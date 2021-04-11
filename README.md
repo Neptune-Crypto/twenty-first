@@ -1,6 +1,6 @@
 # rust-template-project
 
-A template project for Rust applications.
+A template project for Rust applications. Suggestions for additions are very welcome.
 
 ## Features
 
