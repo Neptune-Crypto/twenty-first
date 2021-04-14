@@ -12,7 +12,10 @@ A template project for Rust applications. Suggestions for additions are very wel
 
 ## Usage notes
 
- - To run, use `cargo run`.
- - To test, use `cargo test`.
- - To lint, use `cargo clippy`.
- - To format, use `cargo fmt`.
+ - To run, use `make run`.
+ - To test, use `make test`.
+ - To lint, use `make lint`.
+ - To format, use `make format`.
+ - To build, use `make build`.
+ - To install, use `make install`.
+ - To run lint, compile, run tests use `make all`. Note that this does *not* run install.
