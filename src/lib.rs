@@ -18,6 +18,8 @@ pub fn my_library_function() -> Result<()> {
     primitives::literals_and_operators::literals_and_operators();
     println!("\n**tuples**");
     primitives::tuples::tuples();
+    println!("\n**arrays_and_slices**");
+    primitives::arrays_and_slices::arrays_and_slices();
     Ok(())
 }
 
