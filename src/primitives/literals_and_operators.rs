@@ -1,4 +1,4 @@
-fn main() {
+pub fn literals_and_operators() {
     // Integer addition
     println!("1 + 2 = {}", 1u32 + 2);
 

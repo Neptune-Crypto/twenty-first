@@ -7,29 +7,28 @@ fn reverse(pair: (i32, bool)) -> (bool, i32) {
 #[derive(Debug)]
 struct Matrix(f32, f32, f32, f32);
 
-fn main() {
-    let long_tuple = (1u8, 2u16, 3u32, 4u64,
-        -1i8, -2i16, -3i32, -4i64,
-        0.1f32, 0.2f64,
-        'a', true);
+pub fn tuples() {
+    let long_tuple = (
+        1u8, 2u16, 3u32, 4u64, -1i8, -2i16, -3i32, -4i64, 0.1f32, 0.2f64, 'a', true,
+    );
 
-     // Values can be extracted from the tuple using tuple indexing
-     println!("long tuple first value: {}", long_tuple.0);
-     println!("long tuple second value: {}", long_tuple.1);
-     println!("long tuple third value: {}", long_tuple.2);
-     println!("long tuple fourth value: {}", long_tuple.3);
-     println!("long tuple fifth value: {}", long_tuple.4);
-     println!("{}", long_tuple.5);
-     println!("{}", long_tuple.6);
-     println!("{}", long_tuple.7);
-     println!("{}", long_tuple.8);
-     println!("{}", long_tuple.9);
-     println!("{}", long_tuple.10);
-     println!("{}", long_tuple.11);
-     println!("*** End tuple values ***");
+    // Values can be extracted from the tuple using tuple indexing
+    println!("long tuple first value: {}", long_tuple.0);
+    println!("long tuple second value: {}", long_tuple.1);
+    println!("long tuple third value: {}", long_tuple.2);
+    println!("long tuple fourth value: {}", long_tuple.3);
+    println!("long tuple fifth value: {}", long_tuple.4);
+    println!("{}", long_tuple.5);
+    println!("{}", long_tuple.6);
+    println!("{}", long_tuple.7);
+    println!("{}", long_tuple.8);
+    println!("{}", long_tuple.9);
+    println!("{}", long_tuple.10);
+    println!("{}", long_tuple.11);
+    println!("*** End tuple values ***");
 
-     // Tuple can have tuple members
-     let tuple_of_tuples = ((1u8, 2u16, 2u32), (4u64, -1i8), -2i16);
+    // Tuple can have tuple members
+    let tuple_of_tuples = ((1u8, 2u16, 2u32), (4u64, -1i8), -2i16);
 
     // But long Tuples cannot be printed
     // Typle need to implement std::fmt::Debug to be formatted using `{:?}`.
@@ -51,7 +50,6 @@ fn main() {
     let tuple = (1, "hello", 4.5, true);
     let (a, b, c, d) = tuple;
 }
-
 
 // // Tuples can be used as function arguments and as return values
 // fn reverse(pair: (i32, bool)) -> (bool, i32) {
