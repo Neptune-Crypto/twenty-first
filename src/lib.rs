@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 
+mod custom_types;
 mod formatted_print;
 mod hello_world;
 mod primitives;
@@ -20,6 +21,8 @@ pub fn my_library_function() -> Result<()> {
     primitives::tuples::tuples();
     println!("\n**arrays_and_slices**");
     primitives::arrays_and_slices::arrays_and_slices();
+    println!("\n\n*****Running custom_types*****");
+    custom_types::structures::structures();
     Ok(())
 }
 
