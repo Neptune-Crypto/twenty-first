@@ -1,10 +1,56 @@
 [package]
-name = "rust-template-project"
+name = "rust-tutorial"
 version = "0.1.0"
-authors = ["Philip Munksgaard <philip@munksgaard.me>"]
+authors = ["sword_smith <thorkilk@gmail.me>"]
 edition = "2018"
 
 [dependencies]
 anyhow = "1.0" # Error trait and generalized error handling
 structopt = { version = "0.3", features = [ "paw" ] } # Command-line argument parsing
 paw = "1.0" # Command-line argument parsing
+
+[profile.dev]
+opt-level = 0
+debug = true
+split-debuginfo = '...'  # Platform-specific.
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = 'unwind'
+incremental = true
+codegen-units = 256
+rpath = false
+
+[profile.release]
+opt-level = 3
+debug = false
+split-debuginfo = '...'  # Platform-specific.
+debug-assertions = false
+overflow-checks = false # Could be changed later to increase performance
+lto = false
+panic = 'unwind'
+incremental = false
+codegen-units = 16
+rpath = false
+
+[profile.test]
+opt-level = 0
+debug = 2
+split-debuginfo = '...'  # Platform-specific.
+debug-assertions = true
+overflow-checks = true
+lto = false
+incremental = true
+codegen-units = 256
+rpath = false
+
+[profile.bench]
+opt-level = 3
+debug = false
+split-debuginfo = '...'  # Platform-specific.
+debug-assertions = false
+overflow-checks = false # Could be changed later to increase performance
+lto = false
+incremental = false
+codegen-units = 16
+rpath = false
