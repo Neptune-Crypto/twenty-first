@@ -1,3 +1,5 @@
+#[allow(clippy::print_literal)]
+
 pub fn formatted_print() {
     // In general, the `{}` will be automatically replaced with any
     // arguments. These will be stringified.

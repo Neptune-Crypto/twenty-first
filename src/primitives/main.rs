@@ -1,3 +1,6 @@
+#![allow(unused_variables)]
+#![allow(unused_assignments)]
+
 pub fn primitives() {
     let logical: bool = true;
 

@@ -1,7 +1,9 @@
+#![allow(unused_variables)]
+
 fn reverse(pair: (i32, bool)) -> (bool, i32) {
     let (integer, boolean) = pair;
 
-    return (boolean, integer);
+    (boolean, integer)
 }
 
 #[derive(Debug)]
