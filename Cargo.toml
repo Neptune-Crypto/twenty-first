@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["sword_smith <thorkilk@gmail.me>"]
 edition = "2018"
 
+[dev-dependencies.cargo-husky]
+version = "1"
+default-features = false # Disable features which are enabled by default
+features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
+
 [dependencies]
 anyhow = "1.0" # Error trait and generalized error handling
 structopt = { version = "0.3", features = [ "paw" ] } # Command-line argument parsing
