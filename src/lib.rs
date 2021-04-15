@@ -23,6 +23,8 @@ pub fn my_library_function() -> Result<()> {
     primitives::arrays_and_slices::arrays_and_slices();
     println!("\n\n*****Running custom_types*****");
     custom_types::structures::structures();
+    println!("\n**enums**");
+    custom_types::enums::enums();
     Ok(())
 }
 
