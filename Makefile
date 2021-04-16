@@ -4,6 +4,7 @@ prog :=rust-tutorial
 debug ?=
 
 $(info debug is $(debug))
+# Treat all warnings as errors
 export RUSTFLAGS = -Dwarnings
 
 ifdef debug
@@ -29,10 +30,14 @@ install:
 lint:
 	cargo clippy
 
+# Get a stack trace upon kernel panic (may slow down implementation)
+run: export RUST_BACKTRACE = 1
 run:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo run
 
+# Get a stack trace upon kernel panic (may slow down implementation)
+test: export RUST_BACKTRACE = 1
 test:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo test
