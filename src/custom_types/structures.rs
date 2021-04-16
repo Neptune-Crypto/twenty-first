@@ -18,7 +18,7 @@ struct Unit;
 // A tuple struct
 struct Pair(i32, f32);
 
-// A strict with two fields
+// A struct with two fields
 #[derive(Debug, Copy, Clone)]
 struct Point {
     x: f32,

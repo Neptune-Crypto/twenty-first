@@ -1,9 +1,13 @@
 use anyhow::{bail, Result};
 
+mod conversion;
 mod custom_types;
+mod expressions;
+mod flow_of_control;
 mod formatted_print;
 mod hello_world;
 mod primitives;
+mod types;
 
 pub fn my_library_function() -> Result<()> {
     println!("\n\n*****Running my_private_function*****");
@@ -25,6 +29,25 @@ pub fn my_library_function() -> Result<()> {
     custom_types::structures::structures();
     println!("\n**enums**");
     custom_types::enums::enums();
+    println!("\n**linked_list**");
+    custom_types::linked_list::linked_list();
+    println!("\n**constants**");
+    custom_types::constants::constants();
+    println!("\n\n*****Running types*****");
+    types::casting::casting();
+    types::literals::literals();
+    types::inference::inference();
+    types::aliasing::aliasing();
+    println!("\n\n*****Running conversion*****");
+    conversion::from_and_into::from_and_into();
+    conversion::tryfrom_and_tryinto::tryfrom_and_tryinto();
+    conversion::to_and_from_strings::to_and_from_strings();
+    println!("\n\n*****Running expressions*****");
+    expressions::expressions();
+    println!("\n\n*****Running flow_of_controls*****");
+    flow_of_control::if_else::if_else();
+    flow_of_control::loop_example::loop_example();
+    flow_of_control::fizz_buzz::fizz_buzz();
     Ok(())
 }
 
