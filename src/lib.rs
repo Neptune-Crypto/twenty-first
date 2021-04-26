@@ -5,7 +5,9 @@ mod custom_types;
 mod expressions;
 mod flow_of_control;
 mod formatted_print;
+mod functions;
 mod hello_world;
+mod homomorphic_encryption;
 mod primitives;
 mod types;
 
@@ -48,6 +50,13 @@ pub fn my_library_function() -> Result<()> {
     flow_of_control::if_else::if_else();
     flow_of_control::loop_example::loop_example();
     flow_of_control::fizz_buzz::fizz_buzz();
+    flow_of_control::for_and_range::for_and_range();
+    flow_of_control::match_example::match_example();
+    println!("\n\n*****Running functions*****");
+    functions::methods::methods();
+    functions::closures::closures();
+    println!("\n\n*****Homomorphic encryption*****");
+    homomorphic_encryption::polynomial::test();
     Ok(())
 }
 
