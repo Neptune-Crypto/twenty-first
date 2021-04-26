@@ -56,7 +56,7 @@ pub fn my_library_function() -> Result<()> {
     functions::methods::methods();
     functions::closures::closures();
     println!("\n\n*****Homomorphic encryption*****");
-    homomorphic_encryption::polynomial::test();
+    homomorphic_encryption::test();
     Ok(())
 }
 
