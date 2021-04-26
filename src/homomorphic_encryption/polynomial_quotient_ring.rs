@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PolynomialQuotientRing {
     // polynomial_modulus should be an immutable reference to a Polynomial whose lifetime is the
     // same as this object -- it should die, if this object dies.

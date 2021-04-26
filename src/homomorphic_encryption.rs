@@ -1,48 +1,12 @@
 mod ciphertext;
-use ciphertext::Ciphertext;
 mod polynomial;
 use polynomial::Polynomial;
 mod polynomial_quotient_ring;
 use polynomial_quotient_ring::PolynomialQuotientRing;
-mod public_key;
-use public_key::PublicKey;
 mod keypair;
+mod public_key;
 use keypair::KeyPair;
-
-fn encrypt<'a>(pk: &'a PublicKey<'a>, plain_text_modulus: i128, pt: i128) -> Ciphertext<'a> {
-    let e1 = Polynomial::gen_normal_poly(pk.a.pqr);
-    // println!("e1: {}", e1);
-    let e2 = Polynomial::gen_normal_poly(pk.a.pqr);
-    // println!("e2: {}", e2);
-    let delta = pk.a.pqr.q / plain_text_modulus;
-    let m = Polynomial::polynomium_from_int(pt, pk.a.pqr).scalar_modulus(plain_text_modulus);
-    // println!("m: {}", m);
-    let scaled_m = m.scalar_mul(delta).scalar_modulus(pk.a.pqr.q);
-    // println!("scaled_m: {}", scaled_m);
-    let u = Polynomial::gen_binary_poly(pk.a.pqr).modulus().normalize();
-    // println!("u: {}", u);
-    let ct0 = pk.b.mul(&u).add(&e1).add(&scaled_m).modulus().normalize();
-    let ct1 = pk.a.mul(&u).add(&e2).modulus().normalize();
-    Ciphertext { ct0, ct1 }
-}
-
-fn decrypt<'a>(
-    sk: &'a Polynomial<'a>,
-    plain_text_modulus: i128,
-    ciphertext: &'a Ciphertext,
-) -> Polynomial<'a> {
-    let t_over_q: f64 = plain_text_modulus as f64 / sk.pqr.q as f64;
-    // println!("t_over_q = {}", t_over_q);
-    let scaled_pt = ciphertext.ct1.mul(&sk).add(&ciphertext.ct0);
-    // println!("scaled_pt = {}", scaled_pt);
-    let unscaled_pt = scaled_pt
-        .scalar_mul_float(t_over_q)
-        .modulus()
-        .normalize()
-        .scalar_modulus(plain_text_modulus);
-    // println!("unscaled_pt = {}", unscaled_pt);
-    unscaled_pt.normalize()
-}
+mod secret_key;
 
 pub fn test() {
     let pqr = PolynomialQuotientRing::new(4, 11);
@@ -119,14 +83,14 @@ pub fn test() {
     println!("A randomly generated keypair is: {}", key_pair);
     let plain_text = 2i128;
     let pt_modulus = 5i128;
-    let ciphertext = encrypt(&key_pair.pk, pt_modulus, plain_text);
+    let ciphertext = key_pair.pk.encrypt(pt_modulus, plain_text);
     println!(
         "{} encrypted under this key is: ct0={}, ct1={}",
         plain_text, ciphertext.ct0, ciphertext.ct1
     );
     println!(
         "Decrypting this, we get: {}",
-        decrypt(&key_pair.sk, pt_modulus, &ciphertext)
+        key_pair.sk.decrypt(pt_modulus, &ciphertext)
     );
 
     let test_pqr = PolynomialQuotientRing::new(16, 32768i128);
@@ -135,8 +99,8 @@ pub fn test() {
     let pt_test_2 = 20;
     let key_pair_test = KeyPair::keygen(&test_pqr);
     println!("A new randomly generated keypair is: {}", key_pair_test);
-    let ct1_test = encrypt(&key_pair_test.pk, pt_modulus_test, pt_test_1);
-    let ct2_test = encrypt(&key_pair_test.pk, pt_modulus_test, pt_test_2);
+    let ct1_test = key_pair_test.pk.encrypt(pt_modulus_test, pt_test_1);
+    let ct2_test = key_pair_test.pk.encrypt(pt_modulus_test, pt_test_2);
     println!(
         "\n\n\n\n{} encrypted under this key is: ct0={}, ct1={}",
         pt_test_1, ct1_test.ct0, ct1_test.ct1
@@ -145,8 +109,8 @@ pub fn test() {
         "{} encrypted under this key is: ct0={}, ct1={}",
         pt_test_2, ct2_test.ct0, ct2_test.ct1
     );
-    let decrypted_ct1_test = decrypt(&key_pair_test.sk, pt_modulus_test, &ct1_test);
-    let decrypted_ct2_test = decrypt(&key_pair_test.sk, pt_modulus_test, &ct2_test);
+    let decrypted_ct1_test = key_pair_test.sk.decrypt(pt_modulus_test, &ct1_test);
+    let decrypted_ct2_test = key_pair_test.sk.decrypt(pt_modulus_test, &ct2_test);
     println!("Decrypting this, we get: {}", decrypted_ct1_test);
     println!(
         "Leaving us with the number: {}",
@@ -167,10 +131,14 @@ pub fn test() {
     let pt_modulus_real = 256i128;
     let pqr_real = PolynomialQuotientRing::new(1024, 786433);
     let kp_real = KeyPair::keygen(&pqr_real);
-    let ct_real = encrypt(&kp_real.pk, pt_modulus_real, pt_real);
-    let dec_real = decrypt(&kp_real.sk, pt_modulus_real, &ct_real);
+    let ct_real = kp_real.pk.encrypt(pt_modulus_real, pt_real);
+    let dec_real = kp_real.sk.decrypt(pt_modulus_real, &ct_real);
     println!(
         "Encrypting and decrypting {}, we get: {}",
         pt_real, dec_real
     );
+
+    let ct3 = ct_real.add_plain(7, pt_modulus_real);
+    let decrypted_ct3 = kp_real.sk.decrypt(pt_modulus_real, &ct3);
+    println!("Encrypting adding 7 and decrypting: {}", decrypted_ct3);
 }

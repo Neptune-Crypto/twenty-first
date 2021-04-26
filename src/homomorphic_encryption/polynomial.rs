@@ -11,7 +11,7 @@ use super::polynomial_quotient_ring::PolynomialQuotientRing;
 // All structs holding references must have lifetime annotations in their definition.
 // This <'a> annotation means that an instance of Polynomial cannot outlive the reference it holds
 // in its `pqr` field.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Polynomial<'a> {
     // I think we cannot use arrays to store the coefficients, since array sizes must be known at compile time
     pub coefficients: Vec<i128>,
@@ -297,5 +297,36 @@ impl<'a> Polynomial<'a> {
         };
         // The adding should normalize the result, so we don't need to do it here too.
         self.add(&neg_pol)
+    }
+}
+
+#[cfg(test)]
+mod test_polynomial {
+    use super::*;
+
+    #[test]
+    fn internal() {
+        let pqr = PolynomialQuotientRing::new(4, 7);
+        let a: Polynomial = Polynomial {
+            coefficients: vec![1],
+            pqr: &pqr,
+        };
+        let b: Polynomial = Polynomial {
+            coefficients: vec![2],
+            pqr: &pqr,
+        };
+        let big: Polynomial = Polynomial {
+            coefficients: vec![3, 5, 1, 6],
+            pqr: &pqr,
+        };
+        let big_squared = Polynomial {
+            coefficients: vec![4, 3, 3, 5],
+            pqr: &pqr,
+        };
+        let zero = Polynomial::additive_identity(&pqr);
+        assert!(a.add(&a) == b);
+        assert!(a.sub(&a) == zero);
+        assert!(big.mul(&a) == big);
+        assert!(big.mul(&big).modulus() == big_squared);
     }
 }
