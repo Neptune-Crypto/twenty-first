@@ -141,4 +141,33 @@ pub fn test() {
     let ct3 = ct_real.add_plain(7, pt_modulus_real);
     let decrypted_ct3 = kp_real.sk.decrypt(pt_modulus_real, &ct3);
     println!("Encrypting adding 7 and decrypting: {}", decrypted_ct3);
+
+    let ct4 = ct3.mul_plain(3, pt_modulus_real);
+    let decrypted_ct4 = kp_real.sk.decrypt(pt_modulus_real, &ct4);
+    println!(
+        "Encrypting adding 7, multiplying by 3 and decrypting: {}",
+        decrypted_ct4
+    );
+
+    let mut k = 0;
+    while k < 20 {
+        println!("k = {}", k);
+        for i in 0..10 {
+            let pt_new = i;
+            let ct_new = kp_real.pk.encrypt(pt_modulus_real, pt_new);
+            let dec_new: Polynomial = kp_real.sk.decrypt(pt_modulus_real, &ct_new);
+            let res = match dec_new.coefficients.last() {
+                Some(val) => *val,
+                _ => 0,
+            };
+            println!("Encrypting and decrypting {}, we get: {}", pt_new, res);
+            if res != i {
+                println!("Failed on {}, got: {}", i, dec_new);
+                break;
+            } else {
+                println!("Success on {}", i);
+            }
+        }
+        k += 1;
+    }
 }

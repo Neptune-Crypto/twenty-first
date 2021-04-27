@@ -18,13 +18,13 @@ impl<'a> Ciphertext<'a> {
         }
     }
 
-    // pub fn mul_plain(&self, pt: i128, pt_modulus: i128) -> Ciphertext {
-    //     let pt_pol = Polynomial::polynomium_from_int(pt, self.ct0.pqr).scalar_modulus(pt_modulus);
-    //     let new_c0 = self.ct0.mul(&pt_pol);
-    //     let new_c1 = self.ct1.mul(&pt_pol);
-    //     Ciphertext {
-    //         ct0: new_c0,
-    //         ct1: new_c1,
-    //     }
-    // }
+    pub fn mul_plain(&self, pt: i128, pt_modulus: i128) -> Ciphertext {
+        let pt_pol = Polynomial::polynomium_from_int(pt, self.ct0.pqr).scalar_modulus(pt_modulus);
+        let new_c0 = self.ct0.mul(&pt_pol);
+        let new_c1 = self.ct1.mul(&pt_pol);
+        Ciphertext {
+            ct0: new_c0,
+            ct1: new_c1,
+        }
+    }
 }

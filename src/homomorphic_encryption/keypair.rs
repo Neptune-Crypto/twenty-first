@@ -19,15 +19,20 @@ impl fmt::Display for KeyPair<'_> {
 
 impl<'a> KeyPair<'a> {
     pub fn keygen(pqr: &'a PolynomialQuotientRing) -> Self {
-        let sk: Polynomial = Polynomial::gen_binary_poly(pqr);
+        let secret_key: Polynomial = Polynomial::gen_binary_poly(pqr);
+        println!("secret_key = {}", secret_key);
         let a: Polynomial = Polynomial::gen_uniform_poly(pqr);
-        let e: Polynomial = Polynomial::gen_normal_poly(pqr);
+        println!("{}", a);
+        let e: Polynomial = Polynomial::gen_normal_poly(pqr).normalize();
+        println!("{}", e);
         let zero: Polynomial = Polynomial::additive_identity(pqr);
-        let b: Polynomial = zero.sub(&a).mul(&sk).sub(&e).modulus();
+        println!("{}", zero);
+        let b: Polynomial = zero.sub(&a).mul(&secret_key).sub(&e).modulus().normalize();
+        println!("{}", b);
         let pk = PublicKey { a, b };
         KeyPair {
             pk,
-            sk: SecretKey { value: sk },
+            sk: SecretKey { value: secret_key },
         }
     }
 }
