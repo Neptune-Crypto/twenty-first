@@ -23,3 +23,19 @@ impl PolynomialQuotientRing {
         self.polynomial_modulus.clone()
     }
 }
+
+#[cfg(test)]
+mod test_polynomial_quotient_ring {
+    use super::*;
+
+    #[test]
+    fn internal() {
+        let pqr_four = PolynomialQuotientRing::new(4, 7);
+        let expected_vector_four = vec![1, 0, 0, 0, 1];
+        let pqr_five = PolynomialQuotientRing::new(5, 7);
+        let expected_vector_five = vec![1, 0, 0, 0, 0, 1];
+        assert!(pqr_four.polynomial_modulus == expected_vector_four);
+        assert!(pqr_five.polynomial_modulus == expected_vector_five);
+        assert!(pqr_five.polynomial_modulus != expected_vector_four);
+    }
+}

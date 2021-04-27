@@ -22,7 +22,7 @@ impl<'a> PublicKey<'a> {
         let e2 = Polynomial::gen_normal_poly(self.a.pqr);
         // println!("e2: {}", e2);
         let delta = self.a.pqr.q / plain_text_modulus;
-        let m = Polynomial::polynomium_from_int(pt, self.a.pqr).scalar_modulus(plain_text_modulus);
+        let m = Polynomial::polynomium_from_int(pt, self.a.pqr);
         // println!("m: {}", m);
         let scaled_m = m.scalar_mul(delta).scalar_modulus(self.a.pqr.q);
         // println!("scaled_m: {}", scaled_m);

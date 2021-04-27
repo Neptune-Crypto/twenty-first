@@ -96,7 +96,6 @@ impl<'a> Polynomial<'a> {
             coefficients: Polynomial::generate_random_numbers(pqr.n as usize, 2i128),
             pqr,
         };
-        println!("{:?}", res);
         // TODO: Do we take the modulus here?
         res.normalize()
     }
@@ -229,6 +228,19 @@ impl<'a> Polynomial<'a> {
         ret.normalize()
     }
 
+    pub fn balance(&self) -> Polynomial<'a> {
+        let mut coefficients = self.coefficients.clone();
+        for i in 0..self.coefficients.len() {
+            if coefficients[i] > self.pqr.q / 2 {
+                coefficients[i] -= self.pqr.q;
+            }
+        }
+        Polynomial {
+            coefficients,
+            pqr: self.pqr,
+        }
+    }
+
     pub fn scalar_mul(&self, scalar: i128) -> Polynomial<'a> {
         let mut coefficients = self.coefficients.clone();
         for i in 0..self.coefficients.len() {
@@ -254,10 +266,7 @@ impl<'a> Polynomial<'a> {
     pub fn scalar_mul_float(&self, float_scalar: f64) -> Polynomial<'a> {
         let mut coefficients = self.coefficients.clone();
         for i in 0..self.coefficients.len() {
-            coefficients[i] = ((((coefficients[i] as f64 * float_scalar).round() as i128)
-                % self.pqr.q)
-                + self.pqr.q)
-                % self.pqr.q;
+            coefficients[i] = (coefficients[i] as f64 * float_scalar).round() as i128;
         }
         Polynomial {
             coefficients,
