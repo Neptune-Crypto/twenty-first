@@ -3,6 +3,7 @@ mod polynomial;
 use polynomial::Polynomial;
 mod polynomial_quotient_ring;
 use polynomial_quotient_ring::PolynomialQuotientRing;
+use rand::RngCore;
 mod keypair;
 mod public_key;
 use keypair::KeyPair;
@@ -112,57 +113,71 @@ pub fn test() {
     let decrypted_ct1_test = key_pair_test.sk.decrypt(pt_modulus_test, &ct1_test);
     let decrypted_ct2_test = key_pair_test.sk.decrypt(pt_modulus_test, &ct2_test);
     println!("Decrypting this, we get: {}", decrypted_ct1_test);
-    println!(
-        "Leaving us with the number: {}",
-        (&decrypted_ct1_test.coefficients).last().unwrap()
-    );
     println!("Decrypting this, we get: {}", decrypted_ct2_test);
-    println!(
-        "Leaving us with the number: {}",
-        (&decrypted_ct2_test.coefficients).last().unwrap()
-    );
-    println!(
-        "Taking a modulus here, we get: {}, {}",
-        (&decrypted_ct1_test.coefficients).last().unwrap(),
-        (&decrypted_ct2_test.coefficients).last().unwrap()
-    );
 
     let pt_real = 79;
     let pt_modulus_real = 256i128;
     let pqr_real = PolynomialQuotientRing::new(1024, 786433);
     let kp_real = KeyPair::keygen(&pqr_real);
-    let ct_real = kp_real.pk.encrypt(pt_modulus_real, pt_real);
+    let mut ct_real = kp_real.pk.encrypt(pt_modulus_real, pt_real);
     let dec_real = kp_real.sk.decrypt(pt_modulus_real, &ct_real);
     println!(
         "Encrypting and decrypting {}, we get: {}",
         pt_real, dec_real
     );
 
-    let ct3 = ct_real.add_plain(7, pt_modulus_real);
-    let decrypted_ct3 = kp_real.sk.decrypt(pt_modulus_real, &ct3);
+    ct_real.add_plain(7, pt_modulus_real);
+    let decrypted_ct3 = kp_real.sk.decrypt(pt_modulus_real, &ct_real);
     println!("Encrypting adding 7 and decrypting: {}", decrypted_ct3);
 
-    let ct4 = ct3.mul_plain(3, pt_modulus_real);
-    let decrypted_ct4 = kp_real.sk.decrypt(pt_modulus_real, &ct4);
+    ct_real.mul_plain(3, pt_modulus_real);
+    let decrypted_ct4 = kp_real.sk.decrypt(pt_modulus_real, &ct_real);
     println!(
         "Encrypting adding 7, multiplying by 3 and decrypting: {}",
         decrypted_ct4
     );
 
     let mut k = 0;
-    while k < 20 {
+    while k < 1 {
         println!("k = {}", k);
-        for i in 0..10 {
+        for i in 0..3 {
             let pt_new = i;
             let ct_new = kp_real.pk.encrypt(pt_modulus_real, pt_new);
-            let dec_new: Polynomial = kp_real.sk.decrypt(pt_modulus_real, &ct_new);
-            let res = match dec_new.coefficients.last() {
-                Some(val) => *val,
-                _ => 0,
-            };
+            let res: i128 = kp_real.sk.decrypt(pt_modulus_real, &ct_new);
             println!("Encrypting and decrypting {}, we get: {}", pt_new, res);
             if res != i {
-                println!("Failed on {}, got: {}", i, dec_new);
+                println!("Failed on {}, got: {}", i, res);
+                break;
+            } else {
+                println!("Success on {}", i);
+            }
+        }
+        k += 1;
+    }
+
+    // encrypting and decrypting with plaintext mul and addition on the ciphertext
+    let mut prng = rand::thread_rng();
+    k = 0;
+    while k < 1 {
+        println!("k = {}", k);
+        for i in 1..10 {
+            let pt_new = i;
+            let mut ct_new = kp_real.pk.encrypt(pt_modulus_real, pt_new);
+
+            // multiply ciphertext with x and add y
+            let mul_value: i128 = (prng.next_u32() % (pt_modulus_real as u32 / 16)) as i128;
+            let add_value: i128 = (prng.next_u32() % (pt_modulus_real as u32 / 16)) as i128;
+            ct_new.mul_plain(mul_value, pt_modulus_real);
+            ct_new.add_plain(add_value, pt_modulus_real);
+
+            let res: i128 = kp_real.sk.decrypt(pt_modulus_real, &ct_new);
+            let expected: i128 = (i * mul_value + add_value) % pt_modulus_real;
+            println!(
+                "{} * {} + {} mod {} on the ciphertext gives us: {}",
+                i, mul_value, add_value, pt_modulus_real, res
+            );
+            if res != expected {
+                println!("Failed on {}, got: {}, expected: {}", i, res, expected);
                 break;
             } else {
                 println!("Success on {}", i);

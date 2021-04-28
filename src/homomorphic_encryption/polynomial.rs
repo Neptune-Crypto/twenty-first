@@ -134,6 +134,13 @@ impl<'a> Polynomial<'a> {
         }
     }
 
+    pub fn get_constant_term(&self) -> i128 {
+        match self.coefficients.last() {
+            None => 0,
+            Some(i) => *i,
+        }
+    }
+
     // Doing long division, return the pair (div, mod), coefficients are always floored!
     // TODO: Verify lifetime parameters here!
     pub fn div(&self, divisor: &Polynomial<'a>) -> (Polynomial<'a>, Polynomial<'a>) {
