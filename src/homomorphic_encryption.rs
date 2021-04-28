@@ -1,4 +1,5 @@
 mod ciphertext;
+use ciphertext::Ciphertext;
 mod polynomial;
 use polynomial::Polynomial;
 mod polynomial_quotient_ring;
@@ -115,8 +116,8 @@ pub fn test() {
     println!("Decrypting this, we get: {}", decrypted_ct1_test);
     println!("Decrypting this, we get: {}", decrypted_ct2_test);
 
-    let pt_real = 79;
-    let pt_modulus_real = 256i128;
+    let pt_real = 39;
+    let pt_modulus_real = 64i128;
     let pqr_real = PolynomialQuotientRing::new(1024, 786433);
     let kp_real = KeyPair::keygen(&pqr_real);
     let mut ct_real = kp_real.pk.encrypt(pt_modulus_real, pt_real);
@@ -165,8 +166,8 @@ pub fn test() {
             let mut ct_new = kp_real.pk.encrypt(pt_modulus_real, pt_new);
 
             // multiply ciphertext with x and add y
-            let mul_value: i128 = (prng.next_u32() % (pt_modulus_real as u32 / 16)) as i128;
-            let add_value: i128 = (prng.next_u32() % (pt_modulus_real as u32 / 16)) as i128;
+            let mul_value: i128 = (prng.next_u32() % (pt_modulus_real as u32)) as i128;
+            let add_value: i128 = (prng.next_u32() % (pt_modulus_real as u32)) as i128;
             ct_new.mul_plain(mul_value, pt_modulus_real);
             ct_new.add_plain(add_value, pt_modulus_real);
 
@@ -185,4 +186,19 @@ pub fn test() {
         }
         k += 1;
     }
+
+    // Encrypting and decrypting with sum of ciphertexts
+    let pt0 = 7;
+    let pt1 = 11;
+    let mut ct_new0: Ciphertext = kp_real.pk.encrypt(pt_modulus_real, pt0);
+    let ct_new1 = kp_real.pk.encrypt(pt_modulus_real, pt1);
+    ct_new0.add_cipher(&ct_new1);
+    let res = kp_real.sk.decrypt(pt_modulus_real, &ct_new0);
+    println!("Decrypting {} + {} = {}", pt0, pt1, res);
+
+    // Add encrypted zero to a plaintext and verify that it the ciphertext changes
+    println!("18 encrypted is: {}", ct_new0);
+    let ct_new_zero: Ciphertext = kp_real.pk.encrypt(pt_modulus_real, 0);
+    ct_new0.add_cipher(&ct_new_zero);
+    println!("18 encrypted plus encrypted 0 is: {}", ct_new0);
 }
