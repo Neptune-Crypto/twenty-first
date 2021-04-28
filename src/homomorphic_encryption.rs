@@ -197,8 +197,16 @@ pub fn test() {
     println!("Decrypting {} + {} = {}", pt0, pt1, res);
 
     // Add encrypted zero to a plaintext and verify that it the ciphertext changes
-    println!("18 encrypted is: {}", ct_new0);
+    println!(
+        "18 encrypted ends in : {} and in {}",
+        ct_new0.ct0.get_constant_term(),
+        ct_new0.ct1.get_constant_term(),
+    );
     let ct_new_zero: Ciphertext = kp_real.pk.encrypt(pt_modulus_real, 0);
     ct_new0.add_cipher(&ct_new_zero);
-    println!("18 encrypted plus encrypted 0 is: {}", ct_new0);
+    println!(
+        "18 encrypted plus encrypted 0 ends in: {} and in {}",
+        ct_new0.ct0.get_constant_term(),
+        ct_new0.ct1.get_constant_term(),
+    );
 }
