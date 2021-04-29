@@ -8,7 +8,7 @@ mod flow_of_control;
 mod formatted_print;
 mod functions;
 mod hello_world;
-mod homomorphic_encryption;
+// mod homomorphic_encryption;
 mod primitives;
 mod types;
 
@@ -56,8 +56,8 @@ pub fn my_library_function() -> Result<()> {
     println!("\n\n*****Running functions*****");
     functions::methods::methods();
     functions::closures::closures();
-    println!("\n\n*****Homomorphic encryption*****");
-    homomorphic_encryption::test();
+    // println!("\n\n*****Homomorphic encryption*****");
+    // homomorphic_encryption::test();
     println!("\n\n*****FFT*****");
     fft::test(); // TODO: Remove
     Ok(())
