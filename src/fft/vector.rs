@@ -64,7 +64,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Vector<T: num_traits::Num + Clone> {
+pub struct Vector<T: num_traits::Num + Clone + Copy> {
     values: Vec<T>,
     pub height: usize,
 }
@@ -85,7 +85,7 @@ impl<T: num_traits::Num + Clone + Copy + Display> std::fmt::Display for Vector<T
             .iter()
             .map(|x: &T| format!("{}", *x))
             .collect::<Vec<String>>()
-            .join(",");
+            .join(", ");
         write!(f, "({})", output)
     }
 }
