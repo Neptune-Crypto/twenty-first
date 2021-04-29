@@ -12,6 +12,7 @@ features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
 [dependencies]
 anyhow = "1.0" # Error trait and generalized error handling
 itertools = "0.10.0"
+num-traits = "0.2.14"
 rand = "0.8.3"
 rand_distr = "0.4.0"
 structopt = { version = "0.3", features = [ "paw" ] } # Command-line argument parsing
