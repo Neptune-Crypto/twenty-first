@@ -1,6 +1,7 @@
 mod complex_number;
 mod vector;
 use complex_number::ComplexNumber;
+use num_traits::{One, Zero};
 use std::convert::TryFrom;
 use vector::{Matrix, Vector};
 
@@ -18,8 +19,25 @@ use vector::{Matrix, Vector};
 // space to frequency space.
 
 // Expressing the forward-DFT in linear algebra, we get:
-// X_j = M_jk*x_k, M_jk = exp(-2i)
-// where M_jk = exp(-i2πjk/N)
+// X_j = M_jk*x_k, where M_jk = exp(-i2πjk/N)
+
+pub fn dtf_slow(x: &Vector<ComplexNumber<f64>>) -> Vector<ComplexNumber<f64>> {
+    // e^(ix) = cos(x) + isin(x)
+    let size: usize = x.height;
+    let mut m: Matrix<ComplexNumber<f64>> = Matrix::zeros(size, size);
+    for j in 0..size {
+        for k in 0..size {
+            m.set(
+                j,
+                k,
+                ComplexNumber::from_exponential(
+                    -2.0 * std::f64::consts::PI * k as f64 * j as f64 / size as f64,
+                ),
+            );
+        }
+    }
+    x.mul(&m)
+}
 
 pub fn test() {
     println!("Hello World!");
@@ -56,4 +74,25 @@ pub fn test() {
     let mul_result = j * one;
     println!("{}", mul_result);
     println!("{:?}", mul_result);
+
+    // Complex vectors
+    let unity = ComplexNumber::new(1.0f64, 0.0f64);
+    let origo = ComplexNumber::new(0.0f64, 0.0f64);
+    let complex_vector = Vector::from(vec![unity, origo]);
+    println!("{}", complex_vector);
+
+    // DFT implementation, pulse at origo
+    let mut impulse_data = vec![ComplexNumber::zero(); 8];
+    impulse_data[0] = ComplexNumber::one();
+    let mut impulse = Vector::from(impulse_data);
+    let mut frequency_domain = dtf_slow(&impulse);
+    println!("DFT: {} -> {}", impulse, frequency_domain);
+
+    // DFT implementation, pulse at one
+    impulse_data = vec![ComplexNumber::zero(); 8];
+    impulse_data[0] = ComplexNumber::zero();
+    impulse_data[1] = ComplexNumber::one();
+    impulse = Vector::from(impulse_data);
+    frequency_domain = dtf_slow(&impulse);
+    println!("DFT: {} -> {}", impulse, frequency_domain);
 }
