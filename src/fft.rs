@@ -1,4 +1,6 @@
+mod complex_number;
 mod vector;
+use complex_number::ComplexNumber;
 use std::convert::TryFrom;
 use vector::{Matrix, Vector};
 
@@ -47,4 +49,11 @@ pub fn test() {
     let new_matrix = Matrix::try_from(vec![vec![1, 2], vec![3, 4], vec![5, 6]]).unwrap();
     let new_vector_transformed = new_vector.mul(&new_matrix);
     println!("M: {} -> {}", new_vector, new_vector_transformed);
+
+    // Complex numbers
+    let j = ComplexNumber::new(0, 1);
+    let one = ComplexNumber::new(1, 0);
+    let mul_result = j * one;
+    println!("{}", mul_result);
+    println!("{:?}", mul_result);
 }

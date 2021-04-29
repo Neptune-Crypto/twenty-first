@@ -31,7 +31,7 @@ impl<T: num_traits::Num + Clone> TryFrom<Vec<Vec<T>>> for Matrix<T> {
 
 impl<U> Matrix<U>
 where
-    U: num_traits::Num + Clone + Copy + Display,
+    U: num_traits::Num + Clone + Copy,
 {
     pub fn zeros(length: usize, height: usize) -> Self {
         Matrix {
