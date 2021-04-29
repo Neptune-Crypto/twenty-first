@@ -23,6 +23,17 @@ impl<T: num_traits::Num + Clone + Copy> ComplexNumber<T> {
     }
 }
 
+// I wouldn't know how to implement this for integers (need to take sine and cosine),
+// so we just implement it for floats.
+impl<T: num_traits::Float + Clone + Copy> ComplexNumber<T> {
+    pub fn from_exponential(imaginary: T) -> ComplexNumber<T> {
+        ComplexNumber {
+            r: imaginary.cos(),
+            i: imaginary.sin(),
+        }
+    }
+}
+
 impl<T: num_traits::Num + Clone + Copy + Display> std::fmt::Display for ComplexNumber<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{} + i{}", self.r, self.i)
