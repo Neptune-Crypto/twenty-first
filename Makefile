@@ -1,5 +1,5 @@
 
-prog :=rust-tutorial
+prog :=twenty-first
 
 debug ?=
 

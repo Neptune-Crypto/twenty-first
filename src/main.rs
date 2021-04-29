@@ -13,5 +13,5 @@ struct Args {}
 
 #[paw::main]
 fn main(_args: Args) -> Result<()> {
-    rust_tutorial::my_library_function()
+    twenty_first::my_library_function()
 }

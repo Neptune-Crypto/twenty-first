@@ -265,19 +265,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-tutorial"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cargo-husky",
- "itertools",
- "paw",
- "rand",
- "rand_distr",
- "structopt",
-]
-
-[[package]]
 name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -326,6 +313,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
  "unicode-width",
+]
+
+[[package]]
+name = "twenty-first"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cargo-husky",
+ "itertools",
+ "num-traits",
+ "paw",
+ "rand",
+ "rand_distr",
+ "structopt",
 ]
 
 [[package]]
