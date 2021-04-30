@@ -23,7 +23,7 @@ use vector::{Matrix, Vector};
 
 pub fn dtf_slow(x: &Vector<ComplexNumber<f64>>) -> Vector<ComplexNumber<f64>> {
     // e^(ix) = cos(x) + isin(x)
-    let size: usize = x.height;
+    let size: usize = x.height();
     let mut m: Matrix<ComplexNumber<f64>> = Matrix::zeros(size, size);
     for j in 0..size {
         for k in 0..size {
@@ -57,6 +57,8 @@ pub fn test() {
     matrix.set(4, 1, 1);
     val = matrix.get(0, 0);
     println!("val = {}", val);
+    println!("matrix height: {}", matrix.height());
+    println!("matrix length: {}", matrix.length());
     let vector_transformed = vector.mul(&matrix);
     println!(
         "Matrix transformation M: {} -> {}",

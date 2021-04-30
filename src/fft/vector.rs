@@ -3,8 +3,8 @@ use std::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub struct Matrix<T: num_traits::Num + Clone> {
-    pub length: usize,
-    pub height: usize,
+    length: usize,
+    height: usize,
     values: Vec<T>,
 }
 
@@ -41,6 +41,14 @@ where
         }
     }
 
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    pub fn length(&self) -> usize {
+        self.length
+    }
+
     // Will panic if row/column exceeds height/length
     pub fn set(&mut self, row: usize, column: usize, value: U) {
         if row >= self.height || column >= self.length {
@@ -66,15 +74,11 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub struct Vector<T: num_traits::Num + Clone + Copy> {
     values: Vec<T>,
-    pub height: usize,
 }
 
 impl<T: num_traits::Num + Clone + Copy + Display> From<Vec<T>> for Vector<T> {
     fn from(values: Vec<T>) -> Self {
-        Vector {
-            height: values.len(),
-            values,
-        }
+        Vector { values }
     }
 }
 
@@ -96,26 +100,31 @@ where
 {
     pub fn zeros(height: usize) -> Self {
         Vector {
-            height,
             values: vec![num_traits::zero(); height],
         }
     }
 
+    pub fn height(&self) -> usize {
+        self.values.len()
+    }
+
     pub fn set(&mut self, row: usize, value: U) {
-        if row >= self.height {
+        if row >= self.height() {
             panic!(
                 "Index outside of allowable range. Got: index={}. height: {}",
-                row, self.height
+                row,
+                self.height()
             );
         }
         self.values[row] = value;
     }
 
     pub fn get(&self, row: usize) -> U {
-        if row >= self.height {
+        if row >= self.height() {
             panic!(
                 "Index outside of allowable range. Got: index={}. height: {}",
-                row, self.height
+                row,
+                self.height()
             );
         }
         self.values[row]
@@ -125,15 +134,15 @@ where
     // to prevent a wrong calculation anyway.
     // Also: the height may change as a result of matrix multiplication.
     pub fn mul(&self, matrix: &Matrix<U>) -> Vector<U> {
-        if self.height != matrix.length {
+        if self.height() != matrix.length {
             panic!(
                 "Incompatible matrix and vector size. vector height = {}, matrix length = {}",
-                self.height, matrix.length
+                self.height(),
+                matrix.length
             );
         }
         let mut new_vector = Vector {
             values: Vec::with_capacity(matrix.height),
-            height: matrix.height,
         };
         for i in 0..matrix.height {
             let mut res: U = num_traits::zero();
@@ -160,6 +169,7 @@ mod test_vectors {
         vector.set(4, 4);
         assert_eq!(vector.get(0), -23i128);
         assert_eq!(vector.get(4), 4i128);
+        assert_eq!(vector.height(), 5);
 
         let mut matrix: Matrix<i128> = Matrix::zeros(5, 5);
         matrix.set(0, 0, 2);
@@ -170,14 +180,21 @@ mod test_vectors {
         assert_eq!(matrix.get(0, 0), 2i128);
         assert_eq!(matrix.get(0, 1), 0i128);
         assert_eq!(matrix.get(3, 2), -1i128);
+        assert_eq!(matrix.height(), 5usize);
+        assert_eq!(matrix.length(), 5usize);
         let vector_transformed = vector.mul(&matrix);
         let mut expected_vector = Vector::from(vec![-46, 12, -6, -2, 1]);
         assert_eq!(expected_vector, vector_transformed);
         let new_vector = Vector::from(vec![1, 1]);
 
         let new_matrix = Matrix::try_from(vec![vec![1, 2], vec![3, 4], vec![5, 6]]).unwrap();
+        assert_eq!(new_matrix.height(), 3usize);
+        assert_eq!(new_matrix.length(), 2usize);
+        assert_eq!(new_matrix.height, 3usize);
+        assert_eq!(new_matrix.length, 2usize);
         let new_vector_transformed = new_vector.mul(&new_matrix);
         expected_vector = Vector::from(vec![3i128, 7, 11]);
+        assert_eq!(3usize, new_vector_transformed.height());
         assert_eq!(expected_vector, new_vector_transformed);
 
         // Verify that all row lengths must be equal when creating matrices
