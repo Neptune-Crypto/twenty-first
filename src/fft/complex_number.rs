@@ -21,6 +21,14 @@ impl<T: num_traits::Num + Clone + Copy> ComplexNumber<T> {
             i: imaginary,
         }
     }
+
+    pub fn get_real(&self) -> T {
+        self.r
+    }
+
+    pub fn get_imaginary(&self) -> T {
+        self.i
+    }
 }
 
 // I wouldn't know how to implement this for integers (need to take sine and cosine),

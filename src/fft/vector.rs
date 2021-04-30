@@ -133,7 +133,7 @@ where
 
     pub fn concat(&self, other: Vector<U>) -> Self {
         let mut values = self.values.clone();
-        let mut others = other.values.clone();
+        let mut others = other.values;
         values.append(&mut others);
         Self { values }
     }
