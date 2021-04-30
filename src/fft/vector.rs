@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::fmt::Display;
+use std::ops::Add;
 
 #[derive(Debug, Clone)]
 pub struct Matrix<T: num_traits::Num + Clone> {
@@ -130,6 +131,55 @@ where
         self.values[row]
     }
 
+    pub fn concat(&self, other: Vector<U>) -> Self {
+        let mut values = self.values.clone();
+        let mut others = other.values.clone();
+        values.append(&mut others);
+        Self { values }
+    }
+
+    pub fn split_by_middle(self) -> (Self, Self) {
+        if self.height() % 2 != 0 {
+            panic!(
+                "split_by_middle must be called on an array of even height. Got height: {}",
+                self.height()
+            );
+        }
+        let half_length = self.height() / 2;
+        (
+            Vector {
+                values: self.values.iter().take(half_length).copied().collect(),
+                //values: self.values[0..self.height() / 2].collect(),
+            },
+            Vector {
+                values: self
+                    .values
+                    .into_iter()
+                    .skip(half_length)
+                    .collect::<Vec<U>>(),
+                // values: self.values.iter().skip(1).step_by(2).copied().collect::<Vec<U>>(),
+            },
+        )
+    }
+
+    pub fn split_by_parity(self) -> (Self, Self) {
+        (
+            Vector {
+                // values: self.values.into_iter().step_by(2).collect::<Vec<U>>(),
+                values: self.values.iter().step_by(2).copied().collect::<Vec<U>>(),
+            },
+            Vector {
+                values: self
+                    .values
+                    .into_iter()
+                    .skip(1)
+                    .step_by(2)
+                    .collect::<Vec<U>>(),
+                // values: self.values.iter().skip(1).step_by(2).copied().collect::<Vec<U>>(),
+            },
+        )
+    }
+
     // Returns a new vector, as the allocation for a new vector is needed
     // to prevent a wrong calculation anyway.
     // Also: the height may change as a result of matrix multiplication.
@@ -152,6 +202,39 @@ where
             new_vector.values.push(res);
         }
         new_vector
+    }
+
+    pub fn hadamard_product(self, other: Self) -> Self {
+        if self.height() != other.height() {
+            panic!(
+                "hadamard product vectors must have same height. Got: {}, {}",
+                self.height(),
+                other.height()
+            );
+        }
+        Self {
+            values: self
+                .values
+                .into_iter()
+                .zip(other.values.into_iter())
+                .map(|(a, b)| a * b)
+                .collect(),
+        }
+    }
+}
+
+impl<U: num_traits::Num + Clone + Copy> Add for Vector<U> {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            values: self
+                .values
+                .iter()
+                .zip(other.values.iter())
+                .map(|(&a, &b)| a + b)
+                .collect(),
+        }
     }
 }
 
