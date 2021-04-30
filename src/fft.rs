@@ -3,6 +3,7 @@ mod vector;
 use complex_number::ComplexNumber;
 use num_traits::{One, Zero};
 use std::convert::TryFrom;
+use std::time::Instant;
 use vector::{Matrix, Vector};
 
 // FFT has a runtime of O(N*log(N)) whereas the DFT
@@ -84,17 +85,27 @@ pub fn test() {
     println!("{}", complex_vector);
 
     // DFT implementation, pulse at origo
-    let mut impulse_data = vec![ComplexNumber::zero(); 8];
+    println!("Starting timer");
+    let now = Instant::now();
+    let mut impulse_data = vec![ComplexNumber::zero(); 1024];
     impulse_data[0] = ComplexNumber::one();
-    let mut impulse = Vector::from(impulse_data);
-    let mut frequency_domain = dtf_slow(&impulse);
-    println!("DFT: {} -> {}", impulse, frequency_domain);
+    let impulse = Vector::from(impulse_data);
+
+    #[allow(unused_variables)] // Ignore warnings since we only are interested in runtime
+    let frequency_domain = dtf_slow(&impulse);
 
     // DFT implementation, pulse at one
-    impulse_data = vec![ComplexNumber::zero(); 8];
+    impulse_data = vec![ComplexNumber::zero(); 1024];
     impulse_data[0] = ComplexNumber::zero();
     impulse_data[1] = ComplexNumber::one();
-    impulse = Vector::from(impulse_data);
-    frequency_domain = dtf_slow(&impulse);
-    println!("DFT: {} -> {}", impulse, frequency_domain);
+    let impulse_new = Vector::from(impulse_data);
+    #[allow(unused_variables)]
+    let frequency_domain_new = dtf_slow(&impulse_new);
+
+    println!(
+        "Running DFT twice took {} milli seconds",
+        now.elapsed().as_millis()
+    );
+    // println!("DFT: {} -> {}", impulse, frequency_domain);
+    // println!("DFT: {} -> {}", impulse, frequency_domain_new);
 }
