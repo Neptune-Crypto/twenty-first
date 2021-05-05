@@ -4,6 +4,7 @@ use complex_number::ComplexNumber;
 mod prime_field_element;
 use num_traits::{One, Zero};
 use prime_field_element::{PrimeField, PrimeFieldElement};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::Instant;
 use vector::{Matrix, Vector};
@@ -18,6 +19,7 @@ pub fn dft_finite_fields<'a>(
 fn ntt_fft_helper<'a>(
     x: Vec<PrimeFieldElement<'a>>,
     omega: &PrimeFieldElement<'a>,
+    mod_pows: &mut HashMap<(usize, i64), PrimeFieldElement<'a>>,
 ) -> Vec<PrimeFieldElement<'a>> {
     let size: usize = x.len();
     if size % 2 == 1 {
@@ -40,14 +42,21 @@ fn ntt_fft_helper<'a>(
         // Recursive call
         let omega_squared = *omega * *omega;
         let (even, odd) = (
-            ntt_fft_helper(x_even, &omega_squared),
-            ntt_fft_helper(x_odd, &omega_squared),
+            ntt_fft_helper(x_even, &omega_squared, mod_pows),
+            ntt_fft_helper(x_odd, &omega_squared, mod_pows),
         );
 
         // Calculate all values omega^j, for j=0..size
         let mut factor_values: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size);
         for j in 0..(size / 2) {
-            let pow = omega.mod_pow(j as i64);
+            let pow = match mod_pows.get_key_value(&(j, omega.value)) {
+                None => {
+                    let val = omega.mod_pow(j as i64);
+                    mod_pows.insert((j, omega.value), val);
+                    val
+                }
+                Some(i) => *i.1,
+            };
             factor_values.push(pow);
         }
         let minus_one = PrimeFieldElement::new(-1, omega.field);
@@ -56,16 +65,8 @@ fn ntt_fft_helper<'a>(
         }
 
         // split by middle
-        let mut fst_half_factors: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size / 2);
-        let mut snd_half_factors: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size / 2);
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..(size / 2) {
-            fst_half_factors.push(factor_values[i]);
-        }
-        #[allow(clippy::needless_range_loop)]
-        for i in (size / 2)..size {
-            snd_half_factors.push(factor_values[i]);
-        }
+        let fst_half_factors: &[PrimeFieldElement<'a>] = &factor_values[0..size / 2];
+        let snd_half_factors: &[PrimeFieldElement<'a>] = &factor_values[size / 2..];
 
         // hadamard products
         let mut res: Vec<PrimeFieldElement> = Vec::with_capacity(size);
@@ -85,10 +86,11 @@ pub fn ntt_fft<'a>(
     omega: &PrimeFieldElement<'a>,
 ) -> Vec<PrimeFieldElement<'a>> {
     // Verify that ω^N = 1, N is length of x
+    let mut mod_pows: HashMap<(usize, i64), PrimeFieldElement<'a>> = HashMap::new();
     if omega.mod_pow(x.len() as i64).value != 1 {
         panic!("ntt_fft called with ω^len != 1. Got: {:?}", omega);
     }
-    ntt_fft_helper(x, omega)
+    ntt_fft_helper(x, omega, &mut mod_pows)
 }
 
 pub fn intt_fft<'a>(
