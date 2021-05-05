@@ -65,16 +65,8 @@ fn ntt_fft_helper<'a>(
         }
 
         // split by middle
-        let mut fst_half_factors: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size / 2);
-        let mut snd_half_factors: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size / 2);
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..(size / 2) {
-            fst_half_factors.push(factor_values[i]);
-        }
-        #[allow(clippy::needless_range_loop)]
-        for i in (size / 2)..size {
-            snd_half_factors.push(factor_values[i]);
-        }
+        let fst_half_factors: &[PrimeFieldElement<'a>] = &factor_values[0..size / 2];
+        let snd_half_factors: &[PrimeFieldElement<'a>] = &factor_values[size / 2..];
 
         // hadamard products
         let mut res: Vec<PrimeFieldElement> = Vec::with_capacity(size);
