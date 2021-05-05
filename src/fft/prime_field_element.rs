@@ -7,18 +7,18 @@ use std::ops::Sub;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrimeField {
-    pub q: i128,
+    pub q: i64,
 }
 
 impl PrimeField {
-    pub fn new(q: i128) -> Self {
+    pub fn new(q: i64) -> Self {
         Self { q }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct PrimeFieldElement<'a> {
-    pub value: i128,
+    pub value: i64,
     pub field: &'a PrimeField,
 }
 
@@ -29,15 +29,22 @@ impl fmt::Display for PrimeFieldElement<'_> {
 }
 
 impl<'a> PrimeFieldElement<'a> {
-    pub fn new(value: i128, field: &'a PrimeField) -> Self {
+    pub fn new(value: i64, field: &'a PrimeField) -> Self {
         Self {
             value: (value % field.q + field.q) % field.q,
             field,
         }
     }
 
-    pub fn legendre_symbol(&self) -> i128 {
-        self.mod_pow((self.field.q - 1) / 2).value
+    pub fn legendre_symbol(&self) -> i64 {
+        let elem = self.mod_pow((self.field.q - 1) / 2).value;
+
+        // Ugly hack to force a result in {-1,0,1}
+        if elem == self.field.q - 1 {
+            -1
+        } else {
+            elem
+        }
     }
 
     fn same_field_check(&self, other: &PrimeFieldElement, operation: &str) {
@@ -50,7 +57,7 @@ impl<'a> PrimeFieldElement<'a> {
     }
 
     // Return the greatest common divisor (gcd), and factors a, b s.t. x*a + b*y = gcd(a, b).
-    fn eea(mut x: i128, mut y: i128) -> (i128, i128, i128) {
+    fn eea(mut x: i64, mut y: i64) -> (i64, i64, i64) {
         let (mut a_factor, mut a1, mut b_factor, mut b1) = (1, 0, 0, 1);
 
         while y != 0 {
@@ -77,21 +84,22 @@ impl<'a> PrimeFieldElement<'a> {
         }
     }
 
-    pub fn mod_pow(&self, pow: i128) -> Self {
-        let mut acc = Self {
-            value: 1,
-            field: self.field,
-        };
-        let res = *self;
+    pub fn mod_pow(&self, pow: i64) -> Self {
+        let mut acc: i64 = 1;
+        let mod_value: i64 = self.field.q;
+        let res = self.value;
 
-        for i in 0..128 {
-            acc = acc * acc;
-            let set: bool = pow & (1 << (128 - 1 - i)) != 0;
+        for i in 0..64 {
+            acc = acc * acc % mod_value;
+            let set: bool = pow & (1 << (64 - 1 - i)) != 0;
             if set {
-                acc = acc * res;
+                acc = acc * res % mod_value;
             }
         }
-        acc
+        Self {
+            value: acc,
+            field: self.field,
+        }
     }
 }
 

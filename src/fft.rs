@@ -47,7 +47,7 @@ fn ntt_fft_helper<'a>(
         // Calculate all values omega^j, for j=0..size
         let mut factor_values: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size);
         for j in 0..size {
-            let pow = omega.mod_pow(j as i128);
+            let pow = omega.mod_pow(j as i64);
             factor_values.push(pow);
         }
 
@@ -81,7 +81,7 @@ pub fn ntt_fft<'a>(
     omega: &PrimeFieldElement<'a>,
 ) -> Vec<PrimeFieldElement<'a>> {
     // Verify that ω^N = 1, N is length of x
-    if omega.mod_pow(x.len() as i128).value != 1 {
+    if omega.mod_pow(x.len() as i64).value != 1 {
         panic!("ntt_fft called with ω^len != 1. Got: {:?}", omega);
     }
     ntt_fft_helper(x, omega)
@@ -91,7 +91,7 @@ pub fn intt_fft<'a>(
     x: Vec<PrimeFieldElement<'a>>,
     omega: &PrimeFieldElement<'a>,
 ) -> Vec<PrimeFieldElement<'a>> {
-    let length = PrimeFieldElement::new(x.len() as i128, &omega.field);
+    let length = PrimeFieldElement::new(x.len() as i64, &omega.field);
     let omega_inv = &omega.inv();
     let res_scaled = ntt_fft(x, &omega_inv);
 
@@ -158,15 +158,15 @@ pub fn fft(x: Vector<ComplexNumber<f64>>) -> Vector<ComplexNumber<f64>> {
 
 pub fn test() {
     println!("Hello World!");
-    let mut vector: Vector<i128> = Vector::zeros(5);
+    let mut vector: Vector<i64> = Vector::zeros(5);
     vector.set(0, -23);
     vector.set(1, 1);
     vector.set(2, 2);
     vector.set(3, 3);
     vector.set(4, 4);
-    let mut val: i128 = vector.get(0);
+    let mut val: i64 = vector.get(0);
     println!("val = {}", val);
-    let mut matrix: Matrix<i128> = Matrix::zeros(5, 5);
+    let mut matrix: Matrix<i64> = Matrix::zeros(5, 5);
     matrix.set(0, 0, 2);
     matrix.set(1, 4, 3);
     matrix.set(2, 3, -2);
@@ -226,7 +226,7 @@ pub fn test() {
 
     // FFT implementation, pulse at origo
     println!("Starting FFT timer");
-    let now = Instant::now();
+    let mut now = Instant::now();
     impulse_data = vec![ComplexNumber::zero(); 1024];
     impulse_data[0] = ComplexNumber::one();
     impulse = Vector::from(impulse_data);
