@@ -101,6 +101,59 @@ pub fn intt_fft<'a>(
         .collect()
 }
 
+// Find an ω, s.t. ω^(x.len()) = 1 since this is required for the NTT
+// Also verify that ω is a primitive root of 1.
+pub fn get_omega<'a>(x: &[PrimeFieldElement<'a>]) -> PrimeFieldElement<'a> {
+    if x.len() & (x.len() - 1) != 0 {
+        panic!("Input must be of length 2^n. Got length: {}", x.len());
+    }
+    let field = match x {
+        [x, ..] => x.field,
+        _ => panic!("cannot find omega for empty input vector"),
+    };
+    println!(
+        "Running get_omega with N = {}, p = {}",
+        x.len(),
+        x[0].field.q
+    );
+    // a = w^(p - 1)/2
+    // let mut candidate_value = 2;
+    let mut candidate_value = 2;
+    let mut roots: Vec<i64> = Vec::new();
+    let mut field_element: PrimeFieldElement;
+    loop {
+        if candidate_value % 1000 == 0 {
+            println!("candidate value: {}", candidate_value);
+        }
+        field_element = PrimeFieldElement::new(candidate_value, field);
+        let mut mod_pow = field_element.mod_pow(x.len() as i64);
+        if mod_pow.value == 1 {
+            roots.push(candidate_value);
+            println!("{} ^ N == 1", candidate_value);
+            println!("Roots: {:?}", roots);
+            // candidate is Nth prime. Now check that it is primitive prime
+
+            // cf. this link we must check that for all primes p dividing N=len(x) that
+            // that y^(N/p) != 1. Since only p=2 divides N, we only need to
+            // check if y^(N/2) != 1 to verify y is primitive Nth root to 1.
+            // https://en.wikipedia.org/wiki/Root_of_unity_modulo_n#Finding_an_n_with_a_primitive_k-th_root_of_unity_modulo_n
+            mod_pow = field_element.mod_pow((x.len() / 2) as i64);
+            println!(
+                "{} ^ (N / 2) == {}, N = {}",
+                candidate_value,
+                mod_pow.value,
+                x.len()
+            );
+            if mod_pow.value != 1 {
+                println!("Found primitive root: {}", candidate_value);
+                break;
+            }
+        }
+        candidate_value += 1;
+    }
+    field_element
+}
+
 // FFT has a runtime of O(N*log(N)) whereas the DFT
 // algorithm has a runtime of O(N^2).
 
@@ -270,6 +323,40 @@ pub fn test() {
     let res = ntt_fft(input.clone(), &prime_field_element);
     let inverse = intt_fft(res.clone(), &prime_field_element);
     println!("{:?} -> {:?} -> {:?}", input, res, inverse);
+    // println!("Found omega for this input: {}", get_omega(&input));
+
+    // Time NTT implementation
+    let range = 1048576; // 8192 ;
+    let prime = 167772161; // = 5 * 2^25 + 1
+    let mut ntt_input: Vec<PrimeFieldElement> = Vec::with_capacity(range);
+    let new_field = PrimeField::new(prime);
+    for _ in 0..range {
+        ntt_input.push(PrimeFieldElement::new(
+            rand::random::<u32>() as i64 % prime,
+            &new_field,
+        ))
+    }
+    let omega = get_omega(&ntt_input);
+    // let omega = PrimeFieldElement::new(80500, &new_field); // the get_omega function was used to find this
+    // println!("Legendre symbol of omega: {}", omega.legendre_symbol());
+    println!("Found omega: {}", omega);
+    now = Instant::now();
+    let output = ntt_fft(ntt_input.clone(), &omega);
+    println!(
+        "Running NTT on a dataset of size {} took {} milli seconds",
+        range,
+        now.elapsed().as_millis()
+    );
+
+    // Verify correctness
+    // println!("ntt_input: {:?}", ntt_input);
+    // println!("output: {:?}", output);
+    let res = intt_fft(output, &omega);
+    for i in 0..range {
+        assert_eq!(res[i].value, ntt_input[i].value);
+    }
+
+    println!("Inversion succeeded");
 }
 
 #[cfg(test)]
