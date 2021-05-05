@@ -46,9 +46,13 @@ fn ntt_fft_helper<'a>(
 
         // Calculate all values omega^j, for j=0..size
         let mut factor_values: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size);
-        for j in 0..size {
+        for j in 0..(size / 2) {
             let pow = omega.mod_pow(j as i64);
             factor_values.push(pow);
+        }
+        let minus_one = PrimeFieldElement::new(-1, omega.field);
+        for j in 0..(size / 2) {
+            factor_values.push(minus_one * factor_values[j]);
         }
 
         // split by middle
