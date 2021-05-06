@@ -42,6 +42,10 @@ test:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo test
 
+bench:
+	$(info RUSTFLAGS is $(RUSTFLAGS))
+	cargo bench
+
 all: lint build test
 
 help:

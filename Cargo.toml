@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["sword_smith <thorkilk@gmail.me>"]
 edition = "2018"
 
+[dev-dependencies]
+criterion = "0.3"
+
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false # Disable features which are enabled by default
@@ -13,10 +16,14 @@ features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
 anyhow = "1.0" # Error trait and generalized error handling
 itertools = "0.10.0"
 num-traits = "0.2.14"
-rand = "0.8.3"
+rand = "0.8.3" # random number generation (used for benchmarking NTT and FTT)
 rand_distr = "0.4.0"
 structopt = { version = "0.3", features = [ "paw" ] } # Command-line argument parsing
 paw = "1.0" # Command-line argument parsing
+
+[[bench]]
+name = "ntt"
+harness = false
 
 [profile.dev]
 opt-level = 0
@@ -63,10 +70,3 @@ lto = false
 incremental = false
 codegen-units = 16
 rpath = false
-
-[dev-dependencies]
-criterion = "0.3"
-
-[[bench]]
-name = "fft"
-harness = false

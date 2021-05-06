@@ -1,9 +1,9 @@
 mod complex_number;
-mod vector;
 use complex_number::ComplexNumber;
 pub mod prime_field_element;
-use num_traits::{One, Zero};
 use prime_field_element::{PrimeField, PrimeFieldElement};
+mod vector;
+use num_traits::{One, Zero};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::Instant;
