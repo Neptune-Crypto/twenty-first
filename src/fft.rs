@@ -12,20 +12,32 @@ use vector::{Matrix, Vector};
 pub fn dft_finite_fields<'a>(
     x: &[PrimeFieldElement<'a>],
     omega: &PrimeFieldElement<'a>,
+    mod_pows: &mut HashMap<usize, PrimeFieldElement<'a>>,
+    omega_power: usize,
 ) -> Vec<PrimeFieldElement<'a>> {
-    vec![x[0] + x[1], x[0] + *omega * x[1]]
+    let pow = match mod_pows.get_key_value(&omega_power) {
+        None => {
+            let val = omega.mod_pow(omega_power as i64);
+            mod_pows.insert(omega_power, val);
+            val
+        }
+        Some(i) => *i.1,
+    };
+
+    vec![x[0] + x[1], x[0] + pow * x[1]]
 }
 
 fn ntt_fft_helper<'a>(
     x: Vec<PrimeFieldElement<'a>>,
     omega: &PrimeFieldElement<'a>,
-    mod_pows: &mut HashMap<(usize, i64), PrimeFieldElement<'a>>,
+    mod_pows: &mut HashMap<usize, PrimeFieldElement<'a>>,
+    omega_power: usize,
 ) -> Vec<PrimeFieldElement<'a>> {
     let size: usize = x.len();
     if size % 2 == 1 {
         panic!("size of input must be a power of 2");
     } else if size == 2 {
-        dft_finite_fields(&x, omega)
+        dft_finite_fields(&x, omega, mod_pows, omega_power)
     } else {
         // split by parity
         let mut x_even: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size / 2);
@@ -39,20 +51,20 @@ fn ntt_fft_helper<'a>(
             }
         }
 
-        // Recursive call
-        let omega_squared = *omega * *omega;
+        // Recursive call, using: omega -> omega^2
         let (even, odd) = (
-            ntt_fft_helper(x_even, &omega_squared, mod_pows),
-            ntt_fft_helper(x_odd, &omega_squared, mod_pows),
+            ntt_fft_helper(x_even, &omega, mod_pows, omega_power * 2),
+            ntt_fft_helper(x_odd, &omega, mod_pows, omega_power * 2),
         );
 
-        // Calculate all values omega^j, for j=0..size
+        // Calculate all values omega^(omega_power * j), for j=0..size
         let mut factor_values: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size);
         for j in 0..(size / 2) {
-            let pow = match mod_pows.get_key_value(&(j, omega.value)) {
+            let exponent = j * omega_power;
+            let pow = match mod_pows.get_key_value(&exponent) {
                 None => {
-                    let val = omega.mod_pow(j as i64);
-                    mod_pows.insert((j, omega.value), val);
+                    let val = omega.mod_pow(exponent as i64);
+                    mod_pows.insert(exponent, val);
                     val
                 }
                 Some(i) => *i.1,
@@ -86,11 +98,11 @@ pub fn ntt_fft<'a>(
     omega: &PrimeFieldElement<'a>,
 ) -> Vec<PrimeFieldElement<'a>> {
     // Verify that ω^N = 1, N is length of x
-    let mut mod_pows: HashMap<(usize, i64), PrimeFieldElement<'a>> = HashMap::new();
+    let mut mod_pows: HashMap<usize, PrimeFieldElement<'a>> = HashMap::new();
     if omega.mod_pow(x.len() as i64).value != 1 {
         panic!("ntt_fft called with ω^len != 1. Got: {:?}", omega);
     }
-    ntt_fft_helper(x, omega, &mut mod_pows)
+    ntt_fft_helper(x, omega, &mut mod_pows, 1)
 }
 
 pub fn intt_fft<'a>(
