@@ -63,3 +63,10 @@ lto = false
 incremental = false
 codegen-units = 16
 rpath = false
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "fft"
+harness = false
