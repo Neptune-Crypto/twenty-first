@@ -1,7 +1,7 @@
 mod complex_number;
 mod vector;
 use complex_number::ComplexNumber;
-mod prime_field_element;
+pub mod prime_field_element;
 use num_traits::{One, Zero};
 use prime_field_element::{PrimeField, PrimeFieldElement};
 use std::collections::HashMap;
