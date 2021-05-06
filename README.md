@@ -11,3 +11,4 @@ A collection of cryptography functions written in Rust.
  - To build, use `make build`.
  - To install, use `make install`.
  - To run lint, compile, run tests use `make all`. Note that this does *not* run install.
+ - To run the benchmarks and generate the benchmark report, use `make bench`.
