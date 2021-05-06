@@ -331,6 +331,29 @@ pub fn test() {
     println!("{:?} -> {:?} -> {:?}", input, res, inverse);
     // println!("Found omega for this input: {}", get_omega(&input));
 
+    let root = 2;
+    let a = field.get_primitive_root_of_unity(root);
+    println!(
+        "Found solution to x^{} mod {} = 1: x = {}",
+        root,
+        field.q,
+        a.unwrap()
+    );
+
+    // Primes
+    let val = 11;
+    println!(
+        "Is {} a prime? {}.",
+        val,
+        PrimeFieldElement::is_prime(val, &[2, 3, 5])
+    );
+    let val = 21;
+    println!(
+        "Is {} a prime? {}.",
+        val,
+        PrimeFieldElement::is_prime(val, &[2, 3, 5])
+    );
+
     // Time NTT implementation
     let range = 1048576; // 8192 ;
     let prime = 167772161; // = 5 * 2^25 + 1
