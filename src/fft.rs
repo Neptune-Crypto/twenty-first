@@ -377,12 +377,12 @@ pub fn test() {
             &new_field,
         ))
     }
-    let omega = get_omega(&ntt_input);
+    let omega = new_field.get_primitive_root_of_unity(ntt_input.len() as i64);
     // let omega = PrimeFieldElement::new(80500, &new_field); // the get_omega function was used to find this
     // println!("Legendre symbol of omega: {}", omega.legendre_symbol());
-    println!("Found omega: {}", omega);
+    println!("Found omega: {}", omega.unwrap());
     now = Instant::now();
-    let output = ntt_fft(ntt_input.clone(), &omega);
+    let output = ntt_fft(ntt_input.clone(), &omega.unwrap());
     println!(
         "Running NTT on a dataset of size {} took {} milli seconds",
         range,
@@ -392,7 +392,7 @@ pub fn test() {
     // Verify correctness
     // println!("ntt_input: {:?}", ntt_input);
     // println!("output: {:?}", output);
-    let res = intt_fft(output, &omega);
+    let res = intt_fft(output, &omega.unwrap());
     for i in 0..range {
         assert_eq!(res[i].value, ntt_input[i].value);
     }
@@ -413,11 +413,16 @@ mod test_vectors {
             PrimeFieldElement::new(1, &field),
             PrimeFieldElement::new(4, &field),
         ];
+        let expected_output = vec![
+            PrimeFieldElement::new(0, &field),
+            PrimeFieldElement::new(2, &field),
+        ];
         let output = ntt_fft(input.clone(), &generator);
-        let result = intt_fft(output, &generator);
+        let result = intt_fft(output.clone(), &generator);
 
         for i in 0..result.len() {
             assert_eq!(result[i], input[i]);
+            assert_eq!(expected_output[i], output[i]);
         }
     }
 
@@ -434,10 +439,17 @@ mod test_vectors {
             PrimeFieldElement::new(0, &field),
             PrimeFieldElement::new(0, &field),
         ];
+        let expected_output = vec![
+            PrimeFieldElement::new(0, &field),
+            PrimeFieldElement::new(4, &field),
+            PrimeFieldElement::new(2, &field),
+            PrimeFieldElement::new(3, &field),
+        ];
         let output = ntt_fft(input.clone(), &generator);
-        let result = intt_fft(output, &generator);
+        let result = intt_fft(output.clone(), &generator);
         for i in 0..result.len() {
             assert_eq!(result[i], input[i]);
+            assert_eq!(output[i], expected_output[i]);
         }
     }
 
@@ -465,6 +477,30 @@ mod test_vectors {
         let result = intt_fft(output, &generator);
         for i in 0..result.len() {
             assert_eq!(result[i], input[i]);
+        }
+    }
+
+    #[test]
+    fn finite_field_inversion_fft() {
+        use super::*;
+        // Time NTT implementation
+        let range = 4096; // 8192 ;
+        let prime = 167772161; // = 5 * 2^25 + 1
+        let mut ntt_input: Vec<PrimeFieldElement> = Vec::with_capacity(range);
+        let new_field = PrimeField::new(prime);
+        for _ in 0..range {
+            ntt_input.push(PrimeFieldElement::new(
+                rand::random::<u32>() as i64 % prime,
+                &new_field,
+            ))
+        }
+        let omega = new_field.get_primitive_root_of_unity(ntt_input.len() as i64);
+        let output = ntt_fft(ntt_input.clone(), &omega.unwrap());
+
+        // Verify that intt . ntt = I
+        let res = intt_fft(output, &omega.unwrap());
+        for i in 0..range {
+            assert_eq!(res[i].value, ntt_input[i].value);
         }
     }
 
