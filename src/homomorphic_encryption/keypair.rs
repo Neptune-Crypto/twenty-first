@@ -23,11 +23,13 @@ impl<'a> KeyPair<'a> {
         // println!("secret_key = {}", secret_key);
         let a: Polynomial = Polynomial::gen_uniform_poly(pqr);
         // println!("{}", a);
-        let e: Polynomial = Polynomial::gen_normal_poly(pqr).normalize();
+        let mut e: Polynomial = Polynomial::gen_normal_poly(pqr);
+        e.normalize();
         // println!("{}", e);
         let zero: Polynomial = Polynomial::additive_identity(pqr);
         // println!("{}", zero);
-        let b: Polynomial = zero.sub(&a).mul(&secret_key).sub(&e).modulus().normalize();
+        let mut b: Polynomial = zero.sub(&a).mul(&secret_key).sub(&e).modulus();
+        b.normalize();
         // println!("{}", b);
         let pk = PublicKey { a, b };
         KeyPair {

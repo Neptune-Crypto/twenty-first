@@ -3,7 +3,6 @@ use itertools::Itertools;
 use rand::Rng;
 use rand::RngCore;
 use rand_distr::Normal;
-use std::convert::TryInto;
 use std::fmt;
 
 use super::polynomial_quotient_ring::PolynomialQuotientRing;
@@ -14,6 +13,7 @@ use super::polynomial_quotient_ring::PolynomialQuotientRing;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Polynomial<'a> {
     // I think we cannot use arrays to store the coefficients, since array sizes must be known at compile time
+    // So we use vectors instead.
     pub coefficients: Vec<i128>,
     pub pqr: &'a PolynomialQuotientRing,
 }
@@ -24,38 +24,56 @@ impl fmt::Display for Polynomial<'_> {
             return write!(f, "0");
         }
 
-        let leading_zeros_warning: &str = match self.coefficients.as_slice() {
-            [0, ..] => &"Leading zeros!",
+        let trailing_zeros_warning: &str = match self.coefficients.last() {
+            Some(0) => &"Leading zeros!",
             _ => &"",
         };
+
         let mut outputs: Vec<String> = Vec::new();
-        let degree = self.coefficients.len() - 1;
-        for i in 0..=degree {
-            if self.coefficients[i] != 0 {
+        let pol_degree = self.coefficients.len() - 1;
+        for i in 0..=pol_degree {
+            let pow = pol_degree - i;
+
+            if self.coefficients[pow] != 0 {
+                // operator: plus or minus
+                let mut operator_str = "";
+                if i != 0 && self.coefficients[pow] != 0 {
+                    operator_str = if self.coefficients[pow] > 0 {
+                        " + "
+                    } else {
+                        " - "
+                    };
+                }
+
+                let abs_val = if self.coefficients[pow] < 0 {
+                    -self.coefficients[pow]
+                } else {
+                    self.coefficients[pow]
+                };
                 outputs.push(format!(
-                    "{}{}",
-                    if self.coefficients[i] == 1 {
+                    "{}{}{}",
+                    operator_str,
+                    if abs_val == 1 {
                         String::from("")
                     } else {
-                        self.coefficients[i].to_string()
+                        abs_val.to_string()
                     },
-                    // TODO: Replace by match!
-                    if degree - i == 0 && self.coefficients[i] == 1 {
+                    if pow == 0 && abs_val == 1 {
                         String::from("1")
-                    } else if degree - i == 0 {
+                    } else if pow == 0 {
                         String::from("")
-                    } else if degree - i == 1 {
+                    } else if pow == 1 {
                         String::from("x")
                     } else {
                         let mut result = "x^".to_owned();
-                        let borrowed_string = (degree - i).to_string().to_owned();
+                        let borrowed_string = pow.to_string().to_owned();
                         result.push_str(&borrowed_string);
                         result
                     }
                 ));
             }
         }
-        write!(f, "{}{}", leading_zeros_warning, outputs.join("+"))
+        write!(f, "{}{}", trailing_zeros_warning, outputs.join(""))
     }
 }
 
@@ -92,20 +110,23 @@ impl<'a> Polynomial<'a> {
     }
 
     pub fn gen_binary_poly(pqr: &'a PolynomialQuotientRing) -> Polynomial<'a> {
-        let res = Polynomial {
+        let mut res = Polynomial {
             coefficients: Polynomial::generate_random_numbers(pqr.n as usize, 2i128),
             pqr,
         };
         // TODO: Do we take the modulus here?
-        res.normalize()
+        res.normalize();
+        res
     }
 
     pub fn gen_uniform_poly(pqr: &'a PolynomialQuotientRing) -> Polynomial<'a> {
-        let res = Polynomial {
+        let mut res = Polynomial {
             coefficients: Polynomial::generate_random_numbers(pqr.n as usize, pqr.q),
             pqr,
         };
-        res.modulus().normalize()
+        res = res.modulus();
+        res.normalize();
+        res
     }
 
     pub fn gen_normal_poly(pqr: &'a PolynomialQuotientRing) -> Polynomial<'a> {
@@ -118,32 +139,37 @@ impl<'a> Polynomial<'a> {
             let int_val = ((val.round() as i128 % pqr.q) + pqr.q) % pqr.q;
             *elem = int_val;
         }
-        let ret = Polynomial { coefficients, pqr };
-        ret.modulus().normalize()
+        let mut ret = Polynomial { coefficients, pqr };
+        ret = ret.modulus();
+        ret.normalize();
+        ret
     }
 
-    // Remove leading zeros from coefficients
-    pub fn normalize(self) -> Polynomial<'a> {
-        let mut a: Vec<i128> = self.coefficients.clone();
-        while let [0, ..] = a.as_slice() {
-            a.remove(0);
-        }
-        Polynomial {
-            coefficients: a,
-            pqr: self.pqr,
+    // Remove trailing zeros from coefficients
+    // Borrow mutably when you mutate the data, but don't want to consume it
+    pub fn normalize(&mut self) {
+        while let Some(0) = self.coefficients.last() {
+            self.coefficients.pop();
         }
     }
 
     pub fn get_constant_term(&self) -> i128 {
-        match self.coefficients.last() {
-            None => 0,
-            Some(i) => *i,
+        match self.coefficients[..] {
+            [] => 0,
+            [i, ..] => i,
         }
     }
 
     // Doing long division, return the pair (div, mod), coefficients are always floored!
     // TODO: Verify lifetime parameters here!
     pub fn div(&self, divisor: &Polynomial<'a>) -> (Polynomial<'a>, Polynomial<'a>) {
+        if divisor.coefficients.is_empty() {
+            panic!(
+                "Cannot divide polynomial by zero. Got: ({})/({})",
+                self, divisor
+            );
+        }
+
         if self.coefficients.is_empty() {
             return (
                 Polynomial::additive_identity(self.pqr),
@@ -151,40 +177,43 @@ impl<'a> Polynomial<'a> {
             );
         }
 
+        let mut remainder = self.coefficients.clone();
+        let mut quotient = Vec::with_capacity(self.pqr.n as usize); // built from back to front so must be reversed
+
         let dividend_coeffs: &Vec<i128> = &self.coefficients;
         let divisor_coeffs: &Vec<i128> = &divisor.coefficients;
-        let mut quotient: Vec<i128> = Vec::with_capacity(self.pqr.n.try_into().unwrap());
-        let mut remainder: Vec<i128> = self.coefficients.clone();
-        let dividend_degree = dividend_coeffs.len() - 1;
         let divisor_degree = divisor_coeffs.len() - 1;
+        let dividend_degree = dividend_coeffs.len() - 1;
+        let dominant_divisor = divisor_coeffs.last().unwrap();
         let mut i = 0;
         while i + divisor_degree <= dividend_degree {
-            let mut res = remainder[0] / divisor_coeffs[0]; // result is always floored!
-            res = ((res % self.pqr.q) + self.pqr.q) % self.pqr.q;
+            // calculate next quotient coefficient
+            let res = remainder.last().unwrap() / dominant_divisor;
             quotient.push(res);
+            remainder.pop(); // remove highest order coefficient
 
-            // multiply divisor by result just obtained
-            // Create the correction value which is subtracted from the remainder
-            let mut correction = Vec::new();
-            for div_coeff in divisor_coeffs.iter() {
-                correction.push(div_coeff * res);
+            // Calculate rem = rem - res * divisor
+            // We need to manipulate divisor_degree + 1 values in remainder, but we get one for free through
+            // the pop() above, so we only need to manipulate divisor_degree values. For a divisor of degree
+            // 1, we need to manipulate 1 element.
+            for j in 0..divisor_degree {
+                // TODO: Rewrite this in terms of i, j, and poly degrees
+                let rem_length = remainder.len();
+                let divisor_length = divisor_coeffs.len();
+                remainder[rem_length - j - 1] -= res * divisor_coeffs[divisor_length - j - 2];
             }
-            let zeros = &mut vec![0i128; dividend_degree - divisor_degree - i];
-            correction.append(zeros);
-
-            // calculate rem - correction
-            remainder.remove(0); // TODO: This is probably slow!
-            correction.remove(0); // TODO: This is probably slow!
-            for j in 0..correction.len() {
-                remainder[j] =
-                    (((remainder[j] - correction[j]) % self.pqr.q) + self.pqr.q) % self.pqr.q;
-            }
-
             i += 1;
         }
 
-        // Divide the first coefficient in the dividend w/ the first non-zero coefficient of the divisor.
-        // Store the result in the quotient.
+        // Map all coefficients into the finite field mod p
+        for elem in quotient.iter_mut() {
+            *elem = (*elem % self.pqr.q + self.pqr.q) % self.pqr.q;
+        }
+        for elem in remainder.iter_mut() {
+            *elem = (*elem % self.pqr.q + self.pqr.q) % self.pqr.q;
+        }
+
+        quotient.reverse();
         let quotient_pol = Polynomial {
             coefficients: quotient,
             pqr: self.pqr,
@@ -193,46 +222,40 @@ impl<'a> Polynomial<'a> {
             coefficients: remainder,
             pqr: self.pqr,
         };
-        (quotient_pol.normalize(), remainder_pol.normalize())
+        (quotient_pol, remainder_pol)
     }
 
-    // TODO: Rewrite to return new polynomial instead of manipulating it inplace
-    // The reason that this is better is that it allows for chaining of operators
     pub fn modulus(&self) -> Polynomial<'a> {
         let polynomial_modulus = Polynomial {
             coefficients: self.pqr.get_polynomial_modulus(),
             pqr: self.pqr,
         };
         self.div(&polynomial_modulus).1
-        // self.coefficients = result.coefficients;
     }
 
     pub fn mul(&self, other: &Polynomial<'a>) -> Polynomial<'a> {
+        // If either polynomial is zero, return zero
         if self.coefficients.is_empty() || other.coefficients.is_empty() {
             return Polynomial::additive_identity(self.pqr);
         }
+
         let self_degree = self.coefficients.len() - 1;
         let other_degree = other.coefficients.len() - 1;
-        let mut self_rev = self.coefficients.clone();
-        self_rev.reverse();
-        let mut other_rev = other.coefficients.clone();
-        other_rev.reverse();
         let mut result_coeff: Vec<i128> = vec![0i128; self_degree + other_degree + 1];
         for i in 0..=self_degree {
             for j in 0..=other_degree {
-                let mul = self_rev[i] * other_rev[j];
+                let mul = self.coefficients[i] * other.coefficients[j];
                 result_coeff[i + j] += mul;
                 result_coeff[i + j] =
                     ((result_coeff[i + j] % self.pqr.q) + self.pqr.q) % self.pqr.q;
             }
         }
-        result_coeff.reverse();
-        let ret = Polynomial {
+        let mut ret = Polynomial {
             coefficients: result_coeff,
             pqr: self.pqr,
         };
-
-        ret.normalize()
+        ret.normalize();
+        ret
     }
 
     pub fn balance(&self) -> Polynomial<'a> {
@@ -271,6 +294,7 @@ impl<'a> Polynomial<'a> {
     }
 
     pub fn scalar_mul_float(&self, float_scalar: f64) -> Polynomial<'a> {
+        // Function does not map coefficients into finite field. Should it?
         let mut coefficients = self.coefficients.clone();
         for i in 0..self.coefficients.len() {
             coefficients[i] = (coefficients[i] as f64 * float_scalar).round() as i128;
@@ -282,67 +306,268 @@ impl<'a> Polynomial<'a> {
     }
 
     pub fn add(&self, other: &Polynomial<'a>) -> Polynomial<'a> {
-        // Create reversed copy of self.coefficients and of other.coefficients
-        let mut self_reversed = self.coefficients.clone();
-        self_reversed.reverse();
-        let mut other_reversed = other.coefficients.clone();
-        other_reversed.reverse();
-        let mut summed: Vec<i128> = self_reversed
+        let summed: Vec<i128> = self
+            .coefficients
             .iter()
-            .zip_longest(other_reversed.iter())
+            .zip_longest(other.coefficients.iter())
             .map(|a: itertools::EitherOrBoth<&i128, &i128>| match a {
                 Both(l, r) => (((*l + *r) % self.pqr.q) + self.pqr.q) % self.pqr.q,
                 Left(l) => *l,
                 Right(r) => *r,
             })
             .collect();
-        summed.reverse();
-        let ret = Polynomial {
+
+        Polynomial {
             coefficients: summed,
             pqr: self.pqr,
-        };
-
-        ret.normalize()
+        }
     }
 
     pub fn sub(&self, other: &Polynomial<'a>) -> Polynomial<'a> {
-        let negative_coefficients = other.coefficients.clone().iter().map(|x| -x).collect();
-        let neg_pol = Polynomial {
-            coefficients: negative_coefficients,
+        let diff: Vec<i128> = self
+            .coefficients
+            .iter()
+            .zip_longest(other.coefficients.iter())
+            .map(|a: itertools::EitherOrBoth<&i128, &i128>| match a {
+                Both(l, r) => (((*l - *r) % self.pqr.q) + self.pqr.q) % self.pqr.q,
+                Left(l) => *l,
+                Right(r) => -*r + self.pqr.q,
+            })
+            .collect();
+
+        Polynomial {
+            coefficients: diff,
             pqr: self.pqr,
-        };
-        // The adding should normalize the result, so we don't need to do it here too.
-        self.add(&neg_pol)
+        }
     }
 }
 
 #[cfg(test)]
-mod test_polynomial {
+mod test_polynomials {
     use super::*;
 
     #[test]
-    fn internal() {
-        let pqr = PolynomialQuotientRing::new(4, 7);
-        let a: Polynomial = Polynomial {
+    fn new_test() {
+        let pqr = PolynomialQuotientRing::new(4, 7); // degree: 4, mod prime: 7
+        let mut a: Polynomial = Polynomial {
+            coefficients: vec![1, 0],
+            pqr: &pqr,
+        };
+        let mut b: Polynomial = Polynomial {
+            coefficients: vec![1, 1],
+            pqr: &pqr,
+        };
+        let mut sum: Polynomial = Polynomial {
+            coefficients: vec![2, 1],
+            pqr: &pqr,
+        };
+        assert_eq!(a.add(&b), sum);
+
+        let mut diff: Polynomial = Polynomial {
+            coefficients: vec![0, 6],
+            pqr: &pqr,
+        };
+        assert_eq!(a.sub(&b), diff);
+
+        let mut mul: Polynomial = Polynomial {
+            coefficients: vec![1, 1],
+            pqr: &pqr,
+        };
+        assert_eq!(a.mul(&b), mul);
+
+        a = Polynomial {
+            coefficients: vec![1, 0, 5],
+            pqr: &pqr,
+        };
+        b = Polynomial {
             coefficients: vec![1],
             pqr: &pqr,
         };
-        let b: Polynomial = Polynomial {
-            coefficients: vec![2],
+        sum = Polynomial {
+            coefficients: vec![2, 0, 5],
             pqr: &pqr,
         };
-        let big: Polynomial = Polynomial {
-            coefficients: vec![3, 5, 1, 6],
+        assert_eq!(a.add(&b), sum);
+
+        diff = Polynomial {
+            coefficients: vec![0, 0, 5],
             pqr: &pqr,
         };
-        let big_squared = Polynomial {
-            coefficients: vec![4, 3, 3, 5],
+        assert_eq!(a.sub(&b), diff);
+
+        mul = Polynomial {
+            coefficients: vec![1, 0, 5],
             pqr: &pqr,
         };
-        let zero = Polynomial::additive_identity(&pqr);
-        assert!(a.add(&a) == b);
-        assert!(a.sub(&a) == zero);
-        assert!(big.mul(&a) == big);
-        assert!(big.mul(&big).modulus() == big_squared);
+        assert_eq!(a.mul(&b), mul);
+
+        a = Polynomial {
+            coefficients: vec![1, 5, 6],
+            pqr: &pqr,
+        };
+        b = Polynomial {
+            coefficients: vec![3, 2, 4, 3],
+            pqr: &pqr,
+        };
+        sum = Polynomial {
+            coefficients: vec![4, 0, 3, 3],
+            pqr: &pqr,
+        };
+        assert_eq!(a.add(&b), sum);
+
+        diff = Polynomial {
+            coefficients: vec![5, 3, 2, 4],
+            pqr: &pqr,
+        };
+        assert_eq!(a.sub(&b), diff);
+
+        mul = Polynomial {
+            coefficients: vec![3, 3, 4, 0, 4, 4],
+            pqr: &pqr,
+        };
+        assert_eq!(a.mul(&b), mul);
+
+        a = Polynomial {
+            coefficients: vec![0, 0, 1],
+            pqr: &pqr,
+        };
+        b = Polynomial {
+            coefficients: vec![0, 1],
+            pqr: &pqr,
+        };
+        let mut quotient = Polynomial {
+            coefficients: vec![0, 1],
+            pqr: &pqr,
+        };
+        let mut remainder = Polynomial {
+            coefficients: vec![],
+            pqr: &pqr,
+        };
+        let mut div_result = a.div(&b);
+        div_result.0.normalize();
+        div_result.1.normalize();
+        assert_eq!(div_result.0, quotient);
+        assert_eq!(div_result.1, remainder);
+        assert_eq!(remainder.to_string(), "0");
+        assert_eq!(a.to_string(), "x^2");
+        assert_eq!(b.to_string(), "x");
+
+        a = Polynomial {
+            coefficients: vec![-4, 0, -2, 1],
+            pqr: &pqr,
+        };
+        b = Polynomial {
+            coefficients: vec![-3, 1],
+            pqr: &pqr,
+        };
+        quotient = Polynomial {
+            coefficients: vec![3, 1, 1],
+            pqr: &pqr,
+        };
+        remainder = Polynomial {
+            coefficients: vec![5],
+            pqr: &pqr,
+        };
+        let mut div_result = a.div(&b);
+        div_result.0.normalize();
+        div_result.1.normalize();
+        assert_eq!(div_result.0, quotient);
+        assert_eq!(div_result.1, remainder);
+
+        a = Polynomial {
+            coefficients: vec![-10, 0, 1, 3, -4, 5],
+            pqr: &pqr,
+        };
+        b = Polynomial {
+            coefficients: vec![2, -1, 1],
+            pqr: &pqr,
+        };
+        quotient = Polynomial {
+            coefficients: vec![0, 1, 1, 5],
+            pqr: &pqr,
+        };
+        remainder = Polynomial {
+            coefficients: vec![4, 5],
+            pqr: &pqr,
+        };
+        div_result = a.div(&b);
+        div_result.0.normalize();
+        div_result.1.normalize();
+        assert_eq!(div_result.0, quotient);
+        assert_eq!(div_result.1, remainder);
+
+        let empty_pol = Polynomial {
+            coefficients: vec![],
+            pqr: &pqr,
+        };
+        assert_eq!(a.get_constant_term(), -10);
+        assert_eq!(empty_pol.get_constant_term(), 0);
+        assert_eq!(a.to_string(), "5x^5 - 4x^4 + 3x^3 + x^2 - 10");
+        assert_eq!(b.to_string(), "x^2 - x + 2");
+        assert_eq!(quotient.to_string(), "5x^3 + x^2 + x");
+        assert_eq!(remainder.to_string(), "5x + 4");
+
+        // Let's test: normalize, additive_identitive, polynomial_from_int
+        // random_generators, balance, scalar_mul, scalar_modulus, scalar_mul_float
+        b = Polynomial {
+            coefficients: vec![0, 1, 0],
+            pqr: &pqr,
+        };
+        let normalized = Polynomial {
+            coefficients: vec![0, 1],
+            pqr: &pqr,
+        };
+        let five = Polynomial {
+            coefficients: vec![5],
+            pqr: &pqr,
+        };
+        assert_ne!(b, normalized);
+        b.normalize();
+        assert_eq!(b, normalized);
+        assert_eq!(Polynomial::additive_identity(&pqr), empty_pol);
+        assert_eq!(Polynomial::polynomium_from_int(5, &pqr), five);
+
+        // Test binary polynomial generation
+        let binary = Polynomial::gen_binary_poly(&pqr);
+        assert!(binary.coefficients.len() <= pqr.n as usize);
+        for elem in binary.coefficients.iter() {
+            assert!(*elem == 0 || *elem == 1);
+        }
+
+        // Test balance on quotient = 5x^3 + x^2 + x
+        let balanced = quotient.balance();
+        let expected_balanced = Polynomial {
+            coefficients: vec![0, 1, 1, -2],
+            pqr: &pqr,
+        };
+        assert!(balanced.coefficients.len() == quotient.coefficients.len());
+        assert_eq!(balanced, expected_balanced);
+
+        // Test scalar_mul
+        let scalar_mul = quotient.scalar_mul(3);
+        let expected_scalar_mul = Polynomial {
+            coefficients: vec![0, 3, 3, 1],
+            pqr: &pqr,
+        };
+        assert!(quotient.coefficients.len() == scalar_mul.coefficients.len());
+        assert_eq!(scalar_mul, expected_scalar_mul);
+
+        // Test scalar_modulus
+        let scalar_modulus = scalar_mul.scalar_modulus(2);
+        let expected_scalar_modulus = Polynomial {
+            coefficients: vec![0, 1, 1, 1],
+            pqr: &pqr,
+        };
+        assert!(scalar_mul.coefficients.len() == scalar_modulus.coefficients.len());
+        assert_eq!(expected_scalar_modulus, scalar_modulus);
+
+        // Test scalar_mul_float
+        let scalar_mul_float = scalar_mul.scalar_mul_float(3.4f64);
+        let expected_scalar_mul_float = Polynomial {
+            coefficients: vec![0, 10, 10, 3],
+            pqr: &pqr,
+        };
+        assert!(scalar_mul.coefficients.len() == scalar_mul_float.coefficients.len());
+        assert_eq!(expected_scalar_mul_float, scalar_mul_float);
     }
 }

@@ -3,7 +3,7 @@ pub struct PolynomialQuotientRing {
     // polynomial_modulus should be an immutable reference to a Polynomial whose lifetime is the
     // same as this object -- it should die, if this object dies.
     pub n: i128, // n = 2^p, always a power of 2.
-    pub q: i128,
+    pub q: i128, // A prime number. All coefficients are modulus this number.
     polynomial_modulus: Vec<i128>,
 }
 
