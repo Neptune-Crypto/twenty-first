@@ -26,12 +26,12 @@ impl<'a> PublicKey<'a> {
         // println!("m: {}", m);
         let scaled_m = m.scalar_mul(delta).scalar_modulus(self.a.pqr.q);
         // println!("scaled_m: {}", scaled_m);
-        let u = Polynomial::gen_binary_poly(self.a.pqr)
-            .modulus()
-            .normalize();
+        let u: Polynomial = Polynomial::gen_binary_poly(self.a.pqr).modulus();
         // println!("u: {}", u);
-        let ct0 = self.b.mul(&u).add(&e1).add(&scaled_m).modulus().normalize();
-        let ct1 = self.a.mul(&u).add(&e2).modulus().normalize();
+        let mut ct0 = self.b.mul(&u).add(&e1).add(&scaled_m).modulus();
+        ct0.normalize();
+        let mut ct1 = self.a.mul(&u).add(&e2).modulus();
+        ct1.normalize();
         Ciphertext { ct0, ct1 }
     }
 }
