@@ -95,6 +95,13 @@ pub fn test() {
         key_pair.sk.decrypt(pt_modulus, &ciphertext)
     );
 
+    // Lagrange interpolation
+    let interpolation = Polynomial::lagrange_interpolation(&[(0, 0), (1, 1), (-1, 1)], &pqr);
+    println!(
+        "interpolation result of points (0, 0), (1, 1), (-1, 1) is: {}",
+        interpolation
+    );
+
     let test_pqr = PolynomialQuotientRing::new(16, 32768i128);
     let pt_modulus_test = 256;
     let pt_test_1 = 73;
