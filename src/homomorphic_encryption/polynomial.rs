@@ -92,6 +92,67 @@ impl<'a> Polynomial<'a> {
         }
     }
 
+    pub fn lagrange_interpolation(
+        points: &[(i128, i128)],
+        pqr: &'a PolynomialQuotientRing,
+    ) -> Polynomial<'a> {
+        // calculate a reversed representation of the coefficients of
+        // prod_{i=0}^{N}((x- q_i))
+        fn prod_helper(input: &[i128]) -> Vec<i128> {
+            if let Some((q_j, elements)) = input.split_first() {
+                match elements {
+                    // base case is `x - q_j` := [1, -q_j]
+                    [] => vec![1, -q_j],
+                    _ => {
+                        // The recursive call calculates (x-q_j)*rec = x*rec - q_j*rec := [0, rec] .- q_j*[rec]
+                        let mut rec = prod_helper(elements);
+                        rec.push(0);
+                        let mut i = rec.len() - 1;
+                        while i > 0 {
+                            rec[i] -= q_j * rec[i - 1];
+                            i -= 1;
+                        }
+                        rec
+                    }
+                }
+            } else {
+                panic!("Empty array received");
+            }
+        }
+
+        let mut floats: Vec<f64> = vec![0f64; points.len()];
+        for point in points.iter() {
+            // create a polynomial that is zero at all other points than this
+            // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
+            let roots: Vec<i128> = points
+                .iter()
+                .filter(|x| x.0 != point.0)
+                .map(|x| x.0)
+                .collect();
+
+            // calculate all coefficients
+            let mut coeffs: Vec<i128> = prod_helper(&roots);
+            coeffs.reverse();
+            let mut float_coeffs: Vec<f64> = coeffs.iter().map(|&x| x as f64).collect();
+            let mut divisor: i128 = 1;
+            for root in roots.iter() {
+                divisor *= point.0 - root;
+            }
+            for coeff in float_coeffs.iter_mut() {
+                *coeff *= point.1 as f64;
+                *coeff /= divisor as f64;
+            }
+
+            for i in 0..coeffs.len() {
+                floats[i] += float_coeffs[i];
+            }
+        }
+
+        let coefficients = floats.iter().map(|&x| x as i128).collect();
+
+        Polynomial { coefficients, pqr }
+    }
+
     // should be a private function
     fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
         let mut prng = rand::thread_rng();
@@ -345,6 +406,29 @@ impl<'a> Polynomial<'a> {
 #[cfg(test)]
 mod test_polynomials {
     use super::*;
+
+    #[test]
+    fn lagrange_interpolation() {
+        let pqr = PolynomialQuotientRing::new(4, 101); // degree: 4, mod prime: 101
+
+        let mut interpolation_result =
+            Polynomial::lagrange_interpolation(&[(-1, 1), (0, 0), (1, 1)], &pqr);
+        let expected_interpolation_result = Polynomial {
+            coefficients: vec![0, 0, 1],
+            pqr: &pqr,
+        };
+        assert_eq!(expected_interpolation_result, interpolation_result);
+
+        // Example found on
+        // https://medium.com/@VitalikButerin/quadratic-arithmetic-programs-from-zero-to-hero-f6d558cea649
+        // Bad example as coefficients are not whole numbers
+        interpolation_result = Polynomial::lagrange_interpolation(&[(1, 3), (2, 2), (3, 4)], &pqr);
+        let expected_interpolation_result = Polynomial {
+            coefficients: vec![7, -5, 1],
+            pqr: &pqr,
+        };
+        assert_eq!(expected_interpolation_result, interpolation_result);
+    }
 
     #[test]
     fn new_test() {
