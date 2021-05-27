@@ -1,10 +1,15 @@
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
+use num_traits::Zero;
 use rand::Rng;
 use rand::RngCore;
 use rand_distr::Normal;
+use std::collections::HashSet;
+use std::convert::From;
 use std::fmt;
+use std::hash::Hash;
 
+use super::fraction::Fraction;
 use super::polynomial_quotient_ring::PolynomialQuotientRing;
 
 // All structs holding references must have lifetime annotations in their definition.
@@ -92,10 +97,26 @@ impl<'a> Polynomial<'a> {
         }
     }
 
+    pub fn evaluate(&self, x: i128) -> i128 {
+        self.coefficients
+            .iter()
+            .enumerate()
+            .map(|(i, &c)| c * x.pow(i as u32))
+            .sum()
+    }
+
     pub fn lagrange_interpolation(
         points: &[(i128, i128)],
         pqr: &'a PolynomialQuotientRing,
     ) -> Polynomial<'a> {
+        fn has_unique_elements<T>(iter: T) -> bool
+        where
+            T: IntoIterator,
+            T::Item: Eq + Hash,
+        {
+            let mut uniq = HashSet::new();
+            iter.into_iter().all(move |x| uniq.insert(x))
+        }
         // calculate a reversed representation of the coefficients of
         // prod_{i=0}^{N}((x- q_i))
         fn prod_helper(input: &[i128]) -> Vec<i128> {
@@ -120,35 +141,52 @@ impl<'a> Polynomial<'a> {
             }
         }
 
-        let mut floats: Vec<f64> = vec![0f64; points.len()];
+        if !has_unique_elements(points.iter().map(|&x| x.0)) {
+            panic!("Repeated x values received. Got: {:?}", points);
+        }
+
+        let zero_frac = Fraction::zero();
+        let mut fracs: Vec<Fraction<i128>> = vec![zero_frac; points.len()];
+        let roots: Vec<i128> = points.iter().map(|x| x.0).collect();
+        let mut big_pol_coeffs = prod_helper(&roots);
+        big_pol_coeffs.reverse();
+        let big_pol = Polynomial {
+            coefficients: big_pol_coeffs,
+            pqr,
+        };
         for point in points.iter() {
             // create a polynomial that is zero at all other points than this
             // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
-            let roots: Vec<i128> = points
-                .iter()
-                .filter(|x| x.0 != point.0)
-                .map(|x| x.0)
-                .collect();
+            let mut my_pol = Polynomial {
+                coefficients: vec![-point.0, 1],
+                pqr,
+            };
+            my_pol = big_pol.div_without_modulus(&my_pol).0;
 
-            // calculate all coefficients
-            let mut coeffs: Vec<i128> = prod_helper(&roots);
-            coeffs.reverse();
-            let mut float_coeffs: Vec<f64> = coeffs.iter().map(|&x| x as f64).collect();
             let mut divisor: i128 = 1;
             for root in roots.iter() {
+                if *root == point.0 {
+                    continue;
+                }
                 divisor *= point.0 - root;
             }
-            for coeff in float_coeffs.iter_mut() {
-                *coeff *= point.1 as f64;
-                *coeff /= divisor as f64;
+
+            let mut frac_coeffs: Vec<Fraction<i128>> = my_pol
+                .coefficients
+                .iter()
+                .map(|&x| Fraction::<i128>::from(x))
+                .collect();
+            for coeff in frac_coeffs.iter_mut() {
+                *coeff = coeff.scalar_mul(point.1);
+                *coeff = coeff.scalar_div(divisor);
             }
 
-            for i in 0..coeffs.len() {
-                floats[i] += float_coeffs[i];
+            for i in 0..frac_coeffs.len() {
+                fracs[i] = fracs[i] + frac_coeffs[i];
             }
         }
 
-        let coefficients = floats.iter().map(|&x| x as i128).collect();
+        let coefficients = fracs.iter().map(|&x| x.get_dividend()).collect();
 
         Polynomial { coefficients, pqr }
     }
@@ -221,9 +259,11 @@ impl<'a> Polynomial<'a> {
         }
     }
 
-    // Doing long division, return the pair (div, mod), coefficients are always floored!
-    // TODO: Verify lifetime parameters here!
-    pub fn div(&self, divisor: &Polynomial<'a>) -> (Polynomial<'a>, Polynomial<'a>) {
+    fn div_internal(
+        &self,
+        divisor: &Polynomial<'a>,
+        finite_field: bool,
+    ) -> (Polynomial<'a>, Polynomial<'a>) {
         if divisor.coefficients.is_empty() {
             panic!(
                 "Cannot divide polynomial by zero. Got: ({})/({})",
@@ -267,11 +307,13 @@ impl<'a> Polynomial<'a> {
         }
 
         // Map all coefficients into the finite field mod p
-        for elem in quotient.iter_mut() {
-            *elem = (*elem % self.pqr.q + self.pqr.q) % self.pqr.q;
-        }
-        for elem in remainder.iter_mut() {
-            *elem = (*elem % self.pqr.q + self.pqr.q) % self.pqr.q;
+        if finite_field {
+            for elem in quotient.iter_mut() {
+                *elem = (*elem % self.pqr.q + self.pqr.q) % self.pqr.q;
+            }
+            for elem in remainder.iter_mut() {
+                *elem = (*elem % self.pqr.q + self.pqr.q) % self.pqr.q;
+            }
         }
 
         quotient.reverse();
@@ -284,6 +326,20 @@ impl<'a> Polynomial<'a> {
             pqr: self.pqr,
         };
         (quotient_pol, remainder_pol)
+    }
+
+    // Mainly just written for benchmarking/testing/prototyping
+    pub fn div_without_modulus(
+        &self,
+        divisor: &Polynomial<'a>,
+    ) -> (Polynomial<'a>, Polynomial<'a>) {
+        self.div_internal(divisor, false)
+    }
+
+    // Doing long division, return the pair (div, mod), coefficients are always floored!
+    // TODO: Verify lifetime parameters here!
+    pub fn div(&self, divisor: &Polynomial<'a>) -> (Polynomial<'a>, Polynomial<'a>) {
+        self.div_internal(divisor, true)
     }
 
     pub fn modulus(&self) -> Polynomial<'a> {
@@ -411,23 +467,51 @@ mod test_polynomials {
     fn lagrange_interpolation() {
         let pqr = PolynomialQuotientRing::new(4, 101); // degree: 4, mod prime: 101
 
-        let mut interpolation_result =
-            Polynomial::lagrange_interpolation(&[(-1, 1), (0, 0), (1, 1)], &pqr);
+        let points = &[(-1, 1), (0, 0), (1, 1)];
+        let interpolation_result = Polynomial::lagrange_interpolation(points, &pqr);
         let expected_interpolation_result = Polynomial {
             coefficients: vec![0, 0, 1],
             pqr: &pqr,
         };
         assert_eq!(expected_interpolation_result, interpolation_result);
+        for point in points {
+            assert_eq!(interpolation_result.evaluate(point.0), point.1);
+        }
+    }
 
-        // Example found on
-        // https://medium.com/@VitalikButerin/quadratic-arithmetic-programs-from-zero-to-hero-f6d558cea649
-        // Bad example as coefficients are not whole numbers
-        interpolation_result = Polynomial::lagrange_interpolation(&[(1, 3), (2, 2), (3, 4)], &pqr);
-        let expected_interpolation_result = Polynomial {
-            coefficients: vec![7, -5, 1],
+    #[test]
+    fn property_based_test_lagrange_interpolation() {
+        // Autogenerate a `number_of_points - 1` degree polynomial
+        // We start by autogenerating the polynomial, as we would get a polynomial
+        // with fractional coefficients if we autogenerated the points and derived the polynomium
+        // from that. And we cannot currently handle non-integer coefficients.
+        let number_of_points = 12;
+        let pqr = PolynomialQuotientRing::new(256, std::i64::MAX as i128);
+        let mut coefficients: Vec<i128> = Vec::with_capacity(number_of_points);
+        for _ in 0..number_of_points {
+            coefficients.push(rand::random::<i128>() % 20i128);
+        }
+
+        let pol = Polynomial {
+            coefficients,
             pqr: &pqr,
         };
-        assert_eq!(expected_interpolation_result, interpolation_result);
+
+        // Evaluate this in `number_of_points` points
+        let mut points: Vec<(i128, i128)> = Vec::with_capacity(number_of_points);
+        for i in 0..number_of_points {
+            let x = i as i128 - 5;
+            let y = pol.evaluate(x);
+            points.push((x as i128, y));
+        }
+
+        // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
+        // evaluate the point values, and verify that they match the original values
+        let interpolation_result = Polynomial::lagrange_interpolation(&points, &pqr);
+        for point in points {
+            assert_eq!(interpolation_result.evaluate(point.0), point.1);
+        }
+        assert_eq!(interpolation_result, pol);
     }
 
     #[test]
