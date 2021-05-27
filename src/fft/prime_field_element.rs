@@ -146,10 +146,15 @@ impl<'a> PrimeFieldElement<'a> {
     }
 
     // Return the greatest common divisor (gcd), and factors a, b s.t. x*a + b*y = gcd(a, b).
-    fn eea(mut x: i64, mut y: i64) -> (i64, i64, i64) {
-        let (mut a_factor, mut a1, mut b_factor, mut b1) = (1, 0, 0, 1);
+    pub fn eea<T: num_traits::Num + Clone + Copy>(mut x: T, mut y: T) -> (T, T, T) {
+        let (mut a_factor, mut a1, mut b_factor, mut b1) = (
+            num_traits::one(),
+            num_traits::zero(),
+            num_traits::zero(),
+            num_traits::one(),
+        );
 
-        while y != 0 {
+        while y != num_traits::zero() {
             let (quotient, remainder) = (x / y, x % y);
             let (c, d) = (a_factor - quotient * a1, b_factor - quotient * b1);
 

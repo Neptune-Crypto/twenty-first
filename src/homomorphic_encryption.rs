@@ -1,5 +1,7 @@
 mod ciphertext;
 use ciphertext::Ciphertext;
+mod fraction;
+use fraction::Fraction;
 pub mod polynomial;
 use polynomial::Polynomial;
 pub mod polynomial_quotient_ring;
@@ -101,6 +103,15 @@ pub fn test() {
         "interpolation result of points (0, 0), (1, 1), (-1, 1) is: {}",
         interpolation
     );
+
+    // Fractions
+    let frac = Fraction::new(5, 2);
+    let sum = frac + frac;
+    println!("{} + {} = {}", frac, frac, sum);
+    println!("dividend of {} = {}", frac, frac.get_dividend());
+    println!("divisor of {} = {}", frac, frac.get_divisor());
+    println!("{} * {} = {}", 6, frac, frac.scalar_mul(6));
+    println!("{} / {} = {}", frac, 7, frac.scalar_div(7));
 
     let test_pqr = PolynomialQuotientRing::new(16, 32768i128);
     let pt_modulus_test = 256;
