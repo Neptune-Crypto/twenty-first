@@ -1,8 +1,8 @@
 mod ciphertext;
 use ciphertext::Ciphertext;
-mod polynomial;
+pub mod polynomial;
 use polynomial::Polynomial;
-mod polynomial_quotient_ring;
+pub mod polynomial_quotient_ring;
 use polynomial_quotient_ring::PolynomialQuotientRing;
 use rand::RngCore;
 mod keypair;
