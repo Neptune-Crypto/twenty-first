@@ -1,13 +1,12 @@
+use super::super::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
 use num_traits::Zero;
 use rand::Rng;
 use rand::RngCore;
 use rand_distr::Normal;
-use std::collections::HashSet;
 use std::convert::From;
 use std::fmt;
-use std::hash::Hash;
 
 use super::fraction::Fraction;
 use super::polynomial_quotient_ring::PolynomialQuotientRing;
@@ -109,14 +108,6 @@ impl<'a> Polynomial<'a> {
         points: &[(i128, i128)],
         pqr: &'a PolynomialQuotientRing,
     ) -> Polynomial<'a> {
-        fn has_unique_elements<T>(iter: T) -> bool
-        where
-            T: IntoIterator,
-            T::Item: Eq + Hash,
-        {
-            let mut uniq = HashSet::new();
-            iter.into_iter().all(move |x| uniq.insert(x))
-        }
         // calculate a reversed representation of the coefficients of
         // prod_{i=0}^{N}((x- q_i))
         fn prod_helper(input: &[i128]) -> Vec<i128> {

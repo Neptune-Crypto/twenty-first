@@ -11,6 +11,7 @@ mod hello_world;
 pub mod homomorphic_encryption;
 mod primitives;
 mod types;
+mod utils;
 
 pub fn my_library_function() -> Result<()> {
     println!("\n\n*****Running my_private_function*****");
