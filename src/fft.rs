@@ -17,7 +17,7 @@ pub fn dft_finite_fields<'a>(
 ) -> Vec<PrimeFieldElement<'a>> {
     let pow = match mod_pows.get_key_value(&omega_power) {
         None => {
-            let val = omega.mod_pow(omega_power as i64);
+            let val = omega.mod_pow(omega_power as i128);
             mod_pows.insert(omega_power, val);
             val
         }
@@ -63,7 +63,7 @@ fn ntt_fft_helper<'a>(
             let exponent = j * omega_power;
             let pow = match mod_pows.get_key_value(&exponent) {
                 None => {
-                    let val = omega.mod_pow(exponent as i64);
+                    let val = omega.mod_pow(exponent as i128);
                     mod_pows.insert(exponent, val);
                     val
                 }
@@ -99,7 +99,7 @@ pub fn ntt_fft<'a>(
 ) -> Vec<PrimeFieldElement<'a>> {
     // Verify that ω^N = 1, N is length of x
     let mut mod_pows: HashMap<usize, PrimeFieldElement<'a>> = HashMap::new();
-    if omega.mod_pow(x.len() as i64).value != 1 {
+    if omega.mod_pow(x.len() as i128).value != 1 {
         panic!("ntt_fft called with ω^len != 1. Got: {:?}", omega);
     }
     ntt_fft_helper(x, omega, &mut mod_pows, 1)
@@ -109,7 +109,7 @@ pub fn intt_fft<'a>(
     x: Vec<PrimeFieldElement<'a>>,
     omega: &PrimeFieldElement<'a>,
 ) -> Vec<PrimeFieldElement<'a>> {
-    let length = PrimeFieldElement::new(x.len() as i64, &omega.field);
+    let length = PrimeFieldElement::new(x.len() as i128, &omega.field);
     let omega_inv = &omega.inv();
     let res_scaled = ntt_fft(x, &omega_inv);
 
@@ -319,11 +319,11 @@ pub fn test() {
     let new_field = PrimeField::new(prime);
     for _ in 0..range {
         ntt_input.push(PrimeFieldElement::new(
-            rand::random::<u32>() as i64 % prime,
+            rand::random::<u32>() as i128 % prime,
             &new_field,
         ))
     }
-    let omega = new_field.get_primitive_root_of_unity(ntt_input.len() as i64);
+    let omega = new_field.get_primitive_root_of_unity(ntt_input.len() as i128);
     println!("Found omega: {}", omega.unwrap());
     now = Instant::now();
     let output = ntt_fft(ntt_input.clone(), &omega.unwrap());
@@ -432,11 +432,11 @@ mod test_vectors {
         let new_field = PrimeField::new(prime);
         for _ in 0..range {
             ntt_input.push(PrimeFieldElement::new(
-                rand::random::<u32>() as i64 % prime,
+                rand::random::<u32>() as i128 % prime,
                 &new_field,
             ))
         }
-        let omega = new_field.get_primitive_root_of_unity(ntt_input.len() as i64);
+        let omega = new_field.get_primitive_root_of_unity(ntt_input.len() as i128);
         let output = ntt_fft(ntt_input.clone(), &omega.unwrap());
 
         // Verify that intt . ntt = I

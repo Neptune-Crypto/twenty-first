@@ -7,15 +7,15 @@ use std::ops::Sub;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrimeField {
-    pub q: i64,
+    pub q: i128,
 }
 
 impl PrimeField {
-    pub fn new(q: i64) -> Self {
+    pub fn new(q: i128) -> Self {
         Self { q }
     }
 
-    pub fn get_primitive_root_of_unity(&self, n: i64) -> Option<PrimeFieldElement> {
+    pub fn get_primitive_root_of_unity(&self, n: i128) -> Option<PrimeFieldElement> {
         // Cf. https://www.csd.uwo.ca/~mmorenom/CS874/Lectures/Newton2Hensel.html/node9.html#thrm:PrimitiveRootExistenceCriterium
         // N must divide the field prime minus one for a primitive nth root of unity to exist
         if (self.q - 1) % n != 0 {
@@ -23,7 +23,7 @@ impl PrimeField {
         }
 
         let mut candidate_value = 2;
-        let mut roots: Vec<i64> = Vec::new();
+        let mut roots: Vec<i128> = Vec::new();
         let mut field_element: PrimeFieldElement = PrimeFieldElement::new(0, self);
         let mut found: bool = false;
         while candidate_value <= self.q {
@@ -32,7 +32,7 @@ impl PrimeField {
             // }
 
             field_element = PrimeFieldElement::new(candidate_value, &self);
-            let mod_pow = field_element.mod_pow(n as i64);
+            let mod_pow = field_element.mod_pow(n as i128);
             if mod_pow.value == 1 {
                 roots.push(candidate_value);
                 // println!("{} ^ N == 1", candidate_value);
@@ -45,7 +45,7 @@ impl PrimeField {
                 // find all primes, p_i, less than sqrt(candidate_value) and check, for all p_i
                 // candidate_value ^ (n/p_i) != 1
                 let bound = n / 2;
-                let primes = PrimeFieldElement::primes_lt(bound as i64);
+                let primes = PrimeFieldElement::primes_lt(bound as i128);
                 if primes
                     .iter()
                     .filter(|&x| n % x == 0)
@@ -72,7 +72,7 @@ impl PrimeField {
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct PrimeFieldElement<'a> {
-    pub value: i64,
+    pub value: i128,
     pub field: &'a PrimeField,
 }
 
@@ -85,7 +85,7 @@ impl fmt::Display for PrimeFieldElement<'_> {
 impl<'a> PrimeFieldElement<'a> {
     // is_prime and primes_lt have been shamelessly stolen from
     // https://gist.github.com/glebm/440bbe2fc95e7abee40eb260ec82f85c
-    pub fn is_prime(n: i64, primes: &[i64]) -> bool {
+    pub fn is_prime(n: i128, primes: &[i128]) -> bool {
         for &p in primes {
             let q = n / p;
             if q < p {
@@ -99,9 +99,9 @@ impl<'a> PrimeFieldElement<'a> {
         panic!("too few primes")
     }
 
-    fn primes_lt(bound: i64) -> Vec<i64> {
+    fn primes_lt(bound: i128) -> Vec<i128> {
         let mut primes: Vec<bool> = (0..bound + 1).map(|num| num == 2 || num & 1 != 0).collect();
-        let mut num = 3i64;
+        let mut num = 3i128;
         while num * num <= bound {
             let mut j = num * num;
             while j <= bound {
@@ -114,18 +114,18 @@ impl<'a> PrimeFieldElement<'a> {
             .into_iter()
             .enumerate()
             .skip(2)
-            .filter_map(|(i, p)| if p { Some(i as i64) } else { None })
-            .collect::<Vec<i64>>()
+            .filter_map(|(i, p)| if p { Some(i as i128) } else { None })
+            .collect::<Vec<i128>>()
     }
 
-    pub fn new(value: i64, field: &'a PrimeField) -> Self {
+    pub fn new(value: i128, field: &'a PrimeField) -> Self {
         Self {
             value: (value % field.q + field.q) % field.q,
             field,
         }
     }
 
-    pub fn legendre_symbol(&self) -> i64 {
+    pub fn legendre_symbol(&self) -> i128 {
         let elem = self.mod_pow((self.field.q - 1) / 2).value;
 
         // Ugly hack to force a result in {-1,0,1}
@@ -178,14 +178,14 @@ impl<'a> PrimeFieldElement<'a> {
         }
     }
 
-    pub fn mod_pow_raw(&self, pow: i64) -> i64 {
-        let mut acc: i64 = 1;
-        let mod_value: i64 = self.field.q;
+    pub fn mod_pow_raw(&self, pow: i128) -> i128 {
+        let mut acc: i128 = 1;
+        let mod_value: i128 = self.field.q;
         let res = self.value;
 
-        for i in 0..64 {
+        for i in 0..128 {
             acc = acc * acc % mod_value;
-            let set: bool = pow & (1 << (64 - 1 - i)) != 0;
+            let set: bool = pow & (1 << (128 - 1 - i)) != 0;
             if set {
                 acc = acc * res % mod_value;
             }
@@ -193,7 +193,7 @@ impl<'a> PrimeFieldElement<'a> {
         acc
     }
 
-    pub fn mod_pow(&self, pow: i64) -> Self {
+    pub fn mod_pow(&self, pow: i128) -> Self {
         Self {
             value: self.mod_pow_raw(pow),
             field: self.field,
@@ -273,7 +273,7 @@ mod test_modular_arithmetic {
         use super::*;
 
         // Find primes below 100
-        let expected: Vec<i64> = vec![
+        let expected: Vec<i128> = vec![
             2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83,
             89, 97,
         ];
