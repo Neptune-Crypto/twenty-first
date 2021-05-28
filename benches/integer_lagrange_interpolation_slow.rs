@@ -1,31 +1,15 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use std::collections::HashSet;
-use std::hash::Hash;
 use twenty_first::homomorphic_encryption::polynomial_quotient_ring::PolynomialQuotientRing;
 
 fn generate_integer_lagrange_interpolation_input(
     number_of_points: usize,
     modulus: i128,
 ) -> Vec<(i128, i128)> {
-    fn has_unique_elements<T>(iter: T) -> bool
-    where
-        T: IntoIterator,
-        T::Item: Eq + Hash,
-    {
-        let mut uniq = HashSet::new();
-        iter.into_iter().all(move |x| uniq.insert(x))
-    }
-
     let mut output: Vec<(i128, i128)> = Vec::with_capacity(number_of_points);
     for i in 0..number_of_points {
         let x = -(number_of_points as i128) / 2 + i as i128;
         let y = rand::random::<i128>() % modulus;
         output.push((x, y));
-    }
-
-    // disallow repeated x values
-    if !has_unique_elements(output.iter().map(|&x| x.0)) {
-        panic!("Found repeated x value in: {:?}", output);
     }
 
     output
