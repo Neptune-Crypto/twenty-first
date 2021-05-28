@@ -35,8 +35,8 @@ fn lagrange_interpolation_slow(c: &mut Criterion) {
     static PRIME: i128 = 7;
     let pqr = PolynomialQuotientRing::new(256, PRIME);
     let mut group = c.benchmark_group("lagrange_interpolation_slow");
-    // For non-finite fields, 30 is about as high as we can go without overflowing
-    for number_of_points in [5, 10, 15, 20, 25, 30].iter() {
+    // For non-finite fields, 18 is about as high as we can go without overflowing
+    for number_of_points in [4, 5, 6, 8, 10, 12, 14, 16].iter() {
         group.throughput(Throughput::Elements(*number_of_points as u64));
         group
             .bench_with_input(
