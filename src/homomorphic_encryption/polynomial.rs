@@ -168,6 +168,8 @@ impl<'a> Polynomial<'a> {
                 if *root == point.0 {
                     continue;
                 }
+                // Beware that this value does not overflow
+                // In release/benchmark mode an overflow will not get caught
                 divisor *= point.0 - root;
             }
 

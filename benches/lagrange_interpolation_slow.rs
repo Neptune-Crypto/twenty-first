@@ -4,7 +4,7 @@ use std::hash::Hash;
 use twenty_first::homomorphic_encryption::polynomial_quotient_ring::PolynomialQuotientRing;
 
 fn generate_lagrange_interpolation_input(
-    log2_number_of_points: usize,
+    number_of_points: usize,
     modulus: i128,
 ) -> Vec<(i128, i128)> {
     fn has_unique_elements<T>(iter: T) -> bool
@@ -16,10 +16,9 @@ fn generate_lagrange_interpolation_input(
         iter.into_iter().all(move |x| uniq.insert(x))
     }
 
-    let number_of_points = 2usize.pow(log2_number_of_points as u32);
     let mut output: Vec<(i128, i128)> = Vec::with_capacity(number_of_points);
-    for _ in 0..number_of_points {
-        let x = rand::random::<i128>() % modulus;
+    for i in 0..number_of_points {
+        let x = -(number_of_points as i128) / 2 + i as i128;
         let y = rand::random::<i128>() % modulus;
         output.push((x, y));
     }
@@ -33,16 +32,16 @@ fn generate_lagrange_interpolation_input(
 }
 
 fn lagrange_interpolation_slow(c: &mut Criterion) {
-    static PRIME: i128 = 984445284980888355177813739321;
+    static PRIME: i128 = 7;
     let pqr = PolynomialQuotientRing::new(256, PRIME);
     let mut group = c.benchmark_group("lagrange_interpolation_slow");
-    for log2_of_size in [3usize, 4, 5, 6, 7, 8, 9].iter() {
-        let number_of_points = 2usize.pow(*log2_of_size as u32);
-        group.throughput(Throughput::Elements(number_of_points as u64));
+    // For non-finite fields, 30 is about as high as we can go without overflowing
+    for number_of_points in [5, 10, 15, 20, 25, 30].iter() {
+        group.throughput(Throughput::Elements(*number_of_points as u64));
         group
             .bench_with_input(
-                BenchmarkId::from_parameter(log2_of_size),
-                log2_of_size,
+                BenchmarkId::from_parameter(number_of_points),
+                number_of_points,
                 |b, &log2_of_size| {
                     let input = generate_lagrange_interpolation_input(log2_of_size as usize, PRIME);
                     b.iter(|| {
