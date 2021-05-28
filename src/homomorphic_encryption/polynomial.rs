@@ -1,3 +1,4 @@
+use super::super::fft::prime_field_element::PrimeFieldElement;
 use super::super::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
@@ -96,12 +97,109 @@ impl<'a> Polynomial<'a> {
         }
     }
 
-    pub fn evaluate(&self, x: i128) -> i128 {
+    pub fn evaluate<'d>(&self, x: &'d PrimeFieldElement) -> PrimeFieldElement<'d> {
+        let zero = PrimeFieldElement::new(0, x.field);
+        self.coefficients
+            .iter()
+            .enumerate()
+            .map(|(i, &c)| PrimeFieldElement::new(c, x.field) * x.mod_pow(i as i128))
+            .fold(zero, |sum, val| sum + val)
+    }
+
+    pub fn integer_evaluate(&self, x: i128) -> i128 {
         self.coefficients
             .iter()
             .enumerate()
             .map(|(i, &c)| c * x.pow(i as u32))
             .sum()
+    }
+
+    pub fn finite_field_lagrange_interpolation<'b>(
+        points: &'b [(PrimeFieldElement, PrimeFieldElement)],
+        pqr: &'a PolynomialQuotientRing,
+    ) -> Polynomial<'a> {
+        // calculate a reversed representation of the coefficients of
+        // prod_{i=0}^{N}((x- q_i))
+        fn prod_helper<'c>(input: &[PrimeFieldElement<'c>]) -> Vec<PrimeFieldElement<'c>> {
+            if let Some((q_j, elements)) = input.split_first() {
+                match elements {
+                    // base case is `x - q_j` := [1, -q_j]
+                    [] => vec![
+                        PrimeFieldElement::new(1, q_j.field),
+                        PrimeFieldElement::new(-q_j.value, q_j.field),
+                    ],
+                    _ => {
+                        // The recursive call calculates (x-q_j)*rec = x*rec - q_j*rec := [0, rec] .- q_j*[rec]
+                        let mut rec = prod_helper(elements);
+                        rec.push(PrimeFieldElement::new(0, q_j.field));
+                        let mut i = rec.len() - 1;
+                        while i > 0 {
+                            rec[i] =
+                                rec[i] - PrimeFieldElement::new(q_j.value, q_j.field) * rec[i - 1];
+                            i -= 1;
+                        }
+                        rec
+                    }
+                }
+            } else {
+                panic!("Empty array received");
+            }
+        }
+
+        if !has_unique_elements(points.iter().map(|&x| x.0.value)) {
+            panic!("Repeated x values received. Got: {:?}", points);
+        }
+
+        let roots: Vec<PrimeFieldElement> = points.iter().map(|x| x.0).collect();
+        let mut big_pol_coeffs = prod_helper(&roots);
+
+        big_pol_coeffs.reverse();
+        let big_pol = Polynomial {
+            coefficients: big_pol_coeffs.iter().map(|&x| x.value).collect(),
+            pqr,
+        };
+        let mut coefficients: Vec<PrimeFieldElement> =
+            vec![PrimeFieldElement::new(0, points[0].0.field); points.len()];
+        for point in points.iter() {
+            // create a polynomial that is zero at all other points than this
+            // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
+            let my_div_coefficients = vec![
+                PrimeFieldElement::new(-point.0.value, point.0.field),
+                PrimeFieldElement::new(1, point.0.field),
+            ];
+            let mut my_pol = Polynomial {
+                coefficients: my_div_coefficients.iter().map(|&x| x.value).collect(),
+                pqr,
+            };
+            my_pol = big_pol.div(&my_pol).0; // my_pol = big_pol / my_pol
+
+            let mut divisor: PrimeFieldElement = PrimeFieldElement::new(1, point.0.field);
+            for root in roots.iter() {
+                if root.value == point.0.value {
+                    continue;
+                }
+                divisor = divisor * (point.0 - *root);
+            }
+
+            let mut my_coeffs: Vec<PrimeFieldElement> = my_pol
+                .coefficients
+                .iter()
+                .map(|&x| PrimeFieldElement::new(x, point.0.field))
+                .collect();
+            for coeff in my_coeffs.iter_mut() {
+                *coeff = *coeff * point.1;
+                *coeff = *coeff / divisor;
+            }
+
+            for i in 0..my_coeffs.len() {
+                coefficients[i] = coefficients[i] + my_coeffs[i];
+            }
+        }
+
+        Polynomial {
+            coefficients: coefficients.iter().map(|&x| x.value).collect(),
+            pqr,
+        }
     }
 
     pub fn integer_lagrange_interpolation(
@@ -179,6 +277,7 @@ impl<'a> Polynomial<'a> {
             }
         }
 
+        // This assumes that all divisors are 1 and that all coefficients are integers
         let coefficients = fracs.iter().map(|&x| x.get_dividend()).collect();
 
         Polynomial { coefficients, pqr }
@@ -282,6 +381,7 @@ impl<'a> Polynomial<'a> {
         let mut i = 0;
         while i + divisor_degree <= dividend_degree {
             // calculate next quotient coefficient
+            // TODO: This is wrong for finite fields! But works if dominant_divisor is 1 (which it always is in Lagrange interpolation)
             let res = remainder.last().unwrap() / dominant_divisor;
             quotient.push(res);
             remainder.pop(); // remove highest order coefficient
@@ -295,6 +395,10 @@ impl<'a> Polynomial<'a> {
                 let rem_length = remainder.len();
                 let divisor_length = divisor_coeffs.len();
                 remainder[rem_length - j - 1] -= res * divisor_coeffs[divisor_length - j - 2];
+                if finite_field {
+                    remainder[rem_length - j - 1] =
+                        (remainder[rem_length - j - 1] % self.pqr.q + self.pqr.q) % self.pqr.q;
+                }
             }
             i += 1;
         }
@@ -454,7 +558,82 @@ impl<'a> Polynomial<'a> {
 
 #[cfg(test)]
 mod test_polynomials {
+    use super::super::super::fft::prime_field_element::PrimeField;
     use super::*;
+
+    #[test]
+    fn finite_field_lagrange_interpolation() {
+        let pqr = PolynomialQuotientRing::new(4, 7); // degree: 4, mod prime: 101
+
+        let field = PrimeField::new(7);
+        let points = &[
+            (
+                PrimeFieldElement::new(0, &field),
+                PrimeFieldElement::new(6, &field),
+            ),
+            (
+                PrimeFieldElement::new(1, &field),
+                PrimeFieldElement::new(6, &field),
+            ),
+            (
+                PrimeFieldElement::new(2, &field),
+                PrimeFieldElement::new(2, &field),
+            ),
+        ];
+        let interpolation_result = Polynomial::finite_field_lagrange_interpolation(points, &pqr);
+        let expected_interpolation_result = Polynomial {
+            coefficients: vec![6, 2, 5],
+            pqr: &pqr,
+        };
+        for point in points {
+            assert_eq!(interpolation_result.evaluate(&point.0).value, point.1.value);
+        }
+        assert_eq!(expected_interpolation_result, interpolation_result);
+    }
+
+    #[test]
+    fn property_based_test_finite_field_lagrange_interpolation() {
+        // Autogenerate a `number_of_points - 1` degree polynomial
+        // We start by autogenerating the polynomial, as we would get a polynomial
+        // with fractional coefficients if we autogenerated the points and derived the polynomium
+        // from that.
+        let field = PrimeField::new(999983i128);
+        let number_of_points = 50usize;
+        let pqr = PolynomialQuotientRing::new(256, field.q);
+        let mut coefficients: Vec<i128> = Vec::with_capacity(number_of_points);
+        for _ in 0..number_of_points {
+            coefficients.push((rand::random::<i128>() % field.q + field.q) % field.q);
+        }
+
+        let pol = Polynomial {
+            coefficients,
+            pqr: &pqr,
+        };
+
+        // Evaluate this in `number_of_points` points
+        // Pretty ugly since I don't yet understand Rust lifetime parameters. Sue me.
+        let points: Vec<(PrimeFieldElement, PrimeFieldElement)> = (0..number_of_points)
+            .map(|x| {
+                let x = PrimeFieldElement::new(x as i128, &field);
+                (x, PrimeFieldElement::new(0, &field))
+            })
+            .collect();
+        let mut new_points = points.clone();
+        for i in 0..new_points.len() {
+            new_points[i].1 = pol.evaluate(&points[i].0);
+        }
+
+        // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
+        // evaluate the point values, and verify that they match the original values
+        let interpolation_result =
+            Polynomial::finite_field_lagrange_interpolation(&new_points, &pqr);
+        assert_eq!(interpolation_result, pol);
+        for point in new_points {
+            assert_eq!(interpolation_result.evaluate(&point.0), point.1);
+        }
+        println!("interpolation_result = {}", interpolation_result);
+        println!("pol = {}", pol);
+    }
 
     #[test]
     fn integer_lagrange_interpolation() {
@@ -468,7 +647,7 @@ mod test_polynomials {
         };
         assert_eq!(expected_interpolation_result, interpolation_result);
         for point in points {
-            assert_eq!(interpolation_result.evaluate(point.0), point.1);
+            assert_eq!(interpolation_result.integer_evaluate(point.0), point.1);
         }
     }
 
@@ -494,7 +673,7 @@ mod test_polynomials {
         let mut points: Vec<(i128, i128)> = Vec::with_capacity(number_of_points);
         for i in 0..number_of_points {
             let x = i as i128 - number_of_points as i128 / 2;
-            let y = pol.evaluate(x);
+            let y = pol.integer_evaluate(x);
             points.push((x as i128, y));
         }
 
@@ -502,7 +681,7 @@ mod test_polynomials {
         // evaluate the point values, and verify that they match the original values
         let interpolation_result = Polynomial::integer_lagrange_interpolation(&points, &pqr);
         for point in points {
-            assert_eq!(interpolation_result.evaluate(point.0), point.1);
+            assert_eq!(interpolation_result.integer_evaluate(point.0), point.1);
         }
         assert_eq!(interpolation_result, pol);
     }
