@@ -98,7 +98,8 @@ pub fn test() {
     );
 
     // Lagrange interpolation
-    let interpolation = Polynomial::lagrange_interpolation(&[(0, 0), (1, 1), (-1, 1)], &pqr);
+    let interpolation =
+        Polynomial::integer_lagrange_interpolation(&[(0, 0), (1, 1), (-1, 1)], &pqr);
     println!(
         "interpolation result of points (0, 0), (1, 1), (-1, 1) is: {}",
         interpolation
