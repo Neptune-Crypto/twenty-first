@@ -1,13 +1,10 @@
-mod complex_number;
-use complex_number::ComplexNumber;
-pub mod prime_field_element;
-use prime_field_element::{PrimeField, PrimeFieldElement};
-mod vector;
+use crate::shared_math::complex_number::ComplexNumber;
+use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
+use crate::shared_math::vector::{Matrix, Vector};
 use num_traits::{One, Zero};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::Instant;
-use vector::{Matrix, Vector};
 
 pub fn dft_finite_fields<'a>(
     x: &[PrimeFieldElement<'a>],

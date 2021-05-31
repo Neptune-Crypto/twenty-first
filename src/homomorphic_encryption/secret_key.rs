@@ -1,5 +1,5 @@
 use super::ciphertext::Ciphertext;
-use super::polynomial::Polynomial;
+use crate::shared_math::polynomial::Polynomial;
 
 #[derive(Debug)]
 pub struct SecretKey<'a> {

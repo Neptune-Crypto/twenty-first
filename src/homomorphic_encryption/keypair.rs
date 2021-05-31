@@ -1,7 +1,7 @@
-use super::polynomial::Polynomial;
-use super::polynomial_quotient_ring::PolynomialQuotientRing;
 use super::public_key::PublicKey;
 use super::secret_key::SecretKey;
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
 use std::fmt;
 
 // KeyPair should maybe also have a `size` field

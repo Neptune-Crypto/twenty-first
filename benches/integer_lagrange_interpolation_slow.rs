@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use twenty_first::homomorphic_encryption::polynomial_quotient_ring::PolynomialQuotientRing;
+use twenty_first::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
 
 fn generate_integer_lagrange_interpolation_input(
     number_of_points: usize,
@@ -29,7 +29,7 @@ fn integer_lagrange_interpolation_slow(c: &mut Criterion) {
                 |b, &log2_of_size| {
                     let input = generate_integer_lagrange_interpolation_input(log2_of_size as usize, PRIME);
                     b.iter(|| {
-                        twenty_first::homomorphic_encryption::polynomial::Polynomial::integer_lagrange_interpolation(
+                        twenty_first::shared_math::polynomial::Polynomial::integer_lagrange_interpolation(
                             &input,
                             &pqr,
                         )

@@ -10,6 +10,7 @@ mod functions;
 mod hello_world;
 pub mod homomorphic_encryption;
 mod primitives;
+pub mod shared_math;
 mod types;
 mod utils;
 

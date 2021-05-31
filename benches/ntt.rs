@@ -1,10 +1,10 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use twenty_first::fft::prime_field_element::{PrimeField, PrimeFieldElement};
+use twenty_first::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 
 fn generate_ntt_input<'a>(
     log2_of_size: usize,
     prime: &'a PrimeField,
-) -> Vec<twenty_first::fft::prime_field_element::PrimeFieldElement<'a>> {
+) -> Vec<twenty_first::shared_math::prime_field_element::PrimeFieldElement<'a>> {
     let size: usize = 2usize.pow(log2_of_size as u32);
     let mut output: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(size);
     for _ in 0..size {
