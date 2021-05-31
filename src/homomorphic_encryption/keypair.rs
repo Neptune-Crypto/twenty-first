@@ -1,7 +1,7 @@
 use super::public_key::PublicKey;
 use super::secret_key::SecretKey;
-use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
+use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use std::fmt;
 
 // KeyPair should maybe also have a `size` field
@@ -19,16 +19,16 @@ impl fmt::Display for KeyPair<'_> {
 
 impl<'a> KeyPair<'a> {
     pub fn keygen(pqr: &'a PolynomialQuotientRing) -> Self {
-        let secret_key: Polynomial = Polynomial::gen_binary_poly(pqr);
+        let secret_key: PrimeFieldPolynomial = PrimeFieldPolynomial::gen_binary_poly(pqr);
         // println!("secret_key = {}", secret_key);
-        let a: Polynomial = Polynomial::gen_uniform_poly(pqr);
+        let a: PrimeFieldPolynomial = PrimeFieldPolynomial::gen_uniform_poly(pqr);
         // println!("{}", a);
-        let mut e: Polynomial = Polynomial::gen_normal_poly(pqr);
+        let mut e: PrimeFieldPolynomial = PrimeFieldPolynomial::gen_normal_poly(pqr);
         e.normalize();
         // println!("{}", e);
-        let zero: Polynomial = Polynomial::additive_identity(pqr);
+        let zero: PrimeFieldPolynomial = PrimeFieldPolynomial::additive_identity(pqr);
         // println!("{}", zero);
-        let mut b: Polynomial = zero.sub(&a).mul(&secret_key).sub(&e).modulus();
+        let mut b: PrimeFieldPolynomial = zero.sub(&a).mul(&secret_key).sub(&e).modulus();
         b.normalize();
         // println!("{}", b);
         let pk = PublicKey { a, b };

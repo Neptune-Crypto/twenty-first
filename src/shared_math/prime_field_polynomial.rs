@@ -15,14 +15,14 @@ use std::fmt;
 // This <'a> annotation means that an instance of Polynomial cannot outlive the reference it holds
 // in its `pqr` field.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Polynomial<'a> {
+pub struct PrimeFieldPolynomial<'a> {
     // I think we cannot use arrays to store the coefficients, since array sizes must be known at compile time
     // So we use vectors instead.
     pub coefficients: Vec<i128>,
     pub pqr: &'a PolynomialQuotientRing,
 }
 
-impl fmt::Display for Polynomial<'_> {
+impl fmt::Display for PrimeFieldPolynomial<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.coefficients.is_empty() {
             return write!(f, "0");
@@ -81,16 +81,19 @@ impl fmt::Display for Polynomial<'_> {
     }
 }
 
-impl<'a> Polynomial<'a> {
-    pub fn additive_identity(pqr: &'a PolynomialQuotientRing) -> Polynomial<'a> {
-        Polynomial {
+impl<'a> PrimeFieldPolynomial<'a> {
+    pub fn additive_identity(pqr: &'a PolynomialQuotientRing) -> PrimeFieldPolynomial<'a> {
+        PrimeFieldPolynomial {
             coefficients: Vec::new(),
             pqr,
         }
     }
 
-    pub fn polynomium_from_int(val: i128, pqr: &'a PolynomialQuotientRing) -> Polynomial<'a> {
-        Polynomial {
+    pub fn polynomium_from_int(
+        val: i128,
+        pqr: &'a PolynomialQuotientRing,
+    ) -> PrimeFieldPolynomial<'a> {
+        PrimeFieldPolynomial {
             coefficients: vec![val],
             pqr,
         }
@@ -116,7 +119,7 @@ impl<'a> Polynomial<'a> {
     pub fn finite_field_lagrange_interpolation<'b>(
         points: &'b [(PrimeFieldElement, PrimeFieldElement)],
         pqr: &'a PolynomialQuotientRing,
-    ) -> Polynomial<'a> {
+    ) -> PrimeFieldPolynomial<'a> {
         // calculate a reversed representation of the coefficients of
         // prod_{i=0}^{N}((x- q_i))
         fn prod_helper<'c>(input: &[PrimeFieldElement<'c>]) -> Vec<PrimeFieldElement<'c>> {
@@ -153,20 +156,20 @@ impl<'a> Polynomial<'a> {
         let mut big_pol_coeffs = prod_helper(&roots);
 
         big_pol_coeffs.reverse();
-        let big_pol = Polynomial {
+        let big_pol = PrimeFieldPolynomial {
             coefficients: big_pol_coeffs.iter().map(|&x| x.value).collect(),
             pqr,
         };
         let mut coefficients: Vec<PrimeFieldElement> =
             vec![PrimeFieldElement::new(0, points[0].0.field); points.len()];
         for point in points.iter() {
-            // create a polynomial that is zero at all other points than this
+            // create a PrimeFieldPolynomial that is zero at all other points than this
             // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
             let my_div_coefficients = vec![
                 PrimeFieldElement::new(-point.0.value, point.0.field),
                 PrimeFieldElement::new(1, point.0.field),
             ];
-            let mut my_pol = Polynomial {
+            let mut my_pol = PrimeFieldPolynomial {
                 coefficients: my_div_coefficients.iter().map(|&x| x.value).collect(),
                 pqr,
             };
@@ -195,7 +198,7 @@ impl<'a> Polynomial<'a> {
             }
         }
 
-        Polynomial {
+        PrimeFieldPolynomial {
             coefficients: coefficients.iter().map(|&x| x.value).collect(),
             pqr,
         }
@@ -204,7 +207,7 @@ impl<'a> Polynomial<'a> {
     pub fn integer_lagrange_interpolation(
         points: &[(i128, i128)],
         pqr: &'a PolynomialQuotientRing,
-    ) -> Polynomial<'a> {
+    ) -> PrimeFieldPolynomial<'a> {
         // calculate a reversed representation of the coefficients of
         // prod_{i=0}^{N}((x- q_i))
         fn prod_helper(input: &[i128]) -> Vec<i128> {
@@ -238,14 +241,14 @@ impl<'a> Polynomial<'a> {
         let roots: Vec<i128> = points.iter().map(|x| x.0).collect();
         let mut big_pol_coeffs = prod_helper(&roots);
         big_pol_coeffs.reverse();
-        let big_pol = Polynomial {
+        let big_pol = PrimeFieldPolynomial {
             coefficients: big_pol_coeffs,
             pqr,
         };
         for point in points.iter() {
             // create a polynomial that is zero at all other points than this
             // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
-            let mut my_pol = Polynomial {
+            let mut my_pol = PrimeFieldPolynomial {
                 coefficients: vec![-point.0, 1],
                 pqr,
             };
@@ -279,7 +282,7 @@ impl<'a> Polynomial<'a> {
         // This assumes that all divisors are 1 and that all coefficients are integers
         let coefficients = fracs.iter().map(|&x| x.get_dividend()).collect();
 
-        Polynomial { coefficients, pqr }
+        PrimeFieldPolynomial { coefficients, pqr }
     }
 
     // should be a private function
@@ -299,9 +302,9 @@ impl<'a> Polynomial<'a> {
         coefficients
     }
 
-    pub fn gen_binary_poly(pqr: &'a PolynomialQuotientRing) -> Polynomial<'a> {
-        let mut res = Polynomial {
-            coefficients: Polynomial::generate_random_numbers(pqr.n as usize, 2i128),
+    pub fn gen_binary_poly(pqr: &'a PolynomialQuotientRing) -> PrimeFieldPolynomial<'a> {
+        let mut res = PrimeFieldPolynomial {
+            coefficients: PrimeFieldPolynomial::generate_random_numbers(pqr.n as usize, 2i128),
             pqr,
         };
         // TODO: Do we take the modulus here?
@@ -309,9 +312,9 @@ impl<'a> Polynomial<'a> {
         res
     }
 
-    pub fn gen_uniform_poly(pqr: &'a PolynomialQuotientRing) -> Polynomial<'a> {
-        let mut res = Polynomial {
-            coefficients: Polynomial::generate_random_numbers(pqr.n as usize, pqr.q),
+    pub fn gen_uniform_poly(pqr: &'a PolynomialQuotientRing) -> PrimeFieldPolynomial<'a> {
+        let mut res = PrimeFieldPolynomial {
+            coefficients: PrimeFieldPolynomial::generate_random_numbers(pqr.n as usize, pqr.q),
             pqr,
         };
         res = res.modulus();
@@ -319,7 +322,7 @@ impl<'a> Polynomial<'a> {
         res
     }
 
-    pub fn gen_normal_poly(pqr: &'a PolynomialQuotientRing) -> Polynomial<'a> {
+    pub fn gen_normal_poly(pqr: &'a PolynomialQuotientRing) -> PrimeFieldPolynomial<'a> {
         // Alan recommends N(0, 4) for this
         let mut coefficients: Vec<i128> = vec![0i128; pqr.n as usize];
         let mut prng = rand::thread_rng();
@@ -329,7 +332,7 @@ impl<'a> Polynomial<'a> {
             let int_val = ((val.round() as i128 % pqr.q) + pqr.q) % pqr.q;
             *elem = int_val;
         }
-        let mut ret = Polynomial { coefficients, pqr };
+        let mut ret = PrimeFieldPolynomial { coefficients, pqr };
         ret = ret.modulus();
         ret.normalize();
         ret
@@ -352,9 +355,9 @@ impl<'a> Polynomial<'a> {
 
     fn div_internal(
         &self,
-        divisor: &Polynomial<'a>,
+        divisor: &PrimeFieldPolynomial<'a>,
         finite_field: bool,
-    ) -> (Polynomial<'a>, Polynomial<'a>) {
+    ) -> (PrimeFieldPolynomial<'a>, PrimeFieldPolynomial<'a>) {
         if divisor.coefficients.is_empty() {
             panic!(
                 "Cannot divide polynomial by zero. Got: ({})/({})",
@@ -364,8 +367,8 @@ impl<'a> Polynomial<'a> {
 
         if self.coefficients.is_empty() {
             return (
-                Polynomial::additive_identity(self.pqr),
-                Polynomial::additive_identity(self.pqr),
+                PrimeFieldPolynomial::additive_identity(self.pqr),
+                PrimeFieldPolynomial::additive_identity(self.pqr),
             );
         }
 
@@ -413,11 +416,11 @@ impl<'a> Polynomial<'a> {
         }
 
         quotient.reverse();
-        let quotient_pol = Polynomial {
+        let quotient_pol = PrimeFieldPolynomial {
             coefficients: quotient,
             pqr: self.pqr,
         };
-        let remainder_pol = Polynomial {
+        let remainder_pol = PrimeFieldPolynomial {
             coefficients: remainder,
             pqr: self.pqr,
         };
@@ -427,29 +430,32 @@ impl<'a> Polynomial<'a> {
     // Mainly just written for benchmarking/testing/prototyping
     pub fn div_without_modulus(
         &self,
-        divisor: &Polynomial<'a>,
-    ) -> (Polynomial<'a>, Polynomial<'a>) {
+        divisor: &PrimeFieldPolynomial<'a>,
+    ) -> (PrimeFieldPolynomial<'a>, PrimeFieldPolynomial<'a>) {
         self.div_internal(divisor, false)
     }
 
     // Doing long division, return the pair (div, mod), coefficients are always floored!
     // TODO: Verify lifetime parameters here!
-    pub fn div(&self, divisor: &Polynomial<'a>) -> (Polynomial<'a>, Polynomial<'a>) {
+    pub fn div(
+        &self,
+        divisor: &PrimeFieldPolynomial<'a>,
+    ) -> (PrimeFieldPolynomial<'a>, PrimeFieldPolynomial<'a>) {
         self.div_internal(divisor, true)
     }
 
-    pub fn modulus(&self) -> Polynomial<'a> {
-        let polynomial_modulus = Polynomial {
+    pub fn modulus(&self) -> PrimeFieldPolynomial<'a> {
+        let polynomial_modulus = PrimeFieldPolynomial {
             coefficients: self.pqr.get_polynomial_modulus(),
             pqr: self.pqr,
         };
         self.div(&polynomial_modulus).1
     }
 
-    pub fn mul(&self, other: &Polynomial<'a>) -> Polynomial<'a> {
+    pub fn mul(&self, other: &PrimeFieldPolynomial<'a>) -> PrimeFieldPolynomial<'a> {
         // If either polynomial is zero, return zero
         if self.coefficients.is_empty() || other.coefficients.is_empty() {
-            return Polynomial::additive_identity(self.pqr);
+            return PrimeFieldPolynomial::additive_identity(self.pqr);
         }
 
         let self_degree = self.coefficients.len() - 1;
@@ -463,7 +469,7 @@ impl<'a> Polynomial<'a> {
                     ((result_coeff[i + j] % self.pqr.q) + self.pqr.q) % self.pqr.q;
             }
         }
-        let mut ret = Polynomial {
+        let mut ret = PrimeFieldPolynomial {
             coefficients: result_coeff,
             pqr: self.pqr,
         };
@@ -471,54 +477,54 @@ impl<'a> Polynomial<'a> {
         ret
     }
 
-    pub fn balance(&self) -> Polynomial<'a> {
+    pub fn balance(&self) -> PrimeFieldPolynomial<'a> {
         let mut coefficients = self.coefficients.clone();
         for i in 0..self.coefficients.len() {
             if coefficients[i] > self.pqr.q / 2 {
                 coefficients[i] -= self.pqr.q;
             }
         }
-        Polynomial {
+        PrimeFieldPolynomial {
             coefficients,
             pqr: self.pqr,
         }
     }
 
-    pub fn scalar_mul(&self, scalar: i128) -> Polynomial<'a> {
+    pub fn scalar_mul(&self, scalar: i128) -> PrimeFieldPolynomial<'a> {
         let mut coefficients = self.coefficients.clone();
         for i in 0..self.coefficients.len() {
             coefficients[i] = (((coefficients[i] * scalar) % self.pqr.q) + self.pqr.q) % self.pqr.q;
         }
-        Polynomial {
+        PrimeFieldPolynomial {
             coefficients,
             pqr: self.pqr,
         }
     }
 
-    pub fn scalar_modulus(&self, modulus: i128) -> Polynomial<'a> {
+    pub fn scalar_modulus(&self, modulus: i128) -> PrimeFieldPolynomial<'a> {
         let mut coefficients = self.coefficients.clone();
         for i in 0..self.coefficients.len() {
             coefficients[i] %= modulus;
         }
-        Polynomial {
+        PrimeFieldPolynomial {
             coefficients,
             pqr: self.pqr,
         }
     }
 
-    pub fn scalar_mul_float(&self, float_scalar: f64) -> Polynomial<'a> {
+    pub fn scalar_mul_float(&self, float_scalar: f64) -> PrimeFieldPolynomial<'a> {
         // Function does not map coefficients into finite field. Should it?
         let mut coefficients = self.coefficients.clone();
         for i in 0..self.coefficients.len() {
             coefficients[i] = (coefficients[i] as f64 * float_scalar).round() as i128;
         }
-        Polynomial {
+        PrimeFieldPolynomial {
             coefficients,
             pqr: self.pqr,
         }
     }
 
-    pub fn add(&self, other: &Polynomial<'a>) -> Polynomial<'a> {
+    pub fn add(&self, other: &PrimeFieldPolynomial<'a>) -> PrimeFieldPolynomial<'a> {
         let summed: Vec<i128> = self
             .coefficients
             .iter()
@@ -530,13 +536,13 @@ impl<'a> Polynomial<'a> {
             })
             .collect();
 
-        Polynomial {
+        PrimeFieldPolynomial {
             coefficients: summed,
             pqr: self.pqr,
         }
     }
 
-    pub fn sub(&self, other: &Polynomial<'a>) -> Polynomial<'a> {
+    pub fn sub(&self, other: &PrimeFieldPolynomial<'a>) -> PrimeFieldPolynomial<'a> {
         let diff: Vec<i128> = self
             .coefficients
             .iter()
@@ -548,7 +554,7 @@ impl<'a> Polynomial<'a> {
             })
             .collect();
 
-        Polynomial {
+        PrimeFieldPolynomial {
             coefficients: diff,
             pqr: self.pqr,
         }
@@ -579,8 +585,9 @@ mod test_polynomials {
                 PrimeFieldElement::new(2, &field),
             ),
         ];
-        let interpolation_result = Polynomial::finite_field_lagrange_interpolation(points, &pqr);
-        let expected_interpolation_result = Polynomial {
+        let interpolation_result =
+            PrimeFieldPolynomial::finite_field_lagrange_interpolation(points, &pqr);
+        let expected_interpolation_result = PrimeFieldPolynomial {
             coefficients: vec![6, 2, 5],
             pqr: &pqr,
         };
@@ -604,7 +611,7 @@ mod test_polynomials {
             coefficients.push((rand::random::<i128>() % field.q + field.q) % field.q);
         }
 
-        let pol = Polynomial {
+        let pol = PrimeFieldPolynomial {
             coefficients,
             pqr: &pqr,
         };
@@ -625,7 +632,7 @@ mod test_polynomials {
         // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
         // evaluate the point values, and verify that they match the original values
         let interpolation_result =
-            Polynomial::finite_field_lagrange_interpolation(&new_points, &pqr);
+            PrimeFieldPolynomial::finite_field_lagrange_interpolation(&new_points, &pqr);
         assert_eq!(interpolation_result, pol);
         for point in new_points {
             assert_eq!(interpolation_result.evaluate(&point.0), point.1);
@@ -639,8 +646,9 @@ mod test_polynomials {
         let pqr = PolynomialQuotientRing::new(4, 101); // degree: 4, mod prime: 101
 
         let points = &[(-1, 1), (0, 0), (1, 1)];
-        let interpolation_result = Polynomial::integer_lagrange_interpolation(points, &pqr);
-        let expected_interpolation_result = Polynomial {
+        let interpolation_result =
+            PrimeFieldPolynomial::integer_lagrange_interpolation(points, &pqr);
+        let expected_interpolation_result = PrimeFieldPolynomial {
             coefficients: vec![0, 0, 1],
             pqr: &pqr,
         };
@@ -663,7 +671,7 @@ mod test_polynomials {
             coefficients.push(rand::random::<i128>() % 16i128);
         }
 
-        let pol = Polynomial {
+        let pol = PrimeFieldPolynomial {
             coefficients,
             pqr: &pqr,
         };
@@ -678,7 +686,8 @@ mod test_polynomials {
 
         // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
         // evaluate the point values, and verify that they match the original values
-        let interpolation_result = Polynomial::integer_lagrange_interpolation(&points, &pqr);
+        let interpolation_result =
+            PrimeFieldPolynomial::integer_lagrange_interpolation(&points, &pqr);
         for point in points {
             assert_eq!(interpolation_result.integer_evaluate(point.0), point.1);
         }
@@ -688,97 +697,97 @@ mod test_polynomials {
     #[test]
     fn new_test() {
         let pqr = PolynomialQuotientRing::new(4, 7); // degree: 4, mod prime: 7
-        let mut a: Polynomial = Polynomial {
+        let mut a: PrimeFieldPolynomial = PrimeFieldPolynomial {
             coefficients: vec![1, 0],
             pqr: &pqr,
         };
-        let mut b: Polynomial = Polynomial {
+        let mut b: PrimeFieldPolynomial = PrimeFieldPolynomial {
             coefficients: vec![1, 1],
             pqr: &pqr,
         };
-        let mut sum: Polynomial = Polynomial {
+        let mut sum: PrimeFieldPolynomial = PrimeFieldPolynomial {
             coefficients: vec![2, 1],
             pqr: &pqr,
         };
         assert_eq!(a.add(&b), sum);
 
-        let mut diff: Polynomial = Polynomial {
+        let mut diff: PrimeFieldPolynomial = PrimeFieldPolynomial {
             coefficients: vec![0, 6],
             pqr: &pqr,
         };
         assert_eq!(a.sub(&b), diff);
 
-        let mut mul: Polynomial = Polynomial {
+        let mut mul: PrimeFieldPolynomial = PrimeFieldPolynomial {
             coefficients: vec![1, 1],
             pqr: &pqr,
         };
         assert_eq!(a.mul(&b), mul);
 
-        a = Polynomial {
+        a = PrimeFieldPolynomial {
             coefficients: vec![1, 0, 5],
             pqr: &pqr,
         };
-        b = Polynomial {
+        b = PrimeFieldPolynomial {
             coefficients: vec![1],
             pqr: &pqr,
         };
-        sum = Polynomial {
+        sum = PrimeFieldPolynomial {
             coefficients: vec![2, 0, 5],
             pqr: &pqr,
         };
         assert_eq!(a.add(&b), sum);
 
-        diff = Polynomial {
+        diff = PrimeFieldPolynomial {
             coefficients: vec![0, 0, 5],
             pqr: &pqr,
         };
         assert_eq!(a.sub(&b), diff);
 
-        mul = Polynomial {
+        mul = PrimeFieldPolynomial {
             coefficients: vec![1, 0, 5],
             pqr: &pqr,
         };
         assert_eq!(a.mul(&b), mul);
 
-        a = Polynomial {
+        a = PrimeFieldPolynomial {
             coefficients: vec![1, 5, 6],
             pqr: &pqr,
         };
-        b = Polynomial {
+        b = PrimeFieldPolynomial {
             coefficients: vec![3, 2, 4, 3],
             pqr: &pqr,
         };
-        sum = Polynomial {
+        sum = PrimeFieldPolynomial {
             coefficients: vec![4, 0, 3, 3],
             pqr: &pqr,
         };
         assert_eq!(a.add(&b), sum);
 
-        diff = Polynomial {
+        diff = PrimeFieldPolynomial {
             coefficients: vec![5, 3, 2, 4],
             pqr: &pqr,
         };
         assert_eq!(a.sub(&b), diff);
 
-        mul = Polynomial {
+        mul = PrimeFieldPolynomial {
             coefficients: vec![3, 3, 4, 0, 4, 4],
             pqr: &pqr,
         };
         assert_eq!(a.mul(&b), mul);
 
-        a = Polynomial {
+        a = PrimeFieldPolynomial {
             coefficients: vec![0, 0, 1],
             pqr: &pqr,
         };
-        b = Polynomial {
+        b = PrimeFieldPolynomial {
             coefficients: vec![0, 1],
             pqr: &pqr,
         };
-        let mut quotient = Polynomial {
+        let mut quotient = PrimeFieldPolynomial {
             coefficients: vec![0, 1],
             pqr: &pqr,
         };
-        let mut remainder = Polynomial {
+        let mut remainder = PrimeFieldPolynomial {
             coefficients: vec![],
             pqr: &pqr,
         };
@@ -791,19 +800,19 @@ mod test_polynomials {
         assert_eq!(a.to_string(), "x^2");
         assert_eq!(b.to_string(), "x");
 
-        a = Polynomial {
+        a = PrimeFieldPolynomial {
             coefficients: vec![-4, 0, -2, 1],
             pqr: &pqr,
         };
-        b = Polynomial {
+        b = PrimeFieldPolynomial {
             coefficients: vec![-3, 1],
             pqr: &pqr,
         };
-        quotient = Polynomial {
+        quotient = PrimeFieldPolynomial {
             coefficients: vec![3, 1, 1],
             pqr: &pqr,
         };
-        remainder = Polynomial {
+        remainder = PrimeFieldPolynomial {
             coefficients: vec![5],
             pqr: &pqr,
         };
@@ -813,19 +822,19 @@ mod test_polynomials {
         assert_eq!(div_result.0, quotient);
         assert_eq!(div_result.1, remainder);
 
-        a = Polynomial {
+        a = PrimeFieldPolynomial {
             coefficients: vec![-10, 0, 1, 3, -4, 5],
             pqr: &pqr,
         };
-        b = Polynomial {
+        b = PrimeFieldPolynomial {
             coefficients: vec![2, -1, 1],
             pqr: &pqr,
         };
-        quotient = Polynomial {
+        quotient = PrimeFieldPolynomial {
             coefficients: vec![0, 1, 1, 5],
             pqr: &pqr,
         };
-        remainder = Polynomial {
+        remainder = PrimeFieldPolynomial {
             coefficients: vec![4, 5],
             pqr: &pqr,
         };
@@ -835,7 +844,7 @@ mod test_polynomials {
         assert_eq!(div_result.0, quotient);
         assert_eq!(div_result.1, remainder);
 
-        let empty_pol = Polynomial {
+        let empty_pol = PrimeFieldPolynomial {
             coefficients: vec![],
             pqr: &pqr,
         };
@@ -848,26 +857,26 @@ mod test_polynomials {
 
         // Let's test: normalize, additive_identitive, polynomial_from_int
         // random_generators, balance, scalar_mul, scalar_modulus, scalar_mul_float
-        b = Polynomial {
+        b = PrimeFieldPolynomial {
             coefficients: vec![0, 1, 0],
             pqr: &pqr,
         };
-        let normalized = Polynomial {
+        let normalized = PrimeFieldPolynomial {
             coefficients: vec![0, 1],
             pqr: &pqr,
         };
-        let five = Polynomial {
+        let five = PrimeFieldPolynomial {
             coefficients: vec![5],
             pqr: &pqr,
         };
         assert_ne!(b, normalized);
         b.normalize();
         assert_eq!(b, normalized);
-        assert_eq!(Polynomial::additive_identity(&pqr), empty_pol);
-        assert_eq!(Polynomial::polynomium_from_int(5, &pqr), five);
+        assert_eq!(PrimeFieldPolynomial::additive_identity(&pqr), empty_pol);
+        assert_eq!(PrimeFieldPolynomial::polynomium_from_int(5, &pqr), five);
 
         // Test binary polynomial generation
-        let binary = Polynomial::gen_binary_poly(&pqr);
+        let binary = PrimeFieldPolynomial::gen_binary_poly(&pqr);
         assert!(binary.coefficients.len() <= pqr.n as usize);
         for elem in binary.coefficients.iter() {
             assert!(*elem == 0 || *elem == 1);
@@ -875,7 +884,7 @@ mod test_polynomials {
 
         // Test balance on quotient = 5x^3 + x^2 + x
         let balanced = quotient.balance();
-        let expected_balanced = Polynomial {
+        let expected_balanced = PrimeFieldPolynomial {
             coefficients: vec![0, 1, 1, -2],
             pqr: &pqr,
         };
@@ -884,7 +893,7 @@ mod test_polynomials {
 
         // Test scalar_mul
         let scalar_mul = quotient.scalar_mul(3);
-        let expected_scalar_mul = Polynomial {
+        let expected_scalar_mul = PrimeFieldPolynomial {
             coefficients: vec![0, 3, 3, 1],
             pqr: &pqr,
         };
@@ -893,7 +902,7 @@ mod test_polynomials {
 
         // Test scalar_modulus
         let scalar_modulus = scalar_mul.scalar_modulus(2);
-        let expected_scalar_modulus = Polynomial {
+        let expected_scalar_modulus = PrimeFieldPolynomial {
             coefficients: vec![0, 1, 1, 1],
             pqr: &pqr,
         };
@@ -902,7 +911,7 @@ mod test_polynomials {
 
         // Test scalar_mul_float
         let scalar_mul_float = scalar_mul.scalar_mul_float(3.4f64);
-        let expected_scalar_mul_float = Polynomial {
+        let expected_scalar_mul_float = PrimeFieldPolynomial {
             coefficients: vec![0, 10, 10, 3],
             pqr: &pqr,
         };
