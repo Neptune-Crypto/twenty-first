@@ -29,7 +29,7 @@ fn integer_lagrange_interpolation_slow(c: &mut Criterion) {
                 |b, &log2_of_size| {
                     let input = generate_integer_lagrange_interpolation_input(log2_of_size as usize, PRIME);
                     b.iter(|| {
-                        twenty_first::shared_math::polynomial::Polynomial::integer_lagrange_interpolation(
+                        twenty_first::shared_math::prime_field_polynomial::PrimeFieldPolynomial::integer_lagrange_interpolation(
                             &input,
                             &pqr,
                         )

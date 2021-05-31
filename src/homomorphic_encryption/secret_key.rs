@@ -1,9 +1,9 @@
 use super::ciphertext::Ciphertext;
-use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 
 #[derive(Debug)]
 pub struct SecretKey<'a> {
-    pub value: Polynomial<'a>,
+    pub value: PrimeFieldPolynomial<'a>,
 }
 
 impl<'a> SecretKey<'a> {
@@ -20,7 +20,7 @@ impl<'a> SecretKey<'a> {
         let scaled_pt_balanced = scaled_pt.balance();
 
         // println!("scaled_pt = {}", scaled_pt);
-        let unscaled_pt: Polynomial = scaled_pt_balanced.scalar_mul_float(t_over_q);
+        let unscaled_pt: PrimeFieldPolynomial = scaled_pt_balanced.scalar_mul_float(t_over_q);
 
         // Extract the constant term and map into [0; ptm - 1]
         (unscaled_pt.get_constant_term() % plain_text_modulus + plain_text_modulus)

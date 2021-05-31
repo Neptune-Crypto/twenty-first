@@ -1,7 +1,7 @@
 mod ciphertext;
 use crate::shared_math::fraction::Fraction;
-use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
+use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use ciphertext::Ciphertext;
 use rand::RngCore;
 mod keypair;
@@ -12,11 +12,11 @@ mod secret_key;
 pub fn test() {
     let pqr = PolynomialQuotientRing::new(4, 11);
     let pqr_weird = PolynomialQuotientRing::new(4, 999983i128);
-    let long_quotient = Polynomial {
+    let long_quotient = PrimeFieldPolynomial {
         coefficients: vec![7, 0, 23, 65, 1, 2, 14, 14, 14, 14, 3, 19, 6, 20],
         pqr: &pqr_weird,
     };
-    let pqr_weird_polynomial = Polynomial {
+    let pqr_weird_polynomial = PrimeFieldPolynomial {
         coefficients: pqr_weird.get_polynomial_modulus(),
         pqr: &pqr_weird,
     };
@@ -26,27 +26,27 @@ pub fn test() {
         pqr_weird_polynomial,
         long_quotient.modulus()
     );
-    let pol = Polynomial {
+    let pol = PrimeFieldPolynomial {
         coefficients: vec![4, 9, 9, 1, 0, 0],
         pqr: &pqr,
     };
-    let a = Polynomial {
+    let a = PrimeFieldPolynomial {
         coefficients: vec![4, 9, 9, 1, 0, 0],
         pqr: &pqr,
     };
-    let pol_mod = Polynomial {
+    let pol_mod = PrimeFieldPolynomial {
         coefficients: pqr.get_polynomial_modulus(),
         pqr: &pqr,
     };
-    let c = Polynomial {
+    let c = PrimeFieldPolynomial {
         coefficients: vec![5, 0, 3],
         pqr: &pqr,
     };
-    let d = Polynomial {
+    let d = PrimeFieldPolynomial {
         coefficients: vec![3, 4, 0, 0],
         pqr: &pqr,
     };
-    let leading_zeros = Polynomial {
+    let leading_zeros = PrimeFieldPolynomial {
         coefficients: vec![0, 0, 0, 0, 4, 2],
         pqr: &pqr,
     };
@@ -54,7 +54,10 @@ pub fn test() {
     let mul_result = c.mul(&d);
     mul_result.modulus();
     // Verify that leading zeros warner works!
-    println!("Polynomial with leading zeros: {:?}", leading_zeros);
+    println!(
+        "PrimeFieldPolynomial with leading zeros: {:?}",
+        leading_zeros
+    );
     println!(
         "A polynomial with leading zeros is printed as: {}",
         leading_zeros
@@ -70,15 +73,15 @@ pub fn test() {
     println!("{} - ({}) = {}", a, pol_mod, a.sub(&pol_mod));
     println!(
         "Random binary polynomial: {}",
-        Polynomial::gen_binary_poly(a.pqr),
+        PrimeFieldPolynomial::gen_binary_poly(a.pqr),
     );
     println!(
         "Random uniform polynomial of size 7: {}",
-        Polynomial::gen_uniform_poly(a.pqr),
+        PrimeFieldPolynomial::gen_uniform_poly(a.pqr),
     );
     println!(
         "Random normal distributed polynomial of size 7: {}",
-        Polynomial::gen_normal_poly(a.pqr),
+        PrimeFieldPolynomial::gen_normal_poly(a.pqr),
     );
     let key_pair = KeyPair::keygen(a.pqr);
     println!("A randomly generated keypair is: {}", key_pair);
@@ -96,7 +99,7 @@ pub fn test() {
 
     // Lagrange interpolation
     let interpolation =
-        Polynomial::integer_lagrange_interpolation(&[(0, 0), (1, 1), (-1, 1)], &pqr);
+        PrimeFieldPolynomial::integer_lagrange_interpolation(&[(0, 0), (1, 1), (-1, 1)], &pqr);
     println!(
         "interpolation result of points (0, 0), (1, 1), (-1, 1) is: {}",
         interpolation
