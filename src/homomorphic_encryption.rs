@@ -1,7 +1,7 @@
 mod ciphertext;
 use crate::shared_math::fraction::Fraction;
 use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
-use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
+use crate::shared_math::prime_field_polynomial::{IntegerRingPolynomial, PrimeFieldPolynomial};
 use ciphertext::Ciphertext;
 use rand::RngCore;
 mod keypair;
@@ -99,7 +99,7 @@ pub fn test() {
 
     // Lagrange interpolation
     let interpolation =
-        PrimeFieldPolynomial::integer_lagrange_interpolation(&[(0, 0), (1, 1), (-1, 1)], &pqr);
+        IntegerRingPolynomial::integer_lagrange_interpolation(&[(0, 0), (1, 1), (-1, 1)]);
     println!(
         "interpolation result of points (0, 0), (1, 1), (-1, 1) is: {}",
         interpolation
