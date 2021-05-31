@@ -1,5 +1,7 @@
-use super::super::fft::prime_field_element::PrimeFieldElement;
-use super::super::utils::has_unique_elements;
+use super::fraction::Fraction;
+use super::polynomial_quotient_ring::PolynomialQuotientRing;
+use super::prime_field_element::PrimeFieldElement;
+use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
 use num_traits::Zero;
@@ -8,9 +10,6 @@ use rand::RngCore;
 use rand_distr::Normal;
 use std::convert::From;
 use std::fmt;
-
-use super::fraction::Fraction;
-use super::polynomial_quotient_ring::PolynomialQuotientRing;
 
 // All structs holding references must have lifetime annotations in their definition.
 // This <'a> annotation means that an instance of Polynomial cannot outlive the reference it holds
@@ -558,7 +557,7 @@ impl<'a> Polynomial<'a> {
 
 #[cfg(test)]
 mod test_polynomials {
-    use super::super::super::fft::prime_field_element::PrimeField;
+    use super::super::prime_field_element::PrimeField;
     use super::*;
 
     #[test]

@@ -9,7 +9,7 @@ use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::Sub;
 
-use super::super::fft::prime_field_element::PrimeFieldElement;
+use super::prime_field_element::PrimeFieldElement;
 
 // A simple implementation of fractions, with integers, not with finite fields
 #[derive(Debug, Clone, PartialEq, Copy)]

@@ -1,4 +1,4 @@
-use super::polynomial::Polynomial;
+use crate::shared_math::polynomial::Polynomial;
 use std::fmt;
 
 #[derive(Debug)]

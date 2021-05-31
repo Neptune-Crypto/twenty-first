@@ -1,5 +1,5 @@
 use super::ciphertext::Ciphertext;
-use super::polynomial::Polynomial;
+use crate::shared_math::polynomial::Polynomial;
 use std::fmt;
 
 // Public key should maybe also have a `size` field
