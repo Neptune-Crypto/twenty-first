@@ -322,14 +322,17 @@ impl<'a> PrimeFieldPolynomial<'a> {
         }
 
         quotient.reverse();
-        let quotient_pol = Self {
+        let mut quotient_pol = Self {
             coefficients: quotient,
             pqr: self.pqr,
         };
-        let remainder_pol = Self {
+        let mut remainder_pol = Self {
             coefficients: remainder,
             pqr: self.pqr,
         };
+        quotient_pol.normalize();
+        remainder_pol.normalize();
+
         (quotient_pol, remainder_pol)
     }
 
@@ -756,7 +759,7 @@ mod test_polynomials {
 
     #[test]
     fn modular_arithmetic_mul_and_div2() {
-        let pqr = PolynomialQuotientRing::new(4, 5); // degree: 4, mod prime: 7
+        let pqr = PolynomialQuotientRing::new(4, 5); // degree: 4, mod prime: 5
         let a = PrimeFieldPolynomial {
             coefficients: vec![1, 0, 2],
             pqr: &pqr,
