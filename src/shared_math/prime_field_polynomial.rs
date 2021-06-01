@@ -283,13 +283,17 @@ impl<'a> PrimeFieldPolynomial<'a> {
         let divisor_degree = divisor_coeffs.len() - 1;
         let dividend_degree = dividend_coeffs.len() - 1;
         let dominant_divisor: i128 = *divisor_coeffs.last().unwrap();
+        let mut inv: i128 = 1;
+        if dominant_divisor != 1 {
+            let (_, inv0, _) = PrimeFieldElement::eea(dominant_divisor, self.pqr.q);
+            inv = inv0;
+        }
         let mut i = 0;
         while i + divisor_degree <= dividend_degree {
             // calculate next quotient coefficient
             let mut res: i128 = *remainder.last().unwrap();
-            if dominant_divisor != 1 {
-                let (_, inv, _) = PrimeFieldElement::eea(dominant_divisor, self.pqr.q);
-                res = inv * res % self.pqr.q;
+            if inv != 1 {
+                res = (inv * res % self.pqr.q + self.pqr.q) % self.pqr.q;
             }
             quotient.push(res);
             remainder.pop(); // remove highest order coefficient
@@ -307,14 +311,6 @@ impl<'a> PrimeFieldPolynomial<'a> {
                     (remainder[rem_length - j - 1] % self.pqr.q + self.pqr.q) % self.pqr.q;
             }
             i += 1;
-        }
-
-        // Map all coefficients into the finite field mod p
-        for elem in quotient.iter_mut() {
-            *elem = (*elem % self.pqr.q + self.pqr.q) % self.pqr.q;
-        }
-        for elem in remainder.iter_mut() {
-            *elem = (*elem % self.pqr.q + self.pqr.q) % self.pqr.q;
         }
 
         quotient.reverse();
