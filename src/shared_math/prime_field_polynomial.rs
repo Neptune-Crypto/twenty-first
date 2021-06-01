@@ -112,6 +112,14 @@ impl<'a> PrimeFieldPolynomial<'a> {
         }
     }
 
+    // This function assumes that the polynomial is already normalized
+    pub fn degree(&self) -> usize {
+        match self.coefficients[..] {
+            [] => 0,
+            [_, ..] => self.coefficients.len() - 1,
+        }
+    }
+
     pub fn evaluate<'d>(&self, x: &'d PrimeFieldElement) -> PrimeFieldElement<'d> {
         let zero = PrimeFieldElement::new(0, x.field);
         self.coefficients
@@ -699,6 +707,14 @@ impl IntegerRingPolynomial {
 
         Self { coefficients: diff }
     }
+
+    // This function assumes that the polynomial is already normalized
+    pub fn degree(&self) -> usize {
+        match self.coefficients[..] {
+            [] => 0,
+            [_, ..] => self.coefficients.len() - 1,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -760,30 +776,57 @@ mod test_polynomials {
         let (quotient, remainder) = a.div(&b);
         assert_eq!(expected_quotient, quotient);
         assert_eq!(expected_remainder, remainder);
+        assert_eq!(a.degree(), 2);
+        assert_eq!(b.degree(), 1);
+        assert_eq!(expected_remainder.degree(), 0);
     }
 
     #[test]
     fn modular_arithmetic_polynomial_property_based_test() {
         let prime_modulus = 53;
         let pqr = PolynomialQuotientRing::new(16, prime_modulus); // degree: 16, mod prime: prime_modulus
+        let a_degree = 20;
         for i in 0..20 {
             let mut a = PrimeFieldPolynomial {
-                coefficients: generate_random_numbers(20, prime_modulus),
+                coefficients: generate_random_numbers(a_degree, prime_modulus),
                 pqr: &pqr,
             };
             a.normalize();
             let mut b = PrimeFieldPolynomial {
-                coefficients: generate_random_numbers(20 + i, prime_modulus),
+                coefficients: generate_random_numbers(a_degree + i, prime_modulus),
                 pqr: &pqr,
             };
             b.normalize();
-            assert_eq!(a.mul(&b).div(&b).0, a);
-            assert_eq!(a.add(&b).sub(&b), a);
-            assert_eq!(a.sub(&b).add(&b), a);
-            assert_eq!(b.mul(&a).div(&a).0, b);
-            assert_eq!(b.add(&a).sub(&a), b);
-            assert_eq!(b.sub(&a).add(&a), b);
+
+            let mul_a_b = a.mul(&b);
+            let mul_b_a = b.mul(&a);
+            let add_a_b = a.add(&b);
+            let sub_a_b = a.sub(&b);
+            let sub_b_a = b.sub(&a);
+            let add_b_a = b.add(&a);
+            assert_eq!(mul_a_b.div(&b).0, a);
+            assert_eq!(add_a_b.sub(&b), a);
+            assert_eq!(sub_a_b.add(&b), a);
+            assert_eq!(mul_b_a.div(&a).0, b);
+            assert_eq!(add_b_a.sub(&a), b);
+            assert_eq!(sub_b_a.add(&a), b);
+            assert_eq!(add_a_b, add_b_a);
+            assert_eq!(mul_a_b, mul_b_a);
+            assert!(a.degree() < a_degree);
+            assert!(b.degree() < a_degree + i);
+            assert!(mul_a_b.degree() <= (a_degree - 1) * 2 + i);
+            assert!(add_a_b.degree() < a_degree + i);
         }
+    }
+
+    #[test]
+    fn degree() {
+        let pqr = PolynomialQuotientRing::new(4, 5); // degree: 4, mod prime: 5
+        let a = PrimeFieldPolynomial {
+            coefficients: vec![],
+            pqr: &pqr,
+        };
+        assert_eq!(0, a.degree());
     }
 
     #[test]
