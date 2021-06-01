@@ -763,6 +763,30 @@ mod test_polynomials {
     }
 
     #[test]
+    fn modular_arithmetic_polynomial_property_based_test() {
+        let prime_modulus = 53;
+        let pqr = PolynomialQuotientRing::new(16, prime_modulus); // degree: 16, mod prime: prime_modulus
+        for i in 0..20 {
+            let mut a = PrimeFieldPolynomial {
+                coefficients: generate_random_numbers(20, prime_modulus),
+                pqr: &pqr,
+            };
+            a.normalize();
+            let mut b = PrimeFieldPolynomial {
+                coefficients: generate_random_numbers(20 + i, prime_modulus),
+                pqr: &pqr,
+            };
+            b.normalize();
+            assert_eq!(a.mul(&b).div(&b).0, a);
+            assert_eq!(a.add(&b).sub(&b), a);
+            assert_eq!(a.sub(&b).add(&b), a);
+            assert_eq!(b.mul(&a).div(&a).0, b);
+            assert_eq!(b.add(&a).sub(&a), b);
+            assert_eq!(b.sub(&a).add(&a), b);
+        }
+    }
+
+    #[test]
     fn finite_field_lagrange_interpolation() {
         let pqr = PolynomialQuotientRing::new(4, 7); // degree: 4, mod prime: 7
 
