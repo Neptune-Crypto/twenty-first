@@ -735,6 +735,30 @@ mod test_polynomials {
     }
 
     #[test]
+    fn modular_arithmetic_mul_and_div2() {
+        let pqr = PolynomialQuotientRing::new(4, 5); // degree: 4, mod prime: 7
+        let a = PrimeFieldPolynomial {
+            coefficients: vec![1, 0, 2],
+            pqr: &pqr,
+        };
+        let b = PrimeFieldPolynomial {
+            coefficients: vec![2, 4],
+            pqr: &pqr,
+        };
+        let expected_quotient = PrimeFieldPolynomial {
+            coefficients: vec![1, 3],
+            pqr: &pqr,
+        };
+        let expected_remainder = PrimeFieldPolynomial {
+            coefficients: vec![4],
+            pqr: &pqr,
+        };
+        let (quotient, remainder) = a.div(&b);
+        assert_eq!(expected_quotient, quotient);
+        assert_eq!(expected_remainder, remainder);
+    }
+
+    #[test]
     fn finite_field_lagrange_interpolation() {
         let pqr = PolynomialQuotientRing::new(4, 7); // degree: 4, mod prime: 7
 
