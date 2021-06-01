@@ -417,10 +417,12 @@ impl<'a> PrimeFieldPolynomial<'a> {
             })
             .collect();
 
-        Self {
+        let mut res = Self {
             coefficients: summed,
             pqr: self.pqr,
-        }
+        };
+        res.normalize();
+        res
     }
 
     pub fn sub(&self, other: &Self) -> Self {
@@ -435,10 +437,12 @@ impl<'a> PrimeFieldPolynomial<'a> {
             })
             .collect();
 
-        Self {
+        let mut res = Self {
             coefficients: diff,
             pqr: self.pqr,
-        }
+        };
+        res.normalize();
+        res
     }
 }
 
