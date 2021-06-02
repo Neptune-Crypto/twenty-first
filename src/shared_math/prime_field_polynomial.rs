@@ -1,12 +1,11 @@
 use super::fraction::Fraction;
 use super::polynomial_quotient_ring::PolynomialQuotientRing;
 use super::prime_field_element::PrimeFieldElement;
-use crate::utils::has_unique_elements;
+use crate::utils::{generate_random_numbers, has_unique_elements};
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
 use num_traits::Zero;
 use rand::Rng;
-use rand::RngCore;
 use rand_distr::Normal;
 use std::convert::From;
 use std::fmt;
@@ -62,23 +61,6 @@ fn pretty_print_coefficients(coefficients: &[i128]) -> String {
         }
     }
     format!("{}{}", trailing_zeros_warning, outputs.join(""))
-}
-
-// should be a private function
-fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
-    let mut prng = rand::thread_rng();
-    let mut rand = vec![0u8; size];
-    prng.fill_bytes(rand.as_mut_slice());
-
-    // This looks pretty inefficient
-    // How is this done with a map instead?
-    let mut coefficients: Vec<i128> = vec![0i128; size];
-    for i in 0..size {
-        // The modulus operator should give the remainder, as
-        // all rand[i] are positive.
-        coefficients[i] = rand[i] as i128 % modulus;
-    }
-    coefficients
 }
 
 // All structs holding references must have lifetime annotations in their definition.
