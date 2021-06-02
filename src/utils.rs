@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::hash::Hash;
 
+pub const FIRST_TEN_PRIMES: &[i128] = &[2, 3, 5, 7, 11, 13, 17, 19, 23, 29];
+
 pub fn has_unique_elements<T>(iter: T) -> bool
 where
     T: IntoIterator,
