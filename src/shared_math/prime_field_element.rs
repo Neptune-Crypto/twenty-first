@@ -15,6 +15,34 @@ impl PrimeField {
         Self { q }
     }
 
+    pub fn batch_inversion(&self, input: Vec<i128>) -> Vec<i128> {
+        let size = input.len();
+        if size == 0 {
+            return Vec::<i128>::new();
+        }
+
+        let mut partials0: Vec<i128> = vec![0i128; size];
+        let mut result: Vec<i128> = vec![0i128; size];
+        partials0[0] = input[0];
+        for i in 1..size {
+            partials0[i] = partials0[i - 1] * input[i] % self.q;
+        }
+
+        // Invert the last element of the `partials` vector
+        let (_, inv, _) = PrimeFieldElement::eea(partials0[size - 1], self.q);
+        result[size - 1] = (inv % self.q + self.q) % self.q;
+        for i in 1..size {
+            result[size - i - 1] = result[size - i] * input[size - i] % self.q;
+            if size - i - 1 == 0 {}
+        }
+
+        for i in 1..size {
+            result[i] = result[i] * partials0[i - 1] % self.q;
+        }
+
+        result
+    }
+
     pub fn get_primitive_root_of_unity(&self, n: i128) -> Option<PrimeFieldElement> {
         // Cf. https://www.csd.uwo.ca/~mmorenom/CS874/Lectures/Newton2Hensel.html/node9.html#thrm:PrimitiveRootExistenceCriterium
         // N must divide the field prime minus one for a primitive nth root of unity to exist
@@ -267,11 +295,31 @@ impl<'a> Rem for PrimeFieldElement<'a> {
 #[cfg(test)]
 mod test_modular_arithmetic {
     #![allow(clippy::just_underscores_and_digits)]
+    use super::*;
+
+    #[test]
+    fn batch_inversion_test_small() {
+        let input: Vec<i128> = vec![1, 2, 3, 4];
+        let field = PrimeField::new(5);
+        let output = field.batch_inversion(input);
+        assert_eq!(vec![1, 3, 2, 4], output);
+    }
+
+    #[test]
+    fn batch_inversion_test_bigger() {
+        let input: Vec<i128> = vec![
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+        ];
+        let field = PrimeField::new(23);
+        let output = field.batch_inversion(input);
+        assert_eq!(
+            vec![1, 12, 8, 6, 14, 4, 10, 3, 18, 7, 21, 2, 16, 5, 20, 13, 19, 9, 17, 15, 11, 22],
+            output
+        );
+    }
 
     #[test]
     fn sieve_of_eratosthenes() {
-        use super::*;
-
         // Find primes below 100
         let expected: Vec<i128> = vec![
             2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83,
@@ -289,8 +337,6 @@ mod test_modular_arithmetic {
 
     #[test]
     fn roots_of_unity() {
-        use super::*;
-
         let mut a = PrimeField::new(17);
         for i in 2..a.q {
             let b = a.get_primitive_root_of_unity(i);
@@ -323,8 +369,6 @@ mod test_modular_arithmetic {
 
     #[test]
     fn internal() {
-        use super::*;
-
         // Test addition, subtraction, multiplication, and division
         let _1931 = PrimeField::new(1931);
         let _899_1931 = PrimeFieldElement::new(899, &_1931);
