@@ -1,3 +1,4 @@
+use crate::utils::FIRST_TEN_PRIMES;
 use std::fmt;
 use std::ops::Add;
 use std::ops::Div;
@@ -41,6 +42,63 @@ impl PrimeField {
         }
 
         result
+    }
+
+    pub fn get_primitive_root_of_unity_new(
+        &self,
+        n: i128,
+    ) -> (Option<PrimeFieldElement>, Vec<i128>) {
+        let mut primes: Vec<i128> = vec![];
+
+        if n <= 1 {
+            return (Some(PrimeFieldElement::new(1, self)), primes);
+        }
+
+        // Check if n = 2^k
+        if n & (n - 1) == 0 {
+            primes = vec![2];
+        } else {
+            let mut m = n;
+            for prime in FIRST_TEN_PRIMES.iter() {
+                if m % prime == 0 {
+                    primes.push(*prime);
+                    while m % prime == 0 {
+                        m /= prime;
+                    }
+                }
+            }
+            // This might be prohibitively expensive
+            if m > 1 {
+                let mut other_primes = PrimeFieldElement::primes_lt(m)
+                    .into_iter()
+                    .filter(|&x| n % x == 0)
+                    .collect();
+                primes.append(&mut other_primes);
+            }
+        };
+
+        // N must divide the field prime minus one for a primitive nth root of unity to exist
+        if (self.q - 1) % n != 0 {
+            return (None, primes);
+        }
+
+        let mut primitive_root: Option<PrimeFieldElement> = None;
+        let mut candidate: PrimeFieldElement = PrimeFieldElement::new(1, &self);
+        #[allow(clippy::suspicious_operation_groupings)]
+        while primitive_root == None && candidate.value < self.q {
+            if candidate.legendre_symbol() == -1
+                && primes
+                    .iter()
+                    .filter(|&x| n % x == 0)
+                    .all(|x| candidate.mod_pow_raw((self.q - 1) / x) != 1)
+            {
+                primitive_root = Some(candidate.mod_pow((self.q - 1) / n));
+            }
+
+            candidate.value += 1;
+        }
+
+        (primitive_root, primes)
     }
 
     pub fn get_primitive_root_of_unity(&self, n: i128) -> Option<PrimeFieldElement> {
@@ -296,6 +354,7 @@ impl<'a> Rem for PrimeFieldElement<'a> {
 mod test_modular_arithmetic {
     #![allow(clippy::just_underscores_and_digits)]
     use super::*;
+    use crate::utils::generate_random_numbers;
 
     #[test]
     fn batch_inversion_test_small() {
@@ -365,6 +424,61 @@ mod test_modular_arithmetic {
         assert_eq!(35, b.value);
         b = a.get_primitive_root_of_unity(760).unwrap();
         assert_eq!(6, b.value);
+    }
+
+    // Test vector found in https://www.vitalik.ca/general/2018/07/21/starks_part_3.html
+    #[test]
+    fn find_16th_root_of_unity_mod_337() {
+        let field = PrimeField::new(337);
+        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity_new(16);
+        assert!(
+            vec![59i128, 146, 30, 297, 278, 191, 307, 40].contains(&primitive_root.unwrap().value)
+        );
+        assert_eq!(vec![2], prime_factors);
+    }
+
+    #[test]
+    fn find_40th_root_of_unity_mod_761() {
+        let field = PrimeField::new(761);
+        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity_new(40);
+        println!("Found: {}", primitive_root.unwrap());
+        assert_eq!(208, primitive_root.unwrap().value);
+        assert_eq!(vec![2, 5], prime_factors);
+    }
+
+    #[test]
+    fn primitive_root_property_based_test() {
+        let primes = vec![773i128, 13367, 223, 379, 41, 331319, 1073807359];
+        for prime in primes.iter() {
+            println!("Testing prime {}", prime);
+            let field = PrimeField::new(*prime);
+            let rands = generate_random_numbers(30, *prime);
+            for elem in rands.iter() {
+                println!("elem = {}", *elem);
+                let (root, prime_factors) = field.get_primitive_root_of_unity_new(*elem);
+                assert!(prime_factors.iter().all(|&x| *elem % x == 0));
+                if *elem == 0 {
+                    continue;
+                }
+
+                // verify that we can build *elem from prime_factors
+                let mut m = *elem;
+                for prime in prime_factors {
+                    while m % prime == 0 {
+                        m /= prime;
+                    }
+                }
+                assert_eq!(1, m);
+
+                match root {
+                    None => (),
+                    Some(i) => {
+                        println!("Found root: {}^{} = 1 mod {}", i.value, *elem, *prime);
+                        assert!(i.mod_pow_raw(*elem) == 1);
+                    }
+                }
+            }
+        }
     }
 
     #[test]
