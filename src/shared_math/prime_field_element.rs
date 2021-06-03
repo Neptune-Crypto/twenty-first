@@ -44,10 +44,7 @@ impl PrimeField {
         result
     }
 
-    pub fn get_primitive_root_of_unity_new(
-        &self,
-        n: i128,
-    ) -> (Option<PrimeFieldElement>, Vec<i128>) {
+    pub fn get_primitive_root_of_unity(&self, n: i128) -> (Option<PrimeFieldElement>, Vec<i128>) {
         let mut primes: Vec<i128> = vec![];
 
         if n <= 1 {
@@ -101,7 +98,7 @@ impl PrimeField {
         (primitive_root, primes)
     }
 
-    pub fn get_primitive_root_of_unity(&self, n: i128) -> Option<PrimeFieldElement> {
+    pub fn get_primitive_root_of_unity_deprecated(&self, n: i128) -> Option<PrimeFieldElement> {
         // Cf. https://www.csd.uwo.ca/~mmorenom/CS874/Lectures/Newton2Hensel.html/node9.html#thrm:PrimitiveRootExistenceCriterium
         // N must divide the field prime minus one for a primitive nth root of unity to exist
         if (self.q - 1) % n != 0 {
@@ -398,7 +395,7 @@ mod test_modular_arithmetic {
     fn roots_of_unity() {
         let mut a = PrimeField::new(17);
         for i in 2..a.q {
-            let b = a.get_primitive_root_of_unity(i);
+            let b = a.get_primitive_root_of_unity_deprecated(i);
             if i == 2 || i == 4 || i == 8 || i == 16 {
                 assert_ne!(b, None);
             } else {
@@ -409,7 +406,7 @@ mod test_modular_arithmetic {
         a = PrimeField::new(41);
         let mut count = 0;
         for i in 2..a.q {
-            let b = a.get_primitive_root_of_unity(i);
+            let b = a.get_primitive_root_of_unity_deprecated(i);
             match b {
                 None => {}
                 _ => {
@@ -420,9 +417,9 @@ mod test_modular_arithmetic {
         assert_eq!(count, 7);
 
         a = PrimeField::new(761);
-        let mut b = a.get_primitive_root_of_unity(40).unwrap();
+        let mut b = a.get_primitive_root_of_unity_deprecated(40).unwrap();
         assert_eq!(35, b.value);
-        b = a.get_primitive_root_of_unity(760).unwrap();
+        b = a.get_primitive_root_of_unity_deprecated(760).unwrap();
         assert_eq!(6, b.value);
     }
 
@@ -430,7 +427,7 @@ mod test_modular_arithmetic {
     #[test]
     fn find_16th_root_of_unity_mod_337() {
         let field = PrimeField::new(337);
-        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity_new(16);
+        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity(16);
         assert!(
             vec![59i128, 146, 30, 297, 278, 191, 307, 40].contains(&primitive_root.unwrap().value)
         );
@@ -440,7 +437,7 @@ mod test_modular_arithmetic {
     #[test]
     fn find_40th_root_of_unity_mod_761() {
         let field = PrimeField::new(761);
-        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity_new(40);
+        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity(40);
         println!("Found: {}", primitive_root.unwrap());
         assert_eq!(208, primitive_root.unwrap().value);
         assert_eq!(vec![2, 5], prime_factors);
@@ -455,7 +452,7 @@ mod test_modular_arithmetic {
             let rands = generate_random_numbers(30, *prime);
             for elem in rands.iter() {
                 println!("elem = {}", *elem);
-                let (root, prime_factors) = field.get_primitive_root_of_unity_new(*elem);
+                let (root, prime_factors) = field.get_primitive_root_of_unity(*elem);
                 assert!(prime_factors.iter().all(|&x| *elem % x == 0));
                 if *elem == 0 {
                     continue;

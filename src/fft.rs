@@ -287,7 +287,7 @@ pub fn test() {
     println!("{:?} -> {:?} -> {:?}", input, res, inverse);
 
     let root = 2;
-    let a = field.get_primitive_root_of_unity(root);
+    let (a, _) = field.get_primitive_root_of_unity(root);
     println!(
         "Found solution to x^{} mod {} = 1: x = {}",
         root,
@@ -320,7 +320,7 @@ pub fn test() {
             &new_field,
         ))
     }
-    let omega = new_field.get_primitive_root_of_unity(ntt_input.len() as i128);
+    let (omega, _) = new_field.get_primitive_root_of_unity(ntt_input.len() as i128);
     println!("Found omega: {}", omega.unwrap());
     now = Instant::now();
     let output = ntt_fft(ntt_input.clone(), &omega.unwrap());
@@ -433,7 +433,7 @@ mod test_vectors {
                 &new_field,
             ))
         }
-        let omega = new_field.get_primitive_root_of_unity(ntt_input.len() as i128);
+        let (omega, _) = new_field.get_primitive_root_of_unity(ntt_input.len() as i128);
         let output = ntt_fft(ntt_input.clone(), &omega.unwrap());
 
         // Verify that intt . ntt = I
