@@ -101,60 +101,6 @@ impl PrimeField {
 
         (primitive_root, primes)
     }
-
-    pub fn get_primitive_root_of_unity_deprecated(&self, n: i128) -> Option<PrimeFieldElement> {
-        // Cf. https://www.csd.uwo.ca/~mmorenom/CS874/Lectures/Newton2Hensel.html/node9.html#thrm:PrimitiveRootExistenceCriterium
-        // N must divide the field prime minus one for a primitive nth root of unity to exist
-        if (self.q - 1) % n != 0 {
-            return None;
-        }
-
-        let mut candidate_value = 2;
-        let mut roots: Vec<i128> = Vec::new();
-        let mut field_element: PrimeFieldElement = PrimeFieldElement::new(0, self);
-        let mut found: bool = false;
-        while candidate_value <= self.q {
-            // if candidate_value % 1000 == 0 {
-            //     println!("candidate value: {}", candidate_value);
-            // }
-
-            field_element = PrimeFieldElement::new(candidate_value, &self);
-            let mod_pow = field_element.mod_pow(n as i128);
-            if mod_pow.value == 1 {
-                roots.push(candidate_value);
-                // println!("{} ^ N == 1", candidate_value);
-                // println!("Roots: {:?}", roots);
-
-                // candidate is Nth prime. Now check that it is primitive prime
-                // cf. this link we must check that for all primes p dividing N that
-                // that y^(N/p) != 1.
-                // https://en.wikipedia.org/wiki/Root_of_unity_modulo_n#Finding_an_n_with_a_primitive_k-th_root_of_unity_modulo_n
-                // find all primes, p_i, less than sqrt(candidate_value) and check, for all p_i
-                // candidate_value ^ (n/p_i) != 1
-                let bound = n / 2;
-                let primes = PrimeFieldElement::primes_lt(bound as i128);
-                if primes
-                    .iter()
-                    .filter(|&x| n % x == 0)
-                    .all(|x| field_element.mod_pow_raw(n / x) != 1)
-                {
-                    println!(
-                        "Found {} primitive root: {} of mod {}",
-                        n, candidate_value, self.q
-                    );
-                    found = true;
-                    break;
-                }
-            }
-            candidate_value += 1;
-        }
-
-        if found {
-            Some(field_element)
-        } else {
-            None
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -396,10 +342,10 @@ mod test_modular_arithmetic {
     }
 
     #[test]
-    fn roots_of_unity_deprecated() {
+    fn roots_of_unity() {
         let mut a = PrimeField::new(17);
         for i in 2..a.q {
-            let b = a.get_primitive_root_of_unity_deprecated(i);
+            let (b, _) = a.get_primitive_root_of_unity(i);
             if i == 2 || i == 4 || i == 8 || i == 16 {
                 assert_ne!(b, None);
             } else {
@@ -410,7 +356,7 @@ mod test_modular_arithmetic {
         a = PrimeField::new(41);
         let mut count = 0;
         for i in 2..a.q {
-            let b = a.get_primitive_root_of_unity_deprecated(i);
+            let (b, _) = a.get_primitive_root_of_unity(i);
             match b {
                 None => {}
                 _ => {
@@ -421,10 +367,10 @@ mod test_modular_arithmetic {
         assert_eq!(count, 7);
 
         a = PrimeField::new(761);
-        let mut b = a.get_primitive_root_of_unity_deprecated(40).unwrap();
-        assert_eq!(35, b.value);
-        b = a.get_primitive_root_of_unity_deprecated(760).unwrap();
-        assert_eq!(6, b.value);
+        let (b, _) = a.get_primitive_root_of_unity(40);
+        assert_eq!(208, b.unwrap().value);
+        let (b, _) = a.get_primitive_root_of_unity(760);
+        assert_eq!(6, b.unwrap().value);
     }
 
     #[test]
