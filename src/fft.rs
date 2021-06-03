@@ -116,6 +116,52 @@ pub fn intt_fft<'a>(
         .collect()
 }
 
+// Interpolate a polynomial with y values as given in the input, and with x values
+// which are successive powers of the primitive root of unity given in the input.
+// The primitive root of unity in the input must fulfill
+// `primitive_root_of_unity` ** y_values.len() == 1
+pub fn fast_polynomial_interpolate(
+    y_values: &[i128],
+    prime: i128,
+    primitive_root_of_unity: i128,
+) -> Vec<i128> {
+    // TODO: This function can probably be made faster if we don't have to send prime field
+    // elements to the intt/ntt functions but can just send vectors of atomic values, like i128.
+    let field = PrimeField::new(prime);
+    let omega = PrimeFieldElement::new(primitive_root_of_unity, &field);
+    let intt_inputs = y_values
+        .iter()
+        .map(|&x| PrimeFieldElement::new(x, &field))
+        .collect();
+    intt_fft(intt_inputs, &omega)
+        .iter()
+        .map(|&x| x.value)
+        .collect()
+}
+
+// Evaluate a polynomial with a a list of coefficients on x values which are successive powers
+// of the primitive root of unity given in the input.
+// The primitive root of unity in the input must fulfill
+// `primitive_root_of_unity` ** y_values.len() == 1
+pub fn fast_polynomial_evaluate(
+    pol_coefficients: &[i128],
+    prime: i128,
+    primitive_root_of_unity: i128,
+) -> Vec<i128> {
+    // TODO: This function can probably be made faster if we don't have to send prime field
+    // elements to the intt/ntt functions but can just send vectors of atomic values, like i128.
+    let field = PrimeField::new(prime);
+    let omega = PrimeFieldElement::new(primitive_root_of_unity, &field);
+    let ntt_inputs = pol_coefficients
+        .iter()
+        .map(|x| PrimeFieldElement::new(*x, &field))
+        .collect();
+    ntt_fft(ntt_inputs, &omega)
+        .iter()
+        .map(|&x| x.value)
+        .collect()
+}
+
 // FFT has a runtime of O(N*log(N)) whereas the DFT
 // algorithm has a runtime of O(N^2).
 
@@ -341,11 +387,38 @@ pub fn test() {
 
 #[cfg(test)]
 mod test_vectors {
+    use super::*;
+
+    #[test]
+    fn use_ntt_for_prime_field_polynomial_evaluated() {
+        use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
+        use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
+
+        let field = PrimeField::new(337i128);
+        let pqr = PolynomialQuotientRing::new(256, field.q);
+        let primitive_eighth_root = PrimeFieldElement::new(85, &field);
+        let input_y_values = vec![3i128, 1, 4, 1, 5, 9, 2, 6];
+        let fast_coefficients = fast_polynomial_interpolate(&input_y_values, field.q, 85);
+        let expected_coefficients = vec![46i128, 169, 29, 149, 126, 262, 140, 93];
+        assert_eq!(expected_coefficients, fast_coefficients);
+        let pol = PrimeFieldPolynomial {
+            coefficients: fast_coefficients.to_vec(),
+            pqr: &pqr,
+        };
+
+        let x_values: Vec<PrimeFieldElement> =
+            (0..8).map(|x| primitive_eighth_root.mod_pow(x)).collect();
+        let values: Vec<i128> = x_values.iter().map(|x| pol.evaluate(x).value).collect();
+        assert_eq!(input_y_values, values);
+        let fast_values: Vec<i128> = fast_polynomial_evaluate(&pol.coefficients[..], field.q, 85);
+        println!("Fast values = {:?}", fast_values);
+        assert_eq!(fast_values, input_y_values);
+    }
+
     // test vectors found here:
     // https://math.stackexchange.com/questions/1437624/number-theoretic-transform-ntt-example-not-working-out
     #[test]
     fn finite_field_fft_simple() {
-        use super::*;
         let field = PrimeField::new(5);
         let generator: PrimeFieldElement = PrimeFieldElement::new(4, &field);
         let input = vec![
@@ -369,7 +442,6 @@ mod test_vectors {
     // https://math.stackexchange.com/questions/1437624/number-theoretic-transform-ntt-example-not-working-out
     #[test]
     fn finite_field_fft_four_elements() {
-        use super::*;
         let field = PrimeField::new(5);
         let generator: PrimeFieldElement = PrimeFieldElement::new(2, &field);
         let input = vec![
@@ -394,7 +466,6 @@ mod test_vectors {
 
     #[test]
     fn finite_field_fft() {
-        use super::*;
         let field = PrimeField::new(17);
         let mut generator: PrimeFieldElement = PrimeFieldElement::new(0, &field);
 
@@ -421,7 +492,6 @@ mod test_vectors {
 
     #[test]
     fn finite_field_inversion_fft() {
-        use super::*;
         // Time NTT implementation
         let range = 4096; // 8192 ;
         let prime = 167772161; // = 5 * 2^25 + 1
@@ -445,8 +515,6 @@ mod test_vectors {
 
     #[test]
     fn internal() {
-        use super::*;
-
         let ft_size = 8;
         let mut impulse_data = vec![ComplexNumber::zero(); ft_size];
         impulse_data[0] = ComplexNumber::one();
