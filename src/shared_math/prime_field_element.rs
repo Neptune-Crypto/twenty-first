@@ -1,4 +1,4 @@
-use crate::utils::FIRST_TEN_PRIMES;
+use crate::utils::FIRST_THOUSAND_PRIMES;
 use std::fmt;
 use std::ops::Add;
 use std::ops::Div;
@@ -51,12 +51,16 @@ impl PrimeField {
             return (Some(PrimeFieldElement::new(1, self)), primes);
         }
 
+        // Calculate prime factorization of n
         // Check if n = 2^k
         if n & (n - 1) == 0 {
             primes = vec![2];
         } else {
             let mut m = n;
-            for prime in FIRST_TEN_PRIMES.iter() {
+            for prime in FIRST_THOUSAND_PRIMES.iter() {
+                if m == 1 {
+                    break;
+                }
                 if m % prime == 0 {
                     primes.push(*prime);
                     while m % prime == 0 {
