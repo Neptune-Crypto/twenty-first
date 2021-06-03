@@ -77,13 +77,11 @@ where
 
 pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
     let mut prng = rand::thread_rng();
-    let mut rand = vec![0u8; size];
-    prng.fill_bytes(rand.as_mut_slice());
 
-    // This looks pretty inefficient
-    // How is this done with a map instead?
-    // TODO: Only generates values up to 256!
-    let values: Vec<i128> = rand.iter().map(|&x| x as i128 % modulus).collect();
+    // TODO: Only generates values up to 2^64!
+    let values: Vec<i128> = (0..size)
+        .map(|_| prng.next_u64() as i128 % modulus)
+        .collect();
     values
 }
 
