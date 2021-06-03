@@ -15,7 +15,7 @@ where
 
 pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
     let mut prng = rand::thread_rng();
-    let mut rand = vec![0u8; size * 32];
+    let mut rand = vec![0u8; size];
     prng.fill_bytes(rand.as_mut_slice());
 
     // This looks pretty inefficient
