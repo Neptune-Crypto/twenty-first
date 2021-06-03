@@ -396,7 +396,7 @@ mod test_modular_arithmetic {
     }
 
     #[test]
-    fn roots_of_unity() {
+    fn roots_of_unity_deprecated() {
         let mut a = PrimeField::new(17);
         for i in 2..a.q {
             let b = a.get_primitive_root_of_unity_deprecated(i);
@@ -427,6 +427,23 @@ mod test_modular_arithmetic {
         assert_eq!(6, b.value);
     }
 
+    #[test]
+    fn primitive_root_of_unity_mod_7() {
+        let field = PrimeField::new(7);
+        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity(2);
+        assert_eq!(6, primitive_root.unwrap().value);
+        assert_eq!(vec![2], prime_factors);
+        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity(3);
+        assert_eq!(2, primitive_root.unwrap().value);
+        assert_eq!(vec![3], prime_factors);
+        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity(4);
+        assert_eq!(None, primitive_root);
+        assert_eq!(vec![2], prime_factors);
+        let (primitive_root, prime_factors) = field.get_primitive_root_of_unity(5);
+        assert_eq!(None, primitive_root);
+        assert_eq!(vec![5], prime_factors);
+    }
+
     // Test vector found in https://www.vitalik.ca/general/2018/07/21/starks_part_3.html
     #[test]
     fn find_16th_root_of_unity_mod_337() {
@@ -449,13 +466,14 @@ mod test_modular_arithmetic {
 
     #[test]
     fn primitive_root_property_based_test() {
-        let primes = vec![773i128, 13367, 223, 379, 41, 331319, 1073807359];
+        let primes = vec![773i128, 13367, 223, 379, 41];
         for prime in primes.iter() {
-            println!("Testing prime {}", prime);
+            // println!("Testing prime {}", prime);
             let field = PrimeField::new(*prime);
-            let rands = generate_random_numbers(30, *prime);
+            let rands =
+                generate_random_numbers(30, if *prime > 1000000 { 1000000 } else { *prime });
             for elem in rands.iter() {
-                println!("elem = {}", *elem);
+                // println!("elem = {}", *elem);
                 let (root, prime_factors) = field.get_primitive_root_of_unity(*elem);
                 assert!(prime_factors.iter().all(|&x| *elem % x == 0));
                 if *elem == 0 {
@@ -464,7 +482,7 @@ mod test_modular_arithmetic {
 
                 // verify that we can build *elem from prime_factors
                 let mut m = *elem;
-                for prime in prime_factors {
+                for prime in prime_factors.clone() {
                     while m % prime == 0 {
                         m /= prime;
                     }
@@ -474,8 +492,18 @@ mod test_modular_arithmetic {
                 match root {
                     None => (),
                     Some(i) => {
-                        println!("Found root: {}^{} = 1 mod {}", i.value, *elem, *prime);
-                        assert!(i.mod_pow_raw(*elem) == 1);
+                        // println!(
+                        //     "Found primitive root: {}^{} = 1 mod {}",
+                        //     i.value, *elem, *prime
+                        // );
+
+                        // Verify that i is actually a root of unity
+                        assert_eq!(1, i.mod_pow_raw(*elem));
+
+                        // Verify that root is actually primitive
+                        for prime_factor in prime_factors.clone().iter() {
+                            assert_ne!(1, i.mod_pow_raw(*elem / prime_factor));
+                        }
                     }
                 }
             }
