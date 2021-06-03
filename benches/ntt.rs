@@ -21,7 +21,7 @@ fn ntt_forward(c: &mut Criterion) {
     let mut group = c.benchmark_group("ntt_forward");
     for log2_of_size in [18usize, 19, 20, 21, 22].iter() {
         let size = 2i128.pow(*log2_of_size as u32);
-        let unity_root = prime_field.get_primitive_root_of_unity(size);
+        let (unity_root, _) = prime_field.get_primitive_root_of_unity(size);
         group.throughput(Throughput::Bytes(*log2_of_size as u64));
         group
             .bench_with_input(
