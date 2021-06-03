@@ -78,9 +78,8 @@ where
 pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
     let mut prng = rand::thread_rng();
 
-    // TODO: Only generates values up to 2^64!
     let values: Vec<i128> = (0..size)
-        .map(|_| prng.next_u64() as i128 % modulus)
+        .map(|_| (((prng.next_u64() as i128) << 63) | (prng.next_u64() as i128) >> 1) % modulus)
         .collect();
     values
 }
