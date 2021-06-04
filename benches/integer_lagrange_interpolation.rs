@@ -1,6 +1,6 @@
 use criterion::{
-    criterion_group, criterion_main, AxisScale, Bencher, Benchmark, BenchmarkId, Criterion,
-    PlotConfiguration, Throughput,
+    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
+    Throughput,
 };
 use twenty_first::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
 use twenty_first::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
@@ -37,13 +37,9 @@ fn integer_lagrange_interpolation_slow(c: &mut Criterion) {
                 &primitive_root_of_unity,
             );
 
-        // Get input for the fast interpolation
-        // y_values: &[i128],
-        // prime: i128,
-        // primitive_root_of_unity: i128,
         let y_values_fast: Vec<i128> = input.iter().map(|&x| x.1.value).collect();
         group.throughput(Throughput::Elements(*number_of_points as u64));
-        if (*number_of_points < 2048) {
+        if *number_of_points < 2048 {
             group
                 .bench_with_input(
                     BenchmarkId::new("Slow", number_of_points),
