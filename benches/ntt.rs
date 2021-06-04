@@ -18,24 +18,16 @@ fn generate_ntt_input<'a>(
 fn ntt_forward(c: &mut Criterion) {
     static PRIME: i128 = 167772161; // 5 * 2^25 + !
     let prime_field: PrimeField = PrimeField::new(PRIME);
-    let mut group = c.benchmark_group("ntt_forward");
-    for log2_of_size in [18usize, 19, 20, 21, 22].iter() {
-        let size = 2i128.pow(*log2_of_size as u32);
+    let mut group = c.benchmark_group("ntt");
+    for &log2_of_size in [18usize, 19, 20, 21, 22].iter() {
+        let size = 2i128.pow(log2_of_size as u32);
         let (unity_root, _) = prime_field.get_primitive_root_of_unity(size);
-        group.throughput(Throughput::Bytes(*log2_of_size as u64));
+        let input = generate_ntt_input(log2_of_size, &prime_field);
+        group.throughput(Throughput::Elements(size as u64));
         group
-            .bench_with_input(
-                BenchmarkId::from_parameter(log2_of_size),
-                log2_of_size,
-                |b, &log2_of_size| {
-                    b.iter(|| {
-                        twenty_first::fft::ntt_fft(
-                            generate_ntt_input(log2_of_size as usize, &prime_field),
-                            &unity_root.unwrap(),
-                        )
-                    });
-                },
-            )
+            .bench_with_input(BenchmarkId::from_parameter(log2_of_size), &size, |b, _| {
+                b.iter(|| twenty_first::fft::ntt_fft(input.clone(), &unity_root.unwrap()));
+            })
             .sample_size(10);
     }
     group.finish();
