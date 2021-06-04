@@ -388,12 +388,42 @@ pub fn test() {
 #[cfg(test)]
 mod test_vectors {
     use super::*;
+    use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
+    use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
+
+    #[test]
+    fn fast_polynomial_functions_property_based_test() {
+        let prime = 167772161; // 2^25*5+1
+        let field = PrimeField::new(prime);
+        for &size in &[2, 4, 8, 1024, 2048] {
+            let input_y_values: Vec<i128> = (0..size)
+                .map(|_| rand::random::<u32>() as i128 % prime)
+                .collect();
+            let (root_option, _) = field.get_primitive_root_of_unity(size);
+            let coefficients =
+                fast_polynomial_interpolate(&input_y_values, prime, root_option.unwrap().value);
+            let output_y_values =
+                fast_polynomial_evaluate(&coefficients, prime, root_option.unwrap().value);
+            assert_eq!(input_y_values, output_y_values);
+            assert_ne!(input_y_values, coefficients);
+            if size < 17 {
+                let pqr = PolynomialQuotientRing::new(256, prime);
+                let pol = PrimeFieldPolynomial {
+                    coefficients,
+                    pqr: &pqr,
+                };
+                #[allow(clippy::needless_range_loop)]
+                for i in 0..size as usize {
+                    let x_value = root_option.unwrap().mod_pow(i as i128);
+                    let evaluated_y = pol.evaluate(&x_value);
+                    assert_eq!(input_y_values[i], evaluated_y.value);
+                }
+            }
+        }
+    }
 
     #[test]
     fn use_ntt_for_prime_field_polynomial_evaluated() {
-        use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
-        use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
-
         let field = PrimeField::new(337i128);
         let pqr = PolynomialQuotientRing::new(256, field.q);
         let primitive_eighth_root = PrimeFieldElement::new(85, &field);
