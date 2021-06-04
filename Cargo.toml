@@ -22,7 +22,7 @@ structopt = { version = "0.3", features = [ "paw" ] } # Command-line argument pa
 paw = "1.0" # Command-line argument parsing
 
 [[bench]]
-name = "integer_lagrange_interpolation"
+name = "integer_interpolation"
 harness = false
 
 [[bench]]
