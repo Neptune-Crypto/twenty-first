@@ -26,7 +26,7 @@ fn integer_lagrange_interpolation_slow(c: &mut Criterion) {
     static PRIME: i128 = 167772161;
     let pqr = PolynomialQuotientRing::new(256, PRIME);
     let field = PrimeField::new(PRIME);
-    let mut group = c.benchmark_group("integer_lagrange_interpolation");
+    let mut group = c.benchmark_group("integer_interpolation");
     for number_of_points in [256, 512, 1024, 1048576].iter() {
         let (primitive_root_of_unity_option, _) =
             field.get_primitive_root_of_unity(*number_of_points);
@@ -42,7 +42,7 @@ fn integer_lagrange_interpolation_slow(c: &mut Criterion) {
         if *number_of_points < 2048 {
             group
                 .bench_with_input(
-                    BenchmarkId::new("Slow", number_of_points),
+                    BenchmarkId::new("Lagrange", number_of_points),
                     number_of_points,
                     |b, _| {
                         b.iter(|| {
@@ -56,7 +56,7 @@ fn integer_lagrange_interpolation_slow(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*number_of_points as u64));
         group
             .bench_with_input(
-                BenchmarkId::new("Fast", number_of_points),
+                BenchmarkId::new("NTT", number_of_points),
                 number_of_points,
                 |b, _| {
                     b.iter(|| {
