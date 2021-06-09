@@ -2,8 +2,9 @@
 
 A collection of cryptography functions written in Rust.
 
-## Requirements
- - cargo -- `apt install cargo` on Ubuntu to install
+## Setup
+### Ubuntu
+ - rustup -- `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` (installs rustup, cargo, rustc etc.)
  - gnuplot -- `apt install gnuplot`
 
 ## Cheatsheet
