@@ -13,6 +13,7 @@ mod primitives;
 pub mod shared_math;
 mod types;
 mod utils;
+mod util_types;
 
 pub fn my_library_function() -> Result<()> {
     println!("\n\n*****Running my_private_function*****");
@@ -62,6 +63,8 @@ pub fn my_library_function() -> Result<()> {
     homomorphic_encryption::test();
     println!("\n\n*****FFT*****");
     fft::test(); // TODO: Remove
+    println!("\n\n*****blake3*****");
+    println!("blake3(\"foobarbaz\") = {:?}", blake3::hash(b"foobarbaz"));
     Ok(())
 }
 

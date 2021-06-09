@@ -14,10 +14,13 @@ features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
 
 [dependencies]
 anyhow = "1.0" # Error trait and generalized error handling
+bincode = "1.3.3" # A binary serialization / deserialization strategy that uses Serde for transforming structs into bytes and vice versa!
+blake3 = "0.3.8"
 itertools = "0.10.0"
 num-traits = "0.2.14"
 rand = "0.8.3" # random number generation (used for benchmarking NTT and FTT)
 rand_distr = "0.4.0"
+ring       = "0.16.20"
 structopt = { version = "0.3", features = [ "paw" ] } # Command-line argument parsing
 paw = "1.0" # Command-line argument parsing
 
