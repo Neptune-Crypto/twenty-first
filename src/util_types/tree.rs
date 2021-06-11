@@ -2,8 +2,8 @@
 // https://github.com/SpinResearch/merkle.rs/blob/2acba1bc73eba800e29a833f85f18f337e465213/src/tree.rs
 
 // use digest::Digest;
-use ring::digest::{Algorithm, Digest};
 use super::hash_utils::{HashUtils, Hashable};
+use ring::digest::{Algorithm, Digest};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Tree<T> {
@@ -46,6 +46,7 @@ impl<T> Tree<T> {
         T: Hashable,
     {
         let hash = algo.hash_leaf(&value);
+        // println!("=> {:?}", hash);
         Tree::new(hash, value)
     }
 

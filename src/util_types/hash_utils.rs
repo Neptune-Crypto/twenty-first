@@ -1,4 +1,7 @@
 use ring::digest::{digest, Algorithm, Context, Digest};
+use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
+use std::hash::Hash;
 
 /// The type of values stored in a `MerkleTree` must implement
 /// this trait, in order for them to be able to be fed
@@ -27,11 +30,45 @@ pub trait Hashable {
     fn update_context(&self, context: &mut Context);
 }
 
-impl<T: AsRef<[u8]>> Hashable for T {
+// impl<T: AsRef<[u8]>> Hashable for T {
+//     fn update_context(&self, context: &mut Context) {
+//         context.update(self.as_ref());
+//     }
+// }
+
+impl<T: Serialize> Hashable for T {
     fn update_context(&self, context: &mut Context) {
-        context.update(self.as_ref());
+        // context.update(self.as_ref());
+        // println!(
+        //     "bincode::serialize(self) = {:?}",
+        //     bincode::serialize(self).unwrap().as_slice()
+        // );
+        context.update(bincode::serialize(self).unwrap().as_slice());
     }
 }
+
+// macro_rules! impl_hashable {
+//     ( $($t:ty),* ) => {
+//         $( impl Hashable for $t
+//     {
+//         fn update_context(&self, context: &mut Context) {
+//             // let bytes: Vec<u8> = self.to_bytes();
+//             let bytes = self.to_be_bytes();
+//             context.update(&bytes);
+//         }
+//     }) *
+//     }
+// }
+
+// impl_hashable! { i128 }
+
+//  impl Hashable for i128 {
+//      fn update_context(self: &i128, context: &mut Context) {
+//          // let bytes: Vec<u8> = self.to_bytes();
+//          let bytes = self.to_be_bytes();
+//          context.update(&bytes);
+//      }
+//  }
 
 /// The sole purpose of this trait is to extend the standard
 /// `ring::algo::Algorithm` type with a couple utility functions.
@@ -62,7 +99,7 @@ impl HashUtils for Algorithm {
         T: Hashable,
     {
         let mut ctx = Context::new(self);
-        ctx.update(&[0x00]);
+        // ctx.update(&[0x00]); // TODO: include?
         leaf.update_context(&mut ctx);
         ctx.finish()
     }
@@ -72,7 +109,7 @@ impl HashUtils for Algorithm {
         T: Hashable,
     {
         let mut ctx = Context::new(self);
-        ctx.update(&[0x01]);
+        // ctx.update(&[0x01]); // TODO: include?
         left.update_context(&mut ctx);
         right.update_context(&mut ctx);
         ctx.finish()
