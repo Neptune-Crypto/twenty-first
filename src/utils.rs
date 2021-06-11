@@ -1,6 +1,7 @@
 use rand::RngCore;
 use std::collections::HashSet;
 use std::hash::Hash;
+use std::{fmt::Write, num::ParseIntError};
 
 pub const FIRST_THOUSAND_PRIMES: &[i128] = &[
     2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97,
@@ -97,3 +98,18 @@ mod test_utils {
         assert!(has_unique_elements(v));
     }
 }
+
+pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+        .collect()
+}
+
+// pub fn encode_hex(bytes: &[u8]) -> String {
+//     let mut s = String::with_capacity(bytes.len() * 2);
+//     for &b in bytes {
+//         write!(&mut s, "{:02x}", b).unwrap();
+//     }
+//     s
+// }

@@ -1,3 +1,4 @@
+use crate::utils::decode_hex;
 use ring::digest::{digest, Algorithm, Digest, SHA256};
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -39,8 +40,15 @@ pub struct MerkleTreeVector<T> {
 
 impl<T: Clone + Serialize + Debug> MerkleTreeVector<T> {
     pub fn from_vec(values: &[T]) -> Self {
-        #[allow(unused_assignments)]
-        //let mut nodes: Vec<Node<T>> = Vec::with_capacity(2 * values.len());
+        if values.is_empty() {
+            let empty_hash = *blake3::hash(b"").as_bytes();
+            return MerkleTreeVector {
+                nodes: vec![],
+                root_hash: empty_hash,
+                // hashes: empty_hash.to_vec(),
+            };
+        }
+
         let mut nodes: Vec<Node<T>> = vec![
             Node {
                 value: None,
@@ -49,55 +57,28 @@ impl<T: Clone + Serialize + Debug> MerkleTreeVector<T> {
             2 * values.len()
         ];
         for i in 0..values.len() {
-            // hash: *blake3::hash(bincode::serialize(&x).unwrap().as_slice()).as_bytes(),
+            // println!(
+            //     "{:?} => {:?}",
+            //     &values[i],
+            //     bincode::serialize(&values[i]).unwrap().as_slice()
+            // );
             nodes[values.len() + i].hash =
                 *blake3::hash(bincode::serialize(&values[i]).unwrap().as_slice()).as_bytes();
-            // digest(&SHA256, bincode::serialize(&values[i]).unwrap().as_slice())
-            //     .as_ref()
-            //     .try_into()
-            //     .expect("");
             nodes[values.len() + i].value = Some(values[i].clone());
         }
-        // println!("first hashing: {:?}", nodes);
-        // nodes = values
-        //     .iter()
-        //     .map(|x| Node {
-        //         value: Some(x.clone()),
-        //         hash: digest(&SHA256, bincode::serialize(&x).unwrap().as_slice())
-        //             .as_ref()
-        //             .try_into()
-        //             .expect(""),
-        //         // hash: *blake3::hash(bincode::serialize(&x).unwrap().as_slice()).as_bytes(),
-        //     })
-        //     .collect::<Vec<Node<T>>>();
 
-        // loop from `len(L) - 1` to zero
+        // loop from `len(L) - 1` to 1
         let mut hasher = blake3::Hasher::new();
         for i in (1..(values.len())).rev() {
             hasher.update(&nodes[i * 2].hash[..]);
             hasher.update(&nodes[i * 2 + 1].hash[..]);
-            // println!("{}", i);
-            // let concat: Vec<u8> = nodes[i * 2]
-            //     .hash
-            //     .iter()
-            //     .chain(nodes[i * 2 + 1].hash.iter())
-            //     .cloned()
-            //     .collect::<Vec<u8>>();
-            // println!(
-            //     "{:?} + {:?} = {:?}",
-            //     nodes[i * 2].hash,
-            //     nodes[i * 2 + 1].hash,
-            //     concat
-            // );
             nodes[i].value = None;
-            // nodes[i].hash = digest(&SHA256, &concat).as_ref().try_into().expect("");
-            // nodes[i].hash = *blake3::hash(&concat).as_bytes();
             nodes[i].hash = *hasher.finalize().as_bytes();
             hasher.reset();
         }
 
         // nodes[0] is never used for anything.
-        // TODO: Remove it
+        // TODO: Remove it?
         MerkleTreeVector {
             root_hash: nodes[1].hash,
             nodes,
@@ -111,33 +92,44 @@ mod merkle_tree_vector_test {
 
     #[test]
     fn merkle_tree_vector_test_simple() {
-        //let empty_mt: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&vec![]);
-        //let single_mt: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&vec![1i128]);
-        let mt: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&vec![1i128, 2]);
-        let mt_reverse: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&vec![2i128, 1]);
-        // let mt_three: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&vec![1i128, 2, 3]);
-        // let mt_twelve: MerkleTreeVector<i128> =
-        //     MerkleTreeVector::from_vec(&vec![1i128, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-        // let mt_eight: MerkleTreeVector<i128> =
-        //     MerkleTreeVector::from_vec(&vec![1i128, 2, 3, 4, 5, 6, 7, 8]);
-        // assert_ne!(mt.root_hash, empty_mt.root_hash);
-        // assert_ne!(mt.root_hash, single_mt.root_hash);
-        println!("{:x?}", mt);
-        println!("{:x?}", mt_reverse);
+        let empty_mt: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[]);
+        assert_eq!(
+            decode_hex("af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262")
+                .expect("Decoding failed"),
+            empty_mt.root_hash
+        );
+        let single_mt_one: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128]);
+        assert_eq!(
+            decode_hex("74500697761748e7dc0302d36778f89c6ab324ef942773976b92a7bbefa18cd2")
+                .expect("Decoding failed"),
+            single_mt_one.root_hash
+        );
+        let single_mt_two: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[2i128]);
+        assert_eq!(
+            decode_hex("65706bf07e4e656de8a6b898dfbc64c076e001253f384043a40c437e1d5fb124")
+                .expect("Decoding failed"),
+            single_mt_two.root_hash
+        );
+        let mt: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128, 2]);
+        assert_eq!(
+            decode_hex("c19af4447b81b6ea9b76328441b963e6076d2e787b3fad956aa35c66f8ede2c4")
+                .expect("Decoding failed"),
+            mt.root_hash
+        );
+        let mt_reverse: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[2i128, 1]);
+        assert_eq!(
+            decode_hex("189d788c8539945c368d54e9f61847b05a847f350b925ea499eadb0007130d93")
+                .expect("Decoding failed"),
+            mt_reverse.root_hash
+        );
+        let mt_four: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128, 2, 3, 4]);
+        assert_eq!(
+            decode_hex("44bdb434be4895b977ef91f419f16df22a9c65eeefa3843aae55f81e0e102777")
+                .expect("Decoding failed"),
+            mt_four.root_hash
+        );
         assert_ne!(mt.root_hash, mt_reverse.root_hash);
-        // assert_ne!(mt.root_hash, mt_eight.root_hash);
-        // assert_ne!(mt.root_hash, mt_three.root_hash);
-        // assert_eq!(0, empty_mt.count);
-        // assert_eq!(1, single_mt.count);
-        // assert_eq!(2, mt.count);
-        // assert_eq!(2, mt_reverse.count);
-        // assert_eq!(3, mt_three.count);
-        // println!("{:x?}", empty_mt.root_hash);
-        // println!("{:x?}", single_mt.root_hash);
         println!("{:x?}", mt.root_hash);
         println!("{:x?}", mt_reverse.root_hash);
-        // println!("{:x?}", mt_eight.root_hash);
-        // println!("{:x?}", mt_three.root_hash);
-        // println!("{:x?}", mt_twelve.root_hash);
     }
 }
