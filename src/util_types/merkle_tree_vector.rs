@@ -1,52 +1,50 @@
-use crate::utils::decode_hex;
-use ring::digest::{digest, Algorithm, Digest, SHA256};
-use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
+use crate::shared_math::other::log_2;
+use serde::Serialize;
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
-use std::iter::Chain;
-use std::slice::Iter;
 
 #[derive(Clone, Debug)]
 pub struct Node<T> {
     value: Option<T>,
     hash: [u8; 32],
-    // Leaf { value: T, hash: [u8; 32] },
-    // HashValue { hash: [u8; 32] },
 }
 
 #[derive(Clone, Debug)]
 pub struct MerkleTreeVector<T> {
     root_hash: [u8; 32],
     nodes: Vec<Node<T>>,
-    // TODO: Add field for holding all hashed values. Should
-    // make it very quick to calculate all hash values. This field's
-    // length will be 32 * count.
-    // hashes: Vec<u8>,
+    height: u64,
 }
 
-// pub struct Node<T> {
-//     // For now we only use Blake3. So the hash function is not a dynamic field
-//     // pub hasher: Hasher;
-//     /// The root of the inner binary tree
-//     root: Tree<T>,
+impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
+    pub fn verify_proof(root_hash: [u8; 32], index: u64, proof: Vec<Node<T>>) -> bool {
+        let mut mut_index = index + 2u64.pow(proof.len() as u32);
+        let mut v = proof[0].clone();
+        let mut hasher = blake3::Hasher::new();
+        for node in proof.iter().skip(1) {
+            if mut_index % 2 == 0 {
+                hasher.update(&v.hash[..]);
+                hasher.update(&node.hash[..]);
+            } else {
+                hasher.update(&node.hash[..]);
+                hasher.update(&v.hash[..]);
+            }
+            v.hash = *hasher.finalize().as_bytes();
+            hasher.reset();
+            mut_index /= 2;
+        }
+        let expected_hash = *blake3::hash(
+            bincode::serialize(&proof[0].value.clone().unwrap())
+                .expect("Encoding failed")
+                .as_slice(),
+        )
+        .as_bytes();
+        v.hash == root_hash && expected_hash == proof[0].hash
+    }
 
-//     /// The height of the tree
-//     height: usize,
-
-//     /// The number of leaf nodes in the tree
-//     count: usize,
-// }
-
-impl<T: Clone + Serialize + Debug> MerkleTreeVector<T> {
     pub fn from_vec(values: &[T]) -> Self {
-        if values.is_empty() {
-            let empty_hash = *blake3::hash(b"").as_bytes();
-            return MerkleTreeVector {
-                nodes: vec![],
-                root_hash: empty_hash,
-                // hashes: empty_hash.to_vec(),
-            };
+        // verify that length of input is power of 2
+        if values.len() & (values.len() - 1) != 0 {
+            panic!("Size of input for Merkle tree must be a power of 2");
         }
 
         let mut nodes: Vec<Node<T>> = vec![
@@ -57,11 +55,6 @@ impl<T: Clone + Serialize + Debug> MerkleTreeVector<T> {
             2 * values.len()
         ];
         for i in 0..values.len() {
-            // println!(
-            //     "{:?} => {:?}",
-            //     &values[i],
-            //     bincode::serialize(&values[i]).unwrap().as_slice()
-            // );
             nodes[values.len() + i].hash =
                 *blake3::hash(bincode::serialize(&values[i]).unwrap().as_slice()).as_bytes();
             nodes[values.len() + i].value = Some(values[i].clone());
@@ -72,64 +65,131 @@ impl<T: Clone + Serialize + Debug> MerkleTreeVector<T> {
         for i in (1..(values.len())).rev() {
             hasher.update(&nodes[i * 2].hash[..]);
             hasher.update(&nodes[i * 2 + 1].hash[..]);
-            nodes[i].value = None;
             nodes[i].hash = *hasher.finalize().as_bytes();
             hasher.reset();
         }
 
         // nodes[0] is never used for anything.
-        // TODO: Remove it?
         MerkleTreeVector {
             root_hash: nodes[1].hash,
             nodes,
+            height: log_2(values.len() as u64) + 1,
         }
     }
+
+    pub fn get_proof(&self, mut index: usize) -> Vec<Node<T>> {
+        let mut proof: Vec<Node<T>> = Vec::with_capacity(self.height as usize);
+        index += self.nodes.len() / 2;
+        proof.push(self.nodes[index].clone());
+        while index > 1 {
+            proof.push(self.nodes[index ^ 1].clone());
+            index /= 2;
+        }
+        proof
+    }
+
+    // pub fn get_multi_proof(&self, indices: Vec<usize>) -> Vec<Vec<Node<T>>> {
+    //     let output =
+
+    //     vec![]
+    // }
 }
 
 #[cfg(test)]
 mod merkle_tree_vector_test {
     use super::*;
+    use crate::utils::decode_hex;
 
     #[test]
     fn merkle_tree_vector_test_simple() {
-        let empty_mt: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[]);
-        assert_eq!(
-            decode_hex("af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262")
-                .expect("Decoding failed"),
-            empty_mt.root_hash
-        );
         let single_mt_one: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128]);
         assert_eq!(
             decode_hex("74500697761748e7dc0302d36778f89c6ab324ef942773976b92a7bbefa18cd2")
                 .expect("Decoding failed"),
             single_mt_one.root_hash
         );
+        assert_eq!(1u64, single_mt_one.height);
         let single_mt_two: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[2i128]);
         assert_eq!(
             decode_hex("65706bf07e4e656de8a6b898dfbc64c076e001253f384043a40c437e1d5fb124")
                 .expect("Decoding failed"),
             single_mt_two.root_hash
         );
+        assert_eq!(1u64, single_mt_two.height);
+
         let mt: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128, 2]);
         assert_eq!(
             decode_hex("c19af4447b81b6ea9b76328441b963e6076d2e787b3fad956aa35c66f8ede2c4")
                 .expect("Decoding failed"),
             mt.root_hash
         );
+        assert_eq!(2u64, mt.height);
+        let mut proof = mt.get_proof(1);
+        assert!(MerkleTreeVector::verify_proof(
+            mt.root_hash,
+            1,
+            proof.clone()
+        ));
+        assert_eq!(Some(2), proof[0].value);
+        proof = mt.get_proof(0);
+        assert!(MerkleTreeVector::verify_proof(
+            mt.root_hash,
+            0,
+            proof.clone()
+        ));
+        assert_eq!(Some(1), proof[0].value);
+        assert_eq!(2usize, proof.len());
+
         let mt_reverse: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[2i128, 1]);
         assert_eq!(
             decode_hex("189d788c8539945c368d54e9f61847b05a847f350b925ea499eadb0007130d93")
                 .expect("Decoding failed"),
             mt_reverse.root_hash
         );
-        let mt_four: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128, 2, 3, 4]);
+        assert_eq!(2u64, mt_reverse.height);
+
+        let mut mt_four: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128, 2, 3, 4]);
         assert_eq!(
             decode_hex("44bdb434be4895b977ef91f419f16df22a9c65eeefa3843aae55f81e0e102777")
                 .expect("Decoding failed"),
             mt_four.root_hash
         );
         assert_ne!(mt.root_hash, mt_reverse.root_hash);
-        println!("{:x?}", mt.root_hash);
-        println!("{:x?}", mt_reverse.root_hash);
+        assert_eq!(3u64, mt_four.height);
+        proof = mt_four.get_proof(1);
+        assert_eq!(3usize, proof.len());
+        assert!(MerkleTreeVector::verify_proof(
+            mt_four.root_hash,
+            1,
+            proof.clone()
+        ));
+        assert_eq!(Some(2), proof[0].value);
+        proof[0].value = Some(3);
+        assert!(!MerkleTreeVector::verify_proof(
+            mt_four.root_hash,
+            1,
+            proof.clone()
+        ));
+        proof[0].value = Some(2);
+        proof[0].hash = [0u8; 32];
+        assert!(!MerkleTreeVector::verify_proof(
+            mt_four.root_hash,
+            1,
+            proof.clone()
+        ));
+
+        proof = mt_four.get_proof(1);
+        assert!(MerkleTreeVector::verify_proof(
+            mt_four.root_hash,
+            1,
+            proof.clone()
+        ));
+        mt_four.root_hash = [0u8; 32];
+        assert!(!MerkleTreeVector::verify_proof(
+            mt_four.root_hash,
+            1,
+            proof.clone()
+        ));
+        println!("get_proof(mt_four) = {:x?}", proof);
     }
 }
