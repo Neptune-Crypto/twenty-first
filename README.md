@@ -6,6 +6,7 @@ A collection of cryptography functions written in Rust.
 ### Ubuntu
  - rustup -- `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` (installs rustup, cargo, rustc etc.)
  - gnuplot -- `apt install gnuplot`
+ - build-essential (for `make`) -- `apt install build-essential`
 
 ## Cheatsheet
 
