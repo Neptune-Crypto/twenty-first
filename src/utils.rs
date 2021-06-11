@@ -1,7 +1,7 @@
 use rand::RngCore;
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::{fmt::Write, num::ParseIntError};
+use std::num::ParseIntError;
 
 pub const FIRST_THOUSAND_PRIMES: &[i128] = &[
     2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97,
@@ -99,6 +99,8 @@ mod test_utils {
     }
 }
 
+// Used in Merkle Tree tests
+#[allow(dead_code)]
 pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
     (0..s.len())
         .step_by(2)

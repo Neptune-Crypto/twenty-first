@@ -1,7 +1,5 @@
 use ring::digest::{digest, Algorithm, Context, Digest};
-use serde::{Deserialize, Serialize};
-use std::borrow::Borrow;
-use std::hash::Hash;
+use serde::Serialize;
 
 /// The type of values stored in a `MerkleTree` must implement
 /// this trait, in order for them to be able to be fed

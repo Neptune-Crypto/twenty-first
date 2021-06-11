@@ -10,7 +10,8 @@ fn generate_input(length: usize) -> Vec<i128> {
 
 fn merkle_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("merkle_tree");
-    for size in [128usize, 256, 512, 1024].iter() {
+    // for size in [128usize, 256, 512, 1024].iter() {
+    for size in [1024usize].iter() {
         let input = generate_input(*size);
         group.throughput(Throughput::Elements(*size as u64));
         group
