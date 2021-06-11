@@ -21,6 +21,7 @@ num-traits = "0.2.14"
 rand = "0.8.3" # random number generation (used for benchmarking NTT and FTT)
 rand_distr = "0.4.0"
 ring       = "0.16.20"
+serde = "1.0.126"
 structopt = { version = "0.3", features = [ "paw" ] } # Command-line argument parsing
 paw = "1.0" # Command-line argument parsing
 
@@ -30,6 +31,10 @@ harness = false
 
 [[bench]]
 name = "ntt"
+harness = false
+
+[[bench]]
+name = "merkle_tree"
 harness = false
 
 [profile.dev]
