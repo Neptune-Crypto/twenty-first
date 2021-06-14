@@ -2,6 +2,7 @@ use rand::RngCore;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::num::ParseIntError;
+use std::{mem, slice};
 
 pub const FIRST_THOUSAND_PRIMES: &[i128] = &[
     2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97,
@@ -85,9 +86,52 @@ pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
     values
 }
 
+pub fn get_n_hash_rounds(input: &[u8], n: usize) -> Vec<[u8; 32]> {
+    let mut output: Vec<[u8; 32]> = vec![];
+    for i in 0..n {
+        let mut input_clone = input.to_vec();
+        // input_clone.push(i.to_le());
+        // input_clone.append(&mut i.to_le());
+        // bs.as_mut()
+        // .write_i64::<LittleEndian>(i)
+        // .expect("Unable to write");
+        let ip: *const usize = &i;
+        let bp: *const u8 = ip as *const _;
+        let bs: &[u8] = unsafe { slice::from_raw_parts(bp, mem::size_of::<i64>()) };
+        input_clone.append(&mut bs.to_vec());
+        let hash = *blake3::hash(input_clone.as_slice()).as_bytes();
+        output.push(hash);
+    }
+    output
+}
+
+pub fn get_index_from_bytes(buf: &[u8], length: usize) -> usize {
+    let mut result = 0usize;
+    for elem in buf.iter() {
+        result = (result << 8 ^ *elem as usize) % length;
+    }
+    result
+}
+
+// pub fn bytes_to_usize(buf: &[u8]) -> usize {
+//     let mut output_int = 0usize;
+//     for elem in buf.iter() {
+//         output_int = output_int << 8 ^ *elem as i128;
+//     }
+//     output_int
+// }
+
 #[cfg(test)]
 mod test_utils {
     use super::*;
+
+    #[test]
+    fn get_n_hash_rounds_test() {
+        let v: Vec<u8> = vec![1, 2];
+        let res = get_n_hash_rounds(&v[..], 3);
+        println!("{:?}", res);
+        assert_eq!(3, res.len());
+    }
 
     #[test]
     fn has_unique_elements_test() {
