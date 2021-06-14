@@ -4,7 +4,7 @@ use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Node<T> {
     value: Option<T>,
     hash: [u8; 32],
@@ -90,6 +90,14 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
             index /= 2;
         }
         proof
+    }
+
+    pub fn get_root(&self) -> [u8; 32] {
+        self.root_hash.clone()
+    }
+
+    pub fn get_number_of_leafs(&self) -> usize {
+        self.nodes.len() / 2
     }
 
     pub fn verify_multi_proof(

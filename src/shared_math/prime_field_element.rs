@@ -1,4 +1,5 @@
 use crate::utils::FIRST_THOUSAND_PRIMES;
+use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
 use std::ops::Add;
 use std::ops::Div;
@@ -6,7 +7,8 @@ use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::Sub;
 
-#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serialization-serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PrimeField {
     pub q: i128,
 }
@@ -103,7 +105,11 @@ impl PrimeField {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[cfg_attr(
+    feature = "serialization-serde",
+    derive(Serialize, Deserialize, Serializer)
+)]
+#[derive(Debug, Clone, PartialEq, Copy, Serialize)]
 pub struct PrimeFieldElement<'a> {
     pub value: i128,
     pub field: &'a PrimeField,
@@ -167,6 +173,14 @@ impl<'a> PrimeFieldElement<'a> {
         } else {
             elem
         }
+    }
+
+    pub fn from_bytes_raw(modulus: &i128, buf: &[u8]) -> i128 {
+        let mut output_int = 0i128;
+        for elem in buf.iter() {
+            output_int = output_int << 8 ^ *elem as i128;
+        }
+        output_int % modulus
     }
 
     fn same_field_check(&self, other: &PrimeFieldElement, operation: &str) {
