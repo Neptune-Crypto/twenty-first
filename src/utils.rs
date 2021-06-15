@@ -90,14 +90,12 @@ pub fn get_n_hash_rounds(input: &[u8], n: usize) -> Vec<[u8; 32]> {
     let mut output: Vec<[u8; 32]> = vec![];
     for i in 0..n {
         let mut input_clone = input.to_vec();
-        // input_clone.push(i.to_le());
-        // input_clone.append(&mut i.to_le());
-        // bs.as_mut()
-        // .write_i64::<LittleEndian>(i)
-        // .expect("Unable to write");
+
+        // Convert i: usize into a byte array of length 8
         let ip: *const usize = &i;
         let bp: *const u8 = ip as *const _;
         let bs: &[u8] = unsafe { slice::from_raw_parts(bp, mem::size_of::<i64>()) };
+
         input_clone.append(&mut bs.to_vec());
         let hash = *blake3::hash(input_clone.as_slice()).as_bytes();
         output.push(hash);
@@ -113,24 +111,35 @@ pub fn get_index_from_bytes(buf: &[u8], length: usize) -> usize {
     result
 }
 
-// pub fn bytes_to_usize(buf: &[u8]) -> usize {
-//     let mut output_int = 0usize;
-//     for elem in buf.iter() {
-//         output_int = output_int << 8 ^ *elem as i128;
-//     }
-//     output_int
-// }
-
 #[cfg(test)]
 mod test_utils {
     use super::*;
+    use crate::utils::decode_hex;
 
     #[test]
     fn get_n_hash_rounds_test() {
         let v: Vec<u8> = vec![1, 2];
-        let res = get_n_hash_rounds(&v[..], 3);
-        println!("{:?}", res);
-        assert_eq!(3, res.len());
+        let res3 = get_n_hash_rounds(&v[..], 3);
+        assert_eq!(3, res3.len());
+        let res5 = get_n_hash_rounds(&v[..], 5);
+        assert_eq!(5, res5.len());
+        for (r3_elem, r5_elem) in res3.iter().zip(res5.iter()) {
+            assert_eq!(*r3_elem, *r5_elem);
+        }
+
+        let mut prev = res5[0];
+        for r5_elem in res5.iter().skip(1) {
+            println!("{:?}", prev);
+            assert_ne!(prev, *r5_elem);
+            prev = *r5_elem;
+        }
+
+        // blake3(0x01020000000000000000) =
+        // f03073d703a241eaeaa8b0ab8c9491edb6cea87659d2146708a2134f8d6b4576
+        assert_eq!(
+            decode_hex("f03073d703a241eaeaa8b0ab8c9491edb6cea87659d2146708a2134f8d6b4576").unwrap(),
+            res3[0]
+        );
     }
 
     #[test]
