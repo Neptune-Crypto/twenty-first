@@ -291,8 +291,7 @@ mod merkle_tree_vector_test {
 
         let mut mt_four: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128, 2, 3, 4]);
         assert_eq!(
-            decode_hex("44bdb434be4895b977ef91f419f16df22a9c65eeefa3843aae55f81e0e102777")
-                .expect("Decoding failed"),
+            decode_hex("44bdb434be4895b977ef91f419f16df22a9c65eeefa3843aae55f81e0e102777").unwrap(),
             mt_four.root_hash
         );
         assert_ne!(mt.root_hash, mt_reverse.root_hash);

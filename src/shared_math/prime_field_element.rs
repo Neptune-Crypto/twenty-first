@@ -1,5 +1,5 @@
 use crate::utils::FIRST_THOUSAND_PRIMES;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::Serialize;
 use std::fmt;
 use std::ops::Add;
 use std::ops::Div;
@@ -16,6 +16,36 @@ pub struct PrimeField {
 impl PrimeField {
     pub fn new(q: i128) -> Self {
         Self { q }
+    }
+
+    pub fn get_power_series(&self, root: i128) -> Vec<i128> {
+        let mut val = root;
+        let mut ret: Vec<i128> = vec![1];
+
+        // Idiomatic way of constructing a do-while loop in Rust
+        loop {
+            ret.push(val);
+            val = val * root % self.q;
+            if 1 == val {
+                break;
+            }
+        }
+        ret
+    }
+
+    pub fn get_field_with_primitive_root_of_unity(
+        n: i128,
+        min_value: i128,
+        ret: &mut Option<(Self, i128)>,
+    ) {
+        for prime in FIRST_THOUSAND_PRIMES.iter().filter(|&x| *x > min_value) {
+            let field = PrimeField::new(*prime);
+            if let (Some(i), _) = field.get_primitive_root_of_unity(n) {
+                *ret = Some((PrimeField::new(*prime), i.value));
+                return;
+            }
+        }
+        *ret = None;
     }
 
     pub fn batch_inversion(&self, input: Vec<i128>) -> Vec<i128> {
@@ -180,7 +210,7 @@ impl<'a> PrimeFieldElement<'a> {
         for elem in buf.iter() {
             output_int = output_int << 8 ^ *elem as i128;
         }
-        output_int % modulus
+        (output_int % modulus + modulus) % modulus
     }
 
     fn same_field_check(&self, other: &PrimeFieldElement, operation: &str) {
@@ -353,6 +383,13 @@ mod test_modular_arithmetic {
             assert!(PrimeFieldElement::is_prime(expected[i], &primes[0..i]));
         }
         println!("sieve successful");
+    }
+
+    #[test]
+    fn get_power_series_test() {
+        let field = PrimeField::new(113);
+        let power_series = field.get_power_series(40);
+        println!("{:?}", power_series);
     }
 
     #[test]
