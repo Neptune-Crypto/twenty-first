@@ -324,7 +324,9 @@ pub fn prover(
 #[cfg(test)]
 mod test_utils {
     use super::*;
+    use crate::fft::fast_polynomial_evaluate;
     use crate::shared_math::prime_field_element::PrimeField;
+    use crate::utils::generate_random_numbers;
 
     #[test]
     fn generate_proof_small() {
@@ -465,20 +467,64 @@ mod test_utils {
     #[test]
     fn generate_proof_1024() {
         let mut ret: Option<(PrimeField, i128)> = None;
-        PrimeField::get_field_with_primitive_root_of_unity(2i128.pow(14), 2i128.pow(14), &mut ret);
+        let size = 2usize.pow(14);
+        let degree = 1024;
+        PrimeField::get_field_with_primitive_root_of_unity(size as i128, size as i128, &mut ret);
         let (field, primitive_root_of_unity) = ret.clone().unwrap();
+        let (generator_2_option, _) = field.get_primitive_root_of_unity(degree as i128);
+        let generator_2 = generator_2_option.unwrap();
         println!(
             "primitive_root_of_unity = {}, prime = {}",
             primitive_root_of_unity, field.q
         );
+        println!("generator_2 = {}, {}th root of unity", generator_2, degree);
         assert_eq!(65537i128, field.q);
         assert_eq!(81i128, primitive_root_of_unity);
-        let domain = field.get_power_series(primitive_root_of_unity);
-        assert_eq!(2usize.pow(14), domain.len());
-        // coefficients: vec![6, 2, 5] => P(x) = 5x^2 + 2x + 6
-        let mut y_values = domain
-            .iter()
-            .map(|&x| ((6 + x * (2 + 5 * x)) % field.q + field.q) % field.q)
-            .collect::<Vec<i128>>();
+        let mut coefficients = generate_random_numbers(degree, field.q);
+        coefficients.extend_from_slice(&vec![0; size - degree]);
+        let mut y_values =
+            fast_polynomial_evaluate(coefficients.as_slice(), field.q, primitive_root_of_unity);
+
+        let mut output = vec![];
+
+        // corresponds to the polynomial P(x) = x
+        // degree < codeword.len() / rho
+        let rho = 32;
+        let s = 40;
+        prover(
+            &y_values,
+            field.q,
+            rho,
+            s,
+            &mut output,
+            primitive_root_of_unity,
+        );
+        assert!(verify(
+            field.q,
+            s,
+            &output,
+            y_values.len(),
+            primitive_root_of_unity
+        ));
+
+        // Change a single y value such that it no longer corresponds to a polynomil
+        // a verify that the test fails
+        output = vec![];
+        y_values[3] = 100;
+        prover(
+            &y_values,
+            field.q,
+            rho,
+            s,
+            &mut output,
+            primitive_root_of_unity,
+        );
+        assert!(!verify(
+            field.q,
+            s,
+            &output,
+            y_values.len(),
+            primitive_root_of_unity
+        ));
     }
 }
