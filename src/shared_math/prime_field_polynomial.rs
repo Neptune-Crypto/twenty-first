@@ -1,6 +1,6 @@
 use super::fraction::Fraction;
 use super::polynomial_quotient_ring::PolynomialQuotientRing;
-use super::prime_field_element::PrimeFieldElement;
+use super::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::utils::{generate_random_numbers, has_unique_elements};
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
@@ -80,6 +80,53 @@ impl fmt::Display for PrimeFieldPolynomial<'_> {
 }
 
 impl<'a> PrimeFieldPolynomial<'a> {
+    // Verify that N > 2 points are colinear
+    // Also demand that all x-values are unique??
+    pub fn are_colinear_raw(points: &[(i128, i128)], modulus: i128) -> bool {
+        if points.len() < 3 {
+            println!("Too few points received. Got: {}", points.len());
+            return false;
+        }
+
+        // if !has_unique_elements(points.iter().map(|p| p.0)) {
+        //     println!("Non-unique element spotted Got: {:?}", points);
+        //     return false;
+        // }
+
+        // Find 1st degree polynomial from first two points
+        let field = PrimeField::new(modulus);
+        let x_diff = PrimeFieldElement::new(points[0].0 - points[1].0, &field);
+        let x_diff_inv = x_diff.inv();
+        // println!("x_diff = {} => x_diff_inv = {}", x_diff.value, x_diff_inv);
+        let a = ((points[0].1 - points[1].1) * x_diff_inv.value % modulus + modulus) % modulus;
+        let b = ((points[0].1 - a * points[0].0) % modulus + modulus) % modulus;
+        for point in points.iter().skip(2) {
+            // A decent speedup could be achieved by removing the two last modulus
+            // expressions here and demand that the input x-values are all elements
+            // in the finite field
+            let expected = ((a * point.0 + b) % modulus + modulus) % modulus;
+            if (point.1 % modulus + modulus) % modulus != expected {
+                println!(
+                    "L({}) = {}, expected L({}) = {}, Found: L(x) = {}x + {} mod {} from {{({},{}),({},{})}}",
+                    point.0,
+                    (point.1 % modulus + modulus) % modulus,
+                    point.0,
+                    expected,
+                    a,
+                    b,
+                    modulus,
+                    points[0].0,
+                    points[0].1,
+                    points[1].0,
+                    points[1].1
+                );
+                return false;
+            }
+        }
+
+        true
+    }
+
     pub fn additive_identity(pqr: &'a PolynomialQuotientRing) -> Self {
         Self {
             coefficients: Vec::new(),
@@ -706,6 +753,50 @@ impl IntegerRingPolynomial {
 mod test_polynomials {
     use super::super::prime_field_element::PrimeField;
     use super::*;
+
+    #[test]
+    fn are_colinear_raw_test() {
+        assert!(PrimeFieldPolynomial::are_colinear_raw(
+            &[(1, 1), (2, 2), (3, 3)],
+            5
+        ));
+        assert!(PrimeFieldPolynomial::are_colinear_raw(
+            &[(1, 1), (2, 7), (3, 3)],
+            5
+        ));
+        assert!(PrimeFieldPolynomial::are_colinear_raw(
+            &[(1, 1), (7, 7), (3, 3)],
+            5
+        ));
+        assert!(PrimeFieldPolynomial::are_colinear_raw(
+            &[(1, 1), (7, 2), (3, 3)],
+            5
+        ));
+        assert!(PrimeFieldPolynomial::are_colinear_raw(
+            &[(-4, 1), (7, 2), (3, -2)],
+            5
+        ));
+        assert!(!PrimeFieldPolynomial::are_colinear_raw(
+            &[(1, 1), (2, 2), (3, 4)],
+            5
+        ));
+        assert!(!PrimeFieldPolynomial::are_colinear_raw(
+            &[(1, 1), (2, 3), (3, 3)],
+            5
+        ));
+        assert!(!PrimeFieldPolynomial::are_colinear_raw(
+            &[(1, 0), (2, 2), (3, 3)],
+            5
+        ));
+        assert!(PrimeFieldPolynomial::are_colinear_raw(
+            &[(15, 92), (11, 76), (19, 108)],
+            193
+        ));
+        assert!(!PrimeFieldPolynomial::are_colinear_raw(
+            &[(12, 92), (11, 76), (19, 108)],
+            193
+        ));
+    }
 
     #[test]
     fn modular_arithmetic_mul_and_div0() {
