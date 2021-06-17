@@ -4,6 +4,14 @@ use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use crate::util_types::merkle_tree_vector::{MerkleTreeVector, Node};
 use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use std::convert::TryInto;
+use std::result::Result;
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum ValidationError {
+    BadMerkleProof,
+    NotColinear,
+    LastIterationNotConstant,
+}
 
 pub fn verify(
     modulus: i128,
@@ -11,7 +19,7 @@ pub fn verify(
     output: &[u8],
     codeword_size: usize,
     mut primitive_root_of_unity: i128,
-) -> bool {
+) -> Result<(), ValidationError> {
     let rounds_count_u16: u16 = bincode::deserialize(&output[0..2]).unwrap();
     let rounds_count: usize = rounds_count_u16 as usize;
     let field = PrimeField::new(modulus);
@@ -51,12 +59,14 @@ pub fn verify(
             ab_indices.push(b_index);
         }
         number_of_leaves /= 2;
-        println!("c_indices = {:?}", c_indices);
+        // println!("c_indices = {:?}", c_indices); // TODO: REMOVE
 
         let mut proof_size: u16 =
             bincode::deserialize(&output[output_index..output_index + 2]).unwrap();
         output_index += 2;
         let mut cursor = &output[output_index..output_index + proof_size as usize];
+        println!("c_proofs is located at address: {}", output_index); // TODO: REMOVE
+        println!("cursor is: {:?}", cursor);
         let c_proofs: Vec<Vec<Option<Node<i128>>>> = bincode::deserialize_from(cursor).unwrap();
         c_values = c_proofs
             .iter()
@@ -84,7 +94,7 @@ pub fn verify(
             if !valid_cs {
                 println!("{:?}", ab_proofs);
             }
-            return false;
+            return Err(ValidationError::BadMerkleProof);
         }
 
         let root = PrimeFieldElement::new(primitive_root_of_unity, &field);
@@ -100,16 +110,16 @@ pub fn verify(
             // let c_index = c_indices[j] as i128;
             // let c_x = root.mod_pow_raw(c_index * 2);
             let c_y = c_proofs[j][0].as_ref().unwrap().value.unwrap();
-            println!(
-                "{{({},{}),({},{}),({},{})}}",
-                a_x, a_y, b_x, b_y, challenge, c_y
-            ); // TODO: REMOVE
             if !PrimeFieldPolynomial::are_colinear_raw(
                 &[(a_x, a_y), (b_x, b_y), (challenge, c_y)],
                 modulus,
             ) {
+                println!(
+                    "{{({},{}),({},{}),({},{})}} is not colinear",
+                    a_x, a_y, b_x, b_y, challenge, c_y
+                );
                 println!("Failed to verify colinearity!");
-                return false;
+                return Err(ValidationError::NotColinear);
             } else {
                 println!(
                     "({}, {}), ({}, {}), ({}, {}) are colinear",
@@ -126,13 +136,13 @@ pub fn verify(
     // let last_y_value =
     if !c_values.iter().all(|&x| c_values[0] == x) {
         println!("Last y values were not constant. Got: {:?}", c_values);
-        return false;
+        return Err(ValidationError::LastIterationNotConstant);
     }
 
-    true
+    Ok(())
 }
 
-pub fn fri_prover_iteration(
+fn fri_prover_iteration(
     codeword: &[i128],
     challenge: &i128,
     modulus: &i128,
@@ -356,13 +366,34 @@ mod test_utils {
         );
         println!("\n\n\n\n\n\n\n\n\n\n\n***************** PROOF DONE *****************");
         println!("***************** START VERIFY ***************** \n\n");
-        assert!(verify(
+        assert_eq!(
+            Ok(()),
+            verify(field.q, s, &output, y_values.len(), primitive_root_of_unity)
+        );
+        // assert!(verify(
+        //     field.q,
+        //     s,
+        //     &output,
+        //     y_values.len(),
+        //     primitive_root_of_unity
+        // ));
+
+        // Change one of the values in a leaf in the committed Merkle tree, and verify that the Merkle proof fails
+        output = vec![];
+        prover(
+            &y_values,
             field.q,
+            rho,
             s,
-            &output,
-            y_values.len(),
-            primitive_root_of_unity
-        ));
+            &mut output,
+            primitive_root_of_unity,
+        );
+        println!("output[1033] = {}", output[1033]);
+        output[1033] = (output[1033] + 1) as u8; // Should change a committed value from 42 to 43
+        assert_eq!(
+            Err(ValidationError::BadMerkleProof),
+            verify(field.q, s, &output, y_values.len(), primitive_root_of_unity)
+        );
     }
 
     #[test]
@@ -396,13 +427,10 @@ mod test_utils {
         );
         println!("\n\n\n\n\n\n\n\n\n\n\n***************** PROOF DONE *****************");
         println!("***************** START VERIFY ***************** \n\n");
-        assert!(verify(
-            field.q,
-            s,
-            &output,
-            y_values.len(),
-            primitive_root_of_unity
-        ));
+        assert_eq!(
+            Ok(()),
+            verify(field.q, s, &output, y_values.len(), primitive_root_of_unity)
+        );
 
         // Change a single y value such that it no longer corresponds to a polynomil
         // a verify that the test fails
@@ -417,13 +445,10 @@ mod test_utils {
             &mut output,
             primitive_root_of_unity,
         );
-        assert!(!verify(
-            field.q,
-            s,
-            &output,
-            y_values.len(),
-            primitive_root_of_unity
-        ));
+        assert_eq!(
+            Err(ValidationError::LastIterationNotConstant),
+            verify(field.q, s, &output, y_values.len(), primitive_root_of_unity)
+        );
     }
 
     #[test]
@@ -455,13 +480,10 @@ mod test_utils {
             &mut output,
             primitive_root_of_unity,
         );
-        assert!(verify(
-            field.q,
-            s,
-            &output,
-            y_values.len(),
-            primitive_root_of_unity
-        ));
+        assert_eq!(
+            Ok(()),
+            verify(field.q, s, &output, y_values.len(), primitive_root_of_unity)
+        );
     }
 
     #[test]
@@ -499,16 +521,13 @@ mod test_utils {
             &mut output,
             primitive_root_of_unity,
         );
-        assert!(verify(
-            field.q,
-            s,
-            &output,
-            y_values.len(),
-            primitive_root_of_unity
-        ));
+        assert_eq!(
+            Ok(()),
+            verify(field.q, s, &output, y_values.len(), primitive_root_of_unity)
+        );
 
-        // Change a single y value such that it no longer corresponds to a polynomil
-        // a verify that the test fails
+        // Change a single y value such that it no longer corresponds to a polynomial
+        // and verify that the test fails
         output = vec![];
         y_values[3] = 100;
         prover(
@@ -519,12 +538,9 @@ mod test_utils {
             &mut output,
             primitive_root_of_unity,
         );
-        assert!(!verify(
-            field.q,
-            s,
-            &output,
-            y_values.len(),
-            primitive_root_of_unity
-        ));
+        assert_eq!(
+            Err(ValidationError::LastIterationNotConstant),
+            verify(field.q, s, &output, y_values.len(), primitive_root_of_unity)
+        );
     }
 }
