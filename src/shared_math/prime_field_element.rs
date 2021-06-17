@@ -1,4 +1,4 @@
-use crate::utils::FIRST_THOUSAND_PRIMES;
+use crate::utils::{FIRST_TEN_THOUSAND_PRIMES, FIRST_THOUSAND_PRIMES};
 use serde::Serialize;
 use std::fmt;
 use std::ops::Add;
@@ -38,7 +38,7 @@ impl PrimeField {
         min_value: i128,
         ret: &mut Option<(Self, i128)>,
     ) {
-        for prime in FIRST_THOUSAND_PRIMES.iter().filter(|&x| *x > min_value) {
+        for prime in FIRST_TEN_THOUSAND_PRIMES.iter().filter(|&x| *x > min_value) {
             let field = PrimeField::new(*prime);
             if let (Some(i), _) = field.get_primitive_root_of_unity(n) {
                 *ret = Some((PrimeField::new(*prime), i.value));

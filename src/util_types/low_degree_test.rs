@@ -15,9 +15,10 @@ pub fn verify(
     let rounds_count_u16: u16 = bincode::deserialize(&output[0..2]).unwrap();
     let rounds_count: usize = rounds_count_u16 as usize;
     let field = PrimeField::new(modulus);
-    let roots: Vec<[u8; 32]> = (0..rounds_count)
+    let roots: Vec<[u8; 32]> = (0..rounds_count + 1)
         .map(|i| output[2 + i * 32..(i + 1) * 32 + 2].try_into().unwrap())
         .collect();
+    println!("Last root: {:?}", roots.last().unwrap()); // TODO: REMOVE
     let challenge_hash_preimages: Vec<Vec<u8>> = (0..rounds_count)
         .map(|i| output[0..((i + 1) * 32 + 2)].to_vec())
         .collect();
@@ -34,7 +35,8 @@ pub fn verify(
     let partial_output = output[0..((rounds_count + 1) * 32 + 2)].to_vec();
     let mut number_of_leaves = codeword_size;
     let mut output_index: usize = (rounds_count + 1) * 32 + 2;
-    for i in 0..rounds_count - 1 {
+    let mut c_values: Vec<i128> = vec![];
+    for i in 0..rounds_count {
         let mut hash_preimage: Vec<u8> = partial_output.clone();
         hash_preimage.push(i as u8);
         let hashes = get_n_hash_rounds(hash_preimage.as_slice(), s);
@@ -56,6 +58,11 @@ pub fn verify(
         output_index += 2;
         let mut cursor = &output[output_index..output_index + proof_size as usize];
         let c_proofs: Vec<Vec<Option<Node<i128>>>> = bincode::deserialize_from(cursor).unwrap();
+        c_values = c_proofs
+            .iter()
+            .map(|x| x[0].as_ref().unwrap().value.unwrap())
+            .collect::<Vec<i128>>();
+        println!("c_values = {:?}", c_values); // TODO: REMOVE
         output_index += proof_size as usize;
         proof_size = bincode::deserialize(&output[output_index..output_index + 2]).unwrap();
         output_index += 2;
@@ -63,18 +70,18 @@ pub fn verify(
         let ab_proofs: Vec<Vec<Option<Node<i128>>>> = bincode::deserialize_from(cursor).unwrap();
         output_index += proof_size as usize;
 
-        let valid_ys = MerkleTreeVector::verify_multi_proof(roots[i + 1], &c_indices, &c_proofs);
-        let valid_ss = MerkleTreeVector::verify_multi_proof(roots[i], &ab_indices, &ab_proofs);
-        if !valid_ys || !valid_ss {
+        let valid_cs = MerkleTreeVector::verify_multi_proof(roots[i + 1], &c_indices, &c_proofs);
+        let valid_abs = MerkleTreeVector::verify_multi_proof(roots[i], &ab_indices, &ab_proofs);
+        if !valid_cs || !valid_abs {
             println!(
                 "Found invalidity of indices on iteration {}: y = {}, s = {}",
-                i, valid_ys, valid_ss
+                i, valid_cs, valid_abs
             );
             print!("Invalid proofs:");
-            if !valid_ss {
+            if !valid_abs {
                 println!("{:?}", c_proofs);
             }
-            if !valid_ys {
+            if !valid_cs {
                 println!("{:?}", ab_proofs);
             }
             return false;
@@ -115,6 +122,12 @@ pub fn verify(
     }
 
     // Base case: Verify that the last merkle tree is a constant function
+    // Verify only the c indicies
+    // let last_y_value =
+    if !c_values.iter().all(|&x| c_values[0] == x) {
+        println!("Last y values were not constant. Got: {:?}", c_values);
+        return false;
+    }
 
     true
 }
@@ -226,7 +239,8 @@ pub fn prover(
     // -- query P2 in s2 -> alpha2
     // -- check collinearity (s0, alpha0), (s1, alpha1), (y, beta) <-- we don't care about thi right nw>
     let partial_output = output.clone();
-    for i in 0usize..num_rounds - 1 {
+    for i in 0usize..num_rounds {
+        println!("i = {}", i);
         let number_of_leaves = mts[i].get_number_of_leafs();
         let mut c_indices: Vec<usize> = vec![];
         let mut ab_indices: Vec<usize> = vec![];
@@ -251,6 +265,13 @@ pub fn prover(
             mts[i].get_multi_proof(&ab_indices);
 
         // Debug, TODO: REMOVE
+        if i >= num_rounds - 1 {
+            println!(
+                "i = {}, last Merkle Tree root: {:?}",
+                i,
+                mts[i + 1].get_root()
+            ); // TODO: REMOVE
+        }
         println!("c_indices = {:?}", c_indices);
         let field = PrimeField::new(modulus);
         let root = PrimeFieldElement::new(primitive_root_of_unity, &field);
@@ -383,24 +404,24 @@ mod test_utils {
 
         // Change a single y value such that it no longer corresponds to a polynomil
         // a verify that the test fails
-        // output = vec![];
-        // y_values[3] = 100;
-        // y_values[4] = 100;
-        // prover(
-        //     &y_values,
-        //     field.q,
-        //     rho,
-        //     s,
-        //     &mut output,
-        //     primitive_root_of_unity,
-        // );
-        // assert!(!verify(
-        //     field.q,
-        //     s,
-        //     &output,
-        //     y_values.len(),
-        //     primitive_root_of_unity
-        // ));
+        output = vec![];
+        y_values[3] = 100;
+        y_values[4] = 100;
+        prover(
+            &y_values,
+            field.q,
+            rho,
+            s,
+            &mut output,
+            primitive_root_of_unity,
+        );
+        assert!(!verify(
+            field.q,
+            s,
+            &output,
+            y_values.len(),
+            primitive_root_of_unity
+        ));
     }
 
     #[test]
@@ -439,5 +460,25 @@ mod test_utils {
             y_values.len(),
             primitive_root_of_unity
         ));
+    }
+
+    #[test]
+    fn generate_proof_1024() {
+        let mut ret: Option<(PrimeField, i128)> = None;
+        PrimeField::get_field_with_primitive_root_of_unity(2i128.pow(14), 2i128.pow(14), &mut ret);
+        let (field, primitive_root_of_unity) = ret.clone().unwrap();
+        println!(
+            "primitive_root_of_unity = {}, prime = {}",
+            primitive_root_of_unity, field.q
+        );
+        assert_eq!(65537i128, field.q);
+        assert_eq!(81i128, primitive_root_of_unity);
+        let domain = field.get_power_series(primitive_root_of_unity);
+        assert_eq!(2usize.pow(14), domain.len());
+        // coefficients: vec![6, 2, 5] => P(x) = 5x^2 + 2x + 6
+        let mut y_values = domain
+            .iter()
+            .map(|&x| ((6 + x * (2 + 5 * x)) % field.q + field.q) % field.q)
+            .collect::<Vec<i128>>();
     }
 }
