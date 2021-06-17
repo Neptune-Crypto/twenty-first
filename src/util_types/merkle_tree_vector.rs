@@ -1,12 +1,12 @@
 use crate::shared_math::other::log_2;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Node<T> {
-    value: Option<T>,
+    pub value: Option<T>,
     hash: [u8; 32],
 }
 
@@ -40,8 +40,8 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
                 .as_slice(),
         )
         .as_bytes();
-        println!("root_hash = {:?}", root_hash);
-        println!("v.hash = {:?}", v.hash);
+        // println!("root_hash = {:?}", root_hash);
+        // println!("v.hash = {:?}", v.hash);
         v.hash == root_hash && expected_hash == proof[0].hash
     }
 
@@ -102,8 +102,8 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
 
     pub fn verify_multi_proof(
         root_hash: [u8; 32],
-        indices: Vec<usize>,
-        proof: Vec<Vec<Option<Node<T>>>>,
+        indices: &[usize],
+        proof: &Vec<Vec<Option<Node<T>>>>,
     ) -> bool {
         let mut partial_tree: HashMap<u64, Node<T>> = HashMap::new();
         let mut proof_clone = proof.clone();
@@ -170,8 +170,8 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
                 .into_iter()
                 .map(|x| x.unwrap())
                 .collect();
-            println!("input_proof = {:?}", proof[i]);
-            println!("proof_clone_unwrapped = {:?}", proof_clone_unwrapped);
+            // println!("input_proof = {:?}", proof[i]);
+            // println!("proof_clone_unwrapped = {:?}", proof_clone_unwrapped);
             if !Self::verify_proof(root_hash, indices[i] as u64, proof_clone_unwrapped) {
                 return false;
             }
@@ -179,7 +179,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
         true
     }
 
-    pub fn get_multi_proof(&self, indices: Vec<usize>) -> Vec<Vec<Option<Node<T>>>> {
+    pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<Vec<Option<Node<T>>>> {
         let mut calculable_indices: HashSet<usize> = HashSet::new();
         let mut output: Vec<Vec<Option<Node<T>>>> = Vec::with_capacity(indices.len());
         for i in indices.iter() {
@@ -339,11 +339,11 @@ mod merkle_tree_vector_test {
         println!("root_hash = {:?}", mt_four.root_hash);
         println!("\n\n\n\n proof(0) = {:?} \n\n\n\n", proof);
         assert!(MerkleTreeVector::verify_proof(mt_four.root_hash, 0, proof));
-        let mut compressed_proof = mt_four.get_multi_proof(vec![0]);
+        let mut compressed_proof = mt_four.get_multi_proof(&[0]);
         assert!(MerkleTreeVector::verify_multi_proof(
             mt_four.root_hash,
-            vec![0],
-            compressed_proof.clone()
+            &[0],
+            &compressed_proof
         ));
         proof = mt_four.get_proof(0);
         assert_eq!(proof.len(), compressed_proof[0].len());
@@ -355,19 +355,19 @@ mod merkle_tree_vector_test {
         assert_eq!(proof, unwrapped_compressed_proof);
         println!("{:?}", compressed_proof);
 
-        compressed_proof = mt_four.get_multi_proof(vec![0, 1]);
+        compressed_proof = mt_four.get_multi_proof(&[0, 1]);
         println!("{:?}", compressed_proof);
         assert!(MerkleTreeVector::verify_multi_proof(
             mt_four.root_hash,
-            vec![0, 1],
-            compressed_proof
+            &[0, 1],
+            &compressed_proof
         ));
-        compressed_proof = mt_four.get_multi_proof(vec![0, 1, 2]);
+        compressed_proof = mt_four.get_multi_proof(&[0, 1, 2]);
         println!("{:?}", compressed_proof);
         assert!(MerkleTreeVector::verify_multi_proof(
             mt_four.root_hash,
-            vec![0, 1, 2],
-            compressed_proof
+            &[0, 1, 2],
+            &compressed_proof
         ));
     }
 }
