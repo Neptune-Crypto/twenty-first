@@ -13,6 +13,17 @@ pub enum ValidationError {
     LastIterationNotConstant,
 }
 
+pub struct LowDegreeProof {
+    rounds: u8,
+    s: u32,
+    merkle_roots: Vec<[u8; 32]>,
+    codeword_size: u32,
+    primitive_root_of_unity: i128,
+    c_proofs: Vec<Vec<Vec<Option<Node<i128>>>>>,
+    ab_proofs: Vec<Vec<Vec<Option<Node<i128>>>>>,
+    serialization: Vec<u8>,
+}
+
 pub fn verify(
     modulus: i128,
     s: usize,
