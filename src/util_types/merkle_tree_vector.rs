@@ -1,4 +1,4 @@
-use crate::shared_math::other::log_2;
+use crate::shared_math::other::log_2_floor;
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
@@ -77,7 +77,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
         MerkleTreeVector {
             root_hash: nodes[1].hash,
             nodes,
-            height: log_2(values.len() as u64) + 1,
+            height: log_2_floor(values.len() as u64) + 1,
         }
     }
 

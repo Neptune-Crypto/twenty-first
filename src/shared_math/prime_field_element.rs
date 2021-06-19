@@ -7,7 +7,6 @@ use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::Sub;
 
-#[cfg_attr(feature = "serialization-serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PrimeField {
     pub q: i128,
