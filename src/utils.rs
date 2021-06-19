@@ -842,15 +842,15 @@ pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
     values
 }
 
-pub fn get_n_hash_rounds(input: &[u8], n: usize) -> Vec<[u8; 32]> {
+pub fn get_n_hash_rounds(input: &[u8], n: u32) -> Vec<[u8; 32]> {
     let mut output: Vec<[u8; 32]> = vec![];
     for i in 0..n {
         let mut input_clone = input.to_vec();
 
         // Convert i: usize into a byte array of length 8
-        let ip: *const usize = &i;
+        let ip: *const u32 = &i;
         let bp: *const u8 = ip as *const _;
-        let bs: &[u8] = unsafe { slice::from_raw_parts(bp, mem::size_of::<i64>()) };
+        let bs: &[u8] = unsafe { slice::from_raw_parts(bp, mem::size_of::<u32>()) };
 
         input_clone.append(&mut bs.to_vec());
         let hash = *blake3::hash(input_clone.as_slice()).as_bytes();
@@ -875,7 +875,7 @@ mod test_utils {
     #[test]
     fn get_n_hash_rounds_test() {
         let v: Vec<u8> = vec![1, 2];
-        let res3 = get_n_hash_rounds(&v[..], 3);
+        let res3 = get_n_hash_rounds(&v[..], 3u32);
         assert_eq!(3, res3.len());
         let res5 = get_n_hash_rounds(&v[..], 5);
         assert_eq!(5, res5.len());
@@ -885,15 +885,14 @@ mod test_utils {
 
         let mut prev = res5[0];
         for r5_elem in res5.iter().skip(1) {
-            println!("{:?}", prev);
             assert_ne!(prev, *r5_elem);
             prev = *r5_elem;
         }
 
-        // blake3(0x01020000000000000000) =
-        // f03073d703a241eaeaa8b0ab8c9491edb6cea87659d2146708a2134f8d6b4576
+        // blake3(0x010200000000) =
+        // 677ff528c2a35e8f94d2f40b647392691bc05e6585f506169c797ec07087bc9c
         assert_eq!(
-            decode_hex("f03073d703a241eaeaa8b0ab8c9491edb6cea87659d2146708a2134f8d6b4576").unwrap(),
+            decode_hex("677ff528c2a35e8f94d2f40b647392691bc05e6585f506169c797ec07087bc9c").unwrap(),
             res3[0]
         );
     }
