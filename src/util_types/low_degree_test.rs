@@ -14,7 +14,8 @@ pub enum ValidationError {
 }
 
 pub struct LowDegreeProof {
-    rounds: u8,
+    rounds_count: u8,
+    max_degree: u32,
     s: u32,
     merkle_roots: Vec<[u8; 32]>,
     codeword_size: u32,
@@ -34,7 +35,7 @@ pub fn verify(
     let rounds_count_u16: u16 = bincode::deserialize(&output[0..2]).unwrap();
     let rounds_count: usize = rounds_count_u16 as usize;
     let field = PrimeField::new(modulus);
-    let roots: Vec<[u8; 32]> = (0..rounds_count + 1)
+    let roots: Vec<[u8; 32]> = (0..rounds_count)
         .map(|i| output[2 + i * 32..(i + 1) * 32 + 2].try_into().unwrap())
         .collect();
     println!("Last root: {:?}", roots.last().unwrap()); // TODO: REMOVE
@@ -55,7 +56,8 @@ pub fn verify(
     let mut number_of_leaves = codeword_size;
     let mut output_index: usize = (rounds_count + 1) * 32 + 2;
     let mut c_values: Vec<i128> = vec![];
-    for i in 0..rounds_count {
+    for i in 0..rounds_count - 1 {
+        println!("i = {}", i);
         let mut hash_preimage: Vec<u8> = partial_output.clone();
         hash_preimage.push(i as u8);
         let hashes = get_n_hash_rounds(hash_preimage.as_slice(), s);
@@ -200,20 +202,31 @@ fn fri_prover_iteration(
 // TODO: We want this implemented for prime field elements, and preferably for
 // any finite field/extension field.
 // Prove that codeword elements come from the evaluation of a polynomial of
-// `degree < codeword.len() / rho`
+// `degree < codeword.len() / expansion_factor`
 pub fn prover(
     codeword: &[i128],
     modulus: i128,
-    rho: usize,
+    max_degree: u32,
     s: usize,
     output: &mut Vec<u8>,
-    mut primitive_root_of_unity: i128, // TODO: REMOVE -- only used for debugging
-) {
-    let round_count = log_2((codeword.len() / rho) as u64) + 1;
-    output.append(&mut bincode::serialize(&(round_count as u16)).unwrap());
+    primitive_root_of_unity: i128,
+) -> LowDegreeProof {
+    let expansion_factor = (codeword.len() as f64 / max_degree as f64).ceil() as usize;
+    // let expansion_factor = codeword.len() / (max_degree as usize + 1); // A bit unsure about rounding here
+    println!("max_degree = {}", max_degree);
+    println!("expansion_factor = {}", expansion_factor);
+    println!("codeword.len() = {}", codeword.len());
+    let rounds_count = log_2(expansion_factor as u64) as u8;
+    println!("rounds_count = {}", rounds_count);
+    output.append(&mut bincode::serialize(&(rounds_count as u16)).unwrap());
     let mut mt = MerkleTreeVector::from_vec(codeword);
-    output.append(&mut mt.get_root().to_vec());
     let mut mts: Vec<MerkleTreeVector<i128>> = vec![mt];
+
+    // Arrays for return values
+    let mut c_proofs: Vec<Vec<Vec<Option<Node<i128>>>>> = vec![];
+    let mut ab_proofs: Vec<Vec<Vec<Option<Node<i128>>>>> = vec![];
+
+    output.append(&mut mts[0].get_root().to_vec());
     let mut mut_codeword: Vec<i128> = codeword.to_vec().clone();
 
     // commit phase
@@ -221,7 +234,8 @@ pub fn prover(
     let inv2 = (inv2_temp + modulus) % modulus;
     let mut num_rounds = 0;
     let mut primitive_root_of_unity_temp = primitive_root_of_unity;
-    while mut_codeword.len() >= rho {
+    for _ in 0..rounds_count - 1 {
+        // while mut_codeword.len() > expansion_factor {
         // get challenge
         let hash = *blake3::hash(output.as_slice()).as_bytes();
         let challenge: i128 = PrimeFieldElement::from_bytes_raw(&modulus, &hash[0..16]);
@@ -260,7 +274,8 @@ pub fn prover(
     // -- query P2 in s2 -> alpha2
     // -- check collinearity (s0, alpha0), (s1, alpha1), (y, beta) <-- we don't care about thi right nw>
     let partial_output = output.clone();
-    for i in 0usize..num_rounds {
+    primitive_root_of_unity_temp = primitive_root_of_unity;
+    for i in 0usize..(rounds_count - 1) as usize {
         println!("i = {}", i);
         let number_of_leaves = mts[i].get_number_of_leafs();
         let mut c_indices: Vec<usize> = vec![];
@@ -337,10 +352,38 @@ pub fn prover(
         output.append(&mut bincode::serialize(&(ab_paths_encoded.len() as u16)).unwrap());
         output.append(&mut ab_paths_encoded);
 
-        primitive_root_of_unity = primitive_root_of_unity * primitive_root_of_unity % modulus;
-        // TODO: REMOVE -- only used for debugging
+        primitive_root_of_unity_temp =
+            primitive_root_of_unity_temp * primitive_root_of_unity_temp % modulus;
+
+        // Accumulate values to be returned
+        c_proofs.push(authentication_paths_c);
+        ab_proofs.push(authentication_paths_ab);
+    }
+
+    LowDegreeProof {
+        rounds_count,
+        c_proofs,
+        ab_proofs,
+        s: s as u32,
+        merkle_roots: mts.iter().map(|x| x.get_root()).collect::<Vec<[u8; 32]>>(),
+        codeword_size: codeword.len() as u32,
+        primitive_root_of_unity,
+        max_degree,
+        serialization: output.clone(),
     }
 }
+
+// pub struct LowDegreeProof {
+//     rounds: u8,
+//     max_degree: u32,
+//     s: u32,
+//     merkle_roots: Vec<[u8; 32]>,
+//     codeword_size: u32,
+//     primitive_root_of_unity: i128,
+//     c_proofs: Vec<Vec<Vec<Option<Node<i128>>>>>,
+//     ab_proofs: Vec<Vec<Vec<Option<Node<i128>>>>>,
+//     serialization: Vec<u8>,
+// }
 
 #[cfg(test)]
 mod test_utils {
@@ -362,15 +405,15 @@ mod test_utils {
         let mut output = vec![];
 
         // corresponds to the polynomial P(x) = x
-        // degree < codeword.len() / rho
+        // degree < codeword.len() / expansion_factor
         let y_values = power_series;
-        let rho = 2;
+        let max_degree = 1;
         let s = 5;
-        // prover(&y_values, field.q, rho, s, &mut output);
+        // prover(&y_values, field.q, expansion_factor, s, &mut output);
         prover(
             &y_values,
             field.q,
-            rho,
+            max_degree,
             s,
             &mut output,
             primitive_root_of_unity,
@@ -381,20 +424,13 @@ mod test_utils {
             Ok(()),
             verify(field.q, s, &output, y_values.len(), primitive_root_of_unity)
         );
-        // assert!(verify(
-        //     field.q,
-        //     s,
-        //     &output,
-        //     y_values.len(),
-        //     primitive_root_of_unity
-        // ));
 
         // Change one of the values in a leaf in the committed Merkle tree, and verify that the Merkle proof fails
         output = vec![];
         prover(
             &y_values,
             field.q,
-            rho,
+            max_degree,
             s,
             &mut output,
             primitive_root_of_unity,
@@ -425,13 +461,13 @@ mod test_utils {
 
         println!("domain = {:?}", domain);
         println!("y_values = {:?}", y_values);
-        let rho = 8;
+        let max_degree = 2;
         let s = 6;
         let mut output = vec![];
         prover(
             &y_values,
             field.q,
-            rho,
+            max_degree,
             s,
             &mut output,
             primitive_root_of_unity,
@@ -451,7 +487,7 @@ mod test_utils {
         prover(
             &y_values,
             field.q,
-            rho,
+            max_degree,
             s,
             &mut output,
             primitive_root_of_unity,
@@ -479,14 +515,14 @@ mod test_utils {
         let mut output = vec![];
 
         // corresponds to the polynomial P(x) = x
-        // degree < codeword.len() / rho
-        let rho = 4;
+        // degree < codeword.len() / expansion_factor
+        let expansion_factor = 4;
         let s = 2;
         let y_values = domain;
         prover(
             &y_values,
             field.q,
-            rho,
+            expansion_factor,
             s,
             &mut output,
             primitive_root_of_unity,
@@ -521,13 +557,13 @@ mod test_utils {
         let mut output = vec![];
 
         // corresponds to the polynomial P(x) = x
-        // degree < codeword.len() / rho
-        let rho = 32;
+        // degree < codeword.len() / expansion_factor
+        let expansion_factor = 32;
         let s = 40;
         prover(
             &y_values,
             field.q,
-            rho,
+            expansion_factor,
             s,
             &mut output,
             primitive_root_of_unity,
@@ -544,7 +580,7 @@ mod test_utils {
         prover(
             &y_values,
             field.q,
-            rho,
+            expansion_factor,
             s,
             &mut output,
             primitive_root_of_unity,
