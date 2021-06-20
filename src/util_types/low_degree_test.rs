@@ -5,7 +5,6 @@ use crate::util_types::merkle_tree_vector::{MerkleTreeVector, Node};
 use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
@@ -18,7 +17,11 @@ pub enum ValidationError {
     LastIterationNotConstant,
 }
 
-#[derive(PartialEq, Debug, Serialize)]
+// let challenge_hash_preimages: Vec<Vec<u8>> = (0..rounds_count)
+//         .map(|i| output[0..((i + 1) * 32 + 28)].to_vec())
+//         .collect();
+
+#[derive(PartialEq, Debug, Serialize, Clone)]
 pub struct LowDegreeProof<T>
 where
     // DeserializeOwned is used here to indicate that no data is borrowed
@@ -26,13 +29,11 @@ where
     T: DeserializeOwned + Serialize,
 {
     ab_proofs: Vec<Vec<Vec<Option<Node<i128>>>>>,
+    challenge_hash_preimages: Vec<Vec<u8>>,
     codeword_size: u32,
     c_proofs: Vec<Vec<Vec<Option<Node<i128>>>>>,
     max_degree: u32,
     merkle_roots: Vec<[u8; 32]>,
-    // phantomData is included in this struct since the lifetime parameter
-    // would otherwise be unused, and the deserialization trait on T requires
-    // a lifetime parameter.
     primitive_root_of_unity: T,
     rounds_count: u8,
     s: u32,
@@ -49,14 +50,12 @@ impl fmt::Display for MyError {
     }
 }
 
-impl<T> TryFrom<Vec<u8>> for LowDegreeProof<T>
-where
-    T: DeserializeOwned + Serialize,
-{
-    type Error = Box<dyn Error>;
-
-    fn try_from(serialization: Vec<u8>) -> Result<Self, Box<dyn Error>> {
-        let mut index = 0;
+impl<U: DeserializeOwned + Serialize> LowDegreeProof<U> {
+    pub fn from_serialization<T: DeserializeOwned + Serialize>(
+        serialization: Vec<u8>,
+        start_index: usize,
+    ) -> Result<LowDegreeProof<U>, Box<dyn Error>> {
+        let mut index = start_index;
         // let slice = serialization.clone().as_slice();
         let codeword_size: u32 = bincode::deserialize(&serialization[index..index + 4])?;
         index += 4;
@@ -64,19 +63,24 @@ where
         index += 4;
         let s: u32 = bincode::deserialize(&serialization[index..index + 4])?;
         index += 4;
-        let size_of_t = std::mem::size_of::<T>();
-        let primitive_root_of_unity: T =
-            bincode::deserialize(&serialization[index..index + size_of_t])?;
-        index += size_of_t;
+        let size_of_u = std::mem::size_of::<U>();
+        let primitive_root_of_unity: U =
+            bincode::deserialize(&serialization[index..index + size_of_u])?;
+        index += size_of_u;
         let rounds_count = log_2_ceil(max_degree as u64 + 1) as u8;
         let rounds_count_usize = rounds_count as usize;
+        let challenge_hash_preimages: Vec<Vec<u8>> = (0..rounds_count_usize)
+            .map(|i| serialization[0..((i + 1) * 32 + index)].to_vec())
+            .collect();
         let mut merkle_roots: Vec<[u8; 32]> = Vec::with_capacity(rounds_count_usize + 1);
         for _ in 0usize..(rounds_count_usize + 1) {
             let root: [u8; 32] = serialization[index..index + 32].try_into()?;
             index += 32;
             merkle_roots.push(root);
         }
-
+        //         (0..rounds_count)
+        // //         .map(|i| output[0..((i + 1) * 32 + 28)].to_vec())
+        // //         .collect();
         // let mut proof_size: u16 =
         //     bincode::deserialize(&serialization[output_index..output_index + 2]).unwrap();
         // Get the proofs
@@ -98,9 +102,9 @@ where
             index += proof_size as usize;
             ab_proofs.push(ab_proof);
         }
-
-        Ok(Self {
+        Ok(LowDegreeProof::<U> {
             ab_proofs,
+            challenge_hash_preimages,
             codeword_size,
             c_proofs,
             max_degree,
@@ -113,28 +117,33 @@ where
     }
 }
 
-pub fn verify(modulus: i128, output: &[u8]) -> Result<(), ValidationError> {
+pub fn verify(
+    proof: LowDegreeProof<i128>,
+    modulus: i128,
+    output: &[u8],
+) -> Result<(), ValidationError> {
     // let rounds_count_u8: u8 = bincode::deserialize(&output[0..1]).unwrap();
-    let codeword_size: u32 = bincode::deserialize(&output[0..4]).unwrap();
-    let max_degree: u32 = bincode::deserialize(&output[4..8]).unwrap();
-    let s: u32 = bincode::deserialize(&output[8..12]).unwrap();
-    let mut primitive_root_of_unity: i128 = bincode::deserialize(&output[12..28]).unwrap();
-    let rounds_count: usize = log_2_ceil(max_degree as u64 + 1) as usize;
-    // let rounds_count: usize = rounds_count_u8 as usize;
-    println!("codeword_size = {}", codeword_size);
-    println!("max_degree = {}", max_degree);
-    println!("s = {}", s);
-    println!("primitive_root_of_unity = {}", primitive_root_of_unity);
+    // let codeword_size: u32 = bincode::deserialize(&output[0..4]).unwrap();
+    // let max_degree: u32 = bincode::deserialize(&output[4..8]).unwrap();
+    // let s: u32 = bincode::deserialize(&output[8..12]).unwrap();
+    // let mut primitive_root_of_unity: i128 = bincode::deserialize(&output[12..28]).unwrap();
+    let rounds_count: usize = log_2_ceil(proof.max_degree as u64 + 1) as usize;
     println!("rounds_count = {}", rounds_count);
+    // let rounds_count: usize = rounds_count_u8 as usize;
+    // println!("codeword_size = {}", codeword_size);
+    // println!("max_degree = {}", max_degree);
+    // println!("s = {}", s);
+    // println!("primitive_root_of_unity = {}", primitive_root_of_unity);
     let field = PrimeField::new(modulus);
-    let roots: Vec<[u8; 32]> = (0..=rounds_count)
-        .map(|i| output[28 + i * 32..(i + 1) * 32 + 28].try_into().unwrap())
-        .collect();
-    println!("Last root: {:?}", roots.last().unwrap()); // TODO: REMOVE
-    let challenge_hash_preimages: Vec<Vec<u8>> = (0..rounds_count)
-        .map(|i| output[0..((i + 1) * 32 + 28)].to_vec())
-        .collect();
-    let challenge_hashes: Vec<[u8; 32]> = challenge_hash_preimages
+    // let roots: Vec<[u8; 32]> = (0..=rounds_count)
+    //     .map(|i| output[28 + i * 32..(i + 1) * 32 + 28].try_into().unwrap())
+    //     .collect();
+    println!("Last root: {:?}", proof.merkle_roots.last().unwrap()); // TODO: REMOVE
+                                                                     // let challenge_hash_preimages: Vec<Vec<u8>> = (0..rounds_count)
+                                                                     //     .map(|i| output[0..((i + 1) * 32 + 28)].to_vec())
+                                                                     //     .collect();
+    let challenge_hashes: Vec<[u8; 32]> = proof
+        .challenge_hash_preimages
         .iter()
         .map(|bs| *blake3::hash(bs.as_slice()).as_bytes())
         .collect();
@@ -144,15 +153,16 @@ pub fn verify(modulus: i128, output: &[u8]) -> Result<(), ValidationError> {
         .collect();
     println!("challenges = {:?}", challenges);
 
-    let partial_output = output[0..((rounds_count + 1) * 32 + 28)].to_vec();
-    let mut number_of_leaves = codeword_size as usize;
+    let partial_output = proof.serialization[0..((rounds_count + 1) * 32 + 28)].to_vec();
+    let mut number_of_leaves = proof.codeword_size as usize;
     let mut output_index: usize = (rounds_count + 1) * 32 + 28;
     let mut c_values: Vec<i128> = vec![];
+    let mut primitive_root_of_unity = proof.primitive_root_of_unity;
     for i in 0..rounds_count {
         println!("i = {}", i);
         let mut hash_preimage: Vec<u8> = partial_output.clone();
         hash_preimage.push(i as u8);
-        let hashes = get_n_hash_rounds(hash_preimage.as_slice(), s);
+        let hashes = get_n_hash_rounds(hash_preimage.as_slice(), proof.s);
         let mut c_indices: Vec<usize> = vec![];
         let mut ab_indices: Vec<usize> = vec![];
         for hash in hashes.iter() {
@@ -166,27 +176,36 @@ pub fn verify(modulus: i128, output: &[u8]) -> Result<(), ValidationError> {
         number_of_leaves /= 2;
         // println!("c_indices = {:?}", c_indices); // TODO: REMOVE
 
-        let mut proof_size: u16 =
+        let proof_size: u16 =
             bincode::deserialize(&output[output_index..output_index + 2]).unwrap();
         output_index += 2;
-        let mut cursor = &output[output_index..output_index + proof_size as usize];
+        let cursor = &output[output_index..output_index + proof_size as usize];
         println!("c_proofs is located at address: {}", output_index); // TODO: REMOVE
         println!("cursor is: {:?}", cursor);
-        let c_proofs: Vec<Vec<Option<Node<i128>>>> = bincode::deserialize_from(cursor).unwrap();
-        c_values = c_proofs
+        // let c_proofs: Vec<Vec<Option<Node<i128>>>> = bincode::deserialize_from(cursor).unwrap();
+        c_values = proof.c_proofs[i]
             .iter()
             .map(|x| x[0].as_ref().unwrap().value.unwrap())
             .collect::<Vec<i128>>();
         println!("c_values = {:?}", c_values); // TODO: REMOVE
-        output_index += proof_size as usize;
-        proof_size = bincode::deserialize(&output[output_index..output_index + 2]).unwrap();
+
+        // output_index += proof_size as usize;
+        // proof_size = bincode::deserialize(&output[output_index..output_index + 2]).unwrap();
         output_index += 2;
-        cursor = &output[output_index..output_index + proof_size as usize];
-        let ab_proofs: Vec<Vec<Option<Node<i128>>>> = bincode::deserialize_from(cursor).unwrap();
+        // cursor = &output[output_index..output_index + proof_size as usize];
+        // let ab_proofs: Vec<Vec<Option<Node<i128>>>> = bincode::deserialize_from(cursor).unwrap();
         output_index += proof_size as usize;
 
-        let valid_cs = MerkleTreeVector::verify_multi_proof(roots[i + 1], &c_indices, &c_proofs);
-        let valid_abs = MerkleTreeVector::verify_multi_proof(roots[i], &ab_indices, &ab_proofs);
+        let valid_cs = MerkleTreeVector::verify_multi_proof(
+            proof.merkle_roots[i + 1],
+            &c_indices,
+            &proof.c_proofs[i],
+        );
+        let valid_abs = MerkleTreeVector::verify_multi_proof(
+            proof.merkle_roots[i],
+            &ab_indices,
+            &proof.ab_proofs[i],
+        );
         if !valid_cs || !valid_abs {
             println!(
                 "Found invalidity of indices on iteration {}: y = {}, s = {}",
@@ -194,10 +213,10 @@ pub fn verify(modulus: i128, output: &[u8]) -> Result<(), ValidationError> {
             );
             print!("Invalid proofs:");
             if !valid_abs {
-                println!("{:?}", c_proofs);
+                println!("{:?}", &proof.c_proofs[i]);
             }
             if !valid_cs {
-                println!("{:?}", ab_proofs);
+                println!("{:?}", &proof.ab_proofs[i]);
             }
             return Err(ValidationError::BadMerkleProof);
         }
@@ -205,16 +224,24 @@ pub fn verify(modulus: i128, output: &[u8]) -> Result<(), ValidationError> {
         let root = PrimeFieldElement::new(primitive_root_of_unity, &field);
         println!("primitive_root_of_unity = {}", primitive_root_of_unity);
         let challenge = challenges[i];
-        for j in 0..s as usize {
+        for j in 0..proof.s as usize {
             let a_index = ab_indices[2 * j] as i128;
             let a_x = root.mod_pow_raw(a_index);
-            let a_y = ab_proofs[2 * j][0].as_ref().unwrap().value.unwrap();
+            let a_y = proof.ab_proofs[i][2 * j][0]
+                .as_ref()
+                .unwrap()
+                .value
+                .unwrap();
             let b_index = ab_indices[2 * j + 1] as i128;
             let b_x = root.mod_pow_raw(b_index);
-            let b_y = ab_proofs[2 * j + 1][0].as_ref().unwrap().value.unwrap();
+            let b_y = proof.ab_proofs[i][2 * j + 1][0]
+                .as_ref()
+                .unwrap()
+                .value
+                .unwrap();
             // let c_index = c_indices[j] as i128;
             // let c_x = root.mod_pow_raw(c_index * 2);
-            let c_y = c_proofs[j][0].as_ref().unwrap().value.unwrap();
+            let c_y = proof.c_proofs[i][j][0].as_ref().unwrap().value.unwrap();
             if !PrimeFieldPolynomial::are_colinear_raw(
                 &[(a_x, a_y), (b_x, b_y), (challenge, c_y)],
                 modulus,
@@ -239,7 +266,7 @@ pub fn verify(modulus: i128, output: &[u8]) -> Result<(), ValidationError> {
     // Base case: Verify that the last merkle tree is a constant function
     // Verify only the c indicies
     // let last_y_value =
-    if !c_values.iter().all(|&x| c_values[0] == x) {
+    if c_values.is_empty() || !c_values.iter().all(|&x| c_values[0] == x) {
         println!("Last y values were not constant. Got: {:?}", c_values);
         return Err(ValidationError::LastIterationNotConstant);
     }
@@ -330,9 +357,11 @@ pub fn prover(
     let inv2 = (inv2_temp + modulus) % modulus;
     // let mut num_rounds = 0;
     let mut primitive_root_of_unity_temp = primitive_root_of_unity;
+    let mut challenge_hash_preimages: Vec<Vec<u8>> = vec![];
     for _ in 0..rounds_count {
         // while mut_codeword.len() > expansion_factor {
         // get challenge
+        challenge_hash_preimages.push(output.clone());
         let hash = *blake3::hash(output.as_slice()).as_bytes();
         let challenge: i128 = PrimeFieldElement::from_bytes_raw(&modulus, &hash[0..16]);
 
@@ -459,6 +488,7 @@ pub fn prover(
 
     LowDegreeProof::<i128> {
         rounds_count: rounds_count as u8,
+        challenge_hash_preimages,
         c_proofs,
         ab_proofs,
         s: s as u32,
@@ -522,7 +552,9 @@ mod test_low_degree_proof {
         assert_eq!(1, proof.c_proofs.len());
         assert_eq!(2, proof.merkle_roots.len());
 
-        let deserialized_proof: LowDegreeProof<i128> = proof.serialization.try_into().unwrap();
+        let deserialized_proof: LowDegreeProof<i128> =
+            LowDegreeProof::from_serialization::<i128>(proof.serialization.clone(), 0).unwrap();
+        // let deserialized_proof: LowDegreeProof<i128> = proof.serialization.try_into().unwrap();
         assert_eq!(1, deserialized_proof.max_degree);
         assert_eq!(4, deserialized_proof.codeword_size);
         assert_eq!(10, deserialized_proof.primitive_root_of_unity);
@@ -536,12 +568,12 @@ mod test_low_degree_proof {
 
         println!("\n\n\n\n\n\n\n\n\n\n\n***************** PROOF DONE *****************");
         println!("***************** START VERIFY ***************** \n\n");
-        assert_eq!(Ok(()), verify(field.q, &output));
+        assert_eq!(Ok(()), verify(proof, field.q, &output));
         println!("***************** VERIFY SUCCEEDED! ***************** \n\n");
 
         // Change one of the values in a leaf in the committed Merkle tree, and verify that the Merkle proof fails
         output = vec![];
-        prover(
+        let proof = prover(
             &y_values,
             field.q,
             max_degree,
@@ -551,9 +583,10 @@ mod test_low_degree_proof {
         );
         // println!("output[1033] = {}", output[1033]);
         // output[1033] = (output[1033] + 1) as u8; // Should change a committed value from 42 to 43
+
         assert_eq!(
             Err(ValidationError::BadMerkleProof),
-            verify(field.q, &output)
+            verify(proof, field.q, &output)
         );
     }
 
@@ -578,7 +611,7 @@ mod test_low_degree_proof {
         let max_degree = 2;
         let s = 6;
         let mut output = vec![];
-        let ret = prover(
+        let mut proof: LowDegreeProof<i128> = prover(
             &y_values,
             field.q,
             max_degree,
@@ -586,10 +619,15 @@ mod test_low_degree_proof {
             &mut output,
             primitive_root_of_unity,
         );
-        assert_eq!(ret, ret.serialization.clone().try_into().unwrap());
+        // let deserialized_proof: LowDegreeProof<i128> =
+        // LowDegreeProof::from_serialization::<i128>(proof.serialization, 0).unwrap();
+        assert_eq!(
+            proof,
+            LowDegreeProof::from_serialization::<i128>(proof.serialization.clone(), 0).unwrap()
+        );
         println!("\n\n\n\n\n\n\n\n\n\n\n***************** PROOF DONE *****************");
         println!("***************** START VERIFY ***************** \n\n");
-        assert_eq!(Ok(()), verify(field.q, &output));
+        assert_eq!(Ok(()), verify(proof.clone(), field.q, &output));
 
         // Change a single y value such that it no longer corresponds to a polynomil
         // a verify that the test fails
@@ -597,7 +635,8 @@ mod test_low_degree_proof {
         let original_y_values = y_values.clone();
         y_values[3] = 100;
         y_values[4] = 100;
-        prover(
+        println!("***************** START PROOF ***************** \n\n");
+        proof = prover(
             &y_values,
             field.q,
             max_degree,
@@ -605,16 +644,19 @@ mod test_low_degree_proof {
             &mut output,
             primitive_root_of_unity,
         );
+        println!("\n\n\n\n\n\n\n\n\n\n\n***************** PROOF DONE *****************");
+        println!("***************** START VERIFY ***************** \n\n");
         assert_eq!(
             Err(ValidationError::LastIterationNotConstant),
-            verify(field.q, &output)
+            verify(proof.clone(), field.q, &output)
         );
+        println!("***************** START PROOF ***************** \n\n");
 
         // make a proof with a too low max_degree parameter and verify that it fails verification
         // with the expected output
         let wrong_max_degree = 1;
         output = vec![];
-        prover(
+        let proof = prover(
             &original_y_values,
             field.q,
             wrong_max_degree,
@@ -622,9 +664,11 @@ mod test_low_degree_proof {
             &mut output,
             primitive_root_of_unity,
         );
+        println!("\n\n\n\n\n\n\n\n\n\n\n***************** PROOF DONE *****************");
+        println!("***************** START VERIFY ***************** \n\n");
         assert_eq!(
             Err(ValidationError::LastIterationNotConstant),
-            verify(field.q, &output)
+            verify(proof.clone(), field.q, &output)
         );
     }
 
@@ -657,8 +701,13 @@ mod test_low_degree_proof {
             &mut output,
             primitive_root_of_unity,
         );
-        assert_eq!(proof, proof.serialization.clone().try_into().unwrap());
-        assert_eq!(Ok(()), verify(field.q, &output));
+        // assert_eq!(proof, proof.serialization.clone().try_into().unwrap());
+        assert_eq!(
+            proof,
+            LowDegreeProof::from_serialization::<i128>(proof.serialization.clone(), 0).unwrap()
+        );
+        // assert_eq!(proof, proof.serialization.clone().try_into().unwrap());
+        assert_eq!(Ok(()), verify(proof, field.q, &output));
     }
 
     #[test]
@@ -697,8 +746,11 @@ mod test_low_degree_proof {
             &mut output,
             primitive_root_of_unity,
         );
-        assert_eq!(proof, proof.serialization.clone().try_into().unwrap());
-        assert_eq!(Ok(()), verify(field.q, &output));
+        assert_eq!(
+            proof,
+            LowDegreeProof::from_serialization::<i128>(proof.serialization.clone(), 0).unwrap()
+        );
+        assert_eq!(Ok(()), verify(proof, field.q, &output));
 
         // Change a single y value such that it no longer corresponds to a polynomial
         // and verify that the test fails
@@ -712,10 +764,13 @@ mod test_low_degree_proof {
             &mut output,
             primitive_root_of_unity,
         );
-        assert_eq!(proof, proof.serialization.clone().try_into().unwrap());
+        assert_eq!(
+            proof,
+            LowDegreeProof::from_serialization::<i128>(proof.serialization.clone(), 0).unwrap()
+        );
         assert_eq!(
             Err(ValidationError::LastIterationNotConstant),
-            verify(field.q, &output)
+            verify(proof, field.q, &output)
         );
     }
 }
