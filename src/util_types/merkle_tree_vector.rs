@@ -93,7 +93,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
     }
 
     pub fn get_root(&self) -> [u8; 32] {
-        self.root_hash.clone()
+        self.root_hash
     }
 
     pub fn get_number_of_leafs(&self) -> usize {
@@ -103,10 +103,10 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
     pub fn verify_multi_proof(
         root_hash: [u8; 32],
         indices: &[usize],
-        proof: &Vec<Vec<Option<Node<T>>>>,
+        proof: &[Vec<Option<Node<T>>>],
     ) -> bool {
         let mut partial_tree: HashMap<u64, Node<T>> = HashMap::new();
-        let mut proof_clone = proof.clone();
+        let mut proof_clone = proof.to_owned();
         let half_tree_size = 2u64.pow(proof_clone[0].len() as u32 - 1);
         for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
             let mut index = half_tree_size + *i as u64;
