@@ -1,5 +1,6 @@
 pub mod complex_number;
 pub mod fraction;
+pub mod low_degree_test;
 pub mod other;
 pub mod polynomial_quotient_ring;
 pub mod prime_field_element;
