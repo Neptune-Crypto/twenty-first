@@ -4,6 +4,7 @@ use std::fmt;
 use std::ops::Add;
 use std::ops::Div;
 use std::ops::Mul;
+use std::ops::Neg;
 use std::ops::Rem;
 use std::ops::Sub;
 
@@ -15,6 +16,12 @@ pub struct PrimeField {
 impl PrimeField {
     pub fn new(q: i128) -> Self {
         Self { q }
+    }
+
+    // Verify that field prime is of the form a*k + b
+    // where a, b, and k are all integers
+    pub fn prime_check(&self, a: i128, b: i128) -> bool {
+        self.q % a == b
     }
 
     pub fn get_power_series(&self, root: i128) -> Vec<i128> {
@@ -47,32 +54,82 @@ impl PrimeField {
         *ret = None;
     }
 
-    pub fn batch_inversion(&self, input: Vec<i128>) -> Vec<i128> {
-        let size = input.len();
+    pub fn evaluate_straight_line(
+        &self,
+        (a, b): (PrimeFieldElement, PrimeFieldElement),
+        x_values: &[PrimeFieldElement],
+    ) -> Vec<PrimeFieldElement> {
+        let values = x_values
+            .iter()
+            .map(|&x| (x * a + b).value)
+            .collect::<Vec<i128>>();
+        values
+            .iter()
+            .map(|x| PrimeFieldElement::new(*x, &self))
+            .collect::<Vec<PrimeFieldElement>>()
+    }
+
+    pub fn lagrange_interpolation_2(
+        &self,
+        point0: (PrimeFieldElement, PrimeFieldElement),
+        point1: (PrimeFieldElement, PrimeFieldElement),
+    ) -> (PrimeFieldElement, PrimeFieldElement) {
+        let x_diff = point0.0 - point1.0;
+        let x_diff_inv = x_diff.inv();
+        let a = (point0.1 - point1.1) * x_diff_inv;
+        let b = point0.1 - a * point0.0;
+        (
+            PrimeFieldElement::new(a.value, self),
+            PrimeFieldElement::new(b.value, self),
+        )
+    }
+
+    pub fn batch_inversion(&self, nums: Vec<i128>) -> Vec<i128> {
+        // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
+        // Maps 0 into 0. Does not give warnings or errors on 0 inputs!
+        let size = nums.len();
         if size == 0 {
             return Vec::<i128>::new();
         }
 
-        let mut partials0: Vec<i128> = vec![0i128; size];
-        let mut result: Vec<i128> = vec![0i128; size];
-        partials0[0] = input[0];
-        for i in 1..size {
-            partials0[i] = partials0[i - 1] * input[i] % self.q;
+        let mut scratch: Vec<i128> = vec![0i128; size];
+        let mut acc = 1i128;
+        scratch[0] = nums[0];
+        for i in 0..size {
+            if nums[i] == 0 {
+                continue;
+            }
+            scratch[i] = acc;
+            acc = acc * nums[i] % self.q;
         }
 
         // Invert the last element of the `partials` vector
-        let (_, inv, _) = PrimeFieldElement::eea(partials0[size - 1], self.q);
-        result[size - 1] = (inv % self.q + self.q) % self.q;
-        for i in 1..size {
-            result[size - i - 1] = result[size - i] * input[size - i] % self.q;
-            if size - i - 1 == 0 {}
+        let (_, inv, _) = PrimeFieldElement::eea(acc, self.q);
+        acc = inv;
+        let mut res = nums.clone();
+        for i in (0..size).rev() {
+            if res[i] == 0i128 {
+                continue;
+            }
+
+            let tmp = acc * res[i] % self.q;
+            res[i] = (acc * scratch[i] % self.q + self.q) % self.q;
+            acc = tmp;
         }
 
-        for i in 1..size {
-            result[i] = result[i] * partials0[i - 1] % self.q;
-        }
+        res
+    }
 
-        result
+    pub fn batch_inversion_elements(
+        &self,
+        input: Vec<PrimeFieldElement>,
+    ) -> Vec<PrimeFieldElement> {
+        let values = input.iter().map(|x| x.value).collect::<Vec<i128>>();
+        let result_values = self.batch_inversion(values);
+        result_values
+            .iter()
+            .map(|x| PrimeFieldElement::new(*x, &self))
+            .collect::<Vec<PrimeFieldElement>>()
     }
 
     pub fn get_primitive_root_of_unity(&self, n: i128) -> (Option<PrimeFieldElement>, Vec<i128>) {
@@ -202,6 +259,21 @@ impl<'a> PrimeFieldElement<'a> {
         } else {
             elem
         }
+    }
+
+    pub fn get_generator_domain(&self) -> Vec<PrimeFieldElement> {
+        let mut val = *self;
+        let mut ret: Vec<Self> = vec![PrimeFieldElement::new(1, &self.field)];
+
+        // Idiomatic way of constructing a do-while loop in Rust
+        loop {
+            ret.push(val);
+            val = val * *self;
+            if 1 == val.value {
+                break;
+            }
+        }
+        ret
     }
 
     pub fn from_bytes_raw(modulus: &i128, buf: &[u8]) -> i128 {
@@ -337,6 +409,17 @@ impl<'a> Rem for PrimeFieldElement<'a> {
     }
 }
 
+impl<'a> Neg for PrimeFieldElement<'a> {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self {
+            value: self.field.q - self.value,
+            field: self.field,
+        }
+    }
+}
+
 // p = k*n+1 = 2^32 − 2^20 + 1 = 4293918721
 // p-1=2^20*3^2*5*7*13.
 
@@ -347,11 +430,19 @@ mod test_modular_arithmetic {
     use crate::utils::generate_random_numbers;
 
     #[test]
-    fn batch_inversion_test_small() {
+    fn batch_inversion_test_small_no_zeros() {
         let input: Vec<i128> = vec![1, 2, 3, 4];
         let field = PrimeField::new(5);
         let output = field.batch_inversion(input);
         assert_eq!(vec![1, 3, 2, 4], output);
+    }
+
+    #[test]
+    fn batch_inversion_test_small_with_zeros() {
+        let input: Vec<i128> = vec![1, 2, 3, 4, 0];
+        let field = PrimeField::new(5);
+        let output = field.batch_inversion(input);
+        assert_eq!(vec![1, 3, 2, 4, 0], output);
     }
 
     #[test]
@@ -365,6 +456,19 @@ mod test_modular_arithmetic {
             vec![1, 12, 8, 6, 14, 4, 10, 3, 18, 7, 21, 2, 16, 5, 20, 13, 19, 9, 17, 15, 11, 22],
             output
         );
+    }
+
+    #[test]
+    fn batch_inversion_elements_test_small() {
+        let input_values: Vec<i128> = vec![1, 2, 3, 4];
+        let field = PrimeField::new(5);
+        let input = input_values
+            .iter()
+            .map(|x| PrimeFieldElement::new(*x, &field))
+            .collect::<Vec<PrimeFieldElement>>();
+        let output = field.batch_inversion_elements(input);
+        let output_values = output.iter().map(|x| x.value).collect::<Vec<i128>>();
+        assert_eq!(vec![1, 3, 2, 4], output_values);
     }
 
     #[test]
@@ -389,6 +493,20 @@ mod test_modular_arithmetic {
         let field = PrimeField::new(113);
         let power_series = field.get_power_series(40);
         println!("{:?}", power_series);
+    }
+
+    // get_generator_domain
+    #[test]
+    fn get_generator_domain_test() {
+        let field = PrimeField::new(113);
+        let element = PrimeFieldElement::new(40, &field);
+        let group = element.get_generator_domain();
+        assert_eq!(1, group[0].value);
+        assert_eq!(40, group[1].value);
+        assert_eq!(18, group[2].value);
+        assert_eq!(42, group[3].value);
+        assert_eq!(42, group[3].value);
+        assert_eq!(48, group[7].value);
     }
 
     #[test]
@@ -576,7 +694,10 @@ mod test_modular_arithmetic {
         assert_eq!(-17, b_factor);
         assert_eq!(29, gcd);
 
-        // test mod_pow
+        // test
+        let _17 = PrimeField::new(17);
+        let _1_17 = PrimeFieldElement::new(1, &_17);
+        assert_eq!(_1_17.mod_pow(3).value, 1);
         let _1914 = PrimeField::new(1914);
         let _899_1914 = PrimeFieldElement::new(899, &_1914);
         assert_eq!(_899_1914.value, 899);
