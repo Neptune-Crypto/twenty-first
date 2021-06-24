@@ -2,13 +2,13 @@ use crate::shared_math::prime_field_element::PrimeFieldElement;
 
 pub fn mimc_forward<'a>(
     input: &'a PrimeFieldElement,
-    steps: u64,
+    steps: usize,
     round_costants: &'a [PrimeFieldElement],
 ) -> Vec<PrimeFieldElement<'a>> {
-    let mut trace: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(steps as usize);
+    let mut trace: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(steps);
     let mut res: PrimeFieldElement<'a> = *input;
     trace.push(*input);
-    for i in 0..steps as usize {
+    for i in 0..steps {
         res = res.mod_pow(3) + round_costants[i % round_costants.len()];
         trace.push(res);
     }
@@ -18,7 +18,7 @@ pub fn mimc_forward<'a>(
 
 pub fn mimc_backward<'a>(
     input: &'a PrimeFieldElement,
-    steps: u64,
+    steps: usize,
     round_costants: &'a [PrimeFieldElement],
 ) -> PrimeFieldElement<'a> {
     // Verify that field.q is of the form 6k + 5
@@ -46,6 +46,7 @@ mod test_modular_arithmetic {
     use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
     use crate::util_types::merkle_tree_vector::{MerkleTreeVector, Node};
     use crate::utils;
+    use crate::utils::{get_index_from_bytes_exclude_multiples, get_n_hash_rounds};
 
     #[test]
     fn mimc_forward_small() {
@@ -79,19 +80,20 @@ mod test_modular_arithmetic {
         #![allow(clippy::just_underscores_and_digits)]
         // Create a field with a 8192th primitive root of unity and a (8*8192)th primitive root of unity
         // This field is mod 65537 and the roots are 6561, 3, respectively.
-        let steps = 8192i128;
-        let expansion_factor = 8i128;
-        let range: i128 = steps * expansion_factor;
+        let security_checks = 80;
+        let steps = 8192usize;
+        let expansion_factor = 8usize;
+        let range: usize = steps * expansion_factor;
         let mut ret: Option<(PrimeField, i128)> = None;
-        PrimeField::get_field_with_primitive_root_of_unity(range, 2i128.pow(16), &mut ret);
+        PrimeField::get_field_with_primitive_root_of_unity(range as i128, 2i128.pow(16), &mut ret);
         let (field, root) = ret.unwrap();
         assert_eq!(65537, field.q);
         assert_eq!(3, root);
-        let g1_ret = field.get_primitive_root_of_unity(steps);
+        let g1_ret = field.get_primitive_root_of_unity(steps as i128);
         let g1: PrimeFieldElement = g1_ret.0.unwrap();
         let g2: PrimeFieldElement = PrimeFieldElement::new(root, &field);
         assert_eq!(6561, g1.value);
-        assert_eq!(g2.mod_pow(expansion_factor), g1);
+        assert_eq!(g2.mod_pow(expansion_factor as i128), g1);
         println!("g1 = {}", g1);
 
         // Get the computational trace of MIMC for some round_constant values
@@ -107,8 +109,7 @@ mod test_modular_arithmetic {
             //.map(|x| PrimeFieldElement::new(1, &field)) // TODO: FIX!! REPLACE value BY x
             .collect::<Vec<PrimeFieldElement>>();
         println!("Generating trace");
-        let trace: Vec<PrimeFieldElement> =
-            mimc_forward(&input, steps as u64 - 1, &round_constants);
+        let trace: Vec<PrimeFieldElement> = mimc_forward(&input, steps - 1, &round_constants);
         let output: &PrimeFieldElement = trace.last().unwrap();
         println!("Done generating trace with length {}", trace.len());
         let mut trace_polynomial_coeffs: Vec<PrimeFieldElement> =
@@ -119,7 +120,7 @@ mod test_modular_arithmetic {
         );
         trace_polynomial_coeffs.append(&mut vec![
             PrimeFieldElement::new(0, &field);
-            ((expansion_factor - 1) * steps) as usize
+            (expansion_factor - 1) * steps
         ]);
         println!(
             "expanded trace_polynomial_coeffs has length {}",
@@ -135,25 +136,25 @@ mod test_modular_arithmetic {
         // but it only depends on `round_constants.len()` values, so it should be representable
         // in a simpler form.
         let rc_length = round_constants.len();
-        let round_constants_repeated = (0..steps as usize)
+        let round_constants_repeated = (0..steps)
             .map(|i| round_constants[i % rc_length])
             .collect::<Vec<PrimeFieldElement>>();
         let mut round_constants_polynomial =
             fft::fast_polynomial_interpolate_prime_elements(&round_constants_repeated, &g1);
         round_constants_polynomial.append(&mut vec![
             PrimeFieldElement::new(0, &field);
-            ((expansion_factor - 1) * steps) as usize
+            (expansion_factor - 1) * steps
         ]);
         let round_constants_extended =
             fft::fast_polynomial_evaluate_prime_elements(&round_constants_polynomial, &g2);
 
         // Evaluate the composed polynomial such that
         // C(P(x), P(g1*x), K(x)) = P(g1*x) - P(x)**3 - K(x)
-        let mut c_of_p_evaluations: Vec<PrimeFieldElement> = Vec::with_capacity(range as usize);
+        let mut c_of_p_evaluations: Vec<PrimeFieldElement> = Vec::with_capacity(range);
         for i in 0..range {
-            let evaluation = p_evaluations[((i + expansion_factor) % range) as usize]
-                - p_evaluations[i as usize].mod_pow(3)
-                - round_constants_extended[i as usize % round_constants_extended.len()];
+            let evaluation = p_evaluations[((i + expansion_factor) % range)]
+                - p_evaluations[i].mod_pow(3)
+                - round_constants_extended[i % round_constants_extended.len()];
             c_of_p_evaluations.push(evaluation);
         }
         println!("Computed C(P(x))");
@@ -163,9 +164,9 @@ mod test_modular_arithmetic {
         let g2_domain: Vec<PrimeFieldElement> = g2.get_generator_domain();
         let one = PrimeFieldElement::new(1, &field);
         let mut z_x_numerator: Vec<PrimeFieldElement> =
-            vec![PrimeFieldElement::new(0, &field); range as usize];
-        for i in 0..range as usize {
-            z_x_numerator[i] = g2_domain[i * steps as usize % range as usize] - one;
+            vec![PrimeFieldElement::new(0, &field); range];
+        for i in 0..range {
+            z_x_numerator[i] = g2_domain[i * steps % range] - one;
         }
 
         let z_x_numerator_inv: Vec<PrimeFieldElement> =
@@ -183,8 +184,8 @@ mod test_modular_arithmetic {
 
         // Calculate D(x) = C(P(x)) / Z(x)
         let mut d_evaluations: Vec<PrimeFieldElement> =
-            vec![PrimeFieldElement::new(0, &field); range as usize];
-        for i in 0..range as usize {
+            vec![PrimeFieldElement::new(0, &field); range];
+        for i in 0..range {
             d_evaluations[i] = c_of_p_evaluations[i] * z_inv[i];
         }
         println!("Computed D(x)");
@@ -223,18 +224,15 @@ mod test_modular_arithmetic {
             .iter()
             .map(|x| PrimeFieldElement::new(*x, &field))
             .collect::<Vec<PrimeFieldElement>>();
-        z2_x_coefficients.append(&mut vec![
-            PrimeFieldElement::new(0, &field);
-            range as usize - 3
-        ]);
+        z2_x_coefficients.append(&mut vec![PrimeFieldElement::new(0, &field); range - 3]);
         let z2_x_evaluations: Vec<PrimeFieldElement> =
             fft::fast_polynomial_evaluate_prime_elements(&z2_x_coefficients, &g2);
         let z2_inv_x_evaluations: Vec<PrimeFieldElement> =
             field.batch_inversion_elements(z2_x_evaluations.clone());
 
         let mut b_evaluations: Vec<PrimeFieldElement> =
-            vec![PrimeFieldElement::new(0, &field); range as usize];
-        for i in 0..range as usize {
+            vec![PrimeFieldElement::new(0, &field); range];
+        for i in 0..range {
             b_evaluations[i] = (p_evaluations[i] - i_evaluations[i]) * z2_inv_x_evaluations[i];
         }
         println!("Computed B(x)");
@@ -278,21 +276,21 @@ mod test_modular_arithmetic {
             }
         }
 
-        //for i in 0..range as usize {}
+        //for i in 0..range  {}
         // z_x_2.evaluate(x: &'d PrimeFieldElement)
 
-        for i in 0..steps as usize - 1 {
+        for i in 0..steps - 1 {
             // println!(
             //     "C(P({})) = {}",
             //     g1_domain[i].value,
-            //     c_of_p_evaluations[i * expansion_factor as usize]
+            //     c_of_p_evaluations[i * expansion_factor ]
             // );
-            if c_of_p_evaluations[i * expansion_factor as usize].value != 0 {
+            if c_of_p_evaluations[i * expansion_factor].value != 0 {
                 panic!(
                     "C(P(x)) != 0 for x = {} => i = {}. Got C(P(x)) = {}",
-                    g2_domain[i * expansion_factor as usize],
-                    i * expansion_factor as usize,
-                    c_of_p_evaluations[i * expansion_factor as usize].value
+                    g2_domain[i * expansion_factor],
+                    i * expansion_factor,
+                    c_of_p_evaluations[i * expansion_factor].value
                 );
             }
         }
@@ -307,15 +305,15 @@ mod test_modular_arithmetic {
             .collect::<Vec<PrimeFieldElement>>();
 
         // Calculate x^steps
-        let g2_pow_steps = g2.mod_pow(steps);
-        let mut powers = vec![PrimeFieldElement::new(0, &field); range as usize];
+        let g2_pow_steps = g2.mod_pow(steps as i128);
+        let mut powers = vec![PrimeFieldElement::new(0, &field); range];
         powers[0] = PrimeFieldElement::new(1, &field);
-        for i in 1..range as usize {
+        for i in 1..range {
             powers[i] = powers[i - 1] * g2_pow_steps;
         }
 
-        let mut l_evaluations = vec![PrimeFieldElement::new(0, &field); range as usize];
-        for i in 1..range as usize {
+        let mut l_evaluations = vec![PrimeFieldElement::new(0, &field); range];
+        for i in 1..range {
             l_evaluations[i] = d_evaluations[i]
                 + ks[0] * p_evaluations[i]
                 + ks[1] * p_evaluations[i] * powers[i]
@@ -327,6 +325,12 @@ mod test_modular_arithmetic {
         println!("Computed linear combination of low-degree polynomials");
 
         // Get pseudo-random indices from `l_mtree.get_root()`.
+        let index_preimages = get_n_hash_rounds(&l_mtree.get_root(), security_checks);
+        let indices: Vec<usize> = index_preimages
+            .iter()
+            .map(|x| get_index_from_bytes_exclude_multiples(x, range, expansion_factor))
+            .collect::<Vec<usize>>();
+
         // Use these to index into m and l.
         // Then generate a proof that l_evaluations is of low degree (steps * 2)
     }
