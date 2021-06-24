@@ -208,10 +208,10 @@ pub fn verify(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Validati
                 println!("Failed to verify colinearity!");
                 return Err(ValidationError::NotColinear);
             } else {
-                println!(
-                    "({}, {}), ({}, {}), ({}, {}) are colinear",
-                    a_x, a_y, b_x, b_y, challenge, c_y
-                );
+                // println!(
+                //     "({}, {}), ({}, {}), ({}, {}) are colinear",
+                //     a_x, a_y, b_x, b_y, challenge, c_y
+                // );
             }
         }
 
@@ -265,7 +265,14 @@ pub fn prover(
     output: &mut Vec<u8>,
     primitive_root_of_unity: i128,
 ) -> LowDegreeProof<i128> {
-    let rounds_count = log_2_ceil(max_degree as u64 + 1) as usize;
+    // verify that max_degree + 1 == 2^n
+    // TODO: Can we remove this requirement? I'm not sure how to deal with that...
+    let max_degree_plus_one: u32 = max_degree + 1;
+    if max_degree_plus_one & (max_degree_plus_one - 1) != 0 {
+        panic!("Low-degree prover called for non-power of 2")
+    }
+
+    let rounds_count = log_2_ceil(max_degree_plus_one as u64) as usize;
     output.append(&mut bincode::serialize(&(codeword.len() as u32)).unwrap());
     output.append(&mut bincode::serialize(&(max_degree as u32)).unwrap());
     output.append(&mut bincode::serialize(&(s as u32)).unwrap());
@@ -578,16 +585,19 @@ mod test_low_degree_proof {
     fn generate_proof_1024() {
         let mut ret: Option<(PrimeField, i128)> = None;
         let size = 2usize.pow(14);
-        let max_degree = 1024;
+        let max_degree = 1023;
         PrimeField::get_field_with_primitive_root_of_unity(size as i128, size as i128, &mut ret);
         let (field_temp, primitive_root_of_unity) = ret.clone().unwrap();
         let field: PrimeField = field_temp.clone();
         assert_eq!(65537i128, field.q);
         assert_eq!(81i128, primitive_root_of_unity);
-        let mut coefficients = generate_random_numbers(max_degree, field.q);
-        coefficients.extend_from_slice(&vec![0; size - max_degree]);
+        let mut coefficients = generate_random_numbers(max_degree + 1, field.q);
+        println!("length of coefficients = {}", coefficients.len());
+        coefficients.extend_from_slice(&vec![0; size - max_degree - 1]);
+        println!("length of expanded coefficients = {}", coefficients.len());
         let mut y_values =
             fast_polynomial_evaluate(coefficients.as_slice(), field.q, primitive_root_of_unity);
+        println!("length of y_values = {}", y_values.len());
 
         let mut output = vec![1, 2];
 
@@ -600,11 +610,28 @@ mod test_low_degree_proof {
             &mut output,
             primitive_root_of_unity,
         );
+        println!("rounds in proof = {}", proof.rounds_count);
         assert_eq!(
             proof,
             LowDegreeProof::from_serialization::<i128>(output.clone(), 2).unwrap()
         );
         assert_eq!(Ok(()), verify(proof, field.q));
+
+        // Verify that a 1023 degree polynomial cannot be verified as a degree 512 polynomial
+        output = vec![1, 2];
+        proof = prover(
+            &y_values,
+            field.q,
+            511,
+            s,
+            &mut output,
+            primitive_root_of_unity,
+        );
+        println!("rounds in proof = {}", proof.rounds_count);
+        assert_eq!(
+            Err(ValidationError::LastIterationNotConstant),
+            verify(proof, field.q)
+        );
 
         // Change a single y value such that it no longer corresponds to a polynomial
         // and verify that the test fails

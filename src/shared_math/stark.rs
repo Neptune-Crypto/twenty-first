@@ -41,12 +41,14 @@ pub fn mimc_backward<'a>(
 mod test_modular_arithmetic {
     use super::*;
     use crate::fft;
+    use crate::shared_math::low_degree_test;
     use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
     use crate::shared_math::prime_field_element::PrimeField;
     use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
     use crate::util_types::merkle_tree_vector::{MerkleTreeVector, Node};
     use crate::utils;
     use crate::utils::{get_index_from_bytes_exclude_multiples, get_n_hash_rounds};
+    use std::result;
 
     #[test]
     fn mimc_forward_small() {
@@ -80,7 +82,7 @@ mod test_modular_arithmetic {
         #![allow(clippy::just_underscores_and_digits)]
         // Create a field with a 8192th primitive root of unity and a (8*8192)th primitive root of unity
         // This field is mod 65537 and the roots are 6561, 3, respectively.
-        let security_checks = 80;
+        let security_checks = 80usize;
         let steps = 8192usize;
         let expansion_factor = 8usize;
         let range: usize = steps * expansion_factor;
@@ -246,15 +248,21 @@ mod test_modular_arithmetic {
                 .zip(b_evaluations.iter())
                 .map(|((p, d), b)| (*p, *d, *b))
                 .collect::<Vec<(PrimeFieldElement, PrimeFieldElement, PrimeFieldElement)>>();
-        let mt: MerkleTreeVector<(PrimeFieldElement, PrimeFieldElement, PrimeFieldElement)> =
-            MerkleTreeVector::from_vec(&polynomial_evaluations);
-        println!("Computed merkle tree. Root: {:?}", mt.get_root());
+        let polynomials_merkle_tree: MerkleTreeVector<(
+            PrimeFieldElement,
+            PrimeFieldElement,
+            PrimeFieldElement,
+        )> = MerkleTreeVector::from_vec(&polynomial_evaluations);
+        println!(
+            "Computed merkle tree. Root: {:?}",
+            polynomials_merkle_tree.get_root()
+        );
 
         // Verify that we can extract values from the Merkle Tree
         // TODO: DEBUG: REMOVE!!!
         for i in 700..790 {
             let val: Vec<Node<(PrimeFieldElement, PrimeFieldElement, PrimeFieldElement)>> =
-                mt.get_proof(i);
+                polynomials_merkle_tree.get_proof(i);
             let (p, d, b) = val[0].value.unwrap();
             if p == p_evaluations[i] {
                 // println!("Values matched for i = {}", i);
@@ -271,7 +279,7 @@ mod test_modular_arithmetic {
             } else {
                 panic!("Values did **not** match for b i = {}", i);
             }
-            if !MerkleTreeVector::verify_proof(mt.get_root(), i as u64, val) {
+            if !MerkleTreeVector::verify_proof(polynomials_merkle_tree.get_root(), i as u64, val) {
                 panic!("Failed to verify Merkle Tree proof for i = {}", i);
             }
         }
@@ -297,7 +305,7 @@ mod test_modular_arithmetic {
 
         // Find a pseudo-random linear combination of P, P*x^steps, B, B*x^steps, D and prove
         // low-degreenes of this
-        let mt_root_hash = mt.get_root();
+        let mt_root_hash = polynomials_merkle_tree.get_root();
         let k_seeds = utils::get_n_hash_rounds(&mt_root_hash, 4);
         let ks = k_seeds
             .iter()
@@ -305,10 +313,11 @@ mod test_modular_arithmetic {
             .collect::<Vec<PrimeFieldElement>>();
 
         // Calculate x^steps
-        let g2_pow_steps = g2.mod_pow(steps as i128);
+        let g2_pow_steps = g2_domain[steps];
         let mut powers = vec![PrimeFieldElement::new(0, &field); range];
         powers[0] = PrimeFieldElement::new(1, &field);
         for i in 1..range {
+            // g2^i = g2^(i - 1) * g2^steps => x[i] = x[i - 1] * g2^steps
             powers[i] = powers[i - 1] * g2_pow_steps;
         }
 
@@ -325,11 +334,81 @@ mod test_modular_arithmetic {
         println!("Computed linear combination of low-degree polynomials");
 
         // Get pseudo-random indices from `l_mtree.get_root()`.
-        let index_preimages = get_n_hash_rounds(&l_mtree.get_root(), security_checks);
+        let index_preimages = get_n_hash_rounds(&l_mtree.get_root(), security_checks as u32);
         let indices: Vec<usize> = index_preimages
             .iter()
             .map(|x| get_index_from_bytes_exclude_multiples(x, range, expansion_factor))
             .collect::<Vec<usize>>();
+        let p_d_b_proofs = polynomials_merkle_tree.get_multi_proof(&indices);
+        let l_proofs = l_mtree.get_multi_proof(&indices);
+        // TODO: REMOVE this when low_degree_test is changed to use PrimeFieldElements instead
+        // of i128
+        let mut p_evaluations_i128 = p_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
+        let mut b_evaluations_i128 = b_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
+        let mut d_evaluations_i128 = d_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
+        let mut l_evaluations_i128 = l_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
+        let mut output = vec![];
+        println!(
+            "Length of l_evaluations_i128 = {}",
+            l_evaluations_i128.len()
+        );
+        let mut low_degree_proof: low_degree_test::LowDegreeProof<i128> = low_degree_test::prover(
+            &p_evaluations_i128,
+            field.q,
+            (steps - 1) as u32,
+            security_checks,
+            &mut output,
+            g2.value,
+        );
+        let mut verify: Result<(), low_degree_test::ValidationError> =
+            low_degree_test::verify(low_degree_proof, field.q);
+        if !verify.is_ok() {
+            println!("P failed low-degree test");
+        }
+        // assert!(verify.is_ok());
+        output = vec![];
+        low_degree_proof = low_degree_test::prover(
+            &b_evaluations_i128,
+            field.q,
+            (steps - 1) as u32,
+            security_checks,
+            &mut output,
+            g2.value,
+        );
+        verify = low_degree_test::verify(low_degree_proof, field.q);
+        if !verify.is_ok() {
+            println!("B failed low-degree test");
+        }
+        // assert!(verify.is_ok());
+        output = vec![];
+        low_degree_proof = low_degree_test::prover(
+            &d_evaluations_i128,
+            field.q,
+            (2 * steps - 1) as u32,
+            security_checks,
+            &mut output,
+            g2.value,
+        );
+        verify = low_degree_test::verify(low_degree_proof, field.q);
+        if !verify.is_ok() {
+            println!("D failed low-degree test");
+        }
+        // assert!(verify.is_ok());
+        // l_evaluations_i128[100] = 100;
+        output = vec![];
+        let low_degree_proof = low_degree_test::prover(
+            &l_evaluations_i128,
+            field.q,
+            (steps * 2 - 1) as u32,
+            security_checks,
+            &mut output,
+            g2.value,
+        );
+        let verify: Result<(), low_degree_test::ValidationError> =
+            low_degree_test::verify(low_degree_proof, field.q);
+        if !verify.is_ok() {
+            println!("L failed low-degree test");
+        }
 
         // Use these to index into m and l.
         // Then generate a proof that l_evaluations is of low degree (steps * 2)
