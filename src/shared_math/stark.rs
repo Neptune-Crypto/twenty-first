@@ -130,102 +130,22 @@ mod test_modular_arithmetic {
         println!("Done evaluation over expanded domain!");
         println!("p_evaluations has length {}", p_evaluations.len());
         let g1_domain = g1.get_generator_domain();
-        // for i in 0..20 {
-        //     println!(
-        //         "p({}) = {}",
-        //         g1_domain[i].value,
-        //         p_evaluations[i * expansion_factor as usize]
-        //     );
-        // }
-        let skips2 = (steps as usize / round_constants.len()) as i128;
 
-        println!("steps = {}", steps);
-        println!("round_constants.len() = {}", round_constants.len());
-        println!("skips2 = {}", skips2);
-        println!("g1.mod_pow(skips2) = {}", g1.mod_pow(skips2));
-        println!(
-            "g1.mod_pow(skips2) ^ round_constants.len() = {}",
-            g1.mod_pow(skips2).mod_pow(round_constants.len() as i128)
-        );
-        println!(
-            "g1.mod_pow(skips2) ^ (round_constants.len() / 2) = {}",
-            g1.mod_pow(skips2)
-                .mod_pow(round_constants.len() as i128 / 2)
-        );
-        // Find a polynomial for the round constants in a domain over which they span
-        // TODO: THE ERROR IS HERE SOMEWHERE!!
-        let round_constants_polynomial =
-            fft::fast_polynomial_interpolate_prime_elements(&round_constants, &g1.mod_pow(skips2));
-        println!("round_constants.len() = {}", round_constants.len());
-        println!(
-            "round_constants_polynomial.len() = {}",
-            round_constants_polynomial.len()
-        );
-        // let mut round_constants_polynomial_extended = round_constants_polynomial.clone();
-        // round_constants_polynomial_extended.append(&mut vec![
-        //     PrimeFieldElement::new(0, &field);
-        //     range as usize - round_constants.len()
-        // ]);
-        // println!(
-        //     "round_constants_polynomial_extended.len() = {}",
-        //     round_constants_polynomial_extended.len()
-        // );
-        let mut round_constants_polynomial_extended: Vec<PrimeFieldElement> =
-            Vec::with_capacity(range as usize);
-        for i in 0..range {
-            // if i < skips2 {
-            //     round_constants_polynomial_extended
-            //         .push(round_constants_polynomial[(i / skips2) as usize]);
-            // } else {
-            //     round_constants_polynomial_extended.push(PrimeFieldElement::new(0, &field));
-            // }
-            if i % skips2 == 0 {
-                round_constants_polynomial_extended
-                    .push(round_constants_polynomial[(i / skips2) as usize]);
-            } else {
-                round_constants_polynomial_extended.push(PrimeFieldElement::new(0, &field));
-            }
-        }
-
-        println!(
-            "Calling NTT with ω = {}, length = {}",
-            &g2.mod_pow(skips2).value,
-            round_constants_polynomial_extended.len()
-        );
-        let round_constants_extension =
-            fft::fast_polynomial_evaluate_prime_elements(&round_constants_polynomial_extended, &g2);
-        println!(
-            "g2.mod_pow(skips2) ^ round_constants_extension.len() = {}",
-            g2.mod_pow(skips2)
-                .mod_pow(round_constants_extension.len() as i128)
-        );
-        println!(
-            "g2.mod_pow(skips2) ^ (round_constants_extension.len() / 2) = {}",
-            g2.mod_pow(skips2)
-                .mod_pow(round_constants_extension.len() as i128 / 2)
-        );
-        println!("g2.mod_pow(skips2) = {}", g2.mod_pow(skips2));
-        // for i in 0..10 {
-        //     println!("round_constants[{}] = {}", i, round_constants[i].value);
-        // }
-        // for i in 0..10 {
-        //     println!(
-        //         "round_constants_polynomial[{}] = {}",
-        //         i, round_constants_polynomial[i].value
-        //     );
-        // }
-        println!("Low-degree extended round constants");
-        // for i in 0..10 {
-        //     println!(
-        //         "round_constants_extension[{}] = {}",
-        //         i, round_constants_extension[i].value
-        //     );
-        //     println!(
-        //         "round_constants_extension[{}] = {}",
-        //         i * expansion_factor as usize,
-        //         round_constants_extension[i * expansion_factor as usize].value
-        //     );
-        // }
+        // The round_constants_polynomial is here constructed as a `steps - 1` degree polynomial
+        // but it only depends on `round_constants.len()` values, so it should be representable
+        // in a simpler form.
+        let rc_length = round_constants.len();
+        let round_constants_repeated = (0..steps as usize)
+            .map(|i| round_constants[i % rc_length])
+            .collect::<Vec<PrimeFieldElement>>();
+        let mut round_constants_polynomial =
+            fft::fast_polynomial_interpolate_prime_elements(&round_constants_repeated, &g1);
+        round_constants_polynomial.append(&mut vec![
+            PrimeFieldElement::new(0, &field);
+            ((expansion_factor - 1) * steps) as usize
+        ]);
+        let round_constants_extended =
+            fft::fast_polynomial_evaluate_prime_elements(&round_constants_polynomial, &g2);
 
         // Evaluate the composed polynomial such that
         // C(P(x), P(g1*x), K(x)) = P(g1*x) - P(x)**3 - K(x)
@@ -233,13 +153,10 @@ mod test_modular_arithmetic {
         for i in 0..range {
             let evaluation = p_evaluations[((i + expansion_factor) % range) as usize]
                 - p_evaluations[i as usize].mod_pow(3)
-                - round_constants_extension[i as usize % round_constants_extension.len()];
+                - round_constants_extended[i as usize % round_constants_extended.len()];
             c_of_p_evaluations.push(evaluation);
         }
         println!("Computed C(P(x))");
-        for i in 1000..1200 {
-            println!("C(P(g2^{})) = {}", i, c_of_p_evaluations[i].value);
-        }
 
         // Calculate Z(x) = prod_{i=i}^{N}(x - g1^i) = (x^N - 1) / (x - g2^N)
         // Calculate the inverse of Z(x) so we can divide with it by multiplying with `1/Z(x)`
@@ -300,8 +217,6 @@ mod test_modular_arithmetic {
             pqr: &pqr_mock,
         };
         let z2_x = z2_xfactor0.mul(&z2_xfactor1);
-        // let z_x_2_evaluations: Vec<PrimeFieldElement> =
-        //     vec![PrimeFieldElement::new(0, &field); range as usize];
 
         let mut z2_x_coefficients: Vec<PrimeFieldElement> = z2_x
             .coefficients
@@ -316,25 +231,6 @@ mod test_modular_arithmetic {
             fft::fast_polynomial_evaluate_prime_elements(&z2_x_coefficients, &g2);
         let z2_inv_x_evaluations: Vec<PrimeFieldElement> =
             field.batch_inversion_elements(z2_x_evaluations.clone());
-
-        // for i in 0..10 {
-        //     println!("z2_x_evaluations(g2^{}) = {}", i, z2_x_evaluations[i].value);
-        //     println!(
-        //         "z2_inv_x_evaluations(g2^{}) = {}",
-        //         i, z2_inv_x_evaluations[i].value
-        //     );
-        // }
-        // (steps-1)*extension_factor
-        // println!(
-        //     "z2_x_evaluations(g2^{}) = {}",
-        //     (steps - 1) * expansion_factor,
-        //     z2_x_evaluations[((steps - 1) * expansion_factor) as usize]
-        // );
-        // println!(
-        //     "z2_inv_x_evaluations(g2^{}) = {}",
-        //     (steps - 1) * expansion_factor,
-        //     z2_inv_x_evaluations[((steps - 1) * expansion_factor) as usize]
-        // );
 
         let mut b_evaluations: Vec<PrimeFieldElement> =
             vec![PrimeFieldElement::new(0, &field); range as usize];
@@ -385,7 +281,7 @@ mod test_modular_arithmetic {
         //for i in 0..range as usize {}
         // z_x_2.evaluate(x: &'d PrimeFieldElement)
 
-        for i in 0..8000 as usize {
+        for i in 0..steps as usize - 1 {
             // println!(
             //     "C(P({})) = {}",
             //     g1_domain[i].value,
@@ -400,5 +296,38 @@ mod test_modular_arithmetic {
                 );
             }
         }
+
+        // Find a pseudo-random linear combination of P, P*x^steps, B, B*x^steps, D and prove
+        // low-degreenes of this
+        let mt_root_hash = mt.get_root();
+        let k_seeds = utils::get_n_hash_rounds(&mt_root_hash, 4);
+        let ks = k_seeds
+            .iter()
+            .map(|seed| PrimeFieldElement::from_bytes(&field, seed))
+            .collect::<Vec<PrimeFieldElement>>();
+
+        // Calculate x^steps
+        let g2_pow_steps = g2.mod_pow(steps);
+        let mut powers = vec![PrimeFieldElement::new(0, &field); range as usize];
+        powers[0] = PrimeFieldElement::new(1, &field);
+        for i in 1..range as usize {
+            powers[i] = powers[i - 1] * g2_pow_steps;
+        }
+
+        let mut l_evaluations = vec![PrimeFieldElement::new(0, &field); range as usize];
+        for i in 1..range as usize {
+            l_evaluations[i] = d_evaluations[i]
+                + ks[0] * p_evaluations[i]
+                + ks[1] * p_evaluations[i] * powers[i]
+                + ks[2] * b_evaluations[i]
+                + ks[3] * powers[i] * b_evaluations[i];
+        }
+
+        let l_mtree = MerkleTreeVector::from_vec(&l_evaluations);
+        println!("Computed linear combination of low-degree polynomials");
+
+        // Get pseudo-random indices from `l_mtree.get_root()`.
+        // Use these to index into m and l.
+        // Then generate a proof that l_evaluations is of low degree (steps * 2)
     }
 }
