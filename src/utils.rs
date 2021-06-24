@@ -859,6 +859,7 @@ pub fn get_n_hash_rounds(input: &[u8], n: u32) -> Vec<[u8; 32]> {
     output
 }
 
+// TODO: Not sure I trust the uniformity of this!!
 pub fn get_index_from_bytes(buf: &[u8], length: usize) -> usize {
     let mut result = 0usize;
     for elem in buf.iter() {
@@ -867,10 +868,33 @@ pub fn get_index_from_bytes(buf: &[u8], length: usize) -> usize {
     result
 }
 
+pub fn get_index_from_bytes_exclude_multiples(buf: &[u8], length: usize, multiple: usize) -> usize {
+    let options = length - length / multiple;
+    let x = get_index_from_bytes(buf, options);
+    x + 1 + x / (multiple - 1)
+}
+
 #[cfg(test)]
 mod test_utils {
     use super::*;
     use crate::utils::decode_hex;
+
+    #[test]
+    fn get_index_from_bytes_test() {
+        let mut res = get_index_from_bytes(&[1], 4);
+        assert_eq!(1, res);
+        res = get_index_from_bytes(&[2], 4);
+        assert_eq!(2, res);
+        assert_eq!(3, get_index_from_bytes(&[3], 4));
+        assert_eq!(0, get_index_from_bytes(&[4], 4));
+        assert_eq!(9, get_index_from_bytes(&[9], 100));
+        assert_eq!(10, get_index_from_bytes(&[10], 100));
+        assert_eq!(11, get_index_from_bytes(&[11], 100));
+        assert_eq!(1, get_index_from_bytes_exclude_multiples(&[0], 100, 10));
+        assert_eq!(11, get_index_from_bytes_exclude_multiples(&[9], 100, 10));
+        assert_eq!(12, get_index_from_bytes_exclude_multiples(&[10], 100, 10));
+        assert_eq!(13, get_index_from_bytes_exclude_multiples(&[11], 100, 10));
+    }
 
     #[test]
     fn get_n_hash_rounds_test() {
