@@ -208,6 +208,20 @@ impl fmt::Display for PrimeFieldElement<'_> {
 }
 
 impl<'a> PrimeFieldElement<'a> {
+    pub fn from_bytes(field: &'a PrimeField, buf: &[u8]) -> PrimeFieldElement<'a> {
+        let value = PrimeFieldElement::from_bytes_raw(&field.q, buf);
+        PrimeFieldElement::new(value, &field)
+    }
+
+    // TODO: Is this an OK way to generate a number from a byte array?
+    pub fn from_bytes_raw(modulus: &i128, buf: &[u8]) -> i128 {
+        let mut output_int = 0i128;
+        for elem in buf.iter() {
+            output_int = output_int << 8 ^ *elem as i128;
+        }
+        (output_int % modulus + modulus) % modulus
+    }
+
     // is_prime and primes_lt have been shamelessly stolen from
     // https://gist.github.com/glebm/440bbe2fc95e7abee40eb260ec82f85c
     pub fn is_prime(n: i128, primes: &[i128]) -> bool {
@@ -274,14 +288,6 @@ impl<'a> PrimeFieldElement<'a> {
             }
         }
         ret
-    }
-
-    pub fn from_bytes_raw(modulus: &i128, buf: &[u8]) -> i128 {
-        let mut output_int = 0i128;
-        for elem in buf.iter() {
-            output_int = output_int << 8 ^ *elem as i128;
-        }
-        (output_int % modulus + modulus) % modulus
     }
 
     fn same_field_check(&self, other: &PrimeFieldElement, operation: &str) {
