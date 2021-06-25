@@ -5,15 +5,15 @@ pub fn mimc_forward<'a>(
     steps: usize,
     round_costants: &'a [PrimeFieldElement],
 ) -> Vec<PrimeFieldElement<'a>> {
-    let mut trace: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(steps);
+    let mut computational_trace: Vec<PrimeFieldElement<'a>> = Vec::with_capacity(steps);
     let mut res: PrimeFieldElement<'a> = *input;
-    trace.push(*input);
+    computational_trace.push(*input);
     for i in 0..steps {
         res = res.mod_pow(3) + round_costants[i % round_costants.len()];
-        trace.push(res);
+        computational_trace.push(res);
     }
 
-    trace
+    computational_trace
 }
 
 pub fn mimc_backward<'a>(
@@ -85,9 +85,13 @@ mod test_modular_arithmetic {
         let security_checks = 80usize;
         let steps = 8192usize;
         let expansion_factor = 8usize;
-        let range: usize = steps * expansion_factor;
+        let extended_domain_length: usize = steps * expansion_factor;
         let mut ret: Option<(PrimeField, i128)> = None;
-        PrimeField::get_field_with_primitive_root_of_unity(range as i128, 2i128.pow(16), &mut ret);
+        PrimeField::get_field_with_primitive_root_of_unity(
+            extended_domain_length as i128,
+            2i128.pow(16),
+            &mut ret,
+        );
         let (field, root) = ret.unwrap();
         assert_eq!(65537, field.q);
         assert_eq!(3, root);
@@ -98,7 +102,7 @@ mod test_modular_arithmetic {
         assert_eq!(g2.mod_pow(expansion_factor as i128), g1);
         println!("g1 = {}", g1);
 
-        // Get the computational trace of MIMC for some round_constant values
+        // Get the computational computational_trace of MIMC for some round_constant values
         let input = PrimeFieldElement::new(827, &field);
         // TODO: FIX!! REPLACE modulus
         // let round_constants_raw: Vec<i128> = vec![2i128; 128];
@@ -110,28 +114,34 @@ mod test_modular_arithmetic {
             .map(|x| PrimeFieldElement::new(*x, &field)) // TODO: FIX!! REPLACE value BY x
             //.map(|x| PrimeFieldElement::new(1, &field)) // TODO: FIX!! REPLACE value BY x
             .collect::<Vec<PrimeFieldElement>>();
-        println!("Generating trace");
-        let trace: Vec<PrimeFieldElement> = mimc_forward(&input, steps - 1, &round_constants);
-        let output: &PrimeFieldElement = trace.last().unwrap();
-        println!("Done generating trace with length {}", trace.len());
-        let mut trace_polynomial_coeffs: Vec<PrimeFieldElement> =
-            fft::fast_polynomial_interpolate_prime_elements(&trace, &g1);
+        println!("Generating computational_trace");
+        let computational_trace: Vec<PrimeFieldElement> =
+            mimc_forward(&input, steps - 1, &round_constants);
+        let output: &PrimeFieldElement = computational_trace.last().unwrap();
         println!(
-            "trace_polynomial_coeffs has length {}",
-            trace_polynomial_coeffs.len()
+            "Done generating trace with length {}",
+            computational_trace.len()
         );
-        trace_polynomial_coeffs.append(&mut vec![
+        let mut computational_trace_polynomial_coeffs: Vec<PrimeFieldElement> =
+            fft::fast_polynomial_interpolate_prime_elements(&computational_trace, &g1);
+        println!(
+            "computational_trace_polynomial_coeffs has length {}",
+            computational_trace_polynomial_coeffs.len()
+        );
+        computational_trace_polynomial_coeffs.append(&mut vec![
             PrimeFieldElement::new(0, &field);
             (expansion_factor - 1) * steps
         ]);
         println!(
-            "expanded trace_polynomial_coeffs has length {}",
-            trace_polynomial_coeffs.len()
+            "expanded computational_trace_polynomial_coeffs has length {}",
+            computational_trace_polynomial_coeffs.len()
         );
-        let p_evaluations =
-            fft::fast_polynomial_evaluate_prime_elements(&trace_polynomial_coeffs, &g2);
+        let trace_extension = fft::fast_polynomial_evaluate_prime_elements(
+            &computational_trace_polynomial_coeffs,
+            &g2,
+        );
         println!("Done evaluation over expanded domain!");
-        println!("p_evaluations has length {}", p_evaluations.len());
+        println!("trace_extension has length {}", trace_extension.len());
         let g1_domain = g1.get_generator_domain();
 
         // The round_constants_polynomial is here constructed as a `steps - 1` degree polynomial
@@ -147,58 +157,56 @@ mod test_modular_arithmetic {
             PrimeFieldElement::new(0, &field);
             (expansion_factor - 1) * steps
         ]);
-        let round_constants_extended =
+        let round_constants_extension =
             fft::fast_polynomial_evaluate_prime_elements(&round_constants_polynomial, &g2);
 
-        // Evaluate the composed polynomial such that
-        // C(P(x), P(g1*x), K(x)) = P(g1*x) - P(x)**3 - K(x)
-        let mut c_of_p_evaluations: Vec<PrimeFieldElement> = Vec::with_capacity(range);
-        for i in 0..range {
-            let evaluation = p_evaluations[((i + expansion_factor) % range)]
-                - p_evaluations[i].mod_pow(3)
-                - round_constants_extended[i % round_constants_extended.len()];
-            c_of_p_evaluations.push(evaluation);
+        // Evaluate the Algebraic Intermediate Representation (composed polynomial), such that
+        // AIR(x) = A(te(x), te(g1*x), rc(x)) = te(g1*x) - te(x)**3 - rc(x)
+        let mut air: Vec<PrimeFieldElement> = Vec::with_capacity(extended_domain_length);
+        for i in 0..extended_domain_length {
+            let evaluation = trace_extension[((i + expansion_factor) % extended_domain_length)]
+                - trace_extension[i].mod_pow(3)
+                - round_constants_extension[i % round_constants_extension.len()];
+            air.push(evaluation);
         }
-        println!("Computed C(P(x))");
+        println!("Computed air(x)");
 
-        // Calculate Z(x) = prod_{i=i}^{N}(x - g1^i) = (x^N - 1) / (x - g2^N)
+        // TODO: Alan wants to replace this with a monomial-basis calculation of Q,
+        // and then use that to calculate q_evaluations
+        // Calculate Zerofier(x) = prod_{i=i}^{N}(x - g1^i) = (x^N - 1) / (x - g2^N)
         // Calculate the inverse of Z(x) so we can divide with it by multiplying with `1/Z(x)`
         let g2_domain: Vec<PrimeFieldElement> = g2.get_generator_domain();
         let one = PrimeFieldElement::new(1, &field);
-        let mut z_x_numerator: Vec<PrimeFieldElement> =
-            vec![PrimeFieldElement::new(0, &field); range];
-        for i in 0..range {
-            z_x_numerator[i] = g2_domain[i * steps % range] - one;
+        let mut zerofier_numerator: Vec<PrimeFieldElement> =
+            vec![PrimeFieldElement::new(0, &field); extended_domain_length];
+        for i in 0..extended_domain_length {
+            zerofier_numerator[i] = g2_domain[i * steps % extended_domain_length] - one;
         }
 
-        let z_x_numerator_inv: Vec<PrimeFieldElement> =
-            field.batch_inversion_elements(z_x_numerator);
+        let zerofier_numerator_inv: Vec<PrimeFieldElement> =
+            field.batch_inversion_elements(zerofier_numerator);
         let last_step: &PrimeFieldElement = g1_domain.last().unwrap();
-        let z_x_denominator: Vec<PrimeFieldElement> = g2_domain
+        let zerofier_denominator: Vec<PrimeFieldElement> = g2_domain
             .iter()
             .map(|x| *x - *last_step)
             .collect::<Vec<PrimeFieldElement>>();
-        let z_inv = z_x_numerator_inv
+        let zerofier_inv = zerofier_numerator_inv
             .iter()
-            .zip(z_x_denominator.iter())
+            .zip(zerofier_denominator.iter())
             .map(|(a, b)| *a * *b)
             .collect::<Vec<PrimeFieldElement>>();
 
-        // Calculate D(x) = C(P(x)) / Z(x)
-        let mut d_evaluations: Vec<PrimeFieldElement> =
-            vec![PrimeFieldElement::new(0, &field); range];
-        for i in 0..range {
-            d_evaluations[i] = c_of_p_evaluations[i] * z_inv[i];
+        // Calculate Q(x) = air(x) / Zerofier(x)
+        let mut q_evaluations: Vec<PrimeFieldElement> =
+            vec![PrimeFieldElement::new(0, &field); extended_domain_length];
+        for i in 0..extended_domain_length {
+            q_evaluations[i] = air[i] * zerofier_inv[i];
         }
         println!("Computed D(x)");
 
         // TODO: DEBUG: REMOVE!!!
         for i in 0..2000 {
-            // println!("c(p(g2^{})) = {}", i, c_of_p_evaluations[i].value);
-            // println!("d(g2^{}) = {}", i, d_evaluations[i].value);
-            // println!("1/z(g2^{}) = {}", i, z_inv[i].value);
-            if d_evaluations[i] == c_of_p_evaluations[i] * z_inv[i] {
-                // println!("Values matched for i = {}", i);
+            if q_evaluations[i] == air[i] * zerofier_inv[i] {
             } else {
                 println!("Values did **not** match for i = {}", i);
                 return;
@@ -206,46 +214,54 @@ mod test_modular_arithmetic {
         }
 
         let line = field.lagrange_interpolation_2((one, input), (*last_step, *output));
-        let i_evaluations = field.evaluate_straight_line(line, &g2_domain);
+        let boundary_interpolant_evaluations = field.evaluate_straight_line(line, &g2_domain);
 
         // TODO: Add polynomial support to the PrimeFieldElement struct, so we have
         // support for regular polynomials and not just, as now, extension field polynomials
         let pqr_mock = PolynomialQuotientRing::new(100, field.q);
-        let z2_xfactor0 = PrimeFieldPolynomial {
-            coefficients: vec![-1, 1],
+        let vanishing_polynomial_factor0 = PrimeFieldPolynomial {
+            coefficients: vec![-1, 1], // x - 1
             pqr: &pqr_mock,
         };
-        let z2_xfactor1 = PrimeFieldPolynomial {
-            coefficients: vec![(-*last_step).value, 1],
+        let vanishing_polynomial_factor1 = PrimeFieldPolynomial {
+            coefficients: vec![(-*last_step).value, 1], // x - g^steps
             pqr: &pqr_mock,
         };
-        let z2_x = z2_xfactor0.mul(&z2_xfactor1);
+        // Boundary interpolant, is zero in the boundary-checking x values which are x = 1 and x = g1^steps
+        let vanishing_polynomial = vanishing_polynomial_factor0.mul(&vanishing_polynomial_factor1);
 
-        let mut z2_x_coefficients: Vec<PrimeFieldElement> = z2_x
+        // TODO: Calculate BQ(x) analytically instead of calculating it through other polynomials
+
+        let mut vanishing_polynomial_coefficients: Vec<PrimeFieldElement> = vanishing_polynomial
             .coefficients
             .iter()
             .map(|x| PrimeFieldElement::new(*x, &field))
             .collect::<Vec<PrimeFieldElement>>();
-        z2_x_coefficients.append(&mut vec![PrimeFieldElement::new(0, &field); range - 3]);
-        let z2_x_evaluations: Vec<PrimeFieldElement> =
-            fft::fast_polynomial_evaluate_prime_elements(&z2_x_coefficients, &g2);
-        let z2_inv_x_evaluations: Vec<PrimeFieldElement> =
-            field.batch_inversion_elements(z2_x_evaluations.clone());
+        vanishing_polynomial_coefficients.append(&mut vec![
+            PrimeFieldElement::new(0, &field);
+            extended_domain_length - 3
+        ]);
+        let vanishing_polynomial_evaluations: Vec<PrimeFieldElement> =
+            fft::fast_polynomial_evaluate_prime_elements(&vanishing_polynomial_coefficients, &g2);
+        let vanishing_polynomial_evaluations_inv: Vec<PrimeFieldElement> =
+            field.batch_inversion_elements(vanishing_polynomial_evaluations.clone());
 
-        let mut b_evaluations: Vec<PrimeFieldElement> =
-            vec![PrimeFieldElement::new(0, &field); range];
-        for i in 0..range {
-            b_evaluations[i] = (p_evaluations[i] - i_evaluations[i]) * z2_inv_x_evaluations[i];
+        // Evaluate BQ(x) = (te(x) - I(x)) / Z_boundary(x)
+        let mut bq_evaluations: Vec<PrimeFieldElement> =
+            vec![PrimeFieldElement::new(0, &field); extended_domain_length];
+        for i in 0..extended_domain_length {
+            bq_evaluations[i] = (trace_extension[i] - boundary_interpolant_evaluations[i])
+                * vanishing_polynomial_evaluations_inv[i];
         }
-        println!("Computed B(x)");
+        println!("Computed BQ(x)");
 
         // Wrapping the primefield elements into a triplet will allow us to use our fast Merkle Tree
         // code that requires the number of nodes to be a power of two
         let polynomial_evaluations: Vec<(PrimeFieldElement, PrimeFieldElement, PrimeFieldElement)> =
-            p_evaluations
+            trace_extension
                 .iter()
-                .zip(d_evaluations.iter())
-                .zip(b_evaluations.iter())
+                .zip(q_evaluations.iter())
+                .zip(bq_evaluations.iter())
                 .map(|((p, d), b)| (*p, *d, *b))
                 .collect::<Vec<(PrimeFieldElement, PrimeFieldElement, PrimeFieldElement)>>();
         let polynomials_merkle_tree: MerkleTreeVector<(
@@ -264,17 +280,17 @@ mod test_modular_arithmetic {
             let val: Vec<Node<(PrimeFieldElement, PrimeFieldElement, PrimeFieldElement)>> =
                 polynomials_merkle_tree.get_proof(i);
             let (p, d, b) = val[0].value.unwrap();
-            if p == p_evaluations[i] {
+            if p == trace_extension[i] {
                 // println!("Values matched for i = {}", i);
             } else {
                 panic!("Values did **not** match for p i = {}", i);
             }
-            if d == d_evaluations[i] {
+            if d == q_evaluations[i] {
                 // println!("Values matched for i = {}", i);
             } else {
                 panic!("Values did **not** match for d i = {}", i);
             }
-            if b == b_evaluations[i] {
+            if b == bq_evaluations[i] {
                 // println!("Values matched for i = {}", i);
             } else {
                 panic!("Values did **not** match for b i = {}", i);
@@ -293,12 +309,12 @@ mod test_modular_arithmetic {
             //     g1_domain[i].value,
             //     c_of_p_evaluations[i * expansion_factor ]
             // );
-            if c_of_p_evaluations[i * expansion_factor].value != 0 {
+            if air[i * expansion_factor].value != 0 {
                 panic!(
                     "C(P(x)) != 0 for x = {} => i = {}. Got C(P(x)) = {}",
                     g2_domain[i * expansion_factor],
                     i * expansion_factor,
-                    c_of_p_evaluations[i * expansion_factor].value
+                    air[i * expansion_factor].value
                 );
             }
         }
@@ -314,20 +330,20 @@ mod test_modular_arithmetic {
 
         // Calculate x^steps
         let g2_pow_steps = g2_domain[steps];
-        let mut powers = vec![PrimeFieldElement::new(0, &field); range];
+        let mut powers = vec![PrimeFieldElement::new(0, &field); extended_domain_length];
         powers[0] = PrimeFieldElement::new(1, &field);
-        for i in 1..range {
+        for i in 1..extended_domain_length {
             // g2^i = g2^(i - 1) * g2^steps => x[i] = x[i - 1] * g2^steps
             powers[i] = powers[i - 1] * g2_pow_steps;
         }
 
-        let mut l_evaluations = vec![PrimeFieldElement::new(0, &field); range];
-        for i in 1..range {
-            l_evaluations[i] = d_evaluations[i]
-                + ks[0] * p_evaluations[i]
-                + ks[1] * p_evaluations[i] * powers[i]
-                + ks[2] * b_evaluations[i]
-                + ks[3] * powers[i] * b_evaluations[i];
+        let mut l_evaluations = vec![PrimeFieldElement::new(0, &field); extended_domain_length];
+        for i in 1..extended_domain_length {
+            l_evaluations[i] = q_evaluations[i]
+                + ks[0] * trace_extension[i]
+                + ks[1] * trace_extension[i] * powers[i]
+                + ks[2] * bq_evaluations[i]
+                + ks[3] * powers[i] * bq_evaluations[i];
         }
 
         let l_mtree = MerkleTreeVector::from_vec(&l_evaluations);
@@ -337,15 +353,23 @@ mod test_modular_arithmetic {
         let index_preimages = get_n_hash_rounds(&l_mtree.get_root(), security_checks as u32);
         let indices: Vec<usize> = index_preimages
             .iter()
-            .map(|x| get_index_from_bytes_exclude_multiples(x, range, expansion_factor))
+            .map(|x| {
+                get_index_from_bytes_exclude_multiples(x, extended_domain_length, expansion_factor)
+            })
             .collect::<Vec<usize>>();
         let p_d_b_proofs = polynomials_merkle_tree.get_multi_proof(&indices);
         let l_proofs = l_mtree.get_multi_proof(&indices);
         // TODO: REMOVE this when low_degree_test is changed to use PrimeFieldElements instead
         // of i128
-        let mut p_evaluations_i128 = p_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
-        let mut b_evaluations_i128 = b_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
-        let mut d_evaluations_i128 = d_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
+        let mut trace_extension_i128 = trace_extension
+            .iter()
+            .map(|x| x.value)
+            .collect::<Vec<i128>>();
+        let mut b_evaluations_i128 = bq_evaluations
+            .iter()
+            .map(|x| x.value)
+            .collect::<Vec<i128>>();
+        let mut q_evaluations_i128 = q_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
         let mut l_evaluations_i128 = l_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
         let mut output = vec![];
         println!(
@@ -353,7 +377,7 @@ mod test_modular_arithmetic {
             l_evaluations_i128.len()
         );
         let mut low_degree_proof: low_degree_test::LowDegreeProof<i128> = low_degree_test::prover(
-            &p_evaluations_i128,
+            &trace_extension_i128,
             field.q,
             (steps - 1) as u32,
             security_checks,
@@ -382,7 +406,7 @@ mod test_modular_arithmetic {
         // assert!(verify.is_ok());
         output = vec![];
         low_degree_proof = low_degree_test::prover(
-            &d_evaluations_i128,
+            &q_evaluations_i128,
             field.q,
             (2 * steps - 1) as u32,
             security_checks,
