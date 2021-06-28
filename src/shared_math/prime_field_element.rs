@@ -1,3 +1,4 @@
+use crate::shared_math::traits::IdentityValues;
 use crate::utils::{FIRST_TEN_THOUSAND_PRIMES, FIRST_THOUSAND_PRIMES};
 use serde::Serialize;
 use std::fmt;
@@ -199,6 +200,44 @@ impl PrimeField {
 pub struct PrimeFieldElement<'a> {
     pub value: i128,
     pub field: &'a PrimeField,
+}
+
+impl<'a> IdentityValues for PrimeFieldElement<'_> {
+    fn zero(&self) -> Self {
+        Self {
+            field: self.field,
+            value: 0,
+        }
+    }
+
+    fn one(&self) -> Self {
+        Self {
+            field: self.field,
+            value: 1,
+        }
+    }
+
+    // fn zero_from_field<PrimeField>(field: PrimeField) -> Self {
+    //     Self {
+    //         field: &field,
+    //         value: 0,
+    //     }
+    // }
+
+    // fn one_from_field<PrimeField>(field: PrimeField) -> Self {
+    //     Self {
+    //         field: &field,
+    //         value: 1,
+    //     }
+    // }
+
+    fn is_zero(&self) -> bool {
+        self.value == 0
+    }
+
+    fn is_one(&self) -> bool {
+        self.value == 1
+    }
 }
 
 impl fmt::Display for PrimeFieldElement<'_> {

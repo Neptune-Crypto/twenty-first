@@ -1,6 +1,7 @@
 use super::fraction::Fraction;
 use super::polynomial_quotient_ring::PolynomialQuotientRing;
 use super::prime_field_element::{PrimeField, PrimeFieldElement};
+use crate::shared_math::traits::IdentityValues;
 use crate::utils::{generate_random_numbers, has_unique_elements};
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
@@ -9,6 +10,60 @@ use rand::Rng;
 use rand_distr::Normal;
 use std::convert::From;
 use std::fmt;
+use std::ops::Add;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::Rem;
+use std::ops::Sub;
+
+fn pretty_print_coefficients_generic<
+    T: Add + Div + Mul + Rem + Sub + IdentityValues + std::fmt::Display,
+>(
+    coefficients: &[T],
+) -> String {
+    if coefficients.is_empty() {
+        return String::from("0");
+    }
+
+    let mut outputs: Vec<String> = Vec::new();
+    let mut pol_degree = coefficients.len() - 1;
+    // reduce pol_degree to skip trailing zeros
+    while coefficients[pol_degree].is_zero() {
+        pol_degree -= 1;
+    }
+
+    // for every nonzero term, in descending order
+    for i in 0..=pol_degree {
+        let pow = pol_degree - i;
+        if coefficients[pow].is_zero() {
+            continue;
+        }
+
+        outputs.push(format!(
+            "{}{}{}", // { + } { 7 } { x^3 }
+            if i == 0 { "" } else { " + " },
+            if coefficients[pow].is_one() {
+                String::from("")
+            } else {
+                coefficients[pow].to_string()
+            },
+            if pow == 0 && coefficients[pow].is_one() {
+                let one: T = coefficients[pow].one();
+                one.to_string()
+            } else if pow == 0 {
+                String::from("")
+            } else if pow == 1 {
+                String::from("x")
+            } else {
+                let mut result = "x^".to_owned();
+                let borrowed_string = pow.to_string().to_owned();
+                result.push_str(&borrowed_string);
+                result
+            }
+        ));
+    }
+    outputs.join("")
+}
 
 fn pretty_print_coefficients(coefficients: &[i128]) -> String {
     if coefficients.is_empty() {
@@ -63,6 +118,270 @@ fn pretty_print_coefficients(coefficients: &[i128]) -> String {
     format!("{}{}", trailing_zeros_warning, outputs.join(""))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Polynomial<T: Add + Div + Mul + Rem + Sub + IdentityValues + Clone> {
+    pub coefficients: Vec<T>,
+}
+
+impl<T: Add + Div + Mul + Rem + Sub + IdentityValues + Clone + Copy + std::fmt::Display>
+    std::fmt::Display for Polynomial<T>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            pretty_print_coefficients_generic(&self.coefficients)
+        )
+    }
+}
+
+impl<U: Add + Div + Mul + Rem + Sub + IdentityValues + Clone + Copy> Polynomial<U> {
+    fn leading_coefficient(&self) -> Option<U> {
+        let mut top_index = self.coefficients.len() as isize - 1;
+        while self.coefficients[top_index as usize].is_zero() && top_index > 0 {
+            top_index -= 1;
+        }
+        if top_index < 0 {
+            None
+        } else {
+            Some(self.coefficients[top_index as usize])
+        }
+    }
+
+    fn zero() -> Self {
+        Self {
+            coefficients: vec![],
+        }
+    }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Rem
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + Copy
+            + std::fmt::Debug,
+    > Polynomial<U>
+{
+    fn multiply(self, other: Self) -> Self {
+        let degree_lhs = self.degree();
+        let degree_rhs = other.degree();
+
+        if degree_lhs < 0 || degree_rhs < 0 {
+            return Self::zero();
+            // return self.zero();
+        }
+
+        // allocate right number of coefficients, initialized to zero
+        let elem = self.coefficients[0];
+        let mut result_coeff: Vec<U> =
+            //vec![U::zero_from_field(field: U); degree_lhs as usize + degree_rhs as usize + 1];
+            vec![elem.zero(); degree_lhs as usize + degree_rhs as usize + 1];
+
+        // for all pairs of coefficients, add product to result vector in appropriate coordinate
+        for i in 0..=degree_lhs as usize {
+            for j in 0..=degree_rhs as usize {
+                let mul: U = self.coefficients[i] * other.coefficients[j];
+                result_coeff[i + j] = result_coeff[i + j] + mul;
+            }
+        }
+
+        // build and return Polynomial object
+        Self {
+            coefficients: result_coeff,
+        }
+    }
+
+    fn divide(&self, divisor: Self) -> (Self, Self) {
+        let degree_lhs = self.degree();
+        let degree_rhs = divisor.degree();
+        // cannot divide by zero
+        if degree_rhs < 0 {
+            panic!(
+                "Cannot divide polynomial by zero. Got: ({:?})/({:?})",
+                self, divisor
+            );
+        }
+
+        // zero divided by anything guves zero
+        if degree_lhs < 0 {
+            return (Self::zero(), Self::zero());
+        }
+
+        let mut remainder = self.clone();
+        let mut quotient = Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize); // built from back to front so must be reversed
+
+        let dlc: U = divisor.coefficients[degree_rhs as usize];
+        let mut inv = dlc.one() / dlc;
+        //let mut inv: U = U::one_from_field(dlc.get_field()) / dlc; // Will not work as the field is not set
+        let mut i = 0;
+        while i + degree_rhs <= degree_lhs {
+            // calculate next quotient coefficient
+            let rlc: U = match remainder.leading_coefficient() {
+                Some(i) => i,
+                None => dlc.zero(),
+            };
+            let q = rlc / dlc;
+            quotient.push(q);
+
+            // TODO: This clone can be made redundant with a smarter subtraction implementation
+            // remainder = remainder.sub(divisor.clone().mul())
+            let factor = Polynomial {
+                coefficients: vec![q],
+            };
+            let factor2: Polynomial<U> = divisor.clone() * factor;
+            remainder = remainder - factor2;
+
+            // remainder.pop(); // remove highest order coefficient
+
+            // // Calculate rem = rem - res * divisor
+            // // We need to manipulate divisor_degree + 1 values in remainder, but we get one for free through
+            // // the pop() above, so we only need to manipulate divisor_degree values. For a divisor of degree
+            // // 1, we need to manipulate 1 element.
+            // for j in 0..divisor_degree {
+            //     // TODO: Rewrite this in terms of i, j, and poly degrees
+            //     let rem_length = remainder.len();
+            //     let divisor_length = divisor_coeffs.len();
+            //     remainder[rem_length - j - 1] -= res * divisor_coeffs[divisor_length - j - 2];
+            //     remainder[rem_length - j - 1] =
+            //         (remainder[rem_length - j - 1] % self.pqr.q + self.pqr.q) % self.pqr.q;
+            // }
+            i += 1;
+        }
+
+        quotient.reverse();
+        let mut quotient_pol = Self {
+            coefficients: quotient,
+        };
+
+        (quotient_pol, remainder)
+    }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Rem
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + Copy
+            + std::fmt::Display
+            + std::fmt::Debug,
+    > Div for Polynomial<U>
+{
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self {
+        let (quotient, _): (Self, Self) = self.divide(other);
+        return quotient;
+    }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Rem
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + Copy
+            + std::fmt::Display
+            + std::fmt::Debug,
+    > Rem for Polynomial<U>
+{
+    type Output = Self;
+
+    fn rem(self, other: Self) -> Self {
+        let (_, remainder): (Self, Self) = self.divide(other);
+        return remainder;
+    }
+}
+
+impl<U: Add<Output = U> + Div + Mul + Rem + Sub + IdentityValues + Clone + Copy> Add
+    for Polynomial<U>
+{
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        let summed: Vec<U> = self
+            .coefficients
+            .iter()
+            .zip_longest(other.coefficients.iter())
+            .map(|a: itertools::EitherOrBoth<&U, &U>| match a {
+                Both(l, r) => *l + *r,
+                Left(l) => *l,
+                Right(r) => *r,
+            })
+            .collect();
+
+        Self {
+            coefficients: summed,
+        }
+    }
+}
+
+impl<U: Add + Div + Mul + Rem + Sub<Output = U> + IdentityValues + Clone + Copy> Sub
+    for Polynomial<U>
+{
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        let summed: Vec<U> = self
+            .coefficients
+            .iter()
+            .zip_longest(other.coefficients.iter())
+            .map(|a: itertools::EitherOrBoth<&U, &U>| match a {
+                Both(l, r) => *l - *r,
+                Left(l) => *l,
+                Right(r) => {
+                    let zero: U = r.zero();
+                    return zero - *r;
+                }
+            })
+            .collect();
+
+        Self {
+            coefficients: summed,
+        }
+    }
+}
+
+impl<U: Add + Div + Mul + Rem + Sub + IdentityValues + Clone> Polynomial<U> {
+    pub fn degree(&self) -> isize {
+        let mut deg = self.coefficients.len() as isize - 1;
+        while self.coefficients[deg as usize].is_zero() {
+            deg -= 1;
+        }
+        return deg; // -1 for the zero polynomial
+    }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Rem
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + Copy
+            + std::fmt::Debug,
+    > Mul for Polynomial<U>
+{
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        Self::multiply(self, other)
+    }
+}
+
 // All structs holding references must have lifetime annotations in their definition.
 // This <'a> annotation means that an instance of Polynomial cannot outlive the reference it holds
 // in its `pqr` field.
@@ -72,7 +391,7 @@ pub struct PrimeFieldPolynomial<'a> {
     pub pqr: &'a PolynomialQuotientRing,
 }
 
-impl fmt::Display for PrimeFieldPolynomial<'_> {
+impl std::fmt::Display for PrimeFieldPolynomial<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let res: String = pretty_print_coefficients(&self.coefficients);
         return write!(f, "{}", res);
@@ -751,8 +1070,76 @@ impl IntegerRingPolynomial {
 
 #[cfg(test)]
 mod test_polynomials {
-    use super::super::prime_field_element::PrimeField;
+    #![allow(clippy::just_underscores_and_digits)]
+    use super::super::prime_field_element::{PrimeField, PrimeFieldElement};
     use super::*;
+
+    #[test]
+    fn polynomial_arithmetic_test() {
+        let _71 = PrimeField::new(71);
+        let _6_71 = PrimeFieldElement::new(6, &_71);
+        let _12_71 = PrimeFieldElement::new(12, &_71);
+        let _16_71 = PrimeFieldElement::new(16, &_71);
+        let _17_71 = PrimeFieldElement::new(17, &_71);
+        let _22_71 = PrimeFieldElement::new(22, &_71);
+        let _28_71 = PrimeFieldElement::new(28, &_71);
+        let _33_71 = PrimeFieldElement::new(33, &_71);
+        let _38_71 = PrimeFieldElement::new(38, &_71);
+        let _49_71 = PrimeFieldElement::new(49, &_71);
+        let _60_71 = PrimeFieldElement::new(60, &_71);
+        let _64_71 = PrimeFieldElement::new(64, &_71);
+        let _65_71 = PrimeFieldElement::new(65, &_71);
+        let _66_71 = PrimeFieldElement::new(66, &_71);
+        let mut a = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![_17_71],
+        };
+        let mut b = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![_16_71],
+        };
+        let mut sum = a + b;
+        let mut expected_sum = Polynomial {
+            coefficients: vec![_33_71],
+        };
+        assert_eq!(expected_sum, sum);
+
+        // Verify overflow handling
+        a = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![_66_71],
+        };
+        b = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![_65_71],
+        };
+        sum = a + b;
+        expected_sum = Polynomial {
+            coefficients: vec![_60_71],
+        };
+        assert_eq!(expected_sum, sum);
+
+        // Verify handling of multiple indices
+        a = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![_66_71, _66_71, _66_71],
+        };
+        b = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![_33_71, _33_71, _17_71, _65_71],
+        };
+        sum = a.clone() + b.clone();
+        expected_sum = Polynomial {
+            coefficients: vec![_28_71, _28_71, _12_71, _65_71],
+        };
+        assert_eq!(expected_sum, sum);
+
+        let mut diff = a.clone() - b.clone();
+        let mut expected_diff = Polynomial {
+            coefficients: vec![_33_71, _33_71, _49_71, _6_71],
+        };
+        assert_eq!(expected_diff, diff);
+
+        diff = b - a;
+        expected_diff = Polynomial {
+            coefficients: vec![_38_71, _38_71, _22_71, _65_71],
+        };
+        assert_eq!(expected_diff, diff);
+    }
 
     #[test]
     fn are_colinear_raw_test() {
