@@ -203,33 +203,19 @@ pub struct PrimeFieldElement<'a> {
 }
 
 impl<'a> IdentityValues for PrimeFieldElement<'_> {
-    fn zero(&self) -> Self {
+    fn ring_zero(&self) -> Self {
         Self {
             field: self.field,
             value: 0,
         }
     }
 
-    fn one(&self) -> Self {
+    fn ring_one(&self) -> Self {
         Self {
             field: self.field,
             value: 1,
         }
     }
-
-    // fn zero_from_field<PrimeField>(field: PrimeField) -> Self {
-    //     Self {
-    //         field: &field,
-    //         value: 0,
-    //     }
-    // }
-
-    // fn one_from_field<PrimeField>(field: PrimeField) -> Self {
-    //     Self {
-    //         field: &field,
-    //         value: 1,
-    //     }
-    // }
 
     fn is_zero(&self) -> bool {
         self.value == 0
@@ -242,7 +228,8 @@ impl<'a> IdentityValues for PrimeFieldElement<'_> {
 
 impl fmt::Display for PrimeFieldElement<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} mod {}", self.value, self.field.q)
+        // Pretty printing does not print the modulus value, although I guess it could...
+        write!(f, "{}", self.value)
     }
 }
 
