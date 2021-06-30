@@ -492,7 +492,7 @@ mod test_low_degree_proof {
             .map(|&x| ((6 + x * (2 + 5 * x)) % field.q + field.q) % field.q)
             .collect::<Vec<i128>>();
 
-        let max_degree = 2;
+        let max_degree = 3;
         let s = 6;
         let mut output = vec![124, 62, 98, 10, 207];
         let mut proof: LowDegreeProof<i128> = prover(

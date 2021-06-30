@@ -1,24 +1,17 @@
-use super::fraction::Fraction;
-use super::polynomial_quotient_ring::PolynomialQuotientRing;
-use super::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::traits::IdentityValues;
-use crate::utils::{generate_random_numbers, has_unique_elements};
+use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
-use num_traits::Zero;
-use rand::Rng;
-use rand_distr::Normal;
 use std::convert::From;
-use std::fmt;
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::ops::Add;
 use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::Sub;
 
-fn pretty_print_coefficients_generic<
-    T: Add + Div + Mul + Rem + Sub + IdentityValues + std::fmt::Display,
->(
+fn pretty_print_coefficients_generic<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
     coefficients: &[T],
 ) -> String {
     if coefficients.is_empty() {
@@ -66,12 +59,27 @@ fn pretty_print_coefficients_generic<
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Polynomial<T: Add + Div + Mul + Rem + Sub + IdentityValues + Clone> {
+pub struct Polynomial<
+    T: Add + Div + Mul + Rem + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
+> {
     pub coefficients: Vec<T>,
 }
 
-impl<T: Add + Div + Mul + Rem + Sub + IdentityValues + Clone + Copy + std::fmt::Display>
-    std::fmt::Display for Polynomial<T>
+impl<
+        T: Add
+            + Div
+            + Mul
+            + Rem
+            + Sub
+            + IdentityValues
+            + Clone
+            + Copy
+            + PartialEq
+            + Eq
+            + Hash
+            + Display
+            + Debug,
+    > std::fmt::Display for Polynomial<T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
@@ -91,9 +99,11 @@ impl<
             + IdentityValues
             + Clone
             + Copy
-            + std::fmt::Display
+            + Display
+            + Debug
             + PartialEq
-            + Eq,
+            + Eq
+            + Hash,
     > Polynomial<U>
 {
     pub fn normalize(&mut self) {
@@ -102,25 +112,13 @@ impl<
         }
     }
 
-    pub fn evaluate(&self, x: U) -> U {
+    pub fn le(&self, x: U) -> U {
         let mut acc = x.ring_zero();
         for i in (0..self.coefficients.len()).rev() {
             acc = acc * x + self.coefficients[i];
         }
 
         acc
-    }
-
-    fn leading_coefficient(&self) -> Option<U> {
-        let mut top_index = self.coefficients.len() as isize - 1;
-        while top_index > 0 && self.coefficients[top_index as usize].is_zero() {
-            top_index -= 1;
-        }
-        if top_index < 0 {
-            None
-        } else {
-            Some(self.coefficients[top_index as usize])
-        }
     }
 
     fn ring_zero() -> Self {
@@ -131,7 +129,7 @@ impl<
 
     pub fn are_colinear(points: &[(U, U)]) -> bool {
         if points.len() < 3 {
-            println!("Too few points received. Got: {}", points.len());
+            println!("Too few points received. Got: {} points", points.len());
             return false;
         }
 
@@ -147,9 +145,6 @@ impl<
         let a = (points[0].1 - points[1].1) * x_diff_inv;
         let b = points[0].1 - a * points[0].0;
         for point in points.iter().skip(2) {
-            // A decent speedup could be achieved by removing the two last modulus
-            // expressions here and demand that the input x-values are all elements
-            // in the finite field
             let expected = a * point.0 + b;
             if point.1 != expected {
                 println!(
@@ -184,7 +179,9 @@ impl<
             + Copy
             + std::fmt::Debug
             + std::fmt::Display
-            + PartialEq,
+            + PartialEq
+            + Eq
+            + Hash,
     > Polynomial<U>
 {
     fn multiply(self, other: Self) -> Self {
@@ -281,9 +278,11 @@ impl<
             + IdentityValues
             + Clone
             + Copy
-            + std::fmt::Display
-            + std::fmt::Debug
-            + PartialEq,
+            + PartialEq
+            + Eq
+            + Display
+            + Debug
+            + Hash,
     > Div for Polynomial<U>
 {
     type Output = Self;
@@ -303,9 +302,11 @@ impl<
             + IdentityValues
             + Clone
             + Copy
-            + std::fmt::Display
-            + std::fmt::Debug
-            + PartialEq,
+            + PartialEq
+            + Eq
+            + Hash
+            + Display
+            + Debug,
     > Rem for Polynomial<U>
 {
     type Output = Self;
@@ -316,8 +317,21 @@ impl<
     }
 }
 
-impl<U: Add<Output = U> + Div + Mul + Rem + Sub + IdentityValues + Clone + Copy> Add
-    for Polynomial<U>
+impl<
+        U: Add<Output = U>
+            + Div
+            + Mul
+            + Rem
+            + Sub
+            + IdentityValues
+            + Clone
+            + Copy
+            + PartialEq
+            + Eq
+            + Hash
+            + Display
+            + Debug,
+    > Add for Polynomial<U>
 {
     type Output = Self;
 
@@ -339,8 +353,21 @@ impl<U: Add<Output = U> + Div + Mul + Rem + Sub + IdentityValues + Clone + Copy>
     }
 }
 
-impl<U: Add + Div + Mul + Rem + Sub<Output = U> + IdentityValues + Clone + Copy> Sub
-    for Polynomial<U>
+impl<
+        U: Add
+            + Div
+            + Mul
+            + Rem
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + Copy
+            + PartialEq
+            + Eq
+            + Hash
+            + Display
+            + Debug,
+    > Sub for Polynomial<U>
 {
     type Output = Self;
 
@@ -362,7 +389,21 @@ impl<U: Add + Div + Mul + Rem + Sub<Output = U> + IdentityValues + Clone + Copy>
     }
 }
 
-impl<U: Add + Div + Mul + Rem + Sub + IdentityValues + Clone> Polynomial<U> {
+impl<
+        U: Add
+            + Div
+            + Mul
+            + Rem
+            + Sub
+            + IdentityValues
+            + Clone
+            + PartialEq
+            + Eq
+            + Hash
+            + Debug
+            + Display,
+    > Polynomial<U>
+{
     pub fn degree(&self) -> isize {
         let mut deg = self.coefficients.len() as isize - 1;
         while deg > 0 && self.coefficients[deg as usize].is_zero() {
@@ -384,7 +425,9 @@ impl<
             + Copy
             + std::fmt::Debug
             + std::fmt::Display
-            + PartialEq,
+            + PartialEq
+            + Eq
+            + Hash,
     > Mul for Polynomial<U>
 {
     type Output = Self;
@@ -399,6 +442,7 @@ mod test_polynomials {
     #![allow(clippy::just_underscores_and_digits)]
     use super::super::prime_field_element::{PrimeField, PrimeFieldElement};
     use super::*;
+    use crate::utils::generate_random_numbers;
 
     fn pf<'a>(value: i128, field: &'a PrimeField) -> PrimeFieldElement<'a> {
         PrimeFieldElement::new(value, field)
@@ -417,7 +461,7 @@ mod test_polynomials {
     }
 
     #[test]
-    fn polynomial_evaluate_test() {
+    fn polynomial_le_test() {
         let prime_modulus = 71;
         let _71 = PrimeField::new(prime_modulus);
         let parabola = Polynomial::<PrimeFieldElement> {
@@ -429,31 +473,31 @@ mod test_polynomials {
         };
         assert_eq!(
             PrimeFieldElement::new(7, &_71),
-            parabola.evaluate(PrimeFieldElement::new(0, &_71))
+            parabola.le(PrimeFieldElement::new(0, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(12, &_71),
-            parabola.evaluate(PrimeFieldElement::new(1, &_71))
+            parabola.le(PrimeFieldElement::new(1, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(21, &_71),
-            parabola.evaluate(PrimeFieldElement::new(2, &_71))
+            parabola.le(PrimeFieldElement::new(2, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(34, &_71),
-            parabola.evaluate(PrimeFieldElement::new(3, &_71))
+            parabola.le(PrimeFieldElement::new(3, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(51, &_71),
-            parabola.evaluate(PrimeFieldElement::new(4, &_71))
+            parabola.le(PrimeFieldElement::new(4, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(1, &_71),
-            parabola.evaluate(PrimeFieldElement::new(5, &_71))
+            parabola.le(PrimeFieldElement::new(5, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(26, &_71),
-            parabola.evaluate(PrimeFieldElement::new(6, &_71))
+            parabola.le(PrimeFieldElement::new(6, &_71))
         );
     }
 
@@ -910,32 +954,5 @@ mod test_polynomials {
             "30x^6 + 16x^5 + 64x^4 + 11x^3 + 25x^2 + 48x",
             prod.to_string()
         );
-
-        // Test leading_coefficient function
-        assert_eq!(
-            Some(PrimeFieldElement::new(30, &_71)),
-            prod.leading_coefficient()
-        );
-        assert_eq!(
-            Some(PrimeFieldElement::new(66, &_71)),
-            a.leading_coefficient()
-        );
-        assert_eq!(
-            Some(PrimeFieldElement::new(65, &_71)),
-            b.leading_coefficient()
-        );
-        assert_eq!(
-            Some(PrimeFieldElement::new(1, &_71)),
-            x.leading_coefficient()
-        );
-        assert_eq!(
-            Some(PrimeFieldElement::new(1, &_71)),
-            one.leading_coefficient()
-        );
-        assert_eq!(
-            Some(PrimeFieldElement::new(5, &_71)),
-            five.leading_coefficient()
-        );
-        assert_eq!(None, zero.leading_coefficient());
     }
 }

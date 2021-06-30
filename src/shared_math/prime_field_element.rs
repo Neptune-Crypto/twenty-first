@@ -9,7 +9,7 @@ use std::ops::Neg;
 use std::ops::Rem;
 use std::ops::Sub;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
 pub struct PrimeField {
     pub q: i128,
 }
@@ -196,7 +196,7 @@ impl PrimeField {
     feature = "serialization-serde",
     derive(Serialize, Deserialize, Serializer)
 )]
-#[derive(Debug, Clone, PartialEq, Copy, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, Serialize)]
 pub struct PrimeFieldElement<'a> {
     pub value: i128,
     pub field: &'a PrimeField,

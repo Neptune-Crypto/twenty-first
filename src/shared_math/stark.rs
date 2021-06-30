@@ -48,7 +48,6 @@ mod test_modular_arithmetic {
     use crate::util_types::merkle_tree_vector::{MerkleTreeVector, Node};
     use crate::utils;
     use crate::utils::{get_index_from_bytes_exclude_multiples, get_n_hash_rounds};
-    use std::result;
 
     #[test]
     fn mimc_forward_small() {
