@@ -1,7 +1,6 @@
 use super::fraction::Fraction;
 use super::polynomial_quotient_ring::PolynomialQuotientRing;
 use super::prime_field_element::{PrimeField, PrimeFieldElement};
-use crate::shared_math::traits::IdentityValues;
 use crate::utils::{generate_random_numbers, has_unique_elements};
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
@@ -10,11 +9,6 @@ use rand::Rng;
 use rand_distr::Normal;
 use std::convert::From;
 use std::fmt;
-use std::ops::Add;
-use std::ops::Div;
-use std::ops::Mul;
-use std::ops::Rem;
-use std::ops::Sub;
 
 fn pretty_print_coefficients(coefficients: &[i128]) -> String {
     if coefficients.is_empty() {
