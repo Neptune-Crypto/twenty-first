@@ -526,17 +526,17 @@ mod test_polynomials {
         PrimeFieldElement::new(value, field)
     }
 
-    fn po<'a>(
-        coefficients: &'a [i128],
-        field: &'a PrimeField,
-    ) -> Polynomial<PrimeFieldElement<'a>> {
-        Polynomial {
-            coefficients: coefficients
-                .iter()
-                .map(|x| PrimeFieldElement::new(*x, field))
-                .collect(),
-        }
-    }
+    // fn po<'a>(
+    //     coefficients: &'a [i128],
+    //     field: &'a PrimeField,
+    // ) -> Polynomial<PrimeFieldElement<'a>> {
+    //     Polynomial {
+    //         coefficients: coefficients
+    //             .iter()
+    //             .map(|x| PrimeFieldElement::new(*x, field))
+    //             .collect(),
+    //     }
+    // }
 
     #[test]
     fn polynomial_evaluate_test() {
@@ -1062,9 +1062,9 @@ mod test_polynomials {
         let one: Polynomial<PrimeFieldElement> = Polynomial {
             coefficients: vec![PrimeFieldElement::new(1, &_71)],
         };
-        let five: Polynomial<PrimeFieldElement> = Polynomial {
-            coefficients: vec![PrimeFieldElement::new(5, &_71)],
-        };
+        // let five: Polynomial<PrimeFieldElement> = Polynomial {
+        //     coefficients: vec![PrimeFieldElement::new(5, &_71)],
+        // };
         let x: Polynomial<PrimeFieldElement> = Polynomial {
             coefficients: vec![
                 PrimeFieldElement::new(0, &_71),
