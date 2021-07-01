@@ -111,8 +111,8 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
         for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
             let mut index = half_tree_size + *i as u64;
             partial_tree.insert(index, b[0].clone().unwrap());
-            for j in 1..b.len() {
-                if let Some(i) = b[j].clone() {
+            for elem in b.iter_mut().skip(1) {
+                if let Some(i) = elem.clone() {
                     partial_tree.insert(index ^ 1, i);
                 }
                 index /= 2;
@@ -148,22 +148,22 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
 
         for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
             let mut index = half_tree_size + *i as u64;
-            for j in 1..b.len() {
-                if b[j] == None {
-                    b[j] = Some(partial_tree[&(index ^ 1)].clone());
+            for elem in b.iter_mut().skip(1) {
+                if *elem == None {
+                    // If the Merkle tree/proof in manipulated, the value partial_tree[&(index ^ 1)]
+                    // is not guaranteed to exist. So have to  check
+                    // whether it exists and return false if it does not
+                    if !partial_tree.contains_key(&(index ^ 1)) {
+                        return false;
+                    }
+
+                    *elem = Some(partial_tree[&(index ^ 1)].clone());
                 }
-                partial_tree.insert(index ^ 1, b[j].clone().unwrap());
+                partial_tree.insert(index ^ 1, elem.clone().unwrap());
                 index /= 2;
             }
         }
 
-        // let proof_clone_unwrapped: Vec<Vec<Node<T>>> = proof_clone
-        //     .clone()
-        //     .into_iter()
-        //     .map(|x| x.into_iter().map(|y| y.unwrap()))
-        //     .into_iter()
-        //     //.map(|x| x.unwrap())
-        //     .collect();
         for i in 0..indices.len() {
             let proof_clone_unwrapped: Vec<Node<T>> = proof_clone[i]
                 .clone()
@@ -216,16 +216,14 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
         for (i, b) in indices.iter().zip(output.iter_mut()) {
             let mut index: usize = self.nodes.len() / 2 + i;
             scanned.insert(index);
-            // let mut remove: HashSet<usize> = HashSet::new();
-            for j in 1..b.len() {
+            for elem in b.iter_mut().skip(1) {
                 if calculable_indices.contains(&((index ^ 1) * 2))
                     && calculable_indices.contains(&((index ^ 1) * 2 + 1))
                     || (index ^ 1) as i64 - self.nodes.len() as i64 / 2 > 0 // TODO: Maybe > 1 here?
                         && indices.contains(&((index ^ 1) - self.nodes.len() / 2))
                     || scanned.contains(&(index ^ 1))
                 {
-                    b[j] = None;
-                    // b[j].hash = [0u8; 32]; // TODO: Remove value instead
+                    *elem = None;
                 }
                 scanned.insert(index ^ 1);
                 index /= 2;
@@ -239,7 +237,76 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
 #[cfg(test)]
 mod merkle_tree_vector_test {
     use super::*;
-    use crate::utils::decode_hex;
+    use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
+    use crate::utils::{decode_hex, generate_random_numbers};
+    use itertools::Itertools;
+
+    #[test]
+    fn merkle_tree_vector_test_32() {
+        let field = PrimeField::new(1009);
+        let elements: Vec<PrimeFieldElement> = generate_random_numbers(32, 1000)
+            .iter()
+            .map(|x| PrimeFieldElement::new(*x, &field))
+            .collect();
+        let mut mt_32 = MerkleTreeVector::from_vec(&elements);
+
+        for _ in 0..2 {
+            for i in 0..20 {
+                // Create a vector `indices_usize` of unique (i.e. non-repeated) indices
+                // The first element is discarded to check that verify_multi_proof returns
+                // false if this element is requested in the verification without being
+                // included in the proof
+                let indices_i128: Vec<i128> = generate_random_numbers(10 + i, 32);
+                let mut indices_usize: Vec<usize> = vec![];
+                for elem in indices_i128.iter().unique().skip(1) {
+                    indices_usize.push(*elem as usize);
+                }
+
+                let proof: Vec<Vec<Option<Node<PrimeFieldElement>>>> =
+                    mt_32.get_multi_proof(&indices_usize);
+                assert!(MerkleTreeVector::verify_multi_proof(
+                    mt_32.get_root(),
+                    &indices_usize,
+                    &proof
+                ));
+
+                // manipulate Merkle root and verify failure
+                mt_32.root_hash[i] ^= 1;
+                assert!(!MerkleTreeVector::verify_multi_proof(
+                    mt_32.get_root(),
+                    &indices_usize,
+                    &proof
+                ));
+
+                // Restore root and verify success
+                mt_32.root_hash[i] ^= 1;
+                assert!(MerkleTreeVector::verify_multi_proof(
+                    mt_32.get_root(),
+                    &indices_usize,
+                    &proof
+                ));
+
+                // Request an additional index and verify failure
+                // (indices length does not match proof length)
+                indices_usize.insert(0, indices_i128[0] as usize);
+                assert!(!MerkleTreeVector::verify_multi_proof(
+                    mt_32.get_root(),
+                    &indices_usize,
+                    &proof
+                ));
+
+                // Request a non-existant index and verify failure
+                // (indices length does match proof length)
+                indices_usize.remove(0);
+                indices_usize[0] = indices_i128[0] as usize;
+                assert!(!MerkleTreeVector::verify_multi_proof(
+                    mt_32.get_root(),
+                    &indices_usize,
+                    &proof
+                ));
+            }
+        }
+    }
 
     #[test]
     fn merkle_tree_vector_test_simple() {
@@ -324,7 +391,7 @@ mod merkle_tree_vector_test {
             1,
             proof.clone()
         ));
-        let original_root = mt_four.root_hash.clone();
+        let original_root = mt_four.get_root();
         mt_four.root_hash = [0u8; 32];
         assert!(!MerkleTreeVector::verify_proof(
             mt_four.root_hash,
@@ -367,6 +434,15 @@ mod merkle_tree_vector_test {
         assert!(MerkleTreeVector::verify_multi_proof(
             mt_four.root_hash,
             &[0, 1, 2],
+            &compressed_proof
+        ));
+
+        // Verify that verification of multi-proof where the tree or the proof
+        // does not have the indices requested leads to a false return value,
+        // and not to a run-time panic.
+        assert!(!MerkleTreeVector::verify_multi_proof(
+            mt_four.root_hash,
+            &[2, 3],
             &compressed_proof
         ));
     }
