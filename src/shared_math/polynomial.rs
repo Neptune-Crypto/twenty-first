@@ -170,7 +170,7 @@ impl<
     // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
     // purposes. This also means that it is not pivotal that this function has an optimal
     // runtime.
-    pub fn slow_lagrange_interpolation<'b>(points: &[(U, U)]) -> Self {
+    pub fn slow_lagrange_interpolation(points: &[(U, U)]) -> Self {
         // calculate a reversed representation of the coefficients of
         // prod_{i=0}^{N}((x- q_i))
         fn prod_helper<T: IdentityValues + Sub<Output = T> + Mul<Output = T> + Copy>(
@@ -209,7 +209,7 @@ impl<
 
         big_pol_coeffs.reverse();
         let big_pol = Self {
-            coefficients: big_pol_coeffs.iter().map(|x| *x).collect(),
+            coefficients: big_pol_coeffs.iter().copied().collect(),
         };
         let zero: U = points[0].0.ring_zero();
         let one: U = points[0].0.ring_one();
@@ -219,7 +219,7 @@ impl<
             // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
             let my_div_coefficients = vec![zero - point.0, one];
             let mut my_pol = Self {
-                coefficients: my_div_coefficients.iter().map(|x| *x).collect(),
+                coefficients: my_div_coefficients.iter().copied().collect(),
             };
             my_pol = big_pol.clone() / my_pol.clone();
 
@@ -231,7 +231,7 @@ impl<
                 divisor = divisor * (point.0 - *root);
             }
 
-            let mut my_coeffs: Vec<U> = my_pol.coefficients.iter().map(|x| *x).collect();
+            let mut my_coeffs: Vec<U> = my_pol.coefficients.iter().copied().collect();
             for coeff in my_coeffs.iter_mut() {
                 *coeff = *coeff * point.1;
                 *coeff = *coeff / divisor;

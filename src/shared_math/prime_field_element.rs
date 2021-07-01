@@ -107,7 +107,7 @@ impl PrimeField {
         // Invert the last element of the `partials` vector
         let (_, inv, _) = PrimeFieldElement::eea(acc, self.q);
         acc = inv;
-        let mut res = nums.clone();
+        let mut res = nums;
         for i in (0..size).rev() {
             if res[i] == 0i128 {
                 continue;
