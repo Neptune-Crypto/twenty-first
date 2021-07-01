@@ -112,15 +112,6 @@ impl<
         }
     }
 
-    pub fn le(&self, x: U) -> U {
-        let mut acc = x.ring_zero();
-        for i in (0..self.coefficients.len()).rev() {
-            acc = acc * x + self.coefficients[i];
-        }
-
-        acc
-    }
-
     fn ring_zero() -> Self {
         Self {
             coefficients: vec![],
@@ -548,7 +539,7 @@ mod test_polynomials {
     }
 
     #[test]
-    fn polynomial_le_test() {
+    fn polynomial_evaluate_test() {
         let prime_modulus = 71;
         let _71 = PrimeField::new(prime_modulus);
         let parabola = Polynomial::<PrimeFieldElement> {
@@ -560,31 +551,31 @@ mod test_polynomials {
         };
         assert_eq!(
             PrimeFieldElement::new(7, &_71),
-            parabola.le(PrimeFieldElement::new(0, &_71))
+            parabola.evaluate(&PrimeFieldElement::new(0, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(12, &_71),
-            parabola.le(PrimeFieldElement::new(1, &_71))
+            parabola.evaluate(&PrimeFieldElement::new(1, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(21, &_71),
-            parabola.le(PrimeFieldElement::new(2, &_71))
+            parabola.evaluate(&PrimeFieldElement::new(2, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(34, &_71),
-            parabola.le(PrimeFieldElement::new(3, &_71))
+            parabola.evaluate(&PrimeFieldElement::new(3, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(51, &_71),
-            parabola.le(PrimeFieldElement::new(4, &_71))
+            parabola.evaluate(&PrimeFieldElement::new(4, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(1, &_71),
-            parabola.le(PrimeFieldElement::new(5, &_71))
+            parabola.evaluate(&PrimeFieldElement::new(5, &_71))
         );
         assert_eq!(
             PrimeFieldElement::new(26, &_71),
-            parabola.le(PrimeFieldElement::new(6, &_71))
+            parabola.evaluate(&PrimeFieldElement::new(6, &_71))
         );
     }
 
