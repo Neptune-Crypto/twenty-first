@@ -1,7 +1,8 @@
 mod ciphertext;
 use crate::shared_math::fraction::Fraction;
+use crate::shared_math::integer_ring_polynomial::IntegerRingPolynomial;
 use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
-use crate::shared_math::prime_field_polynomial::{IntegerRingPolynomial, PrimeFieldPolynomial};
+use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use ciphertext::Ciphertext;
 use rand::RngCore;
 mod keypair;
