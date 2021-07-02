@@ -1,7 +1,7 @@
 use crate::shared_math::other::log_2_ceil;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
-use crate::util_types::merkle_tree_vector::{MerkleTreeVector, Node};
+use crate::util_types::merkle_tree::{MerkleTree, Node};
 use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -155,16 +155,13 @@ pub fn verify(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Validati
             .map(|x| x[0].as_ref().unwrap().value.unwrap())
             .collect::<Vec<i128>>();
 
-        let valid_cs = MerkleTreeVector::verify_multi_proof(
+        let valid_cs = MerkleTree::verify_multi_proof(
             proof.merkle_roots[i + 1],
             &c_indices,
             &proof.c_proofs[i],
         );
-        let valid_abs = MerkleTreeVector::verify_multi_proof(
-            proof.merkle_roots[i],
-            &ab_indices,
-            &proof.ab_proofs[i],
-        );
+        let valid_abs =
+            MerkleTree::verify_multi_proof(proof.merkle_roots[i], &ab_indices, &proof.ab_proofs[i]);
         if !valid_cs || !valid_abs {
             println!(
                 "Found invalidity of indices on iteration {}: y = {}, s = {}",
@@ -277,8 +274,8 @@ pub fn prover(
     output.append(&mut bincode::serialize(&(max_degree as u32)).unwrap());
     output.append(&mut bincode::serialize(&(s as u32)).unwrap());
     output.append(&mut bincode::serialize(&(primitive_root_of_unity)).unwrap());
-    let mut mt = MerkleTreeVector::from_vec(codeword);
-    let mut mts: Vec<MerkleTreeVector<i128>> = vec![mt];
+    let mut mt = MerkleTree::from_vec(codeword);
+    let mut mts: Vec<MerkleTree<i128>> = vec![mt];
 
     // Arrays for return values
     let mut c_proofs: Vec<Vec<Vec<Option<Node<i128>>>>> = vec![];
@@ -311,7 +308,7 @@ pub fn prover(
         );
 
         // Construct Merkle Tree from the new codeword of degree `max_degree / 2`
-        mt = MerkleTreeVector::from_vec(&mut_codeword);
+        mt = MerkleTree::from_vec(&mut_codeword);
 
         // append root to proof
         output.append(&mut mt.get_root().to_vec());

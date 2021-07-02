@@ -11,13 +11,13 @@ pub struct Node<T> {
 }
 
 #[derive(Clone, Debug)]
-pub struct MerkleTreeVector<T> {
+pub struct MerkleTree<T> {
     root_hash: [u8; 32],
     nodes: Vec<Node<T>>,
     height: u64,
 }
 
-impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
+impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     pub fn verify_proof(root_hash: [u8; 32], index: u64, proof: Vec<Node<T>>) -> bool {
         let mut mut_index = index + 2u64.pow(proof.len() as u32);
         let mut v = proof[0].clone();
@@ -74,7 +74,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
         }
 
         // nodes[0] is never used for anything.
-        MerkleTreeVector {
+        MerkleTree {
             root_hash: nodes[1].hash,
             nodes,
             height: log_2_floor(values.len() as u64) + 1,
@@ -245,20 +245,20 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
 }
 
 #[cfg(test)]
-mod merkle_tree_vector_test {
+mod merkle_tree_test {
     use super::*;
     use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
     use crate::utils::{decode_hex, generate_random_numbers};
     use itertools::Itertools;
 
     #[test]
-    fn merkle_tree_vector_test_32() {
+    fn merkle_tree_test_32() {
         let field = PrimeField::new(1009);
         let elements: Vec<PrimeFieldElement> = generate_random_numbers(32, 1000)
             .iter()
             .map(|x| PrimeFieldElement::new(*x, &field))
             .collect();
-        let mut mt_32 = MerkleTreeVector::from_vec(&elements);
+        let mut mt_32 = MerkleTree::from_vec(&elements);
 
         for _ in 0..2 {
             for i in 0..20 {
@@ -274,7 +274,7 @@ mod merkle_tree_vector_test {
 
                 let proof: Vec<Vec<Option<Node<PrimeFieldElement>>>> =
                     mt_32.get_multi_proof(&indices_usize);
-                assert!(MerkleTreeVector::verify_multi_proof(
+                assert!(MerkleTree::verify_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -282,7 +282,7 @@ mod merkle_tree_vector_test {
 
                 // manipulate Merkle root and verify failure
                 mt_32.root_hash[i] ^= 1;
-                assert!(!MerkleTreeVector::verify_multi_proof(
+                assert!(!MerkleTree::verify_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -290,7 +290,7 @@ mod merkle_tree_vector_test {
 
                 // Restore root and verify success
                 mt_32.root_hash[i] ^= 1;
-                assert!(MerkleTreeVector::verify_multi_proof(
+                assert!(MerkleTree::verify_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -299,7 +299,7 @@ mod merkle_tree_vector_test {
                 // Request an additional index and verify failure
                 // (indices length does not match proof length)
                 indices_usize.insert(0, indices_i128[0] as usize);
-                assert!(!MerkleTreeVector::verify_multi_proof(
+                assert!(!MerkleTree::verify_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -309,7 +309,7 @@ mod merkle_tree_vector_test {
                 // (indices length does match proof length)
                 indices_usize.remove(0);
                 indices_usize[0] = indices_i128[0] as usize;
-                assert!(!MerkleTreeVector::verify_multi_proof(
+                assert!(!MerkleTree::verify_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -319,7 +319,7 @@ mod merkle_tree_vector_test {
                 // and verify failure since the indices and proof
                 // vectors do not match
                 indices_usize.remove(0);
-                assert!(!MerkleTreeVector::verify_multi_proof(
+                assert!(!MerkleTree::verify_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -329,15 +329,15 @@ mod merkle_tree_vector_test {
     }
 
     #[test]
-    fn merkle_tree_vector_test_simple() {
-        let single_mt_one: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128]);
+    fn merkle_tree_test_simple() {
+        let single_mt_one: MerkleTree<i128> = MerkleTree::from_vec(&[1i128]);
         assert_eq!(
             decode_hex("74500697761748e7dc0302d36778f89c6ab324ef942773976b92a7bbefa18cd2")
                 .expect("Decoding failed"),
             single_mt_one.root_hash
         );
         assert_eq!(1u64, single_mt_one.height);
-        let single_mt_two: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[2i128]);
+        let single_mt_two: MerkleTree<i128> = MerkleTree::from_vec(&[2i128]);
         assert_eq!(
             decode_hex("65706bf07e4e656de8a6b898dfbc64c076e001253f384043a40c437e1d5fb124")
                 .expect("Decoding failed"),
@@ -345,7 +345,7 @@ mod merkle_tree_vector_test {
         );
         assert_eq!(1u64, single_mt_two.height);
 
-        let mt: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128, 2]);
+        let mt: MerkleTree<i128> = MerkleTree::from_vec(&[1i128, 2]);
         assert_eq!(
             decode_hex("c19af4447b81b6ea9b76328441b963e6076d2e787b3fad956aa35c66f8ede2c4")
                 .expect("Decoding failed"),
@@ -353,22 +353,14 @@ mod merkle_tree_vector_test {
         );
         assert_eq!(2u64, mt.height);
         let mut proof = mt.get_proof(1);
-        assert!(MerkleTreeVector::verify_proof(
-            mt.root_hash,
-            1,
-            proof.clone()
-        ));
+        assert!(MerkleTree::verify_proof(mt.root_hash, 1, proof.clone()));
         assert_eq!(Some(2), proof[0].value);
         proof = mt.get_proof(0);
-        assert!(MerkleTreeVector::verify_proof(
-            mt.root_hash,
-            0,
-            proof.clone()
-        ));
+        assert!(MerkleTree::verify_proof(mt.root_hash, 0, proof.clone()));
         assert_eq!(Some(1), proof[0].value);
         assert_eq!(2usize, proof.len());
 
-        let mt_reverse: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[2i128, 1]);
+        let mt_reverse: MerkleTree<i128> = MerkleTree::from_vec(&[2i128, 1]);
         assert_eq!(
             decode_hex("189d788c8539945c368d54e9f61847b05a847f350b925ea499eadb0007130d93")
                 .expect("Decoding failed"),
@@ -376,7 +368,7 @@ mod merkle_tree_vector_test {
         );
         assert_eq!(2u64, mt_reverse.height);
 
-        let mut mt_four: MerkleTreeVector<i128> = MerkleTreeVector::from_vec(&[1i128, 2, 3, 4]);
+        let mut mt_four: MerkleTree<i128> = MerkleTree::from_vec(&[1i128, 2, 3, 4]);
         assert_eq!(
             decode_hex("44bdb434be4895b977ef91f419f16df22a9c65eeefa3843aae55f81e0e102777").unwrap(),
             mt_four.root_hash
@@ -385,35 +377,35 @@ mod merkle_tree_vector_test {
         assert_eq!(3u64, mt_four.height);
         proof = mt_four.get_proof(1);
         assert_eq!(3usize, proof.len());
-        assert!(MerkleTreeVector::verify_proof(
+        assert!(MerkleTree::verify_proof(
             mt_four.root_hash,
             1,
             proof.clone()
         ));
         assert_eq!(Some(2), proof[0].value);
         proof[0].value = Some(3);
-        assert!(!MerkleTreeVector::verify_proof(
+        assert!(!MerkleTree::verify_proof(
             mt_four.root_hash,
             1,
             proof.clone()
         ));
         proof[0].value = Some(2);
         proof[0].hash = [0u8; 32];
-        assert!(!MerkleTreeVector::verify_proof(
+        assert!(!MerkleTree::verify_proof(
             mt_four.root_hash,
             1,
             proof.clone()
         ));
 
         proof = mt_four.get_proof(1);
-        assert!(MerkleTreeVector::verify_proof(
+        assert!(MerkleTree::verify_proof(
             mt_four.root_hash,
             1,
             proof.clone()
         ));
         let original_root = mt_four.get_root();
         mt_four.root_hash = [0u8; 32];
-        assert!(!MerkleTreeVector::verify_proof(
+        assert!(!MerkleTree::verify_proof(
             mt_four.root_hash,
             1,
             proof.clone()
@@ -425,9 +417,9 @@ mod merkle_tree_vector_test {
         proof = mt_four.get_proof(0);
         println!("root_hash = {:?}", mt_four.root_hash);
         println!("\n\n\n\n proof(0) = {:?} \n\n\n\n", proof);
-        assert!(MerkleTreeVector::verify_proof(mt_four.root_hash, 0, proof));
+        assert!(MerkleTree::verify_proof(mt_four.root_hash, 0, proof));
         let mut compressed_proof = mt_four.get_multi_proof(&[0]);
-        assert!(MerkleTreeVector::verify_multi_proof(
+        assert!(MerkleTree::verify_multi_proof(
             mt_four.root_hash,
             &[0],
             &compressed_proof
@@ -444,14 +436,14 @@ mod merkle_tree_vector_test {
 
         compressed_proof = mt_four.get_multi_proof(&[0, 1]);
         println!("{:?}", compressed_proof);
-        assert!(MerkleTreeVector::verify_multi_proof(
+        assert!(MerkleTree::verify_multi_proof(
             mt_four.root_hash,
             &[0, 1],
             &compressed_proof
         ));
         compressed_proof = mt_four.get_multi_proof(&[0, 1, 2]);
         println!("{:?}", compressed_proof);
-        assert!(MerkleTreeVector::verify_multi_proof(
+        assert!(MerkleTree::verify_multi_proof(
             mt_four.root_hash,
             &[0, 1, 2],
             &compressed_proof
@@ -460,7 +452,7 @@ mod merkle_tree_vector_test {
         // Verify that verification of multi-proof where the tree or the proof
         // does not have the indices requested leads to a false return value,
         // and not to a run-time panic.
-        assert!(!MerkleTreeVector::verify_multi_proof(
+        assert!(!MerkleTree::verify_multi_proof(
             mt_four.root_hash,
             &[2, 3],
             &compressed_proof

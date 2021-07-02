@@ -1,1 +1,1 @@
-pub mod merkle_tree_vector;
+pub mod merkle_tree;
