@@ -105,6 +105,16 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
         indices: &[usize],
         proof: &[Vec<Option<Node<T>>>],
     ) -> bool {
+        // compressed proofs can only be verified for all indices,
+        // meaning that all indices for the proof values must be known.
+        // This restriction is put in since the pruned parts of the
+        // multi proof are currently reassembled using the indices
+        // and some parts of the proof would be missing if all the proof
+        // elements were not represented in the indices argument.
+        if indices.len() != proof.len() {
+            return false;
+        }
+
         let mut partial_tree: HashMap<u64, Node<T>> = HashMap::new();
         let mut proof_clone = proof.to_owned();
         let half_tree_size = 2u64.pow(proof_clone[0].len() as u32 - 1);
@@ -150,7 +160,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTreeVector<T> {
             let mut index = half_tree_size + *i as u64;
             for elem in b.iter_mut().skip(1) {
                 if *elem == None {
-                    // If the Merkle tree/proof in manipulated, the value partial_tree[&(index ^ 1)]
+                    // If the Merkle tree/proof is manipulated, the value partial_tree[&(index ^ 1)]
                     // is not guaranteed to exist. So have to  check
                     // whether it exists and return false if it does not
                     if !partial_tree.contains_key(&(index ^ 1)) {
@@ -299,6 +309,16 @@ mod merkle_tree_vector_test {
                 // (indices length does match proof length)
                 indices_usize.remove(0);
                 indices_usize[0] = indices_i128[0] as usize;
+                assert!(!MerkleTreeVector::verify_multi_proof(
+                    mt_32.get_root(),
+                    &indices_usize,
+                    &proof
+                ));
+
+                // Remove an element from the indices vector
+                // and verify failure since the indices and proof
+                // vectors do not match
+                indices_usize.remove(0);
                 assert!(!MerkleTreeVector::verify_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
