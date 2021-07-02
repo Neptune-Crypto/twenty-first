@@ -67,10 +67,12 @@ pub fn my_library_function() -> Result<()> {
     println!("blake3(\"foobarbaz\") = {:?}", blake3::hash(b"foobarbaz"));
     println!("\n\n*****Merkle trees*****");
     let mt_input: Vec<&str> = vec!["Block 1", "Block 2"];
-    let mt: util_types::merkle_tree::MerkleTree<&str> =
-        util_types::merkle_tree::MerkleTree::new_sha256_merkle_tree(mt_input);
+    // let mt: util_types::merkle_tree::MerkleTree<&str> =
+    //     util_types::merkle_tree::MerkleTree::new_sha256_merkle_tree(mt_input);
+    let mt: util_types::merkle_tree_vector::MerkleTreeVector<&str> =
+        util_types::merkle_tree_vector::MerkleTreeVector::from_vec(&mt_input);
     println!("{:?}", mt);
-    println!("root_hash = {:x?}", mt.root_hash());
+    println!("root_hash = {:x?}", mt.get_root());
     Ok(())
 }
 
