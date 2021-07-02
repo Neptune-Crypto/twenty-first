@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use twenty_first::util_types::merkle_tree::MerkleTree;
-use twenty_first::util_types::merkle_tree_vector::MerkleTreeVector;
+use twenty_first::util_types::merkle_tree::MerkleTree;
 
 fn generate_input(length: usize) -> Vec<i128> {
     (0..length)
@@ -22,7 +22,7 @@ fn merkle_benchmark(c: &mut Criterion) {
 
         group
             .bench_with_input(BenchmarkId::new("Own", size), &size, |b, _| {
-                b.iter(|| MerkleTreeVector::from_vec(&input.clone()))
+                b.iter(|| MerkleTree::from_vec(&input.clone()))
             })
             .sample_size(10);
     }

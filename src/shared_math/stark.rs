@@ -3,7 +3,7 @@ use crate::shared_math::low_degree_test;
 use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
-use crate::util_types::merkle_tree_vector::{MerkleTreeVector, Node};
+use crate::util_types::merkle_tree::{MerkleTree, Node};
 use crate::utils;
 use crate::utils::{get_index_from_bytes_exclude_multiples, get_n_hash_rounds};
 
@@ -217,11 +217,11 @@ pub fn stark_of_mimc(
             .zip(bq_evaluations.iter())
             .map(|((p, d), b)| (*p, *d, *b))
             .collect::<Vec<(PrimeFieldElement, PrimeFieldElement, PrimeFieldElement)>>();
-    let polynomials_merkle_tree: MerkleTreeVector<(
+    let polynomials_merkle_tree: MerkleTree<(
         PrimeFieldElement,
         PrimeFieldElement,
         PrimeFieldElement,
-    )> = MerkleTreeVector::from_vec(&polynomial_evaluations);
+    )> = MerkleTree::from_vec(&polynomial_evaluations);
     println!(
         "Computed merkle tree. Root: {:?}",
         polynomials_merkle_tree.get_root()
@@ -248,7 +248,7 @@ pub fn stark_of_mimc(
         } else {
             panic!("Values did **not** match for b i = {}", i);
         }
-        if !MerkleTreeVector::verify_proof(polynomials_merkle_tree.get_root(), i as u64, val) {
+        if !MerkleTree::verify_proof(polynomials_merkle_tree.get_root(), i as u64, val) {
             panic!("Failed to verify Merkle Tree proof for i = {}", i);
         }
     }
@@ -299,7 +299,7 @@ pub fn stark_of_mimc(
             + ks[3] * powers[i] * bq_evaluations[i];
     }
 
-    let l_mtree = MerkleTreeVector::from_vec(&l_evaluations);
+    let l_mtree = MerkleTree::from_vec(&l_evaluations);
     println!(
         "Computed linear combination of low-degree polynomials. Got hash: {:?}",
         l_mtree.get_root()
