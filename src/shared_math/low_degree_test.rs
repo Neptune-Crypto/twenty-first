@@ -598,7 +598,7 @@ mod test_low_degree_proof {
 
         let mut output = vec![1, 2];
 
-        let s = 40;
+        let s = 80;
         let mut proof = prover(
             &y_values,
             field.q,
@@ -633,7 +633,7 @@ mod test_low_degree_proof {
         // Change a single y value such that it no longer corresponds to a polynomial
         // and verify that the test fails
         output = vec![];
-        y_values[3] = 100;
+        y_values[3] ^= 1;
         proof = prover(
             &y_values,
             field.q,
