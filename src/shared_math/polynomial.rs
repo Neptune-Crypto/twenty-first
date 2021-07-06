@@ -73,7 +73,6 @@ impl<
             + Sub
             + IdentityValues
             + Clone
-            + Copy
             + PartialEq
             + Eq
             + Hash
@@ -98,7 +97,6 @@ impl<
             + Sub<Output = U>
             + IdentityValues
             + Clone
-            + Copy
             + Display
             + Debug
             + PartialEq
@@ -121,7 +119,7 @@ impl<
     pub fn evaluate(&self, x: &U) -> U {
         let mut acc = x.ring_zero();
         for c in self.coefficients.iter().rev() {
-            acc = *c + *x * acc;
+            acc = c.to_owned() + x.to_owned() * acc;
         }
 
         acc
@@ -133,19 +131,19 @@ impl<
             return false;
         }
 
-        if !has_unique_elements(points.iter().map(|p| p.0)) {
+        if !has_unique_elements(points.iter().map(|p| p.0.clone())) {
             println!("Non-unique element spotted Got: {:?}", points);
             return false;
         }
 
         // Find 1st degree polynomial from first two points
         let one: U = points[0].0.ring_one();
-        let x_diff: U = points[0].0 - points[1].0;
+        let x_diff: U = points[0].0.clone() - points[1].0.clone();
         let x_diff_inv = one / x_diff;
-        let a = (points[0].1 - points[1].1) * x_diff_inv;
-        let b = points[0].1 - a * points[0].0;
+        let a = (points[0].1.clone() - points[1].1.clone()) * x_diff_inv;
+        let b = points[0].1.clone() - a.clone() * points[0].0.clone();
         for point in points.iter().skip(2) {
-            let expected = a * point.0 + b;
+            let expected = a.clone() * point.0.clone() + b.clone();
             if point.1 != expected {
                 println!(
                     "L({}) = {}, expected L({}) = {}, Found: L(x) = {}x + {} from {{({},{}),({},{})}}",
@@ -173,13 +171,13 @@ impl<
     pub fn slow_lagrange_interpolation(points: &[(U, U)]) -> Self {
         // calculate a reversed representation of the coefficients of
         // prod_{i=0}^{N}((x- q_i))
-        fn prod_helper<T: IdentityValues + Sub<Output = T> + Mul<Output = T> + Copy>(
+        fn prod_helper<T: IdentityValues + Sub<Output = T> + Mul<Output = T> + Clone>(
             input: &[T],
         ) -> Vec<T> {
             if let Some((q_j, elements)) = input.split_first() {
                 let one: T = q_j.ring_one();
                 let zero: T = q_j.ring_zero();
-                let minus_q_j = zero - *q_j;
+                let minus_q_j = zero.clone() - q_j.to_owned();
                 match elements {
                     // base case is `x - q_j` := [1, -q_j]
                     [] => vec![one, minus_q_j],
@@ -189,7 +187,7 @@ impl<
                         rec.push(zero);
                         let mut i = rec.len() - 1;
                         while i > 0 {
-                            rec[i] = rec[i] - *q_j * rec[i - 1];
+                            rec[i] = rec[i].clone() - q_j.to_owned() * rec[i - 1].clone();
                             i -= 1;
                         }
                         rec
@@ -200,45 +198,45 @@ impl<
             }
         }
 
-        if !has_unique_elements(points.iter().map(|&x| x.0)) {
+        if !has_unique_elements(points.iter().map(|x| x.0.clone())) {
             panic!("Repeated x values received. Got: {:?}", points);
         }
 
-        let roots: Vec<U> = points.iter().map(|x| x.0).collect();
+        let roots: Vec<U> = points.iter().map(|x| x.0.clone()).collect();
         let mut big_pol_coeffs = prod_helper(&roots);
 
         big_pol_coeffs.reverse();
         let big_pol = Self {
-            coefficients: big_pol_coeffs.iter().copied().collect(),
+            coefficients: big_pol_coeffs.iter().map(|x| x.to_owned()).collect(),
         };
         let zero: U = points[0].0.ring_zero();
         let one: U = points[0].0.ring_one();
-        let mut coefficients: Vec<U> = vec![zero; points.len()];
+        let mut coefficients: Vec<U> = vec![zero.clone(); points.len()];
         for point in points.iter() {
             // create a PrimeFieldPolynomial that is zero at all other points than this
             // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
-            let my_div_coefficients = vec![zero - point.0, one];
+            let my_div_coefficients = vec![zero.clone() - point.0.clone(), one.clone()];
             let mut my_pol = Self {
-                coefficients: my_div_coefficients.iter().copied().collect(),
+                coefficients: my_div_coefficients.iter().map(|x| x.to_owned()).collect(),
             };
             my_pol = big_pol.clone() / my_pol.clone();
 
-            let mut divisor = one;
+            let mut divisor = one.clone();
             for root in roots.iter() {
                 if *root == point.0 {
                     continue;
                 }
-                divisor = divisor * (point.0 - *root);
+                divisor = divisor * (point.0.clone() - root.to_owned());
             }
 
-            let mut my_coeffs: Vec<U> = my_pol.coefficients.iter().copied().collect();
+            let mut my_coeffs: Vec<U> = my_pol.coefficients.iter().map(|x| x.to_owned()).collect();
             for coeff in my_coeffs.iter_mut() {
-                *coeff = *coeff * point.1;
-                *coeff = *coeff / divisor;
+                *coeff = coeff.to_owned() * point.1.clone();
+                *coeff = coeff.to_owned() / divisor.clone();
             }
 
             for i in 0..my_coeffs.len() {
-                coefficients[i] = coefficients[i] + my_coeffs[i];
+                coefficients[i] = coefficients[i].clone() + my_coeffs[i].clone();
             }
         }
 
@@ -254,7 +252,6 @@ impl<
             + Sub<Output = U>
             + IdentityValues
             + Clone
-            + Copy
             + std::fmt::Debug
             + std::fmt::Display
             + PartialEq
@@ -272,7 +269,7 @@ impl<
         }
 
         // allocate right number of coefficients, initialized to zero
-        let elem = self.coefficients[0];
+        let elem = self.coefficients[0].clone();
         let mut result_coeff: Vec<U> =
             //vec![U::zero_from_field(field: U); degree_lhs as usize + degree_rhs as usize + 1];
             vec![elem.ring_zero(); degree_lhs as usize + degree_rhs as usize + 1];
@@ -280,8 +277,8 @@ impl<
         // for all pairs of coefficients, add product to result vector in appropriate coordinate
         for i in 0..=degree_lhs as usize {
             for j in 0..=degree_rhs as usize {
-                let mul: U = self.coefficients[i] * other.coefficients[j];
-                result_coeff[i + j] = result_coeff[i + j] + mul;
+                let mul: U = self.coefficients[i].clone() * other.coefficients[j].clone();
+                result_coeff[i + j] = result_coeff[i + j].clone() + mul;
             }
         }
 
@@ -311,16 +308,16 @@ impl<
         let mut quotient = Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize);
         let mut remainder = self.clone();
 
-        let dlc: U = divisor.coefficients[degree_rhs as usize]; // divisor leading coefficient
+        let dlc: U = divisor.coefficients[degree_rhs as usize].clone(); // divisor leading coefficient
         let inv = dlc.ring_one() / dlc;
 
         let mut i = 0;
         while i + degree_rhs <= degree_lhs {
             // calculate next quotient coefficient, and set leading coefficient
             // of remainder remainder is 0 by removing it
-            let rlc: U = *remainder.coefficients.last().unwrap();
-            let q: U = rlc * inv;
-            quotient.push(q);
+            let rlc: U = remainder.coefficients.last().unwrap().to_owned();
+            let q: U = rlc * inv.clone();
+            quotient.push(q.clone());
             remainder.coefficients.pop();
             if q.is_zero() {
                 i += 1;
@@ -332,7 +329,8 @@ impl<
                 let rem_length = remainder.coefficients.len();
                 remainder.coefficients[rem_length - j - 1] = remainder.coefficients
                     [rem_length - j - 1]
-                    - q * divisor.coefficients[divisor.coefficients.len() - j - 2];
+                    .clone()
+                    - q.clone() * divisor.coefficients[divisor.coefficients.len() - j - 2].clone();
             }
 
             i += 1;
@@ -355,7 +353,6 @@ impl<
             + Sub<Output = U>
             + IdentityValues
             + Clone
-            + Copy
             + PartialEq
             + Eq
             + Display
@@ -379,7 +376,6 @@ impl<
             + Sub<Output = U>
             + IdentityValues
             + Clone
-            + Copy
             + PartialEq
             + Eq
             + Hash
@@ -403,7 +399,6 @@ impl<
             + Sub
             + IdentityValues
             + Clone
-            + Copy
             + PartialEq
             + Eq
             + Hash
@@ -419,9 +414,9 @@ impl<
             .iter()
             .zip_longest(other.coefficients.iter())
             .map(|a: itertools::EitherOrBoth<&U, &U>| match a {
-                Both(l, r) => *l + *r,
-                Left(l) => *l,
-                Right(r) => *r,
+                Both(l, r) => l.to_owned() + r.to_owned(),
+                Left(l) => l.to_owned(),
+                Right(r) => r.to_owned(),
             })
             .collect();
 
@@ -439,7 +434,6 @@ impl<
             + Sub<Output = U>
             + IdentityValues
             + Clone
-            + Copy
             + PartialEq
             + Eq
             + Hash
@@ -455,9 +449,9 @@ impl<
             .iter()
             .zip_longest(other.coefficients.iter())
             .map(|a: itertools::EitherOrBoth<&U, &U>| match a {
-                Both(l, r) => *l - *r,
-                Left(l) => *l,
-                Right(r) => r.ring_zero() - *r,
+                Both(l, r) => l.to_owned() - r.to_owned(),
+                Left(l) => l.to_owned(),
+                Right(r) => r.ring_zero() - r.to_owned(),
             })
             .collect();
 
@@ -500,7 +494,6 @@ impl<
             + Sub<Output = U>
             + IdentityValues
             + Clone
-            + Copy
             + std::fmt::Debug
             + std::fmt::Display
             + PartialEq
@@ -519,24 +512,42 @@ impl<
 mod test_polynomials {
     #![allow(clippy::just_underscores_and_digits)]
     use super::super::prime_field_element::{PrimeField, PrimeFieldElement};
+    use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
     use crate::utils::generate_random_numbers;
+    use num_bigint::BigInt;
 
-    fn pf<'a>(value: i128, field: &'a PrimeField) -> PrimeFieldElement<'a> {
+    fn b(x: i128) -> BigInt {
+        Into::<BigInt>::into(x)
+    }
+
+    fn pf(value: i128, field: &PrimeField) -> PrimeFieldElement {
         PrimeFieldElement::new(value, field)
     }
 
-    // fn po<'a>(
-    //     coefficients: &'a [i128],
-    //     field: &'a PrimeField,
-    // ) -> Polynomial<PrimeFieldElement<'a>> {
-    //     Polynomial {
-    //         coefficients: coefficients
-    //             .iter()
-    //             .map(|x| PrimeFieldElement::new(*x, field))
-    //             .collect(),
-    //     }
-    // }
+    fn pfb<'a>(value: i128, field: &'a PrimeFieldBig) -> PrimeFieldElementBig<'a> {
+        PrimeFieldElementBig::new(b(value), field)
+    }
+
+    #[test]
+    fn polynomial_evaluate_test_big() {
+        let prime_modulus = 71;
+        let _71 = PrimeFieldBig::new(b(prime_modulus));
+        let parabola = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                PrimeFieldElementBig::new(b(7), &_71),
+                PrimeFieldElementBig::new(b(3), &_71),
+                PrimeFieldElementBig::new(b(2), &_71),
+            ],
+        };
+        assert_eq!(pfb(7, &_71), parabola.evaluate(&pfb(0, &_71)));
+        assert_eq!(pfb(12, &_71), parabola.evaluate(&pfb(1, &_71)));
+        assert_eq!(pfb(21, &_71), parabola.evaluate(&pfb(2, &_71)));
+        assert_eq!(pfb(34, &_71), parabola.evaluate(&pfb(3, &_71)));
+        assert_eq!(pfb(51, &_71), parabola.evaluate(&pfb(4, &_71)));
+        assert_eq!(pfb(1, &_71), parabola.evaluate(&pfb(5, &_71)));
+        assert_eq!(pfb(26, &_71), parabola.evaluate(&pfb(6, &_71)));
+    }
 
     #[test]
     fn polynomial_evaluate_test() {
@@ -680,6 +691,27 @@ mod test_polynomials {
     }
 
     #[test]
+    fn slow_lagrange_interpolation_test_big() {
+        let field = PrimeFieldBig::new(b(7));
+        let points = &[
+            (pfb(0, &field), pfb(6, &field)),
+            (pfb(1, &field), pfb(6, &field)),
+            (pfb(2, &field), pfb(2, &field)),
+        ];
+
+        let interpolation_result = Polynomial::slow_lagrange_interpolation(points);
+        let expected_result = Polynomial {
+            coefficients: vec![pfb(6, &field), pfb(2, &field), pfb(5, &field)],
+        };
+        assert_eq!(expected_result, interpolation_result);
+
+        // Use the same numbers to test evaluation
+        for point in points.iter() {
+            assert_eq!(point.1, interpolation_result.evaluate(&point.0));
+        }
+    }
+
+    #[test]
     fn property_based_slow_lagrange_interpolation_test() {
         // Autogenerate a `number_of_points - 1` degree polynomial
         // We start by autogenerating the polynomial, as we would get a polynomial
@@ -706,6 +738,40 @@ mod test_polynomials {
         // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
         // evaluate the point values, and verify that they match the original values
         let interpolation_result: Polynomial<PrimeFieldElement> =
+            Polynomial::slow_lagrange_interpolation(&points);
+        assert_eq!(interpolation_result, pol);
+        for point in points {
+            assert_eq!(point.1, interpolation_result.evaluate(&point.0));
+        }
+    }
+
+    #[test]
+    fn property_based_slow_lagrange_interpolation_test_big() {
+        // Autogenerate a `number_of_points - 1` degree polynomial
+        // We start by autogenerating the polynomial, as we would get a polynomial
+        // with fractional coefficients if we autogenerated the points and derived the polynomium
+        // from that.
+        let field = PrimeFieldBig::new(b(999983i128));
+        let number_of_points = 50usize;
+        let coefficients: Vec<PrimeFieldElementBig> =
+            generate_random_numbers(number_of_points, 999983i128)
+                .iter()
+                .map(|x| pfb(*x as i128, &field))
+                .collect();
+
+        let pol: Polynomial<PrimeFieldElementBig> = Polynomial { coefficients };
+
+        // Evaluate polynomial in `number_of_points` points
+        let points: Vec<(PrimeFieldElementBig, PrimeFieldElementBig)> = (0..number_of_points)
+            .map(|x| {
+                let x = pfb(x as i128, &field);
+                (x.clone(), pol.evaluate(&x))
+            })
+            .collect();
+
+        // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
+        // evaluate the point values, and verify that they match the original values
+        let interpolation_result: Polynomial<PrimeFieldElementBig> =
             Polynomial::slow_lagrange_interpolation(&points);
         assert_eq!(interpolation_result, pol);
         for point in points {
@@ -777,6 +843,69 @@ mod test_polynomials {
     }
 
     #[test]
+    fn polynomial_are_colinear_test_big() {
+        let field = PrimeFieldBig::new(b(5));
+        assert!(Polynomial::are_colinear(&[
+            (pfb(1, &field), pfb(1, &field)),
+            (pfb(2, &field), pfb(2, &field)),
+            (pfb(3, &field), pfb(3, &field))
+        ]));
+        assert!(Polynomial::are_colinear(&[
+            (pfb(1, &field), pfb(1, &field)),
+            (pfb(2, &field), pfb(7, &field)),
+            (pfb(3, &field), pfb(3, &field))
+        ]));
+        assert!(Polynomial::are_colinear(&[
+            (pfb(1, &field), pfb(3, &field)),
+            (pfb(2, &field), pfb(2, &field)),
+            (pfb(3, &field), pfb(1, &field))
+        ]));
+        assert!(Polynomial::are_colinear(&[
+            (pfb(1, &field), pfb(1, &field)),
+            (pfb(7, &field), pfb(7, &field)),
+            (pfb(3, &field), pfb(3, &field))
+        ]));
+        assert!(!Polynomial::are_colinear(&[
+            (pfb(1, &field), pfb(1, &field)),
+            (pfb(2, &field), pfb(2, &field)),
+            (pfb(3, &field), pfb(4, &field))
+        ]));
+        assert!(!Polynomial::are_colinear(&[
+            (pfb(1, &field), pfb(1, &field)),
+            (pfb(2, &field), pfb(3, &field)),
+            (pfb(3, &field), pfb(3, &field))
+        ]));
+        assert!(!Polynomial::are_colinear(&[
+            (pfb(1, &field), pfb(0, &field)),
+            (pfb(2, &field), pfb(3, &field)),
+            (pfb(3, &field), pfb(3, &field))
+        ]));
+        assert!(Polynomial::are_colinear(&[
+            (pfb(15, &field), pfb(92, &field)),
+            (pfb(11, &field), pfb(76, &field)),
+            (pfb(19, &field), pfb(108, &field))
+        ]));
+        assert!(!Polynomial::are_colinear(&[
+            (pfb(12, &field), pfb(92, &field)),
+            (pfb(11, &field), pfb(76, &field)),
+            (pfb(19, &field), pfb(108, &field))
+        ]));
+
+        // Disallow repeated x-values
+        assert!(!Polynomial::are_colinear(&[
+            (pfb(12, &field), pfb(92, &field)),
+            (pfb(11, &field), pfb(76, &field)),
+            (pfb(11, &field), pfb(108, &field))
+        ]));
+
+        // Disallow args with less than three points
+        assert!(!Polynomial::are_colinear(&[
+            (pfb(12, &field), pfb(92, &field)),
+            (pfb(11, &field), pfb(76, &field))
+        ]));
+    }
+
+    #[test]
     fn polynomial_arithmetic_property_based_test() {
         let prime_modulus = 71;
         let _71 = PrimeField::new(prime_modulus);
@@ -803,6 +932,61 @@ mod test_polynomials {
             let add_b_a: Polynomial<PrimeFieldElement> = b.clone() + a.clone();
             let sub_a_b: Polynomial<PrimeFieldElement> = a.clone() - b.clone();
             let sub_b_a: Polynomial<PrimeFieldElement> = b.clone() - a.clone();
+
+            let mut res = mul_a_b.clone() / b.clone();
+            res.normalize();
+            assert_eq!(res, a);
+            res = mul_b_a.clone() / a.clone();
+            res.normalize();
+            assert_eq!(res, b);
+            res = add_a_b.clone() - b.clone();
+            res.normalize();
+            assert_eq!(res, a);
+            res = sub_a_b.clone() + b.clone();
+            res.normalize();
+            assert_eq!(res, a);
+            res = add_b_a.clone() - a.clone();
+            res.normalize();
+            assert_eq!(res, b);
+            res = sub_b_a.clone() + a.clone();
+            res.normalize();
+            assert_eq!(res, b);
+            assert_eq!(add_a_b, add_b_a);
+            assert_eq!(mul_a_b, mul_b_a);
+            assert!(a.degree() < a_degree as isize);
+            assert!(b.degree() < (a_degree + i) as isize);
+            assert!(mul_a_b.degree() <= ((a_degree - 1) * 2 + i) as isize);
+            assert!(add_a_b.degree() < (a_degree + i) as isize);
+        }
+    }
+
+    #[test]
+    fn polynomial_arithmetic_property_based_test_big() {
+        let prime_modulus = 71;
+        let _71 = PrimeFieldBig::new(b(prime_modulus));
+        let a_degree = 20;
+        for i in 0..20 {
+            let mut a = Polynomial::<PrimeFieldElementBig> {
+                coefficients: generate_random_numbers(a_degree, prime_modulus)
+                    .iter()
+                    .map(|x| pfb(*x, &_71))
+                    .collect(),
+            };
+            a.normalize();
+            let mut b = Polynomial::<PrimeFieldElementBig> {
+                coefficients: generate_random_numbers(a_degree + i, prime_modulus)
+                    .iter()
+                    .map(|x| pfb(*x, &_71))
+                    .collect(),
+            };
+            b.normalize();
+
+            let mul_a_b: Polynomial<PrimeFieldElementBig> = a.clone() * b.clone();
+            let mul_b_a: Polynomial<PrimeFieldElementBig> = b.clone() * a.clone();
+            let add_a_b: Polynomial<PrimeFieldElementBig> = a.clone() + b.clone();
+            let add_b_a: Polynomial<PrimeFieldElementBig> = b.clone() + a.clone();
+            let sub_a_b: Polynomial<PrimeFieldElementBig> = a.clone() - b.clone();
+            let sub_b_a: Polynomial<PrimeFieldElementBig> = b.clone() - a.clone();
 
             let mut res = mul_a_b.clone() / b.clone();
             res.normalize();
