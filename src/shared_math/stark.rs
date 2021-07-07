@@ -1,13 +1,35 @@
 use crate::fft;
 use crate::shared_math::low_degree_test;
+use crate::shared_math::ntt::{intt, ntt};
+use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
+use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
+use crate::shared_math::traits::IdentityValues;
 use crate::util_types::merkle_tree::{MerkleTree, Node};
 use crate::utils;
 use crate::utils::{get_index_from_bytes_exclude_multiples, get_n_hash_rounds};
+use num_bigint::BigInt;
 
 pub fn mimc_forward<'a>(
+    input: &'a PrimeFieldElementBig,
+    num_steps: usize,
+    round_costants: &'a [PrimeFieldElementBig],
+) -> Vec<PrimeFieldElementBig<'a>> {
+    let mut computational_trace: Vec<PrimeFieldElementBig> = Vec::with_capacity(num_steps);
+    let mut res: PrimeFieldElementBig = input.to_owned();
+    computational_trace.push(input.to_owned());
+    for i in 0..num_steps {
+        res = res.clone().mod_pow(Into::<BigInt>::into(3))
+            + round_costants[i % round_costants.len()].clone();
+        computational_trace.push(res.clone());
+    }
+
+    computational_trace
+}
+
+pub fn mimc_forward_i128<'a>(
     input: &'a PrimeFieldElement,
     steps: usize,
     round_costants: &'a [PrimeFieldElement],
@@ -46,6 +68,93 @@ pub fn mimc_backward<'a>(
 
 pub fn stark_of_mimc(
     security_checks: usize,
+    num_steps: usize,
+    expansion_factor: usize,
+    g2: PrimeFieldElementBig,
+    mimc_input: PrimeFieldElementBig,
+    mimc_output: PrimeFieldElementBig,
+    mimc_round_constants: &[PrimeFieldElementBig],
+) {
+    let g1: PrimeFieldElementBig = g2.mod_pow(Into::<BigInt>::into(expansion_factor));
+    let extended_domain_length: usize = num_steps * expansion_factor;
+
+    // compute computational trace
+    let computational_trace: Vec<PrimeFieldElementBig> =
+        mimc_forward(&mimc_input, num_steps - 1, mimc_round_constants);
+
+    // compute low-degree extension of computational trace
+    let trace_interpolant = intt(&computational_trace, &g1);
+    let mut padded_trace_interpolant = trace_interpolant.clone();
+    padded_trace_interpolant.append(&mut vec![
+        g2.ring_zero();
+        (expansion_factor - 1) * num_steps
+    ]);
+    let extended_computational_trace = ntt(&padded_trace_interpolant, &g2);
+
+    // compute low-degree extension of the round constants polynomial
+    let round_constants_interpolant = intt(&mimc_round_constants, &g1);
+    let mut padded_round_constants_interpolant = round_constants_interpolant.clone();
+    padded_round_constants_interpolant.append(&mut vec![
+        g2.ring_zero();
+        (expansion_factor - 1) * num_steps
+    ]);
+    let extended_round_constants = ntt(&padded_round_constants_interpolant, &g2);
+
+    // evaluate AIR
+    let mut air_codeword = Vec::<PrimeFieldElementBig>::with_capacity(extended_domain_length);
+    for i in 0..extended_domain_length {
+        air_codeword.push(
+            extended_computational_trace[i].mod_pow(Into::<BigInt>::into(3))
+                + extended_round_constants[i].clone()
+                - extended_computational_trace[(i + 1) % extended_domain_length].clone(),
+        );
+    }
+
+    // compute transition-zerofier codeword in three steps -- numerator, denominator, ratio
+    let g2_domain: Vec<PrimeFieldElementBig> = g2.get_generator_domain();
+    let g1_domain: Vec<PrimeFieldElementBig> = g1.get_generator_domain();
+    let one = g2.ring_one();
+    let mut zerofier_numerator: Vec<PrimeFieldElementBig> =
+        vec![g2.ring_zero(); extended_domain_length];
+    for i in 0..extended_domain_length {
+        // calculate x**N - 1 = g2**(i*steps) - 1
+        zerofier_numerator[i] =
+            g2_domain[i * num_steps % extended_domain_length].clone() - one.clone();
+    }
+
+    let zerofier_numerator_inv: Vec<PrimeFieldElementBig> =
+        g2.field.batch_inversion_elements(zerofier_numerator);
+    let last_step: &PrimeFieldElementBig = g1_domain.last().unwrap();
+    let zerofier_denominator: Vec<PrimeFieldElementBig> = g2_domain
+        .iter()
+        .map(|x| x.to_owned() - last_step.to_owned())
+        .collect::<Vec<PrimeFieldElementBig>>();
+    let zerofier_inv = zerofier_numerator_inv
+        .iter()
+        .zip(zerofier_denominator.iter())
+        .map(|(a, b)| a.to_owned() * b.to_owned())
+        .collect::<Vec<PrimeFieldElementBig>>();
+
+    // compute the transition-quotient codeword
+    let transition_quotient_codeword: Vec<PrimeFieldElementBig> = zerofier_numerator_inv
+        .iter()
+        .zip(air_codeword.iter())
+        .map(|(a, b)| a.to_owned() * b.to_owned())
+        .collect::<Vec<PrimeFieldElementBig>>();
+
+    // compute the boundary-zerofier
+    let xlast = g1.mod_pow(Into::<BigInt>::into(num_steps - 1));
+    let boundary_zerofier_polynomial = Polynomial {
+        coefficients: vec![
+            xlast.clone(),
+            -xlast.clone() - xlast.ring_one(),
+            xlast.ring_one(),
+        ],
+    };
+}
+
+pub fn stark_of_mimc_i128(
+    security_checks: usize,
     steps: usize,
     expansion_factor: usize,
     field_modulus: i128,
@@ -71,7 +180,7 @@ pub fn stark_of_mimc(
         .collect::<Vec<PrimeFieldElement>>();
     println!("Generating computational_trace");
     let computational_trace: Vec<PrimeFieldElement> =
-        mimc_forward(&mimc_input, steps - 1, &round_constants);
+        mimc_forward_i128(&mimc_input, steps - 1, &round_constants);
     let output: &PrimeFieldElement = computational_trace.last().unwrap();
     println!(
         "Done generating trace with length {}",
@@ -133,6 +242,7 @@ pub fn stark_of_mimc(
     let mut zerofier_numerator: Vec<PrimeFieldElement> =
         vec![PrimeFieldElement::new(0, &field); extended_domain_length];
     for i in 0..extended_domain_length {
+        // calculate x**N - 1 = g2**(i*steps) - 1
         zerofier_numerator[i] = g2_domain[i * steps % extended_domain_length] - one;
     }
 
@@ -155,7 +265,7 @@ pub fn stark_of_mimc(
     for i in 0..extended_domain_length {
         q_evaluations[i] = air[i] * zerofier_inv[i];
     }
-    println!("Computed D(x)");
+    println!("Computed Q(x)");
 
     // TODO: DEBUG: REMOVE!!!
     for i in 0..2000 {
@@ -181,7 +291,8 @@ pub fn stark_of_mimc(
         pqr: &pqr_mock,
     };
     // Boundary interpolant, is zero in the boundary-checking x values which are x = 1 and x = g1^steps
-    let vanishing_polynomial = vanishing_polynomial_factor0.mul(&vanishing_polynomial_factor1);
+    let vanishing_polynomial: PrimeFieldPolynomial =
+        vanishing_polynomial_factor0.mul(&vanishing_polynomial_factor1);
 
     // TODO: Calculate BQ(x) analytically instead of calculating it through other polynomials
 
@@ -215,7 +326,7 @@ pub fn stark_of_mimc(
             .iter()
             .zip(q_evaluations.iter())
             .zip(bq_evaluations.iter())
-            .map(|((p, d), b)| (*p, *d, *b))
+            .map(|((te, q), bq)| (*te, *q, *bq))
             .collect::<Vec<(PrimeFieldElement, PrimeFieldElement, PrimeFieldElement)>>();
     let polynomials_merkle_tree: MerkleTree<(
         PrimeFieldElement,
@@ -272,8 +383,9 @@ pub fn stark_of_mimc(
         }
     }
 
-    // Find a pseudo-random linear combination of P, P*x^steps, B, B*x^steps, D and prove
+    // Find a pseudo-random linear combination of te, te*x^steps, BQ, BQ*x^steps, Q and prove
     // low-degreenes of this
+    // Alan wants to take a random linear combination of two pairs of all polynomials, such that the second element of each pair is always degree 2^n-1
     let mt_root_hash = polynomials_merkle_tree.get_root();
     let k_seeds = utils::get_n_hash_rounds(&mt_root_hash, 4);
     let ks = k_seeds
@@ -281,7 +393,7 @@ pub fn stark_of_mimc(
         .map(|seed| PrimeFieldElement::from_bytes(&field, seed))
         .collect::<Vec<PrimeFieldElement>>();
 
-    // Calculate x^steps
+    // Calculate `powers = x^steps`
     let g2_pow_steps = g2_domain[steps];
     let mut powers = vec![PrimeFieldElement::new(0, &field); extended_domain_length];
     powers[0] = PrimeFieldElement::new(1, &field);
@@ -299,6 +411,7 @@ pub fn stark_of_mimc(
             + ks[3] * powers[i] * bq_evaluations[i];
     }
 
+    // Alan: Don't need to send this tree
     let l_mtree = MerkleTree::from_vec(&l_evaluations);
     println!(
         "Computed linear combination of low-degree polynomials. Got hash: {:?}",
@@ -313,9 +426,9 @@ pub fn stark_of_mimc(
             get_index_from_bytes_exclude_multiples(x, extended_domain_length, expansion_factor)
         })
         .collect::<Vec<usize>>();
-    let p_d_b_proofs = polynomials_merkle_tree.get_multi_proof(&indices);
+    let te_q_bq_proofs = polynomials_merkle_tree.get_multi_proof(&indices);
     let l_proofs = l_mtree.get_multi_proof(&indices);
-    println!("p_d_b_proofs = {:?}", p_d_b_proofs);
+    println!("te_q_bq_proofs = {:?}", te_q_bq_proofs);
     println!("l_proofs = {:?}", l_proofs);
     // TODO: REMOVE this when low_degree_test is changed to use PrimeFieldElements instead
     // of i128
@@ -323,13 +436,30 @@ pub fn stark_of_mimc(
         .iter()
         .map(|x| x.value)
         .collect::<Vec<i128>>();
-    let b_evaluations_i128 = bq_evaluations
+    let bq_evaluations_i128 = bq_evaluations
         .iter()
         .map(|x| x.value)
         .collect::<Vec<i128>>();
     let q_evaluations_i128 = q_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
     let l_evaluations_i128 = l_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
+
     let mut output = vec![];
+    let low_degree_proof = low_degree_test::prover(
+        &l_evaluations_i128,
+        field.q,
+        (steps * 2 - 1) as u32,
+        security_checks,
+        &mut output,
+        g2.value,
+    );
+    let verify: Result<(), low_degree_test::ValidationError> =
+        low_degree_test::verify(low_degree_proof, field.q);
+    if verify.is_err() {
+        println!("L failed low-degree test");
+    }
+
+    // TODO: DEBUG: REMOVE!
+    output = vec![];
     println!(
         "Length of l_evaluations_i128 = {}",
         l_evaluations_i128.len()
@@ -350,7 +480,7 @@ pub fn stark_of_mimc(
     // assert!(verify.is_ok());
     output = vec![];
     low_degree_proof = low_degree_test::prover(
-        &b_evaluations_i128,
+        &bq_evaluations_i128,
         field.q,
         (steps - 1) as u32,
         security_checks,
@@ -375,28 +505,44 @@ pub fn stark_of_mimc(
     if verify.is_err() {
         println!("D failed low-degree test");
     }
-    // assert!(verify.is_ok());
-    // l_evaluations_i128[100] = 100;
-    output = vec![];
-    let low_degree_proof = low_degree_test::prover(
-        &l_evaluations_i128,
-        field.q,
-        (steps * 2 - 1) as u32,
-        security_checks,
-        &mut output,
-        g2.value,
-    );
-    let verify: Result<(), low_degree_test::ValidationError> =
-        low_degree_test::verify(low_degree_proof, field.q);
-    if verify.is_err() {
-        println!("L failed low-degree test");
-    }
 }
 
 #[cfg(test)]
 mod test_modular_arithmetic {
     use super::*;
     use crate::shared_math::prime_field_element::PrimeField;
+
+    fn b(x: i128) -> BigInt {
+        Into::<BigInt>::into(x)
+    }
+
+    #[test]
+    fn mimc_big() {
+        // let mut ret: Option<(PrimeFieldBig, BigInt)> = None;
+        // PrimeFieldBig::get_field_with_primitive_root_of_unity(64, 1000, &mut ret);
+        // println!("Found: ret = {:?}", ret);
+        let no_steps = 16;
+        let field = PrimeFieldBig::new(b(1153));
+        let round_constants_raw: Vec<i128> = utils::generate_random_numbers(no_steps, 1153);
+        let round_constants: Vec<PrimeFieldElementBig> = round_constants_raw
+            .iter()
+            .map(|x| PrimeFieldElementBig::new(b(x.to_owned()), &field)) // TODO: FIX!! REPLACE value BY x
+            //.map(|x| PrimeFieldElement::new(1, &field)) // TODO: FIX!! REPLACE value BY x
+            .collect::<Vec<PrimeFieldElementBig>>();
+        let (g2_option, _) = field.get_primitive_root_of_unity(64);
+        let g2 = g2_option.unwrap();
+        println!("Found g2 = {}", g2);
+
+        stark_of_mimc(
+            10,
+            16,
+            4,
+            g2,
+            PrimeFieldElementBig::new(b(3), &field),
+            PrimeFieldElementBig::new(b(827), &field),
+            &round_constants,
+        );
+    }
 
     #[test]
     fn mimc_forward_small() {
@@ -408,7 +554,7 @@ mod test_modular_arithmetic {
             PrimeFieldElement::new(1, &field),
             PrimeFieldElement::new(9, &field),
         ];
-        let result: Vec<PrimeFieldElement> = mimc_forward(&input, 7, &round_constant);
+        let result: Vec<PrimeFieldElement> = mimc_forward_i128(&input, 7, &round_constant);
 
         // Result was verified on WolframAlpha: works for input = 6 mod 17
         assert_eq!(13, result.last().unwrap().value);
@@ -416,7 +562,7 @@ mod test_modular_arithmetic {
         for j in 0..10 {
             for i in 0..16 {
                 let input2 = PrimeFieldElement::new(i, &field);
-                let result2 = mimc_forward(&input2, j, &round_constant);
+                let result2 = mimc_forward_i128(&input2, j, &round_constant);
                 assert_eq!(
                     input2,
                     mimc_backward(&result2.last().unwrap(), j, &round_constant)
@@ -434,7 +580,7 @@ mod test_modular_arithmetic {
         // Use these to index into m and l.
         // Then generate a proof that l_evaluations is of low degree (steps * 2)
         let field = PrimeField::new(65537);
-        stark_of_mimc(
+        stark_of_mimc_i128(
             80,
             8192,
             8,
