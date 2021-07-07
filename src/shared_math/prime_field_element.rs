@@ -1,4 +1,4 @@
-use crate::shared_math::traits::IdentityValues;
+use crate::shared_math::traits::{IdentityValues, New};
 use crate::utils::{FIRST_TEN_THOUSAND_PRIMES, FIRST_THOUSAND_PRIMES};
 use serde::Serialize;
 use std::fmt;
@@ -223,6 +223,16 @@ impl<'a> IdentityValues for PrimeFieldElement<'_> {
 
     fn is_one(&self) -> bool {
         self.value == 1
+    }
+}
+
+impl<'a> New for PrimeFieldElement<'_> {
+    fn new_from_usize(&self, value: usize) -> Self {
+        let value_i128: i128 = value as i128;
+        Self {
+            value: value_i128 % self.field.q,
+            field: self.field,
+        }
     }
 }
 
