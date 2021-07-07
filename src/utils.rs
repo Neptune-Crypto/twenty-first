@@ -847,7 +847,7 @@ pub fn get_n_hash_rounds(input: &[u8], n: u32) -> Vec<[u8; 32]> {
     for i in 0..n {
         let mut input_clone = input.to_vec();
 
-        // Convert i: usize into a byte array of length 8
+        // Convert i: usize into a byte array of length 4
         let ip: *const u32 = &i;
         let bp: *const u8 = ip as *const _;
         let bs: &[u8] = unsafe { slice::from_raw_parts(bp, mem::size_of::<u32>()) };
