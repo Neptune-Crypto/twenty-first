@@ -9,6 +9,14 @@ pub trait IdentityValues {
     fn ring_one(&self) -> Self;
 }
 
+// We *cannot* use the std library From/Into traits as they cannot
+// capture which field the new element is a member of.
+pub trait New {
+    fn new_from_usize(&self, value: usize) -> Self;
+}
+
+// pub trait RingElement: IdentityValues + Add + Sub + Mul + Div + Rem + Neg {}
+
 pub trait FieldElement:
     num_traits::Num
     + Clone
@@ -24,19 +32,18 @@ pub trait FieldElement:
 {
     fn is_power_of_2(&self) -> bool;
 }
-impl<
-        T: num_traits::Num
-            + Clone
-            + Copy
-            + Hash
-            + Debug
-            + Display
-            + PartialEq
-            + Eq
-            + PartialOrd
-            + Ord
-            + From<i128>
-            + TryInto<i128>,
-    > FieldElement for T
-{
-}
+// impl<
+//         T: num_traits::Num
+//             + Clone
+//             + Hash
+//             + Debug
+//             + Display
+//             + PartialEq
+//             + Eq
+//             + PartialOrd
+//             + Ord
+//             + From<i128>
+//             + TryInto<i128>,
+//     > FieldElement for T
+// {
+// }

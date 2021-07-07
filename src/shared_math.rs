@@ -2,6 +2,7 @@ pub mod complex_number;
 pub mod fraction;
 pub mod integer_ring_polynomial;
 pub mod low_degree_test;
+pub mod ntt;
 pub mod other;
 pub mod polynomial;
 pub mod polynomial_quotient_ring;

@@ -1,4 +1,4 @@
-use crate::shared_math::traits::IdentityValues;
+use crate::shared_math::traits::{IdentityValues, New};
 use crate::utils::{FIRST_TEN_THOUSAND_PRIMES, FIRST_THOUSAND_PRIMES};
 use num_bigint::BigInt;
 use num_traits::One;
@@ -259,6 +259,16 @@ impl<'a> IdentityValues for PrimeFieldElementBig<'_> {
 
     fn is_one(&self) -> bool {
         self.value == BigInt::one()
+    }
+}
+
+impl<'a> New for PrimeFieldElementBig<'_> {
+    fn new_from_usize(&self, value: usize) -> Self {
+        let value_bi: BigInt = Into::<BigInt>::into(value);
+        Self {
+            value: value_bi,
+            field: self.field,
+        }
     }
 }
 
@@ -777,6 +787,21 @@ mod test_modular_arithmetic_big {
                 }
             }
         }
+    }
+
+    #[test]
+
+    fn arithmetic_pointer_equals() {
+        // build two prime field objects with the same modulus
+        let f1 = PrimeFieldBig::new(b(101));
+        let f2 = PrimeFieldBig::new(b(101));
+
+        // build the same prime field element twice, but with pointers to the different objects
+        let e1 = PrimeFieldElementBig::new(b(16), &f1);
+        let e2 = PrimeFieldElementBig::new(b(16), &f2);
+
+        // test for equality
+        assert!(e1 == e2); // test passes => equality test folows all pointers to test end-values
     }
 
     #[test]
