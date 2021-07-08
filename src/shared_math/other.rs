@@ -1,3 +1,10 @@
+use num_bigint::BigInt;
+
+// Function for creating a bigint from an i128
+pub fn bigint(input: i128) -> BigInt {
+    Into::<BigInt>::into(input)
+}
+
 const fn num_bits<T>() -> u64 {
     std::mem::size_of::<T>() as u64 * 8
 }
@@ -21,6 +28,14 @@ pub fn log_2_ceil(x: u64) -> u64 {
 #[cfg(test)]
 mod test_other {
     use super::*;
+
+    #[test]
+    fn bigint_test() {
+        assert_eq!(
+            Into::<BigInt>::into(12345678901234567890i128),
+            bigint(12345678901234567890i128)
+        );
+    }
 
     #[test]
     fn log_2_ceil_test() {

@@ -4,7 +4,7 @@ use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
-use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
+use crate::shared_math::prime_field_element_big::PrimeFieldElementBig;
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use crate::shared_math::traits::IdentityValues;
 use crate::util_types::merkle_tree::{MerkleTree, Node};
@@ -540,7 +540,7 @@ pub fn stark_of_mimc_i128(
     let l_evaluations_i128 = l_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
 
     let mut output = vec![];
-    let low_degree_proof = low_degree_test::prover(
+    let low_degree_proof = low_degree_test::prover_i128(
         &l_evaluations_i128,
         field.q,
         (steps * 2 - 1) as u32,
@@ -549,7 +549,7 @@ pub fn stark_of_mimc_i128(
         g2.value,
     );
     let verify: Result<(), low_degree_test::ValidationError> =
-        low_degree_test::verify(low_degree_proof, field.q);
+        low_degree_test::verify_i128(low_degree_proof, field.q);
     if verify.is_err() {
         println!("L failed low-degree test");
     }
@@ -560,7 +560,7 @@ pub fn stark_of_mimc_i128(
         "Length of l_evaluations_i128 = {}",
         l_evaluations_i128.len()
     );
-    let mut low_degree_proof: low_degree_test::LowDegreeProof<i128> = low_degree_test::prover(
+    let mut low_degree_proof: low_degree_test::LowDegreeProof<i128> = low_degree_test::prover_i128(
         &trace_extension_i128,
         field.q,
         (steps - 1) as u32,
@@ -569,13 +569,13 @@ pub fn stark_of_mimc_i128(
         g2.value,
     );
     let mut verify: Result<(), low_degree_test::ValidationError> =
-        low_degree_test::verify(low_degree_proof, field.q);
+        low_degree_test::verify_i128(low_degree_proof, field.q);
     if verify.is_err() {
         println!("P failed low-degree test");
     }
     // assert!(verify.is_ok());
     output = vec![];
-    low_degree_proof = low_degree_test::prover(
+    low_degree_proof = low_degree_test::prover_i128(
         &bq_evaluations_i128,
         field.q,
         (steps - 1) as u32,
@@ -583,13 +583,13 @@ pub fn stark_of_mimc_i128(
         &mut output,
         g2.value,
     );
-    verify = low_degree_test::verify(low_degree_proof, field.q);
+    verify = low_degree_test::verify_i128(low_degree_proof, field.q);
     if verify.is_err() {
         println!("B failed low-degree test");
     }
     // assert!(verify.is_ok());
     output = vec![];
-    low_degree_proof = low_degree_test::prover(
+    low_degree_proof = low_degree_test::prover_i128(
         &q_evaluations_i128,
         field.q,
         (2 * steps - 1) as u32,
@@ -597,7 +597,7 @@ pub fn stark_of_mimc_i128(
         &mut output,
         g2.value,
     );
-    verify = low_degree_test::verify(low_degree_proof, field.q);
+    verify = low_degree_test::verify_i128(low_degree_proof, field.q);
     if verify.is_err() {
         println!("D failed low-degree test");
     }
@@ -607,6 +607,7 @@ pub fn stark_of_mimc_i128(
 mod test_modular_arithmetic {
     use super::*;
     use crate::shared_math::prime_field_element::PrimeField;
+    use crate::shared_math::prime_field_element_big::PrimeFieldBig;
 
     fn b(x: i128) -> BigInt {
         Into::<BigInt>::into(x)
