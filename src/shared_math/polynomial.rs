@@ -110,10 +110,14 @@ impl<
         }
     }
 
-    fn ring_zero() -> Self {
+    pub fn ring_zero() -> Self {
         Self {
             coefficients: vec![],
         }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.coefficients.len() == 0 || self.coefficients.iter().all(|x| x.is_zero())
     }
 
     pub fn evaluate(&self, x: &U) -> U {
@@ -288,7 +292,7 @@ impl<
         }
     }
 
-    fn divide(&self, divisor: Self) -> (Self, Self) {
+    pub fn divide(&self, divisor: Self) -> (Self, Self) {
         let degree_lhs = self.degree();
         let degree_rhs = divisor.degree();
         // cannot divide by zero
