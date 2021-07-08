@@ -70,80 +70,154 @@ pub fn stark_of_mimc(
     security_checks: usize,
     num_steps: usize,
     expansion_factor: usize,
-    g2: PrimeFieldElementBig,
+    omega: PrimeFieldElementBig,
     mimc_input: PrimeFieldElementBig,
     mimc_output: PrimeFieldElementBig,
     mimc_round_constants: &[PrimeFieldElementBig],
 ) {
-    let g1: PrimeFieldElementBig = g2.mod_pow(Into::<BigInt>::into(expansion_factor));
-    let extended_domain_length: usize = num_steps * expansion_factor;
+    // Omega is the generator of the big domain
+    // Omicron is the generator of the small domain
+    let omicron: PrimeFieldElementBig = omega.mod_pow(Into::<BigInt>::into(expansion_factor));
+    let extended_domain_length: usize = (num_steps + 1) * expansion_factor;
+    println!("extended_domain_length = {}", extended_domain_length); // TODO: REMOVE
+    println!("omicron = {}", omicron); // TODO: REMOVE
 
     // compute computational trace
     let computational_trace: Vec<PrimeFieldElementBig> =
-        mimc_forward(&mimc_input, num_steps - 1, mimc_round_constants);
+        mimc_forward(&mimc_input, num_steps, mimc_round_constants);
+    println!("mimc_round_constants = {:?}", mimc_round_constants); // TODO: REMOVE
+    println!("computational_trace = {:?}", computational_trace); // TODO: REMOVE
 
     // compute low-degree extension of computational trace
-    let trace_interpolant = intt(&computational_trace, &g1);
-    let mut padded_trace_interpolant = trace_interpolant.clone();
-    padded_trace_interpolant.append(&mut vec![
-        g2.ring_zero();
-        (expansion_factor - 1) * num_steps
+    let trace_interpolant_coefficients = intt(&computational_trace, &omicron);
+    let trace_interpolant = Polynomial {
+        coefficients: trace_interpolant_coefficients.clone(),
+    };
+    println!("trace_interpolant = {}", trace_interpolant); // TODO: REMOVE
+    let mut padded_trace_interpolant_coefficients = trace_interpolant_coefficients.clone();
+    padded_trace_interpolant_coefficients.append(&mut vec![
+        omega.ring_zero();
+        (expansion_factor - 1) * (num_steps + 1)
     ]);
-    let extended_computational_trace = ntt(&padded_trace_interpolant, &g2);
+    let extended_computational_trace = ntt(&padded_trace_interpolant_coefficients, &omega);
+    println!(
+        "extended_computational_trace = {:?}",
+        extended_computational_trace
+    ); // TODO: REMOVE
 
     // compute low-degree extension of the round constants polynomial
-    let round_constants_interpolant = intt(&mimc_round_constants, &g1);
+    let mut mimc_round_constants_padded = mimc_round_constants.to_vec();
+    mimc_round_constants_padded.append(&mut vec![omega.ring_zero()]);
+    let round_constants_interpolant = intt(&mimc_round_constants_padded, &omicron);
+    println!(
+        "round_constants_interpolant = {:?}",
+        round_constants_interpolant
+    ); // TODO: REMOVE
     let mut padded_round_constants_interpolant = round_constants_interpolant.clone();
     padded_round_constants_interpolant.append(&mut vec![
-        g2.ring_zero();
-        (expansion_factor - 1) * num_steps
+        omega.ring_zero();
+        (expansion_factor - 1) * (num_steps + 1)
     ]);
-    let extended_round_constants = ntt(&padded_round_constants_interpolant, &g2);
+    let extended_round_constants = ntt(&padded_round_constants_interpolant, &omega);
+    println!("extended_round_constants = {:?}", extended_round_constants); // TODO: REMOVE
 
-    // evaluate AIR
+    // evaluate and interpolate AIR
     let mut air_codeword = Vec::<PrimeFieldElementBig>::with_capacity(extended_domain_length);
     for i in 0..extended_domain_length {
         air_codeword.push(
             extended_computational_trace[i].mod_pow(Into::<BigInt>::into(3))
                 + extended_round_constants[i].clone()
-                - extended_computational_trace[(i + 1) % extended_domain_length].clone(),
+                - extended_computational_trace[(i + expansion_factor) % extended_domain_length]
+                    .clone(),
         );
     }
+    println!("air_codeword = {:?}", air_codeword); // TODO: REMOVE
+    let air_polynomial_coefficients = intt(&air_codeword, &omega); // important to interpolate across the *extended* domain, not the original smaller domain, because the degree of air(x) is greater than num_steps
+    let air_polynomial = Polynomial {
+        coefficients: air_polynomial_coefficients,
+    };
+    println!("air_polynomial = {}", air_polynomial); // TODO: REMOVE
 
     // compute transition-zerofier codeword in three steps -- numerator, denominator, ratio
-    let g2_domain: Vec<PrimeFieldElementBig> = g2.get_generator_domain();
-    let g1_domain: Vec<PrimeFieldElementBig> = g1.get_generator_domain();
-    let one = g2.ring_one();
-    let mut zerofier_numerator: Vec<PrimeFieldElementBig> =
-        vec![g2.ring_zero(); extended_domain_length];
-    for i in 0..extended_domain_length {
-        // calculate x**N - 1 = g2**(i*steps) - 1
-        zerofier_numerator[i] =
-            g2_domain[i * num_steps % extended_domain_length].clone() - one.clone();
+    let omega_domain: Vec<PrimeFieldElementBig> = omega.get_generator_domain();
+    let omicron_domain: Vec<PrimeFieldElementBig> = omicron.get_generator_domain();
+    let one = omega.ring_one();
+    // let mut zerofier_numerator: Vec<PrimeFieldElementBig> =
+    //     vec![omega.ring_zero(); extended_domain_length];
+    // for i in 0..extended_domain_length {
+    //     // calculate x**N - 1 = omega**(i*steps) - 1
+    //     zerofier_numerator[i] =
+    //         omega_domain[i * num_steps % extended_domain_length].clone() - one.clone();
+    // }
+
+    // let zerofier_numerator_inv: Vec<PrimeFieldElementBig> =
+    //     omega.field.batch_inversion_elements(zerofier_numerator);
+    let xlast: &PrimeFieldElementBig = omicron_domain.last().unwrap();
+    println!("xlast = {}", xlast);
+    // let zerofier_denominator: Vec<PrimeFieldElementBig> = omega_domain
+    //     .iter()
+    //     .map(|x| x.to_owned() - last_step.to_owned())
+    //     .collect::<Vec<PrimeFieldElementBig>>();
+    // let zerofier_inv = zerofier_numerator_inv
+    //     .iter()
+    //     .zip(zerofier_denominator.iter())
+    //     .map(|(a, b)| a.to_owned() * b.to_owned())
+    //     .collect::<Vec<PrimeFieldElementBig>>();
+
+    // compute transition-zerofier polynomial
+    let mut transition_zerofier_numerator_coefficients = vec![omega.ring_zero(); num_steps + 2];
+    transition_zerofier_numerator_coefficients[0] = -omega.ring_one();
+    transition_zerofier_numerator_coefficients[num_steps + 1] = omega.ring_one();
+    let transition_zerofier_numerator_polynomial = Polynomial {
+        coefficients: transition_zerofier_numerator_coefficients,
+    };
+    let transition_zerofier_denominator_coefficients = vec![-xlast.clone(), omega.ring_one()];
+    let transition_zerofier_denominator_polynomial = Polynomial {
+        coefficients: transition_zerofier_denominator_coefficients,
+    };
+
+    // compute the transition-quotient polynomial
+    let (transition_quotient_polynomial, rem) = (air_polynomial.clone()
+        * transition_zerofier_denominator_polynomial.clone())
+    .divide(transition_zerofier_numerator_polynomial.clone());
+    // let transition_quotient_polynomial = air_polynomial.clone()
+    //     * transition_zerofier_denominator_polynomial.clone()
+    //     / transition_zerofier_numerator_polynomial.clone();
+
+    // TODO: Computationally expensive extra step. Make sure not to
+    // test for zero remainder
+    if !(rem.is_zero()) {
+        println!(
+            "zerofier numerator: {}",
+            transition_zerofier_numerator_polynomial
+        );
+        println!(
+            "zerofier denominator: {}",
+            transition_zerofier_denominator_polynomial
+        );
+        println!("air interpolant: {}", air_polynomial);
+        println!(
+            "transition quotient polynomial: {}",
+            transition_quotient_polynomial
+        );
+        panic!(
+            "polynomial division does not give remainder zero. got: {}",
+            (trace_interpolant.clone() * transition_zerofier_denominator_polynomial.clone()
+                % transition_zerofier_numerator_polynomial.clone())
+        )
+    } else {
+        println!("transition zerofier divides AIR!!!");
     }
 
-    let zerofier_numerator_inv: Vec<PrimeFieldElementBig> =
-        g2.field.batch_inversion_elements(zerofier_numerator);
-    let last_step: &PrimeFieldElementBig = g1_domain.last().unwrap();
-    let zerofier_denominator: Vec<PrimeFieldElementBig> = g2_domain
-        .iter()
-        .map(|x| x.to_owned() - last_step.to_owned())
-        .collect::<Vec<PrimeFieldElementBig>>();
-    let zerofier_inv = zerofier_numerator_inv
-        .iter()
-        .zip(zerofier_denominator.iter())
-        .map(|(a, b)| a.to_owned() * b.to_owned())
-        .collect::<Vec<PrimeFieldElementBig>>();
-
     // compute the transition-quotient codeword
-    let transition_quotient_codeword: Vec<PrimeFieldElementBig> = zerofier_numerator_inv
-        .iter()
-        .zip(air_codeword.iter())
-        .map(|(a, b)| a.to_owned() * b.to_owned())
-        .collect::<Vec<PrimeFieldElementBig>>();
+    // let transition_quotient_codeword: Vec<PrimeFieldElementBig> = zerofier_numerator_inv
+    //     .iter()
+    //     .zip(air_codeword.iter())
+    //     .map(|(a, b)| a.to_owned() * b.to_owned())
+    //     .collect::<Vec<PrimeFieldElementBig>>();
 
     // compute the boundary-zerofier
-    let xlast = g1.mod_pow(Into::<BigInt>::into(num_steps - 1));
+    let xlast = omicron.mod_pow(Into::<BigInt>::into(num_steps - 1));
     let boundary_zerofier_polynomial = Polynomial {
         coefficients: vec![
             xlast.clone(),
@@ -151,6 +225,28 @@ pub fn stark_of_mimc(
             xlast.ring_one(),
         ],
     };
+
+    // compte boundary contraint interpolant
+    let (line_a, line_b): (PrimeFieldElementBig, PrimeFieldElementBig) = omicron
+        .field
+        .lagrange_interpolation_2((one, mimc_input.clone()), (xlast.to_owned(), mimc_output));
+    let boundary_constraint_polynomial = Polynomial {
+        coefficients: vec![line_a, line_b],
+    };
+
+    // compute the boundary-quotient polynomial and codeword
+    let boundary_quotient_polynomial: Polynomial<PrimeFieldElementBig> =
+        (trace_interpolant - boundary_constraint_polynomial) / boundary_zerofier_polynomial;
+    let mut boundary_constraint_coefficients_padded =
+        boundary_quotient_polynomial.coefficients.clone();
+    boundary_constraint_coefficients_padded.append(&mut vec![
+        omega.ring_zero();
+        expansion_factor * (num_steps + 1)
+            - boundary_quotient_polynomial
+                .coefficients
+                .len()
+    ]);
+    let boundary_quotient_codeword = ntt(&boundary_constraint_coefficients_padded, &omega);
 }
 
 pub fn stark_of_mimc_i128(
@@ -519,26 +615,30 @@ mod test_modular_arithmetic {
     #[test]
     fn mimc_big() {
         // let mut ret: Option<(PrimeFieldBig, BigInt)> = None;
-        // PrimeFieldBig::get_field_with_primitive_root_of_unity(64, 1000, &mut ret);
+        // PrimeFieldBig::get_field_with_primitive_root_of_unity(8, 100, &mut ret);
         // println!("Found: ret = {:?}", ret);
-        let no_steps = 16;
-        let field = PrimeFieldBig::new(b(1153));
-        let round_constants_raw: Vec<i128> = utils::generate_random_numbers(no_steps, 1153);
+        let no_steps = 3;
+        let expansion_factor = 4;
+        let security_factor = 2;
+        let field = PrimeFieldBig::new(b(5 * 2i128.pow(25) + 1));
+        // let round_constants_raw: Vec<i128> = utils::generate_random_numbers(no_steps, 17);
+        let round_constants_raw: Vec<i128> = vec![7, 256, 117];
         let round_constants: Vec<PrimeFieldElementBig> = round_constants_raw
             .iter()
             .map(|x| PrimeFieldElementBig::new(b(x.to_owned()), &field)) // TODO: FIX!! REPLACE value BY x
             //.map(|x| PrimeFieldElement::new(1, &field)) // TODO: FIX!! REPLACE value BY x
             .collect::<Vec<PrimeFieldElementBig>>();
-        let (g2_option, _) = field.get_primitive_root_of_unity(64);
+        let (g2_option, _) = field.get_primitive_root_of_unity((no_steps + 1) * expansion_factor);
         let g2 = g2_option.unwrap();
         println!("Found g2 = {}", g2);
+        println!("Found g1 = {}", g2.mod_pow(b(2)));
 
         stark_of_mimc(
-            10,
-            16,
-            4,
+            security_factor,
+            no_steps as usize,
+            expansion_factor as usize,
             g2,
-            PrimeFieldElementBig::new(b(3), &field),
+            PrimeFieldElementBig::new(b(1), &field),
             PrimeFieldElementBig::new(b(827), &field),
             &round_constants,
         );
