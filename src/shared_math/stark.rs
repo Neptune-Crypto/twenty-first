@@ -547,7 +547,8 @@ pub fn stark_of_mimc_i128(
         security_checks,
         &mut output,
         g2.value,
-    );
+    )
+    .unwrap();
     let verify: Result<(), low_degree_test::ValidationError> =
         low_degree_test::verify_i128(low_degree_proof, field.q);
     if verify.is_err() {
@@ -567,7 +568,8 @@ pub fn stark_of_mimc_i128(
         security_checks,
         &mut output,
         g2.value,
-    );
+    )
+    .unwrap();
     let mut verify: Result<(), low_degree_test::ValidationError> =
         low_degree_test::verify_i128(low_degree_proof, field.q);
     if verify.is_err() {
@@ -582,7 +584,8 @@ pub fn stark_of_mimc_i128(
         security_checks,
         &mut output,
         g2.value,
-    );
+    )
+    .unwrap();
     verify = low_degree_test::verify_i128(low_degree_proof, field.q);
     if verify.is_err() {
         println!("B failed low-degree test");
@@ -596,7 +599,8 @@ pub fn stark_of_mimc_i128(
         security_checks,
         &mut output,
         g2.value,
-    );
+    )
+    .unwrap();
     verify = low_degree_test::verify_i128(low_degree_proof, field.q);
     if verify.is_err() {
         println!("D failed low-degree test");

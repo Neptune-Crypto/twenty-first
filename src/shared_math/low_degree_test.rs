@@ -12,6 +12,7 @@ use serde::Serialize;
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
+use std::fmt::Debug;
 use std::result::Result;
 
 #[derive(PartialEq, Eq, Debug)]
@@ -22,24 +23,10 @@ pub enum ValidationError {
     LastIterationNotConstant,
 }
 
-// #[derive(PartialEq, Debug, Serialize, Clone)]
-// pub struct LowDegreeProofBigElements<T>
-// where
-//     // DeserializeOwned is used here to indicate that no data is borrowed
-//     // in the deserialization process.
-//     T: DeserializeOwned + Serialize,
-// {
-//     ab_proofs: Vec<Vec<Vec<Option<Node<PrimeFieldElementBig>>>>>,
-//     challenge_hash_preimages: Vec<Vec<u8>>,
-//     codeword_size: u32,
-//     c_proofs: Vec<Vec<Vec<Option<Node<PrimeFieldElementBig>>>>>,
-//     index_picker_preimage: Vec<u8>,
-//     max_degree: u32,
-//     merkle_roots: Vec<[u8; 32]>,
-//     primitive_root_of_unity: T,
-//     rounds_count: u8,
-//     s: u32,
-// }
+#[derive(PartialEq, Eq, Debug)]
+pub enum ProveError {
+    BadMaxDegreeValue,
+}
 
 #[derive(PartialEq, Debug, Serialize, Clone)]
 pub struct LowDegreeProof<T>
@@ -70,7 +57,7 @@ impl fmt::Display for MyError {
     }
 }
 
-impl<U: DeserializeOwned + Serialize> LowDegreeProof<U> {
+impl<U: DeserializeOwned + Serialize + std::fmt::Display> LowDegreeProof<U> {
     pub fn from_serialization(
         serialization: Vec<u8>,
         start_index: usize,
@@ -83,10 +70,11 @@ impl<U: DeserializeOwned + Serialize> LowDegreeProof<U> {
         index += 4;
         let s: u32 = bincode::deserialize(&serialization[index..index + 4])?;
         index += 4;
-        let size_of_u = std::mem::size_of::<U>();
+        let size_of_root: u16 = bincode::deserialize(&serialization[index..index + 2])?;
+        index += 2;
         let primitive_root_of_unity: U =
-            bincode::deserialize(&serialization[index..index + size_of_u])?;
-        index += size_of_u;
+            bincode::deserialize(&serialization[index..index + size_of_root as usize])?;
+        index += size_of_root as usize;
         let rounds_count = log_2_ceil(max_degree as u64 + 1) as u8;
         let rounds_count_usize = rounds_count as usize;
         let challenge_hash_preimages: Vec<Vec<u8>> = (0..rounds_count_usize)
@@ -136,7 +124,7 @@ impl<U: DeserializeOwned + Serialize> LowDegreeProof<U> {
 // was unable to, since he could not deserialize a struct with a pointer, like
 // PrimeFieldElementBig has. So the solution is to provide the modulus, as a `BigInt`
 // as an input to this function.
-pub fn verify_big_int(
+pub fn verify_bigint(
     proof: LowDegreeProof<BigInt>,
     modulus: BigInt,
 ) -> Result<(), ValidationError> {
@@ -379,16 +367,16 @@ fn fri_prover_iteration_bigint(
 
     let mut x: BigInt = BigInt::one();
     for i in 0..new_codeword.len() {
-        let (_, x_inv, _) = PrimeFieldElementBig::eea(x, *modulus);
+        let (_, x_inv, _) = PrimeFieldElementBig::eea(x.clone(), modulus.to_owned());
         // If codeword is the evaluation of a polynomial of degree N,
         // this is an evaluation of a polynomial of degree N/2
-        new_codeword[i] = (((1 + challenge * x_inv) * codeword[i]
-            + (1 - challenge * x_inv) * codeword[i + codeword.len() / 2])
-            * *inv_two
-            % *modulus
-            + *modulus)
-            % *modulus;
-        x = x * *primitive_root_of_unity % modulus;
+        new_codeword[i] = (((1 + challenge * x_inv.clone()) * codeword[i].clone()
+            + (1 - challenge * x_inv.clone()) * codeword[i + codeword.len() / 2].clone())
+            * inv_two.to_owned()
+            % modulus.to_owned()
+            + modulus.to_owned())
+            % modulus.to_owned();
+        x = x.clone() * primitive_root_of_unity.to_owned() % modulus.to_owned();
     }
     new_codeword
 }
@@ -418,6 +406,162 @@ fn fri_prover_iteration_i128(
     new_codeword
 }
 
+fn prover_shared<T: Clone + Serialize + Debug + PartialEq>(
+    max_degree: u32,
+    output: &mut Vec<u8>,
+    codeword: &[T],
+    s: usize,
+    primitive_root_of_unity: T,
+) -> Result<(usize, Vec<MerkleTree<T>>), ProveError> {
+    let max_degree_plus_one: u32 = max_degree + 1;
+    if max_degree_plus_one & (max_degree_plus_one - 1) != 0 {
+        return Err(ProveError::BadMaxDegreeValue);
+        // panic!("Low-degree prover called for non-power of 2")
+    }
+
+    output.append(&mut bincode::serialize(&(codeword.len() as u32)).unwrap());
+    output.append(&mut bincode::serialize(&(max_degree as u32)).unwrap());
+    output.append(&mut bincode::serialize(&(s as u32)).unwrap());
+
+    // First append length of primitive root, then actual value
+    let root_serialization: Vec<u8> = bincode::serialize(&(primitive_root_of_unity)).unwrap();
+    let root_serialization_length: u16 = root_serialization.len() as u16;
+    output.append(&mut bincode::serialize(&root_serialization_length).unwrap());
+    output.append(&mut bincode::serialize(&(primitive_root_of_unity)).unwrap());
+
+    let mt: MerkleTree<T> = MerkleTree::from_vec(codeword);
+    let mts: Vec<MerkleTree<T>> = vec![mt];
+
+    output.append(&mut mts[0].get_root().to_vec());
+    Ok((log_2_ceil(max_degree_plus_one as u64) as usize, mts))
+}
+
+pub fn prover_bigint(
+    codeword: &[BigInt],
+    modulus: BigInt,
+    max_degree: u32,
+    s: usize,
+    output: &mut Vec<u8>,
+    primitive_root_of_unity: BigInt,
+) -> Result<LowDegreeProof<BigInt>, ProveError> {
+    let (rounds_count, mut mts): (usize, Vec<MerkleTree<BigInt>>) = prover_shared(
+        max_degree,
+        output,
+        codeword,
+        s,
+        primitive_root_of_unity.clone(),
+    )?;
+    let mut mut_codeword: Vec<BigInt> = codeword.to_vec();
+
+    // Arrays for return values
+    let mut c_proofs: Vec<Vec<Vec<Option<Node<BigInt>>>>> = vec![];
+    let mut ab_proofs: Vec<Vec<Vec<Option<Node<BigInt>>>>> = vec![];
+
+    // commit phase
+    let (_, _, inv2_temp) = PrimeFieldElementBig::eea(modulus.clone(), bigint(2));
+    let inv2 = (inv2_temp + modulus.clone()) % modulus.clone();
+    let mut primitive_root_of_unity_temp = primitive_root_of_unity.clone();
+    let mut challenge_hash_preimages: Vec<Vec<u8>> = vec![];
+    for _ in 0..rounds_count {
+        // get challenge
+        challenge_hash_preimages.push(output.clone());
+        let hash = *blake3::hash(output.as_slice()).as_bytes();
+        let challenge: BigInt = PrimeFieldElementBig::from_bytes_raw(&modulus, &hash[0..16]);
+
+        // run fri iteration reducing the degree of the polynomial by one half.
+        // This is achieved by realizing that
+        // P(x) + P(-x) = 2*P_e(x^2) and P(x) - P(-x) = 2*P_o(x^2) where P_e, P_o both
+        // have half the degree of P.
+        mut_codeword = fri_prover_iteration_bigint(
+            &mut_codeword.clone(),
+            &challenge,
+            &modulus,
+            &inv2,
+            &primitive_root_of_unity_temp,
+        );
+
+        // Construct Merkle Tree from the new codeword of degree `max_degree / 2`
+        let mt = MerkleTree::from_vec(&mut_codeword);
+
+        // append root to proof
+        output.append(&mut mt.get_root().to_vec());
+
+        // collect into memory
+        mts.push(mt);
+
+        // num_rounds += 1;
+        primitive_root_of_unity_temp = primitive_root_of_unity_temp.clone()
+            * primitive_root_of_unity_temp.clone()
+            % modulus.clone();
+    }
+
+    // query phase
+    // for all subsequent pairs of merkle trees:
+    // - do s times:
+    // -- sample random point y in L2
+    // -- compute square roots s1 s2
+    // -- query P1 in y -> beta
+    // -- query P2 in s1 -> alpha1
+    // -- query P2 in s2 -> alpha2
+    // -- check collinearity (s0, alpha0), (s1, alpha1), (y, beta) <-- we don't care about thi right nw>
+    let index_picker_preimage = output.clone();
+    primitive_root_of_unity_temp = primitive_root_of_unity.clone();
+    for i in 0usize..rounds_count {
+        let number_of_leaves = mts[i].get_number_of_leafs();
+        let mut c_indices: Vec<usize> = vec![];
+        let mut ab_indices: Vec<usize> = vec![];
+
+        // it's unrealistic that the number of rounds exceed 256 but this should wrap around if it does
+        let mut hash_preimage: Vec<u8> = index_picker_preimage.clone();
+        hash_preimage.push(i as u8);
+
+        let hashes = get_n_hash_rounds(hash_preimage.as_slice(), s as u32);
+        for hash in hashes.iter() {
+            let c_index = get_index_from_bytes(&hash[0..16], number_of_leaves / 2);
+            c_indices.push(c_index);
+            let s0_index = c_index;
+            ab_indices.push(s0_index);
+            let s1_index = c_index + number_of_leaves / 2;
+            ab_indices.push(s1_index);
+        }
+
+        let authentication_paths_c: Vec<Vec<Option<Node<BigInt>>>> =
+            mts[i + 1].get_multi_proof(&c_indices);
+        let authentication_paths_ab: Vec<Vec<Option<Node<BigInt>>>> =
+            mts[i].get_multi_proof(&ab_indices);
+
+        // serialize proofs and store in output
+        let mut c_paths_encoded = bincode::serialize(&authentication_paths_c.clone()).unwrap();
+        output.append(&mut bincode::serialize(&(c_paths_encoded.len() as u16)).unwrap());
+        output.append(&mut c_paths_encoded);
+
+        let mut ab_paths_encoded = bincode::serialize(&authentication_paths_ab.clone()).unwrap();
+        output.append(&mut bincode::serialize(&(ab_paths_encoded.len() as u16)).unwrap());
+        output.append(&mut ab_paths_encoded);
+
+        primitive_root_of_unity_temp = primitive_root_of_unity_temp.clone()
+            * primitive_root_of_unity_temp.clone()
+            % modulus.clone();
+
+        // Accumulate values to be returned
+        c_proofs.push(authentication_paths_c);
+        ab_proofs.push(authentication_paths_ab);
+    }
+
+    Ok(LowDegreeProof::<BigInt> {
+        rounds_count: rounds_count as u8,
+        challenge_hash_preimages,
+        c_proofs,
+        ab_proofs,
+        index_picker_preimage,
+        s: s as u32,
+        merkle_roots: mts.iter().map(|x| x.get_root()).collect::<Vec<[u8; 32]>>(),
+        codeword_size: codeword.len() as u32,
+        primitive_root_of_unity,
+        max_degree,
+    })
+}
+
 // TODO: We want this implemented for prime field elements, and preferably for
 // any finite field/extension field.
 // Prove that codeword elements come from the evaluation of a polynomial of
@@ -429,27 +573,14 @@ pub fn prover_i128(
     s: usize,
     output: &mut Vec<u8>,
     primitive_root_of_unity: i128,
-) -> LowDegreeProof<i128> {
-    // verify that max_degree + 1 == 2^n
-    // TODO: Can we remove this requirement? I'm not sure how to deal with that...
-    let max_degree_plus_one: u32 = max_degree + 1;
-    if max_degree_plus_one & (max_degree_plus_one - 1) != 0 {
-        panic!("Low-degree prover called for non-power of 2")
-    }
-
-    let rounds_count = log_2_ceil(max_degree_plus_one as u64) as usize;
-    output.append(&mut bincode::serialize(&(codeword.len() as u32)).unwrap());
-    output.append(&mut bincode::serialize(&(max_degree as u32)).unwrap());
-    output.append(&mut bincode::serialize(&(s as u32)).unwrap());
-    output.append(&mut bincode::serialize(&(primitive_root_of_unity)).unwrap());
-    let mut mt = MerkleTree::from_vec(codeword);
-    let mut mts: Vec<MerkleTree<i128>> = vec![mt];
+) -> Result<LowDegreeProof<i128>, ProveError> {
+    let (rounds_count, mut mts): (usize, Vec<MerkleTree<i128>>) =
+        prover_shared(max_degree, output, codeword, s, primitive_root_of_unity)?;
 
     // Arrays for return values
     let mut c_proofs: Vec<Vec<Vec<Option<Node<i128>>>>> = vec![];
     let mut ab_proofs: Vec<Vec<Vec<Option<Node<i128>>>>> = vec![];
 
-    output.append(&mut mts[0].get_root().to_vec());
     let mut mut_codeword: Vec<i128> = codeword.to_vec();
 
     // commit phase
@@ -476,7 +607,7 @@ pub fn prover_i128(
         );
 
         // Construct Merkle Tree from the new codeword of degree `max_degree / 2`
-        mt = MerkleTree::from_vec(&mut_codeword);
+        let mt = MerkleTree::from_vec(&mut_codeword);
 
         // append root to proof
         output.append(&mut mt.get_root().to_vec());
@@ -543,7 +674,7 @@ pub fn prover_i128(
         ab_proofs.push(authentication_paths_ab);
     }
 
-    LowDegreeProof::<i128> {
+    Ok(LowDegreeProof::<i128> {
         rounds_count: rounds_count as u8,
         challenge_hash_preimages,
         c_proofs,
@@ -554,15 +685,17 @@ pub fn prover_i128(
         codeword_size: codeword.len() as u32,
         primitive_root_of_unity,
         max_degree,
-    }
+    })
 }
 
 #[cfg(test)]
 mod test_low_degree_proof {
     use super::*;
     use crate::fft::fast_polynomial_evaluate;
+    use crate::shared_math::ntt::ntt;
     use crate::shared_math::prime_field_element::PrimeField;
     use crate::utils::generate_random_numbers;
+    use num_traits::Zero;
 
     #[test]
     fn generate_proof_small() {
@@ -586,7 +719,8 @@ mod test_low_degree_proof {
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         assert_eq!(1, proof.max_degree);
         assert_eq!(4, proof.codeword_size);
         assert_eq!(10, proof.primitive_root_of_unity);
@@ -623,7 +757,8 @@ mod test_low_degree_proof {
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         let mut new_value = proof.ab_proofs[0][1][0].clone().unwrap();
         new_value.value = Some(237);
         proof.ab_proofs[0][1][0] = Some(new_value);
@@ -641,7 +776,8 @@ mod test_low_degree_proof {
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         deserialized_proof = LowDegreeProof::<i128>::from_serialization(output.clone(), 2).unwrap();
         assert_eq!(deserialized_proof, proof);
         assert_eq!(Ok(()), verify_i128(deserialized_proof, field.q));
@@ -649,7 +785,82 @@ mod test_low_degree_proof {
     }
 
     #[test]
-    fn generate_proof_parabola() {
+    fn generate_proof_parabola_bigint() {
+        let mut ret: Option<(PrimeFieldBig, BigInt)> = None;
+        PrimeFieldBig::get_field_with_primitive_root_of_unity(16, 10000, &mut ret);
+        let (field, primitive_root_of_unity_bi) = ret.clone().unwrap();
+        let domain: Vec<BigInt> = field.get_power_series(primitive_root_of_unity_bi.clone());
+        let max_degree = 3;
+        let s = 6;
+        let mut y_values = domain
+            .iter()
+            .map(|x| (6 + x.to_owned() * (2 + 5 * x)) % field.q.clone())
+            .collect::<Vec<BigInt>>();
+        let mut output = vec![123, 20];
+        let mut proof: LowDegreeProof<BigInt> = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            max_degree,
+            s,
+            &mut output,
+            primitive_root_of_unity_bi.clone(),
+        )
+        .unwrap();
+
+        // Verify that produced proof verifies
+        assert_eq!(Ok(()), verify_bigint(proof.clone(), field.q.clone()));
+
+        // Verify that deserialization works *and* gives the expected result
+        let deserialized_proof_result =
+            LowDegreeProof::<BigInt>::from_serialization(output.clone(), 2);
+        let deserialized_proof = match deserialized_proof_result {
+            Err(error) => panic!("{}", error),
+            Ok(result) => result,
+        };
+
+        assert_eq!(proof, deserialized_proof);
+
+        // Change a single y value such that it no longer corresponds to a polynomil
+        // a verify that the test fails
+        output = vec![];
+        let original_y_values = y_values.clone();
+        y_values[3] = y_values[3].clone() + BigInt::one();
+        y_values[4] = y_values[4].clone() + BigInt::one();
+        proof = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            max_degree,
+            s,
+            &mut output,
+            primitive_root_of_unity_bi.clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            Err(ValidationError::LastIterationNotConstant),
+            verify_bigint(proof.clone(), field.q.clone())
+        );
+
+        // make a proof with a too low max_degree parameter and verify that it fails verification
+        // with the expected output
+        let wrong_max_degree = 1;
+        output = vec![];
+        proof = prover_bigint(
+            &original_y_values,
+            field.q.clone(),
+            wrong_max_degree,
+            s,
+            &mut output,
+            primitive_root_of_unity_bi.clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            Err(ValidationError::LastIterationNotConstant),
+            verify_bigint(proof.clone(), field.q.clone())
+        );
+    }
+
+    #[test]
+    fn generate_proof_parabola_i128() {
         let mut ret: Option<(PrimeField, i128)> = None;
         PrimeField::get_field_with_primitive_root_of_unity(16, 100, &mut ret);
         let (field, primitive_root_of_unity) = ret.clone().unwrap();
@@ -670,7 +881,8 @@ mod test_low_degree_proof {
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         assert_eq!(
             proof,
             LowDegreeProof::<i128>::from_serialization(output.clone(), 5).unwrap()
@@ -690,7 +902,8 @@ mod test_low_degree_proof {
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         assert_eq!(
             Err(ValidationError::LastIterationNotConstant),
             verify_i128(proof.clone(), field.q)
@@ -700,14 +913,15 @@ mod test_low_degree_proof {
         // with the expected output
         let wrong_max_degree = 1;
         output = vec![];
-        let proof = prover_i128(
+        proof = prover_i128(
             &original_y_values,
             field.q,
             wrong_max_degree,
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         assert_eq!(
             Err(ValidationError::LastIterationNotConstant),
             verify_i128(proof.clone(), field.q)
@@ -715,7 +929,7 @@ mod test_low_degree_proof {
     }
 
     #[test]
-    fn generate_proof_16_alt() {
+    fn generate_proof_16_alt_i128() {
         let mut ret: Option<(PrimeField, i128)> = None;
         // should return (field = mod 193; root = 64) for (n = 16, min_value = 113)
         PrimeField::get_field_with_primitive_root_of_unity(16, 113, &mut ret);
@@ -741,7 +955,8 @@ mod test_low_degree_proof {
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         assert_eq!(
             proof,
             LowDegreeProof::<i128>::from_serialization(output.clone(), 0).unwrap()
@@ -749,46 +964,140 @@ mod test_low_degree_proof {
         assert_eq!(Ok(()), verify_i128(proof, field.q));
     }
 
-    // #[test]
-    // fn generate_proof_16_alt_bigint() {
-    //     let mut ret: Option<(PrimeFieldBig, BigInt)> = None;
-    //     // should return (field = mod 193; root = 64) for (n = 16, min_value = 113)
-    //     PrimeFieldBig::get_field_with_primitive_root_of_unity(16, 113, &mut ret);
-    //     assert_eq!(bigint(193i128), ret.clone().unwrap().0.q);
-    //     let (field, primitive_root_of_unity) = ret.clone().unwrap();
-    //     let domain = field.get_power_series(primitive_root_of_unity);
-    //     assert_eq!(16, domain.len());
-    //     assert_eq!(
-    //         vec![1, 64, 43, 50, 112, 27, 184, 3, 192, 129, 150, 143, 81, 166, 9, 190]
-    //             .into_iter()
-    //             .map(|x| bigint(x))
-    //             .collect::<Vec<BigInt>>(),
-    //         domain
-    //     );
-    //     let mut output = vec![];
+    #[test]
+    fn generate_proof_16_alt_bigint() {
+        let mut ret: Option<(PrimeFieldBig, BigInt)> = None;
+        // should return (field = mod 193; root = 64) for (n = 16, min_value = 113)
+        PrimeFieldBig::get_field_with_primitive_root_of_unity(16, 113, &mut ret);
+        assert_eq!(bigint(193i128), ret.clone().unwrap().0.q);
+        let (field, primitive_root_of_unity) = ret.clone().unwrap();
+        let domain = field.get_power_series(primitive_root_of_unity.clone());
+        let expected_domain: Vec<BigInt> = vec![
+            1, 64, 43, 50, 112, 27, 184, 3, 192, 129, 150, 143, 81, 166, 9, 190,
+        ]
+        .iter()
+        .map(|x| bigint(*x))
+        .collect();
+        assert_eq!(16, domain.len());
+        assert_eq!(expected_domain, domain);
+        let mut output = vec![];
 
-    //     // corresponds to the polynomial P(x) = x
-    //     // degree < codeword.len() / expansion_factor
-    //     let max_degree = 1;
-    //     let s = 2;
-    //     let y_values = domain;
-    //     let proof = prover_bigint(
-    //         &y_values,
-    //         field.q,
-    //         max_degree,
-    //         s,
-    //         &mut output,
-    //         primitive_root_of_unity,
-    //     );
-    //     assert_eq!(
-    //         proof,
-    //         LowDegreeProof::<i128>::from_serialization(output.clone(), 0).unwrap()
-    //     );
-    //     assert_eq!(Ok(()), verify_i128(proof, field.q));
-    // }
+        // corresponds to the polynomial P(x) = x
+        // degree < codeword.len() / expansion_factor
+        let max_degree = 1;
+        let s = 2;
+        let y_values = domain;
+        let proof = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            max_degree,
+            s,
+            &mut output,
+            primitive_root_of_unity.clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            proof,
+            LowDegreeProof::<BigInt>::from_serialization(output.clone(), 0).unwrap()
+        );
+        assert_eq!(Ok(()), verify_bigint(proof, field.q));
+    }
 
     #[test]
-    fn generate_proof_1024() {
+    fn generate_proof_1024_bigint() {
+        let mut ret: Option<(PrimeFieldBig, BigInt)> = None;
+        let size = 2usize.pow(14);
+        let max_degree = 1023;
+        let expected_prime_i128 = 65537i128;
+        let expected_prime = bigint(65537i128);
+        let expected_root = bigint(81i128); // 1024 degree root of 65537
+        PrimeFieldBig::get_field_with_primitive_root_of_unity(size as i128, size as i128, &mut ret);
+        let (field_temp, primitive_root_of_unity_bi) = ret.clone().unwrap();
+        let field: PrimeFieldBig = field_temp.clone();
+        assert_eq!(expected_prime, field.q);
+        assert_eq!(expected_root, primitive_root_of_unity_bi);
+        let mut coefficients: Vec<BigInt> =
+            generate_random_numbers(max_degree + 1, expected_prime_i128)
+                .iter()
+                .map(|x| bigint(*x))
+                .collect();
+        println!("length of coefficients = {}", coefficients.len());
+        coefficients.extend_from_slice(&vec![BigInt::zero(); size - max_degree - 1]);
+        let coefficients_pfes: Vec<PrimeFieldElementBig> = coefficients
+            .iter()
+            .map(|x| PrimeFieldElementBig::new(x.to_owned(), &field))
+            .collect();
+        println!("length of expanded coefficients = {}", coefficients.len());
+        let primitive_root_of_unity: PrimeFieldElementBig =
+            PrimeFieldElementBig::new(primitive_root_of_unity_bi.clone(), &field);
+        let y_values_pfes = ntt(
+            coefficients_pfes.as_slice(),
+            &primitive_root_of_unity.clone(),
+        );
+        println!("length of y_values_pfes = {}", y_values_pfes.len());
+        let mut y_values: Vec<BigInt> = y_values_pfes.iter().map(|x| x.to_owned().value).collect();
+
+        let mut output = vec![1, 2];
+
+        let s = 20;
+        let mut proof = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            max_degree as u32,
+            s,
+            &mut output,
+            primitive_root_of_unity_bi.clone(),
+        )
+        .unwrap();
+        println!("rounds in proof = {}", proof.rounds_count);
+        assert_eq!(
+            proof,
+            LowDegreeProof::<BigInt>::from_serialization(output.clone(), 2).unwrap()
+        );
+        assert_eq!(Ok(()), verify_bigint(proof, field.q.clone()));
+
+        // Verify that a 1023 degree polynomial cannot be verified as a degree 512 polynomial
+        output = vec![1, 2];
+        proof = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            511,
+            s,
+            &mut output,
+            primitive_root_of_unity_bi.clone(),
+        )
+        .unwrap();
+        println!("rounds in proof = {}", proof.rounds_count);
+        assert_eq!(
+            Err(ValidationError::LastIterationNotConstant),
+            verify_bigint(proof, field.q.clone())
+        );
+
+        // Change a single y value such that it no longer corresponds to a polynomial
+        // and verify that the test fails
+        output = vec![];
+        y_values[3] = y_values[3].clone() + 1;
+        proof = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            max_degree as u32,
+            s,
+            &mut output,
+            primitive_root_of_unity_bi,
+        )
+        .unwrap();
+        assert_eq!(
+            proof,
+            LowDegreeProof::<BigInt>::from_serialization(output.clone(), 0).unwrap()
+        );
+        assert_eq!(
+            Err(ValidationError::LastIterationNotConstant),
+            verify_bigint(proof, field.q.clone())
+        );
+    }
+
+    #[test]
+    fn generate_proof_1024_i128() {
         let mut ret: Option<(PrimeField, i128)> = None;
         let size = 2usize.pow(14);
         let max_degree = 1023;
@@ -815,7 +1124,8 @@ mod test_low_degree_proof {
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         println!("rounds in proof = {}", proof.rounds_count);
         assert_eq!(
             proof,
@@ -832,7 +1142,8 @@ mod test_low_degree_proof {
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         println!("rounds in proof = {}", proof.rounds_count);
         assert_eq!(
             Err(ValidationError::LastIterationNotConstant),
@@ -850,7 +1161,8 @@ mod test_low_degree_proof {
             s,
             &mut output,
             primitive_root_of_unity,
-        );
+        )
+        .unwrap();
         assert_eq!(
             proof,
             LowDegreeProof::<i128>::from_serialization(output.clone(), 0).unwrap()
