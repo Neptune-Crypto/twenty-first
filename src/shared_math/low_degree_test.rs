@@ -770,7 +770,8 @@ mod test_low_degree_proof {
             verify_bigint(proof, field.q.clone())
         );
 
-        // Verify that the proof still works if the output vector is non-empty
+        // Verify that the proof still works if the output vector is non-empty at the start
+        //  of the proof building
         output = vec![145, 96];
         proof = prover_bigint(
             &y_values,

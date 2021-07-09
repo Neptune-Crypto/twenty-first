@@ -132,7 +132,9 @@ pub fn stark_of_mimc(
         );
     }
     println!("air_codeword = {:?}", air_codeword); // TODO: REMOVE
-    let air_polynomial_coefficients = intt(&air_codeword, &omega); // important to interpolate across the *extended* domain, not the original smaller domain, because the degree of air(x) is greater than num_steps
+
+    // It's important to interpolate across the *extended* domain, not the original smaller domain, because the degree of air(x) is greater than num_steps
+    let air_polynomial_coefficients = intt(&air_codeword, &omega);
     let air_polynomial = Polynomial {
         coefficients: air_polynomial_coefficients,
     };
@@ -142,27 +144,8 @@ pub fn stark_of_mimc(
     let omega_domain: Vec<PrimeFieldElementBig> = omega.get_generator_domain();
     let omicron_domain: Vec<PrimeFieldElementBig> = omicron.get_generator_domain();
     let one = omega.ring_one();
-    // let mut zerofier_numerator: Vec<PrimeFieldElementBig> =
-    //     vec![omega.ring_zero(); extended_domain_length];
-    // for i in 0..extended_domain_length {
-    //     // calculate x**N - 1 = omega**(i*steps) - 1
-    //     zerofier_numerator[i] =
-    //         omega_domain[i * num_steps % extended_domain_length].clone() - one.clone();
-    // }
-
-    // let zerofier_numerator_inv: Vec<PrimeFieldElementBig> =
-    //     omega.field.batch_inversion_elements(zerofier_numerator);
     let xlast: &PrimeFieldElementBig = omicron_domain.last().unwrap();
     println!("xlast = {}", xlast);
-    // let zerofier_denominator: Vec<PrimeFieldElementBig> = omega_domain
-    //     .iter()
-    //     .map(|x| x.to_owned() - last_step.to_owned())
-    //     .collect::<Vec<PrimeFieldElementBig>>();
-    // let zerofier_inv = zerofier_numerator_inv
-    //     .iter()
-    //     .zip(zerofier_denominator.iter())
-    //     .map(|(a, b)| a.to_owned() * b.to_owned())
-    //     .collect::<Vec<PrimeFieldElementBig>>();
 
     // compute transition-zerofier polynomial
     let mut transition_zerofier_numerator_coefficients = vec![omega.ring_zero(); num_steps + 2];
@@ -180,41 +163,25 @@ pub fn stark_of_mimc(
     let (transition_quotient_polynomial, rem) = (air_polynomial.clone()
         * transition_zerofier_denominator_polynomial.clone())
     .divide(transition_zerofier_numerator_polynomial.clone());
-    // let transition_quotient_polynomial = air_polynomial.clone()
-    //     * transition_zerofier_denominator_polynomial.clone()
-    //     / transition_zerofier_numerator_polynomial.clone();
-
-    // TODO: Computationally expensive extra step. Make sure not to
-    // test for zero remainder
+    // Perform sanity check that remainder of division by transition-zerofier is zero
     if !(rem.is_zero()) {
-        println!(
-            "zerofier numerator: {}",
-            transition_zerofier_numerator_polynomial
-        );
-        println!(
-            "zerofier denominator: {}",
-            transition_zerofier_denominator_polynomial
-        );
-        println!("air interpolant: {}", air_polynomial);
-        println!(
-            "transition quotient polynomial: {}",
-            transition_quotient_polynomial
-        );
         panic!(
             "polynomial division does not give remainder zero. got: {}",
             (trace_interpolant.clone() * transition_zerofier_denominator_polynomial.clone()
                 % transition_zerofier_numerator_polynomial.clone())
         )
     } else {
-        println!("transition zerofier divides AIR!!!");
+        println!("transition zerofier divides AIR!!!"); // TODO: REMOVE
     }
 
-    // compute the transition-quotient codeword
-    // let transition_quotient_codeword: Vec<PrimeFieldElementBig> = zerofier_numerator_inv
-    //     .iter()
-    //     .zip(air_codeword.iter())
-    //     .map(|(a, b)| a.to_owned() * b.to_owned())
-    //     .collect::<Vec<PrimeFieldElementBig>>();
+    // Compute the evaluation (codeword) of the transition-quotient polynomial in the entire omega domain,
+    let mut transition_quotient_coefficients = transition_quotient_polynomial.coefficients.clone();
+    transition_quotient_coefficients.append(&mut vec![
+        omega.ring_zero();
+        extended_domain_length
+            - transition_quotient_coefficients.len()
+    ]);
+    let transition_quotient_codeword = ntt(&transition_quotient_coefficients, &omega);
 
     // compute the boundary-zerofier
     let xlast = omicron.mod_pow(Into::<BigInt>::into(num_steps - 1));
@@ -226,7 +193,7 @@ pub fn stark_of_mimc(
         ],
     };
 
-    // compte boundary contraint interpolant
+    // compute boundary contraint interpolant
     let (line_a, line_b): (PrimeFieldElementBig, PrimeFieldElementBig) = omicron
         .field
         .lagrange_interpolation_2((one, mimc_input.clone()), (xlast.to_owned(), mimc_output));
@@ -247,6 +214,38 @@ pub fn stark_of_mimc(
                 .len()
     ]);
     let boundary_quotient_codeword = ntt(&boundary_constraint_coefficients_padded, &omega);
+
+    // Commit to all evaluations by constructing a Merkle tree of the polynomial evaluations
+    let polynomial_evaluations: Vec<(
+        PrimeFieldElementBig,
+        PrimeFieldElementBig,
+        PrimeFieldElementBig,
+    )> = extended_computational_trace
+        .iter()
+        .zip(transition_quotient_codeword.iter())
+        .zip(boundary_quotient_codeword.iter())
+        .map(|((ect, tq), bq)| (ect.to_owned(), tq.to_owned(), bq.to_owned()))
+        .collect::<Vec<(
+            PrimeFieldElementBig,
+            PrimeFieldElementBig,
+            PrimeFieldElementBig,
+        )>>();
+    let polynomials_merkle_tree: MerkleTree<(
+        PrimeFieldElementBig,
+        PrimeFieldElementBig,
+        PrimeFieldElementBig,
+    )> = MerkleTree::from_vec(&polynomial_evaluations);
+    println!(
+        "Computed merkle tree. Root: {:?}",
+        polynomials_merkle_tree.get_root()
+    );
+
+    let mt_root_hash = polynomials_merkle_tree.get_root();
+    let k_seeds = utils::get_n_hash_rounds(&mt_root_hash, 4);
+    let ks = k_seeds
+        .iter()
+        .map(|seed| PrimeFieldElementBig::from_bytes(omega.field, seed))
+        .collect::<Vec<PrimeFieldElementBig>>();
 }
 
 pub fn stark_of_mimc_i128(
