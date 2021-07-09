@@ -698,7 +698,98 @@ mod test_low_degree_proof {
     use num_traits::Zero;
 
     #[test]
-    fn generate_proof_small() {
+    fn generate_proof_small_bigint() {
+        let mut ret: Option<(PrimeFieldBig, BigInt)> = None;
+        PrimeFieldBig::get_field_with_primitive_root_of_unity(4, 100, &mut ret);
+        assert_eq!(bigint(101i128), ret.clone().unwrap().0.q);
+        let (field, primitive_root_of_unity) = ret.clone().unwrap();
+        let power_series = field.get_power_series(primitive_root_of_unity.clone());
+        assert_eq!(4, power_series.len());
+        assert_eq!(
+            vec![bigint(1i128), bigint(10), bigint(100), bigint(91)],
+            power_series
+        );
+        let mut output = vec![];
+
+        // corresponds to the polynomial P(x) = x
+        let y_values = power_series;
+        let max_degree = 1;
+        let s = 5; // The security factor
+        let mut proof: LowDegreeProof<BigInt> = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            max_degree,
+            s,
+            &mut output,
+            primitive_root_of_unity.clone(),
+        )
+        .unwrap();
+        assert_eq!(1, proof.max_degree);
+        assert_eq!(4, proof.codeword_size);
+        assert_eq!(bigint(10), proof.primitive_root_of_unity);
+        assert_eq!(1, proof.rounds_count);
+        assert_eq!(5, proof.s);
+        assert_eq!(1, proof.ab_proofs.len());
+        assert_eq!(1, proof.c_proofs.len());
+        assert_eq!(2, proof.merkle_roots.len());
+
+        let mut deserialized_proof: LowDegreeProof<BigInt> =
+            LowDegreeProof::<BigInt>::from_serialization(output.clone(), 0).unwrap();
+        assert_eq!(1, deserialized_proof.max_degree);
+        assert_eq!(4, deserialized_proof.codeword_size);
+        assert_eq!(bigint(10), deserialized_proof.primitive_root_of_unity);
+        assert_eq!(1, deserialized_proof.rounds_count);
+        assert_eq!(5, deserialized_proof.s);
+        assert_eq!(1, deserialized_proof.ab_proofs.len());
+        assert_eq!(1, deserialized_proof.c_proofs.len());
+        assert_eq!(2, deserialized_proof.merkle_roots.len());
+        assert_eq!(proof.ab_proofs, deserialized_proof.ab_proofs);
+        assert_eq!(proof.c_proofs, deserialized_proof.c_proofs);
+        assert_eq!(
+            proof.index_picker_preimage,
+            deserialized_proof.index_picker_preimage
+        );
+        assert_eq!(Ok(()), verify_bigint(proof, field.q.clone()));
+
+        // Change one of the values in a leaf in the committed Merkle tree, and verify that the Merkle proof fails
+        output = vec![];
+        proof = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            max_degree,
+            s,
+            &mut output,
+            primitive_root_of_unity.clone(),
+        )
+        .unwrap();
+        let mut new_value = proof.ab_proofs[0][1][0].clone().unwrap();
+        new_value.value = Some(bigint(237));
+        proof.ab_proofs[0][1][0] = Some(new_value);
+        assert_eq!(
+            Err(ValidationError::BadMerkleProof),
+            verify_bigint(proof, field.q.clone())
+        );
+
+        // Verify that the proof still works if the output vector is non-empty
+        output = vec![145, 96];
+        proof = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            max_degree,
+            s,
+            &mut output,
+            primitive_root_of_unity.clone(),
+        )
+        .unwrap();
+        deserialized_proof =
+            LowDegreeProof::<BigInt>::from_serialization(output.clone(), 2).unwrap();
+        assert_eq!(deserialized_proof, proof);
+        assert_eq!(Ok(()), verify_bigint(deserialized_proof, field.q.clone()));
+        assert_eq!(Ok(()), verify_bigint(proof, field.q));
+    }
+
+    #[test]
+    fn generate_proof_small_i128() {
         let mut ret: Option<(PrimeField, i128)> = None;
         PrimeField::get_field_with_primitive_root_of_unity(4, 100, &mut ret);
         assert_eq!(101i128, ret.clone().unwrap().0.q);
