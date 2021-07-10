@@ -308,7 +308,7 @@ pub fn stark_of_mimc(
     // polynomials! We might have a off-by-one, or two or three error in the degrees
     // here.
     let mut linear_combination_evaluations = vec![omega.ring_zero(); extended_domain_length];
-    for i in 1..extended_domain_length {
+    for i in 0..extended_domain_length {
         linear_combination_evaluations[i] = transition_quotient_codeword[i].clone()
             + ks[0].clone() * extended_computational_trace[i].clone()
             + ks[1].clone() * extended_computational_trace[i].clone() * x_to_num_steps[i].clone()
@@ -440,8 +440,8 @@ pub fn stark_of_mimc(
         Ok(_) => println!("Succesfully verified low degree of linear combination"),
         Err(err) => {
             println!(
-                "\n\n\n\nFailed to low degreeness of linear combination values.\n\n Coefficients: {:?}\n\nCodeword: {:?}\n\n",
-                ks, linear_combination_evaluations_bigint
+                "\n\n\n\nFailed to low degreeness of linear combination values.\n\n Coefficients: {:?}\n\nCodeword: {:?}\n\nDomain: {:?}",
+                ks, linear_combination_evaluations_bigint, omega_domain
             );
             panic!(
                 "Failed to verify low degree ({}) of linear combination. Got: {:?}",
