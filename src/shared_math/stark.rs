@@ -169,8 +169,7 @@ pub fn stark_of_mimc(
     if !(rem.is_zero()) {
         panic!(
             "polynomial division does not give remainder zero. got: {}",
-            (trace_interpolant.clone() * transition_zerofier_denominator_polynomial.clone()
-                % transition_zerofier_numerator_polynomial.clone())
+            rem
         )
     } else {
         println!("transition zerofier divides AIR!!!"); // TODO: REMOVE
@@ -186,7 +185,7 @@ pub fn stark_of_mimc(
     let transition_quotient_codeword = ntt(&transition_quotient_coefficients, &omega);
 
     // compute the boundary-zerofier
-    let xlast = omicron.mod_pow(Into::<BigInt>::into(num_steps - 1));
+    println!("xlast = {}", xlast);
     let boundary_zerofier_polynomial = Polynomial {
         coefficients: vec![
             xlast.clone(),
@@ -200,12 +199,28 @@ pub fn stark_of_mimc(
         .field
         .lagrange_interpolation_2((one, mimc_input.clone()), (xlast.to_owned(), mimc_output));
     let boundary_constraint_polynomial = Polynomial {
-        coefficients: vec![line_a, line_b],
+        coefficients: vec![line_b, line_a],
     };
+    println!(
+        "boundary_constraint_polynomial = {}",
+        boundary_constraint_polynomial
+    );
+    println!(
+        "boundary_zerofier_polynomial = {}",
+        boundary_zerofier_polynomial
+    );
 
     // compute the boundary-quotient polynomial and codeword
-    let boundary_quotient_polynomial: Polynomial<PrimeFieldElementBig> =
-        (trace_interpolant - boundary_constraint_polynomial) / boundary_zerofier_polynomial;
+    let (boundary_quotient_polynomial, bq_rem) =
+        (trace_interpolant - boundary_constraint_polynomial).divide(boundary_zerofier_polynomial);
+    if !(bq_rem.is_zero()) {
+        panic!(
+            "polynomial division with boundary zerofier does not give remainder zero. got: {}",
+            (bq_rem)
+        )
+    } else {
+        println!("boundary zerofier divides AIR!!!"); // TODO: REMOVE
+    }
     let mut boundary_constraint_coefficients_padded =
         boundary_quotient_polynomial.coefficients.clone();
     boundary_constraint_coefficients_padded.append(&mut vec![
@@ -259,13 +274,13 @@ pub fn stark_of_mimc(
         x_to_num_steps[i] = x_to_num_steps[i - 1].clone() * omega_to_num_steps.clone();
     }
 
-    // TODO: Debug! Remove this check of low degree of x^num_steps
+    // TODO: Debug! Remove this check of low degree of x^num_steps once stuff is working!
     let max_degree_powers = num_steps as u32;
     let x_powers_bigint = x_to_num_steps
         .iter()
         .map(|x| x.value.clone())
         .collect::<Vec<BigInt>>();
-    println!("powers = {:?}", x_powers_bigint);
+    println!("\n\n\npowers = {:?}\n\n\n", x_powers_bigint);
     let mut output = vec![];
     let low_degree_proof_powers = low_degree_test::prover_bigint(
         &x_powers_bigint,
@@ -318,9 +333,9 @@ pub fn stark_of_mimc(
         })
         .collect::<Vec<usize>>();
     let polynomial_proofs = polynomials_merkle_tree.get_multi_proof(&indices);
-    let l_proofs = linear_combination_mt.get_multi_proof(&indices);
-    println!("te_q_bq_proofs = {:?}", polynomial_proofs);
-    println!("l_proofs = {:?}", l_proofs);
+    let lc_proofs = linear_combination_mt.get_multi_proof(&indices);
+    println!("polynomial_proofs = {:?}", polynomial_proofs);
+    println!("lc_proofs = {:?}", lc_proofs);
 
     // Compute the FRI low-degree proofs
     let extended_computational_trace_bigint = extended_computational_trace
@@ -423,10 +438,16 @@ pub fn stark_of_mimc(
         low_degree_test::verify_bigint(low_degree_proof_lc, field.q.clone());
     match verify {
         Ok(_) => println!("Succesfully verified low degree of linear combination"),
-        Err(err) => panic!(
-            "Failed to verify low degree ({}) of linear combination. Got: {:?}",
-            max_degree_lc, err
-        ),
+        Err(err) => {
+            println!(
+                "\n\n\n\nFailed to low degreeness of linear combination values.\n\n Coefficients: {:?}\n\nCodeword: {:?}\n\n",
+                ks, linear_combination_evaluations_bigint
+            );
+            panic!(
+                "Failed to verify low degree ({}) of linear combination. Got: {:?}",
+                max_degree_lc, err
+            )
+        }
     }
 }
 
@@ -679,17 +700,19 @@ pub fn stark_of_mimc_i128(
         powers[i] = powers[i - 1] * g2_pow_steps;
     }
 
-    let mut l_evaluations = vec![PrimeFieldElement::new(0, &field); extended_domain_length];
+    let mut lc_codeword = vec![PrimeFieldElement::new(0, &field); extended_domain_length];
     for i in 1..extended_domain_length {
-        l_evaluations[i] = q_evaluations[i]
+        lc_codeword[i] = q_evaluations[i]
             + ks[0] * trace_extension[i]
             + ks[1] * trace_extension[i] * powers[i]
             + ks[2] * bq_evaluations[i]
             + ks[3] * powers[i] * bq_evaluations[i];
     }
 
+    //
+
     // Alan: Don't need to send this tree
-    let l_mtree = MerkleTree::from_vec(&l_evaluations);
+    let l_mtree = MerkleTree::from_vec(&lc_codeword);
     println!(
         "Computed linear combination of low-degree polynomials. Got hash: {:?}",
         l_mtree.get_root()
@@ -718,11 +741,11 @@ pub fn stark_of_mimc_i128(
         .map(|x| x.value)
         .collect::<Vec<i128>>();
     let q_evaluations_i128 = q_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
-    let l_evaluations_i128 = l_evaluations.iter().map(|x| x.value).collect::<Vec<i128>>();
+    let lc_codeword_i128 = lc_codeword.iter().map(|x| x.value).collect::<Vec<i128>>();
 
     let mut output = vec![];
     let low_degree_proof = low_degree_test::prover_i128(
-        &l_evaluations_i128,
+        &lc_codeword_i128,
         field.q,
         (steps * 2 - 1) as u32,
         security_checks,
@@ -738,10 +761,7 @@ pub fn stark_of_mimc_i128(
 
     // TODO: DEBUG: REMOVE!
     output = vec![];
-    println!(
-        "Length of l_evaluations_i128 = {}",
-        l_evaluations_i128.len()
-    );
+    println!("Length of lc_codeword_i128 = {}", lc_codeword_i128.len());
     let mut low_degree_proof: low_degree_test::LowDegreeProof<i128> = low_degree_test::prover_i128(
         &trace_extension_i128,
         field.q,
@@ -812,12 +832,13 @@ mod test_modular_arithmetic {
         let round_constants: Vec<PrimeFieldElementBig> = round_constants_raw
             .iter()
             .map(|x| PrimeFieldElementBig::new(b(x.to_owned()), &field)) // TODO: FIX!! REPLACE value BY x
-            //.map(|x| PrimeFieldElement::new(1, &field)) // TODO: FIX!! REPLACE value BY x
             .collect::<Vec<PrimeFieldElementBig>>();
         let (g2_option, _) = field.get_primitive_root_of_unity((no_steps + 1) * expansion_factor);
         let omega = g2_option.unwrap();
-        println!("Found g2 = {}", omega);
-        println!("Found g1 = {}", omega.mod_pow(b(expansion_factor)));
+        let omicron = omega.mod_pow(b(expansion_factor));
+        println!("Found omega = {}", omega);
+        println!("Found omicron = {}", omicron);
+        println!("omicron domain = {:?}", omicron.get_generator_domain());
 
         for i in 0..20 {
             let mimc_input = PrimeFieldElementBig::new(b(i), &field);
@@ -825,6 +846,7 @@ mod test_modular_arithmetic {
             let mimc_output = mimc_trace[no_steps as usize].clone();
             println!("\n\n\n\n\n\n\n\n\n\nmimc_input = {}", mimc_input);
             println!("mimc_output = {}", mimc_output);
+            println!("x_last = {}", omicron.mod_pow(b(no_steps - 1)));
             stark_of_mimc(
                 security_factor,
                 no_steps as usize,
@@ -871,7 +893,7 @@ mod test_modular_arithmetic {
         // This field is mod 65537 and the roots are 6561, 3, respectively.
 
         // Use these to index into m and l.
-        // Then generate a proof that l_evaluations is of low degree (steps * 2)
+        // Then generate a proof that lc_codeword is of low degree (steps * 2)
         let field = PrimeField::new(65537);
         stark_of_mimc_i128(
             80,
