@@ -292,6 +292,15 @@ impl<
         }
     }
 
+    pub fn scalar_mul(&self, scalar: U) -> Self {
+        let mut coefficients: Vec<U> = vec![];
+        for i in 0..self.coefficients.len() {
+            coefficients.push(self.coefficients[i].clone() * scalar.clone());
+        }
+
+        Self { coefficients }
+    }
+
     pub fn divide(&self, divisor: Self) -> (Self, Self) {
         let degree_lhs = self.degree();
         let degree_rhs = divisor.degree();
@@ -1157,6 +1166,107 @@ mod test_polynomials {
             },
             prod_x % (x.clone() * x.clone())
         );
+    }
+
+    #[test]
+    fn polynomial_arithmetic_test_linear_combination() {
+        let field = PrimeFieldBig::new(b(167772161));
+        let tq = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(76432291, &field),
+                pfb(6568597, &field),
+                pfb(37593670, &field),
+                pfb(164656139, &field),
+                pfb(100728053, &field),
+                pfb(8855557, &field),
+                pfb(84827854, &field),
+            ],
+        };
+        let ti = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(137616711, &field),
+                pfb(15613095, &field),
+                pfb(114041830, &field),
+                pfb(68272686, &field),
+            ],
+        };
+        let bq = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(43152288, &field), pfb(68272686, &field)],
+        };
+        let x_to_3 = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(0, &field),
+                pfb(0, &field),
+                pfb(0, &field),
+                pfb(1, &field),
+            ],
+        };
+        let ks = vec![
+            pfb(132934501, &field),
+            pfb(57662258, &field),
+            pfb(76229169, &field),
+            pfb(82319948, &field),
+        ];
+        let expected_lc = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(2792937, &field),
+                pfb(39162406, &field),
+                pfb(7217300, &field),
+                pfb(58955792, &field),
+                pfb(3275580, &field),
+                pfb(58708383, &field),
+                pfb(3119620, &field),
+            ],
+        };
+        let linear_combination = tq
+            + ti.scalar_mul(ks[0].clone())
+            + (ti * x_to_3.clone()).scalar_mul(ks[1].clone())
+            + bq.scalar_mul(ks[2].clone())
+            + (bq * x_to_3).scalar_mul(ks[3].clone());
+        assert_eq!(expected_lc, linear_combination);
+
+        let x_values: Vec<PrimeFieldElementBig> = vec![
+            pfb(1, &field),
+            pfb(116878283, &field),
+            pfb(71493608, &field),
+            pfb(131850885, &field),
+            pfb(65249968, &field),
+            pfb(26998229, &field),
+            pfb(30406922, &field),
+            pfb(40136459, &field),
+            pfb(167772160, &field),
+            pfb(50893878, &field),
+            pfb(96278553, &field),
+            pfb(35921276, &field),
+            pfb(102522193, &field),
+            pfb(140773932, &field),
+            pfb(137365239, &field),
+            pfb(127635702, &field),
+        ];
+        let expected_y_values: Vec<PrimeFieldElementBig> = vec![
+            pfb(5459857, &field),
+            pfb(148657471, &field),
+            pfb(30002611, &field),
+            pfb(66137138, &field),
+            pfb(8094868, &field),
+            pfb(56386222, &field),
+            pfb(156375138, &field),
+            pfb(54481212, &field),
+            pfb(27351017, &field),
+            pfb(142491681, &field),
+            pfb(27138843, &field),
+            pfb(146662298, &field),
+            pfb(151140487, &field),
+            pfb(131629901, &field),
+            pfb(120097158, &field),
+            pfb(114758378, &field),
+        ];
+        for i in 0..16 {
+            assert_eq!(
+                expected_y_values[i],
+                linear_combination.evaluate(&x_values[i])
+            );
+        }
     }
 
     #[test]
