@@ -117,7 +117,7 @@ impl<
     }
 
     pub fn is_zero(&self) -> bool {
-        self.coefficients.len() == 0 || self.coefficients.iter().all(|x| x.is_zero())
+        self.coefficients.is_empty() || self.coefficients.iter().all(|x| x.is_zero())
     }
 
     pub fn evaluate(&self, x: &U) -> U {
@@ -538,7 +538,8 @@ mod test_polynomials {
         PrimeFieldElement::new(value, field)
     }
 
-    fn pfb<'a>(value: i128, field: &'a PrimeFieldBig) -> PrimeFieldElementBig<'a> {
+    #[allow(clippy::needless_lifetimes)] // Suppress wrong warning (fails to compile without lifetime, I think)
+    fn pfb<'a>(value: i128, field: &'a PrimeFieldBig) -> PrimeFieldElementBig {
         PrimeFieldElementBig::new(b(value), field)
     }
 
