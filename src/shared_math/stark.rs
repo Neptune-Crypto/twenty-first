@@ -4,7 +4,7 @@ use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
-use crate::shared_math::prime_field_element_big::PrimeFieldElementBig;
+use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use crate::shared_math::traits::IdentityValues;
 use crate::util_types::merkle_tree::{MerkleTree, Node};
@@ -79,7 +79,9 @@ pub fn stark_of_mimc(
     // Omicron is the generator of the small domain
     let omicron: PrimeFieldElementBig = omega.mod_pow(Into::<BigInt>::into(expansion_factor));
     let extended_domain_length: usize = (num_steps + 1) * expansion_factor;
+    let field: &PrimeFieldBig = omega.field;
     println!("extended_domain_length = {}", extended_domain_length); // TODO: REMOVE
+    println!("omega = {}", omega); // TODO: REMOVE
     println!("omicron = {}", omicron); // TODO: REMOVE
 
     // compute computational trace
@@ -244,8 +246,188 @@ pub fn stark_of_mimc(
     let k_seeds = utils::get_n_hash_rounds(&mt_root_hash, 4);
     let ks = k_seeds
         .iter()
-        .map(|seed| PrimeFieldElementBig::from_bytes(omega.field, seed))
+        .map(|seed| PrimeFieldElementBig::from_bytes(field, seed))
         .collect::<Vec<PrimeFieldElementBig>>();
+
+    // Calculate x^num_steps`
+    // TODO: Thor thinks there might be an off-by-one error here
+    let omega_to_num_steps: PrimeFieldElementBig = omega_domain[num_steps].clone();
+    let mut x_to_num_steps = vec![omega.ring_zero(); extended_domain_length];
+    x_to_num_steps[0] = omega.ring_one();
+    for i in 1..extended_domain_length {
+        // (omega^i)^steps = (omega^(i - 1)^steps) * omega^steps => x[i] = x[i - 1] * omega^steps
+        x_to_num_steps[i] = x_to_num_steps[i - 1].clone() * omega_to_num_steps.clone();
+    }
+
+    // TODO: Debug! Remove this check of low degree of x^num_steps
+    let max_degree_powers = num_steps as u32;
+    let x_powers_bigint = x_to_num_steps
+        .iter()
+        .map(|x| x.value.clone())
+        .collect::<Vec<BigInt>>();
+    println!("powers = {:?}", x_powers_bigint);
+    let mut output = vec![];
+    let low_degree_proof_powers = low_degree_test::prover_bigint(
+        &x_powers_bigint,
+        field.q.clone(),
+        max_degree_powers,
+        security_checks,
+        &mut output,
+        omega.value.clone(),
+    )
+    .unwrap();
+    let verify: Result<(), low_degree_test::ValidationError> =
+        low_degree_test::verify_bigint(low_degree_proof_powers, field.q.clone());
+    match verify {
+        Ok(_) => println!(
+            "Succesfully verified low degree ({}) of powers",
+            max_degree_powers
+        ),
+        Err(err) => panic!(
+            "Failed to verify low degree ({}) of powers. Got: {:?}",
+            max_degree_powers, err
+        ),
+    }
+
+    // TODO: Alan says we need to verify that the degree is high enough on all these
+    // polynomials! We might have a off-by-one, or two or three error in the degrees
+    // here.
+    let mut linear_combination_evaluations = vec![omega.ring_zero(); extended_domain_length];
+    for i in 1..extended_domain_length {
+        linear_combination_evaluations[i] = transition_quotient_codeword[i].clone()
+            + ks[0].clone() * extended_computational_trace[i].clone()
+            + ks[1].clone() * extended_computational_trace[i].clone() * x_to_num_steps[i].clone()
+            + ks[2].clone() * boundary_quotient_codeword[i].clone()
+            + ks[3].clone() * x_to_num_steps[i].clone() * boundary_quotient_codeword[i].clone();
+    }
+
+    // Alan: Don't need to send this tree
+    let linear_combination_mt = MerkleTree::from_vec(&linear_combination_evaluations);
+    println!(
+        "Computed linear combination of low-degree polynomials. Got hash: {:?}",
+        linear_combination_mt.get_root()
+    );
+
+    // Get pseudo-random indices from `l_mtree.get_root()`.
+    let index_preimages =
+        get_n_hash_rounds(&linear_combination_mt.get_root(), security_checks as u32);
+    let indices: Vec<usize> = index_preimages
+        .iter()
+        .map(|x| {
+            get_index_from_bytes_exclude_multiples(x, extended_domain_length, expansion_factor)
+        })
+        .collect::<Vec<usize>>();
+    let polynomial_proofs = polynomials_merkle_tree.get_multi_proof(&indices);
+    let l_proofs = linear_combination_mt.get_multi_proof(&indices);
+    println!("te_q_bq_proofs = {:?}", polynomial_proofs);
+    println!("l_proofs = {:?}", l_proofs);
+
+    // Compute the FRI low-degree proofs
+    let extended_computational_trace_bigint = extended_computational_trace
+        .iter()
+        .map(|x| x.value.clone())
+        .collect::<Vec<BigInt>>();
+    let boundary_quotient_codeword_bigint = boundary_quotient_codeword
+        .iter()
+        .map(|x| x.value.clone())
+        .collect::<Vec<BigInt>>();
+    let transition_quotient_codeword_bigint = transition_quotient_codeword
+        .iter()
+        .map(|x| x.value.clone())
+        .collect::<Vec<BigInt>>();
+    let linear_combination_evaluations_bigint = linear_combination_evaluations
+        .iter()
+        .map(|x| x.value.clone())
+        .collect::<Vec<BigInt>>();
+
+    let mut output = vec![];
+    let max_degree_ect = num_steps as u32;
+    let low_degree_proof_ect = low_degree_test::prover_bigint(
+        &extended_computational_trace_bigint,
+        field.q.clone(),
+        max_degree_ect,
+        security_checks,
+        &mut output,
+        omega.value.clone(),
+    )
+    .unwrap();
+    let verify: Result<(), low_degree_test::ValidationError> =
+        low_degree_test::verify_bigint(low_degree_proof_ect, field.q.clone());
+    match verify {
+        Ok(_) => println!(
+            "Succesfully verified low degree ({}) of extended computational trace",
+            max_degree_ect
+        ),
+        Err(err) => panic!(
+            "Failed to verify low degree ({}) of extended computational trace. Got: {:?}",
+            max_degree_ect, err
+        ),
+    }
+    let max_degree_bq = num_steps as u32;
+    let low_degree_proof_bq = low_degree_test::prover_bigint(
+        &boundary_quotient_codeword_bigint,
+        field.q.clone(),
+        max_degree_bq,
+        security_checks,
+        &mut output,
+        omega.value.clone(),
+    )
+    .unwrap();
+    let verify: Result<(), low_degree_test::ValidationError> =
+        low_degree_test::verify_bigint(low_degree_proof_bq, field.q.clone());
+    match verify {
+        Ok(_) => println!(
+            "Succesfully verified low degree ({}) of boundary quotient",
+            max_degree_bq
+        ),
+        Err(err) => panic!(
+            "Failed to verify low degree ({}) of boundary quotient. Got: {:?}",
+            max_degree_bq, err
+        ),
+    }
+    let max_degree_tq = ((num_steps + 1) * 2 - 1) as u32;
+    let low_degree_proof_tq = low_degree_test::prover_bigint(
+        &transition_quotient_codeword_bigint,
+        field.q.clone(),
+        max_degree_tq,
+        security_checks,
+        &mut output,
+        omega.value.clone(),
+    )
+    .unwrap();
+    let verify: Result<(), low_degree_test::ValidationError> =
+        low_degree_test::verify_bigint(low_degree_proof_tq, field.q.clone());
+    match verify {
+        Ok(_) => println!(
+            "Succesfully verified low degree ({}) of transition quotient",
+            max_degree_tq
+        ),
+        Err(err) => panic!(
+            "Failed to verify low degree ({}) of transition quotient. Got: {:?}",
+            max_degree_tq, err
+        ),
+    }
+    // let max_degree_lc = num_steps as u32;
+    let max_degree_lc = ((num_steps + 1) * 2 - 1) as u32;
+    println!("max_degree of linear combination is: {}", max_degree_lc);
+    let low_degree_proof_lc = low_degree_test::prover_bigint(
+        &linear_combination_evaluations_bigint,
+        field.q.clone(),
+        max_degree_lc,
+        security_checks,
+        &mut output,
+        omega.value.clone(),
+    )
+    .unwrap();
+    let verify: Result<(), low_degree_test::ValidationError> =
+        low_degree_test::verify_bigint(low_degree_proof_lc, field.q.clone());
+    match verify {
+        Ok(_) => println!("Succesfully verified low degree of linear combination"),
+        Err(err) => panic!(
+            "Failed to verify low degree ({}) of linear combination. Got: {:?}",
+            max_degree_lc, err
+        ),
+    }
 }
 
 pub fn stark_of_mimc_i128(
@@ -623,7 +805,7 @@ mod test_modular_arithmetic {
         // println!("Found: ret = {:?}", ret);
         let no_steps = 3;
         let expansion_factor = 4;
-        let security_factor = 2;
+        let security_factor = 10;
         let field = PrimeFieldBig::new(b(5 * 2i128.pow(25) + 1));
         // let round_constants_raw: Vec<i128> = utils::generate_random_numbers(no_steps, 17);
         let round_constants_raw: Vec<i128> = vec![7, 256, 117];
@@ -633,19 +815,26 @@ mod test_modular_arithmetic {
             //.map(|x| PrimeFieldElement::new(1, &field)) // TODO: FIX!! REPLACE value BY x
             .collect::<Vec<PrimeFieldElementBig>>();
         let (g2_option, _) = field.get_primitive_root_of_unity((no_steps + 1) * expansion_factor);
-        let g2 = g2_option.unwrap();
-        println!("Found g2 = {}", g2);
-        println!("Found g1 = {}", g2.mod_pow(b(2)));
+        let omega = g2_option.unwrap();
+        println!("Found g2 = {}", omega);
+        println!("Found g1 = {}", omega.mod_pow(b(expansion_factor)));
 
-        stark_of_mimc(
-            security_factor,
-            no_steps as usize,
-            expansion_factor as usize,
-            g2,
-            PrimeFieldElementBig::new(b(1), &field),
-            PrimeFieldElementBig::new(b(827), &field),
-            &round_constants,
-        );
+        for i in 0..20 {
+            let mimc_input = PrimeFieldElementBig::new(b(i), &field);
+            let mimc_trace = mimc_forward(&mimc_input, no_steps as usize, &round_constants);
+            let mimc_output = mimc_trace[no_steps as usize].clone();
+            println!("\n\n\n\n\n\n\n\n\n\nmimc_input = {}", mimc_input);
+            println!("mimc_output = {}", mimc_output);
+            stark_of_mimc(
+                security_factor,
+                no_steps as usize,
+                expansion_factor as usize,
+                omega.clone(),
+                mimc_input.clone(),
+                mimc_output.clone(),
+                &round_constants,
+            );
+        }
     }
 
     #[test]
