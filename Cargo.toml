@@ -36,10 +36,6 @@ harness = false
 name = "ntt"
 harness = false
 
-[[bench]]
-name = "merkle_tree"
-harness = false
-
 [profile.dev]
 opt-level = 0
 debug = true
