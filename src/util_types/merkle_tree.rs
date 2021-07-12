@@ -22,6 +22,21 @@ pub struct CompressedProofElement<T: Clone + Debug + PartialEq + Serialize>(
     pub Vec<Option<Node<T>>>,
 );
 
+impl<T: Clone + Debug + Serialize + PartialEq> CompressedProofElement<T> {
+    pub fn get_value(&self) -> T {
+        match self.0.first() {
+            None => panic!("CompressedProofElement was empty"),
+            Some(option) => match option {
+                None => panic!("First element of CompressedProofElement was pruned"),
+                Some(node) => match &node.value {
+                    None => panic!("No value of first element of CompressedProofElement"),
+                    Some(val) => val.clone(),
+                },
+            },
+        }
+    }
+}
+
 impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     pub fn verify_proof(root_hash: [u8; 32], index: u64, proof: Vec<Node<T>>) -> bool {
         let mut mut_index = index + 2u64.pow(proof.len() as u32);
@@ -286,6 +301,13 @@ mod merkle_tree_test {
                     &proof
                 ));
 
+                // Verify that `get_value` returns the value for this proof
+                assert!(proof
+                    .iter()
+                    .enumerate()
+                    .all(|(i, proof_element)| proof_element.get_value()
+                        == elements[indices_usize[i]]));
+
                 // manipulate Merkle root and verify failure
                 mt_32.root_hash[i] ^= 1;
                 assert!(!MerkleTree::verify_multi_proof(
@@ -425,6 +447,7 @@ mod merkle_tree_test {
         println!("\n\n\n\n proof(0) = {:?} \n\n\n\n", proof);
         assert!(MerkleTree::verify_proof(mt_four.root_hash, 0, proof));
         let mut compressed_proof = mt_four.get_multi_proof(&[0]);
+        assert_eq!(1i128, compressed_proof[0].get_value());
         assert!(MerkleTree::verify_multi_proof(
             mt_four.root_hash,
             &[0],
@@ -442,6 +465,8 @@ mod merkle_tree_test {
         println!("{:?}", compressed_proof);
 
         compressed_proof = mt_four.get_multi_proof(&[0, 1]);
+        assert_eq!(1i128, compressed_proof[0].get_value());
+        assert_eq!(2i128, compressed_proof[1].get_value());
         println!("{:?}", compressed_proof);
         assert!(MerkleTree::verify_multi_proof(
             mt_four.root_hash,
@@ -449,6 +474,9 @@ mod merkle_tree_test {
             &compressed_proof
         ));
         compressed_proof = mt_four.get_multi_proof(&[0, 1, 2]);
+        assert_eq!(1i128, compressed_proof[0].get_value());
+        assert_eq!(2i128, compressed_proof[1].get_value());
+        assert_eq!(3i128, compressed_proof[2].get_value());
         println!("{:?}", compressed_proof);
         assert!(MerkleTree::verify_multi_proof(
             mt_four.root_hash,
