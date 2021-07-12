@@ -17,6 +17,11 @@ pub struct MerkleTree<T> {
     height: u64,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CompressedProofElement<T: Clone + Debug + PartialEq + Serialize>(
+    pub Vec<Option<Node<T>>>,
+);
+
 impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     pub fn verify_proof(root_hash: [u8; 32], index: u64, proof: Vec<Node<T>>) -> bool {
         let mut mut_index = index + 2u64.pow(proof.len() as u32);
@@ -103,7 +108,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     pub fn verify_multi_proof(
         root_hash: [u8; 32],
         indices: &[usize],
-        proof: &[Vec<Option<Node<T>>>],
+        proof: &[CompressedProofElement<T>],
     ) -> bool {
         // compressed proofs can only be verified for all indices,
         // meaning that all indices for the proof values must be known.
@@ -116,12 +121,12 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         }
 
         let mut partial_tree: HashMap<u64, Node<T>> = HashMap::new();
-        let mut proof_clone = proof.to_owned();
-        let half_tree_size = 2u64.pow(proof_clone[0].len() as u32 - 1);
+        let mut proof_clone: Vec<CompressedProofElement<T>> = proof.to_owned();
+        let half_tree_size = 2u64.pow(proof_clone[0].0.len() as u32 - 1);
         for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
             let mut index = half_tree_size + *i as u64;
-            partial_tree.insert(index, b[0].clone().unwrap());
-            for elem in b.iter_mut().skip(1) {
+            partial_tree.insert(index, b.0[0].clone().unwrap());
+            for elem in b.0.iter_mut().skip(1) {
                 if let Some(i) = elem.clone() {
                     partial_tree.insert(index ^ 1, i);
                 }
@@ -158,7 +163,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
 
         for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
             let mut index = half_tree_size + *i as u64;
-            for elem in b.iter_mut().skip(1) {
+            for elem in b.0.iter_mut().skip(1) {
                 if *elem == None {
                     // If the Merkle tree/proof is manipulated, the value partial_tree[&(index ^ 1)]
                     // is not guaranteed to exist. So have to  check
@@ -176,6 +181,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
 
         for i in 0..indices.len() {
             let proof_clone_unwrapped: Vec<Node<T>> = proof_clone[i]
+                .0
                 .clone()
                 .into_iter()
                 .map(|x| x.unwrap())
@@ -189,15 +195,15 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         true
     }
 
-    pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<Vec<Option<Node<T>>>> {
+    pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<CompressedProofElement<T>> {
         let mut calculable_indices: HashSet<usize> = HashSet::new();
-        let mut output: Vec<Vec<Option<Node<T>>>> = Vec::with_capacity(indices.len());
+        let mut output: Vec<CompressedProofElement<T>> = Vec::with_capacity(indices.len());
         for i in indices.iter() {
-            let new_branch: Vec<Option<Node<T>>> =
-                self.get_proof(*i).into_iter().map(Some).collect();
+            let new_branch: CompressedProofElement<T> =
+                CompressedProofElement(self.get_proof(*i).into_iter().map(Some).collect());
             let mut index = self.nodes.len() / 2 + i;
             calculable_indices.insert(index);
-            for _ in 1..new_branch.len() {
+            for _ in 1..new_branch.0.len() {
                 calculable_indices.insert(index ^ 1);
                 index /= 2;
             }
@@ -226,7 +232,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         for (i, b) in indices.iter().zip(output.iter_mut()) {
             let mut index: usize = self.nodes.len() / 2 + i;
             scanned.insert(index);
-            for elem in b.iter_mut().skip(1) {
+            for elem in b.0.iter_mut().skip(1) {
                 if calculable_indices.contains(&((index ^ 1) * 2))
                     && calculable_indices.contains(&((index ^ 1) * 2 + 1))
                     || (index ^ 1) as i64 - self.nodes.len() as i64 / 2 > 0 // TODO: Maybe > 1 here?
@@ -272,7 +278,7 @@ mod merkle_tree_test {
                     indices_usize.push(*elem as usize);
                 }
 
-                let proof: Vec<Vec<Option<Node<PrimeFieldElement>>>> =
+                let proof: Vec<CompressedProofElement<PrimeFieldElement>> =
                     mt_32.get_multi_proof(&indices_usize);
                 assert!(MerkleTree::verify_multi_proof(
                     mt_32.get_root(),
@@ -425,8 +431,9 @@ mod merkle_tree_test {
             &compressed_proof
         ));
         proof = mt_four.get_proof(0);
-        assert_eq!(proof.len(), compressed_proof[0].len());
+        assert_eq!(proof.len(), compressed_proof[0].0.len());
         let unwrapped_compressed_proof: Vec<Node<i128>> = compressed_proof[0]
+            .0
             .clone()
             .into_iter()
             .map(|x| x.unwrap())

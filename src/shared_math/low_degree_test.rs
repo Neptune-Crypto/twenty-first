@@ -3,7 +3,7 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
-use crate::util_types::merkle_tree::{MerkleTree, Node};
+use crate::util_types::merkle_tree::{CompressedProofElement, MerkleTree, Node};
 use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use num_bigint::BigInt;
 use num_traits::One;
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::result::Result;
 
 #[derive(PartialEq, Eq, Debug)]
@@ -37,12 +37,12 @@ pub struct LowDegreeProof<T>
 where
     // DeserializeOwned is used here to indicate that no data is borrowed
     // in the deserialization process.
-    T: Serialize,
+    T: Clone + Debug + PartialEq + Serialize,
 {
-    ab_proofs: Vec<Vec<Vec<Option<Node<T>>>>>,
+    ab_proofs: Vec<Vec<CompressedProofElement<T>>>,
     challenge_hash_preimages: Vec<Vec<u8>>,
     codeword_size: u32,
-    c_proofs: Vec<Vec<Vec<Option<Node<T>>>>>,
+    c_proofs: Vec<Vec<CompressedProofElement<T>>>,
     index_picker_preimage: Vec<u8>,
     max_degree: u32,
     merkle_roots: Vec<[u8; 32]>,
@@ -61,7 +61,7 @@ impl fmt::Display for MyError {
     }
 }
 
-impl<U: DeserializeOwned + Serialize + std::fmt::Display> LowDegreeProof<U> {
+impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowDegreeProof<U> {
     pub fn from_serialization(
         serialization: Vec<u8>,
         start_index: usize,
@@ -93,18 +93,20 @@ impl<U: DeserializeOwned + Serialize + std::fmt::Display> LowDegreeProof<U> {
             merkle_roots.push(root);
         }
 
-        let mut c_proofs: Vec<Vec<Vec<Option<Node<U>>>>> = Vec::with_capacity(rounds_count_usize);
-        let mut ab_proofs: Vec<Vec<Vec<Option<Node<U>>>>> = Vec::with_capacity(rounds_count_usize);
+        let mut c_proofs: Vec<Vec<CompressedProofElement<U>>> =
+            Vec::with_capacity(rounds_count_usize);
+        let mut ab_proofs: Vec<Vec<CompressedProofElement<U>>> =
+            Vec::with_capacity(rounds_count_usize);
         for _ in 0..rounds_count {
             let mut proof_size: u16 = bincode::deserialize(&serialization[index..index + 2])?;
             index += 2;
-            let c_proof: Vec<Vec<Option<Node<U>>>> =
+            let c_proof: Vec<CompressedProofElement<U>> =
                 bincode::deserialize_from(&serialization[index..index + proof_size as usize])?;
             index += proof_size as usize;
             c_proofs.push(c_proof);
             proof_size = bincode::deserialize(&serialization[index..index + 2])?;
             index += 2;
-            let ab_proof: Vec<Vec<Option<Node<U>>>> =
+            let ab_proof: Vec<CompressedProofElement<U>> =
                 bincode::deserialize_from(&serialization[index..index + proof_size as usize])?;
             index += proof_size as usize;
             ab_proofs.push(ab_proof);
@@ -172,7 +174,7 @@ pub fn verify_bigint(
         number_of_leaves /= 2;
         c_values = proof.c_proofs[i]
             .iter()
-            .map(|x| x[0].clone().unwrap().value.unwrap())
+            .map(|x| x.0[0].clone().unwrap().value.unwrap())
             .collect::<Vec<BigInt>>();
 
         let valid_cs = MerkleTree::verify_multi_proof(
@@ -201,15 +203,19 @@ pub fn verify_bigint(
         for j in 0..proof.s as usize {
             let a_index = ab_indices[2 * j] as i128;
             let a_x_bigint = root.mod_pow_raw(bigint(a_index));
-            let a_y_bigint = proof.ab_proofs[i][2 * j][0].clone().unwrap().value.unwrap();
-            let b_index = ab_indices[2 * j + 1] as i128;
-            let b_x_bigint = root.mod_pow_raw(bigint(b_index));
-            let b_y_bigint = proof.ab_proofs[i][2 * j + 1][0]
+            let a_y_bigint = proof.ab_proofs[i][2 * j].0[0]
                 .clone()
                 .unwrap()
                 .value
                 .unwrap();
-            let c_y_bigint = proof.c_proofs[i][j][0].clone().unwrap().value.unwrap();
+            let b_index = ab_indices[2 * j + 1] as i128;
+            let b_x_bigint = root.mod_pow_raw(bigint(b_index));
+            let b_y_bigint = proof.ab_proofs[i][2 * j + 1].0[0]
+                .clone()
+                .unwrap()
+                .value
+                .unwrap();
+            let c_y_bigint = proof.c_proofs[i][j].0[0].clone().unwrap().value.unwrap();
             let a_x = PrimeFieldElementBig::new(a_x_bigint.clone(), &field);
             let a_y = PrimeFieldElementBig::new(a_y_bigint, &field);
             let b_x = PrimeFieldElementBig::new(b_x_bigint, &field);
@@ -287,7 +293,7 @@ pub fn verify_i128(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Val
         number_of_leaves /= 2;
         c_values = proof.c_proofs[i]
             .iter()
-            .map(|x| x[0].as_ref().unwrap().value.unwrap())
+            .map(|x| x.0[0].as_ref().unwrap().value.unwrap())
             .collect::<Vec<i128>>();
 
         let valid_cs = MerkleTree::verify_multi_proof(
@@ -316,19 +322,19 @@ pub fn verify_i128(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Val
         for j in 0..proof.s as usize {
             let a_index = ab_indices[2 * j] as i128;
             let a_x = root.mod_pow_raw(a_index);
-            let a_y = proof.ab_proofs[i][2 * j][0]
+            let a_y = proof.ab_proofs[i][2 * j].0[0]
                 .as_ref()
                 .unwrap()
                 .value
                 .unwrap();
             let b_index = ab_indices[2 * j + 1] as i128;
             let b_x = root.mod_pow_raw(b_index);
-            let b_y = proof.ab_proofs[i][2 * j + 1][0]
+            let b_y = proof.ab_proofs[i][2 * j + 1].0[0]
                 .as_ref()
                 .unwrap()
                 .value
                 .unwrap();
-            let c_y = proof.c_proofs[i][j][0].as_ref().unwrap().value.unwrap();
+            let c_y = proof.c_proofs[i][j].0[0].as_ref().unwrap().value.unwrap();
             if !PrimeFieldPolynomial::are_colinear_raw(
                 &[(a_x, a_y), (b_x, b_y), (*challenge, c_y)],
                 modulus,
@@ -410,7 +416,7 @@ fn fri_prover_iteration_i128(
     new_codeword
 }
 
-fn prover_shared<T: Clone + Serialize + Debug + PartialEq>(
+fn prover_shared<T: Clone + Debug + Serialize + PartialEq>(
     max_degree: u32,
     output: &mut Vec<u8>,
     codeword: &[T],
@@ -458,8 +464,8 @@ pub fn prover_bigint(
     let mut mut_codeword: Vec<BigInt> = codeword.to_vec();
 
     // Arrays for return values
-    let mut c_proofs: Vec<Vec<Vec<Option<Node<BigInt>>>>> = vec![];
-    let mut ab_proofs: Vec<Vec<Vec<Option<Node<BigInt>>>>> = vec![];
+    let mut c_proofs: Vec<Vec<CompressedProofElement<BigInt>>> = vec![];
+    let mut ab_proofs: Vec<Vec<CompressedProofElement<BigInt>>> = vec![];
 
     // commit phase
     let (_, _, inv2_temp) = PrimeFieldElementBig::eea(modulus.clone(), bigint(2));
@@ -529,9 +535,9 @@ pub fn prover_bigint(
             ab_indices.push(s1_index);
         }
 
-        let authentication_paths_c: Vec<Vec<Option<Node<BigInt>>>> =
+        let authentication_paths_c: Vec<CompressedProofElement<BigInt>> =
             mts[i + 1].get_multi_proof(&c_indices);
-        let authentication_paths_ab: Vec<Vec<Option<Node<BigInt>>>> =
+        let authentication_paths_ab: Vec<CompressedProofElement<BigInt>> =
             mts[i].get_multi_proof(&ab_indices);
 
         // serialize proofs and store in output
@@ -582,8 +588,8 @@ pub fn prover_i128(
         prover_shared(max_degree, output, codeword, s, primitive_root_of_unity)?;
 
     // Arrays for return values
-    let mut c_proofs: Vec<Vec<Vec<Option<Node<i128>>>>> = vec![];
-    let mut ab_proofs: Vec<Vec<Vec<Option<Node<i128>>>>> = vec![];
+    let mut c_proofs: Vec<Vec<CompressedProofElement<i128>>> = vec![];
+    let mut ab_proofs: Vec<Vec<CompressedProofElement<i128>>> = vec![];
 
     let mut mut_codeword: Vec<i128> = codeword.to_vec();
 
@@ -656,9 +662,9 @@ pub fn prover_i128(
             ab_indices.push(s1_index);
         }
 
-        let authentication_paths_c: Vec<Vec<Option<Node<i128>>>> =
+        let authentication_paths_c: Vec<CompressedProofElement<i128>> =
             mts[i + 1].get_multi_proof(&c_indices);
-        let authentication_paths_ab: Vec<Vec<Option<Node<i128>>>> =
+        let authentication_paths_ab: Vec<CompressedProofElement<i128>> =
             mts[i].get_multi_proof(&ab_indices);
 
         // serialize proofs and store in output
@@ -766,9 +772,9 @@ mod test_low_degree_proof {
             primitive_root_of_unity.clone(),
         )
         .unwrap();
-        let mut new_value = proof.ab_proofs[0][1][0].clone().unwrap();
+        let mut new_value = proof.ab_proofs[0][1].0[0].clone().unwrap();
         new_value.value = Some(bigint(237));
-        proof.ab_proofs[0][1][0] = Some(new_value);
+        proof.ab_proofs[0][1].0[0] = Some(new_value);
         assert_eq!(
             Err(ValidationError::BadMerkleProof),
             verify_bigint(proof, field.q.clone())
@@ -855,9 +861,9 @@ mod test_low_degree_proof {
             primitive_root_of_unity,
         )
         .unwrap();
-        let mut new_value = proof.ab_proofs[0][1][0].clone().unwrap();
+        let mut new_value = proof.ab_proofs[0][1].0[0].clone().unwrap();
         new_value.value = Some(237);
-        proof.ab_proofs[0][1][0] = Some(new_value);
+        proof.ab_proofs[0][1].0[0] = Some(new_value);
         assert_eq!(
             Err(ValidationError::BadMerkleProof),
             verify_i128(proof, field.q)

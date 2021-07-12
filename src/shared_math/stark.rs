@@ -8,7 +8,7 @@ use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use crate::shared_math::traits::IdentityValues;
-use crate::util_types::merkle_tree::{MerkleTree, Node};
+use crate::util_types::merkle_tree::{CompressedProofElement, MerkleTree, Node};
 use crate::utils;
 use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use num_bigint::BigInt;
@@ -30,8 +30,8 @@ pub enum StarkProofError {
 pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     codeword_merkle_root: [u8; 32],
     linear_combination_merkle_root: [u8; 32],
-    codeword_proofs: Vec<Vec<Option<Node<(T, T, T)>>>>,
-    linear_combination_proofs: Vec<Vec<Option<Node<T>>>>,
+    codeword_proofs: Vec<CompressedProofElement<(T, T, T)>>,
+    linear_combination_proofs: Vec<CompressedProofElement<T>>,
     linear_combination_fri: LowDegreeProof<T>,
 }
 
@@ -347,9 +347,9 @@ pub fn stark_of_mimc(
         .iter()
         .map(|x| get_index_from_bytes(x, extended_domain_length))
         .collect::<Vec<usize>>();
-    let polynomial_proofs: Vec<Vec<Option<Node<(BigInt, BigInt, BigInt)>>>> =
+    let polynomial_proofs: Vec<CompressedProofElement<(BigInt, BigInt, BigInt)>> =
         polynomials_merkle_tree.get_multi_proof(&indices);
-    let linear_combination_proofs: Vec<Vec<Option<Node<BigInt>>>> =
+    let linear_combination_proofs: Vec<CompressedProofElement<BigInt>> =
         linear_combination_mt.get_multi_proof(&indices);
     println!("polynomial_proofs = {:?}", polynomial_proofs);
     println!(
