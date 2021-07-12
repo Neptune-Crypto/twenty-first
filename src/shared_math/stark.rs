@@ -933,12 +933,12 @@ mod test_modular_arithmetic {
             stark_proof.linear_combination_merkle_root[0] ^= 1;
 
             // Verify linear combination
-            let k_seeds = utils::get_n_hash_rounds(&stark_proof.codeword_merkle_root, 4);
-            let ks = k_seeds
-                .iter()
-                .map(|seed| PrimeFieldElementBig::from_bytes(&field, seed))
-                .collect::<Vec<PrimeFieldElementBig>>();
-            for linear_proof in stark_proof.linear_combination_proofs.iter() {}
+            // let k_seeds = utils::get_n_hash_rounds(&stark_proof.codeword_merkle_root, 4);
+            // let ks = k_seeds
+            //     .iter()
+            //     .map(|seed| PrimeFieldElementBig::from_bytes(&field, seed))
+            //     .collect::<Vec<PrimeFieldElementBig>>();
+            // for linear_proof in stark_proof.linear_combination_proofs.iter() {}
         }
     }
 
