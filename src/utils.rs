@@ -868,11 +868,11 @@ pub fn get_index_from_bytes(buf: &[u8], length: usize) -> usize {
     result
 }
 
-pub fn get_index_from_bytes_exclude_multiples(buf: &[u8], length: usize, multiple: usize) -> usize {
-    let options = length - length / multiple;
-    let x = get_index_from_bytes(buf, options);
-    x + 1 + x / (multiple - 1)
-}
+// pub fn get_index_from_bytes_exclude_multiples(buf: &[u8], length: usize, multiple: usize) -> usize {
+//     let options = length - length / multiple;
+//     let x = get_index_from_bytes(buf, options);
+//     x + 1 + x / (multiple - 1)
+// }
 
 #[cfg(test)]
 mod test_utils {
@@ -890,10 +890,6 @@ mod test_utils {
         assert_eq!(9, get_index_from_bytes(&[9], 100));
         assert_eq!(10, get_index_from_bytes(&[10], 100));
         assert_eq!(11, get_index_from_bytes(&[11], 100));
-        assert_eq!(1, get_index_from_bytes_exclude_multiples(&[0], 100, 10));
-        assert_eq!(11, get_index_from_bytes_exclude_multiples(&[9], 100, 10));
-        assert_eq!(12, get_index_from_bytes_exclude_multiples(&[10], 100, 10));
-        assert_eq!(13, get_index_from_bytes_exclude_multiples(&[11], 100, 10));
     }
 
     #[test]
@@ -939,11 +935,3 @@ pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
         .collect()
 }
-
-// pub fn encode_hex(bytes: &[u8]) -> String {
-//     let mut s = String::with_capacity(bytes.len() * 2);
-//     for &b in bytes {
-//         write!(&mut s, "{:02x}", b).unwrap();
-//     }
-//     s
-// }
