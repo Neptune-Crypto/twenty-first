@@ -44,6 +44,12 @@ jobs:
         with:
           command: test
 
+      - name: Run cargo benchmark compile
+        uses: actions-rs/cargo@v1
+        with:
+          command: bench
+          args: --no-run
+
   lints:
     name: Lints
     runs-on: ubuntu-latest
