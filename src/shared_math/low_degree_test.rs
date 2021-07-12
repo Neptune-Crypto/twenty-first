@@ -8,7 +8,7 @@ use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use num_bigint::BigInt;
 use num_traits::One;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
@@ -28,12 +28,16 @@ pub enum ProveError {
     BadMaxDegreeValue,
 }
 
+#[cfg_attr(
+    feature = "serialization-serde",
+    derive(Serialize, Deserialize, Serializer)
+)]
 #[derive(PartialEq, Debug, Serialize, Clone)]
 pub struct LowDegreeProof<T>
 where
     // DeserializeOwned is used here to indicate that no data is borrowed
     // in the deserialization process.
-    T: DeserializeOwned + Serialize,
+    T: Serialize,
 {
     ab_proofs: Vec<Vec<Vec<Option<Node<T>>>>>,
     challenge_hash_preimages: Vec<Vec<u8>>,
