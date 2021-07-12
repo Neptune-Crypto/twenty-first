@@ -13,7 +13,6 @@ use crate::utils;
 use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use num_bigint::BigInt;
 use num_traits::Zero;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::Debug;
 
@@ -27,7 +26,8 @@ pub enum StarkProofError {
     NonZeroTransitionRemainder,
 }
 
-pub struct StarkProof<T: Clone + Debug + Serialize + DeserializeOwned + PartialEq> {
+#[derive(Clone, Debug, Serialize)]
+pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     codeword_merkle_root: [u8; 32],
     linear_combination_merkle_root: [u8; 32],
     codeword_proofs: Vec<Vec<Option<Node<(T, T, T)>>>>,
