@@ -203,19 +203,11 @@ pub fn verify_bigint(
         for j in 0..proof.s as usize {
             let a_index = ab_indices[2 * j] as i128;
             let a_x_bigint = root.mod_pow_raw(bigint(a_index));
-            let a_y_bigint = proof.ab_proofs[i][2 * j].0[0]
-                .clone()
-                .unwrap()
-                .value
-                .unwrap();
+            let a_y_bigint: BigInt = proof.ab_proofs[i][2 * j].get_value();
             let b_index = ab_indices[2 * j + 1] as i128;
             let b_x_bigint = root.mod_pow_raw(bigint(b_index));
-            let b_y_bigint = proof.ab_proofs[i][2 * j + 1].0[0]
-                .clone()
-                .unwrap()
-                .value
-                .unwrap();
-            let c_y_bigint = proof.c_proofs[i][j].0[0].clone().unwrap().value.unwrap();
+            let b_y_bigint: BigInt = proof.ab_proofs[i][2 * j + 1].get_value();
+            let c_y_bigint = proof.c_proofs[i][j].get_value();
             let a_x = PrimeFieldElementBig::new(a_x_bigint.clone(), &field);
             let a_y = PrimeFieldElementBig::new(a_y_bigint, &field);
             let b_x = PrimeFieldElementBig::new(b_x_bigint, &field);
@@ -322,19 +314,11 @@ pub fn verify_i128(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Val
         for j in 0..proof.s as usize {
             let a_index = ab_indices[2 * j] as i128;
             let a_x = root.mod_pow_raw(a_index);
-            let a_y = proof.ab_proofs[i][2 * j].0[0]
-                .as_ref()
-                .unwrap()
-                .value
-                .unwrap();
+            let a_y: i128 = proof.ab_proofs[i][2 * j].get_value();
             let b_index = ab_indices[2 * j + 1] as i128;
             let b_x = root.mod_pow_raw(b_index);
-            let b_y = proof.ab_proofs[i][2 * j + 1].0[0]
-                .as_ref()
-                .unwrap()
-                .value
-                .unwrap();
-            let c_y = proof.c_proofs[i][j].0[0].as_ref().unwrap().value.unwrap();
+            let b_y: i128 = proof.ab_proofs[i][2 * j + 1].get_value();
+            let c_y: i128 = proof.c_proofs[i][j].get_value();
             if !PrimeFieldPolynomial::are_colinear_raw(
                 &[(a_x, a_y), (b_x, b_y), (*challenge, c_y)],
                 modulus,
