@@ -254,6 +254,8 @@ pub fn stark_of_mimc(
     let boundary_quotient_codeword = ntt(&boundary_constraint_coefficients_padded, &omega);
 
     // Commit to all evaluations by constructing a Merkle tree of the polynomial evaluations
+    // TODO: We also need the offset values of the ect, since this is needed to verify that
+    // `air(x) = TQ(x) * Z_t(x)`.
     let polynomial_evaluations: Vec<(BigInt, BigInt, BigInt)> = extended_computational_trace
         .iter()
         .zip(transition_quotient_codeword.iter())
@@ -988,7 +990,8 @@ mod test_modular_arithmetic {
                             * ks[3].clone()
                 );
 
-                // Verify transition constraint in the selected indices
+                // Verify transition constraint in the selected indices:
+                // `air(x) = TQ(x) * Z_t(x)` =>
                 // assert_eq!(BigInt::zero(), );
             }
 
