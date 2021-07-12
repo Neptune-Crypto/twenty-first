@@ -22,7 +22,10 @@ pub struct CompressedProofElement<T: Clone + Debug + PartialEq + Serialize>(
     pub Vec<Option<Node<T>>>,
 );
 
+/// Method for extracting the value for which a compressed Merkle proof element is for.
 impl<T: Clone + Debug + Serialize + PartialEq> CompressedProofElement<T> {
+    /// Given a proof_element: CompressedProofElement<T>, this returns the value
+    /// `proof_element.0[0].clone().unwrap().value.unwrap();`
     pub fn get_value(&self) -> T {
         match self.0.first() {
             None => panic!("CompressedProofElement was empty"),
