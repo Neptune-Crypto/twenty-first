@@ -8,7 +8,7 @@ use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use crate::shared_math::traits::IdentityValues;
-use crate::util_types::merkle_tree::{CompressedProofElement, MerkleTree, Node};
+use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree, Node};
 use crate::utils;
 use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use num_bigint::BigInt;
@@ -28,10 +28,10 @@ pub enum StarkProofError {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
-    codeword_merkle_root: [u8; 32],
+    tuple_merkle_root: [u8; 32],
     linear_combination_merkle_root: [u8; 32],
-    codeword_proofs: Vec<CompressedProofElement<(T, T, T)>>,
-    linear_combination_proofs: Vec<CompressedProofElement<T>>,
+    tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
+    linear_combination_authentication_paths: Vec<CompressedAuthenticationPath<T>>,
     linear_combination_fri: LowDegreeProof<T>,
 }
 
@@ -289,8 +289,10 @@ pub fn stark_of_mimc(
     let mut shifted_trace_codeword: Vec<PrimeFieldElementBig> =
         extended_computational_trace.clone();
     let mut xi: PrimeFieldElementBig = omega.ring_one();
-    for i in 0..extended_domain_length {
-        shifted_trace_codeword[i] = shifted_trace_codeword[i].clone() * xi.clone();
+    // for i in 0..extended_domain_length {
+    for stc in shifted_trace_codeword.iter_mut() {
+        // shifted_trace_codeword[i] = shifted_trace_codeword[i].clone() * xi.clone();
+        *stc = stc.to_owned() * xi.clone();
         xi = xi * omega_domain[num_steps + 1].clone();
     }
 
@@ -306,9 +308,11 @@ pub fn stark_of_mimc(
     let mut shifted_boundary_quotient_codeword: Vec<PrimeFieldElementBig> =
         boundary_quotient_codeword.clone();
     xi = omega.ring_one();
-    for i in 0..extended_domain_length {
-        shifted_boundary_quotient_codeword[i] =
-            shifted_boundary_quotient_codeword[i].clone() * xi.clone();
+    // for i in 0..extended_domain_length {
+    for sbqc in shifted_boundary_quotient_codeword.iter_mut() {
+        // shifted_boundary_quotient_codeword[i] =
+        //     shifted_boundary_quotient_codeword[i].clone() * xi.clone();
+        *sbqc = sbqc.to_owned() * xi.clone();
         xi = xi * omega_domain[num_steps + 3].clone();
     }
 
@@ -342,9 +346,9 @@ pub fn stark_of_mimc(
         .iter()
         .map(|x| get_index_from_bytes(x, extended_domain_length))
         .collect::<Vec<usize>>();
-    let polynomial_proofs: Vec<CompressedProofElement<(BigInt, BigInt, BigInt)>> =
+    let polynomial_proofs: Vec<CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>> =
         polynomials_merkle_tree.get_multi_proof(&indices);
-    let linear_combination_proofs: Vec<CompressedProofElement<BigInt>> =
+    let linear_combination_paths: Vec<CompressedAuthenticationPath<BigInt>> =
         linear_combination_mt.get_multi_proof(&indices);
     // println!(
     //     "polynomial_proof values = {:?}",
@@ -548,10 +552,10 @@ pub fn stark_of_mimc(
     }
 
     Ok(StarkProof {
-        codeword_merkle_root: mt_root_hash,
+        tuple_merkle_root: mt_root_hash,
         linear_combination_merkle_root: linear_combination_mt.get_root(),
-        codeword_proofs: polynomial_proofs,
-        linear_combination_proofs,
+        tuple_authentication_paths: polynomial_proofs,
+        linear_combination_authentication_paths: linear_combination_paths,
         linear_combination_fri,
     })
 }
