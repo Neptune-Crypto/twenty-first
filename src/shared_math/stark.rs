@@ -276,68 +276,60 @@ pub fn stark_of_mimc(
     // );
 
     let mt_root_hash = polynomials_merkle_tree.get_root();
-    let k_seeds = utils::get_n_hash_rounds(&mt_root_hash, 4);
+    let k_seeds = utils::get_n_hash_rounds(&mt_root_hash, 5);
     let ks = k_seeds
         .iter()
         .map(|seed| PrimeFieldElementBig::from_bytes(field, seed))
         .collect::<Vec<PrimeFieldElementBig>>();
     // println!("ks = {:?}", ks);
 
-    // Calculate x^num_steps`
-    let omega_to_num_steps: PrimeFieldElementBig = omega_domain[num_steps].clone();
-    let mut x_to_num_steps = vec![omega.ring_zero(); extended_domain_length];
-    x_to_num_steps[0] = omega.ring_one();
-    for i in 1..extended_domain_length {
-        x_to_num_steps[i] = x_to_num_steps[i - 1].clone() * omega_to_num_steps.clone();
+    // Calculate x^3
+
+    // compute shifted trace codeword
+    let mut shifted_trace_codeword: Vec<PrimeFieldElementBig> =
+        extended_computational_trace.clone();
+    let mut xi: PrimeFieldElementBig = omega.ring_one();
+    for i in 0..extended_domain_length {
+        shifted_trace_codeword[i] = shifted_trace_codeword[i].clone() * xi.clone();
+        xi = xi * omega_domain[num_steps + 1].clone();
     }
 
-    // TODO: Debug! Remove this check of low degree of x^num_steps once stuff is working!
-    let max_degree_powers = num_steps as u32;
-    let x_powers_bigint = x_to_num_steps
-        .iter()
-        .map(|x| x.value.clone())
-        .collect::<Vec<BigInt>>();
-    // println!("\n\n\npowers = {:?}\n\n\n", x_powers_bigint);
-    let mut output = vec![];
-    let low_degree_proof_powers = low_degree_test::prover_bigint(
-        &x_powers_bigint,
-        field.q.clone(),
-        max_degree_powers,
-        security_checks,
-        &mut output,
-        omega.value.clone(),
-    )
-    .unwrap();
-    let verify: Result<(), low_degree_test::ValidationError> =
-        low_degree_test::verify_bigint(low_degree_proof_powers, field.q.clone());
-    match verify {
-        Ok(_) => println!(
-            "Succesfully verified low degree ({}) of powers",
-            max_degree_powers
-        ),
-        Err(err) => panic!(
-            "Failed to verify low degree ({}) of powers. Got: {:?}",
-            max_degree_powers, err
-        ),
+    // compute shifted transition quotient codeword
+    let mut shifted_transition_quotient_codeword: Vec<PrimeFieldElementBig> =
+        transition_quotient_codeword.clone();
+    for i in 0..extended_domain_length {
+        shifted_transition_quotient_codeword[i] =
+            shifted_transition_quotient_codeword[i].clone() * omega_domain[i].clone();
+    }
+
+    // compute shifted boundary quotient codeword
+    let mut shifted_boundary_quotient_codeword: Vec<PrimeFieldElementBig> =
+        boundary_quotient_codeword.clone();
+    xi = omega.ring_one();
+    for i in 0..extended_domain_length {
+        shifted_boundary_quotient_codeword[i] =
+            shifted_boundary_quotient_codeword[i].clone() * xi.clone();
+        xi = xi * omega_domain[num_steps + 3].clone();
     }
 
     // TODO: Alan says we need to verify that the degree is high enough on all these
     // polynomials! We might have a off-by-one, or two or three error in the degrees
     // here.
-    let mut linear_combination_evaluations = vec![BigInt::zero(); extended_domain_length];
+    let mut linear_combination_codeword = vec![BigInt::zero(); extended_domain_length];
     for i in 0..extended_domain_length {
-        linear_combination_evaluations[i] = (transition_quotient_codeword[i].clone()
-            + ks[0].clone() * extended_computational_trace[i].clone()
-            + ks[1].clone() * extended_computational_trace[i].clone() * x_to_num_steps[i].clone()
-            + ks[2].clone() * boundary_quotient_codeword[i].clone()
-            + ks[3].clone() * x_to_num_steps[i].clone() * boundary_quotient_codeword[i].clone())
+        linear_combination_codeword[i] = (extended_computational_trace[i].clone()
+            + ks[0].clone() * shifted_trace_codeword[i].clone()
+            + ks[1].clone() * boundary_quotient_codeword[i].clone()
+            + ks[2].clone() * shifted_boundary_quotient_codeword[i].clone()
+            + ks[3].clone() * transition_quotient_codeword[i].clone()
+            + ks[4].clone() * shifted_transition_quotient_codeword[i].clone())
         .value;
     }
 
     // Alan: Don't need to send this tree
     // Thor: Probably true, but we calculate the proof indices from this tree, so I think
     // it makes verification faster if we send it.
-    let linear_combination_mt = MerkleTree::from_vec(&linear_combination_evaluations);
+    let linear_combination_mt = MerkleTree::from_vec(&linear_combination_codeword);
     // println!(
     //     "Computed linear combination of low-degree polynomials. Got hash: {:?}",
     //     linear_combination_mt.get_root()
@@ -382,7 +374,7 @@ pub fn stark_of_mimc(
         .iter()
         .map(|x| x.value.clone())
         .collect::<Vec<BigInt>>();
-    let linear_combination_evaluations_bigint = linear_combination_evaluations;
+    let linear_combination_evaluations_bigint = linear_combination_codeword;
 
     let mut output = vec![];
     let max_degree_ect = num_steps as u32;
@@ -446,10 +438,80 @@ pub fn stark_of_mimc(
         ),
         Err(_err) => return Err(StarkProofError::HighDegreeTransitionQuotient),
     }
+    let max_degree_shifted_tq = ((num_steps + 1) * 2 - 1) as u32;
+    let shifted_transition_quotient_codeword_bi = shifted_transition_quotient_codeword
+        .iter()
+        .map(|x| x.value.clone())
+        .collect::<Vec<BigInt>>();
+    let low_degree_proof_shifted_tq = low_degree_test::prover_bigint(
+        &shifted_transition_quotient_codeword_bi,
+        field.q.clone(),
+        max_degree_shifted_tq,
+        security_checks,
+        &mut output,
+        omega.value.clone(),
+    )
+    .unwrap();
+    let verify: Result<(), low_degree_test::ValidationError> =
+        low_degree_test::verify_bigint(low_degree_proof_shifted_tq, field.q.clone());
+    match verify {
+        Ok(_) => println!(
+            "Succesfully verified low degree ({}) of shifted transition quotient",
+            max_degree_tq
+        ),
+        Err(_err) => return Err(StarkProofError::HighDegreeTransitionQuotient),
+    }
+    let max_degree_shifted_bq = ((num_steps + 1) * 2 - 1) as u32;
+    let shifted_boundary_quotient_codeword_bi = shifted_boundary_quotient_codeword
+        .iter()
+        .map(|x| x.value.clone())
+        .collect::<Vec<BigInt>>();
+    let low_degree_proof_shifted_bq = low_degree_test::prover_bigint(
+        &shifted_boundary_quotient_codeword_bi,
+        field.q.clone(),
+        max_degree_shifted_bq,
+        security_checks,
+        &mut output,
+        omega.value.clone(),
+    )
+    .unwrap();
+    let verify: Result<(), low_degree_test::ValidationError> =
+        low_degree_test::verify_bigint(low_degree_proof_shifted_bq, field.q.clone());
+    match verify {
+        Ok(_) => println!(
+            "Succesfully verified low degree ({}) of shifted boundary quotient",
+            max_degree_tq
+        ),
+        Err(_err) => return Err(StarkProofError::HighDegreeTransitionQuotient),
+    }
+    let max_degree_shifted_ti = ((num_steps + 1) * 2 - 1) as u32;
+    let shifted_trace_codeword_bi = shifted_trace_codeword
+        .iter()
+        .map(|x| x.value.clone())
+        .collect::<Vec<BigInt>>();
+    let low_degree_proof_shifted_ti = low_degree_test::prover_bigint(
+        &shifted_trace_codeword_bi,
+        field.q.clone(),
+        max_degree_shifted_ti,
+        security_checks,
+        &mut output,
+        omega.value.clone(),
+    )
+    .unwrap();
+    let verify: Result<(), low_degree_test::ValidationError> =
+        low_degree_test::verify_bigint(low_degree_proof_shifted_ti, field.q.clone());
+    match verify {
+        Ok(_) => println!(
+            "Succesfully verified low degree ({}) of shifted trace interpolant",
+            max_degree_tq
+        ),
+        Err(_err) => return Err(StarkProofError::HighDegreeTransitionQuotient),
+    }
     // let max_degree_lc = num_steps as u32;
     let max_degree_lc = ((num_steps + 1) * 2 - 1) as u32;
     println!("max_degree of linear combination is: {}", max_degree_lc);
-    output = linear_combination_mt.get_root().to_vec();
+    output = vec![];
+    // output = linear_combination_mt.get_root().to_vec();
     let low_degree_proof_lc_result = low_degree_test::prover_bigint(
         &linear_combination_evaluations_bigint,
         field.q.clone(),
@@ -462,6 +524,10 @@ pub fn stark_of_mimc(
     match low_degree_proof_lc_result {
         Err(_err) => return Err(StarkProofError::HighDegreeLinearCombination),
         Ok(proof) => {
+            println!(
+                "Successfully verified low degree ({}) of linear combination!",
+                max_degree_lc
+            );
             low_degree_proof_lc = proof;
         }
     }
@@ -879,14 +945,6 @@ mod test_modular_arithmetic {
         println!("omicron domain = {:?}", omicron.get_generator_domain());
         let omega_domain = omega.get_generator_domain();
 
-        // Calculate some values used in verification of the linear combination
-        let omega_to_num_steps: PrimeFieldElementBig = omega_domain[no_steps as usize].clone();
-        let mut x_to_num_steps = vec![omega.ring_zero(); extended_domain_length as usize];
-        x_to_num_steps[0] = omega.ring_one();
-        for i in 1..extended_domain_length as usize {
-            x_to_num_steps[i] = x_to_num_steps[i - 1].clone() * omega_to_num_steps.clone();
-        }
-
         for i in 0..20 {
             println!("i = {}", i);
             let mimc_input = PrimeFieldElementBig::new(b(i), &field);
@@ -909,91 +967,6 @@ mod test_modular_arithmetic {
                 Ok(stark_proof) => stark_proof,
                 Err(_err) => panic!("Failed to produce STARK proof"),
             };
-
-            // Get the codeword indices for which a proof is provided
-            // Get pseudo-random indices from `l_mtree.get_root()`.
-            let index_preimages = get_n_hash_rounds(
-                &stark_proof.linear_combination_merkle_root,
-                security_factor as u32,
-            );
-            let indices: Vec<usize> = index_preimages
-                .iter()
-                .map(|x| get_index_from_bytes(x, extended_domain_length as usize))
-                .collect::<Vec<usize>>();
-            assert!(MerkleTree::verify_multi_proof(
-                stark_proof.codeword_merkle_root,
-                &indices,
-                &stark_proof.codeword_proofs,
-            ));
-
-            // Change hash of codeword root and verify that proofs fail
-            stark_proof.codeword_merkle_root[0] ^= 1;
-            assert!(!MerkleTree::verify_multi_proof(
-                stark_proof.codeword_merkle_root,
-                &indices,
-                &stark_proof.codeword_proofs,
-            ));
-
-            // Change hash of root back
-            stark_proof.codeword_merkle_root[0] ^= 1;
-
-            // Verify proofs of linear combination values
-            assert!(MerkleTree::verify_multi_proof(
-                stark_proof.linear_combination_merkle_root,
-                &indices,
-                &stark_proof.linear_combination_proofs,
-            ));
-
-            // Change hash of linear combination root and verify that proofs fail
-            stark_proof.linear_combination_merkle_root[0] ^= 1;
-            assert!(!MerkleTree::verify_multi_proof(
-                stark_proof.linear_combination_merkle_root,
-                &indices,
-                &stark_proof.linear_combination_proofs,
-            ));
-
-            // Change hash of LC root back
-            stark_proof.linear_combination_merkle_root[0] ^= 1;
-
-            // Verify that quotient
-            assert_eq!(security_factor, stark_proof.linear_combination_proofs.len());
-            assert_eq!(security_factor, stark_proof.codeword_proofs.len());
-
-            let k_seeds = utils::get_n_hash_rounds(&stark_proof.codeword_merkle_root, 4);
-            let ks: Vec<PrimeFieldElementBig> = k_seeds
-                .iter()
-                .map(|seed| PrimeFieldElementBig::from_bytes(&field, seed))
-                .collect::<Vec<PrimeFieldElementBig>>();
-            println!("ks = {:?}", ks);
-            for j in 0..security_factor as usize {
-                let extended_computational_trace: PrimeFieldElementBig =
-                    PrimeFieldElementBig::new(stark_proof.codeword_proofs[j].get_value().0, &field);
-                let transition_quotient: PrimeFieldElementBig =
-                    PrimeFieldElementBig::new(stark_proof.codeword_proofs[j].get_value().1, &field);
-                let boundary_constraint_quotient: PrimeFieldElementBig =
-                    PrimeFieldElementBig::new(stark_proof.codeword_proofs[j].get_value().2, &field);
-                let linear_combination = PrimeFieldElementBig::new(
-                    stark_proof.linear_combination_proofs[j].get_value(),
-                    &field,
-                );
-                // Verify that linear combination follows from polynomial evaluations
-                assert_eq!(
-                    linear_combination,
-                    transition_quotient
-                        + extended_computational_trace.clone() * ks[0].clone()
-                        + extended_computational_trace.clone()
-                            * x_to_num_steps[indices[j]].clone()
-                            * ks[1].clone()
-                        + boundary_constraint_quotient.clone() * ks[2].clone()
-                        + boundary_constraint_quotient.clone()
-                            * x_to_num_steps[indices[j]].clone()
-                            * ks[3].clone()
-                );
-
-                // Verify transition constraint in the selected indices:
-                // `air(x) = TQ(x) * Z_t(x)` =>
-                // assert_eq!(BigInt::zero(), );
-            }
 
             // Verify low-degreeness of linear combination
             assert!(low_degree_test::verify_bigint(
