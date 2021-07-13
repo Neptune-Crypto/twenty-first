@@ -3,7 +3,7 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
-use crate::util_types::merkle_tree::{CompressedProofElement, MerkleTree};
+use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
 use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use num_bigint::BigInt;
 use num_traits::One;
@@ -39,10 +39,10 @@ where
     // in the deserialization process.
     T: Clone + Debug + PartialEq + Serialize,
 {
-    ab_proofs: Vec<Vec<CompressedProofElement<T>>>,
+    ab_proofs: Vec<Vec<CompressedAuthenticationPath<T>>>,
     challenge_hash_preimages: Vec<Vec<u8>>,
     codeword_size: u32,
-    c_proofs: Vec<Vec<CompressedProofElement<T>>>,
+    c_proofs: Vec<Vec<CompressedAuthenticationPath<T>>>,
     index_picker_preimage: Vec<u8>,
     max_degree: u32,
     merkle_roots: Vec<[u8; 32]>,
@@ -93,20 +93,20 @@ impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowD
             merkle_roots.push(root);
         }
 
-        let mut c_proofs: Vec<Vec<CompressedProofElement<U>>> =
+        let mut c_proofs: Vec<Vec<CompressedAuthenticationPath<U>>> =
             Vec::with_capacity(rounds_count_usize);
-        let mut ab_proofs: Vec<Vec<CompressedProofElement<U>>> =
+        let mut ab_proofs: Vec<Vec<CompressedAuthenticationPath<U>>> =
             Vec::with_capacity(rounds_count_usize);
         for _ in 0..rounds_count {
             let mut proof_size: u16 = bincode::deserialize(&serialization[index..index + 2])?;
             index += 2;
-            let c_proof: Vec<CompressedProofElement<U>> =
+            let c_proof: Vec<CompressedAuthenticationPath<U>> =
                 bincode::deserialize_from(&serialization[index..index + proof_size as usize])?;
             index += proof_size as usize;
             c_proofs.push(c_proof);
             proof_size = bincode::deserialize(&serialization[index..index + 2])?;
             index += 2;
-            let ab_proof: Vec<CompressedProofElement<U>> =
+            let ab_proof: Vec<CompressedAuthenticationPath<U>> =
                 bincode::deserialize_from(&serialization[index..index + proof_size as usize])?;
             index += proof_size as usize;
             ab_proofs.push(ab_proof);
@@ -448,8 +448,8 @@ pub fn prover_bigint(
     let mut mut_codeword: Vec<BigInt> = codeword.to_vec();
 
     // Arrays for return values
-    let mut c_proofs: Vec<Vec<CompressedProofElement<BigInt>>> = vec![];
-    let mut ab_proofs: Vec<Vec<CompressedProofElement<BigInt>>> = vec![];
+    let mut c_proofs: Vec<Vec<CompressedAuthenticationPath<BigInt>>> = vec![];
+    let mut ab_proofs: Vec<Vec<CompressedAuthenticationPath<BigInt>>> = vec![];
 
     // commit phase
     let (_, _, inv2_temp) = PrimeFieldElementBig::eea(modulus.clone(), bigint(2));
@@ -519,9 +519,9 @@ pub fn prover_bigint(
             ab_indices.push(s1_index);
         }
 
-        let authentication_paths_c: Vec<CompressedProofElement<BigInt>> =
+        let authentication_paths_c: Vec<CompressedAuthenticationPath<BigInt>> =
             mts[i + 1].get_multi_proof(&c_indices);
-        let authentication_paths_ab: Vec<CompressedProofElement<BigInt>> =
+        let authentication_paths_ab: Vec<CompressedAuthenticationPath<BigInt>> =
             mts[i].get_multi_proof(&ab_indices);
 
         // serialize proofs and store in output
@@ -572,8 +572,8 @@ pub fn prover_i128(
         prover_shared(max_degree, output, codeword, s, primitive_root_of_unity)?;
 
     // Arrays for return values
-    let mut c_proofs: Vec<Vec<CompressedProofElement<i128>>> = vec![];
-    let mut ab_proofs: Vec<Vec<CompressedProofElement<i128>>> = vec![];
+    let mut c_proofs: Vec<Vec<CompressedAuthenticationPath<i128>>> = vec![];
+    let mut ab_proofs: Vec<Vec<CompressedAuthenticationPath<i128>>> = vec![];
 
     let mut mut_codeword: Vec<i128> = codeword.to_vec();
 
@@ -646,9 +646,9 @@ pub fn prover_i128(
             ab_indices.push(s1_index);
         }
 
-        let authentication_paths_c: Vec<CompressedProofElement<i128>> =
+        let authentication_paths_c: Vec<CompressedAuthenticationPath<i128>> =
             mts[i + 1].get_multi_proof(&c_indices);
-        let authentication_paths_ab: Vec<CompressedProofElement<i128>> =
+        let authentication_paths_ab: Vec<CompressedAuthenticationPath<i128>> =
             mts[i].get_multi_proof(&ab_indices);
 
         // serialize proofs and store in output

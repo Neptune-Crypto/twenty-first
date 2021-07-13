@@ -18,21 +18,21 @@ pub struct MerkleTree<T> {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct CompressedProofElement<T: Clone + Debug + PartialEq + Serialize>(
+pub struct CompressedAuthenticationPath<T: Clone + Debug + PartialEq + Serialize>(
     pub Vec<Option<Node<T>>>,
 );
 
 /// Method for extracting the value for which a compressed Merkle proof element is for.
-impl<T: Clone + Debug + Serialize + PartialEq> CompressedProofElement<T> {
-    /// Given a proof_element: CompressedProofElement<T>, this returns the value
+impl<T: Clone + Debug + Serialize + PartialEq> CompressedAuthenticationPath<T> {
+    /// Given a proof_element: CompressedAuthenticationPath<T>, this returns the value
     /// `proof_element.0[0].clone().unwrap().value.unwrap();`
     pub fn get_value(&self) -> T {
         match self.0.first() {
-            None => panic!("CompressedProofElement was empty"),
+            None => panic!("CompressedAuthenticationPath was empty"),
             Some(option) => match option {
-                None => panic!("First element of CompressedProofElement was pruned"),
+                None => panic!("First element of CompressedAuthenticationPath was pruned"),
                 Some(node) => match &node.value {
-                    None => panic!("No value of first element of CompressedProofElement"),
+                    None => panic!("No value of first element of CompressedAuthenticationPath"),
                     Some(val) => val.clone(),
                 },
             },
@@ -126,7 +126,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     pub fn verify_multi_proof(
         root_hash: [u8; 32],
         indices: &[usize],
-        proof: &[CompressedProofElement<T>],
+        proof: &[CompressedAuthenticationPath<T>],
     ) -> bool {
         // compressed proofs can only be verified for all indices,
         // meaning that all indices for the proof values must be known.
@@ -139,7 +139,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         }
 
         let mut partial_tree: HashMap<u64, Node<T>> = HashMap::new();
-        let mut proof_clone: Vec<CompressedProofElement<T>> = proof.to_owned();
+        let mut proof_clone: Vec<CompressedAuthenticationPath<T>> = proof.to_owned();
         let half_tree_size = 2u64.pow(proof_clone[0].0.len() as u32 - 1);
         for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
             let mut index = half_tree_size + *i as u64;
@@ -213,12 +213,12 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         true
     }
 
-    pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<CompressedProofElement<T>> {
+    pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<CompressedAuthenticationPath<T>> {
         let mut calculable_indices: HashSet<usize> = HashSet::new();
-        let mut output: Vec<CompressedProofElement<T>> = Vec::with_capacity(indices.len());
+        let mut output: Vec<CompressedAuthenticationPath<T>> = Vec::with_capacity(indices.len());
         for i in indices.iter() {
-            let new_branch: CompressedProofElement<T> =
-                CompressedProofElement(self.get_proof(*i).into_iter().map(Some).collect());
+            let new_branch: CompressedAuthenticationPath<T> =
+                CompressedAuthenticationPath(self.get_proof(*i).into_iter().map(Some).collect());
             let mut index = self.nodes.len() / 2 + i;
             calculable_indices.insert(index);
             for _ in 1..new_branch.0.len() {
@@ -296,7 +296,7 @@ mod merkle_tree_test {
                     indices_usize.push(*elem as usize);
                 }
 
-                let proof: Vec<CompressedProofElement<PrimeFieldElement>> =
+                let proof: Vec<CompressedAuthenticationPath<PrimeFieldElement>> =
                     mt_32.get_multi_proof(&indices_usize);
                 assert!(MerkleTree::verify_multi_proof(
                     mt_32.get_root(),
