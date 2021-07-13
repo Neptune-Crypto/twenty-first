@@ -62,6 +62,21 @@ impl fmt::Display for MyError {
 }
 
 impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowDegreeProof<U> {
+    pub fn get_ab_indices(&self, round: u8) -> Vec<(usize, usize)> {
+        let mut hash_preimage: Vec<u8> = self.index_picker_preimage.clone();
+        hash_preimage.push(round);
+        let hashes = get_n_hash_rounds(hash_preimage.as_slice(), self.s);
+        let mut ab_indices: Vec<(usize, usize)> = vec![(0, 0); self.s as usize];
+        for i in 0..self.s as usize {
+            let index =
+                get_index_from_bytes(&hashes[i][0..16], self.codeword_size as usize >> round);
+            ab_indices[i] = (index, index + (self.codeword_size as usize >> round));
+        }
+        return ab_indices;
+    }
+}
+
+impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowDegreeProof<U> {
     pub fn from_serialization(
         serialization: Vec<u8>,
         start_index: usize,
