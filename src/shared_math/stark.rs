@@ -37,6 +37,17 @@ pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     linear_combination_fri: LowDegreeProof<T>,
 }
 
+fn get_linear_combination_coefficients<'a>(
+    field: &'a PrimeFieldBig,
+    root_hash: &[u8; 32],
+) -> Vec<PrimeFieldElementBig<'a>> {
+    let k_seeds = utils::get_n_hash_rounds(root_hash, 5);
+    k_seeds
+        .iter()
+        .map(|seed| PrimeFieldElementBig::from_bytes(field, seed))
+        .collect::<Vec<PrimeFieldElementBig>>()
+}
+
 pub fn mimc_forward<'a>(
     input: &'a PrimeFieldElementBig,
     num_steps: usize,
@@ -277,12 +288,8 @@ pub fn stark_of_mimc(
     //     tuple_merkle_tree.get_root()
     // );
 
-    let mt_root_hash = tuple_merkle_tree.get_root();
-    let k_seeds = utils::get_n_hash_rounds(&mt_root_hash, 5);
-    let ks = k_seeds
-        .iter()
-        .map(|seed| PrimeFieldElementBig::from_bytes(field, seed))
-        .collect::<Vec<PrimeFieldElementBig>>();
+    let lc_coefficients =
+        get_linear_combination_coefficients(&field, &tuple_merkle_tree.get_root());
     // println!("ks = {:?}", ks);
 
     // Calculate x^3
@@ -322,14 +329,14 @@ pub fn stark_of_mimc(
     // polynomials! We might have a off-by-one, or two or three error in the degrees
     // here.
     let mut linear_combination_codeword = vec![BigInt::zero(); extended_domain_length];
-    println!("coefficients = {:?}", ks);
+    println!("coefficients = {:?}", lc_coefficients);
     for i in 0..extended_domain_length {
         linear_combination_codeword[i] = (extended_computational_trace[i].clone()
-            + ks[0].clone() * shifted_trace_codeword[i].clone()
-            + ks[1].clone() * transition_quotient_codeword[i].clone()
-            + ks[2].clone() * shifted_transition_quotient_codeword[i].clone()
-            + ks[3].clone() * boundary_quotient_codeword[i].clone()
-            + ks[4].clone() * shifted_boundary_quotient_codeword[i].clone())
+            + lc_coefficients[0].clone() * shifted_trace_codeword[i].clone()
+            + lc_coefficients[1].clone() * transition_quotient_codeword[i].clone()
+            + lc_coefficients[2].clone() * shifted_transition_quotient_codeword[i].clone()
+            + lc_coefficients[3].clone() * boundary_quotient_codeword[i].clone()
+            + lc_coefficients[4].clone() * shifted_boundary_quotient_codeword[i].clone())
         .value;
     }
     println!("licombo[7] = {:?}", linear_combination_codeword[7]);
@@ -562,7 +569,7 @@ pub fn stark_of_mimc(
         Err(_err) => {
             println!(
                 "\n\n\n\nFailed to low degreeness of linear combination values.\n\n Coefficients: {:?}\n\nCodeword: {:?}\n\nDomain: {:?}",
-                ks, linear_combination_evaluations_bigint, omega_domain
+                lc_coefficients, linear_combination_evaluations_bigint, omega_domain
             );
             return Err(StarkProofError::HighDegreeLinearCombination);
         }
@@ -597,7 +604,7 @@ pub fn stark_of_mimc(
     > = tuple_merkle_tree.get_multi_proof(&shifted_indices);
 
     Ok(StarkProof {
-        tuple_merkle_root: mt_root_hash,
+        tuple_merkle_root: tuple_merkle_tree.get_root(),
         linear_combination_merkle_root: linear_combination_mt.get_root(),
         shifted_tuple_authentication_paths,
         tuple_authentication_paths,
@@ -1028,13 +1035,9 @@ mod test_modular_arithmetic {
             // Verify properties of polynomials
 
             // ## verify linear combination
-            // get the coefficients for the licombo
-            let coefficients_randomness =
-                utils::get_n_hash_rounds(&stark_proof.tuple_merkle_root, 5);
-            let coefficients: Vec<PrimeFieldElementBig> = coefficients_randomness
-                .iter()
-                .map(|seed| PrimeFieldElementBig::from_bytes(omega.field, seed))
-                .collect();
+            let lc_coefficients =
+                get_linear_combination_coefficients(omega.field, &stark_proof.tuple_merkle_root);
+
             // get all indices (a,b) of first FRI round
             let abc_indices: Vec<(usize, usize, usize)> =
                 stark_proof.linear_combination_fri.get_abc_indices(0);
@@ -1070,7 +1073,7 @@ mod test_modular_arithmetic {
 
             // verify linear relation on indicated elements
             println!("ab_indices = {:?}", ab_indices);
-            println!("coefficients = {:?}", coefficients);
+            println!("lc_coefficients = {:?}", lc_coefficients);
             for j in 0..stark_proof.linear_combination_fri.s as usize * 2 {
                 println!("j = {}", j);
                 println!("ab_indices[j] = {}", ab_indices[j]);
@@ -1099,7 +1102,7 @@ mod test_modular_arithmetic {
                     omega.field,
                 );
                 right_hand_side = right_hand_side.clone()
-                    + coefficients[0].clone()
+                    + lc_coefficients[0].clone()
                         * PrimeFieldElementBig::new(
                             stark_proof.tuple_authentication_paths[j]
                                 .get_value()
@@ -1109,7 +1112,7 @@ mod test_modular_arithmetic {
                         )
                         * x_power_ns_plus_1.clone();
                 right_hand_side = right_hand_side.clone()
-                    + coefficients[1].clone()
+                    + lc_coefficients[1].clone()
                         * PrimeFieldElementBig::new(
                             stark_proof.tuple_authentication_paths[j]
                                 .get_value()
@@ -1118,7 +1121,7 @@ mod test_modular_arithmetic {
                             omega.field,
                         );
                 right_hand_side = right_hand_side.clone()
-                    + coefficients[2].clone()
+                    + lc_coefficients[2].clone()
                         * PrimeFieldElementBig::new(
                             stark_proof.tuple_authentication_paths[j]
                                 .get_value()
@@ -1128,7 +1131,7 @@ mod test_modular_arithmetic {
                         )
                         * x.clone();
                 right_hand_side = right_hand_side.clone()
-                    + coefficients[3].clone()
+                    + lc_coefficients[3].clone()
                         * PrimeFieldElementBig::new(
                             stark_proof.tuple_authentication_paths[j]
                                 .get_value()
@@ -1137,7 +1140,7 @@ mod test_modular_arithmetic {
                             omega.field,
                         );
                 right_hand_side = right_hand_side.clone()
-                    + coefficients[4].clone()
+                    + lc_coefficients[4].clone()
                         * PrimeFieldElementBig::new(
                             stark_proof.tuple_authentication_paths[j]
                                 .get_value()
