@@ -106,6 +106,21 @@ fn get_boundary_zerofier_polynomial<
     }
 }
 
+fn get_boundary_constraint_polynomial<'a>(
+    mimc_input: &PrimeFieldElementBig<'a>,
+    mimc_output: &PrimeFieldElementBig<'a>,
+    last_x_value_of_trace: &PrimeFieldElementBig<'a>,
+) -> Polynomial<PrimeFieldElementBig<'a>> {
+    let (line_a, line_b): (PrimeFieldElementBig, PrimeFieldElementBig) =
+        mimc_input.field.lagrange_interpolation_2(
+            (mimc_input.ring_one(), mimc_input.clone()),
+            (last_x_value_of_trace.to_owned(), mimc_output.to_owned()),
+        );
+    Polynomial {
+        coefficients: vec![line_b, line_a],
+    }
+}
+
 fn get_linear_combination_coefficients<'a>(
     field: &'a PrimeFieldBig,
     root_hash: &[u8; 32],
@@ -285,7 +300,6 @@ pub fn stark_of_mimc(
     // compute transition-zerofier codeword in three steps -- numerator, denominator, ratio
     let omega_domain: Vec<PrimeFieldElementBig> = omega.get_generator_domain();
     let omicron_domain: Vec<PrimeFieldElementBig> = omicron.get_generator_domain();
-    let one = omega.ring_one();
     let xlast: &PrimeFieldElementBig = omicron_domain.last().unwrap();
     // println!("xlast = {}", xlast);
 
@@ -317,21 +331,8 @@ pub fn stark_of_mimc(
     // println!("xlast = {}", xlast);
     let boundary_zerofier_polynomial = get_boundary_zerofier_polynomial(xlast);
 
-    // compute boundary contraint interpolant
-    let (line_a, line_b): (PrimeFieldElementBig, PrimeFieldElementBig) = omicron
-        .field
-        .lagrange_interpolation_2((one, mimc_input.clone()), (xlast.to_owned(), mimc_output));
-    let boundary_constraint_polynomial = Polynomial {
-        coefficients: vec![line_b, line_a],
-    };
-    // println!(
-    //     "boundary_constraint_polynomial = {}",
-    //     boundary_constraint_polynomial
-    // );
-    // println!(
-    //     "boundary_zerofier_polynomial = {}",
-    //     boundary_zerofier_polynomial
-    // );
+    let boundary_constraint_polynomial =
+        get_boundary_constraint_polynomial(&mimc_input, &mimc_output, xlast);
 
     // compute the boundary-quotient polynomial and codeword
     let (boundary_quotient_polynomial, bq_rem) =
