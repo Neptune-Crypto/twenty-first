@@ -79,6 +79,33 @@ fn get_transition_zerofier_polynomials<
     )
 }
 
+fn get_boundary_zerofier_polynomial<
+    T: Clone
+        + Debug
+        + Serialize
+        + Mul<Output = T>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + Rem<Output = T>
+        + Neg<Output = T>
+        + IdentityValues
+        + PartialEq
+        + Eq
+        + Hash
+        + Display,
+>(
+    last_x_value_of_trace: &T,
+) -> Polynomial<T> {
+    Polynomial {
+        coefficients: vec![
+            last_x_value_of_trace.clone(),
+            -last_x_value_of_trace.clone() - last_x_value_of_trace.ring_one(),
+            last_x_value_of_trace.ring_one(),
+        ],
+    }
+}
+
 fn get_linear_combination_coefficients<'a>(
     field: &'a PrimeFieldBig,
     root_hash: &[u8; 32],
@@ -288,13 +315,7 @@ pub fn stark_of_mimc(
 
     // compute the boundary-zerofier
     // println!("xlast = {}", xlast);
-    let boundary_zerofier_polynomial = Polynomial {
-        coefficients: vec![
-            xlast.clone(),
-            -xlast.clone() - xlast.ring_one(),
-            xlast.ring_one(),
-        ],
-    };
+    let boundary_zerofier_polynomial = get_boundary_zerofier_polynomial(xlast);
 
     // compute boundary contraint interpolant
     let (line_a, line_b): (PrimeFieldElementBig, PrimeFieldElementBig) = omicron
