@@ -106,7 +106,7 @@ fn get_extended_computational_trace<
     let trace_interpolant = Polynomial {
         coefficients: trace_interpolant_coefficients.clone(),
     };
-    let mut padded_trace_interpolant_coefficients = trace_interpolant_coefficients.clone();
+    let mut padded_trace_interpolant_coefficients = trace_interpolant_coefficients;
     padded_trace_interpolant_coefficients.append(&mut vec![
         omega.ring_zero();
         (expansion_factor - 1) * (num_steps + 1)
@@ -143,7 +143,7 @@ fn get_extended_round_constant<
     let mut mimc_round_constants_padded = mimc_round_constants.to_vec();
     mimc_round_constants_padded.append(&mut vec![omega.ring_zero()]);
     let round_constants_interpolant = intt(&mimc_round_constants_padded, &omicron);
-    let mut padded_round_constants_interpolant = round_constants_interpolant.clone();
+    let mut padded_round_constants_interpolant = round_constants_interpolant;
     padded_round_constants_interpolant.append(&mut vec![
         omega.ring_zero();
         (expansion_factor - 1) * (num_steps + 1)
