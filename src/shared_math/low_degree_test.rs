@@ -62,17 +62,19 @@ impl fmt::Display for MyError {
 }
 
 impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowDegreeProof<U> {
-    pub fn get_ab_indices(&self, round: u8) -> Vec<(usize, usize)> {
+    pub fn get_abc_indices(&self, round: u8) -> Vec<(usize, usize, usize)> {
         let mut hash_preimage: Vec<u8> = self.index_picker_preimage.clone();
         hash_preimage.push(round);
-        let hashes = get_n_hash_rounds(hash_preimage.as_slice(), self.s);
-        let mut ab_indices: Vec<(usize, usize)> = vec![(0, 0); self.s as usize];
-        for i in 0..self.s as usize {
-            let index =
-                get_index_from_bytes(&hashes[i][0..16], self.codeword_size as usize >> round);
-            ab_indices[i] = (index, index + (self.codeword_size as usize >> round));
+        let hashes: Vec<[u8; 32]> = get_n_hash_rounds(hash_preimage.as_slice(), self.s);
+        let mut abc_indices: Vec<(usize, usize, usize)> =
+            Vec::<(usize, usize, usize)>::with_capacity(self.s as usize);
+        let half_code_word_size = self.codeword_size as usize >> (round + 1);
+        for hash in hashes.iter() {
+            let index = get_index_from_bytes(&hash[0..16], half_code_word_size);
+            abc_indices.push((index, index + half_code_word_size, index));
         }
-        return ab_indices;
+
+        abc_indices
     }
 }
 
@@ -167,26 +169,19 @@ pub fn verify_bigint(
         .iter()
         .map(|x| PrimeFieldElementBig::from_bytes_raw(&modulus, &x[0..16]))
         .collect();
-    let mut number_of_leaves = proof.codeword_size as usize;
     let mut primitive_root_of_unity = proof.primitive_root_of_unity.clone();
 
     let field = PrimeFieldBig::new(modulus.clone());
     let mut c_values: Vec<BigInt> = vec![];
     for (i, challenge_bigint) in challenges.iter().enumerate() {
-        let mut hash_preimage: Vec<u8> = proof.index_picker_preimage.clone();
-        hash_preimage.push(i as u8);
-        let hashes = get_n_hash_rounds(hash_preimage.as_slice(), proof.s);
-        let mut c_indices: Vec<usize> = vec![];
-        let mut ab_indices: Vec<usize> = vec![];
-        for hash in hashes.iter() {
-            let c_index = get_index_from_bytes(&hash[0..16], number_of_leaves / 2);
-            c_indices.push(c_index);
-            let a_index = c_index;
-            ab_indices.push(a_index);
-            let b_index = c_index + number_of_leaves / 2;
-            ab_indices.push(b_index);
+        let abc_indices = proof.get_abc_indices(i as u8);
+        let c_indices = abc_indices.iter().map(|x| x.2).collect::<Vec<usize>>();
+        let mut ab_indices = Vec::<usize>::with_capacity(2 * abc_indices.len());
+        for (a, b, _) in abc_indices.iter() {
+            ab_indices.push(*a);
+            ab_indices.push(*b);
         }
-        number_of_leaves /= 2;
+
         c_values = proof.c_proofs[i]
             .iter()
             .map(|x| x.0[0].clone().unwrap().value.unwrap())
@@ -742,6 +737,24 @@ mod test_low_degree_proof {
         assert_eq!(1, proof.c_proofs.len());
         assert_eq!(2, proof.merkle_roots.len());
 
+        // Verify that abc indices return a value matching that in the authentication paths
+        let indicies_round_0 = proof.get_abc_indices(0);
+        let selected_ab_values: Vec<(BigInt, BigInt)> = indicies_round_0
+            .iter()
+            .map(|i| (y_values[i.0].clone(), y_values[i.1].clone()))
+            .collect::<Vec<(BigInt, BigInt)>>();
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..(proof.ab_proofs[0].len() / 2) {
+            assert_eq!(
+                selected_ab_values[i].0,
+                proof.ab_proofs[0][2 * i].get_value()
+            );
+            assert_eq!(
+                selected_ab_values[i].1,
+                proof.ab_proofs[0][2 * i + 1].get_value()
+            );
+        }
+
         let mut deserialized_proof: LowDegreeProof<BigInt> =
             LowDegreeProof::<BigInt>::from_serialization(output.clone(), 0).unwrap();
         assert_eq!(1, deserialized_proof.max_degree);
@@ -1155,7 +1168,25 @@ mod test_low_degree_proof {
             proof,
             LowDegreeProof::<BigInt>::from_serialization(output.clone(), 2).unwrap()
         );
-        assert_eq!(Ok(()), verify_bigint(proof, field.q.clone()));
+        assert_eq!(Ok(()), verify_bigint(proof.clone(), field.q.clone()));
+
+        // Verify that the index picker matches picked indices for ab_proof
+        let indices = proof.get_abc_indices(0);
+        let selected_ab_values: Vec<(BigInt, BigInt)> = indices
+            .iter()
+            .map(|i| (y_values[i.0].clone(), y_values[i.1].clone()))
+            .collect::<Vec<(BigInt, BigInt)>>();
+        #[allow(clippy::needless_range_loop)]
+        for j in 0..(proof.ab_proofs[0].len() / 2) {
+            assert_eq!(
+                selected_ab_values[j].0,
+                proof.ab_proofs[0][2 * j].get_value()
+            );
+            assert_eq!(
+                selected_ab_values[j].1,
+                proof.ab_proofs[0][2 * j + 1].get_value()
+            );
+        }
 
         // Verify that a 1023 degree polynomial cannot be verified as a degree 512 polynomial
         output = vec![1, 2];
