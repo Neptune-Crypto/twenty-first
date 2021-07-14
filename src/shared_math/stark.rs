@@ -79,6 +79,44 @@ fn get_transition_zerofier_polynomials<
     )
 }
 
+fn get_extended_computational_trace<
+    T: Clone
+        + Debug
+        + Serialize
+        + Mul<Output = T>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + Rem<Output = T>
+        + Neg<Output = T>
+        + IdentityValues
+        + New
+        + PartialEq
+        + Eq
+        + Hash
+        + Display,
+>(
+    omega: &T,
+    omicron: &T,
+    num_steps: usize,
+    expansion_factor: usize,
+    computational_trace: &[T],
+) -> (Vec<T>, Polynomial<T>) {
+    let trace_interpolant_coefficients = intt(&computational_trace, &omicron);
+    let trace_interpolant = Polynomial {
+        coefficients: trace_interpolant_coefficients.clone(),
+    };
+    let mut padded_trace_interpolant_coefficients = trace_interpolant_coefficients.clone();
+    padded_trace_interpolant_coefficients.append(&mut vec![
+        omega.ring_zero();
+        (expansion_factor - 1) * (num_steps + 1)
+    ]);
+    (
+        ntt(&padded_trace_interpolant_coefficients, &omega),
+        trace_interpolant,
+    )
+}
+
 fn get_extended_round_constant<
     T: Clone
         + Debug
@@ -276,21 +314,16 @@ pub fn stark_of_mimc(
         mimc_forward(&mimc_input, num_steps, mimc_round_constants);
 
     // compute low-degree extension of computational trace
-    let trace_interpolant_coefficients = intt(&computational_trace, &omicron);
-    let trace_interpolant = Polynomial {
-        coefficients: trace_interpolant_coefficients.clone(),
-    };
-    println!("trace_interpolant = {}", trace_interpolant); // TODO: REMOVE
-    let mut padded_trace_interpolant_coefficients = trace_interpolant_coefficients.clone();
-    padded_trace_interpolant_coefficients.append(&mut vec![
-        omega.ring_zero();
-        (expansion_factor - 1) * (num_steps + 1)
-    ]);
-    let extended_computational_trace = ntt(&padded_trace_interpolant_coefficients, &omega);
-    println!(
-        "extended_computational_trace = {:?}",
-        extended_computational_trace
-    ); // TODO: REMOVE
+    let (extended_computational_trace, trace_interpolant): (
+        Vec<PrimeFieldElementBig>,
+        Polynomial<PrimeFieldElementBig>,
+    ) = get_extended_computational_trace(
+        &omega,
+        &omicron,
+        num_steps,
+        expansion_factor,
+        &computational_trace,
+    );
 
     // compute low-degree extension of the round constants polynomial
     let extended_round_constants = get_extended_round_constant(
