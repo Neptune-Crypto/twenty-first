@@ -4,7 +4,7 @@ use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element::PrimeFieldElement;
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
-use crate::shared_math::traits::IdentityValues;
+use crate::shared_math::traits::{IdentityValues, New};
 use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
 use crate::utils;
 use num_bigint::BigInt;
@@ -235,15 +235,10 @@ pub fn stark_of_mimc(
     let omicron: PrimeFieldElementBig = omega.mod_pow(Into::<BigInt>::into(expansion_factor));
     let extended_domain_length: usize = (num_steps + 1) * expansion_factor;
     let field: &PrimeFieldBig = omega.field;
-    println!("extended_domain_length = {}", extended_domain_length); // TODO: REMOVE
-    println!("omega = {}", omega); // TODO: REMOVE
-    println!("omicron = {}", omicron); // TODO: REMOVE
 
     // compute computational trace
     let computational_trace: Vec<PrimeFieldElementBig> =
         mimc_forward(&mimc_input, num_steps, mimc_round_constants);
-    println!("mimc_round_constants = {:?}", mimc_round_constants); // TODO: REMOVE
-    println!("computational_trace = {:?}", computational_trace); // TODO: REMOVE
 
     // compute low-degree extension of computational trace
     let trace_interpolant_coefficients = intt(&computational_trace, &omicron);
@@ -288,20 +283,16 @@ pub fn stark_of_mimc(
                     .clone(),
         );
     }
-    // println!("air_codeword = {:?}", air_codeword); // TODO: REMOVE
 
     // It's important to interpolate across the *extended* domain, not the original smaller domain, because the degree of air(x) is greater than num_steps
     let air_polynomial_coefficients = intt(&air_codeword, &omega);
     let air_polynomial = Polynomial {
         coefficients: air_polynomial_coefficients,
     };
-    // println!("air_polynomial = {}", air_polynomial); // TODO: REMOVE
 
-    // compute transition-zerofier codeword in three steps -- numerator, denominator, ratio
     let omega_domain: Vec<PrimeFieldElementBig> = omega.get_generator_domain();
     let omicron_domain: Vec<PrimeFieldElementBig> = omicron.get_generator_domain();
     let xlast: &PrimeFieldElementBig = omicron_domain.last().unwrap();
-    // println!("xlast = {}", xlast);
 
     // compute transition-zerofier polynomial
     let (transition_zerofier_numerator_polynomial, transition_zerofier_denominator_polynomial) =
@@ -314,11 +305,9 @@ pub fn stark_of_mimc(
     // Perform sanity check that remainder of division by transition-zerofier is zero
     if !(rem.is_zero()) {
         return Err(StarkProofError::NonZeroTransitionRemainder);
-    } else {
-        println!("transition zerofier divides AIR!!!"); // TODO: REMOVE
     }
 
-    // Compute the evaluation (codeword) of the transition-quotient polynomial in the entire omega domain,
+    // Compute the codeword of the transition-quotient polynomial in the entire omega domain,
     let mut transition_quotient_coefficients = transition_quotient_polynomial.coefficients.clone();
     transition_quotient_coefficients.append(&mut vec![
         omega.ring_zero();
@@ -328,7 +317,6 @@ pub fn stark_of_mimc(
     let transition_quotient_codeword = ntt(&transition_quotient_coefficients, &omega);
 
     // compute the boundary-zerofier
-    // println!("xlast = {}", xlast);
     let boundary_zerofier_polynomial = get_boundary_zerofier_polynomial(xlast);
 
     let boundary_constraint_polynomial =
@@ -339,13 +327,8 @@ pub fn stark_of_mimc(
         (trace_interpolant - boundary_constraint_polynomial).divide(boundary_zerofier_polynomial);
     if !(bq_rem.is_zero()) {
         return Err(StarkProofError::NonZeroBoundaryRemainder);
-        // panic!(
-        //     "polynomial division with boundary zerofier does not give remainder zero. got: {}",
-        //     (bq_rem)
-        // )
-    } else {
-        println!("boundary zerofier divides AIR!!!"); // TODO: REMOVE
     }
+
     let mut boundary_constraint_coefficients_padded =
         boundary_quotient_polynomial.coefficients.clone();
     boundary_constraint_coefficients_padded.append(&mut vec![
@@ -374,24 +357,15 @@ pub fn stark_of_mimc(
         .collect::<Vec<(BigInt, BigInt, BigInt)>>();
     let tuple_merkle_tree: MerkleTree<(BigInt, BigInt, BigInt)> =
         MerkleTree::from_vec(&polynomial_evaluations);
-    // println!(
-    //     "Computed merkle tree. Root: {:?}",
-    //     tuple_merkle_tree.get_root()
-    // );
 
     let lc_coefficients =
         get_linear_combination_coefficients(&field, &tuple_merkle_tree.get_root());
-    // println!("ks = {:?}", ks);
-
-    // Calculate x^3
 
     // compute shifted trace codeword
     let mut shifted_trace_codeword: Vec<PrimeFieldElementBig> =
         extended_computational_trace.clone();
     let mut xi: PrimeFieldElementBig = omega.ring_one();
-    // for i in 0..extended_domain_length {
     for stc in shifted_trace_codeword.iter_mut() {
-        // shifted_trace_codeword[i] = shifted_trace_codeword[i].clone() * xi.clone();
         *stc = stc.to_owned() * xi.clone();
         xi = xi * omega_domain[num_steps + 1].clone();
     }
@@ -408,17 +382,12 @@ pub fn stark_of_mimc(
     let mut shifted_boundary_quotient_codeword: Vec<PrimeFieldElementBig> =
         boundary_quotient_codeword.clone();
     xi = omega.ring_one();
-    // for i in 0..extended_domain_length {
     for sbqc in shifted_boundary_quotient_codeword.iter_mut() {
-        // shifted_boundary_quotient_codeword[i] =
-        //     shifted_boundary_quotient_codeword[i].clone() * xi.clone();
         *sbqc = sbqc.to_owned() * xi.clone();
         xi = xi * omega_domain[num_steps + 3].clone();
     }
 
-    // TODO: Alan says we need to verify that the degree is high enough on all these
-    // polynomials! We might have a off-by-one, or two or three error in the degrees
-    // here.
+    // Compute linear combination of previous polynomial values
     let polynomial_evaluations = (0..extended_domain_length)
         .map(|i| PolynomialEvaluations {
             extended_computational_trace: extended_computational_trace[i].clone(),
@@ -435,9 +404,6 @@ pub fn stark_of_mimc(
             .map(|x| x.value.clone())
             .collect::<Vec<BigInt>>();
 
-    // Alan: Don't need to send this tree
-    // Thor: Probably true, but we calculate the proof indices from this tree, so I think
-    // it makes verification faster if we send it.
     let linear_combination_mt = MerkleTree::from_vec(&linear_combination_codeword);
 
     // Compute the FRI low-degree proofs
