@@ -129,6 +129,15 @@ impl<
         acc
     }
 
+    pub fn lagrange_interpolation_2(point0: &(U, U), point1: &(U, U)) -> (U, U) {
+        let x_diff = point0.0.clone() - point1.0.clone();
+        let x_diff_inv = point0.0.ring_one() / x_diff;
+        let a = (point0.1.clone() - point1.1.clone()) * x_diff_inv;
+        let b = point0.1.clone() - a.clone() * point0.0.clone();
+
+        (a, b)
+    }
+
     pub fn are_colinear(points: &[(U, U)]) -> bool {
         if points.len() < 3 {
             println!("Too few points received. Got: {} points", points.len());
@@ -791,6 +800,70 @@ mod test_polynomials {
         for point in points {
             assert_eq!(point.1, interpolation_result.evaluate(&point.0));
         }
+    }
+
+    #[test]
+    fn lagrange_interpolation_2_test() {
+        let field = PrimeField::new(5);
+        assert_eq!(
+            (pf(1, &field), pf(0, &field)),
+            Polynomial::lagrange_interpolation_2(
+                &(pf(1, &field), pf(1, &field)),
+                &(pf(2, &field), pf(2, &field))
+            )
+        );
+        assert_eq!(
+            (pf(4, &field), pf(4, &field)),
+            Polynomial::lagrange_interpolation_2(
+                &(pf(1, &field), pf(3, &field)),
+                &(pf(2, &field), pf(2, &field))
+            )
+        );
+        assert_eq!(
+            (pf(4, &field), pf(2, &field)),
+            Polynomial::lagrange_interpolation_2(
+                &(pf(15, &field), pf(92, &field)),
+                &(pf(19, &field), pf(108, &field))
+            )
+        );
+
+        assert_eq!(
+            (pf(3, &field), pf(2, &field)),
+            Polynomial::lagrange_interpolation_2(
+                &(pf(1, &field), pf(0, &field)),
+                &(pf(2, &field), pf(3, &field))
+            )
+        );
+
+        let field_big = PrimeFieldBig::new(b(5));
+        assert_eq!(
+            (pfb(1, &field_big), pfb(0, &field_big)),
+            Polynomial::lagrange_interpolation_2(
+                &(pfb(1, &field_big), pfb(1, &field_big)),
+                &(pfb(2, &field_big), pfb(2, &field_big))
+            )
+        );
+        assert_eq!(
+            (pfb(4, &field_big), pfb(4, &field_big)),
+            Polynomial::lagrange_interpolation_2(
+                &(pfb(1, &field_big), pfb(3, &field_big)),
+                &(pfb(2, &field_big), pfb(2, &field_big))
+            )
+        );
+        assert_eq!(
+            (pfb(4, &field_big), pfb(2, &field_big)),
+            Polynomial::lagrange_interpolation_2(
+                &(pfb(15, &field_big), pfb(92, &field_big)),
+                &(pfb(19, &field_big), pfb(108, &field_big))
+            )
+        );
+        assert_eq!(
+            (pfb(3, &field_big), pfb(2, &field_big)),
+            Polynomial::lagrange_interpolation_2(
+                &(pfb(1, &field_big), pfb(0, &field_big)),
+                &(pfb(2, &field_big), pfb(3, &field_big))
+            )
+        );
     }
 
     #[test]
