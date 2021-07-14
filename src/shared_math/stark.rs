@@ -8,9 +8,10 @@ use crate::shared_math::traits::IdentityValues;
 use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
 use crate::utils;
 use num_bigint::BigInt;
-use num_traits::Zero;
 use serde::Serialize;
 use std::fmt::Debug;
+use std::ops::Add;
+use std::ops::Mul;
 
 pub enum StarkProofError {
     InputOutputMismatch,
@@ -42,6 +43,41 @@ fn get_linear_combination_coefficients<'a>(
         .iter()
         .map(|seed| PrimeFieldElementBig::from_bytes(field, seed))
         .collect::<Vec<PrimeFieldElementBig>>()
+}
+
+struct PolynomialEvaluations<T: Clone + Debug + Serialize + PartialEq> {
+    extended_computational_trace: T,
+    shifted_trace_codeword: T,
+    transition_quotient_codeword: T,
+    shifted_transition_quotient_codeword: T,
+    boundary_quotient_codeword: T,
+    shifted_boundary_quotient_codeword: T,
+}
+
+fn get_linear_combination<
+    T: Clone + Debug + Serialize + PartialEq + Mul<Output = T> + Add<Output = T>,
+>(
+    coefficients: &[T],
+    values: PolynomialEvaluations<T>,
+) -> T {
+    values.extended_computational_trace.clone()
+        + coefficients[0].clone() * values.shifted_trace_codeword
+        + coefficients[1].clone() * values.transition_quotient_codeword
+        + coefficients[2].clone() * values.shifted_transition_quotient_codeword
+        + coefficients[3].clone() * values.boundary_quotient_codeword
+        + coefficients[4].clone() * values.shifted_boundary_quotient_codeword
+}
+
+fn get_linear_combinations<
+    T: Clone + Debug + Serialize + PartialEq + Mul<Output = T> + Add<Output = T>,
+>(
+    coefficients: &[T],
+    values: Vec<PolynomialEvaluations<T>>,
+) -> Vec<T> {
+    values
+        .into_iter()
+        .map(|value| get_linear_combination(coefficients, value))
+        .collect::<Vec<T>>()
 }
 
 pub fn mimc_forward<'a>(
@@ -324,66 +360,26 @@ pub fn stark_of_mimc(
     // TODO: Alan says we need to verify that the degree is high enough on all these
     // polynomials! We might have a off-by-one, or two or three error in the degrees
     // here.
-    let mut linear_combination_codeword = vec![BigInt::zero(); extended_domain_length];
-    println!("coefficients = {:?}", lc_coefficients);
-    for i in 0..extended_domain_length {
-        linear_combination_codeword[i] = (extended_computational_trace[i].clone()
-            + lc_coefficients[0].clone() * shifted_trace_codeword[i].clone()
-            + lc_coefficients[1].clone() * transition_quotient_codeword[i].clone()
-            + lc_coefficients[2].clone() * shifted_transition_quotient_codeword[i].clone()
-            + lc_coefficients[3].clone() * boundary_quotient_codeword[i].clone()
-            + lc_coefficients[4].clone() * shifted_boundary_quotient_codeword[i].clone())
-        .value;
-    }
-    println!("licombo[7] = {:?}", linear_combination_codeword[7]);
-    println!("licombo[15] = {:?}", linear_combination_codeword[15]);
-    println!(
-        "extended_computational_trace[15] = {:?}",
-        extended_computational_trace[15]
-    );
-    println!(
-        "transition_quotient_codeword[15] = {:?}",
-        transition_quotient_codeword[15]
-    );
-    println!(
-        "boundary_quotient_codeword[15] = {:?}",
-        boundary_quotient_codeword[15]
-    );
+    let polynomial_evaluations = (0..extended_domain_length)
+        .map(|i| PolynomialEvaluations {
+            extended_computational_trace: extended_computational_trace[i].clone(),
+            shifted_trace_codeword: shifted_trace_codeword[i].clone(),
+            transition_quotient_codeword: transition_quotient_codeword[i].clone(),
+            shifted_transition_quotient_codeword: shifted_transition_quotient_codeword[i].clone(),
+            boundary_quotient_codeword: boundary_quotient_codeword[i].clone(),
+            shifted_boundary_quotient_codeword: shifted_boundary_quotient_codeword[i].clone(),
+        })
+        .collect::<Vec<PolynomialEvaluations<PrimeFieldElementBig>>>();
+    let linear_combination_codeword =
+        get_linear_combinations(&lc_coefficients, polynomial_evaluations)
+            .iter()
+            .map(|x| x.value.clone())
+            .collect::<Vec<BigInt>>();
 
     // Alan: Don't need to send this tree
     // Thor: Probably true, but we calculate the proof indices from this tree, so I think
     // it makes verification faster if we send it.
     let linear_combination_mt = MerkleTree::from_vec(&linear_combination_codeword);
-    // println!(
-    //     "Computed linear combination of low-degree polynomials. Got hash: {:?}",
-    //     linear_combination_mt.get_root()
-    // );
-
-    // Get pseudo-random indices from `l_mtree.get_root()`.
-    // let index_preimages =
-    //     get_n_hash_rounds(&linear_combination_mt.get_root(), security_checks as u32);
-    // let indices: Vec<usize> = index_preimages
-    //     .iter()
-    //     .map(|x| get_index_from_bytes(x, extended_domain_length))
-    //     .collect::<Vec<usize>>();
-    // let polynomial_proofs: Vec<CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>> =
-    //     tuple_merkle_tree.get_multi_proof(&indices);
-    // let linear_combination_paths: Vec<CompressedAuthenticationPath<BigInt>> =
-    //     linear_combination_mt.get_multi_proof(&indices);
-    // println!(
-    //     "polynomial_proof values = {:?}",
-    //     polynomial_proofs
-    //         .iter()
-    //         .map(|x| x.get_value())
-    //         .collect::<Vec<(BigInt, BigInt, BigInt)>>()
-    // );
-    // println!(
-    //     "linear_combination_proof values = {:?}",
-    //     linear_combination_proofs
-    //         .iter()
-    //         .map(|x| x.get_value())
-    //         .collect::<Vec<BigInt>>()
-    // );
 
     // Compute the FRI low-degree proofs
     let extended_computational_trace_bigint = extended_computational_trace
@@ -1066,96 +1062,74 @@ mod test_modular_arithmetic {
                 &shifted_tuple_authentication_paths
             ));
 
-            // verify linear relation on indicated elements
-            println!("ab_indices = {:?}", ab_indices);
-            println!("lc_coefficients = {:?}", lc_coefficients);
             for j in 0..stark_proof.linear_combination_fri.s as usize * 2 {
-                println!("j = {}", j);
-                println!("ab_indices[j] = {}", ab_indices[j]);
+                // verify linear relation on indicated elements
                 let x = omega_domain[ab_indices[j]].clone();
-                println!("x = {}", omega_domain[ab_indices[j]]);
                 let x_power_ns_plus_1 = omega_domain
                     [ab_indices[j] * (no_steps + 1) as usize % extended_domain_length as usize]
                     .clone();
-                println!("x^(ns + 1) = {}", x_power_ns_plus_1);
                 let x_power_ns_plus_3 = omega_domain
                     [ab_indices[j] * (no_steps + 3) as usize % extended_domain_length as usize]
                     .clone();
-                println!("x^(ns + 3) = {}", x_power_ns_plus_3);
-                // let omega_power_1 = omega_domain[1].clone();
-                // let omega_power_ns_plus_1 = omega_domain[no_steps as usize + 1].clone();
-                // let omega_power_ns_plus_3 = omega_domain[no_steps as usize + 3].clone();
-                let left_hand_side: PrimeFieldElementBig = PrimeFieldElementBig::new(
-                    stark_proof.linear_combination_fri.ab_proofs[0][j].get_value(),
-                    omega.field,
-                );
-                let mut right_hand_side: PrimeFieldElementBig = PrimeFieldElementBig::new(
+                let extended_computational_trace: PrimeFieldElementBig = PrimeFieldElementBig::new(
                     stark_proof.tuple_authentication_paths[j]
                         .get_value()
                         .0
                         .clone(),
                     omega.field,
                 );
-                right_hand_side = right_hand_side.clone()
-                    + lc_coefficients[0].clone()
-                        * PrimeFieldElementBig::new(
-                            stark_proof.tuple_authentication_paths[j]
-                                .get_value()
-                                .0
-                                .clone(),
-                            omega.field,
-                        )
-                        * x_power_ns_plus_1.clone();
-                right_hand_side = right_hand_side.clone()
-                    + lc_coefficients[1].clone()
-                        * PrimeFieldElementBig::new(
-                            stark_proof.tuple_authentication_paths[j]
-                                .get_value()
-                                .1
-                                .clone(),
-                            omega.field,
-                        );
-                right_hand_side = right_hand_side.clone()
-                    + lc_coefficients[2].clone()
-                        * PrimeFieldElementBig::new(
-                            stark_proof.tuple_authentication_paths[j]
-                                .get_value()
-                                .1
-                                .clone(),
-                            omega.field,
-                        )
-                        * x.clone();
-                right_hand_side = right_hand_side.clone()
-                    + lc_coefficients[3].clone()
-                        * PrimeFieldElementBig::new(
-                            stark_proof.tuple_authentication_paths[j]
-                                .get_value()
-                                .2
-                                .clone(),
-                            omega.field,
-                        );
-                right_hand_side = right_hand_side.clone()
-                    + lc_coefficients[4].clone()
-                        * PrimeFieldElementBig::new(
-                            stark_proof.tuple_authentication_paths[j]
-                                .get_value()
-                                .2
-                                .clone(),
-                            omega.field,
-                        )
-                        * x_power_ns_plus_3.clone();
-                println!(
-                    "extended_computational_trace[i] = {:?}",
-                    stark_proof.tuple_authentication_paths[j].get_value().0
+                let shifted_trace_codeword: PrimeFieldElementBig = PrimeFieldElementBig::new(
+                    stark_proof.tuple_authentication_paths[j]
+                        .get_value()
+                        .0
+                        .clone(),
+                    omega.field,
+                ) * x_power_ns_plus_1.clone();
+                let transition_quotient_codeword: PrimeFieldElementBig = PrimeFieldElementBig::new(
+                    stark_proof.tuple_authentication_paths[j]
+                        .get_value()
+                        .1
+                        .clone(),
+                    omega.field,
                 );
-                println!(
-                    "transition_quotient_codeword[i] = {:?}",
-                    stark_proof.tuple_authentication_paths[j].get_value().1
+                let shifted_transition_quotient_codeword = PrimeFieldElementBig::new(
+                    stark_proof.tuple_authentication_paths[j]
+                        .get_value()
+                        .1
+                        .clone(),
+                    omega.field,
+                ) * x.clone();
+                let boundary_quotient_codeword = PrimeFieldElementBig::new(
+                    stark_proof.tuple_authentication_paths[j]
+                        .get_value()
+                        .2
+                        .clone(),
+                    omega.field,
                 );
-                println!(
-                    "boundary_quotient_codeword[i] = {:?}",
-                    stark_proof.tuple_authentication_paths[j].get_value().2
+                let shifted_boundary_quotient_codeword = PrimeFieldElementBig::new(
+                    stark_proof.tuple_authentication_paths[j]
+                        .get_value()
+                        .2
+                        .clone(),
+                    omega.field,
+                ) * x_power_ns_plus_3.clone();
+                let right_hand_side: PrimeFieldElementBig = get_linear_combination(
+                    &lc_coefficients,
+                    PolynomialEvaluations {
+                        extended_computational_trace,
+                        shifted_trace_codeword,
+                        transition_quotient_codeword,
+                        shifted_transition_quotient_codeword,
+                        boundary_quotient_codeword,
+                        shifted_boundary_quotient_codeword,
+                    },
                 );
+                println!("right_hand_side = {}", right_hand_side);
+                let left_hand_side: PrimeFieldElementBig = PrimeFieldElementBig::new(
+                    stark_proof.linear_combination_fri.ab_proofs[0][j].get_value(),
+                    omega.field,
+                );
+                println!("left_hand_side = {}", left_hand_side);
                 assert_eq!(left_hand_side, right_hand_side);
             }
         }
