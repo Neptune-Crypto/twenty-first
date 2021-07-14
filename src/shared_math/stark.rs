@@ -30,7 +30,7 @@ pub enum StarkProofError {
 pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     tuple_merkle_root: [u8; 32],
     linear_combination_merkle_root: [u8; 32],
-    shifted_extended_trace_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
+    shifted_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     // TODO: Change this to three Merkle trees instead, do not store all triplets in a single
     // Merkle tree!
     tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
@@ -554,13 +554,13 @@ pub fn stark_of_mimc(
     }
 
     // Produce authentication paths for the relevant codewords
-    let ab_indices: Vec<(usize, usize)> = linear_combination_fri.get_ab_indices(0);
+    let abc_indices: Vec<(usize, usize, usize)> = linear_combination_fri.get_abc_indices(0);
     // let indices = ab_indices.iter().map(|(a, b)| )
     // todo: use https://users.rust-lang.org/t/flattening-a-vector-of-tuples/11409/2
-    let mut indices: Vec<usize> = vec![];
-    for (a, b) in ab_indices.iter() {
-        indices.push(*a);
-        indices.push(*b);
+    let mut ab_indices: Vec<usize> = vec![];
+    for (a, b, _) in abc_indices.iter() {
+        ab_indices.push(*a);
+        ab_indices.push(*b);
     }
     // index_preimage.push(0);
     // let index_preimages =
@@ -572,19 +572,19 @@ pub fn stark_of_mimc(
     //     .map(|x| get_index_from_bytes(x, extended_domain_length))
     //     .collect::<Vec<usize>>();
     let tuple_authentication_paths: Vec<CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>> =
-        tuple_merkle_tree.get_multi_proof(&indices);
-    let shifted_indices = indices
+        tuple_merkle_tree.get_multi_proof(&ab_indices);
+    let shifted_indices = ab_indices
         .iter()
         .map(|x| (x + expansion_factor) % extended_domain_length)
         .collect::<Vec<usize>>();
-    let shifted_extended_trace_authentication_paths: Vec<
+    let shifted_tuple_authentication_paths: Vec<
         CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>,
     > = tuple_merkle_tree.get_multi_proof(&shifted_indices);
 
     Ok(StarkProof {
         tuple_merkle_root: mt_root_hash,
         linear_combination_merkle_root: linear_combination_mt.get_root(),
-        shifted_extended_trace_authentication_paths,
+        shifted_tuple_authentication_paths,
         tuple_authentication_paths,
         linear_combination_fri,
     })
@@ -956,7 +956,7 @@ mod test_modular_arithmetic {
     }
 
     #[test]
-    fn mimc_big() {
+    fn mimc_big_test() {
         // let mut ret: Option<(PrimeFieldBig, BigInt)> = None;
         // PrimeFieldBig::get_field_with_primitive_root_of_unity(8, 100, &mut ret);
         // println!("Found: ret = {:?}", ret);
@@ -1004,12 +1004,56 @@ mod test_modular_arithmetic {
 
             // Verify low-degreeness of linear combination
             assert!(low_degree_test::verify_bigint(
-                stark_proof.linear_combination_fri,
+                stark_proof.linear_combination_fri.clone(),
                 field.q.clone()
             )
             .is_ok());
 
             // Verify properties of polynomials
+
+            // ## verify linear combination
+            // get the coefficients for the licombo
+            let coefficients_randomness =
+                utils::get_n_hash_rounds(&stark_proof.tuple_merkle_root, 5);
+            let coefficients: Vec<PrimeFieldElementBig> = coefficients_randomness
+                .iter()
+                .map(|seed| PrimeFieldElementBig::from_bytes(omega.field, seed))
+                .collect();
+            // get all indices (a,b) of first FRI round
+            let abc_indices: Vec<(usize, usize, usize)> =
+                stark_proof.linear_combination_fri.get_abc_indices(0);
+            // let indices = ab_indices.iter().map(|(a, b)| )
+            // todo: use https://users.rust-lang.org/t/flattening-a-vector-of-tuples/11409/2
+            let mut ab_indices: Vec<usize> = vec![];
+            for (a, b, _) in abc_indices.iter() {
+                ab_indices.push(*a);
+                ab_indices.push(*b);
+            }
+            let shifted_indices = ab_indices
+                .iter()
+                .map(|x| (x + expansion_factor as usize) % extended_domain_length as usize)
+                .collect::<Vec<usize>>();
+
+            // verify tuple authentication paths and shifted authentication paths
+            let tuple_authentication_paths: Vec<
+                CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>,
+            > = stark_proof.tuple_authentication_paths;
+
+            // Merkle::verify(root, indices, leafs, paths);
+            assert!(MerkleTree::verify_multi_proof(
+                stark_proof.tuple_merkle_root,
+                &ab_indices,
+                &tuple_authentication_paths,
+            ));
+            let shifted_tuple_authentication_paths = stark_proof.shifted_tuple_authentication_paths;
+            assert!(MerkleTree::verify_multi_proof(
+                stark_proof.tuple_merkle_root,
+                &shifted_indices,
+                &shifted_tuple_authentication_paths
+            ));
+
+            // verify linear relation on indicated elements
+            //for j in 0..stark_proof.linear_combination_fri.s {}
         }
     }
 
