@@ -79,6 +79,41 @@ fn get_transition_zerofier_polynomials<
     )
 }
 
+fn get_extended_round_constant<
+    T: Clone
+        + Debug
+        + Serialize
+        + Mul<Output = T>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + Rem<Output = T>
+        + Neg<Output = T>
+        + IdentityValues
+        + New
+        + PartialEq
+        + Eq
+        + Hash
+        + Display,
+>(
+    omega: &T,
+    omicron: &T,
+    num_steps: usize,
+    expansion_factor: usize,
+    mimc_round_constants: &[T],
+) -> Vec<T> {
+    let mut mimc_round_constants_padded = mimc_round_constants.to_vec();
+    mimc_round_constants_padded.append(&mut vec![omega.ring_zero()]);
+    let round_constants_interpolant = intt(&mimc_round_constants_padded, &omicron);
+    let mut padded_round_constants_interpolant = round_constants_interpolant.clone();
+    padded_round_constants_interpolant.append(&mut vec![
+        omega.ring_zero();
+        (expansion_factor - 1) * (num_steps + 1)
+    ]);
+
+    ntt(&padded_round_constants_interpolant, &omega)
+}
+
 fn get_boundary_zerofier_polynomial<
     T: Clone
         + Debug
@@ -258,20 +293,13 @@ pub fn stark_of_mimc(
     ); // TODO: REMOVE
 
     // compute low-degree extension of the round constants polynomial
-    let mut mimc_round_constants_padded = mimc_round_constants.to_vec();
-    mimc_round_constants_padded.append(&mut vec![omega.ring_zero()]);
-    let round_constants_interpolant = intt(&mimc_round_constants_padded, &omicron);
-    // println!(
-    //     "round_constants_interpolant = {:?}",
-    //     round_constants_interpolant
-    // ); // TODO: REMOVE
-    let mut padded_round_constants_interpolant = round_constants_interpolant.clone();
-    padded_round_constants_interpolant.append(&mut vec![
-        omega.ring_zero();
-        (expansion_factor - 1) * (num_steps + 1)
-    ]);
-    let extended_round_constants = ntt(&padded_round_constants_interpolant, &omega);
-    // println!("extended_round_constants = {:?}", extended_round_constants); // TODO: REMOVE
+    let extended_round_constants = get_extended_round_constant(
+        &omega,
+        &omicron,
+        num_steps,
+        expansion_factor,
+        mimc_round_constants,
+    );
 
     // evaluate and interpolate AIR
     let mut air_codeword = Vec::<PrimeFieldElementBig>::with_capacity(extended_domain_length);
