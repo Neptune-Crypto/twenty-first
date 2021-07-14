@@ -39,7 +39,7 @@ where
     // in the deserialization process.
     T: Clone + Debug + PartialEq + Serialize,
 {
-    ab_proofs: Vec<Vec<CompressedAuthenticationPath<T>>>,
+    pub ab_proofs: Vec<Vec<CompressedAuthenticationPath<T>>>,
     challenge_hash_preimages: Vec<Vec<u8>>,
     codeword_size: u32,
     c_proofs: Vec<Vec<CompressedAuthenticationPath<T>>>,
@@ -48,7 +48,7 @@ where
     merkle_roots: Vec<[u8; 32]>,
     primitive_root_of_unity: T,
     rounds_count: u8,
-    s: u32,
+    pub s: u32,
 }
 
 #[derive(Debug)]
