@@ -1062,6 +1062,7 @@ pub fn stark_of_mimc(
 #[cfg(test)]
 mod test_modular_arithmetic {
     use super::*;
+    use crate::shared_math::prime_field_element::PrimeField;
     use crate::shared_math::prime_field_element_big::PrimeFieldBig;
 
     fn b(x: i128) -> BigInt {
@@ -1235,32 +1236,32 @@ mod test_modular_arithmetic {
         }
     }
 
-    // #[test]
-    // fn mimc_forward_small() {
-    //     let field = PrimeField::new(17);
-    //     let input = PrimeFieldElement::new(6, &field);
-    //     let round_constant = vec![
-    //         PrimeFieldElement::new(6, &field),
-    //         PrimeFieldElement::new(2, &field),
-    //         PrimeFieldElement::new(1, &field),
-    //         PrimeFieldElement::new(9, &field),
-    //     ];
-    //     let result: Vec<PrimeFieldElement> = mimc_forward_i128(&input, 7, &round_constant);
+    #[test]
+    fn mimc_forward_small() {
+        let field = PrimeField::new(17);
+        let input = PrimeFieldElement::new(6, &field);
+        let round_constant = vec![
+            PrimeFieldElement::new(6, &field),
+            PrimeFieldElement::new(2, &field),
+            PrimeFieldElement::new(1, &field),
+            PrimeFieldElement::new(9, &field),
+        ];
+        let result: Vec<PrimeFieldElement> = mimc_forward_i128(&input, 7, &round_constant);
 
-    //     // Result was verified on WolframAlpha: works for input = 6 mod 17
-    //     assert_eq!(13, result.last().unwrap().value);
+        // Result was verified on WolframAlpha: works for input = 6 mod 17
+        assert_eq!(13, result.last().unwrap().value);
 
-    //     for j in 0..10 {
-    //         for i in 0..16 {
-    //             let input2 = PrimeFieldElement::new(i, &field);
-    //             let result2 = mimc_forward_i128(&input2, j, &round_constant);
-    //             assert_eq!(
-    //                 input2,
-    //                 mimc_backward(&result2.last().unwrap(), j, &round_constant)
-    //             );
-    //         }
-    //     }
-    // }
+        for j in 0..10 {
+            for i in 0..16 {
+                let input2 = PrimeFieldElement::new(i, &field);
+                let result2 = mimc_forward_i128(&input2, j, &round_constant);
+                assert_eq!(
+                    input2,
+                    mimc_backward(&result2.last().unwrap(), j, &round_constant)
+                );
+            }
+        }
+    }
 
     // #[test]
     // fn small_stark_of_mimc() {
