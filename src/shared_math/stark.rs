@@ -179,16 +179,30 @@ fn get_boundary_zerofier_polynomial<
     }
 }
 
-fn get_boundary_constraint_polynomial<'a>(
-    mimc_input: &PrimeFieldElementBig<'a>,
-    mimc_output: &PrimeFieldElementBig<'a>,
-    last_x_value_of_trace: &PrimeFieldElementBig<'a>,
-) -> Polynomial<PrimeFieldElementBig<'a>> {
-    let (line_a, line_b): (PrimeFieldElementBig, PrimeFieldElementBig) =
-        mimc_input.field.lagrange_interpolation_2(
-            (mimc_input.ring_one(), mimc_input.clone()),
-            (last_x_value_of_trace.to_owned(), mimc_output.to_owned()),
-        );
+fn get_boundary_constraint_polynomial<
+    T: Clone
+        + Debug
+        + Serialize
+        + Mul<Output = T>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + Rem<Output = T>
+        + Neg<Output = T>
+        + IdentityValues
+        + PartialEq
+        + Eq
+        + Hash
+        + Display,
+>(
+    mimc_input: &T,
+    mimc_output: &T,
+    last_x_value_of_trace: &T,
+) -> Polynomial<T> {
+    let (line_a, line_b): (T, T) = Polynomial::lagrange_interpolation_2(
+        &(mimc_input.ring_one(), mimc_input.clone()),
+        &(last_x_value_of_trace.to_owned(), mimc_output.to_owned()),
+    );
     Polynomial {
         coefficients: vec![line_b, line_a],
     }
