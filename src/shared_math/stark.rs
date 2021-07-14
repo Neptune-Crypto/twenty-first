@@ -1,16 +1,12 @@
-use crate::fft;
 use crate::shared_math::low_degree_test;
 use crate::shared_math::low_degree_test::LowDegreeProof;
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::polynomial_quotient_ring::PolynomialQuotientRing;
-use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
+use crate::shared_math::prime_field_element::PrimeFieldElement;
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
-use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use crate::shared_math::traits::IdentityValues;
-use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree, Node};
+use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
 use crate::utils;
-use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
 use num_bigint::BigInt;
 use num_traits::Zero;
 use serde::Serialize;
@@ -970,7 +966,6 @@ pub fn stark_of_mimc(
 #[cfg(test)]
 mod test_modular_arithmetic {
     use super::*;
-    use crate::shared_math::prime_field_element::PrimeField;
     use crate::shared_math::prime_field_element_big::PrimeFieldBig;
 
     fn b(x: i128) -> BigInt {
@@ -1020,7 +1015,7 @@ mod test_modular_arithmetic {
                 &round_constants,
             );
 
-            let mut stark_proof: StarkProof<BigInt> = match stark_res {
+            let stark_proof: StarkProof<BigInt> = match stark_res {
                 Ok(stark_proof) => stark_proof,
                 Err(_err) => panic!("Failed to produce STARK proof"),
             };
@@ -1162,7 +1157,6 @@ mod test_modular_arithmetic {
                     stark_proof.tuple_authentication_paths[j].get_value().2
                 );
                 assert_eq!(left_hand_side, right_hand_side);
-                println!("");
             }
         }
     }
