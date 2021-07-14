@@ -9,9 +9,14 @@ use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
 use crate::utils;
 use num_bigint::BigInt;
 use serde::Serialize;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::ops::Add;
+use std::ops::Div;
 use std::ops::Mul;
+use std::ops::Neg;
+use std::ops::Rem;
+use std::ops::Sub;
 
 pub enum StarkProofError {
     InputOutputMismatch,
@@ -32,6 +37,46 @@ pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     // Merkle tree!
     tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     linear_combination_fri: LowDegreeProof<T>,
+}
+
+// Returns a pair of polynomials, the numerator and denominator of the zerofier polynomias
+fn get_transition_zerofier_polynomials<
+    T: Clone
+        + Debug
+        + Serialize
+        + Mul<Output = T>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + Rem<Output = T>
+        + Neg<Output = T>
+        + IdentityValues
+        + PartialEq
+        + Eq
+        + Hash
+        + Display,
+>(
+    num_steps: usize,
+    last_x_value_of_trace: &T,
+) -> (Polynomial<T>, Polynomial<T>) {
+    let mut transition_zerofier_numerator_coefficients =
+        vec![last_x_value_of_trace.ring_zero(); num_steps + 2];
+    transition_zerofier_numerator_coefficients[0] = -last_x_value_of_trace.ring_one();
+    transition_zerofier_numerator_coefficients[num_steps + 1] = last_x_value_of_trace.ring_one();
+    let transition_zerofier_numerator = Polynomial {
+        coefficients: transition_zerofier_numerator_coefficients,
+    };
+    let transition_zerofier_denominator_coefficients = vec![
+        -last_x_value_of_trace.clone(),
+        last_x_value_of_trace.ring_one(),
+    ];
+    let transition_zerofier_denominator = Polynomial {
+        coefficients: transition_zerofier_denominator_coefficients,
+    };
+    (
+        transition_zerofier_numerator,
+        transition_zerofier_denominator,
+    )
 }
 
 fn get_linear_combination_coefficients<'a>(
@@ -218,16 +263,8 @@ pub fn stark_of_mimc(
     // println!("xlast = {}", xlast);
 
     // compute transition-zerofier polynomial
-    let mut transition_zerofier_numerator_coefficients = vec![omega.ring_zero(); num_steps + 2];
-    transition_zerofier_numerator_coefficients[0] = -omega.ring_one();
-    transition_zerofier_numerator_coefficients[num_steps + 1] = omega.ring_one();
-    let transition_zerofier_numerator_polynomial = Polynomial {
-        coefficients: transition_zerofier_numerator_coefficients,
-    };
-    let transition_zerofier_denominator_coefficients = vec![-xlast.clone(), omega.ring_one()];
-    let transition_zerofier_denominator_polynomial = Polynomial {
-        coefficients: transition_zerofier_denominator_coefficients,
-    };
+    let (transition_zerofier_numerator_polynomial, transition_zerofier_denominator_polynomial) =
+        get_transition_zerofier_polynomials(num_steps, xlast);
 
     // compute the transition-quotient polynomial
     let (transition_quotient_polynomial, rem) = (air_polynomial.clone()
