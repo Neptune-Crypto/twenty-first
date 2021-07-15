@@ -32,7 +32,7 @@ pub enum StarkProofError {
 pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     tuple_merkle_root: [u8; 32],
     linear_combination_merkle_root: [u8; 32],
-    shifted_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
+    next_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     // TODO: Change this to three Merkle trees instead, do not store all triplets in a single
     // Merkle tree!
     tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
@@ -711,18 +711,18 @@ pub fn stark_of_mimc(
     //     .collect::<Vec<usize>>();
     let tuple_authentication_paths: Vec<CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>> =
         tuple_merkle_tree.get_multi_proof(&ab_indices);
-    let shifted_indices = ab_indices
+    let next_indices = ab_indices
         .iter()
         .map(|x| (x + expansion_factor) % extended_domain_length)
         .collect::<Vec<usize>>();
-    let shifted_tuple_authentication_paths: Vec<
+    let next_tuple_authentication_paths: Vec<
         CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>,
-    > = tuple_merkle_tree.get_multi_proof(&shifted_indices);
+    > = tuple_merkle_tree.get_multi_proof(&next_indices);
 
     Ok(StarkProof {
         tuple_merkle_root: tuple_merkle_tree.get_root(),
         linear_combination_merkle_root: linear_combination_mt.get_root(),
-        shifted_tuple_authentication_paths,
+        next_tuple_authentication_paths,
         tuple_authentication_paths,
         linear_combination_fri,
     })
@@ -1114,8 +1114,11 @@ mod test_modular_arithmetic {
         let omicron = omega.mod_pow(b(expansion_factor));
         println!("Found omega = {}", omega);
         println!("Found omicron = {}", omicron);
-        println!("omicron domain = {:?}", omicron.get_generator_domain());
+        let omicron_domain = omicron.get_generator_domain();
+        println!("omicron_domain = {:?}", omicron_domain);
         let omega_domain = omega.get_generator_domain();
+        let xlast = omicron_domain.last().unwrap();
+
         println!("omega_domain = {:?}", omega_domain);
 
         for i in 0..20 {
@@ -1180,12 +1183,21 @@ mod test_modular_arithmetic {
                 &ab_indices,
                 &tuple_authentication_paths,
             ));
-            let shifted_tuple_authentication_paths = stark_proof.shifted_tuple_authentication_paths;
+            let next_tuple_authentication_paths = stark_proof.next_tuple_authentication_paths;
             assert!(MerkleTree::verify_multi_proof(
                 stark_proof.tuple_merkle_root,
                 &shifted_indices,
-                &shifted_tuple_authentication_paths
+                &next_tuple_authentication_paths
             ));
+
+            // Calculate the transition zerofier and round constant interpolation
+            let (tz_num, tz_den): (
+                Polynomial<PrimeFieldElementBig>,
+                Polynomial<PrimeFieldElementBig>,
+            ) = get_transition_zerofier_polynomials(no_steps as usize, xlast);
+            let tz_pol = tz_num / tz_den;
+            let rcc = get_round_constants_coefficients(&omega, &omicron, &round_constants);
+            let rc_pol = Polynomial { coefficients: rcc };
 
             for j in 0..stark_proof.linear_combination_fri.s as usize * 2 {
                 // verify linear relation on indicated elements
@@ -1241,9 +1253,9 @@ mod test_modular_arithmetic {
                 let right_hand_side: PrimeFieldElementBig = get_linear_combination(
                     &lc_coefficients,
                     PolynomialEvaluations {
-                        extended_computational_trace,
+                        extended_computational_trace: extended_computational_trace.clone(),
                         shifted_trace_codeword,
-                        transition_quotient_codeword,
+                        transition_quotient_codeword: transition_quotient_codeword.clone(),
                         shifted_transition_quotient_codeword,
                         boundary_quotient_codeword,
                         shifted_boundary_quotient_codeword,
@@ -1256,6 +1268,20 @@ mod test_modular_arithmetic {
                 );
                 println!("left_hand_side = {}", left_hand_side);
                 assert_eq!(left_hand_side, right_hand_side);
+
+                // Verify transition constraint of AIR
+                let next_extended_computational_trace_bi =
+                    next_tuple_authentication_paths[j].clone().get_value().0;
+                let next_extended_computational_trace =
+                    PrimeFieldElementBig::new(next_extended_computational_trace_bi, omega.field);
+                assert_eq!(
+                    transition_quotient_codeword * tz_pol.evaluate(&x),
+                    rc_pol.evaluate(&x)
+                        + extended_computational_trace
+                            .clone()
+                            .mod_pow(Into::<BigInt>::into(3))
+                        - next_extended_computational_trace
+                )
             }
         }
     }
