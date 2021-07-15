@@ -117,6 +117,32 @@ fn get_extended_computational_trace<
     )
 }
 
+fn get_round_constants_coefficients<
+    T: Clone
+        + Debug
+        + Serialize
+        + Mul<Output = T>
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + Rem<Output = T>
+        + Neg<Output = T>
+        + IdentityValues
+        + New
+        + PartialEq
+        + Eq
+        + Hash
+        + Display,
+>(
+    omega: &T,
+    omicron: &T,
+    mimc_round_constants: &[T],
+) -> Vec<T> {
+    let mut mimc_round_constants_padded = mimc_round_constants.to_vec();
+    mimc_round_constants_padded.append(&mut vec![omega.ring_zero()]);
+    intt(&mimc_round_constants_padded, &omicron)
+}
+
 fn get_extended_round_constant<
     T: Clone
         + Debug
@@ -140,10 +166,8 @@ fn get_extended_round_constant<
     expansion_factor: usize,
     mimc_round_constants: &[T],
 ) -> Vec<T> {
-    let mut mimc_round_constants_padded = mimc_round_constants.to_vec();
-    mimc_round_constants_padded.append(&mut vec![omega.ring_zero()]);
-    let round_constants_interpolant = intt(&mimc_round_constants_padded, &omicron);
-    let mut padded_round_constants_interpolant = round_constants_interpolant;
+    let mut padded_round_constants_interpolant =
+        get_round_constants_coefficients(omega, omicron, mimc_round_constants);
     padded_round_constants_interpolant.append(&mut vec![
         omega.ring_zero();
         (expansion_factor - 1) * (num_steps + 1)
