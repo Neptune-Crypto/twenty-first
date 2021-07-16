@@ -36,8 +36,16 @@ pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     next_air_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     // TODO: Change this to three Merkle trees instead, do not store all triplets in a single
     // Merkle tree!
+    bc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     lc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     linear_combination_fri: LowDegreeProof<T>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MimcClaim<T: Clone + Debug + Serialize + PartialEq> {
+    input: T,
+    output: T,
+    round_constants: Vec<T>,
 }
 
 // Returns a pair of polynomials, the numerator and denominator of the zerofier polynomias
@@ -135,12 +143,11 @@ fn get_round_constants_coefficients<
         + Hash
         + Display,
 >(
-    omega: &T,
     omicron: &T,
     mimc_round_constants: &[T],
 ) -> Vec<T> {
     let mut mimc_round_constants_padded = mimc_round_constants.to_vec();
-    mimc_round_constants_padded.append(&mut vec![omega.ring_zero()]);
+    mimc_round_constants_padded.append(&mut vec![omicron.ring_zero()]);
     intt(&mimc_round_constants_padded, &omicron)
 }
 
@@ -168,7 +175,7 @@ fn get_extended_round_constant<
     mimc_round_constants: &[T],
 ) -> Vec<T> {
     let mut padded_round_constants_interpolant =
-        get_round_constants_coefficients(omega, omicron, mimc_round_constants);
+        get_round_constants_coefficients(omicron, mimc_round_constants);
     padded_round_constants_interpolant.append(&mut vec![
         omega.ring_zero();
         (expansion_factor - 1) * (num_steps + 1)
@@ -338,9 +345,8 @@ pub fn stark_of_mimc(
     num_steps: usize,
     expansion_factor: usize,
     omega: PrimeFieldElementBig,
-    mimc_input: PrimeFieldElementBig,
-    mimc_output: PrimeFieldElementBig,
-    mimc_round_constants: &[PrimeFieldElementBig],
+    mimc_claim: &MimcClaim<PrimeFieldElementBig>,
+    transcript: &mut Vec<u8>,
 ) -> Result<StarkProof<BigInt>, StarkProofError> {
     // Omega is the generator of the big domain
     // Omicron is the generator of the small domain
@@ -350,7 +356,7 @@ pub fn stark_of_mimc(
 
     // compute computational trace
     let computational_trace: Vec<PrimeFieldElementBig> =
-        mimc_forward(&mimc_input, num_steps, mimc_round_constants);
+        mimc_forward(&mimc_claim.input, num_steps, &mimc_claim.round_constants);
 
     // compute low-degree extension of computational trace
     let (extended_computational_trace, trace_interpolant): (
@@ -370,7 +376,7 @@ pub fn stark_of_mimc(
         &omicron,
         num_steps,
         expansion_factor,
-        mimc_round_constants,
+        &mimc_claim.round_constants,
     );
 
     // evaluate and interpolate AIR
@@ -420,7 +426,7 @@ pub fn stark_of_mimc(
     let boundary_zerofier_polynomial = get_boundary_zerofier_polynomial(xlast);
 
     let boundary_constraint_polynomial =
-        get_boundary_constraint_polynomial(&mimc_input, &mimc_output, xlast);
+        get_boundary_constraint_polynomial(&mimc_claim.input, &mimc_claim.output, xlast);
 
     // compute the boundary-quotient polynomial and codeword
     let (boundary_quotient_polynomial, bq_rem) =
@@ -522,6 +528,8 @@ pub fn stark_of_mimc(
     let linear_combination_evaluations_bigint = linear_combination_codeword;
 
     let mut output = vec![];
+
+    // sanity check: low degree of trace
     let max_degree_ect = num_steps as u32;
     let low_degree_proof_ect = low_degree_test::prover_bigint(
         &extended_computational_trace_bigint,
@@ -541,6 +549,8 @@ pub fn stark_of_mimc(
         ),
         Err(_err) => return Err(StarkProofError::HighDegreeExtendedComputationalTrace),
     }
+
+    // sanity check: low degree of boundary quotient
     let max_degree_bq = num_steps as u32;
     let low_degree_proof_bq = low_degree_test::prover_bigint(
         &boundary_quotient_codeword_bigint,
@@ -564,6 +574,8 @@ pub fn stark_of_mimc(
         //     max_degree_bq, err
         // ),
     }
+
+    // sanity check: low degree of transition quotient
     let max_degree_tq = ((num_steps + 1) * 2 - 1) as u32;
     let low_degree_proof_tq = low_degree_test::prover_bigint(
         &transition_quotient_codeword_bigint,
@@ -583,6 +595,8 @@ pub fn stark_of_mimc(
         ),
         Err(_err) => return Err(StarkProofError::HighDegreeTransitionQuotient),
     }
+
+    // sanity check: low degee of shifted transition quotient
     let max_degree_shifted_tq = ((num_steps + 1) * 2 - 1) as u32;
     let shifted_transition_quotient_codeword_bi = shifted_transition_quotient_codeword
         .iter()
@@ -606,6 +620,8 @@ pub fn stark_of_mimc(
         ),
         Err(_err) => return Err(StarkProofError::HighDegreeTransitionQuotient),
     }
+
+    // sanity check: low degree of shifted boundary quotient
     let max_degree_shifted_bq = ((num_steps + 1) * 2 - 1) as u32;
     let shifted_boundary_quotient_codeword_bi = shifted_boundary_quotient_codeword
         .iter()
@@ -629,6 +645,8 @@ pub fn stark_of_mimc(
         ),
         Err(_err) => return Err(StarkProofError::HighDegreeTransitionQuotient),
     }
+
+    // sanity check: low degree of shifted trace
     let max_degree_shifted_ti = ((num_steps + 1) * 2 - 1) as u32;
     let shifted_trace_codeword_bi = shifted_trace_codeword
         .iter()
@@ -655,16 +673,17 @@ pub fn stark_of_mimc(
     // let max_degree_lc = num_steps as u32;
     let max_degree_lc = ((num_steps + 1) * 2 - 1) as u32;
     println!("max_degree of linear combination is: {}", max_degree_lc);
-    output = vec![];
-    // output = linear_combination_mt.get_root().to_vec();
+    transcript.append(&mut tuple_merkle_tree.get_root().to_vec());
     let low_degree_proof_lc_result = low_degree_test::prover_bigint(
         &linear_combination_evaluations_bigint,
         field.q.clone(),
         max_degree_lc,
         security_checks,
-        &mut output,
+        transcript,
         omega.value.clone(),
     );
+
+    // sanity check: low degree of linear combination
     let low_degree_proof_lc: LowDegreeProof<BigInt>;
     match low_degree_proof_lc_result {
         Err(_err) => return Err(StarkProofError::HighDegreeLinearCombination),
@@ -692,6 +711,8 @@ pub fn stark_of_mimc(
         }
     }
 
+    // enable verification of linear combination
+
     // Produce authentication paths for the relevant codewords
     let abc_indices: Vec<(usize, usize, usize)> = linear_combination_fri.get_abc_indices(0);
     // let indices = ab_indices.iter().map(|(a, b)| )
@@ -701,34 +722,52 @@ pub fn stark_of_mimc(
         ab_indices.push(*a);
         ab_indices.push(*b);
     }
-    // index_preimage.push(0);
-    // let index_preimages =
-    // let index_preimages =
-    //     get_n_hash_rounds(&linear_combination_fri.index_picker_preimage)
-    // get_n_hash_rounds(&linear_combination_mt.get_root(), security_checks as u32);
-    // let indices: Vec<usize> = index_preimages
-    //     .iter()
-    //     .map(|x| get_index_from_bytes(x, extended_domain_length))
-    //     .collect::<Vec<usize>>();
-    let tuple_authentication_paths: Vec<CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>> =
+
+    let lc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>> =
         tuple_merkle_tree.get_multi_proof(&ab_indices);
-    let next_indices = ab_indices
-        .iter()
-        .map(|x| (x + expansion_factor) % extended_domain_length)
-        .collect::<Vec<usize>>();
-    let next_tuple_authentication_paths: Vec<
-        CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>,
-    > = tuple_merkle_tree.get_multi_proof(&next_indices);
+
+    // enable verification of transition constraint
 
     // Need:
     // - New source of randomness, use FRI's `output` Vec<u8>
     // - Use these to pick new authentication paths, both for tuple_authentication_paths, next_tuple_authentication_paths
+    let security_level = 128;
+    let num_air_checks = security_level;
+    let index_picker_hashes: Vec<[u8; 32]> =
+        utils::get_n_hash_rounds(&transcript, 2 * security_level as u32);
+    let air_indices: Vec<usize> = index_picker_hashes[0..num_air_checks]
+        // .slice(0, security_level)
+        .iter()
+        .map(|d| utils::get_index_from_bytes(d, extended_domain_length))
+        .collect();
+    let next_air_indices: Vec<usize> = air_indices
+        .iter()
+        .map(|x| (x + expansion_factor) % extended_domain_length)
+        .collect::<Vec<usize>>();
+    let air_authentication_paths = tuple_merkle_tree.get_multi_proof(air_indices.as_slice());
+    let next_air_authentication_paths =
+        tuple_merkle_tree.get_multi_proof(next_air_indices.as_slice());
+
+    // enable boundary constraint check
+    let num_boundary_checks = security_level;
+    let bc_indices: Vec<usize> = index_picker_hashes
+        [num_air_checks..(num_air_checks + num_boundary_checks)]
+        // .slice(0, security_level)
+        .iter()
+        .map(|d| utils::get_index_from_bytes(d, extended_domain_length))
+        .collect();
+
+    let bc_authentication_paths = tuple_merkle_tree.get_multi_proof(&bc_indices);
+
+    // return STARK proof object
 
     Ok(StarkProof {
         tuple_merkle_root: tuple_merkle_tree.get_root(),
         linear_combination_merkle_root: linear_combination_mt.get_root(),
-        next_tuple_authentication_paths,
-        tuple_authentication_paths,
+        lc_tuple_authentication_paths,
+        next_air_tuple_authentication_paths: next_air_authentication_paths,
+        air_tuple_authentication_paths: air_authentication_paths,
+        bc_tuple_authentication_paths: bc_authentication_paths,
         linear_combination_fri,
     })
 }
@@ -1134,14 +1173,18 @@ mod test_modular_arithmetic {
             println!("\n\n\n\n\n\n\n\n\n\nmimc_input = {}", mimc_input);
             println!("mimc_output = {}", mimc_output);
             println!("x_last = {}", omicron.mod_pow(b(no_steps - 1)));
+            let mut transcript: Vec<u8> = vec![];
             let stark_res = stark_of_mimc(
                 security_factor,
                 no_steps as usize,
                 expansion_factor as usize,
                 omega.clone(),
-                mimc_input.clone(),
-                mimc_output.clone(),
-                &round_constants,
+                &MimcClaim::<PrimeFieldElementBig> {
+                    input: mimc_input.clone(),
+                    output: mimc_output.clone(),
+                    round_constants: round_constants.clone(),
+                },
+                &mut transcript,
             );
 
             let stark_proof: StarkProof<BigInt> = match stark_res {
@@ -1172,10 +1215,6 @@ mod test_modular_arithmetic {
                 ab_indices.push(*a);
                 ab_indices.push(*b);
             }
-            let shifted_indices = ab_indices
-                .iter()
-                .map(|x| (x + expansion_factor as usize) % extended_domain_length as usize)
-                .collect::<Vec<usize>>();
 
             // verify tuple authentication paths and shifted authentication paths
             let lc_tuple_authentication_paths: Vec<
@@ -1188,23 +1227,6 @@ mod test_modular_arithmetic {
                 &ab_indices,
                 &lc_tuple_authentication_paths,
             ));
-            // let next_tuple_authentication_paths = stark_proof.next_tuple_authentication_paths;
-            // assert!(MerkleTree::verify_multi_proof(
-            //     stark_proof.tuple_merkle_root,
-            //     &shifted_indices,
-            //     &next_tuple_authentication_paths
-            // ));
-
-            // Calculate the transition zerofier and round constant interpolation
-            let (tz_num, tz_den): (
-                Polynomial<PrimeFieldElementBig>,
-                Polynomial<PrimeFieldElementBig>,
-            ) = get_transition_zerofier_polynomials(no_steps as usize, xlast);
-            let tz_pol = tz_num / tz_den;
-            let rcc = get_round_constants_coefficients(&omega, &omicron, &round_constants);
-            let rc_pol = Polynomial { coefficients: rcc };
-            let bz_pol = get_boundary_zerofier_polynomial(xlast);
-            // let bc_pol = get_boundary_constraint_polynomial( xlast);
 
             for j in 0..stark_proof.linear_combination_fri.s as usize * 2 {
                 // verify linear relation on indicated elements
@@ -1277,13 +1299,44 @@ mod test_modular_arithmetic {
                 assert_eq!(left_hand_side, right_hand_side);
             }
 
+            // Calculate the transition zerofier and round constant interpolation
+            let (tz_num, tz_den): (
+                Polynomial<PrimeFieldElementBig>,
+                Polynomial<PrimeFieldElementBig>,
+            ) = get_transition_zerofier_polynomials(no_steps as usize, xlast);
+            let tz_pol = tz_num / tz_den;
+            let rcc = get_round_constants_coefficients(&omicron, &round_constants);
+            let rc_pol = Polynomial { coefficients: rcc };
+
             // sample AIR polynomial identity num_air_checks many times
-            let num_air_checks = 7; // TODO: set me properly
-            let air_check_indices = stark_proof.get_air_check_indices(num_air_checks);
-            for j in 0..num_air_checks {
+            let security_level = 128;
+            let num_air_checks = security_level; // TODO: set me properly
+            let num_bc_checks = security_level;
+            let air_index_picker_hashes =
+                utils::get_n_hash_rounds(&transcript, (num_air_checks + num_bc_checks) as u32);
+            let air_indices: Vec<usize> = air_index_picker_hashes[0..num_air_checks]
+                .iter()
+                .map(|d| utils::get_index_from_bytes(d, extended_domain_length as usize))
+                .collect();
+            let next_air_indices: Vec<usize> = air_indices
+                .iter()
+                .map(|x| (x + expansion_factor as usize) % extended_domain_length as usize)
+                .collect::<Vec<usize>>();
+            assert!(MerkleTree::verify_multi_proof(
+                stark_proof.tuple_merkle_root,
+                &air_indices,
+                &stark_proof.air_tuple_authentication_paths,
+            ));
+            assert!(MerkleTree::verify_multi_proof(
+                stark_proof.tuple_merkle_root,
+                &next_air_indices,
+                &stark_proof.next_air_tuple_authentication_paths,
+            ));
+            #[allow(clippy::needless_range_loop)]
+            for j in 0..num_air_checks as usize {
                 // Verify transition constraint relation
-                let index = air_check_indices[j];
-                let x = omega_domain[index];
+                let index = air_indices[j];
+                let x = omega_domain[index].clone();
                 let transition_quotient_value: PrimeFieldElementBig = PrimeFieldElementBig::new(
                     stark_proof.air_tuple_authentication_paths[j]
                         .clone()
@@ -1305,6 +1358,8 @@ mod test_modular_arithmetic {
                         .0,
                     omega.field,
                 );
+
+                // Verify AIR transition identity
                 assert_eq!(
                     transition_quotient_value * tz_pol.evaluate(&x),
                     rc_pol.evaluate(&x)
@@ -1313,6 +1368,42 @@ mod test_modular_arithmetic {
                             .mod_pow(Into::<BigInt>::into(3))
                         - next_extended_computational_trace_value
                 );
+            }
+
+            // verify boundary constraints
+            let bz_pol = get_boundary_zerofier_polynomial(xlast);
+            let bc_pol = get_boundary_constraint_polynomial(&mimc_input, &mimc_output, xlast);
+            let bc_indices: Vec<usize> = air_index_picker_hashes
+                [num_air_checks..(num_air_checks + num_bc_checks)]
+                .iter()
+                .map(|d| utils::get_index_from_bytes(d, extended_domain_length as usize))
+                .collect();
+            assert!(MerkleTree::verify_multi_proof(
+                stark_proof.tuple_merkle_root,
+                &bc_indices,
+                &stark_proof.bc_tuple_authentication_paths
+            ));
+            #[allow(clippy::needless_range_loop)]
+            for j in 0..num_bc_checks {
+                let index = bc_indices[j];
+                let x = omega_domain[index].clone();
+                let extended_computational_trace_value = PrimeFieldElementBig::new(
+                    stark_proof.bc_tuple_authentication_paths[j]
+                        .clone()
+                        .get_value()
+                        .0,
+                    omega.field,
+                );
+                let boundary_quotient_value: PrimeFieldElementBig = PrimeFieldElementBig::new(
+                    stark_proof.bc_tuple_authentication_paths[j]
+                        .clone()
+                        .get_value()
+                        .2,
+                    omega.field,
+                );
+                let left_hand_side = extended_computational_trace_value - bc_pol.evaluate(&x);
+                let right_hand_side = boundary_quotient_value * bz_pol.evaluate(&x);
+                assert_eq!(left_hand_side, right_hand_side);
             }
         }
     }
