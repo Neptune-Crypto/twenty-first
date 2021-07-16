@@ -32,10 +32,11 @@ pub enum StarkProofError {
 pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     tuple_merkle_root: [u8; 32],
     linear_combination_merkle_root: [u8; 32],
-    next_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
+    air_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
+    next_air_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     // TODO: Change this to three Merkle trees instead, do not store all triplets in a single
     // Merkle tree!
-    tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
+    lc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     linear_combination_fri: LowDegreeProof<T>,
 }
 
@@ -719,6 +720,10 @@ pub fn stark_of_mimc(
         CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>,
     > = tuple_merkle_tree.get_multi_proof(&next_indices);
 
+    // Need:
+    // - New source of randomness, use FRI's `output` Vec<u8>
+    // - Use these to pick new authentication paths, both for tuple_authentication_paths, next_tuple_authentication_paths
+
     Ok(StarkProof {
         tuple_merkle_root: tuple_merkle_tree.get_root(),
         linear_combination_merkle_root: linear_combination_mt.get_root(),
@@ -1173,22 +1178,22 @@ mod test_modular_arithmetic {
                 .collect::<Vec<usize>>();
 
             // verify tuple authentication paths and shifted authentication paths
-            let tuple_authentication_paths: Vec<
+            let lc_tuple_authentication_paths: Vec<
                 CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>,
-            > = stark_proof.tuple_authentication_paths.clone();
+            > = stark_proof.lc_tuple_authentication_paths.clone();
 
             // Merkle::verify(root, indices, leafs, paths);
             assert!(MerkleTree::verify_multi_proof(
                 stark_proof.tuple_merkle_root,
                 &ab_indices,
-                &tuple_authentication_paths,
+                &lc_tuple_authentication_paths,
             ));
-            let next_tuple_authentication_paths = stark_proof.next_tuple_authentication_paths;
-            assert!(MerkleTree::verify_multi_proof(
-                stark_proof.tuple_merkle_root,
-                &shifted_indices,
-                &next_tuple_authentication_paths
-            ));
+            // let next_tuple_authentication_paths = stark_proof.next_tuple_authentication_paths;
+            // assert!(MerkleTree::verify_multi_proof(
+            //     stark_proof.tuple_merkle_root,
+            //     &shifted_indices,
+            //     &next_tuple_authentication_paths
+            // ));
 
             // Calculate the transition zerofier and round constant interpolation
             let (tz_num, tz_den): (
@@ -1198,6 +1203,8 @@ mod test_modular_arithmetic {
             let tz_pol = tz_num / tz_den;
             let rcc = get_round_constants_coefficients(&omega, &omicron, &round_constants);
             let rc_pol = Polynomial { coefficients: rcc };
+            let bz_pol = get_boundary_zerofier_polynomial(xlast);
+            // let bc_pol = get_boundary_constraint_polynomial( xlast);
 
             for j in 0..stark_proof.linear_combination_fri.s as usize * 2 {
                 // verify linear relation on indicated elements
@@ -1209,42 +1216,42 @@ mod test_modular_arithmetic {
                     [ab_indices[j] * (no_steps + 3) as usize % extended_domain_length as usize]
                     .clone();
                 let extended_computational_trace: PrimeFieldElementBig = PrimeFieldElementBig::new(
-                    stark_proof.tuple_authentication_paths[j]
+                    stark_proof.lc_tuple_authentication_paths[j]
                         .get_value()
                         .0
                         .clone(),
                     omega.field,
                 );
                 let shifted_trace_codeword: PrimeFieldElementBig = PrimeFieldElementBig::new(
-                    stark_proof.tuple_authentication_paths[j]
+                    stark_proof.lc_tuple_authentication_paths[j]
                         .get_value()
                         .0
                         .clone(),
                     omega.field,
                 ) * x_power_ns_plus_1.clone();
                 let transition_quotient_codeword: PrimeFieldElementBig = PrimeFieldElementBig::new(
-                    stark_proof.tuple_authentication_paths[j]
+                    stark_proof.lc_tuple_authentication_paths[j]
                         .get_value()
                         .1
                         .clone(),
                     omega.field,
                 );
                 let shifted_transition_quotient_codeword = PrimeFieldElementBig::new(
-                    stark_proof.tuple_authentication_paths[j]
+                    stark_proof.lc_tuple_authentication_paths[j]
                         .get_value()
                         .1
                         .clone(),
                     omega.field,
                 ) * x.clone();
                 let boundary_quotient_codeword = PrimeFieldElementBig::new(
-                    stark_proof.tuple_authentication_paths[j]
+                    stark_proof.lc_tuple_authentication_paths[j]
                         .get_value()
                         .2
                         .clone(),
                     omega.field,
                 );
                 let shifted_boundary_quotient_codeword = PrimeFieldElementBig::new(
-                    stark_proof.tuple_authentication_paths[j]
+                    stark_proof.lc_tuple_authentication_paths[j]
                         .get_value()
                         .2
                         .clone(),
@@ -1268,20 +1275,44 @@ mod test_modular_arithmetic {
                 );
                 println!("left_hand_side = {}", left_hand_side);
                 assert_eq!(left_hand_side, right_hand_side);
+            }
 
-                // Verify transition constraint of AIR
-                let next_extended_computational_trace_bi =
-                    next_tuple_authentication_paths[j].clone().get_value().0;
-                let next_extended_computational_trace =
-                    PrimeFieldElementBig::new(next_extended_computational_trace_bi, omega.field);
+            // sample AIR polynomial identity num_air_checks many times
+            let num_air_checks = 7; // TODO: set me properly
+            let air_check_indices = stark_proof.get_air_check_indices(num_air_checks);
+            for j in 0..num_air_checks {
+                // Verify transition constraint relation
+                let index = air_check_indices[j];
+                let x = omega_domain[index];
+                let transition_quotient_value: PrimeFieldElementBig = PrimeFieldElementBig::new(
+                    stark_proof.air_tuple_authentication_paths[j]
+                        .clone()
+                        .get_value()
+                        .1,
+                    omega.field,
+                );
+                let next_extended_computational_trace_value = PrimeFieldElementBig::new(
+                    stark_proof.next_air_tuple_authentication_paths[j]
+                        .clone()
+                        .get_value()
+                        .0,
+                    omega.field,
+                );
+                let extended_computational_trace_value = PrimeFieldElementBig::new(
+                    stark_proof.air_tuple_authentication_paths[j]
+                        .clone()
+                        .get_value()
+                        .0,
+                    omega.field,
+                );
                 assert_eq!(
-                    transition_quotient_codeword * tz_pol.evaluate(&x),
+                    transition_quotient_value * tz_pol.evaluate(&x),
                     rc_pol.evaluate(&x)
-                        + extended_computational_trace
+                        + extended_computational_trace_value
                             .clone()
                             .mod_pow(Into::<BigInt>::into(3))
-                        - next_extended_computational_trace
-                )
+                        - next_extended_computational_trace_value
+                );
             }
         }
     }
