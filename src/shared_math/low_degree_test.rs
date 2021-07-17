@@ -23,9 +23,35 @@ pub enum ValidationError {
     LastIterationNotConstant,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Debug)]
+struct MyError(String);
+impl Error for MyError {}
+
+impl fmt::Display for MyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Deserialization error for LowDegreeProof: {}", self.0)
+    }
+}
+
+impl Error for ValidationError {}
+
+impl fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Deserialization error for LowDegreeProof: {:?}", self)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum ProveError {
     BadMaxDegreeValue,
+}
+
+impl Error for ProveError {}
+
+impl fmt::Display for ProveError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Deserialization error for LowDegreeProof: {:?}", self)
+    }
 }
 
 #[cfg_attr(
@@ -49,16 +75,6 @@ where
     primitive_root_of_unity: T,
     rounds_count: u8,
     pub s: u32,
-}
-
-#[derive(Debug)]
-struct MyError(String);
-impl Error for MyError {}
-
-impl fmt::Display for MyError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Deserialization error for LowDegreeProof: {}", self.0)
-    }
 }
 
 impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowDegreeProof<U> {
