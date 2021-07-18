@@ -12,6 +12,7 @@ pub mod homomorphic_encryption;
 mod primitives;
 pub mod shared_math;
 mod types;
+pub mod util_types;
 mod utils;
 
 pub fn my_library_function() -> Result<()> {
@@ -59,9 +60,19 @@ pub fn my_library_function() -> Result<()> {
     functions::methods::methods();
     functions::closures::closures();
     println!("\n\n*****Homomorphic encryption*****");
-    homomorphic_encryption::test();
+    // homomorphic_encryption::test(); // Takes long
     println!("\n\n*****FFT*****");
-    fft::test(); // TODO: Remove
+    // fft::test(); // Takes long
+    println!("\n\n*****blake3*****");
+    println!("blake3(\"foobarbaz\") = {:?}", blake3::hash(b"foobarbaz"));
+    println!("\n\n*****Merkle trees*****");
+    let mt_input: Vec<&str> = vec!["Block 1", "Block 2"];
+    // let mt: util_types::merkle_tree::MerkleTree<&str> =
+    //     util_types::merkle_tree::MerkleTree::new_sha256_merkle_tree(mt_input);
+    let mt: util_types::merkle_tree::MerkleTree<&str> =
+        util_types::merkle_tree::MerkleTree::from_vec(&mt_input);
+    println!("{:?}", mt);
+    println!("root_hash = {:x?}", mt.get_root());
     Ok(())
 }
 

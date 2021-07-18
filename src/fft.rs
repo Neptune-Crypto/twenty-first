@@ -99,6 +99,9 @@ pub fn ntt_fft<'a>(
     if omega.mod_pow(x.len() as i128).value != 1 {
         panic!("ntt_fft called with ω^len != 1. Got: {:?}", omega);
     }
+    if omega.mod_pow(x.len() as i128 / 2).value == 1 {
+        panic!("ntt_fft called with ω^(len / 2) == 1. So ω is *not* a primitive root of unity. Got: {:?}", omega);
+    }
     ntt_fft_helper(x, omega, &mut mod_pows, 1)
 }
 
@@ -114,6 +117,22 @@ pub fn intt_fft<'a>(
         .into_iter()
         .map(|x: PrimeFieldElement| x / length)
         .collect()
+}
+
+pub fn fast_polynomial_evaluate_prime_elements<'a>(
+    coefficients: &[PrimeFieldElement<'a>],
+    primitive_root_of_unity: &PrimeFieldElement<'a>,
+) -> Vec<PrimeFieldElement<'a>> {
+    let coefficients_deref: Vec<PrimeFieldElement<'a>> = coefficients.to_vec();
+    ntt_fft(coefficients_deref, primitive_root_of_unity)
+}
+
+pub fn fast_polynomial_interpolate_prime_elements<'a>(
+    y_values: &[PrimeFieldElement<'a>],
+    primitive_root_of_unity: &PrimeFieldElement<'a>,
+) -> Vec<PrimeFieldElement<'a>> {
+    let y_values_derefs = y_values.to_vec();
+    intt_fft(y_values_derefs, primitive_root_of_unity)
 }
 
 // Interpolate a polynomial with y values as given in the input, and with x values
