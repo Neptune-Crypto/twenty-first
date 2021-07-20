@@ -71,7 +71,7 @@ where
     c_proofs: Vec<Vec<CompressedAuthenticationPath<T>>>,
     index_picker_preimage: Vec<u8>,
     max_degree: u32,
-    merkle_roots: Vec<[u8; 32]>,
+    pub merkle_roots: Vec<[u8; 32]>,
     primitive_root_of_unity: T,
     rounds_count: u8,
     pub s: u32,
