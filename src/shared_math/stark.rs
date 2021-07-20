@@ -8,6 +8,7 @@ use crate::shared_math::traits::{IdentityValues, New};
 use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
 use crate::utils;
 use num_bigint::BigInt;
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::error::Error;
 use std::fmt;
@@ -65,7 +66,7 @@ impl fmt::Display for StarkVerifyError {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     tuple_merkle_root: [u8; 32],
     linear_combination_merkle_root: [u8; 32],
@@ -76,6 +77,7 @@ pub struct StarkProof<T: Clone + Debug + Serialize + PartialEq> {
     bc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     lc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
     linear_combination_fri: LowDegreeProof<T>,
+    index_picker_preimage: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -377,6 +379,67 @@ pub fn mimc_backward<'a>(
     res
 }
 
+impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> StarkProof<U> {
+    pub fn from_serialization(
+        transcript: Vec<u8>,
+        start_index: usize,
+    ) -> Result<(StarkProof<U>, usize), Box<dyn Error>> {
+        // tuple Merkle root is first 32 bytes
+        let mut index = start_index;
+        let tuple_merkle_root: [u8; 32] = bincode::deserialize(&transcript[index..index + 32])?;
+        index += 32;
+        let (linear_combination_fri, new_index) =
+            LowDegreeProof::<U>::from_serialization(transcript.clone(), index)?;
+        index = new_index;
+        let index_picker_preimage: Vec<u8> = transcript[0..index].to_vec();
+        let linear_combination_merkle_root: [u8; 32] =
+            bincode::deserialize(&transcript[index..index + 32])?;
+        index += 32;
+
+        // Get LC tuple authentication paths
+        let mut proof_size: u32 = bincode::deserialize(&transcript[index..index + 4])?;
+        index += 4;
+        let lc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(U, U, U)>> =
+            bincode::deserialize_from(&transcript[index..index + proof_size as usize])?;
+        index += proof_size as usize;
+
+        // Get Next AIR tuple authentication paths
+        proof_size = bincode::deserialize(&transcript[index..index + 4])?;
+        index += 4;
+        let next_air_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(U, U, U)>> =
+            bincode::deserialize_from(&transcript[index..index + proof_size as usize])?;
+        index += proof_size as usize;
+
+        // Get AIR tuple authentication paths
+        proof_size = bincode::deserialize(&transcript[index..index + 4])?;
+        index += 4;
+        let air_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(U, U, U)>> =
+            bincode::deserialize_from(&transcript[index..index + proof_size as usize])?;
+        index += proof_size as usize;
+
+        // Get AIR boundary authentication paths
+        proof_size = bincode::deserialize(&transcript[index..index + 4])?;
+        index += 4;
+        let bc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(U, U, U)>> =
+            bincode::deserialize_from(&transcript[index..index + proof_size as usize])?;
+        index += proof_size as usize;
+
+        Ok((
+            StarkProof::<U> {
+                tuple_merkle_root,
+                linear_combination_merkle_root,
+                air_tuple_authentication_paths,
+                next_air_tuple_authentication_paths,
+                bc_tuple_authentication_paths,
+                lc_tuple_authentication_paths,
+                linear_combination_fri,
+                index_picker_preimage,
+            },
+            index,
+        ))
+    }
+}
+
 impl StarkProof<BigInt> {
     pub fn verify(
         &self,
@@ -385,8 +448,6 @@ impl StarkProof<BigInt> {
         omega: PrimeFieldElementBig,
         num_steps: i128,
         expansion_factor: i128,
-        // TODO: Should transcript be contained in the proof?
-        transcript: &[u8],
     ) -> Result<(), Box<dyn Error>> {
         let field = claim.input.field;
         let omicron = omega.mod_pow(Into::<BigInt>::into(expansion_factor));
@@ -485,8 +546,10 @@ impl StarkProof<BigInt> {
 
         let num_air_checks = self.air_tuple_authentication_paths.len();
         let num_bc_checks = self.bc_tuple_authentication_paths.len();
-        let index_picker_hashes =
-            utils::get_n_hash_rounds(transcript, (num_air_checks + num_bc_checks) as u32);
+        let index_picker_hashes = utils::get_n_hash_rounds(
+            &self.index_picker_preimage,
+            (num_air_checks + num_bc_checks) as u32,
+        );
         let air_indices: Vec<usize> = index_picker_hashes[0..num_air_checks]
             .iter()
             .map(|d| utils::get_index_from_bytes(d, extended_domain_length as usize))
@@ -1022,6 +1085,10 @@ pub fn stark_of_mimc_prove(
     let num_air_checks = security_level;
     let index_picker_hashes: Vec<[u8; 32]> =
         utils::get_n_hash_rounds(&transcript, 2 * security_level as u32);
+    // Before transcript is manipulated, store the preimage that was used to pick the
+    // indices, as this is a field of the STARK proof
+    let index_picker_preimage = transcript.clone();
+
     let air_indices: Vec<usize> = index_picker_hashes[0..num_air_checks]
         .iter()
         .map(|d| utils::get_index_from_bytes(d, extended_domain_length))
@@ -1044,7 +1111,42 @@ pub fn stark_of_mimc_prove(
 
     let bc_authentication_paths = tuple_merkle_tree.get_multi_proof(&bc_indices);
 
-    // return STARK proof object
+    // Manipulate the transcript to include whole proof
+    // Add LC merkle root
+    transcript.append(&mut bincode::serialize(&linear_combination_mt.get_root()).unwrap());
+
+    // Add LC tuple authentication paths
+    let mut serialized_lc_tuple_authentication_paths =
+        bincode::serialize(&lc_tuple_authentication_paths).unwrap();
+    transcript.append(
+        &mut bincode::serialize(&(serialized_lc_tuple_authentication_paths.len() as u32)).unwrap(),
+    );
+    transcript.append(&mut serialized_lc_tuple_authentication_paths);
+
+    // Add Next AIR Tuple authentication paths
+    let mut serialized_next_air_authentication_paths =
+        bincode::serialize(&next_air_authentication_paths).unwrap();
+    transcript.append(
+        &mut bincode::serialize(&(serialized_next_air_authentication_paths.len() as u32)).unwrap(),
+    );
+    transcript.append(&mut serialized_next_air_authentication_paths);
+
+    // Add AIR Tuple authentication paths
+    let mut serialized_air_authentication_paths =
+        bincode::serialize(&air_authentication_paths).unwrap();
+    transcript.append(
+        &mut bincode::serialize(&(serialized_air_authentication_paths.len() as u32)).unwrap(),
+    );
+    transcript.append(&mut serialized_air_authentication_paths);
+
+    // Add AIR boundary conditions authentication paths
+    let mut serialized_bc_authentication_paths =
+        bincode::serialize(&bc_authentication_paths).unwrap();
+    transcript.append(
+        &mut bincode::serialize(&(serialized_bc_authentication_paths.len() as u32)).unwrap(),
+    );
+    transcript.append(&mut serialized_bc_authentication_paths);
+
     Ok(StarkProof {
         tuple_merkle_root: tuple_merkle_tree.get_root(),
         linear_combination_merkle_root: linear_combination_mt.get_root(),
@@ -1053,6 +1155,7 @@ pub fn stark_of_mimc_prove(
         air_tuple_authentication_paths: air_authentication_paths,
         bc_tuple_authentication_paths: bc_authentication_paths,
         linear_combination_fri,
+        index_picker_preimage,
     })
 }
 
@@ -1083,7 +1186,7 @@ mod test_modular_arithmetic {
         println!("Found omega = {}", omega);
         println!("Found omicron = {}", omicron);
 
-        for i in 0..30 {
+        for i in 0..5 {
             println!("i = {}", i);
             let mimc_input = PrimeFieldElementBig::new(b(i), &field);
             let mimc_trace = mimc_forward(&mimc_input, no_steps as usize, &round_constants);
@@ -1091,12 +1194,12 @@ mod test_modular_arithmetic {
             println!("\n\n\n\n\n\n\n\n\n\nmimc_input = {}", mimc_input);
             println!("mimc_output = {}", mimc_output);
             println!("x_last = {}", omicron.mod_pow(b(no_steps - 1)));
-            let mut transcript: Vec<u8> = vec![];
             let mut mimc_claim = MimcClaim::<PrimeFieldElementBig> {
                 input: mimc_input.clone(),
                 output: mimc_output.clone(),
                 round_constants: round_constants.clone(),
             };
+            let mut transcript: Vec<u8> = vec![];
             let mut stark_res = stark_of_mimc_prove(
                 security_factor,
                 no_steps as usize,
@@ -1111,6 +1214,10 @@ mod test_modular_arithmetic {
                 Err(_err) => panic!("Failed to produce STARK proof"),
             };
 
+            // Verify that proof can be deserialized correctly
+            let (deserialized_proof, _) =
+                StarkProof::<BigInt>::from_serialization(transcript.clone(), 0).unwrap();
+            assert_eq!(stark_proof, deserialized_proof);
             assert!(stark_proof
                 .verify(
                     mimc_claim.clone(),
@@ -1118,9 +1225,29 @@ mod test_modular_arithmetic {
                     omega.clone(),
                     no_steps,
                     expansion_factor,
-                    &transcript
                 )
                 .is_ok());
+
+            // Verify that the transcript can be preloaded when the STARK prover begins
+            transcript = vec![123, 45, 67, 89, 52];
+            stark_res = stark_of_mimc_prove(
+                security_factor,
+                no_steps as usize,
+                expansion_factor as usize,
+                omega.clone(),
+                &mimc_claim,
+                &mut transcript,
+            );
+
+            stark_proof = match stark_res {
+                Ok(stark_proof) => stark_proof,
+                Err(_err) => panic!("Failed to produce STARK proof"),
+            };
+
+            // Verify that proof can be deserialized correctly
+            let (deserialized_proof, _) =
+                StarkProof::<BigInt>::from_serialization(transcript.clone(), 5).unwrap();
+            assert_eq!(stark_proof, deserialized_proof);
 
             // Verify that false Merkle roots result in the correct verification errors
             stark_proof.tuple_merkle_root[31] ^= 1;
@@ -1130,7 +1257,6 @@ mod test_modular_arithmetic {
                 omega.clone(),
                 no_steps,
                 expansion_factor,
-                &transcript,
             );
             assert!(bad_verify_result.is_err());
             println!("Error is: {:?}", bad_verify_result.as_ref().err());
@@ -1146,7 +1272,6 @@ mod test_modular_arithmetic {
                 omega.clone(),
                 no_steps,
                 expansion_factor,
-                &transcript,
             );
             assert!(bad_verify_result.is_err());
             println!("Error is now: {:?}", bad_verify_result.as_ref().err());
