@@ -78,19 +78,35 @@ where
 }
 
 impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowDegreeProof<U> {
-    pub fn get_abc_indices(&self, round: u8) -> Vec<(usize, usize, usize)> {
-        let mut hash_preimage: Vec<u8> = self.index_picker_preimage.clone();
-        hash_preimage.push(round);
-        let hashes: Vec<[u8; 32]> = get_n_hash_rounds(hash_preimage.as_slice(), self.s);
+    fn get_abc_indices_internal(
+        index_picker_preimage: &[u8],
+        round: u8,
+        num_locations: u32,
+        full_codeword_side: u32,
+    ) -> Vec<(usize, usize, usize)> {
+        let mut hash_preimage_clone = index_picker_preimage.to_vec();
+
+        hash_preimage_clone.push(round);
+        let hashes: Vec<[u8; 32]> =
+            get_n_hash_rounds(hash_preimage_clone.as_slice(), num_locations);
         let mut abc_indices: Vec<(usize, usize, usize)> =
-            Vec::<(usize, usize, usize)>::with_capacity(self.s as usize);
-        let half_code_word_size = self.codeword_size as usize >> (round + 1);
+            Vec::<(usize, usize, usize)>::with_capacity(num_locations as usize);
+        let half_code_word_size = full_codeword_side as usize >> (round + 1);
         for hash in hashes.iter() {
             let index = get_index_from_bytes(&hash[0..16], half_code_word_size);
             abc_indices.push((index, index + half_code_word_size, index));
         }
 
         abc_indices
+    }
+
+    pub fn get_abc_indices(&self, round: u8) -> Vec<(usize, usize, usize)> {
+        LowDegreeProof::<U>::get_abc_indices_internal(
+            &self.index_picker_preimage,
+            round,
+            self.s,
+            self.codeword_size,
+        )
     }
 }
 
@@ -292,26 +308,20 @@ pub fn verify_i128(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Val
         .iter()
         .map(|x| PrimeFieldElement::from_bytes_raw(&modulus, &x[0..16]))
         .collect();
-    let mut number_of_leaves = proof.codeword_size as usize;
     let mut primitive_root_of_unity = proof.primitive_root_of_unity;
 
     let field = PrimeField::new(modulus);
     let mut c_values: Vec<i128> = vec![];
     for (i, challenge) in challenges.iter().enumerate() {
-        let mut hash_preimage: Vec<u8> = proof.index_picker_preimage.clone();
-        hash_preimage.push(i as u8);
-        let hashes = get_n_hash_rounds(hash_preimage.as_slice(), proof.s);
+        // Get the indices of the locations checked in this round
+        let abc_indices: Vec<(usize, usize, usize)> = proof.get_abc_indices(i as u8);
         let mut c_indices: Vec<usize> = vec![];
         let mut ab_indices: Vec<usize> = vec![];
-        for hash in hashes.iter() {
-            let c_index = get_index_from_bytes(&hash[0..16], number_of_leaves / 2);
-            c_indices.push(c_index);
-            let a_index = c_index;
-            ab_indices.push(a_index);
-            let b_index = c_index + number_of_leaves / 2;
-            ab_indices.push(b_index);
+        for (a, b, c) in abc_indices.into_iter() {
+            ab_indices.push(a);
+            ab_indices.push(b);
+            c_indices.push(c);
         }
-        number_of_leaves /= 2;
         c_values = proof.c_proofs[i]
             .iter()
             .map(|x| x.0[0].as_ref().unwrap().value.unwrap())
@@ -530,22 +540,20 @@ pub fn prover_bigint(
     let index_picker_preimage = output.clone();
     primitive_root_of_unity_temp = primitive_root_of_unity.clone();
     for i in 0usize..rounds_count {
-        let number_of_leaves = mts[i].get_number_of_leafs();
+        // Get the indices of the locations checked in this round
+        let abc_indices: Vec<(usize, usize, usize)> =
+            LowDegreeProof::<BigInt>::get_abc_indices_internal(
+                &index_picker_preimage,
+                i as u8,
+                s as u32,
+                codeword.len() as u32,
+            );
         let mut c_indices: Vec<usize> = vec![];
         let mut ab_indices: Vec<usize> = vec![];
-
-        // it's unrealistic that the number of rounds exceed 256 but this should wrap around if it does
-        let mut hash_preimage: Vec<u8> = index_picker_preimage.clone();
-        hash_preimage.push(i as u8);
-
-        let hashes = get_n_hash_rounds(hash_preimage.as_slice(), s as u32);
-        for hash in hashes.iter() {
-            let c_index = get_index_from_bytes(&hash[0..16], number_of_leaves / 2);
-            c_indices.push(c_index);
-            let s0_index = c_index;
-            ab_indices.push(s0_index);
-            let s1_index = c_index + number_of_leaves / 2;
-            ab_indices.push(s1_index);
+        for (a, b, c) in abc_indices.into_iter() {
+            ab_indices.push(a);
+            ab_indices.push(b);
+            c_indices.push(c);
         }
 
         let authentication_paths_c: Vec<CompressedAuthenticationPath<BigInt>> =
@@ -652,27 +660,23 @@ pub fn prover_i128(
     // -- query P2 in s1 -> alpha1
     // -- query P2 in s2 -> alpha2
     // -- check collinearity (s0, alpha0), (s1, alpha1), (y, beta) <-- we don't care about thi right nw>
-    // let index_picker_preimage =
-    // serialization[0..((rounds_count_usize + 1) * 32 + index)].to_vec();
     let index_picker_preimage = output.clone();
     primitive_root_of_unity_temp = primitive_root_of_unity;
     for i in 0usize..rounds_count {
-        let number_of_leaves = mts[i].get_number_of_leafs();
+        // Get the indices of the locations checked in this round
+        let abc_indices: Vec<(usize, usize, usize)> =
+            LowDegreeProof::<i128>::get_abc_indices_internal(
+                &index_picker_preimage,
+                i as u8,
+                s as u32,
+                codeword.len() as u32,
+            );
         let mut c_indices: Vec<usize> = vec![];
         let mut ab_indices: Vec<usize> = vec![];
-
-        // it's unrealistic that the number of rounds exceed 256 but this should wrap around if it does
-        let mut hash_preimage: Vec<u8> = index_picker_preimage.clone();
-        hash_preimage.push(i as u8);
-
-        let hashes = get_n_hash_rounds(hash_preimage.as_slice(), s as u32);
-        for hash in hashes.iter() {
-            let c_index = get_index_from_bytes(&hash[0..16], number_of_leaves / 2);
-            c_indices.push(c_index);
-            let s0_index = c_index;
-            ab_indices.push(s0_index);
-            let s1_index = c_index + number_of_leaves / 2;
-            ab_indices.push(s1_index);
+        for (a, b, c) in abc_indices.into_iter() {
+            ab_indices.push(a);
+            ab_indices.push(b);
+            c_indices.push(c);
         }
 
         let authentication_paths_c: Vec<CompressedAuthenticationPath<i128>> =
