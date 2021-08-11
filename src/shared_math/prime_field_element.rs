@@ -66,7 +66,7 @@ impl PrimeField {
             .collect::<Vec<i128>>();
         values
             .iter()
-            .map(|x| PrimeFieldElement::new(*x, &self))
+            .map(|x| PrimeFieldElement::new(*x, self))
             .collect::<Vec<PrimeFieldElement>>()
     }
 
@@ -129,7 +129,7 @@ impl PrimeField {
         let result_values = self.batch_inversion(values);
         result_values
             .iter()
-            .map(|x| PrimeFieldElement::new(*x, &self))
+            .map(|x| PrimeFieldElement::new(*x, self))
             .collect::<Vec<PrimeFieldElement>>()
     }
 
@@ -173,7 +173,7 @@ impl PrimeField {
         }
 
         let mut primitive_root: Option<PrimeFieldElement> = None;
-        let mut candidate: PrimeFieldElement = PrimeFieldElement::new(1, &self);
+        let mut candidate: PrimeFieldElement = PrimeFieldElement::new(1, self);
         #[allow(clippy::suspicious_operation_groupings)]
         while primitive_root == None && candidate.value < self.q {
             if candidate.legendre_symbol() == -1
@@ -246,7 +246,7 @@ impl fmt::Display for PrimeFieldElement<'_> {
 impl<'a> PrimeFieldElement<'a> {
     pub fn from_bytes(field: &'a PrimeField, buf: &[u8]) -> PrimeFieldElement<'a> {
         let value = PrimeFieldElement::from_bytes_raw(&field.q, buf);
-        PrimeFieldElement::new(value, &field)
+        PrimeFieldElement::new(value, field)
     }
 
     // TODO: Is this an OK way to generate a number from a byte array?
@@ -313,7 +313,7 @@ impl<'a> PrimeFieldElement<'a> {
 
     pub fn get_generator_domain(&self) -> Vec<PrimeFieldElement> {
         let mut val = *self;
-        let mut ret: Vec<Self> = vec![PrimeFieldElement::new(1, &self.field)];
+        let mut ret: Vec<Self> = vec![PrimeFieldElement::new(1, self.field)];
 
         // Idiomatic way of constructing a do-while loop in Rust
         loop {

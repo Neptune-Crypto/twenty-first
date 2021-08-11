@@ -12,8 +12,8 @@ fn pretty_print_coefficients(coefficients: &[i128]) -> String {
     }
 
     let trailing_zeros_warning: &str = match coefficients.last() {
-        Some(0) => &"Trailing zeros!",
-        _ => &"",
+        Some(0) => "Trailing zeros!",
+        _ => "",
     };
 
     let mut outputs: Vec<String> = Vec::new();

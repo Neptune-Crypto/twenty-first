@@ -50,8 +50,8 @@ fn ntt_fft_helper<'a>(
 
         // Recursive call, using: omega -> omega^2
         let (even, odd) = (
-            ntt_fft_helper(x_even, &omega, mod_pows, omega_power * 2),
-            ntt_fft_helper(x_odd, &omega, mod_pows, omega_power * 2),
+            ntt_fft_helper(x_even, omega, mod_pows, omega_power * 2),
+            ntt_fft_helper(x_odd, omega, mod_pows, omega_power * 2),
         );
 
         // Calculate all values omega^(omega_power * j), for j=0..size
@@ -109,9 +109,9 @@ pub fn intt_fft<'a>(
     x: Vec<PrimeFieldElement<'a>>,
     omega: &PrimeFieldElement<'a>,
 ) -> Vec<PrimeFieldElement<'a>> {
-    let length = PrimeFieldElement::new(x.len() as i128, &omega.field);
+    let length = PrimeFieldElement::new(x.len() as i128, omega.field);
     let omega_inv = &omega.inv();
-    let res_scaled = ntt_fft(x, &omega_inv);
+    let res_scaled = ntt_fft(x, omega_inv);
 
     res_scaled
         .into_iter()

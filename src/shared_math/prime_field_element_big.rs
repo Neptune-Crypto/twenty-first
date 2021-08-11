@@ -78,7 +78,7 @@ impl PrimeFieldBig {
             .collect::<Vec<BigInt>>();
         values
             .iter()
-            .map(|x| PrimeFieldElementBig::new(x.to_owned(), &self))
+            .map(|x| PrimeFieldElementBig::new(x.to_owned(), self))
             .collect::<Vec<PrimeFieldElementBig>>()
     }
 
@@ -145,7 +145,7 @@ impl PrimeFieldBig {
         let result_values = self.batch_inversion(values);
         result_values
             .iter()
-            .map(|x| PrimeFieldElementBig::new(x.to_owned(), &self))
+            .map(|x| PrimeFieldElementBig::new(x.to_owned(), self))
             .collect::<Vec<PrimeFieldElementBig>>()
     }
 
@@ -204,7 +204,7 @@ impl PrimeFieldBig {
         }
 
         let mut primitive_root: Option<PrimeFieldElementBig> = None;
-        let mut candidate: PrimeFieldElementBig = PrimeFieldElementBig::new(one.clone(), &self);
+        let mut candidate: PrimeFieldElementBig = PrimeFieldElementBig::new(one.clone(), self);
         #[allow(clippy::suspicious_operation_groupings)]
         while primitive_root == None && candidate.value < self.q {
             if (-candidate.legendre_symbol()).is_one()
@@ -282,7 +282,7 @@ impl fmt::Display for PrimeFieldElementBig<'_> {
 impl<'a> PrimeFieldElementBig<'a> {
     pub fn from_bytes(field: &'a PrimeFieldBig, buf: &[u8]) -> Self {
         let value = Self::from_bytes_raw(&field.q, buf);
-        Self::new(value, &field)
+        Self::new(value, field)
     }
 
     // TODO: Is this an OK way to generate a number from a byte array?
@@ -352,7 +352,7 @@ impl<'a> PrimeFieldElementBig<'a> {
     pub fn get_generator_domain(&self) -> Vec<Self> {
         let mut val = self.to_owned();
         let one = BigInt::one();
-        let mut ret: Vec<Self> = vec![Self::new(one, &self.field)];
+        let mut ret: Vec<Self> = vec![Self::new(one, self.field)];
 
         // Idiomatic way of constructing a do-while loop in Rust
         loop {
@@ -508,7 +508,7 @@ impl<'a> Add for &PrimeFieldElementBig<'a> {
     type Output = PrimeFieldElementBig<'a>;
 
     fn add(self, other: Self) -> PrimeFieldElementBig<'a> {
-        self.same_field_check(&other, "add");
+        self.same_field_check(other, "add");
         PrimeFieldElementBig {
             value: (self.value.clone() + other.value.clone()) % self.field.q.clone(),
             field: self.field,

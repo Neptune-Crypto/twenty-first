@@ -150,7 +150,7 @@ fn get_extended_computational_trace<
     expansion_factor: usize,
     computational_trace: &[T],
 ) -> (Vec<T>, Polynomial<T>) {
-    let trace_interpolant_coefficients = intt(&computational_trace, &omicron);
+    let trace_interpolant_coefficients = intt(computational_trace, omicron);
     let trace_interpolant = Polynomial {
         coefficients: trace_interpolant_coefficients.clone(),
     };
@@ -160,7 +160,7 @@ fn get_extended_computational_trace<
         (expansion_factor - 1) * (num_steps + 1)
     ]);
     (
-        ntt(&padded_trace_interpolant_coefficients, &omega),
+        ntt(&padded_trace_interpolant_coefficients, omega),
         trace_interpolant,
     )
 }
@@ -187,7 +187,7 @@ fn get_round_constants_coefficients<
 ) -> Vec<T> {
     let mut mimc_round_constants_padded = mimc_round_constants.to_vec();
     mimc_round_constants_padded.append(&mut vec![omicron.ring_zero()]);
-    intt(&mimc_round_constants_padded, &omicron)
+    intt(&mimc_round_constants_padded, omicron)
 }
 
 fn get_extended_round_constant<
@@ -220,7 +220,7 @@ fn get_extended_round_constant<
         (expansion_factor - 1) * (num_steps + 1)
     ]);
 
-    ntt(&padded_round_constants_interpolant, &omega)
+    ntt(&padded_round_constants_interpolant, omega)
 }
 
 fn get_boundary_zerofier_polynomial<
@@ -699,7 +699,7 @@ fn stark_of_mimc_sanity_checks(args: SanityCheckArgs) -> bool {
     // sanity check: low degree of boundary quotient
     let max_degree_bq = num_steps as u32;
     let low_degree_proof_bq = low_degree_test::prover_bigint(
-        &boundary_quotient_codeword_bigint,
+        boundary_quotient_codeword_bigint,
         field.q.clone(),
         max_degree_bq,
         security_checks,
@@ -720,7 +720,7 @@ fn stark_of_mimc_sanity_checks(args: SanityCheckArgs) -> bool {
     // sanity check: low degree of transition quotient
     let max_degree_tq = ((num_steps + 1) * 2 - 1) as u32;
     let low_degree_proof_tq = low_degree_test::prover_bigint(
-        &transition_quotient_codeword_bigint,
+        transition_quotient_codeword_bigint,
         field.q.clone(),
         max_degree_tq,
         security_checks,
@@ -946,8 +946,7 @@ pub fn stark_of_mimc_prove(
     let tuple_merkle_tree: MerkleTree<(BigInt, BigInt, BigInt)> =
         MerkleTree::from_vec(&polynomial_evaluations);
 
-    let lc_coefficients =
-        get_linear_combination_coefficients(&field, &tuple_merkle_tree.get_root());
+    let lc_coefficients = get_linear_combination_coefficients(field, &tuple_merkle_tree.get_root());
 
     // compute shifted trace codeword
     let mut shifted_trace_codeword: Vec<PrimeFieldElementBig> =
@@ -1084,7 +1083,7 @@ pub fn stark_of_mimc_prove(
     let security_level = 128;
     let num_air_checks = security_level;
     let index_picker_hashes: Vec<[u8; 32]> =
-        utils::get_n_hash_rounds(&transcript, 2 * security_level as u32);
+        utils::get_n_hash_rounds(transcript, 2 * security_level as u32);
     // Before transcript is manipulated, store the preimage that was used to pick the
     // indices, as this is a field of the STARK proof
     let index_picker_preimage = transcript.clone();
