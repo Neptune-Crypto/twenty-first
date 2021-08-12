@@ -1036,7 +1036,7 @@ mod test_low_degree_proof {
     }
 
     #[test]
-    fn generate_proof_parabola_bigint() {
+    fn generate_proof_cubica_bigint() {
         let mut ret: Option<(PrimeFieldBig, BigInt)> = None;
         PrimeFieldBig::get_field_with_primitive_root_of_unity(16, 10000, &mut ret);
         let (field, primitive_root_of_unity_bi) = ret.clone().unwrap();
@@ -1045,7 +1045,7 @@ mod test_low_degree_proof {
         let s = 6;
         let mut y_values = domain
             .iter()
-            .map(|x| (6 + x.to_owned() * (2 + 5 * x)) % field.q.clone())
+            .map(|x| (6 + x.to_owned() * (14 + x.to_owned() * (2 + 5 * x))) % field.q.clone())
             .collect::<Vec<BigInt>>();
         let mut output = vec![123, 20];
         let mut proof: LowDegreeProof<BigInt> = prover_bigint(
@@ -1071,12 +1071,37 @@ mod test_low_degree_proof {
 
         assert_eq!(proof, deserialized_proof);
 
-        // Change a single y value such that it no longer corresponds to a polynomil
-        // a verify that the test fails
-        output = vec![];
+        // Attempt proof + verification of 4th degree polynomial with max_degree = 3 parameter
         let original_y_values = y_values.clone();
+        y_values = domain
+            .iter()
+            .map(|x| {
+                x.to_owned() * (6 + x.to_owned() * (14 + x.to_owned() * (2 + 5 * x)))
+                    % field.q.clone()
+            })
+            .collect::<Vec<BigInt>>();
+        let mut output = vec![];
+        proof = prover_bigint(
+            &y_values,
+            field.q.clone(),
+            max_degree,
+            s,
+            &mut output,
+            primitive_root_of_unity_bi.clone(),
+        )
+        .unwrap();
+
+        // Verify that produced proof does *not* verify
+        assert_eq!(
+            Err(ValidationError::LastIterationTooHighDegree),
+            verify_bigint(proof.clone(), field.q.clone())
+        );
+
+        // Change a single y value such that it no longer corresponds to a polynomial
+        // a verify that the test fails
+        y_values = original_y_values.clone();
+        output = vec![];
         y_values[3] = y_values[3].clone() + BigInt::one();
-        y_values[4] = y_values[4].clone() + BigInt::one();
         proof = prover_bigint(
             &y_values,
             field.q.clone(),
@@ -1105,21 +1130,21 @@ mod test_low_degree_proof {
         )
         .unwrap();
         assert_eq!(
-            Err(ValidationError::LastIterationNotConstant),
+            Err(ValidationError::LastIterationTooHighDegree),
             verify_bigint(proof.clone(), field.q.clone())
         );
     }
 
     #[test]
-    fn generate_proof_parabola_i128() {
+    fn generate_proof_cubica_i128() {
         let mut ret: Option<(PrimeField, i128)> = None;
         PrimeField::get_field_with_primitive_root_of_unity(16, 100, &mut ret);
         let (field, primitive_root_of_unity) = ret.clone().unwrap();
         let domain = field.get_power_series(primitive_root_of_unity);
-        // coefficients: vec![6, 2, 5] => P(x) = 5x^2 + 2x + 6
+        // coefficients: vec![6, 0, 2, 5] => P(x) = 5x^3 + 2x^2 + 6
         let mut y_values = domain
             .iter()
-            .map(|&x| ((6 + x * (2 + 5 * x)) % field.q + field.q) % field.q)
+            .map(|&x| ((6 + x * x * (2 + 5 * x)) % field.q + field.q) % field.q)
             .collect::<Vec<i128>>();
 
         let max_degree = 3;
