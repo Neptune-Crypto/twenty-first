@@ -330,11 +330,6 @@ pub fn verify_bigint(
                 // );
                 println!("Failed to verify colinearity!");
                 return Err(ValidationError::NotColinear);
-            } else {
-                // println!(
-                //     "({}, {}), ({}, {}), ({}, {}) are colinear",
-                //     a_x, a_y, b_x, b_y, challenge, c_y
-                // );
             }
         }
 
@@ -542,7 +537,6 @@ fn prover_shared<T: Clone + Debug + Serialize + PartialEq>(
     let max_degree_plus_one: u32 = max_degree + 1;
     if max_degree_plus_one & (max_degree_plus_one - 1) != 0 {
         return Err(ProveError::BadMaxDegreeValue);
-        // panic!("Low-degree prover called for non-power of 2")
     }
 
     output.append(&mut bincode::serialize(&(codeword.len() as u32)).unwrap());
