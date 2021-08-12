@@ -1239,10 +1239,12 @@ mod test_low_degree_proof {
             verify_bigint(proof, field.q.clone())
         );
 
-        // Change a single y value such that it no longer corresponds to a polynomial
-        // and verify that the test fails
+        // Change about 10 % of the values, s.t. the Hamming distance of the codeword
+        // is far from a low-degree polynomial.
         output = vec![];
-        y_values[3] = y_values[3].clone() + 1;
+        for j in 400..450 {
+            y_values[j] = y_values[j].clone() + bigint(1);
+        }
         proof = prover_bigint(
             &y_values,
             field.q.clone(),
@@ -1284,7 +1286,7 @@ mod test_low_degree_proof {
 
         let mut output = vec![1, 2];
 
-        let s = 80;
+        let s = 9;
         let mut proof = prover_i128(
             &y_values,
             field.q,
@@ -1316,14 +1318,17 @@ mod test_low_degree_proof {
         .unwrap();
         println!("rounds in proof = {}", proof.rounds_count);
         assert_eq!(
-            Err(ValidationError::LastIterationNotConstant),
+            Err(ValidationError::LastIterationTooHighDegree),
             verify_i128(proof, field.q)
         );
 
-        // Change a single y value such that it no longer corresponds to a polynomial
-        // and verify that the test fails
+        // Change about 10 % of the values, s.t. the Hamming distance of the codeword
+        // is far from a low-degree polynomial.
         output = vec![];
-        y_values[3] ^= 1;
+        for j in 450..500 {
+            y_values[j] ^= 1;
+        }
+
         proof = prover_i128(
             &y_values,
             field.q,
