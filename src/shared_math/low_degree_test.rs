@@ -20,6 +20,7 @@ use std::result::Result;
 pub enum ValidationError {
     BadMerkleProof,
     BadSizedProof,
+    NonPostiveRoundCount,
     NotColinear,
     LastIterationTooHighDegree,
 }
@@ -147,6 +148,31 @@ impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowD
     }
 }
 
+fn get_rounds_count(
+    codeword_size: u32,
+    max_degree: u32,
+    number_of_colinearity_checks: u32,
+) -> (u8, u32) {
+    // Find number of rounds from max_degree. If expansion factor is less than the security level (s),
+    // then we need to stop the iteration when the remaining codeword (that is halved in each round)
+    // has a length smaller than the security level. Otherwise, we couldn't test enough points for the
+    // remaining code word.
+    // codeword_size *should* be a multiple of `max_degree + 1`
+    // rounds_count is the number of times the code word length is halved
+    let expansion_factor: u32 = codeword_size / (max_degree + 1);
+    let mut rounds_count = log_2_ceil(max_degree as u64 + 1) as u8;
+    let mut max_degree_of_last_round = 0u32;
+    if expansion_factor < number_of_colinearity_checks {
+        let num_missed_rounds = log_2_ceil(
+            (number_of_colinearity_checks as f64 / expansion_factor as f64).ceil() as u64,
+        ) as u8;
+        rounds_count -= num_missed_rounds;
+        max_degree_of_last_round = 2u32.pow(num_missed_rounds as u32) - 1;
+    }
+
+    (rounds_count, max_degree_of_last_round)
+}
+
 impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowDegreeProof<U> {
     pub fn from_serialization(
         serialization: Vec<u8>,
@@ -166,23 +192,12 @@ impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowD
             bincode::deserialize(&serialization[index..index + size_of_root as usize])?;
         index += size_of_root as usize;
 
-        // Find number of rounds from max_degree. If expansion factor is less than the security level (s),
-        // then we need to stop the iteration when the remaining codeword (that is halved in each round)
-        // has a length smaller than the security level. Otherwise, we couldn't test enough points for the
-        // remaining code word.
-        // codeword_size *should* be a multiple of `max_degree + 1`
-        // rounds_count is the number of times the code word length is halved
-        // TODO: FACTOR OUT THIS `rounds_count` and max_degree calculation
-        let expansion_factor: u32 = codeword_size / (max_degree + 1);
-        let mut rounds_count = log_2_ceil(max_degree as u64 + 1) as u8;
-        let mut max_degree_of_last_round = 0u32;
-        if expansion_factor < number_of_colinearity_checks {
-            let num_missed_rounds = log_2_ceil(
-                (number_of_colinearity_checks as f64 / expansion_factor as f64).ceil() as u64,
-            ) as u8;
-            rounds_count -= num_missed_rounds;
-            max_degree_of_last_round = 2u32.pow(num_missed_rounds as u32) - 1;
+        let (rounds_count, max_degree_of_last_round) =
+            get_rounds_count(codeword_size, max_degree, number_of_colinearity_checks);
+        if rounds_count < 1 {
+            return Err(Box::new(ValidationError::NonPostiveRoundCount));
         }
+
         let rounds_count_usize = rounds_count as usize;
 
         let challenge_hash_preimages: Vec<Vec<u8>> = (0..rounds_count_usize)
@@ -553,15 +568,8 @@ fn prover_shared<T: Clone + Debug + Serialize + PartialEq>(
     let mts: Vec<MerkleTree<T>> = vec![mt];
 
     output.append(&mut mts[0].get_root().to_vec());
-    let mut rounds_count = log_2_ceil(max_degree_plus_one as u64) as isize;
-    let expansion_factor: usize = codeword.len() / max_degree_plus_one as usize;
-    let mut max_degree_of_last_round = 0usize;
-    if expansion_factor < s {
-        let num_missed_rounds =
-            log_2_ceil((s as f64 / expansion_factor as f64).ceil() as u64) as isize;
-        rounds_count -= num_missed_rounds;
-        max_degree_of_last_round = 2u32.pow(num_missed_rounds as u32) as usize - 1;
-    }
+    let (rounds_count, max_degree_of_last_round) =
+        get_rounds_count(codeword.len() as u32, max_degree, s as u32);
 
     // Require that the prover runs at least *one* round of code word size halving
     if rounds_count < 1 {
@@ -830,6 +838,26 @@ mod test_low_degree_proof {
     use crate::shared_math::prime_field_element::PrimeField;
     use crate::utils::generate_random_numbers;
     use num_traits::Zero;
+
+    #[test]
+    fn get_rounds_count_test() {
+        assert_eq!((3, 0), get_rounds_count(128, 7, 10));
+        assert_eq!((3, 0), get_rounds_count(128, 7, 16));
+        assert_eq!((2, 1), get_rounds_count(128, 7, 17));
+        assert_eq!((2, 1), get_rounds_count(128, 7, 32));
+        assert_eq!((1, 3), get_rounds_count(128, 7, 33));
+        assert_eq!((1, 3), get_rounds_count(128, 7, 63));
+        assert_eq!((1, 3), get_rounds_count(128, 7, 64));
+        assert_eq!((3, 0), get_rounds_count(256, 7, 10));
+        assert_eq!((4, 0), get_rounds_count(256, 15, 10));
+        assert_eq!((4, 0), get_rounds_count(256, 15, 16));
+        assert_eq!((3, 1), get_rounds_count(256, 15, 17));
+        assert_eq!((3, 1), get_rounds_count(256, 15, 32));
+        assert_eq!((2, 3), get_rounds_count(256, 15, 33));
+        assert_eq!((14, 3), get_rounds_count(1048576, 65535, 50));
+        assert_eq!((14, 3), get_rounds_count(1048576, 65535, 64));
+        assert_eq!((13, 7), get_rounds_count(1048576, 65535, 65));
+    }
 
     #[test]
     fn generate_proof_small_bigint() {
