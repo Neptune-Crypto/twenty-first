@@ -219,7 +219,7 @@ pub fn verify_bigint(
 
         c_values = proof.c_proofs[i]
             .iter()
-            .map(|x| x.0[0].clone().unwrap().value.unwrap())
+            .map(|x| x.get_value())
             .collect::<Vec<BigInt>>();
 
         let valid_cs = MerkleTree::verify_multi_proof(
@@ -324,7 +324,7 @@ pub fn verify_i128(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Val
         }
         c_values = proof.c_proofs[i]
             .iter()
-            .map(|x| x.0[0].as_ref().unwrap().value.unwrap())
+            .map(|x| x.get_value())
             .collect::<Vec<i128>>();
 
         let valid_cs = MerkleTree::verify_multi_proof(
