@@ -842,6 +842,10 @@ pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
     values
 }
 
+pub fn blake3_digest(input: &[u8]) -> [u8; 32] {
+    *blake3::hash(input).as_bytes()
+}
+
 pub fn get_n_hash_rounds(input: &[u8], n: u32) -> Vec<[u8; 32]> {
     let mut output: Vec<[u8; 32]> = vec![];
     for i in 0..n {
