@@ -4,11 +4,12 @@ use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
 use crate::shared_math::prime_field_polynomial::PrimeFieldPolynomial;
 use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
-use crate::utils::{get_index_from_bytes, get_n_hash_rounds};
+use crate::utils::{blake3_digest, get_index_from_bytes};
 use num_bigint::BigInt;
 use num_traits::One;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
@@ -20,7 +21,7 @@ pub enum ValidationError {
     BadMerkleProof,
     BadSizedProof,
     NotColinear,
-    LastIterationNotConstant,
+    LastIterationTooHighDegree,
 }
 
 #[derive(Debug)]
@@ -44,6 +45,7 @@ impl fmt::Display for ValidationError {
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProveError {
     BadMaxDegreeValue,
+    NonPostiveRoundCount,
 }
 
 impl Error for ProveError {}
@@ -71,6 +73,7 @@ where
     c_proofs: Vec<Vec<CompressedAuthenticationPath<T>>>,
     index_picker_preimage: Vec<u8>,
     max_degree: u32,
+    max_degree_of_last_round: u32,
     pub merkle_roots: Vec<[u8; 32]>,
     primitive_root_of_unity: T,
     rounds_count: u8,
@@ -83,24 +86,58 @@ impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowD
         round: u8,
         num_locations: u32,
         full_codeword_side: u32,
-    ) -> Vec<(usize, usize, usize)> {
-        let mut hash_preimage_clone = index_picker_preimage.to_vec();
-
-        hash_preimage_clone.push(round);
-        let hashes: Vec<[u8; 32]> =
-            get_n_hash_rounds(hash_preimage_clone.as_slice(), num_locations);
-        let mut abc_indices: Vec<(usize, usize, usize)> =
-            Vec::<(usize, usize, usize)>::with_capacity(num_locations as usize);
+    ) -> Option<Vec<(usize, usize, usize)>> {
         let half_code_word_size = full_codeword_side as usize >> (round + 1);
-        for hash in hashes.iter() {
-            let index = get_index_from_bytes(&hash[0..16], half_code_word_size);
-            abc_indices.push((index, index + half_code_word_size, index));
+
+        // for now this function can only handle 256 indices. This can be expanded by
+        // letting `i`/`counter` have a bigger size than u8 and then serializing and
+        // appending this array instead
+        if num_locations > 0xFF {
+            panic!("Max num_locations is 256. Got: {}", num_locations);
         }
 
-        abc_indices
+        // Verify that number of returned indices is less than available indices
+        if half_code_word_size < num_locations as usize {
+            return None;
+        }
+
+        let mut hash_preimage_clone = index_picker_preimage.to_vec();
+        hash_preimage_clone.push(round);
+        let mut abc_indices: Vec<(usize, usize, usize)> = vec![];
+        if num_locations > half_code_word_size as u32 / 2 {
+            let mut remaining: Vec<usize> = (0..half_code_word_size).collect();
+            for i in 0..num_locations {
+                let mut index_picker_prehash_temp = hash_preimage_clone.clone();
+                index_picker_prehash_temp.push((i % 256) as u8);
+                let hash = blake3_digest(index_picker_prehash_temp.as_slice());
+                let index_index = get_index_from_bytes(&hash, remaining.len());
+                let index = remaining.remove(index_index);
+                abc_indices.push((index, index + half_code_word_size, index));
+            }
+        } else {
+            // This case works when the set of available indices is much larger than the
+            // number of indices being picked. It's expected runtime is ~2*num_locations
+            // if half of the available indices are to be picked and lower than
+            // ~2*num_locations if a smaller proportion is picked.
+            let mut picked: HashSet<usize> = HashSet::<usize>::new();
+            let mut counter: u8 = 0;
+            while abc_indices.len() < num_locations as usize {
+                let mut index_picker_prehash_temp = hash_preimage_clone.clone();
+                index_picker_prehash_temp.push(counter);
+                let hash = blake3_digest(index_picker_prehash_temp.as_slice());
+                let index = get_index_from_bytes(&hash, half_code_word_size);
+                if !picked.contains(&index) {
+                    abc_indices.push((index, index + half_code_word_size, index));
+                    picked.insert(index);
+                }
+                counter += 1;
+            }
+        }
+
+        Some(abc_indices)
     }
 
-    pub fn get_abc_indices(&self, round: u8) -> Vec<(usize, usize, usize)> {
+    pub fn get_abc_indices(&self, round: u8) -> Option<Vec<(usize, usize, usize)>> {
         LowDegreeProof::<U>::get_abc_indices_internal(
             &self.index_picker_preimage,
             round,
@@ -116,20 +153,38 @@ impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowD
         start_index: usize,
     ) -> Result<(LowDegreeProof<U>, usize), Box<dyn Error>> {
         let mut index = start_index;
-        // let slice = serialization.clone().as_slice();
         let codeword_size: u32 = bincode::deserialize(&serialization[index..index + 4])?;
         index += 4;
         let max_degree: u32 = bincode::deserialize(&serialization[index..index + 4])?;
         index += 4;
-        let s: u32 = bincode::deserialize(&serialization[index..index + 4])?;
+        let number_of_colinearity_checks: u32 =
+            bincode::deserialize(&serialization[index..index + 4])?;
         index += 4;
         let size_of_root: u16 = bincode::deserialize(&serialization[index..index + 2])?;
         index += 2;
         let primitive_root_of_unity: U =
             bincode::deserialize(&serialization[index..index + size_of_root as usize])?;
         index += size_of_root as usize;
-        let rounds_count = log_2_ceil(max_degree as u64 + 1) as u8;
+
+        // Find number of rounds from max_degree. If expansion factor is less than the security level (s),
+        // then we need to stop the iteration when the remaining codeword (that is halved in each round)
+        // has a length smaller than the security level. Otherwise, we couldn't test enough points for the
+        // remaining code word.
+        // codeword_size *should* be a multiple of `max_degree + 1`
+        // rounds_count is the number of times the code word length is halved
+        // TODO: FACTOR OUT THIS `rounds_count` and max_degree calculation
+        let expansion_factor: u32 = codeword_size / (max_degree + 1);
+        let mut rounds_count = log_2_ceil(max_degree as u64 + 1) as u8;
+        let mut max_degree_of_last_round = 0u32;
+        if expansion_factor < number_of_colinearity_checks {
+            let num_missed_rounds = log_2_ceil(
+                (number_of_colinearity_checks as f64 / expansion_factor as f64).ceil() as u64,
+            ) as u8;
+            rounds_count -= num_missed_rounds;
+            max_degree_of_last_round = 2u32.pow(num_missed_rounds as u32) - 1;
+        }
         let rounds_count_usize = rounds_count as usize;
+
         let challenge_hash_preimages: Vec<Vec<u8>> = (0..rounds_count_usize)
             .map(|i| serialization[0..((i + 1) * 32 + index)].to_vec())
             .collect();
@@ -168,10 +223,11 @@ impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowD
                 c_proofs,
                 index_picker_preimage,
                 max_degree,
+                max_degree_of_last_round,
                 merkle_roots,
                 primitive_root_of_unity,
                 rounds_count,
-                s,
+                s: number_of_colinearity_checks,
             },
             index,
         ))
@@ -186,11 +242,10 @@ pub fn verify_bigint(
     proof: LowDegreeProof<BigInt>,
     modulus: BigInt,
 ) -> Result<(), ValidationError> {
-    let rounds_count: usize = log_2_ceil(proof.max_degree as u64 + 1) as usize;
-    if rounds_count != proof.ab_proofs.len()
-        || rounds_count != proof.c_proofs.len()
-        || rounds_count != proof.challenge_hash_preimages.len()
-        || rounds_count + 1 != proof.merkle_roots.len()
+    if proof.rounds_count as usize != proof.ab_proofs.len()
+        || proof.rounds_count as usize != proof.c_proofs.len()
+        || proof.rounds_count as usize != proof.challenge_hash_preimages.len()
+        || (proof.rounds_count + 1) as usize != proof.merkle_roots.len()
     {
         return Err(ValidationError::BadSizedProof);
     }
@@ -208,8 +263,10 @@ pub fn verify_bigint(
 
     let field = PrimeFieldBig::new(modulus.clone());
     let mut c_values: Vec<BigInt> = vec![];
+    let mut last_a_xs: Vec<PrimeFieldElementBig> = vec![];
     for (i, challenge_bigint) in challenges.iter().enumerate() {
-        let abc_indices = proof.get_abc_indices(i as u8);
+        let abc_indices_option = proof.get_abc_indices(i as u8);
+        let abc_indices = abc_indices_option.unwrap();
         let c_indices = abc_indices.iter().map(|x| x.2).collect::<Vec<usize>>();
         let mut ab_indices = Vec::<usize>::with_capacity(2 * abc_indices.len());
         for (a, b, _) in abc_indices.iter() {
@@ -254,6 +311,13 @@ pub fn verify_bigint(
             let b_y_bigint: BigInt = proof.ab_proofs[i][2 * j + 1].get_value();
             let c_y_bigint = proof.c_proofs[i][j].get_value();
             let a_x = PrimeFieldElementBig::new(a_x_bigint.clone(), &field);
+
+            // We need the a_x values from the last round when inspecting the
+            // last sample
+            if i == proof.rounds_count as usize - 1usize {
+                last_a_xs.push(a_x.clone());
+            }
+
             let a_y = PrimeFieldElementBig::new(a_y_bigint, &field);
             let b_x = PrimeFieldElementBig::new(b_x_bigint, &field);
             let b_y = PrimeFieldElementBig::new(b_y_bigint, &field);
@@ -278,23 +342,33 @@ pub fn verify_bigint(
             primitive_root_of_unity.clone() * primitive_root_of_unity.clone() % modulus.clone();
     }
 
-    // Base case: Verify that the last merkle tree is a constant function
-    // Verify only the c indicies
-    if c_values.is_empty() || !c_values.iter().all(|x| c_values[0] == *x) {
-        // println!("Last y values were not constant. Got: {:?}", c_values);
-        println!("Last y values were not constant.");
-        return Err(ValidationError::LastIterationNotConstant);
+    // Base case: Verify that the values in the last merkle tree has a sufficiently low degree
+    // Verify only the c points
+    let c_points: Vec<(PrimeFieldElementBig, PrimeFieldElementBig)> = c_values
+        .iter()
+        .zip(last_a_xs.iter())
+        .map(|(c_y, a_x)| {
+            (
+                a_x.clone().mod_pow(bigint(2)),
+                PrimeFieldElementBig::new(c_y.clone(), &field),
+            )
+        })
+        .collect();
+    let last_polynomial = Polynomial::slow_lagrange_interpolation(&c_points);
+
+    if c_values.is_empty() || last_polynomial.degree() > proof.max_degree_of_last_round as isize {
+        println!("Last iteration not sufficiently low degree");
+        return Err(ValidationError::LastIterationTooHighDegree);
     }
 
     Ok(())
 }
 
 pub fn verify_i128(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), ValidationError> {
-    let rounds_count: usize = log_2_ceil(proof.max_degree as u64 + 1) as usize;
-    if rounds_count != proof.ab_proofs.len()
-        || rounds_count != proof.c_proofs.len()
-        || rounds_count != proof.challenge_hash_preimages.len()
-        || rounds_count + 1 != proof.merkle_roots.len()
+    if proof.rounds_count != proof.ab_proofs.len() as u8
+        || proof.rounds_count != proof.c_proofs.len() as u8
+        || proof.rounds_count != proof.challenge_hash_preimages.len() as u8
+        || proof.rounds_count + 1 != proof.merkle_roots.len() as u8
     {
         return Err(ValidationError::BadSizedProof);
     }
@@ -312,9 +386,11 @@ pub fn verify_i128(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Val
 
     let field = PrimeField::new(modulus);
     let mut c_values: Vec<i128> = vec![];
+    let mut last_a_xs: Vec<i128> = vec![];
     for (i, challenge) in challenges.iter().enumerate() {
         // Get the indices of the locations checked in this round
-        let abc_indices: Vec<(usize, usize, usize)> = proof.get_abc_indices(i as u8);
+        let abc_indices_option: Option<Vec<(usize, usize, usize)>> = proof.get_abc_indices(i as u8);
+        let abc_indices = abc_indices_option.unwrap();
         let mut c_indices: Vec<usize> = vec![];
         let mut ab_indices: Vec<usize> = vec![];
         for (a, b, c) in abc_indices.into_iter() {
@@ -353,6 +429,9 @@ pub fn verify_i128(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Val
         for j in 0..proof.s as usize {
             let a_index = ab_indices[2 * j] as i128;
             let a_x = root.mod_pow_raw(a_index);
+            if i as u8 == proof.rounds_count - 1 {
+                last_a_xs.push(a_x);
+            }
             let a_y: i128 = proof.ab_proofs[i][2 * j].get_value();
             let b_index = ab_indices[2 * j + 1] as i128;
             let b_x = root.mod_pow_raw(b_index);
@@ -368,22 +447,36 @@ pub fn verify_i128(proof: LowDegreeProof<i128>, modulus: i128) -> Result<(), Val
                 );
                 println!("Failed to verify colinearity!");
                 return Err(ValidationError::NotColinear);
-            } else {
-                // println!(
-                //     "({}, {}), ({}, {}), ({}, {}) are colinear",
-                //     a_x, a_y, b_x, b_y, challenge, c_y
-                // );
             }
         }
 
         primitive_root_of_unity = primitive_root_of_unity * primitive_root_of_unity % modulus;
     }
 
-    // Base case: Verify that the last merkle tree is a constant function
+    // Base case: Verify that the values in the last merkle tree has a sufficiently low degree
     // Verify only the c indicies
-    if c_values.is_empty() || !c_values.iter().all(|&x| c_values[0] == x) {
-        println!("Last y values were not constant. Got: {:?}", c_values);
-        return Err(ValidationError::LastIterationNotConstant);
+    let c_points: Vec<(PrimeFieldElement, PrimeFieldElement)> = c_values
+        .iter()
+        .zip(last_a_xs.iter())
+        .map(|(y, x)| {
+            (
+                PrimeFieldElement::new(*x, &field).mod_pow(2),
+                PrimeFieldElement::new(*y, &field),
+            )
+        })
+        .collect();
+    let last_polynomial = Polynomial::slow_lagrange_interpolation(&c_points);
+    if c_values.is_empty() || last_polynomial.degree() > proof.max_degree_of_last_round as isize {
+        println!(
+            "Last y values were not of sufficiently low degree. Got: {:?}",
+            c_points
+        );
+        println!(
+            "degree of last polynomial: {}, max: {}",
+            last_polynomial.degree(),
+            proof.max_degree_of_last_round
+        );
+        return Err(ValidationError::LastIterationTooHighDegree);
     }
 
     Ok(())
@@ -445,7 +538,7 @@ fn prover_shared<T: Clone + Debug + Serialize + PartialEq>(
     codeword: &[T],
     s: usize,
     primitive_root_of_unity: T,
-) -> Result<(usize, Vec<MerkleTree<T>>), ProveError> {
+) -> Result<(usize, Vec<MerkleTree<T>>, u32), ProveError> {
     let max_degree_plus_one: u32 = max_degree + 1;
     if max_degree_plus_one & (max_degree_plus_one - 1) != 0 {
         return Err(ProveError::BadMaxDegreeValue);
@@ -466,7 +559,22 @@ fn prover_shared<T: Clone + Debug + Serialize + PartialEq>(
     let mts: Vec<MerkleTree<T>> = vec![mt];
 
     output.append(&mut mts[0].get_root().to_vec());
-    Ok((log_2_ceil(max_degree_plus_one as u64) as usize, mts))
+    let mut rounds_count = log_2_ceil(max_degree_plus_one as u64) as isize;
+    let expansion_factor: usize = codeword.len() / max_degree_plus_one as usize;
+    let mut max_degree_of_last_round = 0usize;
+    if expansion_factor < s {
+        let num_missed_rounds =
+            log_2_ceil((s as f64 / expansion_factor as f64).ceil() as u64) as isize;
+        rounds_count -= num_missed_rounds;
+        max_degree_of_last_round = 2u32.pow(num_missed_rounds as u32) as usize - 1;
+    }
+
+    // Require that the prover runs at least *one* round of code word size halving
+    if rounds_count < 1 {
+        return Err(ProveError::NonPostiveRoundCount);
+    }
+
+    Ok((rounds_count as usize, mts, max_degree_of_last_round as u32))
 }
 
 pub fn prover_bigint(
@@ -477,13 +585,14 @@ pub fn prover_bigint(
     output: &mut Vec<u8>,
     primitive_root_of_unity: BigInt,
 ) -> Result<LowDegreeProof<BigInt>, ProveError> {
-    let (rounds_count, mut mts): (usize, Vec<MerkleTree<BigInt>>) = prover_shared(
-        max_degree,
-        output,
-        codeword,
-        s,
-        primitive_root_of_unity.clone(),
-    )?;
+    let (rounds_count, mut mts, max_degree_of_last_round): (usize, Vec<MerkleTree<BigInt>>, u32) =
+        prover_shared(
+            max_degree,
+            output,
+            codeword,
+            s,
+            primitive_root_of_unity.clone(),
+        )?;
     let mut mut_codeword: Vec<BigInt> = codeword.to_vec();
 
     // Arrays for return values
@@ -541,13 +650,14 @@ pub fn prover_bigint(
     primitive_root_of_unity_temp = primitive_root_of_unity.clone();
     for i in 0usize..rounds_count {
         // Get the indices of the locations checked in this round
-        let abc_indices: Vec<(usize, usize, usize)> =
+        let abc_indices_option: Option<Vec<(usize, usize, usize)>> =
             LowDegreeProof::<BigInt>::get_abc_indices_internal(
                 &index_picker_preimage,
                 i as u8,
                 s as u32,
                 codeword.len() as u32,
             );
+        let abc_indices = abc_indices_option.unwrap();
         let mut c_indices: Vec<usize> = vec![];
         let mut ab_indices: Vec<usize> = vec![];
         for (a, b, c) in abc_indices.into_iter() {
@@ -590,6 +700,7 @@ pub fn prover_bigint(
         codeword_size: codeword.len() as u32,
         primitive_root_of_unity,
         max_degree,
+        max_degree_of_last_round,
     })
 }
 
@@ -605,7 +716,7 @@ pub fn prover_i128(
     output: &mut Vec<u8>,
     primitive_root_of_unity: i128,
 ) -> Result<LowDegreeProof<i128>, ProveError> {
-    let (rounds_count, mut mts): (usize, Vec<MerkleTree<i128>>) =
+    let (rounds_count, mut mts, max_degree_of_last_round): (usize, Vec<MerkleTree<i128>>, u32) =
         prover_shared(max_degree, output, codeword, s, primitive_root_of_unity)?;
 
     // Arrays for return values
@@ -664,13 +775,14 @@ pub fn prover_i128(
     primitive_root_of_unity_temp = primitive_root_of_unity;
     for i in 0usize..rounds_count {
         // Get the indices of the locations checked in this round
-        let abc_indices: Vec<(usize, usize, usize)> =
-            LowDegreeProof::<i128>::get_abc_indices_internal(
+        let abc_indices_option: Option<Vec<(usize, usize, usize)>> =
+            LowDegreeProof::<BigInt>::get_abc_indices_internal(
                 &index_picker_preimage,
                 i as u8,
                 s as u32,
                 codeword.len() as u32,
             );
+        let abc_indices = abc_indices_option.unwrap();
         let mut c_indices: Vec<usize> = vec![];
         let mut ab_indices: Vec<usize> = vec![];
         for (a, b, c) in abc_indices.into_iter() {
@@ -712,6 +824,7 @@ pub fn prover_i128(
         codeword_size: codeword.len() as u32,
         primitive_root_of_unity,
         max_degree,
+        max_degree_of_last_round,
     })
 }
 
@@ -741,7 +854,7 @@ mod test_low_degree_proof {
         // corresponds to the polynomial P(x) = x
         let y_values = power_series;
         let max_degree = 1;
-        let s = 5; // The security factor
+        let s = 2; // The security factor
         let mut proof: LowDegreeProof<BigInt> = prover_bigint(
             &y_values,
             field.q.clone(),
@@ -752,16 +865,19 @@ mod test_low_degree_proof {
         )
         .unwrap();
         assert_eq!(1, proof.max_degree);
+        assert_eq!(0, proof.max_degree_of_last_round);
         assert_eq!(4, proof.codeword_size);
         assert_eq!(bigint(10), proof.primitive_root_of_unity);
         assert_eq!(1, proof.rounds_count);
-        assert_eq!(5, proof.s);
+        assert_eq!(2, proof.s);
         assert_eq!(1, proof.ab_proofs.len());
         assert_eq!(1, proof.c_proofs.len());
         assert_eq!(2, proof.merkle_roots.len());
 
         // Verify that abc indices return a value matching that in the authentication paths
-        let indicies_round_0 = proof.get_abc_indices(0);
+        // TODO: FIX
+        let indicies_round_0_option = proof.get_abc_indices(0);
+        let indicies_round_0 = indicies_round_0_option.unwrap();
         let selected_ab_values: Vec<(BigInt, BigInt)> = indicies_round_0
             .iter()
             .map(|i| (y_values[i.0].clone(), y_values[i.1].clone()))
@@ -784,7 +900,7 @@ mod test_low_degree_proof {
         assert_eq!(4, deserialized_proof.codeword_size);
         assert_eq!(bigint(10), deserialized_proof.primitive_root_of_unity);
         assert_eq!(1, deserialized_proof.rounds_count);
-        assert_eq!(5, deserialized_proof.s);
+        assert_eq!(2, deserialized_proof.s);
         assert_eq!(1, deserialized_proof.ab_proofs.len());
         assert_eq!(1, deserialized_proof.c_proofs.len());
         assert_eq!(2, deserialized_proof.merkle_roots.len());
@@ -849,7 +965,7 @@ mod test_low_degree_proof {
         // corresponds to the polynomial P(x) = x
         let y_values = power_series;
         let max_degree = 1;
-        let s = 5; // The security factor
+        let s = 2; // The security factor
         let mut proof: LowDegreeProof<i128> = prover_i128(
             &y_values,
             field.q,
@@ -860,10 +976,11 @@ mod test_low_degree_proof {
         )
         .unwrap();
         assert_eq!(1, proof.max_degree);
+        assert_eq!(0, proof.max_degree_of_last_round);
         assert_eq!(4, proof.codeword_size);
         assert_eq!(10, proof.primitive_root_of_unity);
         assert_eq!(1, proof.rounds_count);
-        assert_eq!(5, proof.s);
+        assert_eq!(2, proof.s);
         assert_eq!(1, proof.ab_proofs.len());
         assert_eq!(1, proof.c_proofs.len());
         assert_eq!(2, proof.merkle_roots.len());
@@ -874,7 +991,7 @@ mod test_low_degree_proof {
         assert_eq!(4, deserialized_proof.codeword_size);
         assert_eq!(10, deserialized_proof.primitive_root_of_unity);
         assert_eq!(1, deserialized_proof.rounds_count);
-        assert_eq!(5, deserialized_proof.s);
+        assert_eq!(2, deserialized_proof.s);
         assert_eq!(1, deserialized_proof.ab_proofs.len());
         assert_eq!(1, deserialized_proof.c_proofs.len());
         assert_eq!(2, deserialized_proof.merkle_roots.len());
@@ -976,7 +1093,7 @@ mod test_low_degree_proof {
         )
         .unwrap();
         assert_eq!(
-            Err(ValidationError::LastIterationNotConstant),
+            Err(ValidationError::LastIterationTooHighDegree),
             verify_bigint(proof.clone(), field.q.clone())
         );
 
@@ -1047,7 +1164,7 @@ mod test_low_degree_proof {
         )
         .unwrap();
         assert_eq!(
-            Err(ValidationError::LastIterationNotConstant),
+            Err(ValidationError::LastIterationTooHighDegree),
             verify_i128(proof.clone(), field.q)
         );
 
@@ -1065,7 +1182,7 @@ mod test_low_degree_proof {
         )
         .unwrap();
         assert_eq!(
-            Err(ValidationError::LastIterationNotConstant),
+            Err(ValidationError::LastIterationTooHighDegree),
             verify_i128(proof.clone(), field.q)
         );
     }
@@ -1205,7 +1322,9 @@ mod test_low_degree_proof {
         assert_eq!(Ok(()), verify_bigint(proof.clone(), field.q.clone()));
 
         // Verify that the index picker matches picked indices for ab_proof
-        let indices = proof.get_abc_indices(0);
+        // TODO: FIX
+        let indices_option = proof.get_abc_indices(0);
+        let indices = indices_option.unwrap();
         let selected_ab_values: Vec<(BigInt, BigInt)> = indices
             .iter()
             .map(|i| (y_values[i.0].clone(), y_values[i.1].clone()))
@@ -1235,7 +1354,7 @@ mod test_low_degree_proof {
         .unwrap();
         println!("rounds in proof = {}", proof.rounds_count);
         assert_eq!(
-            Err(ValidationError::LastIterationNotConstant),
+            Err(ValidationError::LastIterationTooHighDegree),
             verify_bigint(proof, field.q.clone())
         );
 
@@ -1261,7 +1380,7 @@ mod test_low_degree_proof {
                 .0
         );
         assert_eq!(
-            Err(ValidationError::LastIterationNotConstant),
+            Err(ValidationError::LastIterationTooHighDegree),
             verify_bigint(proof, field.q.clone())
         );
     }
@@ -1345,8 +1464,8 @@ mod test_low_degree_proof {
                 .0
         );
         assert_eq!(
-            Err(ValidationError::LastIterationNotConstant),
-            verify_i128(proof, field.q)
+            Err(ValidationError::LastIterationTooHighDegree),
+            verify_i128(proof.clone(), field.q)
         );
     }
 }
