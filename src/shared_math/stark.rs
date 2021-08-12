@@ -462,7 +462,7 @@ impl StarkProof<BigInt> {
         // Verify that linear combination matches that of the committed tuple tree
         // get all indices (a,b) of first FRI round
         let abc_indices: Vec<(usize, usize, usize)> =
-            self.linear_combination_fri.get_abc_indices(0);
+            self.linear_combination_fri.get_abc_indices(0).unwrap();
         let mut ab_indices: Vec<usize> = vec![];
         for (a, b, _) in abc_indices.iter() {
             ab_indices.push(*a);
@@ -1012,7 +1012,7 @@ pub fn stark_of_mimc_prove(
         num_steps,
         extended_computational_trace_bigint,
         field: field.clone(),
-        security_checks: 128,
+        security_checks,
         omega: omega.clone(),
         boundary_quotient_codeword_bigint: &boundary_quotient_codeword_bigint,
         transition_quotient_codeword_bigint: &transition_quotient_codeword_bigint,
@@ -1063,7 +1063,8 @@ pub fn stark_of_mimc_prove(
     // enable verification of linear combination
 
     // Produce authentication paths for the relevant codewords
-    let abc_indices: Vec<(usize, usize, usize)> = linear_combination_fri.get_abc_indices(0);
+    let abc_indices: Vec<(usize, usize, usize)> =
+        linear_combination_fri.get_abc_indices(0).unwrap();
     // let indices = ab_indices.iter().map(|(a, b)| )
     // todo: use https://users.rust-lang.org/t/flattening-a-vector-of-tuples/11409/2
     let mut ab_indices: Vec<usize> = vec![];
@@ -1172,7 +1173,7 @@ mod test_modular_arithmetic {
     fn mimc_big_test() {
         let no_steps = 3;
         let expansion_factor = 4;
-        let security_factor = 10;
+        let security_factor = 8;
         let field = PrimeFieldBig::new(b(5 * 2i128.pow(25) + 1));
         let round_constants_raw: Vec<i128> = vec![7, 256, 117];
         let round_constants: Vec<PrimeFieldElementBig> = round_constants_raw
