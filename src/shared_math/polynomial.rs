@@ -11,21 +11,28 @@ use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::Sub;
 
+fn degree_raw<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
+    coefficients: &[T],
+) -> isize {
+    let mut deg = coefficients.len() as isize - 1;
+    while deg >= 0 && coefficients[deg as usize].is_zero() {
+        deg -= 1;
+    }
+
+    deg // -1 for the zero polynomial
+}
+
 fn pretty_print_coefficients_generic<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
     coefficients: &[T],
 ) -> String {
-    if coefficients.is_empty() {
+    let degree = degree_raw(coefficients);
+    if degree == -1 {
         return String::from("0");
     }
 
-    let mut outputs: Vec<String> = Vec::new();
-    let mut pol_degree = coefficients.len() - 1;
-    // reduce pol_degree to skip trailing zeros
-    while coefficients[pol_degree].is_zero() {
-        pol_degree -= 1;
-    }
-
     // for every nonzero term, in descending order
+    let mut outputs: Vec<String> = Vec::new();
+    let pol_degree = degree as usize;
     for i in 0..=pol_degree {
         let pow = pol_degree - i;
         if coefficients[pow].is_zero() {
@@ -499,12 +506,7 @@ impl<
     > Polynomial<U>
 {
     pub fn degree(&self) -> isize {
-        let mut deg = self.coefficients.len() as isize - 1;
-        while deg > 0 && self.coefficients[deg as usize].is_zero() {
-            deg -= 1;
-        }
-
-        deg // -1 for the zero polynomial
+        degree_raw(&self.coefficients)
     }
 }
 
@@ -550,6 +552,78 @@ mod test_polynomials {
     #[allow(clippy::needless_lifetimes)] // Suppress wrong warning (fails to compile without lifetime, I think)
     fn pfb<'a>(value: i128, field: &'a PrimeFieldBig) -> PrimeFieldElementBig {
         PrimeFieldElementBig::new(b(value), field)
+    }
+
+    #[test]
+    fn polynomial_display_test() {
+        let prime_modulus = 71;
+        let _71 = PrimeFieldBig::new(b(prime_modulus));
+        let empty = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![],
+        };
+        assert_eq!("0", empty.to_string());
+        let zero = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(0, &_71)],
+        };
+        assert_eq!("0", zero.to_string());
+        let double_zero = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(0, &_71), pfb(0, &_71)],
+        };
+        assert_eq!("0", double_zero.to_string());
+        let one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71)],
+        };
+        assert_eq!("1", one.to_string());
+        let zero_one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71), pfb(0, &_71)],
+        };
+        assert_eq!("1", zero_one.to_string());
+        let zero_zero_one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71), pfb(0, &_71), pfb(0, &_71)],
+        };
+        assert_eq!("1", zero_zero_one.to_string());
+        let one_zero = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(0, &_71), pfb(1, &_71)],
+        };
+        assert_eq!("x", one_zero.to_string());
+        let one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71)],
+        };
+        assert_eq!("1", one.to_string());
+        let x_plus_one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71), pfb(1, &_71)],
+        };
+        assert_eq!("x + 1", x_plus_one.to_string());
+        let many_zeros = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(1, &_71),
+                pfb(1, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+            ],
+        };
+        assert_eq!("x + 1", many_zeros.to_string());
+        let also_many_zeros = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(1, &_71),
+                pfb(1, &_71),
+            ],
+        };
+        assert_eq!("x^4 + x^3", also_many_zeros.to_string());
+        let yet_many_zeros = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(1, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(1, &_71),
+            ],
+        };
+        assert_eq!("x^4 + 1", yet_many_zeros.to_string());
     }
 
     #[test]
