@@ -228,6 +228,13 @@ impl<
             panic!("Repeated x values received. Got: {:?}", points);
         }
 
+        if points.len() == 2 {
+            let (a, b) = Polynomial::lagrange_interpolation_2(&points[0], &points[1]);
+            return Polynomial {
+                coefficients: vec![b, a],
+            };
+        }
+
         let roots: Vec<U> = points.iter().map(|x| x.0.clone()).collect();
         let mut big_pol_coeffs = Self::prod_helper(&roots);
 
@@ -798,8 +805,8 @@ mod test_polynomials {
             (pf(2, &field), pf(2, &field)),
         ];
 
-        let interpolation_result = Polynomial::slow_lagrange_interpolation(points);
-        let expected_result = Polynomial {
+        let mut interpolation_result = Polynomial::slow_lagrange_interpolation(points);
+        let mut expected_result = Polynomial {
             coefficients: vec![pf(6, &field), pf(2, &field), pf(5, &field)],
         };
         assert_eq!(expected_result, interpolation_result);
@@ -808,6 +815,17 @@ mod test_polynomials {
         for point in points.iter() {
             assert_eq!(point.1, interpolation_result.evaluate(&point.0));
         }
+
+        // Test linear interpolation, when there are only two points given as input
+        let two_points = &[
+            (pf(0, &field), pf(6, &field)),
+            (pf(2, &field), pf(2, &field)),
+        ];
+        interpolation_result = Polynomial::slow_lagrange_interpolation(two_points);
+        expected_result = Polynomial {
+            coefficients: vec![pf(6, &field), pf(5, &field)],
+        };
+        assert_eq!(expected_result, interpolation_result);
     }
 
     #[test]
