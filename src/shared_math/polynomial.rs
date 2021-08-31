@@ -292,7 +292,7 @@ impl<
             + Hash,
     > Polynomial<U>
 {
-    fn multiply(self, other: Self) -> Self {
+    pub fn multiply(self, other: Self) -> Self {
         let degree_lhs = self.degree();
         let degree_rhs = other.degree();
 
@@ -352,14 +352,21 @@ impl<
             );
         }
 
-        // zero divided by anything guves zero
-        if degree_lhs < 0 {
+        // zero divided by anything gives zero. degree == -1 <=> polynomial = 0
+        if self.is_zero() {
             return (Self::ring_zero(), Self::ring_zero());
         }
 
         // quotient is built from back to front so must be reversed
-        let mut quotient = Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize);
+        // Preallocate space for quotient coefficients
+        let mut quotient: Vec<U>;
+        if degree_lhs - degree_rhs >= 0 {
+            quotient = Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize);
+        } else {
+            quotient = vec![];
+        }
         let mut remainder = self.clone();
+        remainder.normalize();
 
         let dlc: U = divisor.coefficients[degree_rhs as usize].clone(); // divisor leading coefficient
         let inv = dlc.ring_one() / dlc;
@@ -1282,10 +1289,24 @@ mod test_polynomials {
             coefficients: vec![PrimeFieldElement::new(1, &_71)],
         };
         let zero = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![],
+        };
+        let zero_alt = Polynomial::<PrimeFieldElement> {
             coefficients: vec![PrimeFieldElement::new(0, &_71)],
         };
+        let zero_alt_alt = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![PrimeFieldElement::new(0, &_71); 4],
+        };
         assert_eq!(one, a / b.clone());
-        assert_eq!(zero, zero.clone() / b.clone());
+        let div_with_zero = zero.clone() / b.clone();
+        let div_with_zero_alt = zero_alt.clone() / b.clone();
+        let div_with_zero_alt_alt = zero_alt_alt.clone() / b.clone();
+        assert!(div_with_zero.is_zero());
+        assert!(div_with_zero_alt.is_zero());
+        assert!(div_with_zero_alt_alt.is_zero());
+        assert!(div_with_zero.coefficients.is_empty());
+        assert!(div_with_zero_alt.coefficients.is_empty());
+        assert!(div_with_zero_alt_alt.coefficients.is_empty());
 
         let x: Polynomial<PrimeFieldElement> = Polynomial {
             coefficients: vec![
