@@ -146,6 +146,22 @@ impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> LowD
             self.codeword_size,
         )
     }
+
+    pub fn get_ab_indices(&self, round: u8) -> Option<Vec<usize>> {
+        let abc_indices_option = self.get_abc_indices(round);
+        let abc_indices = match abc_indices_option {
+            None => return None,
+            Some(indices) => indices,
+        };
+
+        let mut ab_indices: Vec<usize> = vec![];
+        for (a, b, _) in abc_indices.iter() {
+            ab_indices.push(*a);
+            ab_indices.push(*b);
+        }
+
+        Some(ab_indices)
+    }
 }
 
 fn get_rounds_count(
@@ -778,7 +794,7 @@ pub fn prover_i128(
     for i in 0usize..rounds_count {
         // Get the indices of the locations checked in this round
         let abc_indices_option: Option<Vec<(usize, usize, usize)>> =
-            LowDegreeProof::<BigInt>::get_abc_indices_internal(
+            LowDegreeProof::<i128>::get_abc_indices_internal(
                 &index_picker_preimage,
                 i as u8,
                 s as u32,
@@ -914,6 +930,14 @@ mod test_low_degree_proof {
                 selected_ab_values[i].1,
                 proof.ab_proofs[0][2 * i + 1].get_value()
             );
+        }
+
+        // Verify that the ab_indices are consistent with the abc indices
+        let indicies_round_0_alt = proof.get_ab_indices(0).unwrap();
+        assert_eq!(2 * indicies_round_0.len(), indicies_round_0_alt.len());
+        for i in 0..indicies_round_0.len() {
+            assert_eq!(indicies_round_0_alt[2 * i], indicies_round_0[i].0);
+            assert_eq!(indicies_round_0_alt[2 * i + 1], indicies_round_0[i].1);
         }
 
         let (mut deserialized_proof, _): (LowDegreeProof<BigInt>, usize) =
