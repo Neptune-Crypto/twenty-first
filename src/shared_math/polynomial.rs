@@ -321,6 +321,17 @@ impl<
         }
     }
 
+    // Multiply a polynomial with x^power
+    pub fn shift_coefficients(&self, power: usize, zero: U) -> Self {
+        if !zero.is_zero() {
+            panic!("`zero` was not zero. Don't do this.");
+        }
+
+        let mut coefficients: Vec<U> = self.coefficients.clone();
+        coefficients.splice(0..0, vec![zero; power]);
+        Polynomial { coefficients }
+    }
+
     pub fn scalar_mul(&self, scalar: U) -> Self {
         let mut coefficients: Vec<U> = vec![];
         for i in 0..self.coefficients.len() {
@@ -1105,6 +1116,47 @@ mod test_polynomials {
             (pfb(12, &field), pfb(92, &field)),
             (pfb(11, &field), pfb(76, &field))
         ]));
+    }
+
+    #[test]
+    fn polynomial_shift_test() {
+        let prime_modulus = 71;
+        let _71 = PrimeField::new(prime_modulus);
+        let pol = Polynomial {
+            coefficients: vec![
+                PrimeFieldElement::new(17, &_71),
+                PrimeFieldElement::new(14, &_71),
+            ],
+        };
+        assert_eq!(
+            vec![
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(17, &_71),
+                PrimeFieldElement::new(14, &_71)
+            ],
+            pol.shift_coefficients(4, PrimeFieldElement::new(0, &_71))
+                .coefficients
+        );
+        assert_eq!(
+            vec![
+                PrimeFieldElement::new(17, &_71),
+                PrimeFieldElement::new(14, &_71)
+            ],
+            pol.shift_coefficients(0, PrimeFieldElement::new(0, &_71))
+                .coefficients
+        );
+        assert_eq!(
+            vec![
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(17, &_71),
+                PrimeFieldElement::new(14, &_71)
+            ],
+            pol.shift_coefficients(1, PrimeFieldElement::new(0, &_71))
+                .coefficients
+        );
     }
 
     #[test]
