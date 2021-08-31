@@ -11,21 +11,28 @@ use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::Sub;
 
+fn degree_raw<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
+    coefficients: &[T],
+) -> isize {
+    let mut deg = coefficients.len() as isize - 1;
+    while deg >= 0 && coefficients[deg as usize].is_zero() {
+        deg -= 1;
+    }
+
+    deg // -1 for the zero polynomial
+}
+
 fn pretty_print_coefficients_generic<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
     coefficients: &[T],
 ) -> String {
-    if coefficients.is_empty() {
+    let degree = degree_raw(coefficients);
+    if degree == -1 {
         return String::from("0");
     }
 
-    let mut outputs: Vec<String> = Vec::new();
-    let mut pol_degree = coefficients.len() - 1;
-    // reduce pol_degree to skip trailing zeros
-    while coefficients[pol_degree].is_zero() {
-        pol_degree -= 1;
-    }
-
     // for every nonzero term, in descending order
+    let mut outputs: Vec<String> = Vec::new();
+    let pol_degree = degree as usize;
     for i in 0..=pol_degree {
         let pow = pol_degree - i;
         if coefficients[pow].is_zero() {
@@ -178,45 +185,58 @@ impl<
         true
     }
 
+    // Calculates a reversed representation of the coefficients of
+    // prod_{i=0}^{N}((x- q_i))
+    fn prod_helper<T: IdentityValues + Sub<Output = T> + Mul<Output = T> + Clone>(
+        input: &[T],
+    ) -> Vec<T> {
+        if let Some((q_j, elements)) = input.split_first() {
+            let one: T = q_j.ring_one();
+            let zero: T = q_j.ring_zero();
+            let minus_q_j = zero.clone() - q_j.to_owned();
+            match elements {
+                // base case is `x - q_j` := [1, -q_j]
+                [] => vec![one, minus_q_j],
+                _ => {
+                    // The recursive call calculates (x-q_j)*rec = x*rec - q_j*rec := [0, rec] .- q_j*[rec]
+                    let mut rec = Self::prod_helper(elements);
+                    rec.push(zero);
+                    let mut i = rec.len() - 1;
+                    while i > 0 {
+                        rec[i] = rec[i].clone() - q_j.to_owned() * rec[i - 1].clone();
+                        i -= 1;
+                    }
+                    rec
+                }
+            }
+        } else {
+            panic!("Empty array received");
+        }
+    }
+
+    pub fn get_polynomial_with_roots(roots: &[U]) -> Self {
+        let mut coefficients = Self::prod_helper(roots);
+        coefficients.reverse();
+        Polynomial { coefficients }
+    }
+
     // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
     // purposes. This also means that it is not pivotal that this function has an optimal
     // runtime.
     pub fn slow_lagrange_interpolation(points: &[(U, U)]) -> Self {
-        // calculate a reversed representation of the coefficients of
-        // prod_{i=0}^{N}((x- q_i))
-        fn prod_helper<T: IdentityValues + Sub<Output = T> + Mul<Output = T> + Clone>(
-            input: &[T],
-        ) -> Vec<T> {
-            if let Some((q_j, elements)) = input.split_first() {
-                let one: T = q_j.ring_one();
-                let zero: T = q_j.ring_zero();
-                let minus_q_j = zero.clone() - q_j.to_owned();
-                match elements {
-                    // base case is `x - q_j` := [1, -q_j]
-                    [] => vec![one, minus_q_j],
-                    _ => {
-                        // The recursive call calculates (x-q_j)*rec = x*rec - q_j*rec := [0, rec] .- q_j*[rec]
-                        let mut rec = prod_helper(elements);
-                        rec.push(zero);
-                        let mut i = rec.len() - 1;
-                        while i > 0 {
-                            rec[i] = rec[i].clone() - q_j.to_owned() * rec[i - 1].clone();
-                            i -= 1;
-                        }
-                        rec
-                    }
-                }
-            } else {
-                panic!("Empty array received");
-            }
-        }
-
         if !has_unique_elements(points.iter().map(|x| x.0.clone())) {
             panic!("Repeated x values received. Got: {:?}", points);
         }
 
+        if points.len() == 2 {
+            let (a, b) = Polynomial::lagrange_interpolation_2(&points[0], &points[1]);
+            return Polynomial {
+                coefficients: vec![b, a],
+            };
+        }
+
         let roots: Vec<U> = points.iter().map(|x| x.0.clone()).collect();
-        let mut big_pol_coeffs = prod_helper(&roots);
+        let mut big_pol_coeffs = Self::prod_helper(&roots);
 
         big_pol_coeffs.reverse();
         let big_pol = Self {
@@ -272,7 +292,7 @@ impl<
             + Hash,
     > Polynomial<U>
 {
-    fn multiply(self, other: Self) -> Self {
+    pub fn multiply(self, other: Self) -> Self {
         let degree_lhs = self.degree();
         let degree_rhs = other.degree();
 
@@ -301,6 +321,17 @@ impl<
         }
     }
 
+    // Multiply a polynomial with x^power
+    pub fn shift_coefficients(&self, power: usize, zero: U) -> Self {
+        if !zero.is_zero() {
+            panic!("`zero` was not zero. Don't do this.");
+        }
+
+        let mut coefficients: Vec<U> = self.coefficients.clone();
+        coefficients.splice(0..0, vec![zero; power]);
+        Polynomial { coefficients }
+    }
+
     pub fn scalar_mul(&self, scalar: U) -> Self {
         let mut coefficients: Vec<U> = vec![];
         for i in 0..self.coefficients.len() {
@@ -321,14 +352,21 @@ impl<
             );
         }
 
-        // zero divided by anything guves zero
-        if degree_lhs < 0 {
+        // zero divided by anything gives zero. degree == -1 <=> polynomial = 0
+        if self.is_zero() {
             return (Self::ring_zero(), Self::ring_zero());
         }
 
         // quotient is built from back to front so must be reversed
-        let mut quotient = Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize);
+        // Preallocate space for quotient coefficients
+        let mut quotient: Vec<U>;
+        if degree_lhs - degree_rhs >= 0 {
+            quotient = Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize);
+        } else {
+            quotient = vec![];
+        }
         let mut remainder = self.clone();
+        remainder.normalize();
 
         let dlc: U = divisor.coefficients[degree_rhs as usize].clone(); // divisor leading coefficient
         let inv = dlc.ring_one() / dlc;
@@ -499,12 +537,7 @@ impl<
     > Polynomial<U>
 {
     pub fn degree(&self) -> isize {
-        let mut deg = self.coefficients.len() as isize - 1;
-        while deg > 0 && self.coefficients[deg as usize].is_zero() {
-            deg -= 1;
-        }
-
-        deg // -1 for the zero polynomial
+        degree_raw(&self.coefficients)
     }
 }
 
@@ -550,6 +583,78 @@ mod test_polynomials {
     #[allow(clippy::needless_lifetimes)] // Suppress wrong warning (fails to compile without lifetime, I think)
     fn pfb<'a>(value: i128, field: &'a PrimeFieldBig) -> PrimeFieldElementBig {
         PrimeFieldElementBig::new(b(value), field)
+    }
+
+    #[test]
+    fn polynomial_display_test() {
+        let prime_modulus = 71;
+        let _71 = PrimeFieldBig::new(b(prime_modulus));
+        let empty = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![],
+        };
+        assert_eq!("0", empty.to_string());
+        let zero = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(0, &_71)],
+        };
+        assert_eq!("0", zero.to_string());
+        let double_zero = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(0, &_71), pfb(0, &_71)],
+        };
+        assert_eq!("0", double_zero.to_string());
+        let one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71)],
+        };
+        assert_eq!("1", one.to_string());
+        let zero_one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71), pfb(0, &_71)],
+        };
+        assert_eq!("1", zero_one.to_string());
+        let zero_zero_one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71), pfb(0, &_71), pfb(0, &_71)],
+        };
+        assert_eq!("1", zero_zero_one.to_string());
+        let one_zero = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(0, &_71), pfb(1, &_71)],
+        };
+        assert_eq!("x", one_zero.to_string());
+        let one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71)],
+        };
+        assert_eq!("1", one.to_string());
+        let x_plus_one = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![pfb(1, &_71), pfb(1, &_71)],
+        };
+        assert_eq!("x + 1", x_plus_one.to_string());
+        let many_zeros = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(1, &_71),
+                pfb(1, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+            ],
+        };
+        assert_eq!("x + 1", many_zeros.to_string());
+        let also_many_zeros = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(1, &_71),
+                pfb(1, &_71),
+            ],
+        };
+        assert_eq!("x^4 + x^3", also_many_zeros.to_string());
+        let yet_many_zeros = Polynomial::<PrimeFieldElementBig> {
+            coefficients: vec![
+                pfb(1, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(0, &_71),
+                pfb(1, &_71),
+            ],
+        };
+        assert_eq!("x^4 + 1", yet_many_zeros.to_string());
     }
 
     #[test]
@@ -693,6 +798,23 @@ mod test_polynomials {
     }
 
     #[test]
+    fn get_polynomial_with_roots_test() {
+        let field = PrimeField::new(31);
+        assert_eq!(
+            Polynomial {
+                coefficients: vec![pf(30, &field), pf(0, &field), pf(1, &field)],
+            },
+            Polynomial::get_polynomial_with_roots(&[pf(1, &field), pf(30, &field)])
+        );
+        assert_eq!(
+            Polynomial {
+                coefficients: vec![pf(0, &field), pf(30, &field), pf(0, &field), pf(1, &field)],
+            },
+            Polynomial::get_polynomial_with_roots(&[pf(1, &field), pf(30, &field), pf(0, &field)])
+        );
+    }
+
+    #[test]
     fn slow_lagrange_interpolation_test() {
         let field = PrimeField::new(7);
         let points = &[
@@ -701,8 +823,8 @@ mod test_polynomials {
             (pf(2, &field), pf(2, &field)),
         ];
 
-        let interpolation_result = Polynomial::slow_lagrange_interpolation(points);
-        let expected_result = Polynomial {
+        let mut interpolation_result = Polynomial::slow_lagrange_interpolation(points);
+        let mut expected_result = Polynomial {
             coefficients: vec![pf(6, &field), pf(2, &field), pf(5, &field)],
         };
         assert_eq!(expected_result, interpolation_result);
@@ -711,6 +833,17 @@ mod test_polynomials {
         for point in points.iter() {
             assert_eq!(point.1, interpolation_result.evaluate(&point.0));
         }
+
+        // Test linear interpolation, when there are only two points given as input
+        let two_points = &[
+            (pf(0, &field), pf(6, &field)),
+            (pf(2, &field), pf(2, &field)),
+        ];
+        interpolation_result = Polynomial::slow_lagrange_interpolation(two_points);
+        expected_result = Polynomial {
+            coefficients: vec![pf(6, &field), pf(5, &field)],
+        };
+        assert_eq!(expected_result, interpolation_result);
     }
 
     #[test]
@@ -993,6 +1126,47 @@ mod test_polynomials {
     }
 
     #[test]
+    fn polynomial_shift_test() {
+        let prime_modulus = 71;
+        let _71 = PrimeField::new(prime_modulus);
+        let pol = Polynomial {
+            coefficients: vec![
+                PrimeFieldElement::new(17, &_71),
+                PrimeFieldElement::new(14, &_71),
+            ],
+        };
+        assert_eq!(
+            vec![
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(17, &_71),
+                PrimeFieldElement::new(14, &_71)
+            ],
+            pol.shift_coefficients(4, PrimeFieldElement::new(0, &_71))
+                .coefficients
+        );
+        assert_eq!(
+            vec![
+                PrimeFieldElement::new(17, &_71),
+                PrimeFieldElement::new(14, &_71)
+            ],
+            pol.shift_coefficients(0, PrimeFieldElement::new(0, &_71))
+                .coefficients
+        );
+        assert_eq!(
+            vec![
+                PrimeFieldElement::new(0, &_71),
+                PrimeFieldElement::new(17, &_71),
+                PrimeFieldElement::new(14, &_71)
+            ],
+            pol.shift_coefficients(1, PrimeFieldElement::new(0, &_71))
+                .coefficients
+        );
+    }
+
+    #[test]
     fn polynomial_arithmetic_property_based_test() {
         let prime_modulus = 71;
         let _71 = PrimeField::new(prime_modulus);
@@ -1115,10 +1289,24 @@ mod test_polynomials {
             coefficients: vec![PrimeFieldElement::new(1, &_71)],
         };
         let zero = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![],
+        };
+        let zero_alt = Polynomial::<PrimeFieldElement> {
             coefficients: vec![PrimeFieldElement::new(0, &_71)],
         };
+        let zero_alt_alt = Polynomial::<PrimeFieldElement> {
+            coefficients: vec![PrimeFieldElement::new(0, &_71); 4],
+        };
         assert_eq!(one, a / b.clone());
-        assert_eq!(zero, zero.clone() / b.clone());
+        let div_with_zero = zero.clone() / b.clone();
+        let div_with_zero_alt = zero_alt.clone() / b.clone();
+        let div_with_zero_alt_alt = zero_alt_alt.clone() / b.clone();
+        assert!(div_with_zero.is_zero());
+        assert!(div_with_zero_alt.is_zero());
+        assert!(div_with_zero_alt_alt.is_zero());
+        assert!(div_with_zero.coefficients.is_empty());
+        assert!(div_with_zero_alt.coefficients.is_empty());
+        assert!(div_with_zero_alt_alt.coefficients.is_empty());
 
         let x: Polynomial<PrimeFieldElement> = Polynomial {
             coefficients: vec![

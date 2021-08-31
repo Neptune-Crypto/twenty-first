@@ -1,7 +1,9 @@
+pub mod collatz_sequence;
 pub mod complex_number;
 pub mod fraction;
 pub mod integer_ring_polynomial;
 pub mod low_degree_test;
+pub mod mimc_stark;
 pub mod ntt;
 pub mod other;
 pub mod polynomial;

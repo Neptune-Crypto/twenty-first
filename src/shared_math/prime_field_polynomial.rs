@@ -310,7 +310,9 @@ impl<'a> PrimeFieldPolynomial<'a> {
             );
         }
 
-        let mut remainder = self.coefficients.clone();
+        let mut rem = self.clone();
+        rem.normalize();
+        let mut remainder = rem.coefficients;
         let mut quotient = Vec::with_capacity(self.pqr.n as usize); // built from back to front so must be reversed
 
         let dividend_coeffs: &Vec<i128> = &self.coefficients;
