@@ -366,9 +366,49 @@ fn get_indices_over_all_registers(indices: &[usize], num_registers: usize) -> Ve
 }
 
 impl CollatzStarkProof {
+    pub fn from_serialization(
+        transcript: &mut [u8],
+        start_index: usize,
+    ) -> Result<(CollatzStarkProof, usize), Box<dyn Error>> {
+        // We could use the reader trait on transcript. But then the type of transcript should be
+        // a byte slice, not a byte array. And we would have to modify the FRI deserializer to
+        // handle the byte slice as a reader as well
+        let mut index = start_index;
+        let bq_merkle_root: [u8; 32] = bincode::deserialize(&transcript[index..index + 32])?;
+        index += 32;
+        let composition_polynomial_merkle_root: [u8; 32] =
+            bincode::deserialize(&transcript[index..index + 32])?;
+        index += 32;
+
+        let (composite_polynomial_fri, new_index) =
+            LowDegreeProof::<i128>::from_serialization(transcript.to_vec(), index)?;
+        index = new_index;
+
+        let mut auth_path_size: u32 = bincode::deserialize(&transcript[index..index + 4])?;
+        index += 4;
+        let boundary_quotient_authentication_paths: Vec<CompressedAuthenticationPath<i128>> =
+            bincode::deserialize(&transcript[index..index + auth_path_size as usize])?;
+        index += auth_path_size as usize;
+        auth_path_size = bincode::deserialize(&transcript[index..index + 4])?;
+        index += 4;
+        let boundary_quotient_authentication_paths_next: Vec<CompressedAuthenticationPath<i128>> =
+            bincode::deserialize(&transcript[index..index + auth_path_size as usize])?;
+
+        Ok((
+            CollatzStarkProof {
+                bq_merkle_root,
+                composition_polynomial_merkle_root,
+                boundary_quotient_authentication_paths,
+                boundary_quotient_authentication_paths_next,
+                composite_polynomial_fri,
+            },
+            index + auth_path_size as usize,
+        ))
+    }
+
     pub fn verify(
         &self,
-        claim: CollatzClaim,
+        claim: &CollatzClaim,
         omega: PrimeFieldElement,
         num_steps: usize,
         expansion_factor: usize,
@@ -693,21 +733,31 @@ pub fn stark_of_collatz_sequence_prove(
     let ab_indices_over_registers: Vec<usize> =
         get_indices_over_all_registers(&ab_indices, num_registers);
 
+    // Get authentication paths
     // We *only* need to commit to the boundary quotient values here since the extended
     // trace, air codewords, and transition quotient can be calculated from the boundary
     // quotient codeword.
     let boundary_quotient_authentication_paths: Vec<CompressedAuthenticationPath<i128>> =
         boundary_quotient_mt.get_multi_proof(&ab_indices_over_registers);
-    transcript.append(&mut bincode::serialize(&boundary_quotient_authentication_paths).unwrap());
     let ab_indices_over_registers_next_step: Vec<usize> = ab_indices_over_registers
         .iter()
         .map(|x| (x + num_registers * expansion_factor) % (extended_domain_length * num_registers))
         .collect();
     let boundary_quotient_authentication_paths_next: Vec<CompressedAuthenticationPath<i128>> =
         boundary_quotient_mt.get_multi_proof(&ab_indices_over_registers_next_step);
-    transcript
-        .append(&mut bincode::serialize(&boundary_quotient_authentication_paths_next).unwrap());
 
+    // Serialize authentication paths
+    let mut bqap_serialized = bincode::serialize(&boundary_quotient_authentication_paths).unwrap();
+    let mut bqap_next_serialized =
+        bincode::serialize(&boundary_quotient_authentication_paths_next).unwrap();
+
+    // Write size of serialization and actual serialization to transcript
+    transcript.append(&mut bincode::serialize(&(bqap_serialized.len() as u32)).unwrap());
+    transcript.append(&mut bqap_serialized);
+    transcript.append(&mut bincode::serialize(&(bqap_next_serialized.len() as u32)).unwrap());
+    transcript.append(&mut bqap_next_serialized);
+
+    // Return proof object. Proof is also contained in the transcript in serialized form
     Ok(CollatzStarkProof {
         bq_merkle_root: boundary_quotient_mt.get_root(),
         composition_polynomial_merkle_root: composition_polynomial_mt.get_root(),
@@ -755,10 +805,19 @@ mod collatz_sequence_test {
             end_value: PrimeFieldElement::new(1, omega.field),
         };
 
-        match stark_proof.verify(claim, omega, 15, 8, 128) {
+        match stark_proof.verify(&claim, omega, 15, 8, 128) {
             Err(err) => panic!("{:?}", err),
             Ok(_proof) => (),
         }
-        // assert!(stark_proof.verify(claim, omega, 15, 8, 128).is_ok());
+
+        // Verify that deserialization of transcript returns the same STARK proof as the function call
+        let stark_proof_deserialized_res =
+            CollatzStarkProof::from_serialization(&mut transcript, 0);
+        let stark_proof_deserialized = stark_proof_deserialized_res.unwrap().0;
+        match stark_proof_deserialized.verify(&claim, omega, 15, 8, 128) {
+            Err(err) => panic!("{:?}", err),
+            Ok(_proof) => (),
+        }
+        assert_eq!(stark_proof, stark_proof_deserialized);
     }
 }
