@@ -185,45 +185,51 @@ impl<
         true
     }
 
+    // Calculates a reversed representation of the coefficients of
+    // prod_{i=0}^{N}((x- q_i))
+    fn prod_helper<T: IdentityValues + Sub<Output = T> + Mul<Output = T> + Clone>(
+        input: &[T],
+    ) -> Vec<T> {
+        if let Some((q_j, elements)) = input.split_first() {
+            let one: T = q_j.ring_one();
+            let zero: T = q_j.ring_zero();
+            let minus_q_j = zero.clone() - q_j.to_owned();
+            match elements {
+                // base case is `x - q_j` := [1, -q_j]
+                [] => vec![one, minus_q_j],
+                _ => {
+                    // The recursive call calculates (x-q_j)*rec = x*rec - q_j*rec := [0, rec] .- q_j*[rec]
+                    let mut rec = Self::prod_helper(elements);
+                    rec.push(zero);
+                    let mut i = rec.len() - 1;
+                    while i > 0 {
+                        rec[i] = rec[i].clone() - q_j.to_owned() * rec[i - 1].clone();
+                        i -= 1;
+                    }
+                    rec
+                }
+            }
+        } else {
+            panic!("Empty array received");
+        }
+    }
+
+    pub fn get_polynomial_with_roots(roots: &[U]) -> Self {
+        let mut coefficients = Self::prod_helper(roots);
+        coefficients.reverse();
+        Polynomial { coefficients }
+    }
+
     // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
     // purposes. This also means that it is not pivotal that this function has an optimal
     // runtime.
     pub fn slow_lagrange_interpolation(points: &[(U, U)]) -> Self {
-        // calculate a reversed representation of the coefficients of
-        // prod_{i=0}^{N}((x- q_i))
-        fn prod_helper<T: IdentityValues + Sub<Output = T> + Mul<Output = T> + Clone>(
-            input: &[T],
-        ) -> Vec<T> {
-            if let Some((q_j, elements)) = input.split_first() {
-                let one: T = q_j.ring_one();
-                let zero: T = q_j.ring_zero();
-                let minus_q_j = zero.clone() - q_j.to_owned();
-                match elements {
-                    // base case is `x - q_j` := [1, -q_j]
-                    [] => vec![one, minus_q_j],
-                    _ => {
-                        // The recursive call calculates (x-q_j)*rec = x*rec - q_j*rec := [0, rec] .- q_j*[rec]
-                        let mut rec = prod_helper(elements);
-                        rec.push(zero);
-                        let mut i = rec.len() - 1;
-                        while i > 0 {
-                            rec[i] = rec[i].clone() - q_j.to_owned() * rec[i - 1].clone();
-                            i -= 1;
-                        }
-                        rec
-                    }
-                }
-            } else {
-                panic!("Empty array received");
-            }
-        }
-
         if !has_unique_elements(points.iter().map(|x| x.0.clone())) {
             panic!("Repeated x values received. Got: {:?}", points);
         }
 
         let roots: Vec<U> = points.iter().map(|x| x.0.clone()).collect();
-        let mut big_pol_coeffs = prod_helper(&roots);
+        let mut big_pol_coeffs = Self::prod_helper(&roots);
 
         big_pol_coeffs.reverse();
         let big_pol = Self {
@@ -763,6 +769,23 @@ mod test_polynomials {
                 coefficients: vec![],
             },
             a
+        );
+    }
+
+    #[test]
+    fn get_polynomial_with_roots_test() {
+        let field = PrimeField::new(31);
+        assert_eq!(
+            Polynomial {
+                coefficients: vec![pf(30, &field), pf(0, &field), pf(1, &field)],
+            },
+            Polynomial::get_polynomial_with_roots(&[pf(1, &field), pf(30, &field)])
+        );
+        assert_eq!(
+            Polynomial {
+                coefficients: vec![pf(0, &field), pf(30, &field), pf(0, &field), pf(1, &field)],
+            },
+            Polynomial::get_polynomial_with_roots(&[pf(1, &field), pf(30, &field), pf(0, &field)])
         );
     }
 
