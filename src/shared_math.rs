@@ -1,3 +1,4 @@
+pub mod collatz_sequence;
 pub mod complex_number;
 pub mod fraction;
 pub mod integer_ring_polynomial;
