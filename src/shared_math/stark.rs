@@ -32,8 +32,8 @@ pub struct Stark<'a> {
     expansion_factor: usize,
     field: PrimeFieldBig,
     fri: Fri,
-    generator: PrimeFieldElementBig<'a>,
-    num_randomizers: usize,
+    field_generator: PrimeFieldElementBig<'a>,
+    randomizer_count: usize,
     omega: PrimeFieldElementBig<'a>,
     pub omicron: PrimeFieldElementBig<'a>, // omicron = omega^expansion_factor
     omicron_domain: Vec<PrimeFieldElementBig<'a>>,
@@ -46,14 +46,14 @@ impl<'a> Stark<'a> {
     pub fn new(
         field: &'a PrimeFieldBig,
         expansion_factor: usize,
-        colinearity_checks_count: usize,
+        colinearity_check_count: usize,
         register_count: usize,
-        cycles_count: usize,
+        cycle_count: usize,
         transition_constraints_degree: usize,
         generator: PrimeFieldElementBig<'a>,
     ) -> Self {
-        let num_randomizers = 4 * colinearity_checks_count;
-        let original_trace_length = cycles_count;
+        let num_randomizers = 4 * colinearity_check_count;
+        let original_trace_length = cycle_count;
         let randomized_trace_length = original_trace_length + num_randomizers;
         let omicron_domain_length =
             1usize << log_2_ceil((randomized_trace_length * transition_constraints_degree) as u64);
@@ -95,15 +95,15 @@ impl<'a> Stark<'a> {
             omega.value.clone(),
             fri_domain_length,
             expansion_factor,
-            colinearity_checks_count,
+            colinearity_check_count,
             omega.field.q.clone(),
         );
 
         Self {
             expansion_factor,
             field: field.to_owned(),
-            generator,
-            num_randomizers,
+            field_generator: generator,
+            randomizer_count: num_randomizers,
             omega,
             omicron,
             omicron_domain,
@@ -301,14 +301,14 @@ impl<'a> Stark<'a> {
         trace: Vec<Vec<PrimeFieldElementBig>>,
         transition_constraints: Vec<MPolynomial<PrimeFieldElementBig>>,
         boundary_constraints: Vec<BoundaryConstraint>,
-    ) -> Result<ProofStream, Box<dyn Error>> {
-        let mut proof_stream = ProofStream::new();
-
+        proof_stream: &mut ProofStream,
+    ) -> Result<(), Box<dyn Error>> {
         // Concatenate randomizers
+        // TODO: PCG ("permuted congrential generator") is not cryptographically secure; so exchange this for something else like Keccak/SHAKE256
         let mut rng = Pcg64::seed_from_u64(17);
         let mut rand_bytes = [0u8; 32];
         let mut randomized_trace: Vec<Vec<PrimeFieldElementBig>> = trace;
-        for _ in 0..self.num_randomizers {
+        for _ in 0..self.randomizer_count {
             randomized_trace.push(vec![]);
             for _ in 0..self.register_count {
                 rng.fill_bytes(&mut rand_bytes);
@@ -480,7 +480,7 @@ impl<'a> Stark<'a> {
                 .iter()
                 .map(|x| x.value.clone())
                 .collect::<Vec<BigInt>>(),
-            &mut proof_stream,
+            proof_stream,
         )?;
 
         // Process indices
@@ -509,7 +509,7 @@ impl<'a> Stark<'a> {
         proof_stream
             .enqueue_length_prepended(&randomizer_mt.get_multi_proof(&quadrupled_indices))?;
 
-        Ok(proof_stream)
+        Ok(())
     }
 
     pub fn verify(
@@ -616,11 +616,11 @@ impl<'a> Stark<'a> {
         let expected_tq_degrees = self.transition_quotient_degree_bounds(&transition_constraints);
         for (i, current_index) in indices.into_iter().enumerate() {
             let current_x: PrimeFieldElementBig =
-                self.generator.clone() * self.omega.mod_pow(current_index.into());
+                self.field_generator.clone() * self.omega.mod_pow(current_index.into());
             let next_index: usize =
                 (current_index + self.expansion_factor) % self.fri.domain_length;
             let next_x: PrimeFieldElementBig =
-                self.generator.clone() * self.omega.mod_pow(next_index.into());
+                self.field_generator.clone() * self.omega.mod_pow(next_index.into());
             let mut current_trace: Vec<PrimeFieldElementBig> = (0..self.register_count)
                 .map(|r| {
                     boundary_quotients[r][&current_index].clone()
@@ -790,18 +790,20 @@ mod test_stark {
         let output_element = trace[rescue_prime.steps_count][0].clone();
         let transition_constraints = rescue_prime.get_air_constraints(&stark.omicron);
         let boundary_constraints = rescue_prime.get_boundary_constraints(&output_element);
+        let mut proof_stream = ProofStream::default();
 
         let stark_proof = stark.prove(
             trace,
             transition_constraints.clone(),
             boundary_constraints.clone(),
+            &mut proof_stream,
         );
-        let stream: ProofStream = match stark_proof {
-            Ok(stream) => stream,
-            Err(_) => panic!("Failed to produce STARK proof"),
-        };
+        match stark_proof {
+            Ok(()) => (),
+            Err(_) => panic!("Failed to produce STARK proof."),
+        }
         let verify = stark.verify(
-            &stream.serialize(),
+            &proof_stream.serialize(),
             transition_constraints,
             boundary_constraints,
         );

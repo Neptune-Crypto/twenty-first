@@ -14,6 +14,7 @@ pub mod prime_field_element;
 pub mod prime_field_element_big;
 pub mod prime_field_polynomial;
 pub mod rescue_prime_stark;
+pub mod rpsss;
 pub mod stark;
 pub mod traits;
 pub mod vector;
