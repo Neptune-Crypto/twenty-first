@@ -4,7 +4,7 @@ use num_bigint::BigInt;
 use num_traits::Zero;
 
 use crate::shared_math::polynomial::Polynomial;
-use crate::util_types::merkle_tree::CompressedAuthenticationPath;
+use crate::util_types::merkle_tree::PartialAuthenticationPath;
 use crate::util_types::{merkle_tree::MerkleTree, proof_stream::ProofStream};
 use crate::utils::{blake3_digest, get_index_from_bytes};
 
@@ -348,9 +348,9 @@ impl Fri {
             ab_indices.append(&mut b_indices.clone());
 
             // Read values and check colinearity
-            let ab_values: Vec<CompressedAuthenticationPath<BigInt>> =
+            let ab_values: Vec<PartialAuthenticationPath<BigInt>> =
                 proof_stream.dequeue_length_prepended()?;
-            let c_values: Vec<CompressedAuthenticationPath<BigInt>> =
+            let c_values: Vec<PartialAuthenticationPath<BigInt>> =
                 proof_stream.dequeue_length_prepended()?;
 
             // verify Merkle authentication paths

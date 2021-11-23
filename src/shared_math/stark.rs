@@ -4,7 +4,7 @@ use rand::{RngCore, SeedableRng};
 use rand_pcg::Pcg64;
 
 use crate::shared_math::traits::IdentityValues;
-use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
+use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use std::fmt;
 use std::{collections::HashMap, error::Error};
 
@@ -560,7 +560,7 @@ impl<'a> Stark<'a> {
         let mut boundary_quotients: Vec<HashMap<usize, PrimeFieldElementBig>> = vec![];
         for (i, bq_root) in boundary_quotient_mt_roots.into_iter().enumerate() {
             boundary_quotients.push(HashMap::new());
-            let authentication_paths: Vec<CompressedAuthenticationPath<BigInt>> =
+            let authentication_paths: Vec<PartialAuthenticationPath<BigInt>> =
                 proof_stream.dequeue_length_prepended()?;
             let valid =
                 MerkleTree::verify_multi_proof(bq_root, &duplicated_indices, &authentication_paths);
@@ -582,7 +582,7 @@ impl<'a> Stark<'a> {
         }
 
         // Read and verify randomizer leafs
-        let authentication_paths: Vec<CompressedAuthenticationPath<BigInt>> =
+        let authentication_paths: Vec<PartialAuthenticationPath<BigInt>> =
             proof_stream.dequeue_length_prepended()?;
         let valid = MerkleTree::verify_multi_proof(
             randomizer_mt_root,
