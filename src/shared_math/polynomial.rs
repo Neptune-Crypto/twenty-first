@@ -2,6 +2,8 @@ use crate::shared_math::traits::IdentityValues;
 use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
+use num_bigint::BigInt;
+use num_traits::Zero;
 use std::convert::From;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -123,8 +125,18 @@ impl<
         }
     }
 
+    pub fn from_constant(constant: U) -> Self {
+        Self {
+            coefficients: vec![constant],
+        }
+    }
+
     pub fn is_zero(&self) -> bool {
         self.coefficients.is_empty() || self.coefficients.iter().all(|x| x.is_zero())
+    }
+
+    pub fn is_one(&self) -> bool {
+        self.degree() == 0 && self.coefficients[0].is_one()
     }
 
     pub fn evaluate(&self, x: &U) -> U {
@@ -134,6 +146,20 @@ impl<
         }
 
         acc
+    }
+
+    // Return the polynomial which corresponds to the transformation `x -> alpha * x`
+    pub fn scale(&self, x: &U) -> Self {
+        let mut acc = x.ring_one();
+        let mut return_coefficients = self.coefficients.clone();
+        for elem in return_coefficients.iter_mut() {
+            *elem = elem.clone() * acc.clone();
+            acc = acc * x.to_owned();
+        }
+
+        Self {
+            coefficients: return_coefficients,
+        }
     }
 
     pub fn lagrange_interpolation_2(point0: &(U, U), point1: &(U, U)) -> (U, U) {
@@ -220,6 +246,74 @@ impl<
         Polynomial { coefficients }
     }
 
+    fn slow_lagrange_interpolation_internal(xs: &[U], ys: &[U]) -> Self {
+        assert_eq!(
+            xs.len(),
+            ys.len(),
+            "x and y values must have the same length"
+        );
+        let roots: Vec<U> = xs.to_vec();
+        let mut big_pol_coeffs = Self::prod_helper(&roots);
+        big_pol_coeffs.reverse();
+        let big_pol = Self {
+            coefficients: big_pol_coeffs,
+        };
+
+        let zero: U = xs[0].ring_zero();
+        let one: U = xs[0].ring_one();
+        let mut coefficients: Vec<U> = vec![zero.clone(); xs.len()];
+        for (x, y) in xs.iter().zip(ys.iter()) {
+            // create a PrimeFieldPolynomial that is zero at all other points than this
+            // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
+            let my_div_coefficients = vec![zero.clone() - x.clone(), one.clone()];
+            let mut my_pol = Self {
+                coefficients: my_div_coefficients,
+            };
+            my_pol = big_pol.clone() / my_pol.clone();
+
+            let mut divisor = one.clone();
+            for root in roots.iter() {
+                if *root == *x {
+                    continue;
+                }
+                divisor = divisor * (x.clone() - root.to_owned());
+            }
+
+            let mut my_coeffs: Vec<U> = my_pol.coefficients.iter().map(|x| x.to_owned()).collect();
+            for coeff in my_coeffs.iter_mut() {
+                *coeff = coeff.to_owned() * y.clone();
+                *coeff = coeff.to_owned() / divisor.clone();
+            }
+
+            for i in 0..my_coeffs.len() {
+                coefficients[i] = coefficients[i].clone() + my_coeffs[i].clone();
+            }
+        }
+
+        Self { coefficients }
+    }
+
+    pub fn slow_lagrange_interpolation_new(xs: &[U], ys: &[U]) -> Self {
+        if !has_unique_elements(xs.iter()) {
+            panic!("Repeated x values received. Got: {:?}", xs);
+        }
+        if xs.len() != ys.len() {
+            panic!("Attempted to interpolate with x and y values of different length");
+        }
+
+        if xs.len() == 2 {
+            let (a, b) = Polynomial::lagrange_interpolation_2(
+                &(xs[0].clone(), ys[0].clone()),
+                &(xs[1].clone(), ys[1].clone()),
+            );
+            return Polynomial {
+                coefficients: vec![b, a],
+            };
+        }
+
+        Self::slow_lagrange_interpolation_internal(xs, ys)
+    }
+
     // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
     // purposes. This also means that it is not pivotal that this function has an optimal
     // runtime.
@@ -235,45 +329,10 @@ impl<
             };
         }
 
-        let roots: Vec<U> = points.iter().map(|x| x.0.clone()).collect();
-        let mut big_pol_coeffs = Self::prod_helper(&roots);
+        let xs: Vec<U> = points.iter().map(|x| x.0.to_owned()).collect();
+        let ys: Vec<U> = points.iter().map(|x| x.1.to_owned()).collect();
 
-        big_pol_coeffs.reverse();
-        let big_pol = Self {
-            coefficients: big_pol_coeffs.iter().map(|x| x.to_owned()).collect(),
-        };
-        let zero: U = points[0].0.ring_zero();
-        let one: U = points[0].0.ring_one();
-        let mut coefficients: Vec<U> = vec![zero.clone(); points.len()];
-        for point in points.iter() {
-            // create a PrimeFieldPolynomial that is zero at all other points than this
-            // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
-            let my_div_coefficients = vec![zero.clone() - point.0.clone(), one.clone()];
-            let mut my_pol = Self {
-                coefficients: my_div_coefficients.iter().map(|x| x.to_owned()).collect(),
-            };
-            my_pol = big_pol.clone() / my_pol.clone();
-
-            let mut divisor = one.clone();
-            for root in roots.iter() {
-                if *root == point.0 {
-                    continue;
-                }
-                divisor = divisor * (point.0.clone() - root.to_owned());
-            }
-
-            let mut my_coeffs: Vec<U> = my_pol.coefficients.iter().map(|x| x.to_owned()).collect();
-            for coeff in my_coeffs.iter_mut() {
-                *coeff = coeff.to_owned() * point.1.clone();
-                *coeff = coeff.to_owned() / divisor.clone();
-            }
-
-            for i in 0..my_coeffs.len() {
-                coefficients[i] = coefficients[i].clone() + my_coeffs[i].clone();
-            }
-        }
-
-        Self { coefficients }
+        Self::slow_lagrange_interpolation_internal(&xs, &ys)
     }
 }
 
@@ -321,6 +380,34 @@ impl<
         }
     }
 
+    // Multiply a polynomial with itself `pow` times
+    pub fn mod_pow(&self, pow: BigInt, one: U) -> Self {
+        assert!(one.is_one(), "Provided one must be one");
+
+        // Special case to handle 0^0 = 1
+        if pow.is_zero() {
+            return Self::from_constant(one);
+        }
+
+        if self.is_zero() {
+            return Self::ring_zero();
+        }
+
+        let one = self.coefficients.last().unwrap().ring_one();
+        let mut acc = Polynomial::from_constant(one);
+        let bit_length: u64 = pow.bits();
+        for i in 0..bit_length {
+            acc = acc.clone() * acc.clone();
+            let set: bool =
+                !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
+            if set {
+                acc = acc * self.clone();
+            }
+        }
+
+        acc
+    }
+
     // Multiply a polynomial with x^power
     pub fn shift_coefficients(&self, power: usize, zero: U) -> Self {
         if !zero.is_zero() {
@@ -341,6 +428,7 @@ impl<
         Self { coefficients }
     }
 
+    /// Return (quotient, remainder)
     pub fn divide(&self, divisor: Self) -> (Self, Self) {
         let degree_lhs = self.degree();
         let degree_rhs = divisor.degree();
@@ -566,6 +654,8 @@ impl<
 #[cfg(test)]
 mod test_polynomials {
     #![allow(clippy::just_underscores_and_digits)]
+    use std::vec;
+
     use super::super::prime_field_element::{PrimeField, PrimeFieldElement};
     use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
@@ -719,6 +809,42 @@ mod test_polynomials {
     }
 
     #[test]
+    fn scale_test() {
+        let prime_modulus = 71;
+        let _71 = PrimeField::new(prime_modulus);
+        let _0_71 = PrimeFieldElement::new(0, &_71);
+        let _1_71 = PrimeFieldElement::new(1, &_71);
+        let _2_71 = PrimeFieldElement::new(2, &_71);
+        let _3_71 = PrimeFieldElement::new(3, &_71);
+        let _6_71 = PrimeFieldElement::new(6, &_71);
+        let _12_71 = PrimeFieldElement::new(12, &_71);
+        let _36_71 = PrimeFieldElement::new(36, &_71);
+        let _37_71 = PrimeFieldElement::new(37, &_71);
+        let _40_71 = PrimeFieldElement::new(40, &_71);
+        let mut input = Polynomial {
+            coefficients: vec![_1_71, _6_71],
+        };
+
+        let mut expected = Polynomial {
+            coefficients: vec![_1_71, _12_71],
+        };
+
+        assert_eq!(expected, input.scale(&_2_71));
+
+        input = Polynomial::ring_zero();
+        expected = Polynomial::ring_zero();
+        assert_eq!(expected, input.scale(&_2_71));
+
+        input = Polynomial {
+            coefficients: vec![_12_71, _12_71, _12_71, _12_71],
+        };
+        expected = Polynomial {
+            coefficients: vec![_12_71, _36_71, _37_71, _40_71],
+        };
+        assert_eq!(expected, input.scale(&_3_71));
+    }
+
+    #[test]
     fn normalize_test() {
         let prime_modulus = 71;
         let _71 = PrimeField::new(prime_modulus);
@@ -812,19 +938,41 @@ mod test_polynomials {
             },
             Polynomial::get_polynomial_with_roots(&[pf(1, &field), pf(30, &field), pf(0, &field)])
         );
+        assert_eq!(
+            Polynomial {
+                coefficients: vec![
+                    pf(25, &field),
+                    pf(11, &field),
+                    pf(25, &field),
+                    pf(1, &field)
+                ],
+            },
+            Polynomial::get_polynomial_with_roots(&[pf(1, &field), pf(2, &field), pf(3, &field)])
+        );
     }
 
     #[test]
     fn slow_lagrange_interpolation_test() {
         let field = PrimeField::new(7);
+
+        // Verify that interpolation works with just one point
+        let one_point = &[(pf(2, &field), pf(5, &field))];
+        let mut interpolation_result = Polynomial::slow_lagrange_interpolation(one_point);
+        println!("interpolation_result = {}", interpolation_result);
+        let mut expected_result = Polynomial {
+            coefficients: vec![pf(5, &field)],
+        };
+        assert_eq!(expected_result, interpolation_result);
+
+        // Test with three points
         let points = &[
             (pf(0, &field), pf(6, &field)),
             (pf(1, &field), pf(6, &field)),
             (pf(2, &field), pf(2, &field)),
         ];
 
-        let mut interpolation_result = Polynomial::slow_lagrange_interpolation(points);
-        let mut expected_result = Polynomial {
+        interpolation_result = Polynomial::slow_lagrange_interpolation(points);
+        expected_result = Polynomial {
             coefficients: vec![pf(6, &field), pf(2, &field), pf(5, &field)],
         };
         assert_eq!(expected_result, interpolation_result);
@@ -1167,6 +1315,109 @@ mod test_polynomials {
     }
 
     #[test]
+    fn mod_pow_test() {
+        let _71 = PrimeField::new(71);
+        let zero = PrimeFieldElement::new(0, &_71);
+        let one = PrimeFieldElement::new(1, &_71);
+        let one_pol = Polynomial::from_constant(one);
+
+        assert_eq!(one_pol, one_pol.mod_pow(0.into(), one));
+        assert_eq!(one_pol, one_pol.mod_pow(1.into(), one));
+        assert_eq!(one_pol, one_pol.mod_pow(2.into(), one));
+        assert_eq!(one_pol, one_pol.mod_pow(3.into(), one));
+
+        let x = one_pol.shift_coefficients(1, zero);
+        let x_squared = one_pol.shift_coefficients(2, zero);
+        let x_cubed = one_pol.shift_coefficients(3, zero);
+        assert_eq!(x, x.mod_pow(1.into(), one));
+        assert_eq!(x_squared, x.mod_pow(2.into(), one));
+        assert_eq!(x_cubed, x.mod_pow(3.into(), one));
+
+        let pol = Polynomial {
+            coefficients: vec![
+                zero,
+                PrimeFieldElement::new(14, &_71),
+                zero,
+                PrimeFieldElement::new(4, &_71),
+                zero,
+                PrimeFieldElement::new(8, &_71),
+                zero,
+                PrimeFieldElement::new(3, &_71),
+            ],
+        };
+        let pol_squared = Polynomial {
+            coefficients: vec![
+                zero,
+                zero,
+                PrimeFieldElement::new(196, &_71),
+                zero,
+                PrimeFieldElement::new(112, &_71),
+                zero,
+                PrimeFieldElement::new(240, &_71),
+                zero,
+                PrimeFieldElement::new(148, &_71),
+                zero,
+                PrimeFieldElement::new(88, &_71),
+                zero,
+                PrimeFieldElement::new(48, &_71),
+                zero,
+                PrimeFieldElement::new(9, &_71),
+            ],
+        };
+        let pol_cubed = Polynomial {
+            coefficients: vec![
+                zero,
+                zero,
+                zero,
+                PrimeFieldElement::new(2744, &_71),
+                zero,
+                PrimeFieldElement::new(2352, &_71),
+                zero,
+                PrimeFieldElement::new(5376, &_71),
+                zero,
+                PrimeFieldElement::new(4516, &_71),
+                zero,
+                PrimeFieldElement::new(4080, &_71),
+                zero,
+                PrimeFieldElement::new(2928, &_71),
+                zero,
+                PrimeFieldElement::new(1466, &_71),
+                zero,
+                PrimeFieldElement::new(684, &_71),
+                zero,
+                PrimeFieldElement::new(216, &_71),
+                zero,
+                PrimeFieldElement::new(27, &_71),
+            ],
+        };
+
+        assert_eq!(one_pol, pol.mod_pow(0.into(), one));
+        assert_eq!(pol, pol.mod_pow(1.into(), one));
+        assert_eq!(pol_squared, pol.mod_pow(2.into(), one));
+        assert_eq!(pol_cubed, pol.mod_pow(3.into(), one));
+
+        let parabola = Polynomial {
+            coefficients: vec![
+                PrimeFieldElement::new(5, &_71),
+                PrimeFieldElement::new(41, &_71),
+                PrimeFieldElement::new(19, &_71),
+            ],
+        };
+        let parabola_squared = Polynomial {
+            coefficients: vec![
+                PrimeFieldElement::new(25, &_71),
+                PrimeFieldElement::new(410, &_71),
+                PrimeFieldElement::new(1871, &_71),
+                PrimeFieldElement::new(1558, &_71),
+                PrimeFieldElement::new(361, &_71),
+            ],
+        };
+        assert_eq!(one_pol, parabola.mod_pow(0.into(), one));
+        assert_eq!(parabola, parabola.mod_pow(1.into(), one));
+        assert_eq!(parabola_squared, parabola.mod_pow(2.into(), one));
+    }
+
+    #[test]
     fn polynomial_arithmetic_property_based_test() {
         let prime_modulus = 71;
         let _71 = PrimeField::new(prime_modulus);
@@ -1218,6 +1469,13 @@ mod test_polynomials {
             assert!(b.degree() < (a_degree + i) as isize);
             assert!(mul_a_b.degree() <= ((a_degree - 1) * 2 + i) as isize);
             assert!(add_a_b.degree() < (a_degree + i) as isize);
+
+            let mut one = mul_a_b.clone() / mul_a_b.clone();
+            assert!(one.is_one());
+            one = a.clone() / a.clone();
+            assert!(one.is_one());
+            one = b.clone() / b.clone();
+            assert!(one.is_one());
         }
     }
 
@@ -1273,6 +1531,9 @@ mod test_polynomials {
             assert!(b.degree() < (a_degree + i) as isize);
             assert!(mul_a_b.degree() <= ((a_degree - 1) * 2 + i) as isize);
             assert!(add_a_b.degree() < (a_degree + i) as isize);
+
+            let one = mul_a_b.clone() / mul_a_b.clone();
+            assert!(one.is_one());
         }
     }
 
@@ -1302,8 +1563,11 @@ mod test_polynomials {
         let div_with_zero_alt = zero_alt.clone() / b.clone();
         let div_with_zero_alt_alt = zero_alt_alt.clone() / b.clone();
         assert!(div_with_zero.is_zero());
+        assert!(!div_with_zero.is_one());
         assert!(div_with_zero_alt.is_zero());
+        assert!(!div_with_zero_alt.is_one());
         assert!(div_with_zero_alt_alt.is_zero());
+        assert!(!div_with_zero_alt_alt.is_one());
         assert!(div_with_zero.coefficients.is_empty());
         assert!(div_with_zero_alt.coefficients.is_empty());
         assert!(div_with_zero_alt_alt.coefficients.is_empty());
