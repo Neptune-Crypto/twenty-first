@@ -24,10 +24,43 @@ impl PrimeFieldBig {
         Self { q }
     }
 
+    pub fn ring_zero(&self) -> PrimeFieldElementBig {
+        PrimeFieldElementBig {
+            value: 0.into(),
+            field: self,
+        }
+    }
+
+    pub fn ring_one(&self) -> PrimeFieldElementBig {
+        PrimeFieldElementBig {
+            value: 1.into(),
+            field: self,
+        }
+    }
+
+    pub fn from_bytes(&self, bytes: &[u8]) -> PrimeFieldElementBig {
+        PrimeFieldElementBig::from_bytes(self, bytes)
+    }
+
     // Verify that field prime is of the form a*k + b
     // where a, b, and k are all integers
     pub fn prime_check(&self, a: BigInt, b: BigInt) -> bool {
         self.q.clone() % a == b
+    }
+
+    pub fn get_generator_values<'a>(
+        &self,
+        generator: &PrimeFieldElementBig<'a>,
+        length: usize,
+    ) -> Vec<PrimeFieldElementBig<'a>> {
+        let mut output: Vec<PrimeFieldElementBig> = vec![];
+        let mut value: PrimeFieldElementBig = generator.ring_one();
+        for _ in 0..length {
+            output.push(value.clone());
+            value = value.clone() * generator.clone();
+        }
+
+        output
     }
 
     pub fn get_power_series(&self, root: BigInt) -> Vec<BigInt> {
