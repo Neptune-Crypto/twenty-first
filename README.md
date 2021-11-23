@@ -4,10 +4,14 @@ A collection of cryptography functions written in Rust.
 
 ## Setup
 ### Ubuntu
- - curl -- `apt install curl`
+ - curl -- `sudo apt install curl`
  - rustup -- `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` (installs rustup, cargo, rustc etc.)
- - gnuplot -- `apt install gnuplot`
- - build-essential (for `make`) -- `apt install build-essential`
+ - source the rust environment `source $HOME/.cargo/env`
+ - gnuplot -- `sudo apt install gnuplot`
+ - build-essential (for `make`) -- `sudo apt install build-essential`
+ - clone this repository -- `git clone git@github.com:Sword-Smith/twenty-first.git` and make sure to Google/DDG the Github SSH fingerprint before accepting it, if prompted
+ - install `vscode`
+ - in `vscode` install the plugin `rust-analyzer`
 
 ## Cheatsheet
 
@@ -17,7 +21,7 @@ A collection of cryptography functions written in Rust.
  - To format, use `make format`.
  - To build, use `make build`.
  - To install, use `make install`.
- - To run lint, compile, run tests use `make all`. Note that this does *not* run install.
+ - To run lint, compile, and run tests use `make all`. Note that this does *not* run install.
  - To run the benchmarks and generate the benchmark report, use `make bench`.
 
 ## Notes
