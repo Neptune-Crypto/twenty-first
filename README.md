@@ -12,6 +12,7 @@ A collection of cryptography functions written in Rust.
  - clone this repository -- `git clone git@github.com:Sword-Smith/twenty-first.git` and make sure to Google/DDG the Github SSH fingerprint before accepting it, if prompted
  - install `vscode`
  - in `vscode` install the plugin `rust-analyzer`
+ - in `vscode` activate format-on-save via `File` > `Preferences` > `Settings` then check the box for "Format on Save"
 
 ## Cheatsheet
 
