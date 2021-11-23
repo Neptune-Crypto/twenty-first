@@ -1,11 +1,10 @@
-use crate::shared_math::traits::{IdentityValues, New};
+use crate::shared_math::traits::{IdentityValues, ModPowU64, New};
 use crate::utils::{FIRST_TEN_THOUSAND_PRIMES, FIRST_THOUSAND_PRIMES};
 use num_bigint::BigInt;
 use num_traits::One;
 use num_traits::Zero;
 use serde::Serialize;
 use std::convert::Into;
-use std::fmt;
 use std::hash::Hash;
 use std::ops::Add;
 use std::ops::Div;
@@ -13,6 +12,7 @@ use std::ops::Mul;
 use std::ops::Neg;
 use std::ops::Rem;
 use std::ops::Sub;
+use std::{fmt, vec};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
 pub struct PrimeFieldBig {
@@ -24,10 +24,43 @@ impl PrimeFieldBig {
         Self { q }
     }
 
+    pub fn ring_zero(&self) -> PrimeFieldElementBig {
+        PrimeFieldElementBig {
+            value: 0.into(),
+            field: self,
+        }
+    }
+
+    pub fn ring_one(&self) -> PrimeFieldElementBig {
+        PrimeFieldElementBig {
+            value: 1.into(),
+            field: self,
+        }
+    }
+
+    pub fn from_bytes(&self, bytes: &[u8]) -> PrimeFieldElementBig {
+        PrimeFieldElementBig::from_bytes(self, bytes)
+    }
+
     // Verify that field prime is of the form a*k + b
     // where a, b, and k are all integers
     pub fn prime_check(&self, a: BigInt, b: BigInt) -> bool {
         self.q.clone() % a == b
+    }
+
+    pub fn get_generator_values<'a>(
+        &self,
+        generator: &PrimeFieldElementBig<'a>,
+        length: usize,
+    ) -> Vec<PrimeFieldElementBig<'a>> {
+        let mut output: Vec<PrimeFieldElementBig> = vec![];
+        let mut value: PrimeFieldElementBig = generator.ring_one();
+        for _ in 0..length {
+            output.push(value.clone());
+            value = value.clone() * generator.clone();
+        }
+
+        output
     }
 
     pub fn get_power_series(&self, root: BigInt) -> Vec<BigInt> {
@@ -238,6 +271,12 @@ pub struct PrimeFieldElementBig<'a> {
     pub field: &'a PrimeFieldBig,
 }
 
+impl<'a> ModPowU64 for PrimeFieldElementBig<'a> {
+    fn mod_pow_u64(&self, pow: u64) -> Self {
+        self.mod_pow(pow.into())
+    }
+}
+
 impl<'a> IdentityValues for PrimeFieldElementBig<'_> {
     fn ring_zero(&self) -> Self {
         Self {
@@ -407,6 +446,11 @@ impl<'a> PrimeFieldElementBig<'a> {
     }
 
     pub fn mod_pow_raw(&self, pow: BigInt) -> BigInt {
+        // Special case for handling 0^0 = 1
+        if pow.is_zero() {
+            return 1.into();
+        }
+
         let mut acc: BigInt = BigInt::one();
         let mod_value: BigInt = self.field.q.clone();
         let res = self.value.clone();
@@ -416,7 +460,7 @@ impl<'a> PrimeFieldElementBig<'a> {
         for i in 0..bit_length {
             acc = acc.clone() * acc.clone() % mod_value.clone();
             let set: bool =
-                !(pow.clone() & Into::<BigInt>::into(1 << (bit_length - 1 - i))).is_zero();
+                !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
             if set {
                 acc = acc * res.clone() % mod_value.clone();
             }
@@ -892,6 +936,7 @@ mod test_modular_arithmetic_big {
 
         // Now with an actual prime
         assert_eq!(_899_1931.value, b(899));
+        assert_eq!(_899_1931.mod_pow(b(0)).value, b(1));
         assert_eq!(_899_1931.mod_pow(b(1)).value, b(899));
         assert_eq!(_899_1931.mod_pow(b(2)).value, b(1043));
         assert_eq!(_899_1931.mod_pow(b(3)).value, b(1122));
@@ -908,6 +953,10 @@ mod test_modular_arithmetic_big {
         assert_eq!(_899_1931.mod_pow(b(14)).value, b(1093));
         assert_eq!(_899_1931.mod_pow(b(15)).value, b(1659));
         assert_eq!(_899_1931.mod_pow(b(1930)).value, b(1)); // Fermat's Little Theorem
+
+        // Test 0^0
+        let _0_1931 = _1931.ring_zero();
+        assert_eq!(_0_1931.mod_pow(b(0)).value, b(1));
 
         // Test the inverse function
         assert_eq!(_899_1931.inv().value, b(784));

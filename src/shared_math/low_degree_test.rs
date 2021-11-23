@@ -64,8 +64,6 @@ impl fmt::Display for ProveError {
 #[derive(PartialEq, Debug, Serialize, Clone)]
 pub struct LowDegreeProof<T>
 where
-    // DeserializeOwned is used here to indicate that no data is borrowed
-    // in the deserialization process.
     T: Clone + Debug + PartialEq + Serialize,
 {
     pub ab_proofs: Vec<Vec<CompressedAuthenticationPath<T>>>,
