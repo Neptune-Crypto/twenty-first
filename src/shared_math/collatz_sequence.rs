@@ -5,7 +5,7 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::stark::{StarkProofError, StarkVerifyError};
 use crate::shared_math::traits::IdentityValues;
-use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
+use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::utils;
 use serde::Serialize;
 use std::error::Error;
@@ -14,8 +14,8 @@ use std::error::Error;
 pub struct CollatzStarkProof {
     bq_merkle_root: [u8; 32],
     composition_polynomial_merkle_root: [u8; 32],
-    boundary_quotient_authentication_paths: Vec<CompressedAuthenticationPath<i128>>,
-    boundary_quotient_authentication_paths_next: Vec<CompressedAuthenticationPath<i128>>,
+    boundary_quotient_authentication_paths: Vec<PartialAuthenticationPath<i128>>,
+    boundary_quotient_authentication_paths_next: Vec<PartialAuthenticationPath<i128>>,
     composite_polynomial_fri: LowDegreeProof<i128>,
 }
 
@@ -386,12 +386,12 @@ impl CollatzStarkProof {
 
         let mut auth_path_size: u32 = bincode::deserialize(&transcript[index..index + 4])?;
         index += 4;
-        let boundary_quotient_authentication_paths: Vec<CompressedAuthenticationPath<i128>> =
+        let boundary_quotient_authentication_paths: Vec<PartialAuthenticationPath<i128>> =
             bincode::deserialize(&transcript[index..index + auth_path_size as usize])?;
         index += auth_path_size as usize;
         auth_path_size = bincode::deserialize(&transcript[index..index + 4])?;
         index += 4;
-        let boundary_quotient_authentication_paths_next: Vec<CompressedAuthenticationPath<i128>> =
+        let boundary_quotient_authentication_paths_next: Vec<PartialAuthenticationPath<i128>> =
             bincode::deserialize(&transcript[index..index + auth_path_size as usize])?;
 
         Ok((
@@ -737,13 +737,13 @@ pub fn stark_of_collatz_sequence_prove(
     // We *only* need to commit to the boundary quotient values here since the extended
     // trace, air codewords, and transition quotient can be calculated from the boundary
     // quotient codeword.
-    let boundary_quotient_authentication_paths: Vec<CompressedAuthenticationPath<i128>> =
+    let boundary_quotient_authentication_paths: Vec<PartialAuthenticationPath<i128>> =
         boundary_quotient_mt.get_multi_proof(&ab_indices_over_registers);
     let ab_indices_over_registers_next_step: Vec<usize> = ab_indices_over_registers
         .iter()
         .map(|x| (x + num_registers * expansion_factor) % (extended_domain_length * num_registers))
         .collect();
-    let boundary_quotient_authentication_paths_next: Vec<CompressedAuthenticationPath<i128>> =
+    let boundary_quotient_authentication_paths_next: Vec<PartialAuthenticationPath<i128>> =
         boundary_quotient_mt.get_multi_proof(&ab_indices_over_registers_next_step);
 
     // Serialize authentication paths

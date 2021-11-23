@@ -6,7 +6,7 @@ use crate::shared_math::prime_field_element::PrimeFieldElement;
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
 use crate::shared_math::stark::{StarkProofError, StarkVerifyError};
 use crate::shared_math::traits::{IdentityValues, New};
-use crate::util_types::merkle_tree::{CompressedAuthenticationPath, MerkleTree};
+use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::utils;
 use num_bigint::BigInt;
 use serde::de::DeserializeOwned;
@@ -25,12 +25,12 @@ use std::ops::Sub;
 pub struct MimcStarkProof<T: Clone + Debug + Serialize + PartialEq> {
     tuple_merkle_root: [u8; 32],
     linear_combination_merkle_root: [u8; 32],
-    air_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
-    next_air_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
+    air_tuple_authentication_paths: Vec<PartialAuthenticationPath<(T, T, T)>>,
+    next_air_tuple_authentication_paths: Vec<PartialAuthenticationPath<(T, T, T)>>,
     // TODO: Change this to three Merkle trees instead, do not store all triplets in a single
     // Merkle tree!
-    bc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
-    lc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(T, T, T)>>,
+    bc_tuple_authentication_paths: Vec<PartialAuthenticationPath<(T, T, T)>>,
+    lc_tuple_authentication_paths: Vec<PartialAuthenticationPath<(T, T, T)>>,
     linear_combination_fri: LowDegreeProof<T>,
     index_picker_preimage: Vec<u8>,
 }
@@ -354,28 +354,28 @@ impl<U: Clone + Debug + Display + DeserializeOwned + PartialEq + Serialize> Mimc
         // Get LC tuple authentication paths
         let mut proof_size: u32 = bincode::deserialize(&transcript[index..index + 4])?;
         index += 4;
-        let lc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(U, U, U)>> =
+        let lc_tuple_authentication_paths: Vec<PartialAuthenticationPath<(U, U, U)>> =
             bincode::deserialize_from(&transcript[index..index + proof_size as usize])?;
         index += proof_size as usize;
 
         // Get Next AIR tuple authentication paths
         proof_size = bincode::deserialize(&transcript[index..index + 4])?;
         index += 4;
-        let next_air_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(U, U, U)>> =
+        let next_air_tuple_authentication_paths: Vec<PartialAuthenticationPath<(U, U, U)>> =
             bincode::deserialize_from(&transcript[index..index + proof_size as usize])?;
         index += proof_size as usize;
 
         // Get AIR tuple authentication paths
         proof_size = bincode::deserialize(&transcript[index..index + 4])?;
         index += 4;
-        let air_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(U, U, U)>> =
+        let air_tuple_authentication_paths: Vec<PartialAuthenticationPath<(U, U, U)>> =
             bincode::deserialize_from(&transcript[index..index + proof_size as usize])?;
         index += proof_size as usize;
 
         // Get AIR boundary authentication paths
         proof_size = bincode::deserialize(&transcript[index..index + 4])?;
         index += 4;
-        let bc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(U, U, U)>> =
+        let bc_tuple_authentication_paths: Vec<PartialAuthenticationPath<(U, U, U)>> =
             bincode::deserialize_from(&transcript[index..index + proof_size as usize])?;
         index += proof_size as usize;
 
@@ -422,7 +422,7 @@ impl MimcStarkProof<BigInt> {
         // Note that the authentication paths *should* be checked in the verifier of the low-degree test.
         // So we don't need to check that here.
         let lc_tuple_authentication_paths: Vec<
-            CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>,
+            PartialAuthenticationPath<(BigInt, BigInt, BigInt)>,
         > = self.lc_tuple_authentication_paths.clone();
         let lc_paths_valid = MerkleTree::verify_multi_proof(
             self.tuple_merkle_root,
@@ -1025,7 +1025,7 @@ pub fn stark_of_mimc_prove(
         ab_indices.push(*b);
     }
 
-    let lc_tuple_authentication_paths: Vec<CompressedAuthenticationPath<(BigInt, BigInt, BigInt)>> =
+    let lc_tuple_authentication_paths: Vec<PartialAuthenticationPath<(BigInt, BigInt, BigInt)>> =
         tuple_merkle_tree.get_multi_proof(&ab_indices);
 
     // enable verification of transition constraint
