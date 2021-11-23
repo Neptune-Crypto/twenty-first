@@ -17,15 +17,18 @@ impl From<Vec<u8>> for ProofStream {
 
 impl Default for ProofStream {
     fn default() -> Self {
-        Self::new()
+        Self {
+            read_index: 0,
+            transcript: vec![],
+        }
     }
 }
 
 impl ProofStream {
-    pub fn new() -> Self {
+    pub fn new_with_prefix(prefix: &[u8]) -> Self {
         Self {
             read_index: 0,
-            transcript: vec![],
+            transcript: prefix.to_vec(),
         }
     }
 

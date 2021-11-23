@@ -1,3 +1,5 @@
+use num_bigint::BigInt;
+
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
 use crate::shared_math::stark::BoundaryConstraint;
 use crate::shared_math::traits::IdentityValues;
@@ -11,8 +13,8 @@ pub struct RescuePrime<'a> {
     // rate: usize,
     // capacity: usize,
     pub steps_count: usize,
-    alpha: PrimeFieldElementBig<'a>,
-    alpha_inv: PrimeFieldElementBig<'a>,
+    alpha: BigInt,
+    alpha_inv: BigInt,
     mds: Vec<Vec<PrimeFieldElementBig<'a>>>,
     mds_inv: Vec<Vec<PrimeFieldElementBig<'a>>>,
     round_constants: Vec<PrimeFieldElementBig<'a>>,
@@ -185,11 +187,8 @@ impl<'a> RescuePrime<'a> {
             // rate: 1,
             // capacity: 1,
             steps_count: 27,
-            alpha: PrimeFieldElementBig::new(3.into(), field),
-            alpha_inv: PrimeFieldElementBig::new(
-                180331931428153586757283157844700080811u128.into(),
-                field,
-            ),
+            alpha: 3.into(),
+            alpha_inv: 180331931428153586757283157844700080811u128.into(),
             mds,
             mds_inv,
             round_constants,
@@ -204,7 +203,7 @@ impl<'a> RescuePrime<'a> {
         // S-box
         let mut state: Vec<PrimeFieldElementBig<'a>> = input_state
             .iter()
-            .map(|v| v.mod_pow(self.alpha.value.clone()))
+            .map(|v| v.mod_pow(self.alpha.clone()))
             .collect();
 
         // Matrix
@@ -227,7 +226,7 @@ impl<'a> RescuePrime<'a> {
         // S-box
         state = state
             .iter()
-            .map(|v| v.mod_pow(self.alpha_inv.value.clone()))
+            .map(|v| v.mod_pow(self.alpha_inv.clone()))
             .collect();
 
         // Matrix
@@ -275,6 +274,16 @@ impl<'a> RescuePrime<'a> {
         }
 
         trace
+    }
+
+    pub fn eval_and_trace(
+        &self,
+        input: &PrimeFieldElementBig<'a>,
+    ) -> (PrimeFieldElementBig, Vec<Vec<PrimeFieldElementBig>>) {
+        let trace = self.trace(input);
+        let output = trace.last().unwrap()[0].clone();
+
+        (output, trace)
     }
 
     /// Return a pair of a list of polynomials, first element in the pair,
@@ -354,7 +363,7 @@ impl<'a> RescuePrime<'a> {
             for k in 0..self.m {
                 lhs = lhs
                     + previous_state[k]
-                        .mod_pow(self.alpha.value.clone(), one.clone())
+                        .mod_pow(self.alpha.clone(), one.clone())
                         .scalar_mul(self.mds[i][k].clone());
             }
             lhs = lhs + first_step_constants[i].clone();
@@ -365,7 +374,7 @@ impl<'a> RescuePrime<'a> {
                     + (next_state[k].clone() - second_step_constants[k].clone())
                         .scalar_mul(self.mds_inv[i][k].clone());
             }
-            rhs = rhs.mod_pow(self.alpha.value.clone(), one.clone());
+            rhs = rhs.mod_pow(self.alpha.clone(), one.clone());
 
             air.push(lhs - rhs);
         }
@@ -394,7 +403,7 @@ impl<'a> RescuePrime<'a> {
 
 #[cfg(test)]
 mod rescue_prime_start_test {
-    use crate::shared_math::stark::Stark;
+    use crate::{shared_math::stark::Stark, util_types::proof_stream::ProofStream};
 
     use super::*;
 
@@ -516,6 +525,12 @@ mod rescue_prime_start_test {
         let hash_result = trace.last().unwrap()[0].clone();
         let boundary_constraints: Vec<BoundaryConstraint> =
             rescue_prime_stark.get_boundary_constraints(&hash_result);
-        let _proof = stark.prove(trace, air_constraints, boundary_constraints);
+        let mut proof_stream = ProofStream::default();
+        let _proof = stark.prove(
+            trace,
+            air_constraints,
+            boundary_constraints,
+            &mut proof_stream,
+        );
     }
 }

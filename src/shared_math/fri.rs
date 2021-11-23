@@ -522,7 +522,7 @@ mod test_fri {
         assert_eq!(228, field_elements.len());
 
         let fri = Fri::new(generator, primitive_root_of_unity, 4, 2, 1, 229.into());
-        let mut proof_stream: ProofStream = ProofStream::new();
+        let mut proof_stream: ProofStream = ProofStream::default();
         fri.prove(&power_series, &mut proof_stream).unwrap();
 
         let verify_result = fri.verify(&mut proof_stream);
@@ -562,8 +562,7 @@ mod test_fri {
             field.q.clone(),
         );
         // let output = vec![123, 20];
-        let mut output = vec![];
-        let mut proof_stream: ProofStream = output.into();
+        let mut proof_stream: ProofStream = ProofStream::default();
         // proof_stream.set_index(output.len());
         fri.prove(&y_values, &mut proof_stream).unwrap();
         let mut verify_result = fri.verify(&mut proof_stream);
@@ -583,8 +582,7 @@ mod test_fri {
         for i in 0..expansion_factor {
             y_values[i] = 0.into();
         }
-        output = vec![];
-        proof_stream = output.into();
+        proof_stream = ProofStream::default();
         fri.prove(&y_values, &mut proof_stream).unwrap();
         verify_result = fri.verify(&mut proof_stream);
         assert!(!verify_result.is_ok(), "FRI verification must not succeed");
