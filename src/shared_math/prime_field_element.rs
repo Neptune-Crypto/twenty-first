@@ -1,4 +1,4 @@
-use crate::shared_math::traits::{IdentityValues, New};
+use crate::shared_math::traits::{IdentityValues, ModPowU64, New};
 use crate::utils::{FIRST_TEN_THOUSAND_PRIMES, FIRST_THOUSAND_PRIMES};
 use serde::Serialize;
 use std::fmt;
@@ -17,6 +17,20 @@ pub struct PrimeField {
 impl PrimeField {
     pub fn new(q: i128) -> Self {
         Self { q }
+    }
+
+    pub fn ring_zero(&self) -> PrimeFieldElement {
+        PrimeFieldElement {
+            value: 0.into(),
+            field: self,
+        }
+    }
+
+    pub fn ring_one(&self) -> PrimeFieldElement {
+        PrimeFieldElement {
+            value: 1.into(),
+            field: self,
+        }
     }
 
     // Verify that field prime is of the form a*k + b
@@ -202,6 +216,12 @@ pub struct PrimeFieldElement<'a> {
     pub field: &'a PrimeField,
 }
 
+impl<'a> ModPowU64 for PrimeFieldElement<'a> {
+    fn mod_pow_u64(&self, pow: u64) -> Self {
+        self.mod_pow(pow.into())
+    }
+}
+
 impl<'a> IdentityValues for PrimeFieldElement<'_> {
     fn ring_zero(&self) -> Self {
         Self {
@@ -369,6 +389,11 @@ impl<'a> PrimeFieldElement<'a> {
     }
 
     pub fn mod_pow_raw(&self, pow: i128) -> i128 {
+        // Special case for handling 0^0 = 1
+        if pow == 0 {
+            return 1.into();
+        }
+
         let mut acc: i128 = 1;
         let mod_value: i128 = self.field.q;
         let res = self.value;
@@ -770,6 +795,10 @@ mod test_modular_arithmetic {
         assert_eq!(_899_1931.mod_pow(14).value, 1093);
         assert_eq!(_899_1931.mod_pow(15).value, 1659);
         assert_eq!(_899_1931.mod_pow(1930).value, 1); // Fermat's Little Theorem
+
+        // Test 0^0
+        let _0_1931 = _1931.ring_zero();
+        assert_eq!(_0_1931.mod_pow(0).value, 1);
 
         // Test the inverse function
         println!("{}", _899_1931.inv().value);
