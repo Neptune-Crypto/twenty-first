@@ -872,6 +872,14 @@ pub fn get_index_from_bytes(buf: &[u8], length: usize) -> usize {
     result
 }
 
+// Used in Merkle Tree tests and in STARK tests
+#[allow(dead_code)]
+pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+        .collect()
+}
 // pub fn get_index_from_bytes_exclude_multiples(buf: &[u8], length: usize, multiple: usize) -> usize {
 //     let options = length - length / multiple;
 //     let x = get_index_from_bytes(buf, options);
@@ -929,13 +937,4 @@ mod test_utils {
         let v = vec![10, 20, 30, 40, 50];
         assert!(has_unique_elements(v));
     }
-}
-
-// Used in Merkle Tree tests
-#[allow(dead_code)]
-pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
-    (0..s.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
-        .collect()
 }

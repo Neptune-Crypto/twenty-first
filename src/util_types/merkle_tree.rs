@@ -68,6 +68,13 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         v.hash == root_hash && expected_hash == proof[0].hash
     }
 
+    pub fn to_vec(&self) -> Vec<T> {
+        self.nodes[self.nodes.len() / 2..self.nodes.len()]
+            .iter()
+            .map(|x| x.value.clone().unwrap())
+            .collect()
+    }
+
     pub fn from_vec(values: &[T]) -> Self {
         // verify that length of input is power of 2
         if values.len() & (values.len() - 1) != 0 {

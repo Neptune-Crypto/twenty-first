@@ -9,6 +9,10 @@ pub trait IdentityValues {
     fn ring_one(&self) -> Self;
 }
 
+pub trait ModPowU64 {
+    fn mod_pow_u64(&self, pow: u64) -> Self;
+}
+
 // We *cannot* use the std library From/Into traits as they cannot
 // capture which field the new element is a member of.
 pub trait New {
