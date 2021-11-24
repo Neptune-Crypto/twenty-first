@@ -67,7 +67,7 @@ fn pretty_print_coefficients_generic<T: Add + Div + Mul + Rem + Sub + IdentityVa
     outputs.join("")
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Polynomial<
     T: Add + Div + Mul + Rem + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
 > {
@@ -96,6 +96,54 @@ impl<
             pretty_print_coefficients_generic(&self.coefficients)
         )
     }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Rem
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + PartialEq
+            + Eq
+            + Hash
+            + Display
+            + Debug,
+    > PartialEq for Polynomial<U>
+{
+    fn eq(&self, other: &Self) -> bool {
+        if self.degree() != other.degree() {
+            return false;
+        }
+
+        if self.degree() == -1 {
+            return true;
+        }
+
+        self.coefficients
+            .iter()
+            .zip(other.coefficients.iter())
+            .all(|(x, y)| x == y)
+    }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Rem
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + PartialEq
+            + Eq
+            + Hash
+            + Display
+            + Debug,
+    > Eq for Polynomial<U>
+{
 }
 
 impl<
