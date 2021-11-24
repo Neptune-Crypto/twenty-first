@@ -1,3 +1,4 @@
+use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::traits::IdentityValues;
 use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
@@ -7,11 +8,13 @@ use num_traits::Zero;
 use std::convert::From;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::ops::Add;
 use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::Sub;
+use std::ops::{Add, Neg};
+
+use super::traits::{ModPowU64, New};
 
 fn degree_raw<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
     coefficients: &[T],
@@ -381,6 +384,80 @@ impl<
         let ys: Vec<U> = points.iter().map(|x| x.1.to_owned()).collect();
 
         Self::slow_lagrange_interpolation_internal(&xs, &ys)
+    }
+}
+
+// pub fn fast_multiply(lhs: Self, rhs: Self, primitive_root: U, root_order: usize) {
+//     assert!()
+// }
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Neg<Output = U>
+            + New
+            + Rem
+            + ModPowU64
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + std::fmt::Debug
+            + std::fmt::Display
+            + PartialEq
+            + Eq
+            + Hash,
+    > Polynomial<U>
+{
+    pub fn fast_multiply(lhs: &Self, rhs: &Self, primitive_root: &U, root_order: usize) -> Self {
+        assert!(
+            primitive_root.mod_pow_u64(root_order as u64).is_one(),
+            "provided primitive root must have the provided power."
+        );
+        assert!(
+            !primitive_root.mod_pow_u64(root_order as u64 / 2).is_one(),
+            "provided primitive root must be primitive in the right power."
+        );
+
+        if lhs.is_zero() || rhs.is_zero() {
+            return Self::ring_zero();
+        }
+
+        let mut root: U = primitive_root.to_owned();
+        let mut order = root_order;
+        let lhs_degree = lhs.degree() as usize;
+        let rhs_degree = rhs.degree() as usize;
+        let degree = lhs_degree + rhs_degree;
+
+        while degree < order / 2 {
+            root = root.clone() * root.clone();
+            order /= 2;
+        }
+
+        let mut lhs_coefficients: Vec<U> = lhs.coefficients[0..lhs_degree + 1].to_vec();
+        let mut rhs_coefficients: Vec<U> = rhs.coefficients[0..rhs_degree + 1].to_vec();
+        while lhs_coefficients.len() < order {
+            lhs_coefficients.push(root.ring_zero());
+        }
+        while rhs_coefficients.len() < order {
+            rhs_coefficients.push(root.ring_zero());
+        }
+
+        let lhs_codeword: Vec<U> = ntt(&lhs_coefficients, &root);
+        let rhs_codeword: Vec<U> = ntt(&rhs_coefficients, &root);
+
+        let hadamard_product: Vec<U> = rhs_codeword
+            .into_iter()
+            .zip(lhs_codeword.into_iter())
+            .map(|(r, l)| r * l)
+            .collect();
+
+        let mut res_coefficients = intt(&hadamard_product, &root);
+        res_coefficients.truncate(degree + 1);
+
+        Polynomial {
+            coefficients: res_coefficients,
+        }
     }
 }
 
@@ -1841,6 +1918,81 @@ mod test_polynomials {
                 linear_combination.evaluate(&x_values[i])
             );
         }
+    }
+
+    #[test]
+    fn fast_multiply_test() {
+        let _65537 = PrimeFieldBig::new(65537.into());
+        let primitive_root = _65537.get_primitive_root_of_unity(32).0.unwrap();
+        println!("primitive_root = {}", primitive_root);
+        let a: Polynomial<PrimeFieldElementBig> = Polynomial {
+            coefficients: vec![
+                pfb(1, &_65537),
+                pfb(2, &_65537),
+                pfb(3, &_65537),
+                pfb(4, &_65537),
+                pfb(5, &_65537),
+                pfb(6, &_65537),
+                pfb(7, &_65537),
+                pfb(8, &_65537),
+                pfb(9, &_65537),
+                pfb(10, &_65537),
+            ],
+        };
+        let b: Polynomial<PrimeFieldElementBig> = Polynomial {
+            coefficients: vec![
+                pfb(1, &_65537),
+                pfb(2, &_65537),
+                pfb(3, &_65537),
+                pfb(4, &_65537),
+                pfb(5, &_65537),
+                pfb(6, &_65537),
+                pfb(7, &_65537),
+                pfb(8, &_65537),
+                pfb(9, &_65537),
+                pfb(17, &_65537),
+            ],
+        };
+        let c_fast = Polynomial::fast_multiply(&a, &b, &primitive_root, 32);
+        let c_normal = a.clone() * b.clone();
+        println!("c_normal = {}", c_normal);
+        println!("c_fast = {}", c_fast);
+        assert_eq!(c_normal, c_fast);
+        assert_eq!(
+            Polynomial::ring_zero(),
+            Polynomial::fast_multiply(&Polynomial::ring_zero(), &b, &primitive_root, 32)
+        );
+        assert_eq!(
+            Polynomial::ring_zero(),
+            Polynomial::fast_multiply(&a, &Polynomial::ring_zero(), &primitive_root, 32)
+        );
+
+        let one: Polynomial<PrimeFieldElementBig> = Polynomial {
+            coefficients: vec![pfb(1, &_65537)],
+        };
+        assert_eq!(a, Polynomial::fast_multiply(&a, &one, &primitive_root, 32));
+        assert_eq!(a, Polynomial::fast_multiply(&one, &a, &primitive_root, 32));
+        assert_eq!(b, Polynomial::fast_multiply(&b, &one, &primitive_root, 32));
+        assert_eq!(b, Polynomial::fast_multiply(&one, &b, &primitive_root, 32));
+        let x: Polynomial<PrimeFieldElementBig> = Polynomial {
+            coefficients: vec![pfb(0, &_65537), pfb(1, &_65537)],
+        };
+        assert_eq!(
+            a.shift_coefficients(1, _65537.ring_zero()),
+            Polynomial::fast_multiply(&x, &a, &primitive_root, 32)
+        );
+        assert_eq!(
+            a.shift_coefficients(1, _65537.ring_zero()),
+            Polynomial::fast_multiply(&a, &x, &primitive_root, 32)
+        );
+        assert_eq!(
+            b.shift_coefficients(1, _65537.ring_zero()),
+            Polynomial::fast_multiply(&x, &b, &primitive_root, 32)
+        );
+        assert_eq!(
+            b.shift_coefficients(1, _65537.ring_zero()),
+            Polynomial::fast_multiply(&b, &x, &primitive_root, 32)
+        );
     }
 
     #[test]
