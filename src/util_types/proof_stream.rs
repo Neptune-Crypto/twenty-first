@@ -1,6 +1,7 @@
 use serde::{de::DeserializeOwned, Serialize};
-use std::{error::Error, result::Result};
+use std::{error::Error, fmt, result::Result};
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct ProofStream {
     read_index: usize,
     transcript: Vec<u8>,
@@ -21,6 +22,19 @@ impl Default for ProofStream {
             read_index: 0,
             transcript: vec![],
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ProofStreamError {
+    TranscriptLengthExceeded,
+}
+
+impl Error for ProofStreamError {}
+
+impl fmt::Display for ProofStreamError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -49,6 +63,10 @@ impl ProofStream {
     }
 
     pub fn set_index(&mut self, new_index: usize) {
+        assert!(
+            new_index <= self.transcript.len(),
+            "new_index cannot exceed transcript length"
+        );
         self.read_index = new_index;
     }
 
@@ -79,6 +97,10 @@ impl ProofStream {
     where
         T: DeserializeOwned,
     {
+        if byte_length + self.read_index > self.transcript.len() {
+            return Err(Box::new(ProofStreamError::TranscriptLengthExceeded));
+        }
+
         let item: T =
             bincode::deserialize(&self.transcript[self.read_index..self.read_index + byte_length])?;
         self.read_index += byte_length;
@@ -93,6 +115,10 @@ impl ProofStream {
         let item_length: u32 =
             bincode::deserialize(&self.transcript[self.read_index..self.read_index + 4])?;
         self.read_index += 4;
+        if item_length as usize + self.read_index > self.transcript.len() {
+            return Err(Box::new(ProofStreamError::TranscriptLengthExceeded));
+        }
+
         let item: T = bincode::deserialize(
             &self.transcript[self.read_index..self.read_index + item_length as usize],
         )?;

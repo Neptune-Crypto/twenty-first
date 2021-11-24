@@ -63,8 +63,6 @@ impl<'a> Stark<'a> {
             .0
             .unwrap();
         let omicron = omega.mod_pow(expansion_factor.into());
-        println!("omega = {}", omega);
-        println!("omicron = {}", omicron);
 
         // Verify omega and omicron values
         assert!(
@@ -521,10 +519,10 @@ impl<'a> Stark<'a> {
         // Get Merkle root of boundary quotient codewords
         let mut boundary_quotient_mt_roots: Vec<[u8; 32]> = vec![];
         for _ in 0..self.register_count {
-            boundary_quotient_mt_roots.push(proof_stream.dequeue(32).unwrap());
+            boundary_quotient_mt_roots.push(proof_stream.dequeue(32)?);
         }
 
-        let randomizer_mt_root: [u8; 32] = proof_stream.dequeue(32).unwrap();
+        let randomizer_mt_root: [u8; 32] = proof_stream.dequeue(32)?;
 
         // Get weights for nonlinear combination
         // 1 weight element for randomizer
