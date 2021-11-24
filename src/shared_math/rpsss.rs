@@ -113,6 +113,7 @@ mod test_rpsss {
         let verify_duration = start.elapsed();
         println!("Proof time: {:?}", proof_duration);
         println!("Verification time: {:?}", verify_duration);
+        println!("proof-size: {} bytes", signature.proof.len());
 
         if let Some(last) = signature.proof.last_mut() {
             *last = *last ^ 0x01;
