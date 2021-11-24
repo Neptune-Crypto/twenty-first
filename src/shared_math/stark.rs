@@ -514,12 +514,10 @@ impl<'a> Stark<'a> {
 
     pub fn verify(
         &self,
-        proof: &[u8],
+        proof_stream: &mut ProofStream,
         transition_constraints: Vec<MPolynomial<PrimeFieldElementBig>>,
         boundary_constraints: Vec<BoundaryConstraint>,
     ) -> Result<(), Box<dyn Error>> {
-        let mut proof_stream: ProofStream = proof.to_vec().into();
-
         // Get Merkle root of boundary quotient codewords
         let mut boundary_quotient_mt_roots: Vec<[u8; 32]> = vec![];
         for _ in 0..self.register_count {
@@ -541,7 +539,7 @@ impl<'a> Stark<'a> {
         // Verify low degree of combination polynomial, and collect indices
         // Note that FRI verifier verifies number of samples, so we don't have
         // to check that number here
-        let polynomial_values = self.fri.verify(&mut proof_stream)?;
+        let polynomial_values = self.fri.verify(proof_stream)?;
 
         let indices: Vec<usize> = polynomial_values.iter().map(|(i, _y)| *i).collect();
         let values: Vec<BigInt> = polynomial_values.iter().map(|(_i, y)| y.clone()).collect();
@@ -688,14 +686,14 @@ impl<'a> Stark<'a> {
 }
 
 #[cfg(test)]
-mod test_stark {
+pub mod test_stark {
     use num_bigint::BigInt;
 
     use crate::shared_math::rescue_prime_stark::RescuePrime;
 
     use super::*;
 
-    fn get_tutorial_objects<'a>(field: &'a PrimeFieldBig) -> (Stark<'a>, RescuePrime<'a>) {
+    pub fn get_tutorial_stark<'a>(field: &'a PrimeFieldBig) -> (Stark<'a>, RescuePrime<'a>) {
         let expansion_factor = 4;
         let colinearity_checks_count = 2;
         let rescue_prime = RescuePrime::from_tutorial(&field);
@@ -737,7 +735,7 @@ mod test_stark {
     fn boundary_quotient_degree_bounds_test() {
         let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
         let field = PrimeFieldBig::new(modulus);
-        let (stark, rescue_prime) = get_tutorial_objects(&field);
+        let (stark, rescue_prime) = get_tutorial_stark(&field);
         let input = PrimeFieldElementBig::new(228894434762048332457318u128.into(), &field);
         let output_element = rescue_prime.hash(&input);
         let boundary_constraints = rescue_prime.get_boundary_constraints(&output_element);
@@ -752,7 +750,7 @@ mod test_stark {
     fn max_degree_test() {
         let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
         let field = PrimeFieldBig::new(modulus);
-        let (stark, rescue_prime) = get_tutorial_objects(&field);
+        let (stark, rescue_prime) = get_tutorial_stark(&field);
         let res = stark.max_degree(&rescue_prime.get_air_constraints(&stark.omicron));
         assert_eq!(127usize, res);
     }
@@ -761,7 +759,7 @@ mod test_stark {
     fn transition_quotient_degree_bounds_test() {
         let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
         let field = PrimeFieldBig::new(modulus);
-        let (stark, rescue_prime) = get_tutorial_objects(&field);
+        let (stark, rescue_prime) = get_tutorial_stark(&field);
         let res = stark
             .transition_quotient_degree_bounds(&rescue_prime.get_air_constraints(&stark.omicron));
         // tq.degree()
@@ -774,7 +772,7 @@ mod test_stark {
     fn transition_degree_bounds_test() {
         let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
         let field = PrimeFieldBig::new(modulus);
-        let (stark, rescue_prime) = get_tutorial_objects(&field);
+        let (stark, rescue_prime) = get_tutorial_stark(&field);
         let res = stark.transition_degree_bounds(&rescue_prime.get_air_constraints(&stark.omicron));
         assert_eq!(vec![105, 105], res);
     }
@@ -783,7 +781,7 @@ mod test_stark {
     fn rescue_prime_stark() {
         let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
         let field = PrimeFieldBig::new(modulus);
-        let (stark, rescue_prime) = get_tutorial_objects(&field);
+        let (stark, rescue_prime) = get_tutorial_stark(&field);
 
         let input = PrimeFieldElementBig::new(228894434762048332457318u128.into(), &field);
         let trace = rescue_prime.trace(&input);
@@ -803,7 +801,7 @@ mod test_stark {
             Err(_) => panic!("Failed to produce STARK proof."),
         }
         let verify = stark.verify(
-            &proof_stream.serialize(),
+            &mut proof_stream,
             transition_constraints,
             boundary_constraints,
         );
