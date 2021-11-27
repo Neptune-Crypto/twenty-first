@@ -389,10 +389,6 @@ impl<
     }
 }
 
-// pub fn fast_multiply(lhs: Self, rhs: Self, primitive_root: U, root_order: usize) {
-//     assert!()
-// }
-
 impl<
         U: Add<Output = U>
             + Div<Output = U>
