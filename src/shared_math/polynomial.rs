@@ -483,6 +483,35 @@ impl<
         let right = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
         Self::fast_multiply(&left, &right, primitive_root, root_order)
     }
+
+    pub fn fast_evaluate(&self, domain: &[U], primitive_root: &U, root_order: usize) -> Vec<U> {
+        if domain.is_empty() {
+            return vec![];
+        }
+
+        if domain.len() == 1 {
+            return vec![self.evaluate(&domain[0])];
+        }
+
+        let half = domain.len() / 2;
+
+        let left_zerofier = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
+        let right_zerofier = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+
+        let mut left = (self.clone() % left_zerofier).fast_evaluate(
+            &domain[..half],
+            primitive_root,
+            root_order,
+        );
+        let mut right = (self.clone() % right_zerofier).fast_evaluate(
+            &domain[half..],
+            primitive_root,
+            root_order,
+        );
+
+        left.append(&mut right);
+        left
+    }
 }
 
 impl<
@@ -2019,7 +2048,6 @@ mod test_polynomials {
         );
     }
 
-    // XXX
     #[test]
     fn fast_zerofier_test() {
         let _17 = PrimeField::new(17);
@@ -2061,6 +2089,31 @@ mod test_polynomials {
             "expecting {} = 0 when x = 10",
             actual_2
         );
+    }
+
+    #[test]
+    fn fast_evaluate_test() {
+        let _17 = PrimeField::new(17);
+        let _0_17 = _17.ring_zero();
+        let _1_17 = _17.ring_one();
+        let _3_17 = PrimeFieldElement::new(3, &_17);
+        let _5_17 = PrimeFieldElement::new(5, &_17);
+
+        // x^5 + x^3
+        let poly = Polynomial {
+            coefficients: vec![_0_17, _0_17, _0_17, _1_17, _0_17, _1_17],
+        };
+
+        let _6_17 = PrimeFieldElement::new(6, &_17);
+        let _12_17 = PrimeFieldElement::new(12, &_17);
+        let domain = vec![_6_17, _12_17];
+
+        let actual = poly.fast_evaluate(&domain, &_3_17, 16);
+        let expected_6 = _6_17.mod_pow(5) + _6_17.mod_pow(3);
+        assert_eq!(expected_6, actual[0]);
+
+        let expected_12 = _12_17.mod_pow(5) + _12_17.mod_pow(3);
+        assert_eq!(expected_12, actual[1]);
     }
 
     #[test]
