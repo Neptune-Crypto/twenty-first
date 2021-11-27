@@ -194,12 +194,14 @@ impl<
         let mut acc = x.ring_zero();
         for c in self.coefficients.iter().rev() {
             acc = c.to_owned() + x.to_owned() * acc;
+            // acc = c + x * &acc;
         }
 
         acc
     }
 
     // Return the polynomial which corresponds to the transformation `x -> alpha * x`
+    // x should probably be called alpha below
     pub fn scale(&self, x: &U) -> Self {
         let mut acc = x.ring_one();
         let mut return_coefficients = self.coefficients.clone();
@@ -429,6 +431,10 @@ impl<
         let rhs_degree = rhs.degree() as usize;
         let degree = lhs_degree + rhs_degree;
 
+        if degree < 8 {
+            return lhs.to_owned() * rhs.to_owned();
+        }
+
         while degree < order / 2 {
             root = root.clone() * root.clone();
             order /= 2;
@@ -458,6 +464,28 @@ impl<
         Polynomial {
             coefficients: res_coefficients,
         }
+    }
+
+    // domain: polynomium roots
+    pub fn fast_zerofier(domain: &[U], primitive_root: &U, root_order: usize) -> Self {
+        // assert(primitive_root^root_order == primitive_root.field.one()), "supplied root does not have supplied order"
+        // assert(primitive_root^(root_order//2) != primitive_root.field.one()), "supplied root is not primitive root of supplied order"
+
+        if domain.is_empty() {
+            return Self::ring_zero();
+        }
+
+        if domain.len() == 1 {
+            return Self {
+                coefficients: vec![-domain[0].clone(), primitive_root.ring_one()],
+            };
+        }
+
+        let half = domain.len() / 2;
+
+        let left = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
+        let right = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+        Self::fast_multiply(&left, &right, primitive_root, root_order)
     }
 }
 
@@ -1992,6 +2020,50 @@ mod test_polynomials {
         assert_eq!(
             b.shift_coefficients(1, _65537.ring_zero()),
             Polynomial::fast_multiply(&b, &x, &primitive_root, 32)
+        );
+    }
+
+    // XXX
+    #[test]
+    fn fast_zerofier_test() {
+        let _17 = PrimeField::new(17);
+        let _1_17 = PrimeFieldElement::new(1, &_17);
+        let _5_17 = PrimeFieldElement::new(5, &_17);
+        let _9_17 = PrimeFieldElement::new(9, &_17);
+        let root_order = 8;
+        let domain = vec![_1_17, _5_17];
+        let actual = Polynomial::fast_zerofier(&domain, &_9_17, root_order);
+        assert!(
+            actual.evaluate(&_1_17).is_zero(),
+            "expecting {} = 0 when x = 1",
+            actual
+        );
+        assert!(
+            actual.evaluate(&_5_17).is_zero(),
+            "expecting {} = 0 when x = 5",
+            actual
+        );
+        assert!(
+            !actual.evaluate(&_9_17).is_zero(),
+            "expecting {} != 0 when x = 9",
+            actual
+        );
+
+        let _3_17 = PrimeFieldElement::new(3, &_17);
+        let _7_17 = PrimeFieldElement::new(7, &_17);
+        let _10_17 = PrimeFieldElement::new(10, &_17);
+        let root_order_2 = 16;
+        let domain_2 = vec![_7_17, _10_17];
+        let actual_2 = Polynomial::fast_zerofier(&domain_2, &_3_17, root_order_2);
+        assert!(
+            actual_2.evaluate(&_7_17).is_zero(),
+            "expecting {} = 0 when x = 7",
+            actual_2
+        );
+        assert!(
+            actual_2.evaluate(&_10_17).is_zero(),
+            "expecting {} = 0 when x = 10",
+            actual_2
         );
     }
 
