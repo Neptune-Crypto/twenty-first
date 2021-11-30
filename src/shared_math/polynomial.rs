@@ -512,6 +512,84 @@ impl<
         left.append(&mut right);
         left
     }
+
+    pub fn fast_interpolate(
+        domain: &[U],
+        values: &[U],
+        primitive_root: &U,
+        root_order: usize,
+    ) -> Self {
+        assert_eq!(
+            domain.len(),
+            values.len(),
+            "Domain and values lengths must match"
+        );
+        assert_eq!(
+            domain.len(),
+            root_order,
+            "Domain length and root order must match"
+        );
+        assert!(primitive_root.mod_pow_u64(root_order as u64).is_one());
+
+        if domain.is_empty() {
+            return Self::ring_zero();
+        }
+
+        if domain.len() == 1 {
+            return Polynomial {
+                coefficients: vec![values[0].clone()],
+            };
+        }
+
+        assert!(!primitive_root.mod_pow_u64(root_order as u64 / 2).is_one());
+
+        let half = domain.len() / 2;
+        let primitive_root_squared = primitive_root.to_owned() * primitive_root.to_owned();
+
+        let left_zerofier =
+            Self::fast_zerofier(&domain[..half], &primitive_root_squared, root_order / 2);
+        let right_zerofier =
+            Self::fast_zerofier(&domain[half..], &primitive_root_squared, root_order / 2);
+
+        let left_offset: Vec<U> = Self::fast_evaluate(
+            &right_zerofier,
+            &domain[..half],
+            &primitive_root_squared,
+            root_order / 2,
+        );
+        let right_offset: Vec<U> = Self::fast_evaluate(
+            &left_zerofier,
+            &domain[half..],
+            &primitive_root_squared,
+            root_order / 2,
+        );
+
+        let left_targets: Vec<U> = values[..half]
+            .iter()
+            .zip(left_offset)
+            .map(|(n, d)| n.to_owned() / d)
+            .collect();
+        let right_targets: Vec<U> = values[half..]
+            .iter()
+            .zip(right_offset)
+            .map(|(n, d)| n.to_owned() / d)
+            .collect();
+
+        let left_interpolant = Self::fast_interpolate(
+            &domain[..half],
+            &left_targets,
+            &primitive_root_squared,
+            root_order / 2,
+        );
+        let right_interpolant = Self::fast_interpolate(
+            &domain[half..],
+            &right_targets,
+            &primitive_root_squared,
+            root_order / 2,
+        );
+
+        left_interpolant * right_zerofier + right_interpolant * left_zerofier
+    }
 }
 
 impl<
@@ -2114,6 +2192,30 @@ mod test_polynomials {
 
         let expected_12 = _12_17.mod_pow(5) + _12_17.mod_pow(3);
         assert_eq!(expected_12, actual[1]);
+    }
+
+    #[test]
+    fn fast_interpolate_test() {
+        let _17 = PrimeField::new(17);
+        let _0_17 = _17.ring_zero();
+        let _1_17 = _17.ring_one();
+        let _13_17 = PrimeFieldElement::new(13, &_17);
+        let _5_17 = PrimeFieldElement::new(5, &_17);
+
+        // x^3 + x^1
+        let poly = Polynomial {
+            coefficients: vec![_0_17, _1_17, _0_17, _1_17],
+        };
+
+        let _6_17 = PrimeFieldElement::new(6, &_17);
+        let _7_17 = PrimeFieldElement::new(7, &_17);
+        let _8_17 = PrimeFieldElement::new(8, &_17);
+        let _9_17 = PrimeFieldElement::new(9, &_17);
+        let domain = vec![_6_17, _7_17, _8_17, _9_17];
+
+        let evals = poly.fast_evaluate(&domain, &_13_17, 4);
+        let reinterp = Polynomial::fast_interpolate(&domain, &evals, &_13_17, 4);
+        assert_eq!(poly, reinterp);
     }
 
     #[test]
