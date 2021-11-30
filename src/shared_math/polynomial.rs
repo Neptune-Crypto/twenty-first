@@ -590,6 +590,12 @@ impl<
 
         left_interpolant * right_zerofier + right_interpolant * left_zerofier
     }
+
+    pub fn fast_coset_evaluate(&self, offset: &U, generator: &U, order: usize) -> Vec<U> {
+        let mut coefficients = self.scale(offset).coefficients;
+        coefficients.append(&mut vec![generator.ring_zero(); order - coefficients.len()]);
+        ntt(&coefficients, generator)
+    }
 }
 
 impl<
@@ -2216,6 +2222,31 @@ mod test_polynomials {
         let evals = poly.fast_evaluate(&domain, &_13_17, 4);
         let reinterp = Polynomial::fast_interpolate(&domain, &evals, &_13_17, 4);
         assert_eq!(poly, reinterp);
+    }
+
+    #[test]
+    fn fast_coset_evaluate_test() {
+        let _17 = PrimeField::new(17);
+        let _0_17 = _17.ring_zero();
+        let _1_17 = _17.ring_one();
+        let _3_17 = PrimeFieldElement::new(3, &_17);
+        let _9_17 = PrimeFieldElement::new(9, &_17);
+
+        // x^5 + x^3
+        let poly = Polynomial {
+            coefficients: vec![_0_17, _0_17, _0_17, _1_17, _0_17, _1_17],
+        };
+
+        let values = poly.fast_coset_evaluate(&_3_17, &_9_17, 8);
+
+        let mut domain = vec![_0_17; 8];
+        domain[0] = _3_17.clone();
+        for i in 1..8 {
+            domain[i] = domain[i - 1].to_owned() * _9_17.to_owned();
+        }
+
+        let reinterp = Polynomial::fast_interpolate(&domain, &values, &_9_17, 8);
+        assert_eq!(reinterp, poly);
     }
 
     #[test]
