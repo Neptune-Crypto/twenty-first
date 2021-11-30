@@ -596,6 +596,82 @@ impl<
         coefficients.append(&mut vec![generator.ring_zero(); order - coefficients.len()]);
         ntt(&coefficients, generator)
     }
+
+    /// Divide two polynomials under the homomorphism of evaluation for a N^2 -> N*log(N) speedup
+    /// Since we often want to use this fast division for numerators and divisors that evaluate
+    /// to zero in their domain, we do the division with an offset from the polynomials' original
+    /// domains. The issue of zero in the numerator and divisor arises when we divide a transition
+    /// polynomial with a zerofier.
+    pub fn fast_coset_divide(
+        lhs: &Polynomial<U>,
+        rhs: &Polynomial<U>,
+        offset: &U,
+        primitive_root: &U,
+        root_order: usize,
+    ) -> Polynomial<U> {
+        assert!(
+            primitive_root.mod_pow_u64(root_order as u64).is_one(),
+            "primitive root raised to given order must yield 1"
+        );
+        assert!(
+            !primitive_root.mod_pow_u64(root_order as u64 / 2).is_one(),
+            "primitive root raised to half of given order must not yield 1"
+        );
+        assert!(!rhs.is_zero(), "cannot divide by zero polynomial");
+
+        if lhs.is_zero() {
+            return Polynomial {
+                coefficients: vec![],
+            };
+        }
+
+        assert!(
+            rhs.degree() <= lhs.degree(),
+            "in polynomial division, right hand side degree must be at most that of left hand side"
+        );
+
+        let zero = lhs.coefficients[0].ring_zero();
+        let mut root: U = primitive_root.to_owned();
+        let mut order = root_order;
+        let degree: usize = lhs.degree() as usize;
+
+        if degree < 8 {
+            return lhs.to_owned() / rhs.to_owned();
+        }
+
+        while degree < order / 2 {
+            root = root.clone() * root;
+            order /= 2;
+        }
+
+        let mut scaled_lhs_coefficients: Vec<U> = lhs.scale(offset).coefficients;
+        scaled_lhs_coefficients.append(&mut vec![
+            zero.clone();
+            order - scaled_lhs_coefficients.len()
+        ]);
+        let mut scaled_rhs_coefficients: Vec<U> = rhs.scale(offset).coefficients;
+        scaled_rhs_coefficients.append(&mut vec![
+            zero.clone();
+            order - scaled_rhs_coefficients.len()
+        ]);
+
+        let lhs_codeword = ntt(&scaled_lhs_coefficients, &root);
+        let rhs_codeword = ntt(&scaled_rhs_coefficients, &root);
+
+        let quotient_codeword: Vec<U> = lhs_codeword
+            .iter()
+            .zip(rhs_codeword)
+            .map(|(l, r)| l.to_owned() / r)
+            .collect();
+
+        let scaled_quotient_coefficients = intt(&quotient_codeword, &root);
+
+        let scaled_quotient = Polynomial {
+            coefficients: scaled_quotient_coefficients,
+        };
+
+        scaled_quotient.scale(&(zero.ring_one() / offset.to_owned()))
+    }
 }
 
 impl<
@@ -2247,6 +2323,49 @@ mod test_polynomials {
 
         let reinterp = Polynomial::fast_interpolate(&domain, &values, &_9_17, 8);
         assert_eq!(reinterp, poly);
+    }
+
+    #[test]
+    fn fast_coset_divide_test() {
+        let _65537 = PrimeFieldBig::new(65537.into());
+        let offset = _65537.get_primitive_root_of_unity(64).0.unwrap();
+        let primitive_root = _65537.get_primitive_root_of_unity(32).0.unwrap();
+        println!("primitive_root = {}", primitive_root);
+        let a: Polynomial<PrimeFieldElementBig> = Polynomial {
+            coefficients: vec![
+                pfb(1, &_65537),
+                pfb(2, &_65537),
+                pfb(3, &_65537),
+                pfb(4, &_65537),
+                pfb(5, &_65537),
+                pfb(6, &_65537),
+                pfb(7, &_65537),
+                pfb(8, &_65537),
+                pfb(9, &_65537),
+                pfb(10, &_65537),
+            ],
+        };
+        let b: Polynomial<PrimeFieldElementBig> = Polynomial {
+            coefficients: vec![
+                pfb(1, &_65537),
+                pfb(2, &_65537),
+                pfb(3, &_65537),
+                pfb(4, &_65537),
+                pfb(5, &_65537),
+                pfb(6, &_65537),
+                pfb(7, &_65537),
+                pfb(8, &_65537),
+                pfb(9, &_65537),
+                pfb(17, &_65537),
+            ],
+        };
+        let c_fast = Polynomial::fast_multiply(&a, &b, &primitive_root, 32);
+
+        let mut quotient = Polynomial::fast_coset_divide(&c_fast, &b, &offset, &primitive_root, 32);
+        assert_eq!(a, quotient);
+
+        quotient = Polynomial::fast_coset_divide(&c_fast, &a, &offset, &primitive_root, 32);
+        assert_eq!(b, quotient);
     }
 
     #[test]
