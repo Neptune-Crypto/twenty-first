@@ -524,11 +524,6 @@ impl<
             values.len(),
             "Domain and values lengths must match"
         );
-        assert_eq!(
-            domain.len(),
-            root_order,
-            "Domain length and root order must match"
-        );
         assert!(primitive_root.mod_pow_u64(root_order as u64).is_one());
 
         if domain.is_empty() {
