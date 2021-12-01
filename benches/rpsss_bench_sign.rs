@@ -34,7 +34,7 @@ pub fn get_tutorial_stark<'a>(field: &'a PrimeFieldBig) -> (Stark<'a>, RescuePri
 fn rpsss_bench_sign(c: &mut Criterion) {
     let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
     let field = PrimeFieldBig::new(modulus);
-    let (stark, rp) = get_tutorial_stark(&field);
+    let (mut stark, rp) = get_tutorial_stark(&field);
     let rpsss = RPSSS {
         field: field.clone(),
         stark: stark.clone(),
@@ -44,8 +44,7 @@ fn rpsss_bench_sign(c: &mut Criterion) {
     let document: Vec<u8> = document_string.clone().into_bytes();
 
     // Calculate the index, AKA preprocessing
-    let (transition_zerofier, transition_zerofier_mt, _transition_zerofier_mt_root) =
-        stark.preprocess();
+    stark.prover_preprocess();
 
     let (sk, _pk) = rpsss.keygen();
     let mut group_sign = c.benchmark_group("rpsss_bench_sign");
@@ -54,14 +53,7 @@ fn rpsss_bench_sign(c: &mut Criterion) {
             BenchmarkId::from_parameter("rpsss_bench_sign"),
             &1,
             |b, _| {
-                b.iter(|| {
-                    rpsss.sign(
-                        &sk,
-                        &document,
-                        transition_zerofier.clone(),
-                        transition_zerofier_mt.clone(),
-                    )
-                });
+                b.iter(|| rpsss.sign(&sk, &document));
             },
         )
         .sample_size(10);
