@@ -142,9 +142,7 @@ impl PrimeFieldBig {
         let mut acc = BigInt::one();
         scratch[0] = nums[0].clone();
         for i in 0..size {
-            if nums[i].is_zero() {
-                continue;
-            }
+            assert!(!nums[i].is_zero(), "Cannot do batch inversion on zero");
             scratch[i] = acc.clone();
             acc = acc.clone() * nums[i].clone() % self.q.clone()
         }
@@ -154,10 +152,6 @@ impl PrimeFieldBig {
         acc = inv;
         let mut res = nums;
         for i in (0..size).rev() {
-            if res[i].is_zero() {
-                continue;
-            }
-
             let tmp = acc.clone() * res[i].clone() % self.q.clone();
             res[i] = (acc.clone() * scratch[i].clone() % self.q.clone() + self.q.clone())
                 % self.q.clone();
@@ -585,11 +579,11 @@ mod test_modular_arithmetic_big {
     }
 
     #[test]
+    #[should_panic]
     fn batch_inversion_test_small_with_zeros() {
         let input: Vec<BigInt> = vec![b(1), b(2), b(3), b(4), b(0)];
         let field = PrimeFieldBig::new(b(5));
-        let output = field.batch_inversion(input);
-        assert_eq!(vec![b(1), b(3), b(2), b(4), b(0)], output);
+        field.batch_inversion(input);
     }
 
     #[test]
