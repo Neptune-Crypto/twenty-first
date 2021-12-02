@@ -71,6 +71,7 @@ pub fn from_and_into() {
     // So `instance.into(): Type` := `Type::From(instance)`
     let num: Number = int.into();
     println!("My number is {:?}", num);
+    println!("It has the value {}", num.value);
 
     // Create an Another object
     let another: Another = Another::from(31);
