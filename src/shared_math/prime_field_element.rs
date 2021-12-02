@@ -111,9 +111,7 @@ impl PrimeField {
         let mut acc = 1i128;
         scratch[0] = nums[0];
         for i in 0..size {
-            if nums[i] == 0 {
-                continue;
-            }
+            assert_ne!(nums[i], 0i128, "Cannot do batch inversion on zero");
             scratch[i] = acc;
             acc = acc * nums[i] % self.q;
         }
@@ -123,10 +121,6 @@ impl PrimeField {
         acc = inv;
         let mut res = nums;
         for i in (0..size).rev() {
-            if res[i] == 0i128 {
-                continue;
-            }
-
             let tmp = acc * res[i] % self.q;
             res[i] = (acc * scratch[i] % self.q + self.q) % self.q;
             acc = tmp;
@@ -505,11 +499,11 @@ mod test_modular_arithmetic {
     }
 
     #[test]
+    #[should_panic]
     fn batch_inversion_test_small_with_zeros() {
         let input: Vec<i128> = vec![1, 2, 3, 4, 0];
         let field = PrimeField::new(5);
-        let output = field.batch_inversion(input);
-        assert_eq!(vec![1, 3, 2, 4, 0], output);
+        field.batch_inversion(input);
     }
 
     #[test]
