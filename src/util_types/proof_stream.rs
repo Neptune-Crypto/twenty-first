@@ -1,7 +1,7 @@
 use serde::{de::DeserializeOwned, Serialize};
 use std::{error::Error, fmt, result::Result};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct ProofStream {
     read_index: usize,
     transcript: Vec<u8>,
@@ -12,15 +12,6 @@ impl From<Vec<u8>> for ProofStream {
         ProofStream {
             read_index: 0,
             transcript: item,
-        }
-    }
-}
-
-impl Default for ProofStream {
-    fn default() -> Self {
-        Self {
-            read_index: 0,
-            transcript: vec![],
         }
     }
 }
@@ -135,5 +126,18 @@ impl ProofStream {
         blake3::hash(&self.transcript[0..self.read_index])
             .as_bytes()
             .to_vec()
+    }
+}
+
+#[cfg(test)]
+pub mod test_proof_stream {
+
+    use super::*;
+
+    #[test]
+    fn test_default_empty_initiation() {
+        let proof_stream = ProofStream::default();
+        assert!(proof_stream.is_empty());
+        assert_eq!(0, proof_stream.get_read_index());
     }
 }
