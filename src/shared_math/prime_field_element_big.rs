@@ -132,7 +132,6 @@ impl PrimeFieldBig {
 
     pub fn batch_inversion(&self, nums: Vec<BigInt>) -> Vec<BigInt> {
         // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
-        // Maps 0 into 0. Does not give warnings or errors on 0 inputs!
         let size = nums.len();
         if size == 0 {
             return Vec::<BigInt>::new();

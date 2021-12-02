@@ -101,7 +101,6 @@ impl PrimeField {
 
     pub fn batch_inversion(&self, nums: Vec<i128>) -> Vec<i128> {
         // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
-        // Maps 0 into 0. Does not give warnings or errors on 0 inputs!
         let size = nums.len();
         if size == 0 {
             return Vec::<i128>::new();
