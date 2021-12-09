@@ -5,29 +5,28 @@ authors = ["sword_smith <thorkilk@gmail.me>"]
 edition = "2018"
 
 [dev-dependencies]
-criterion = "0.3.4"
+criterion = "0.3"
 
 [dev-dependencies.cargo-husky]
 version = "1"
-default-features = false # Disable features which are enabled by default
+default-features = false
 features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
 
 [dependencies]
-anyhow = "1.0" # Error trait and generalized error handling
-bincode = "1.3.3" # A binary serialization / deserialization strategy that uses Serde for transforming structs into bytes and vice versa!
-blake3 = "0.3.8"
-byteorder = "1.4.3"
-num-bigint = { version = "0.4.0", features = ["serde"] }
-num-traits = "0.2.14"
-itertools = "0.10.0"
-rand = "0.8.3" # random number generation (used for benchmarking NTT and FTT)
-rand_distr = "0.4.0"
+anyhow = "1.0"
+bincode = "1.3"
+blake3 = "1.2"
+byteorder = "1.4"
+itertools = "0.10"
+num-bigint = { version = "0.4", features = ["serde"] }
+num-traits = "0.2"
+paw = "1.0"
+rand = "0.8"
+rand_distr = "0.4"
 rand_pcg = "0.3"
-ring       = "0.16.20"
-serde = { version = "1.0.126", features = ["derive"] }
-# serde = { version = "1.0", features = ["derive"] }
-structopt = { version = "0.3", features = [ "paw" ] } # Command-line argument parsing
-paw = "1.0" # Command-line argument parsing
+ring = "0.16"
+serde = { version = "1.0", features = ["derive"] }
+structopt = { version = "0.3", features = ["paw"] }
 
 [[bench]]
 name = "integer_interpolation"
@@ -48,7 +47,7 @@ harness = false
 [profile.dev]
 opt-level = 0
 debug = true
-split-debuginfo = '...'  # Platform-specific.
+split-debuginfo = '...'
 debug-assertions = true
 overflow-checks = true
 lto = false
@@ -60,9 +59,9 @@ rpath = false
 [profile.release]
 opt-level = 3
 debug = false
-split-debuginfo = '...'  # Platform-specific.
+split-debuginfo = '...'
 debug-assertions = false
-overflow-checks = false # Could be changed later to increase performance
+overflow-checks = false
 lto = false
 panic = 'unwind'
 incremental = false
@@ -72,7 +71,7 @@ rpath = false
 [profile.test]
 opt-level = 0
 debug = 2
-split-debuginfo = '...'  # Platform-specific.
+split-debuginfo = '...'
 debug-assertions = true
 overflow-checks = true
 lto = false
@@ -83,9 +82,9 @@ rpath = false
 [profile.bench]
 opt-level = 3
 debug = false
-split-debuginfo = '...'  # Platform-specific.
+split-debuginfo = '...'
 debug-assertions = false
-overflow-checks = false # Could be changed later to increase performance
+overflow-checks = false
 lto = false
 incremental = false
 codegen-units = 16
