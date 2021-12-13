@@ -38,6 +38,10 @@ name = "ntt"
 harness = false
 
 [[bench]]
+name = "ntt_bfield"
+harness = false
+
+[[bench]]
 name = "rpsss_bench_sign"
 harness = false
 

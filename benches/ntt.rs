@@ -19,7 +19,7 @@ fn ntt_forward(c: &mut Criterion) {
     static PRIME: i128 = 167772161; // 5 * 2^25 + !
     let prime_field: PrimeField = PrimeField::new(PRIME);
     let mut group = c.benchmark_group("ntt");
-    for &log2_of_size in [18usize, 19, 20, 21, 22].iter() {
+    for &log2_of_size in [16usize, 18, 20].iter() {
         let size = 2i128.pow(log2_of_size as u32);
         let (unity_root, _) = prime_field.get_primitive_root_of_unity(size);
         let input = generate_ntt_input(log2_of_size, &prime_field);
