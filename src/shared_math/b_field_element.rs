@@ -1,3 +1,4 @@
+use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -6,8 +7,6 @@ use std::{
 };
 
 use super::traits::{IdentityValues, ModPowU64};
-
-// use super::traits::IdentityValues;
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
@@ -81,9 +80,110 @@ impl BFieldElement {
         acc
     }
 
+    pub fn ring_zero() -> Self {
+        Self { 0: 0 }
+    }
+
+    pub fn ring_one() -> Self {
+        Self { 0: 1 }
+    }
+
     pub fn mod_pow(&self, pow: u64) -> Self {
         Self {
             0: self.mod_pow_raw(pow),
+        }
+    }
+
+    // TODO: Maybe make u128 into <T>?
+    pub fn get_primitive_root_of_unity(n: u128) -> (Option<BFieldElement>, Vec<u128>) {
+        let mut primes: Vec<u128> = vec![];
+
+        if n <= 1 {
+            return (Some(BFieldElement::ring_one()), primes);
+        }
+
+        // Calculate prime factorization of n
+        // Check if n = 2^k
+        if n & (n - 1) == 0 {
+            primes = vec![2];
+        } else {
+            let mut m = n;
+            for prime in FIRST_THOUSAND_PRIMES.iter().map(|&p| p as u128) {
+                if m == 1 {
+                    break;
+                }
+                if m % prime == 0 {
+                    primes.push(prime);
+                    while m % prime == 0 {
+                        m /= prime;
+                    }
+                }
+            }
+            // This might be prohibitively expensive
+            if m > 1 {
+                let mut other_primes = BFieldElement::primes_lt(m)
+                    .into_iter()
+                    .filter(|&x| n % x == 0)
+                    .collect();
+                primes.append(&mut other_primes);
+            }
+        };
+
+        // N must divide the field prime minus one for a primitive nth root of unity to exist
+        if !((Self::QUOTIENT - 1) % n).is_zero() {
+            return (None, primes);
+        }
+
+        let mut primitive_root: Option<BFieldElement> = None;
+        let mut candidate: BFieldElement = BFieldElement::ring_one();
+        #[allow(clippy::suspicious_operation_groupings)]
+        while primitive_root == None && candidate.0 < Self::QUOTIENT {
+            if (-candidate.legendre_symbol()).is_one()
+                && primes.iter().filter(|&x| n % x == 0).all(|x| {
+                    !candidate
+                        .mod_pow_raw(((Self::QUOTIENT - 1) / x) as u64)
+                        .is_one()
+                })
+            {
+                primitive_root = Some(candidate.mod_pow(((Self::QUOTIENT - 1) / n) as u64));
+            }
+
+            candidate.0 += 1;
+        }
+
+        (primitive_root, primes)
+    }
+
+    // TODO: Abstract for both i128 and u128 so we don't keep multiple copies of the same algorithm.
+    fn primes_lt(bound: u128) -> Vec<u128> {
+        let mut primes: Vec<bool> = (0..bound + 1).map(|num| num == 2 || num & 1 != 0).collect();
+        let mut num = 3u128;
+        while num * num <= bound {
+            let mut j = num * num;
+            while j <= bound {
+                primes[j as usize] = false;
+                j += num;
+            }
+            num += 2;
+        }
+        primes
+            .into_iter()
+            .enumerate()
+            .skip(2)
+            .filter_map(|(i, p)| if p { Some(i as u128) } else { None })
+            .collect::<Vec<u128>>()
+    }
+
+    pub fn legendre_symbol(&self) -> i8 {
+        let elem = self.mod_pow((Self::QUOTIENT - 1) as u64 / 2).0;
+
+        // Ugly hack to force a result in {-1,0,1}
+        if elem == Self::QUOTIENT - 1 {
+            -1
+        } else if elem == 0 {
+            0
+        } else {
+            1
         }
     }
 }
@@ -237,15 +337,15 @@ mod b_prime_field_element_test {
         -> BFieldElement { n }
     }
 
-    fn primefield_element() -> impl Strategy<Value = BFieldElement> {
-        let max = BFieldElement::MAX;
-        let bar = prop_oneof![
-            primefield_element_ranged(0, 0xffff),
-            primefield_element_ranged(max - 0xffff, max),
-        ];
+    // fn primefield_element() -> impl Strategy<Value = BFieldElement> {
+    //     let max = BFieldElement::MAX;
+    //     let bar = prop_oneof![
+    //         primefield_element_ranged(0, 0xffff),
+    //         primefield_element_ranged(max - 0xffff, max),
+    //     ];
 
-        return bar;
-    }
+    //     return bar;
+    // }
 
     proptest! {
         // #[test]
