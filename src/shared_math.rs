@@ -1,3 +1,4 @@
+pub mod b_field_element;
 pub mod collatz_sequence;
 pub mod complex_number;
 pub mod fraction;
@@ -10,7 +11,6 @@ pub mod ntt;
 pub mod other;
 pub mod polynomial;
 pub mod polynomial_quotient_ring;
-pub mod prime_field_efficient;
 pub mod prime_field_element;
 pub mod prime_field_element_big;
 pub mod prime_field_polynomial;
