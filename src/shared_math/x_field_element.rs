@@ -312,4 +312,13 @@ mod x_field_element_test {
         assert_eq!(quotient_expected, quotient_result);
         assert_eq!(remainder_expected, remainder_result);
     }
+
+    // TODO: Write property-based test of `divide_as_polynomial`
+    // #[test]
+    // fn divide_as_polynomial_property_based_test() {
+    //     let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::MAX as i128);
+    //     for rand in rands {
+    //         let a =
+    //     }
+    // }
 }
