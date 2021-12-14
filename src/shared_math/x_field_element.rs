@@ -39,7 +39,6 @@ impl XFieldElement {
     // Division in 𝔽_p[X], not 𝔽_p^e ≅ 𝔽[X]/p(x).
     // TODO (Maybe): Could be that this isn't as efficient as possible.
     fn divide_as_polynomial(&self, other: Self) -> (Self, Self) {
-        println!("PMD0");
         let lhs = Polynomial {
             coefficients: self.coefficients.to_vec(),
         };
@@ -49,7 +48,6 @@ impl XFieldElement {
         let (quot_as_vec, rem_as_vec) = lhs.divide(rhs);
         let mut quot_coefficients = [BFieldElement::ring_zero(); 3];
         let mut rem_coefficients = [BFieldElement::ring_zero(); 3];
-        println!("PMD1");
         for i in 0..quot_as_vec.degree() {
             quot_coefficients[i as usize] = quot_as_vec.coefficients[i as usize];
         }
