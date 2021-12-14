@@ -392,6 +392,27 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[test]
+    fn mul_div_plus_minus_property_based_test() {
+        let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::QUOTIENT as i128);
+        for i in 1..rands.len() {
+            let a = BFieldElement::new(rands[i - 1] as u128);
+            let b = BFieldElement::new(rands[i] as u128);
+            let ab = a * b;
+            let a_o_b = a / b;
+            let b_o_a = b / a;
+            assert_eq!(a, ab / b);
+            assert_eq!(b, ab / a);
+            assert_eq!(a, a_o_b * b);
+            assert_eq!(b, b_o_a * a);
+
+            assert_eq!(a - b + b, a);
+            assert_eq!(b - a + a, b);
+            assert!((a - a).is_zero());
+            assert!((b - b).is_zero());
+        }
+    }
+
     prop_compose! {
         fn primefield_element_ranged(min: u128, max: u128)
             (n in (min..max)
