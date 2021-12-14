@@ -23,7 +23,7 @@ impl BFieldElement {
     }
 
     pub fn inv(&self) -> Self {
-        let (_, _, a) = Self::eea(Self::QUOTIENT as i128, self.0 as i128);
+        let (_, _, a) = Self::xgcd(Self::QUOTIENT as i128, self.0 as i128);
 
         Self {
             0: ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
@@ -32,7 +32,7 @@ impl BFieldElement {
     }
 
     // TODO: Name this collection of traits as something like... FieldElementInternalNumRepresentation
-    pub fn eea<T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone>(
+    pub fn xgcd<T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone>(
         mut x: T,
         mut y: T,
     ) -> (T, T, T) {
@@ -58,7 +58,7 @@ impl BFieldElement {
         (x, a_factor, b_factor)
     }
 
-    // TODO: Use Rust Pow. TODO: Maybe move this out into a library along with eea().
+    // TODO: Use Rust Pow. TODO: Maybe move this out into a library along with xgcd().
     // TODO: Name this collection of traits as something like... FieldElementInternalNumRepresentation
     fn mod_pow_raw(&self, pow: u64) -> u128 {
         // Special case for handling 0^0 = 1

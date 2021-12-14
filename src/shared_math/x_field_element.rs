@@ -19,7 +19,7 @@ impl XFieldElement {
     }
 
     // TODO: inv
-    // TODO: eea
+    // TODO: xgcd
     // TODO: mod_pow, mod_pow_raw
     // TODO: get_primitive_root_of_unity (TBD), primes_lt, legendre_symbol,
 

@@ -118,7 +118,7 @@ impl PrimeField {
         }
 
         // Invert the last element of the `partials` vector
-        let (_, inv, _) = PrimeFieldElement::eea(acc, self.q);
+        let (_, inv, _) = PrimeFieldElement::xgcd(acc, self.q);
         acc = inv;
         let mut res = nums;
         for i in (0..size).rev() {
@@ -357,7 +357,7 @@ impl<'a> PrimeFieldElement<'a> {
     }
 
     // Return the greatest common divisor (gcd), and factors a, b s.t. x*a + b*y = gcd(a, b).
-    pub fn eea<T: num_traits::Num + Clone + Copy>(mut x: T, mut y: T) -> (T, T, T) {
+    pub fn xgcd<T: num_traits::Num + Clone + Copy>(mut x: T, mut y: T) -> (T, T, T) {
         let (mut a_factor, mut a1, mut b_factor, mut b1) = (
             num_traits::one(),
             num_traits::zero(),
@@ -382,7 +382,7 @@ impl<'a> PrimeFieldElement<'a> {
     }
 
     pub fn inv(&self) -> Self {
-        let (_, _, a) = Self::eea(self.field.q, self.value);
+        let (_, _, a) = Self::xgcd(self.field.q, self.value);
         Self {
             field: self.field,
             value: (a % self.field.q + self.field.q) % self.field.q,
@@ -757,7 +757,7 @@ mod test_modular_arithmetic {
         );
 
         // Test EAC (Extended Euclidean Algorithm/Extended Greatest Common Divider)
-        let (gcd, a_factor, b_factor) = PrimeFieldElement::eea(1914, 899);
+        let (gcd, a_factor, b_factor) = PrimeFieldElement::xgcd(1914, 899);
         assert_eq!(8, a_factor);
         assert_eq!(-17, b_factor);
         assert_eq!(29, gcd);
