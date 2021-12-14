@@ -23,10 +23,11 @@ impl BFieldElement {
     }
 
     pub fn inv(&self) -> Self {
-        let (_, _, a) = Self::eea(Self::QUOTIENT, self.0);
+        let (_, _, a) = Self::eea(Self::QUOTIENT as i128, self.0 as i128);
 
         Self {
-            0: (a % Self::QUOTIENT + Self::QUOTIENT) % Self::QUOTIENT,
+            0: ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
+                as u128,
         }
     }
 
@@ -303,7 +304,10 @@ impl ModPowU64 for BFieldElement {
 
 #[cfg(test)]
 mod b_prime_field_element_test {
-    use crate::shared_math::{b_field_element::*, polynomial::Polynomial};
+    use crate::{
+        shared_math::{b_field_element::*, polynomial::Polynomial},
+        utils::generate_random_numbers,
+    };
     use proptest::prelude::*;
 
     #[test]
@@ -330,6 +334,61 @@ mod b_prime_field_element_test {
             prop_assert_eq!(other, other + zero, "right zero identity");
             prop_assert_eq!(other, one * other, "left one identity");
             prop_assert_eq!(other, other * one, "right one identity");
+        }
+    }
+
+    #[test]
+    fn inversion_test() {
+        assert_eq!(
+            BFieldElement(9223372034707292161),
+            BFieldElement::new(2).inv()
+        );
+        assert_eq!(
+            BFieldElement(12297829379609722881),
+            BFieldElement::new(3).inv()
+        );
+        assert_eq!(
+            BFieldElement(13835058052060938241),
+            BFieldElement::new(4).inv()
+        );
+        assert_eq!(
+            BFieldElement(14757395255531667457),
+            BFieldElement::new(5).inv()
+        );
+        assert_eq!(
+            BFieldElement(15372286724512153601),
+            BFieldElement::new(6).inv()
+        );
+        assert_eq!(
+            BFieldElement(2635249152773512046),
+            BFieldElement::new(7).inv()
+        );
+        assert_eq!(
+            BFieldElement(16140901060737761281),
+            BFieldElement::new(8).inv()
+        );
+        assert_eq!(
+            BFieldElement(4099276459869907627),
+            BFieldElement::new(9).inv()
+        );
+        assert_eq!(
+            BFieldElement(16602069662473125889),
+            BFieldElement::new(10).inv()
+        );
+        assert_eq!(
+            BFieldElement(11826576560539181984),
+            BFieldElement::new(8567106).inv()
+        );
+    }
+
+    #[test]
+    fn inversion_property_based_test() {
+        let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::MAX as i128);
+        for rand in rands {
+            assert!(
+                (BFieldElement::new(rand as u128).inv() * BFieldElement::new(rand as u128))
+                    .is_one()
+            );
         }
     }
 
