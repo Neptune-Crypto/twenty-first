@@ -764,10 +764,14 @@ impl<
         Self { coefficients }
     }
 
+    // XXX
     /// Return (quotient, remainder)
     pub fn divide(&self, divisor: Self) -> (Self, Self) {
+        println!("PMD2");
         let degree_lhs = self.degree();
+        println!("PMD3");
         let degree_rhs = divisor.degree();
+        println!("PMD4");
         // cannot divide by zero
         if degree_rhs < 0 {
             panic!(
@@ -784,18 +788,25 @@ impl<
         // quotient is built from back to front so must be reversed
         // Preallocate space for quotient coefficients
         let mut quotient: Vec<U>;
+        println!("PMD5");
         if degree_lhs - degree_rhs >= 0 {
+            println!("PMD6");
             quotient = Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize);
         } else {
+            println!("PMD7");
             quotient = vec![];
         }
         let mut remainder = self.clone();
         remainder.normalize();
 
         let dlc: U = divisor.coefficients[degree_rhs as usize].clone(); // divisor leading coefficient
+        println!("PMD8");
+        println!("dlc = {}", dlc);
         let inv = dlc.ring_one() / dlc;
+        println!("PMD9");
 
         let mut i = 0;
+        println!("PMDA");
         while i + degree_rhs <= degree_lhs {
             // calculate next quotient coefficient, and set leading coefficient
             // of remainder remainder is 0 by removing it
@@ -808,6 +819,7 @@ impl<
                 continue;
             }
 
+            println!("PMDB");
             // Calculate the new remainder
             for j in 0..degree_rhs as usize {
                 let rem_length = remainder.coefficients.len();

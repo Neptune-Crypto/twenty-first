@@ -59,7 +59,7 @@ impl BFieldElement {
 
     // TODO: Use Rust Pow. TODO: Maybe move this out into a library along with eea().
     // TODO: Name this collection of traits as something like... FieldElementInternalNumRepresentation
-    pub fn mod_pow_raw(&self, pow: u64) -> u128 {
+    fn mod_pow_raw(&self, pow: u64) -> u128 {
         // Special case for handling 0^0 = 1
         if pow == 0 {
             return 1u128;
@@ -80,6 +80,9 @@ impl BFieldElement {
         acc
     }
 
+    // TODO: Currently, IdentityValues has &self as part of its signature, so we hotfix
+    // being able to refer to a zero/one element without having an element at hand. This
+    // will go away when moving to Zero/One traits.
     pub fn ring_zero() -> Self {
         Self { 0: 0 }
     }
