@@ -164,6 +164,16 @@ impl<
             + Hash,
     > Polynomial<U>
 {
+    pub fn new(coefficients: Vec<U>) -> Self {
+        Self { coefficients }
+    }
+
+    pub fn new_const(element: U) -> Self {
+        Self {
+            coefficients: vec![element],
+        }
+    }
+
     pub fn normalize(&mut self) {
         while !self.coefficients.is_empty() && self.coefficients.last().unwrap().is_zero() {
             self.coefficients.pop();
@@ -764,7 +774,6 @@ impl<
         Self { coefficients }
     }
 
-    // XXX
     /// Return (quotient, remainder)
     pub fn divide(&self, divisor: Self) -> (Self, Self) {
         let degree_lhs = self.degree();
@@ -996,6 +1005,8 @@ mod test_polynomials {
     use super::super::prime_field_element::{PrimeField, PrimeFieldElement};
     use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::x_field_element::XFieldElement;
     use crate::utils::generate_random_numbers;
     use num_bigint::BigInt;
 
@@ -2496,5 +2507,59 @@ mod test_polynomials {
             "30x^6 + 16x^5 + 64x^4 + 11x^3 + 25x^2 + 48x",
             prod.to_string()
         );
+    }
+
+    #[test]
+    pub fn polynomial_divide_test() {
+        let minus_one = BFieldElement::QUOTIENT - 1;
+        let zero = BFieldElement::ring_zero();
+        let one = BFieldElement::ring_one();
+        let two = BFieldElement::new(2);
+        // let three = BFieldElement::new(3);
+        // let four = BFieldElement::new(4);
+        // let five = BFieldElement::new(5);
+
+        let a: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(30));
+        let b: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(5));
+
+        let (actual_quot, actual_rem) = a.divide(b);
+        let expected_quot: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(6));
+
+        assert_eq!(expected_quot, actual_quot);
+        assert!(actual_rem.is_zero());
+
+        // Shah-polynomial test
+        let shah = XFieldElement::shah_polynomial();
+        let c = Polynomial::new(vec![
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_one(),
+        ]);
+        let (actual_quot, actual_rem) = shah.divide(c);
+        println!("actual_quot = {}", actual_quot);
+        println!("actual_rem = {}", actual_rem);
+
+        let expected_quot = Polynomial::new_const(BFieldElement::new(1));
+        let expected_rem = Polynomial::new(vec![
+            BFieldElement::ring_one(),
+            BFieldElement::new(minus_one),
+        ]);
+        assert_eq!(expected_quot, actual_quot);
+        assert_eq!(expected_rem, actual_rem);
+
+        // x^6
+        let c: Polynomial<BFieldElement> = Polynomial::new(vec![one]).shift_coefficients(6, zero);
+
+        let (actual_sixth_quot, actual_sixth_rem) = c.divide(shah);
+
+        // x^3 + x - 1
+        let expected_sixth_quot: Polynomial<BFieldElement> =
+            Polynomial::new(vec![-one, one, zero, one]);
+        // x^2 - 2x + 1
+        let expected_sixth_rem: Polynomial<BFieldElement> = Polynomial::new(vec![one, -two, one]);
+
+        assert_eq!(expected_sixth_quot, actual_sixth_quot);
+        assert_eq!(expected_sixth_rem, actual_sixth_rem);
     }
 }

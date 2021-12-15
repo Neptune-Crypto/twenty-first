@@ -288,9 +288,10 @@ impl Sub for BFieldElement {
 impl Div for BFieldElement {
     type Output = Self;
 
+    // XXX
     fn div(self, other: Self) -> Self {
         Self {
-            0: other.inv().0 * self.0 % Self::QUOTIENT,
+            0: (other.inv().0 * self.0) % Self::QUOTIENT,
         }
     }
 }
@@ -413,30 +414,6 @@ mod b_prime_field_element_test {
         }
     }
 
-    prop_compose! {
-        fn primefield_element_ranged(min: u128, max: u128)
-            (n in (min..max)
-                .prop_map(BFieldElement::new))
-        -> BFieldElement { n }
-    }
-
-    // fn primefield_element() -> impl Strategy<Value = BFieldElement> {
-    //     let max = BFieldElement::MAX;
-    //     let bar = prop_oneof![
-    //         primefield_element_ranged(0, 0xffff),
-    //         primefield_element_ranged(max - 0xffff, max),
-    //     ];
-
-    //     return bar;
-    // }
-
-    proptest! {
-        // #[test]
-        // fn add_within_range(a in primefield_element(), b in primefield_element()) {
-        //     let sum = a + b;
-        // }
-    }
-
     #[test]
     fn create_polynomial_test() {
         // use crate::shared_math_
@@ -465,5 +442,37 @@ mod b_prime_field_element_test {
         };
 
         assert_eq!(expected, a + b);
+    }
+
+    #[test]
+    fn b_field_xgcd_test() {
+        let a = 15;
+        let b = 25;
+        let expected_gcd_ab = 5;
+        let (actual_gcd_ab, a_factor, b_factor) = BFieldElement::xgcd(a, b);
+
+        assert_eq!(expected_gcd_ab, actual_gcd_ab);
+        assert_eq!(2, a_factor);
+        assert_eq!(-1, b_factor);
+        assert_eq!(expected_gcd_ab, a_factor * a + b_factor * b);
+    }
+
+    #[test]
+    fn xgcd_help() {
+        let two = BFieldElement::new(2);
+        let one = BFieldElement::new(1);
+        println!("1 / 2 = {}, -1 / 2 = {}", one / two, -one / two);
+        // let expected = BFieldElement(7);
+        // let actual = a / b;
+        // assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn b_field_div_test() {
+        let a = BFieldElement::new(15);
+        let b = BFieldElement::new(2);
+        let expected = BFieldElement(7);
+        let actual = a / b;
+        assert_eq!(expected, actual);
     }
 }

@@ -14,6 +14,8 @@ pub struct XFieldElement {
     pub coefficients: [BFieldElement; 3],
 }
 
+// TODO: Consider moving this to Polynomial file by untying XFieldElement, and\
+// instead referring to its internals. Not sure though.
 impl From<XFieldElement> for Polynomial<BFieldElement> {
     fn from(item: XFieldElement) -> Self {
         Self {
@@ -22,16 +24,29 @@ impl From<XFieldElement> for Polynomial<BFieldElement> {
     }
 }
 
+impl From<Polynomial<BFieldElement>> for XFieldElement {
+    fn from(poly: Polynomial<BFieldElement>) -> Self {
+        let (_, rem) = poly.divide(Self::shah_polynomial());
+        let zero = BFieldElement::ring_zero();
+        let mut rem_arr: [BFieldElement; 3] = [zero; 3];
+
+        // XXX
+        for i in 0..rem.degree() + 1 {
+            rem_arr[i as usize] = rem.coefficients[i as usize];
+        }
+
+        XFieldElement::new(rem_arr)
+    }
+}
+
 impl XFieldElement {
     pub fn shah_polynomial() -> Polynomial<BFieldElement> {
-        Polynomial {
-            coefficients: vec![
-                BFieldElement::ring_one(),
-                -BFieldElement::ring_one(),
-                BFieldElement::ring_zero(),
-                BFieldElement::ring_one(),
-            ],
-        }
+        Polynomial::new(vec![
+            BFieldElement::ring_one(),
+            -BFieldElement::ring_one(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_one(),
+        ])
     }
 
     pub fn new(coefficients: [BFieldElement; 3]) -> Self {
@@ -91,22 +106,20 @@ impl XFieldElement {
         Polynomial<BFieldElement>,
         Polynomial<BFieldElement>,
     ) {
-        let mut a_factor = Polynomial {
-            coefficients: vec![BFieldElement::ring_one()],
-        };
-        let mut a1 = Polynomial {
-            coefficients: vec![BFieldElement::ring_zero()],
-        };
-        let mut b_factor = Polynomial {
-            coefficients: vec![BFieldElement::ring_zero()],
-        };
-        let mut b1 = Polynomial {
-            coefficients: vec![BFieldElement::ring_one()],
-        };
+        let input_x = x.clone();
+        let input_y = y.clone();
+        let mut a_factor = Polynomial::new(vec![BFieldElement::ring_one()]);
+        let mut a1 = Polynomial::new(vec![BFieldElement::ring_zero()]);
+        let mut b_factor = Polynomial::new(vec![BFieldElement::ring_zero()]);
+        let mut b1 = Polynomial::new(vec![BFieldElement::ring_one()]);
 
         while !y.is_zero() {
+            println!("x = {},\ny = {}", x, y);
             let (quotient, remainder): (Polynomial<BFieldElement>, Polynomial<BFieldElement>) =
-                x.divide(y.clone());
+                x.clone().divide(y.clone());
+            println!("quotient = {}", quotient);
+            println!("remainder = {}", remainder);
+            assert_eq!(x, quotient.clone() * y.clone() + remainder.clone()); // numerator = quotient * divisor + remainder
             let (c, d) = (
                 a_factor - quotient.clone() * a1.clone(),
                 b_factor.clone() - quotient * b1.clone(),
@@ -118,18 +131,39 @@ impl XFieldElement {
             a1 = c;
             b_factor = b1;
             b1 = d;
+
+            println!("a_factor = {},\nb_factor = {}", a_factor, b_factor);
+            println!();
         }
 
-        // x is the gcd
+        // gcd = a_factor * x + b_factor * y
+        // let gcd = tmp;
+        println!("gcd = {}", x);
+        assert_eq!(
+            x.clone(),
+            a_factor.clone() * input_x.clone() + b_factor.clone() * input_y.clone()
+        );
         (x, a_factor, b_factor)
     }
 
     pub fn inv(&self) -> Self {
-        let (_, _, a) = Self::xgcd(Self::shah_polynomial(), self.to_owned().into());
-        Self {
-            field: self.field,
-            value: (a % self.field.q.clone() + self.field.q.clone()) % self.field.q.clone(),
-        }
+        println!("self is {}", self);
+        println!("BFieldElement::QUOTIENT = {}", BFieldElement::QUOTIENT);
+        // 1 = _ * shah + a * self, so 'a' is congruent to self^-1
+        let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
+        let (zzz, qqq, a) = Self::xgcd(Self::shah_polynomial(), self_as_poly.clone());
+        println!(
+            "xgcd({}, {}) = ({}, {}, {})",
+            Self::shah_polynomial(),
+            self_as_poly,
+            zzz,
+            qqq,
+            a
+        );
+
+        println!("a = {}", a);
+
+        a.into()
     }
 }
 
@@ -318,6 +352,39 @@ mod x_field_element_test {
     }
 
     #[test]
+    fn x_field_sub_test() {
+        let poly1 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
+        let poly2 = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
+
+        let mut poly_diff = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
+        assert_eq!(poly_diff, poly2 - poly1);
+
+        let poly3 = XFieldElement::new([0, 5, 0].map(BFieldElement::new));
+        let poly4 = XFieldElement::new([0, 7, 0].map(BFieldElement::new));
+
+        poly_diff = XFieldElement::new([0, 2, 0].map(BFieldElement::new));
+        assert_eq!(poly_diff, poly4 - poly3);
+
+        let poly5 = XFieldElement::new([0, 0, 14].map(BFieldElement::new));
+        let poly6 = XFieldElement::new([0, 0, 23].map(BFieldElement::new));
+
+        poly_diff = XFieldElement::new([0, 0, 9].map(BFieldElement::new));
+        assert_eq!(poly_diff, poly6 - poly5);
+
+        let poly7 = XFieldElement::new([0, 0, BFieldElement::MAX].map(BFieldElement::new));
+        let poly8 = XFieldElement::new([0, 0, 23].map(BFieldElement::new));
+
+        poly_diff = XFieldElement::new([0, 0, 24].map(BFieldElement::new));
+        assert_eq!(poly_diff, poly8 - poly7);
+
+        let poly9 = XFieldElement::new([BFieldElement::MAX - 2, 12, 4].map(BFieldElement::new));
+        let poly10 = XFieldElement::new([2, 45000, BFieldElement::MAX - 3].map(BFieldElement::new));
+
+        poly_diff = XFieldElement::new([5, 44988, BFieldElement::MAX - 7].map(BFieldElement::new));
+        assert_eq!(poly_diff, poly10 - poly9);
+    }
+
+    #[test]
     fn x_field_mul_test() {
         let poly1 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
         let poly2 = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
@@ -358,6 +425,55 @@ mod x_field_element_test {
 
         let poly1112_product = XFieldElement::new([237, 33, 137].map(BFieldElement::new));
         assert_eq!(poly1112_product, poly11 * poly12);
+    }
+
+    #[test]
+    fn x_field_into_test() {
+        let zero_poly: XFieldElement = Polynomial::<BFieldElement>::new(vec![]).into();
+        assert!(zero_poly.is_zero());
+
+        let shah_zero: XFieldElement = XFieldElement::shah_polynomial().into();
+        assert!(shah_zero.is_zero());
+
+        let neg_shah_zero: XFieldElement = XFieldElement::shah_polynomial()
+            .scalar_mul(BFieldElement::new(BFieldElement::QUOTIENT - 1))
+            .into();
+        assert!(neg_shah_zero.is_zero());
+    }
+
+    #[test]
+    fn x_field_inv_test() {
+        // TODO: REMOVE
+        let two_inv_expected = XFieldElement::new([
+            BFieldElement::new(2).inv(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+        ]);
+        let two = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
+        assert!((two * two_inv_expected).is_one());
+        assert!((two_inv_expected * two).is_one());
+
+        let foo = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
+        let foo_inv = foo.inv();
+        println!("foo_inv: {}", foo_inv);
+        println!("foo: {}", foo);
+
+        let foo_one_left = foo_inv * foo;
+        assert_eq!(foo_one_left, XFieldElement::ring_one());
+
+        let foo_one_right = foo * foo_inv;
+        assert_eq!(foo_one_right, XFieldElement::ring_one());
+    }
+
+    #[test]
+    fn x_field_xgcd_test() {
+        let a = Polynomial::new(vec![BFieldElement::new(15)]);
+        let b = Polynomial::new(vec![BFieldElement::new(25)]);
+
+        let (actual_gcd_ab, a_factor, b_factor) = XFieldElement::xgcd(a.clone(), b.clone());
+        assert_eq!(actual_gcd_ab, a * a_factor.clone() + b * b_factor.clone());
+
+        println!("({}, {}, {})", actual_gcd_ab, a_factor, b_factor);
     }
 
     // #[test]
