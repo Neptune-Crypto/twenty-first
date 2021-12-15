@@ -2,7 +2,7 @@ use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt,
+    fmt::{self, Display},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
@@ -32,7 +32,9 @@ impl BFieldElement {
     }
 
     // TODO: Name this collection of traits as something like... FieldElementInternalNumRepresentation
-    pub fn xgcd<T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone>(
+    pub fn xgcd<
+        T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,
+    >(
         mut x: T,
         mut y: T,
     ) -> (T, T, T) {

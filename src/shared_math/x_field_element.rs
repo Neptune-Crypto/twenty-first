@@ -106,20 +106,14 @@ impl XFieldElement {
         Polynomial<BFieldElement>,
         Polynomial<BFieldElement>,
     ) {
-        let input_x = x.clone();
-        let input_y = y.clone();
         let mut a_factor = Polynomial::new(vec![BFieldElement::ring_one()]);
         let mut a1 = Polynomial::new(vec![BFieldElement::ring_zero()]);
         let mut b_factor = Polynomial::new(vec![BFieldElement::ring_zero()]);
         let mut b1 = Polynomial::new(vec![BFieldElement::ring_one()]);
 
         while !y.is_zero() {
-            println!("x = {},\ny = {}", x, y);
             let (quotient, remainder): (Polynomial<BFieldElement>, Polynomial<BFieldElement>) =
                 x.clone().divide(y.clone());
-            println!("quotient = {}", quotient);
-            println!("remainder = {}", remainder);
-            assert_eq!(x, quotient.clone() * y.clone() + remainder.clone()); // numerator = quotient * divisor + remainder
             let (c, d) = (
                 a_factor - quotient.clone() * a1.clone(),
                 b_factor.clone() - quotient * b1.clone(),
@@ -131,38 +125,31 @@ impl XFieldElement {
             a1 = c;
             b_factor = b1;
             b1 = d;
-
-            println!("a_factor = {},\nb_factor = {}", a_factor, b_factor);
-            println!();
         }
 
-        // gcd = a_factor * x + b_factor * y
-        // let gcd = tmp;
-        println!("gcd = {}", x);
-        assert_eq!(
-            x.clone(),
-            a_factor.clone() * input_x.clone() + b_factor.clone() * input_y.clone()
-        );
-        (x, a_factor, b_factor)
+        // The result is valid up to a coefficient, so we normalize the result,
+        // to ensure that x has a leading coefficient of 1.
+        let lc = x.leading_coefficient(BFieldElement::ring_zero());
+        let scale = lc.inv();
+        println!("lc = {}", lc);
+        println!("scale = {}", scale);
+        println!("x = {}", x);
+        println!("a_factor = {}", a_factor);
+        println!("b_factor = {}", b_factor);
+
+        (
+            x.scalar_mul(scale),
+            a_factor.scalar_mul(scale),
+            b_factor.scalar_mul(scale),
+        )
     }
 
     pub fn inv(&self) -> Self {
-        println!("self is {}", self);
-        println!("BFieldElement::QUOTIENT = {}", BFieldElement::QUOTIENT);
-        // 1 = _ * shah + a * self, so 'a' is congruent to self^-1
         let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
-        let (zzz, qqq, a) = Self::xgcd(Self::shah_polynomial(), self_as_poly.clone());
-        println!(
-            "xgcd({}, {}) = ({}, {}, {})",
-            Self::shah_polynomial(),
-            self_as_poly,
-            zzz,
-            qqq,
-            a
-        );
-
+        let (gcd, b, a) = Self::xgcd(Self::shah_polynomial(), self_as_poly.clone());
+        println!("gcd = {}", gcd);
         println!("a = {}", a);
-
+        println!("b = {}", b);
         a.into()
     }
 }
@@ -443,86 +430,34 @@ mod x_field_element_test {
 
     #[test]
     fn x_field_inv_test() {
-        // TODO: REMOVE
-        let two_inv_expected = XFieldElement::new([
-            BFieldElement::new(2).inv(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-        ]);
+        println!("QUOTIENT = {}", BFieldElement::QUOTIENT);
+        let one = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
+        let one_inv = one.inv();
+        assert!((one_inv * one).is_one());
+        assert!((one * one_inv).is_one());
+
         let two = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
-        assert!((two * two_inv_expected).is_one());
-        assert!((two_inv_expected * two).is_one());
+        let two_inv = two.inv();
+        assert!((two_inv * two).is_one());
+        assert!((two * two_inv).is_one());
 
-        let foo = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
-        let foo_inv = foo.inv();
-        println!("foo_inv: {}", foo_inv);
-        println!("foo: {}", foo);
+        let three = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
+        let three_inv = three.inv();
+        assert!((three_inv * three).is_one());
+        assert!((three * three_inv).is_one());
 
-        let foo_one_left = foo_inv * foo;
-        assert_eq!(foo_one_left, XFieldElement::ring_one());
+        let hundred = XFieldElement::new([100, 0, 0].map(BFieldElement::new));
+        let hundred_inv = hundred.inv();
+        assert!((hundred_inv * hundred).is_one());
+        assert!((hundred * hundred_inv).is_one());
 
-        let foo_one_right = foo * foo_inv;
-        assert_eq!(foo_one_right, XFieldElement::ring_one());
+        let x = XFieldElement::new([0, 1, 0].map(BFieldElement::new));
+        let x_inv = x.inv();
+        println!("x = {}", x);
+        println!("x_inv = {}", x_inv);
+        println!("x * x_inv = {}", x_inv * x);
+        println!("x_inv * x = {}", x * x_inv);
+        assert!((x_inv * x).is_one());
+        assert!((x * x_inv).is_one());
     }
-
-    #[test]
-    fn x_field_xgcd_test() {
-        let a = Polynomial::new(vec![BFieldElement::new(15)]);
-        let b = Polynomial::new(vec![BFieldElement::new(25)]);
-
-        let (actual_gcd_ab, a_factor, b_factor) = XFieldElement::xgcd(a.clone(), b.clone());
-        assert_eq!(actual_gcd_ab, a * a_factor.clone() + b * b_factor.clone());
-
-        println!("({}, {}, {})", actual_gcd_ab, a_factor, b_factor);
-    }
-
-    // #[test]
-    // fn divide_as_polynomial_test() {
-    //     // (0x^2 + 0x + 2) / (0x^2 + 0x + 2) = 1, remainder = 0
-    //     let mut poly1 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
-    //     let mut poly2 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
-    //     let (quotient_result, remainder_result) = poly1.divide_as_polynomial(poly2);
-    //     let mut quotient_expected = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
-    //     let mut remainder_expected = XFieldElement::new([0, 0, 0].map(BFieldElement::new));
-    //     assert_eq!(quotient_expected, quotient_result);
-    //     assert_eq!(remainder_expected, remainder_result);
-
-    //     // (0x^2 + 2x + 0) / (0x^2 + 0x + 2) = x, remainder = 0
-    //     poly1 = XFieldElement::new([0, 2, 0].map(BFieldElement::new));
-    //     poly2 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
-    //     let (quotient_result, remainder_result) = poly1.divide_as_polynomial(poly2);
-    //     quotient_expected = XFieldElement::new([0, 1, 0].map(BFieldElement::new));
-    //     remainder_expected = XFieldElement::new([0, 0, 0].map(BFieldElement::new));
-    //     assert_eq!(quotient_expected, quotient_result);
-    //     assert_eq!(remainder_expected, remainder_result);
-
-    //     // (2x^2 + 0x + 0) / (0x^2 + 0x + 2) = x^2, remainder = 0
-    //     poly1 = XFieldElement::new([0, 0, 2].map(BFieldElement::new));
-    //     poly2 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
-    //     let (quotient_result, remainder_result) = poly1.divide_as_polynomial(poly2);
-    //     quotient_expected = XFieldElement::new([0, 0, 1].map(BFieldElement::new));
-    //     remainder_expected = XFieldElement::new([0, 0, 0].map(BFieldElement::new));
-    //     assert_eq!(quotient_expected, quotient_result);
-    //     assert_eq!(remainder_expected, remainder_result);
-
-    //     // (2x^2 + 17x + 299) / (0x^2 + 0x + 2) = x^2 + ??x + ???, remainder = 0
-    //     poly1 = XFieldElement::new([2, 17, 299].map(BFieldElement::new));
-    //     poly2 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
-    //     let (quotient_result, remainder_result) = poly1.divide_as_polynomial(poly2);
-    //     quotient_expected = XFieldElement::new(
-    //         [1, 9223372034707292169u128, 9223372034707292310u128].map(BFieldElement::new),
-    //     );
-    //     remainder_expected = XFieldElement::new([0, 0, 0].map(BFieldElement::new));
-    //     assert_eq!(quotient_expected, quotient_result);
-    //     assert_eq!(remainder_expected, remainder_result);
-    // }
-
-    // TODO: Write property-based test of `divide_as_polynomial`
-    // #[test]
-    // fn divide_as_polynomial_property_based_test() {
-    //     let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::MAX as i128);
-    //     for rand in rands {
-    //         let a =
-    //     }
-    // }
 }
