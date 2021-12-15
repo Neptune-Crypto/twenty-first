@@ -210,6 +210,15 @@ impl<
         acc
     }
 
+    pub fn leading_coefficient(&self, zero: U) -> U {
+        assert!(zero.is_zero(), "zero must be zero. Got: {}", zero);
+        let degree = self.degree();
+        match degree {
+            -1 => zero,
+            n => self.coefficients[n as usize].clone(),
+        }
+    }
+
     // Return the polynomial which corresponds to the transformation `x -> alpha * x`
     // x should probably be called alpha below
     pub fn scale(&self, x: &U) -> Self {
@@ -802,7 +811,9 @@ impl<
         let mut remainder = self.clone();
         remainder.normalize();
 
-        let dlc: U = divisor.coefficients[degree_rhs as usize].clone(); // divisor leading coefficient
+        // a divisor coefficient is guaranteed to exist since the divisor is non-zero
+        // we need a divisor coefficient to get a `zero` field element to send to `leading_coefficient`.
+        let dlc: U = divisor.leading_coefficient(divisor.coefficients.first().unwrap().ring_zero());
         let inv = dlc.ring_one() / dlc;
 
         let mut i = 0;
@@ -1154,6 +1165,44 @@ mod test_polynomials {
             PrimeFieldElement::new(26, &_71),
             parabola.evaluate(&PrimeFieldElement::new(6, &_71))
         );
+    }
+
+    #[test]
+    fn leading_coefficient_test() {
+        let _14 = BFieldElement::new(14);
+        let _0 = BFieldElement::ring_zero();
+        let _1 = BFieldElement::ring_one();
+        let _max = BFieldElement::new(BFieldElement::MAX);
+        let lc_0_0: Polynomial<BFieldElement> = Polynomial::new(vec![]);
+        let lc_0_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0]);
+        let lc_0_2: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0]);
+        assert_eq!(_0, lc_0_0.leading_coefficient(_0));
+        assert_eq!(_0, lc_0_1.leading_coefficient(_0));
+        assert_eq!(_0, lc_0_2.leading_coefficient(_0));
+
+        // Other numbers as LC
+        let lc_1_0: Polynomial<BFieldElement> = Polynomial::new(vec![_1]);
+        let lc_1_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0, _1]);
+        let lc_1_2: Polynomial<BFieldElement> = Polynomial::new(vec![_max, _14, _0, _max, _1]);
+        assert_eq!(_1, lc_1_0.leading_coefficient(_0));
+        assert_eq!(_1, lc_1_1.leading_coefficient(_0));
+        assert_eq!(_1, lc_1_2.leading_coefficient(_0));
+
+        let lc_14_0: Polynomial<BFieldElement> = Polynomial::new(vec![_14]);
+        let lc_14_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0, _14]);
+        let lc_14_2: Polynomial<BFieldElement> =
+            Polynomial::new(vec![_max, _14, _0, _max, _14, _0, _0, _0]);
+        assert_eq!(_14, lc_14_0.leading_coefficient(_0));
+        assert_eq!(_14, lc_14_1.leading_coefficient(_0));
+        assert_eq!(_14, lc_14_2.leading_coefficient(_0));
+
+        let lc_max_0: Polynomial<BFieldElement> = Polynomial::new(vec![_max]);
+        let lc_max_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0, _max]);
+        let lc_max_2: Polynomial<BFieldElement> =
+            Polynomial::new(vec![_max, _14, _0, _max, _max, _0, _0, _0]);
+        assert_eq!(_max, lc_max_0.leading_coefficient(_0));
+        assert_eq!(_max, lc_max_1.leading_coefficient(_0));
+        assert_eq!(_max, lc_max_2.leading_coefficient(_0));
     }
 
     #[test]
