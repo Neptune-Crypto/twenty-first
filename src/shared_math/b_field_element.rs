@@ -71,9 +71,9 @@ impl BFieldElement {
         let mod_value: u128 = Self::QUOTIENT;
         let res = self.0;
 
-        for i in 0..128 {
+        for i in 0..64 {
             acc = acc * acc % mod_value;
-            let set: bool = pow & (1 << (128 - 1 - i)) != 0;
+            let set: bool = pow & (1 << (64 - 1 - i)) != 0;
             if set {
                 acc = acc * res % mod_value;
             }
@@ -420,5 +420,20 @@ mod b_prime_field_element_test {
         assert_eq!(2, a_factor);
         assert_eq!(-1, b_factor);
         assert_eq!(expected_gcd_ab, a_factor * a + b_factor * b);
+    }
+
+    #[test]
+    fn mod_pow_test() {
+        // These values were found by finding primitive roots of unity and verifying
+        // that they are group generators of the right order
+        assert!(BFieldElement::new(281474976710656).mod_pow(4).is_one());
+        assert_eq!(
+            BFieldElement::new(281474976710656),
+            BFieldElement::new(281474976710656).mod_pow(5)
+        );
+        assert!(BFieldElement::new(18446744069414584320).mod_pow(2).is_one()); // 18446744069414584320, 2nd
+        assert!(BFieldElement::new(18446744069397807105).mod_pow(8).is_one());
+        assert!(BFieldElement::new(2625919085333925275).mod_pow(10).is_one());
+        assert!(BFieldElement::new(281474976645120).mod_pow(12).is_one());
     }
 }
