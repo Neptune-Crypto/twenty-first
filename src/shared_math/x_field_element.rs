@@ -3,10 +3,13 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{IdentityValues, ModPowU64};
 use serde::{Deserialize, Serialize};
 
+use std::ops::Div;
 use std::{
     fmt::Display,
     ops::{Add, Mul, Neg, Sub},
 };
+
+use super::traits::New;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -114,6 +117,20 @@ impl XFieldElement {
         )
     }
 
+    pub fn get_cyclic_group(&self) -> Vec<XFieldElement> {
+        let mut val = *self;
+        let mut ret: Vec<XFieldElement> = vec![XFieldElement::ring_one()];
+
+        loop {
+            ret.push(val);
+            val = val * *self;
+            if val.is_one() {
+                break;
+            }
+        }
+        ret
+    }
+
     pub fn inv(&self) -> Self {
         let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
         let (_, a, _) = Self::xgcd(self_as_poly, Self::shah_polynomial());
@@ -155,6 +172,14 @@ impl IdentityValues for XFieldElement {
 
     fn ring_one(&self) -> Self {
         Self::ring_one()
+    }
+}
+
+// TODO: Replace this with a From<usize> trait
+// This trait is used by INTT
+impl New for XFieldElement {
+    fn new_from_usize(&self, value: usize) -> Self {
+        Self::new_const(BFieldElement::new(value as u128))
     }
 }
 
@@ -253,27 +278,14 @@ impl Sub for XFieldElement {
     }
 }
 
-// impl Rem for XFieldElement {
-//     type Output = Self;
+impl Div for XFieldElement {
+    type Output = Self;
 
-//     fn rem(self, other: Self) -> Self {
-//         // XXX
-//     }
-// }
-
-// impl Div for XFieldElement {
-//     type Output = Self;
-
-//     fn add(self, other: Self) -> Self {
-//         Self {
-//             coefficients: [
-//                 self.coefficients[0] + other.coefficients[0],
-//                 self.coefficients[1] + other.coefficients[1],
-//                 self.coefficients[2] + other.coefficients[2],
-//             ],
-//         }
-//     }
-// }
+    #[allow(clippy::suspicious_arithmetic_impl)]
+    fn div(self, other: Self) -> Self {
+        self * other.inv()
+    }
+}
 
 impl ModPowU64 for XFieldElement {
     fn mod_pow_u64(&self, exponent: u64) -> Self {
@@ -292,7 +304,7 @@ impl ModPowU64 for XFieldElement {
             }
 
             x = x * x;
-            i = i >> 1;
+            i >>= 1;
         }
 
         result
@@ -305,7 +317,7 @@ impl ModPowU64 for XFieldElement {
 mod x_field_element_test {
     use itertools::izip;
 
-    use crate::shared_math::{b_field_element::*, x_field_element::*};
+    use crate::shared_math::{b_field_element::*, ntt, x_field_element::*};
     // use proptest::prelude::*;
 
     #[test]
@@ -544,6 +556,37 @@ mod x_field_element_test {
 
         for (expected, actual) in izip!(expecteds, actuals) {
             assert_eq!(expected, actual);
+        }
+    }
+
+    #[test]
+    fn x_field_ntt_test() {
+        for i in [2, 4, 8, 16, 32] {
+            // Verify that NTT and INTT are each other's inverses,
+            // and that NTT corresponds to polynomial evaluation
+            let inputs_u128: Vec<u128> = (0..i).collect();
+            let inputs: Vec<XFieldElement> = inputs_u128
+                .iter()
+                .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
+                .collect();
+            let root = XFieldElement::get_primitive_root_of_unity(i).0.unwrap();
+            let outputs = ntt::ntt(&inputs, &root);
+            let inverted_outputs = ntt::intt(&outputs, &root);
+            assert_eq!(inputs, inverted_outputs);
+
+            // The output should be equivalent to evaluating root^i, i = [0..4]
+            // over the polynomium with coefficients 1, 2, 3, 4
+            let pol_degree_i_minus_1: Polynomial<XFieldElement> = Polynomial::new(inputs.to_vec());
+            let x_domain = root.get_cyclic_group();
+            for i in 0..outputs.len() {
+                assert_eq!(pol_degree_i_minus_1.evaluate(&x_domain[i]), outputs[i]);
+            }
+
+            // Verify that polynomial interpolation produces the same polynomial
+            // Slow Lagrange interpolation is very slow for big inputs. Do not increase
+            // this above 32 elements!
+            let interpolated = Polynomial::slow_lagrange_interpolation_new(&x_domain, &outputs);
+            assert_eq!(pol_degree_i_minus_1, interpolated);
         }
     }
 }
