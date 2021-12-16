@@ -835,7 +835,7 @@ impl<
                 remainder.coefficients[rem_length - j - 1] = remainder.coefficients
                     [rem_length - j - 1]
                     .clone()
-                    - q.clone() * divisor.coefficients[divisor.coefficients.len() - j - 2].clone();
+                    - q.clone() * divisor.coefficients[(degree_rhs + 1) as usize - j - 2].clone();
             }
 
             i += 1;
@@ -1932,6 +1932,72 @@ mod test_polynomials {
             let one = mul_a_b.clone() / mul_a_b.clone();
             assert!(one.is_one());
         }
+    }
+
+    // This test was used to catch a bug where the polynomial division
+    // was wrong when the divisor has a leading zero coefficient, i.e.
+    // when it was not normalized
+    #[test]
+    fn pol_div_bug_detection_test() {
+        // x^3 + 18446744069414584320x + 1 / y = x
+        let numerator = Polynomial::new(vec![
+            BFieldElement::new(1),
+            -BFieldElement::new(1),
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+        ]);
+        let divisor_normalized =
+            Polynomial::new(vec![BFieldElement::new(0), BFieldElement::new(1)]);
+        let divisor_not_normalized = Polynomial::new(vec![
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+            BFieldElement::new(0),
+        ]);
+
+        let divisor_more_leading_zeros = Polynomial::new(vec![
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+        ]);
+
+        let numerator_with_leading_zero = Polynomial::new(vec![
+            BFieldElement::new(1),
+            -BFieldElement::new(1),
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+            BFieldElement::new(0),
+        ]);
+
+        let expected = Polynomial::new(vec![
+            -BFieldElement::new(1),
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+        ]);
+
+        // Verify that the divisor need not be normalized
+        let res_correct = numerator.clone() / divisor_normalized.clone();
+        let res_not_normalized = numerator.clone() / divisor_not_normalized.clone();
+        assert_eq!(expected, res_correct);
+        assert_eq!(res_correct, res_not_normalized);
+        let res_more_leading_zeros = numerator / divisor_more_leading_zeros.clone();
+        assert_eq!(expected, res_more_leading_zeros);
+
+        // Verify that numerator need not be normalized
+        let res_numerator_not_normalized_0 =
+            numerator_with_leading_zero.clone() / divisor_normalized;
+        let res_numerator_not_normalized_1 =
+            numerator_with_leading_zero.clone() / divisor_not_normalized;
+        let res_numerator_not_normalized_2 =
+            numerator_with_leading_zero / divisor_more_leading_zeros;
+        assert_eq!(expected, res_numerator_not_normalized_0);
+        assert_eq!(expected, res_numerator_not_normalized_1);
+        assert_eq!(expected, res_numerator_not_normalized_2);
     }
 
     #[test]
