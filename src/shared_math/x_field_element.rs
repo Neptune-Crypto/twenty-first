@@ -52,6 +52,14 @@ impl XFieldElement {
         Self { coefficients }
     }
 
+    pub fn new_const(element: BFieldElement) -> Self {
+        let zero = BFieldElement::ring_zero();
+
+        Self {
+            coefficients: [element, zero, zero],
+        }
+    }
+
     pub fn ring_zero() -> Self {
         Self {
             coefficients: [0, 0, 0].map(BFieldElement::new),
@@ -65,7 +73,7 @@ impl XFieldElement {
         }
     }
 
-    // Division in 𝔽_p[X], not 𝔽_p^e ≅ 𝔽[X]/p(x).
+    // Division in 𝔽_p[X], not 𝔽_{p^e} ≅ 𝔽[X]/p(x).
     pub fn xgcd(
         mut x: Polynomial<BFieldElement>,
         mut y: Polynomial<BFieldElement>,
@@ -111,6 +119,15 @@ impl XFieldElement {
         let (_, a, _) = Self::xgcd(self_as_poly, Self::shah_polynomial());
         a.into()
     }
+
+    pub fn get_primitive_root_of_unity(n: u128) -> (Option<XFieldElement>, Vec<u128>) {
+        let (b_root, primes) = BFieldElement::get_primitive_root_of_unity(n);
+        let x_root = b_root.map(XFieldElement::new_const);
+
+        (x_root, primes)
+    }
+
+    // TODO: legendre_symbol
 }
 
 impl Display for XFieldElement {
@@ -257,8 +274,6 @@ impl Sub for XFieldElement {
 //         }
 //     }
 // }
-
-// TODO: get_primitive_root_of_unity (TBD), primes_lt, legendre_symbol,
 
 impl ModPowU64 for XFieldElement {
     fn mod_pow_u64(&self, exponent: u64) -> Self {
