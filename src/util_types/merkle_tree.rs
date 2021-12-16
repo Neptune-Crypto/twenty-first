@@ -4,15 +4,19 @@ use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
+type Blake3Hash = [u8; 32];
+
+const BLAKE3ZERO: Blake3Hash = [0u8; 32];
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Node<T> {
     pub value: Option<T>,
-    hash: [u8; 32],
+    hash: Blake3Hash,
 }
 
 #[derive(Clone, Debug)]
 pub struct MerkleTree<T> {
-    root_hash: [u8; 32],
+    root_hash: Blake3Hash,
     nodes: Vec<Node<T>>,
     height: u64,
 }
@@ -41,7 +45,7 @@ impl<T: Clone + Debug + Serialize + PartialEq> PartialAuthenticationPath<T> {
 }
 
 impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
-    pub fn verify_proof(root_hash: [u8; 32], index: u64, proof: Vec<Node<T>>) -> bool {
+    pub fn verify_proof(root_hash: Blake3Hash, index: u64, proof: Vec<Node<T>>) -> bool {
         let mut mut_index = index + 2u64.pow(proof.len() as u32);
         let mut v = proof[0].clone();
         let mut hasher = blake3::Hasher::new();
@@ -84,7 +88,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         let mut nodes: Vec<Node<T>> = vec![
             Node {
                 value: None,
-                hash: [0u8; 32],
+                hash: BLAKE3ZERO,
             };
             2 * values.len()
         ];
@@ -120,6 +124,114 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
             index /= 2;
         }
         proof
+    }
+
+    // Similar to `get_proof', but instead of returning a `Vec<Node<T>>`, we only
+    // return the hashes, not the tree nodes (and potential leaf values), and instead
+    // of referring to this as a `proof', we call it the `authentication path'.
+    //
+    //              root
+    //             /    \
+    // H(H(a)+H(b))      H(H(c)+H(d))
+    //   /      \        /      \
+    // H(a)    H(b)    H(c)    H(d)
+    //
+    // The authentication path for `c' (index: 2) would be
+    //
+    //   vec![ H(d), H(H(a)+H(b)) ]
+    //
+    // ... so a criss-cross of siblings upwards.
+    pub fn get_authentication_path(&self, index: usize) -> Vec<Blake3Hash> {
+        let mut auth_path: Vec<Blake3Hash> = Vec::with_capacity(self.height as usize);
+
+        let mut i = index + self.nodes.len() / 2;
+        while i > 1 {
+            // We get the sibling node by XOR'ing with 1.
+            let sibling_i = i ^ 1;
+            auth_path.push(self.nodes[sibling_i].hash);
+            i /= 2;
+        }
+
+        // We don't include the root hash in the authentication path
+        // because it's implied in the context of use.
+        //auth_path.push(self.root_hash);
+
+        auth_path
+    }
+
+    // Verify the `authentication path' of a `value' with an `index' from the
+    // `root_hash' of a given Merkle tree. Similar to `verify_proof', but instead of
+    // a `proof: Vec<Node<T>>` that contains [ValueNode, ...PathNodes..., RootNode],
+    // we only pass an `auth_path: Vec<Blake3Hash>' with the hashes of the path nodes;
+    // the `root_hash' is passed along separately, and the `value' hash is computed.
+    //
+    // The `index' is to know if a given path element is a left- or a right-sibling.
+    pub fn verify_authentication_path(
+        root_hash: Blake3Hash,
+        index: u32,
+        value: T,
+        auth_path: Vec<Blake3Hash>,
+    ) -> bool {
+        let path_length = auth_path.len() as u32;
+        let mut hasher = blake3::Hasher::new();
+
+        let value_hash = *blake3::hash(
+            bincode::serialize(&value)
+                .expect("Encoding failed")
+                .as_slice(),
+        )
+        .as_bytes();
+
+        // Initialize `acc_hash' as H(value)
+        let mut acc_hash = value_hash;
+        let mut i = index + 2u32.pow(path_length);
+        for path_hash in auth_path.iter() {
+            // Use Merkle tree index parity (odd/even) to determine which
+            // order to concatenate the hashes before hashing them.
+            if i % 2 == 0 {
+                hasher.update(&acc_hash);
+                hasher.update(&path_hash[..]);
+            } else {
+                hasher.update(&path_hash[..]);
+                hasher.update(&acc_hash);
+            }
+            acc_hash = *hasher.finalize().as_bytes();
+            hasher.reset();
+            i /= 2;
+        }
+
+        acc_hash == root_hash
+    }
+
+    // `verify_authentication_path_dummy' has same interface as `verify_authentication_path_dummy',
+    // but uses `verify_proof' internally. This helps to verify equivalence between the two.
+    pub fn verify_authentication_path_dummy(
+        root_hash: Blake3Hash,
+        index: u32,
+        value: T,
+        auth_path: Vec<Blake3Hash>,
+    ) -> bool {
+        let value_hash = *blake3::hash(
+            bincode::serialize(&value)
+                .expect("Encoding failed")
+                .as_slice(),
+        )
+        .as_bytes();
+        let leaf_node = Node {
+            value: Some(value),
+            hash: value_hash,
+        };
+        let auth_path_nodes: Vec<Node<T>> = auth_path
+            .iter()
+            .map(|hash| Node {
+                value: None,
+                hash: *hash,
+            })
+            .collect();
+        let mut proof = vec![leaf_node];
+        proof.extend(auth_path_nodes);
+
+        Self::verify_proof(root_hash, index as u64, proof)
     }
 
     pub fn get_root(&self) -> [u8; 32] {
@@ -502,5 +614,85 @@ mod merkle_tree_test {
             &[2, 3],
             &compressed_proof
         ));
+    }
+
+    #[test]
+    fn merkle_tree_get_authentication_path_test() {
+        // 1: Create Merkle tree
+        //
+        //     root
+        //    /    \
+        //   x      y
+        //  / \    / \
+        // 3   6  9   12
+        let tree_a = MerkleTree::from_vec(&[3, 6, 9, 12]);
+
+        // 2: Get the path for value '9' (index: 2)
+        let auth_path_a = tree_a.get_authentication_path(2);
+
+        assert_eq!(
+            2,
+            auth_path_a.len(),
+            "authentication path a has right length"
+        );
+        assert_eq!(tree_a.nodes[2].hash, auth_path_a[1], "sibling x");
+        assert_eq!(tree_a.nodes[7].hash, auth_path_a[0], "sibling 12");
+
+        //        ___root___
+        //       /          \
+        //      e            f
+        //    /   \        /   \
+        //   a     b      c     d
+        //  / \   / \    / \   / \
+        // 3   1 4   1  5   9 8   6
+        let tree_b = MerkleTree::from_vec(&[3, 1, 4, 1, 5, 9, 8, 6]);
+
+        // merkle leaf index: 5
+        // merkle leaf value: 9
+        // auth path: 5 ~> d ~> e
+        let auth_path_b = tree_b.get_authentication_path(5);
+
+        assert_eq!(3, auth_path_b.len());
+        assert_eq!(tree_b.nodes[12].hash, auth_path_b[0], "sibling 5");
+        assert_eq!(tree_b.nodes[7].hash, auth_path_b[1], "sibling d");
+        assert_eq!(tree_b.nodes[2].hash, auth_path_b[2], "sibling e");
+
+        // println!("tree...\n{:?}", tree.root_hash);
+        // tree.nodes
+        //     .iter()
+        //     .for_each(|node| println!(" - {:?}", node.hash));
+        // println!("path...");
+        // auth_path.iter().for_each(|hash| println!(" ~ {:?}", hash));
+    }
+
+    #[test]
+    fn merkle_tree_verify_authentication_path_test() {
+        let merkle_values = &[3, 1, 4, 1, 5, 9, 8, 6];
+        let tree = MerkleTree::from_vec(merkle_values);
+
+        for (index, value) in merkle_values.iter().enumerate() {
+            let auth_path = tree.get_authentication_path(index);
+
+            let verified_1 = MerkleTree::verify_authentication_path(
+                tree.root_hash,
+                index as u32,
+                value,
+                auth_path.clone(),
+            );
+
+            let verified_2 = MerkleTree::verify_authentication_path_dummy(
+                tree.root_hash,
+                index as u32,
+                value,
+                auth_path.clone(),
+            );
+
+            let proof = tree.get_proof(index);
+            let verified_3 = MerkleTree::verify_proof(tree.root_hash, index as u64, proof);
+
+            assert_eq!(verified_1, verified_2);
+            assert_eq!(verified_1, verified_3);
+            assert!(verified_1, "(index:{},value:{}) verifies", index, value);
+        }
     }
 }
