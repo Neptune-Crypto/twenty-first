@@ -1,12 +1,11 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::IdentityValues;
-use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
 use std::{
     fmt::Display,
-    ops::{Add, Mul, Neg, Rem, Sub},
+    ops::{Add, Mul, Neg, Sub},
 };
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
@@ -70,34 +69,6 @@ impl XFieldElement {
     }
 
     // Division in 𝔽_p[X], not 𝔽_p^e ≅ 𝔽[X]/p(x).
-    // TODO (Maybe): Could be that this isn't as efficient as possible.
-    // fn divide_as_polynomial(lhs: Polynomial<BFieldElement>, rhs: Polynomial<BFieldElement>) -> (Polynomial<BFieldElement>, Polynomial<BFieldElement>) {
-    // let lhs = Polynomial {
-    //     coefficients: self.coefficients.to_vec(),
-    // };
-    // let rhs = Polynomial {
-    //     coefficients: other.coefficients.to_vec(),
-    // };
-    // lhs.divide(rhs)
-    // let mut quot_coefficients = [BFieldElement::ring_zero(); 3];
-    // let mut rem_coefficients = [BFieldElement::ring_zero(); 3];
-    // for i in 0..quot_as_vec.degree() + 1 {
-    //     quot_coefficients[i as usize] = quot_as_vec.coefficients[i as usize];
-    // }
-    // for i in 0..rem_as_vec.degree() + 1 {
-    //     rem_coefficients[i as usize] = rem_as_vec.coefficients[i as usize];
-    // }
-
-    // (
-    //     Self {
-    //         coefficients: quot_coefficients,
-    //     },
-    //     Self {
-    //         coefficients: rem_coefficients,
-    //     },
-    // )
-    // }
-
     pub fn xgcd(
         mut x: Polynomial<BFieldElement>,
         mut y: Polynomial<BFieldElement>,
@@ -131,12 +102,6 @@ impl XFieldElement {
         // to ensure that x has a leading coefficient of 1.
         let lc = x.leading_coefficient(BFieldElement::ring_zero());
         let scale = lc.inv();
-        println!("lc = {}", lc);
-        println!("scale = {}", scale);
-        println!("x = {}", x);
-        println!("a_factor = {}", a_factor);
-        println!("b_factor = {}", b_factor);
-
         (
             x.scalar_mul(scale),
             a_factor.scalar_mul(scale),
@@ -146,10 +111,7 @@ impl XFieldElement {
 
     pub fn inv(&self) -> Self {
         let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
-        let (gcd, b, a) = Self::xgcd(Self::shah_polynomial(), self_as_poly.clone());
-        println!("gcd = {}", gcd);
-        println!("a = {}", a);
-        println!("b = {}", b);
+        let (_, a, _) = Self::xgcd(self_as_poly, Self::shah_polynomial());
         a.into()
     }
 }
@@ -429,8 +391,74 @@ mod x_field_element_test {
     }
 
     #[test]
+    fn x_field_xgcp_test() {
+        // Verify expected properties of XGCP: symmetry and that gcd is always
+        // one. gcd is always one for all field elements.
+        let one = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
+        let two = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
+        let hundred = XFieldElement::new([100, 0, 0].map(BFieldElement::new));
+        let x = XFieldElement::new([0, 1, 0].map(BFieldElement::new));
+        let x_squared = XFieldElement::new([0, 0, 1].map(BFieldElement::new));
+        let one_one_one = XFieldElement::new([1, 1, 1].map(BFieldElement::new));
+        let complex0 = XFieldElement::new([450, 967, 21444444201].map(BFieldElement::new));
+        let complex1 = XFieldElement::new([456230, 0, 4563210789].map(BFieldElement::new));
+        let complex2 = XFieldElement::new([0, 96701, 456703214].map(BFieldElement::new));
+        let complex3 = XFieldElement::new([124504, 9654677, 0].map(BFieldElement::new));
+        let complex4 = XFieldElement::new(
+            [BFieldElement::MAX, BFieldElement::MAX, BFieldElement::MAX].map(BFieldElement::new),
+        );
+        let complex5 =
+            XFieldElement::new([0, BFieldElement::MAX, BFieldElement::MAX].map(BFieldElement::new));
+        let complex6 =
+            XFieldElement::new([BFieldElement::MAX, 0, BFieldElement::MAX].map(BFieldElement::new));
+        let complex7 =
+            XFieldElement::new([BFieldElement::MAX, BFieldElement::MAX, 0].map(BFieldElement::new));
+
+        let x_field_elements = vec![
+            one,
+            two,
+            hundred,
+            x,
+            x_squared,
+            one_one_one,
+            complex0,
+            complex1,
+            complex2,
+            complex3,
+            complex4,
+            complex5,
+            complex6,
+            complex7,
+        ];
+        for x_field_element in x_field_elements.iter() {
+            let x_field_element_poly: Polynomial<BFieldElement> = (*x_field_element).into();
+            // XGCP for x
+            let (gcd_0, a_0, b_0) = XFieldElement::xgcd(
+                x_field_element_poly.clone(),
+                XFieldElement::shah_polynomial(),
+            );
+            let (gcd_1, b_1, a_1) = XFieldElement::xgcd(
+                XFieldElement::shah_polynomial(),
+                x_field_element.clone().into(),
+            );
+
+            // Verify symmetry, and that all elements are mutual primes, meaning that
+            // they form a field
+            assert!(gcd_0.is_one());
+            assert!(gcd_1.is_one());
+            assert_eq!(a_0, a_1);
+            assert_eq!(b_0, b_1);
+
+            // Verify Bezout relations: ax + by = gcd
+            assert_eq!(
+                gcd_0,
+                a_0 * x_field_element_poly + b_0 * XFieldElement::shah_polynomial()
+            );
+        }
+    }
+
+    #[test]
     fn x_field_inv_test() {
-        println!("QUOTIENT = {}", BFieldElement::QUOTIENT);
         let one = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
         let one_inv = one.inv();
         assert!((one_inv * one).is_one());
@@ -453,10 +481,6 @@ mod x_field_element_test {
 
         let x = XFieldElement::new([0, 1, 0].map(BFieldElement::new));
         let x_inv = x.inv();
-        println!("x = {}", x);
-        println!("x_inv = {}", x_inv);
-        println!("x * x_inv = {}", x_inv * x);
-        println!("x_inv * x = {}", x * x_inv);
         assert!((x_inv * x).is_one());
         assert!((x * x_inv).is_one());
     }
