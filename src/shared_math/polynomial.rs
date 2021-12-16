@@ -1820,20 +1820,18 @@ mod test_polynomials {
         let _71 = PrimeField::new(prime_modulus);
         let a_degree = 20;
         for i in 0..20 {
-            let mut a = Polynomial::<PrimeFieldElement> {
+            let a = Polynomial::<PrimeFieldElement> {
                 coefficients: generate_random_numbers(a_degree, prime_modulus)
                     .iter()
                     .map(|x| PrimeFieldElement::new(*x, &_71))
                     .collect(),
             };
-            a.normalize();
-            let mut b = Polynomial::<PrimeFieldElement> {
+            let b = Polynomial::<PrimeFieldElement> {
                 coefficients: generate_random_numbers(a_degree + i, prime_modulus)
                     .iter()
                     .map(|x| PrimeFieldElement::new(*x, &_71))
                     .collect(),
             };
-            b.normalize();
 
             let mul_a_b: Polynomial<PrimeFieldElement> = a.clone() * b.clone();
             let mul_b_a: Polynomial<PrimeFieldElement> = b.clone() * a.clone();
@@ -1843,22 +1841,16 @@ mod test_polynomials {
             let sub_b_a: Polynomial<PrimeFieldElement> = b.clone() - a.clone();
 
             let mut res = mul_a_b.clone() / b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = mul_b_a.clone() / a.clone();
-            res.normalize();
             assert_eq!(res, b);
             res = add_a_b.clone() - b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = sub_a_b.clone() + b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = add_b_a.clone() - a.clone();
-            res.normalize();
             assert_eq!(res, b);
             res = sub_b_a.clone() + a.clone();
-            res.normalize();
             assert_eq!(res, b);
             assert_eq!(add_a_b, add_b_a);
             assert_eq!(mul_a_b, mul_b_a);
@@ -1882,20 +1874,18 @@ mod test_polynomials {
         let _71 = PrimeFieldBig::new(b(prime_modulus));
         let a_degree = 20;
         for i in 0..20 {
-            let mut a = Polynomial::<PrimeFieldElementBig> {
+            let a = Polynomial::<PrimeFieldElementBig> {
                 coefficients: generate_random_numbers(a_degree, prime_modulus)
                     .iter()
                     .map(|x| pfb(*x, &_71))
                     .collect(),
             };
-            a.normalize();
-            let mut b = Polynomial::<PrimeFieldElementBig> {
+            let b = Polynomial::<PrimeFieldElementBig> {
                 coefficients: generate_random_numbers(a_degree + i, prime_modulus)
                     .iter()
                     .map(|x| pfb(*x, &_71))
                     .collect(),
             };
-            b.normalize();
 
             let mul_a_b: Polynomial<PrimeFieldElementBig> = a.clone() * b.clone();
             let mul_b_a: Polynomial<PrimeFieldElementBig> = b.clone() * a.clone();
@@ -1905,22 +1895,16 @@ mod test_polynomials {
             let sub_b_a: Polynomial<PrimeFieldElementBig> = b.clone() - a.clone();
 
             let mut res = mul_a_b.clone() / b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = mul_b_a.clone() / a.clone();
-            res.normalize();
             assert_eq!(res, b);
             res = add_a_b.clone() - b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = sub_a_b.clone() + b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = add_b_a.clone() - a.clone();
-            res.normalize();
             assert_eq!(res, b);
             res = sub_b_a.clone() + a.clone();
-            res.normalize();
             assert_eq!(res, b);
             assert_eq!(add_a_b, add_b_a);
             assert_eq!(mul_a_b, mul_b_a);
