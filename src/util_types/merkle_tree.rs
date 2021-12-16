@@ -1,4 +1,5 @@
 use crate::shared_math::other::log_2_floor;
+use itertools::izip;
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
@@ -25,6 +26,9 @@ pub struct MerkleTree<T> {
 pub struct PartialAuthenticationPath<T: Clone + Debug + PartialEq + Serialize>(
     pub Vec<Option<Node<T>>>,
 );
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LeaflessPartialAuthenticationPath(pub Vec<Option<Blake3Hash>>);
 
 /// Method for extracting the value for which a compressed Merkle proof element is for.
 impl<T: Clone + Debug + Serialize + PartialEq> PartialAuthenticationPath<T> {
@@ -242,8 +246,9 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         self.nodes.len() / 2
     }
 
+    // XXX
     pub fn verify_multi_proof(
-        root_hash: [u8; 32],
+        root_hash: Blake3Hash,
         indices: &[usize],
         proof: &[PartialAuthenticationPath<T>],
     ) -> bool {
@@ -260,10 +265,10 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         let mut partial_tree: HashMap<u64, Node<T>> = HashMap::new();
         let mut proof_clone: Vec<PartialAuthenticationPath<T>> = proof.to_owned();
         let half_tree_size = 2u64.pow(proof_clone[0].0.len() as u32 - 1);
-        for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
+        for (i, b) in indices.iter().zip(proof_clone.iter()) {
             let mut index = half_tree_size + *i as u64;
             partial_tree.insert(index, b.0[0].clone().unwrap());
-            for elem in b.0.iter_mut().skip(1) {
+            for elem in b.0.iter().skip(1) {
                 if let Some(i) = elem.clone() {
                     partial_tree.insert(index ^ 1, i);
                 }
@@ -332,6 +337,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         true
     }
 
+    // Compact Merkle Multiproof Generation
     pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<PartialAuthenticationPath<T>> {
         let mut calculable_indices: HashSet<usize> = HashSet::new();
         let mut output: Vec<PartialAuthenticationPath<T>> = Vec::with_capacity(indices.len());
@@ -384,6 +390,121 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         }
 
         output
+    }
+
+    // Compact Merkle Multiproof Generation
+    //
+    // Leafless (produce authentication paths, not Vec<Node<T>>s with leaf values in it).
+    //
+    // `_dummy' because it relies on the existing `get_multi_proof'.
+    pub fn get_leafless_multi_proof_dummy(
+        &self,
+        indices: &[usize],
+    ) -> Vec<LeaflessPartialAuthenticationPath> {
+        self.get_multi_proof(indices)
+            .iter()
+            .map(|pat| Self::convert_pat_leafless(pat.clone()))
+            .collect()
+    }
+
+    fn convert_pat_leafless(
+        auth_path_nodes: PartialAuthenticationPath<T>,
+    ) -> LeaflessPartialAuthenticationPath {
+        let auth_path_hashes: Vec<Option<Blake3Hash>> = auth_path_nodes
+            .0
+            .iter()
+            .map(|node_opt| node_opt.clone().map(|node| node.hash))
+            .collect();
+
+        LeaflessPartialAuthenticationPath(auth_path_hashes)
+    }
+
+    // Nearly copy-paste of `verify_multi_proof', but modified for
+    // `LeaflessPartialAuthenticationPath'.
+    pub fn verify_leafless_multi_proof(
+        root_hash: Blake3Hash,
+        indices: &[usize],
+        values: &[T],
+        partial_auth_paths: &[LeaflessPartialAuthenticationPath],
+    ) -> bool {
+        if indices.len() != partial_auth_paths.len() {
+            return false;
+        }
+
+        if indices.len() != values.len() {
+            return false;
+        }
+
+        let mut partial_tree: HashMap<u64, Blake3Hash> = HashMap::new();
+        let mut proof_clone: Vec<LeaflessPartialAuthenticationPath> = partial_auth_paths.to_owned();
+        let half_tree_size = 2u64.pow(proof_clone[0].0.len() as u32 - 1);
+        for (i, b) in indices.iter().zip(proof_clone.iter()) {
+            let mut index = half_tree_size + *i as u64;
+            partial_tree.insert(index, b.0[0].clone().unwrap());
+            for elem in b.0.iter().skip(1) {
+                if let Some(i) = elem.clone() {
+                    partial_tree.insert(index ^ 1, i);
+                }
+                index /= 2;
+            }
+        }
+
+        let mut complete = false;
+        let mut hasher = blake3::Hasher::new();
+        while !complete {
+            complete = true;
+            let mut keys: Vec<u64> = partial_tree.keys().copied().map(|x| x / 2).collect();
+            keys.sort_by_key(|w| Reverse(*w));
+            for key in keys {
+                if partial_tree.contains_key(&(key * 2))
+                    && partial_tree.contains_key(&(key * 2 + 1))
+                    && !partial_tree.contains_key(&key)
+                {
+                    hasher.update(&partial_tree[&(key * 2)]);
+                    hasher.update(&partial_tree[&(key * 2 + 1)]);
+                    partial_tree.insert(key, *hasher.finalize().as_bytes());
+                    hasher.reset();
+                    complete = false;
+                }
+            }
+        }
+
+        for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
+            let mut index = half_tree_size + *i as u64;
+            for elem in b.0.iter_mut().skip(1) {
+                if *elem == None {
+                    // If the Merkle tree/proof is manipulated, the value partial_tree[&(index ^ 1)]
+                    // is not guaranteed to exist. So have to  check
+                    // whether it exists and return false if it does not
+                    if !partial_tree.contains_key(&(index ^ 1)) {
+                        return false;
+                    }
+
+                    *elem = Some(partial_tree[&(index ^ 1)].clone());
+                }
+                partial_tree.insert(index ^ 1, elem.clone().unwrap());
+                index /= 2;
+            }
+        }
+
+        let auth_paths = partial_auth_paths
+            .iter()
+            .map(Self::unwrap_leafless_partial_authentication_path);
+
+        izip!(indices, values, auth_paths).all(|(index, value, auth_path)| {
+            Self::verify_authentication_path(root_hash, *index as u32, value.clone(), auth_path)
+        })
+    }
+
+    fn unwrap_leafless_partial_authentication_path(
+        partial_auth_path: &LeaflessPartialAuthenticationPath,
+    ) -> Vec<Blake3Hash> {
+        partial_auth_path
+            .clone()
+            .0
+            .into_iter()
+            .map(|hash| hash.unwrap())
+            .collect()
     }
 }
 
