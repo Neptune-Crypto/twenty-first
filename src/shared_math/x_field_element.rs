@@ -1,6 +1,6 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::IdentityValues;
+use crate::shared_math::traits::{IdentityValues, ModPowU64};
 use serde::{Deserialize, Serialize};
 
 use std::{
@@ -51,9 +51,6 @@ impl XFieldElement {
     pub fn new(coefficients: [BFieldElement; 3]) -> Self {
         Self { coefficients }
     }
-
-    // TODO: mod_pow, mod_pow_raw
-    // TODO: get_primitive_root_of_unity (TBD), primes_lt, legendre_symbol,
 
     pub fn ring_zero() -> Self {
         Self {
@@ -206,6 +203,7 @@ impl Mul for XFieldElement {
         let e = other.coefficients[1];
         let f = other.coefficients[0];
 
+        // (ax^2 + bx + c) * (dx^2 + ex + f)
         Self {
             coefficients: [
                 c * f - a * e - b * d,                 // * x^0
@@ -260,10 +258,38 @@ impl Sub for XFieldElement {
 //     }
 // }
 
+// TODO: get_primitive_root_of_unity (TBD), primes_lt, legendre_symbol,
+
+impl ModPowU64 for XFieldElement {
+    fn mod_pow_u64(&self, exponent: u64) -> Self {
+        // Special case for handling 0^0 = 1
+        if exponent == 0 {
+            return Self::ring_one();
+        }
+
+        let mut x = *self;
+        let mut result = Self::ring_one();
+        let mut i = exponent;
+
+        while i > 0 {
+            if i % 2 == 1 {
+                result = result * x;
+            }
+
+            x = x * x;
+            i = i >> 1;
+        }
+
+        result
+    }
+}
+
 // TODO: ModPow64
 
 #[cfg(test)]
 mod x_field_element_test {
+    use itertools::izip;
+
     use crate::shared_math::{b_field_element::*, x_field_element::*};
     // use proptest::prelude::*;
 
@@ -483,5 +509,26 @@ mod x_field_element_test {
         let x_inv = x.inv();
         assert!((x_inv * x).is_one());
         assert!((x * x_inv).is_one());
+    }
+
+    #[test]
+    fn x_field_mod_pow_test() {
+        let const_poly = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
+
+        let expecteds = [1u64, 3, 9, 27, 81, 243].iter().map(|&x| {
+            XFieldElement::new([
+                BFieldElement::new(x as u128),
+                BFieldElement::ring_zero(),
+                BFieldElement::ring_zero(),
+            ])
+        });
+
+        let actuals = [0u64, 1, 2, 3, 4, 5]
+            .iter()
+            .map(|&n| const_poly.mod_pow_u64(n));
+
+        for (expected, actual) in izip!(expecteds, actuals) {
+            assert_eq!(expected, actual);
+        }
     }
 }
