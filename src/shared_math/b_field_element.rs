@@ -1,3 +1,4 @@
+use crate::shared_math::traits::{IdentityValues, ModPowU64};
 use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
@@ -5,8 +6,6 @@ use std::{
     fmt::{self, Display},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
-
-use super::traits::{IdentityValues, ModPowU64};
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
@@ -313,25 +312,32 @@ mod b_prime_field_element_test {
     };
     use proptest::prelude::*;
 
+    // TODO: Move this into separate file.
+    macro_rules! bfield_elem {
+        ($value:expr) => {{
+            BFieldElement::new($value)
+        }};
+    }
+
     #[test]
     fn test_zero_one() {
-        let zero = BFieldElement::new(0);
-        let one = BFieldElement::new(1);
+        let zero = bfield_elem!(0);
+        let one = bfield_elem!(1);
 
         assert!(zero.is_zero());
         assert!(!zero.is_one());
         assert!(!one.is_zero());
         assert!(one.is_one());
-        assert!(BFieldElement::new(BFieldElement::MAX + 1).is_zero());
-        assert!(BFieldElement::new(BFieldElement::MAX + 2).is_one());
+        assert!(bfield_elem!(BFieldElement::MAX + 1).is_zero());
+        assert!(bfield_elem!(BFieldElement::MAX + 2).is_one());
     }
 
     proptest! {
         #[test]
         fn identity_tests(n in 0u128..BFieldElement::MAX) {
-            let zero = BFieldElement::new(0);
-            let one = BFieldElement::new(1);
-            let other = BFieldElement::new(n);
+            let zero = bfield_elem!(0);
+            let one = bfield_elem!(1);
+            let other = bfield_elem!(n);
 
             prop_assert_eq!(other, zero + other, "left zero identity");
             prop_assert_eq!(other, other + zero, "right zero identity");
@@ -342,45 +348,18 @@ mod b_prime_field_element_test {
 
     #[test]
     fn inversion_test() {
+        assert_eq!(bfield_elem!(9223372034707292161), bfield_elem!(2).inv());
+        assert_eq!(bfield_elem!(12297829379609722881), bfield_elem!(3).inv());
+        assert_eq!(bfield_elem!(13835058052060938241), bfield_elem!(4).inv());
+        assert_eq!(bfield_elem!(14757395255531667457), bfield_elem!(5).inv());
+        assert_eq!(bfield_elem!(15372286724512153601), bfield_elem!(6).inv());
+        assert_eq!(bfield_elem!(2635249152773512046), bfield_elem!(7).inv());
+        assert_eq!(bfield_elem!(16140901060737761281), bfield_elem!(8).inv());
+        assert_eq!(bfield_elem!(4099276459869907627), bfield_elem!(9).inv());
+        assert_eq!(bfield_elem!(16602069662473125889), bfield_elem!(10).inv());
         assert_eq!(
-            BFieldElement(9223372034707292161),
-            BFieldElement::new(2).inv()
-        );
-        assert_eq!(
-            BFieldElement(12297829379609722881),
-            BFieldElement::new(3).inv()
-        );
-        assert_eq!(
-            BFieldElement(13835058052060938241),
-            BFieldElement::new(4).inv()
-        );
-        assert_eq!(
-            BFieldElement(14757395255531667457),
-            BFieldElement::new(5).inv()
-        );
-        assert_eq!(
-            BFieldElement(15372286724512153601),
-            BFieldElement::new(6).inv()
-        );
-        assert_eq!(
-            BFieldElement(2635249152773512046),
-            BFieldElement::new(7).inv()
-        );
-        assert_eq!(
-            BFieldElement(16140901060737761281),
-            BFieldElement::new(8).inv()
-        );
-        assert_eq!(
-            BFieldElement(4099276459869907627),
-            BFieldElement::new(9).inv()
-        );
-        assert_eq!(
-            BFieldElement(16602069662473125889),
-            BFieldElement::new(10).inv()
-        );
-        assert_eq!(
-            BFieldElement(11826576560539181984),
-            BFieldElement::new(8567106).inv()
+            bfield_elem!(11826576560539181984),
+            bfield_elem!(8567106).inv()
         );
     }
 
@@ -388,10 +367,7 @@ mod b_prime_field_element_test {
     fn inversion_property_based_test() {
         let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::MAX as i128);
         for rand in rands {
-            assert!(
-                (BFieldElement::new(rand as u128).inv() * BFieldElement::new(rand as u128))
-                    .is_one()
-            );
+            assert!((bfield_elem!(rand as u128).inv() * bfield_elem!(rand as u128)).is_one());
         }
     }
 
@@ -399,8 +375,8 @@ mod b_prime_field_element_test {
     fn mul_div_plus_minus_property_based_test() {
         let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::QUOTIENT as i128);
         for i in 1..rands.len() {
-            let a = BFieldElement::new(rands[i - 1] as u128);
-            let b = BFieldElement::new(rands[i] as u128);
+            let a = bfield_elem!(rands[i - 1] as u128);
+            let b = bfield_elem!(rands[i] as u128);
             let ab = a * b;
             let a_o_b = a / b;
             let b_o_a = b / a;
@@ -418,30 +394,17 @@ mod b_prime_field_element_test {
 
     #[test]
     fn create_polynomial_test() {
-        // use crate::shared_math_
-        let a: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![
-                BFieldElement::new(1),
-                BFieldElement::new(3),
-                BFieldElement::new(7),
-            ],
-        };
+        let a: Polynomial<BFieldElement> =
+            Polynomial::new(vec![bfield_elem!(1), bfield_elem!(3), bfield_elem!(7)]);
 
-        let b: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![
-                BFieldElement::new(2),
-                BFieldElement::new(5),
-                BFieldElement::new(BFieldElement::MAX),
-            ],
-        };
+        let b: Polynomial<BFieldElement> = Polynomial::new(vec![
+            bfield_elem!(2),
+            bfield_elem!(5),
+            bfield_elem!(BFieldElement::MAX),
+        ]);
 
-        let expected: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![
-                BFieldElement::new(3),
-                BFieldElement::new(8),
-                BFieldElement::new(6),
-            ],
-        };
+        let expected: Polynomial<BFieldElement> =
+            Polynomial::new(vec![bfield_elem!(3), bfield_elem!(8), bfield_elem!(6)]);
 
         assert_eq!(expected, a + b);
     }
