@@ -458,23 +458,4 @@ mod b_prime_field_element_test {
         assert_eq!(-1, b_factor);
         assert_eq!(expected_gcd_ab, a_factor * a + b_factor * b);
     }
-
-    #[test]
-    fn xgcd_help() {
-        let two = BFieldElement::new(2);
-        let one = BFieldElement::new(1);
-        println!("1 / 2 = {}, -1 / 2 = {}", one / two, -one / two);
-        // let expected = BFieldElement(7);
-        // let actual = a / b;
-        // assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn b_field_div_test() {
-        let a = BFieldElement::new(15);
-        let b = BFieldElement::new(2);
-        let expected = BFieldElement(7);
-        let actual = a / b;
-        assert_eq!(expected, actual);
-    }
 }
