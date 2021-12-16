@@ -16,9 +16,7 @@ use std::ops::{Add, Neg};
 
 use super::traits::{FieldBatchInversion, ModPowU64, New};
 
-fn degree_raw<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
-    coefficients: &[T],
-) -> isize {
+fn degree_raw<T: Add + Div + Mul + Sub + IdentityValues + Display>(coefficients: &[T]) -> isize {
     let mut deg = coefficients.len() as isize - 1;
     while deg >= 0 && coefficients[deg as usize].is_zero() {
         deg -= 1;
@@ -27,7 +25,7 @@ fn degree_raw<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
     deg // -1 for the zero polynomial
 }
 
-fn pretty_print_coefficients_generic<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
+fn pretty_print_coefficients_generic<T: Add + Div + Mul + Sub + IdentityValues + Display>(
     coefficients: &[T],
 ) -> String {
     let degree = degree_raw(coefficients);
@@ -72,24 +70,13 @@ fn pretty_print_coefficients_generic<T: Add + Div + Mul + Rem + Sub + IdentityVa
 
 #[derive(Debug, Clone)]
 pub struct Polynomial<
-    T: Add + Div + Mul + Rem + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
+    T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
 > {
     pub coefficients: Vec<T>,
 }
 
 impl<
-        T: Add
-            + Div
-            + Mul
-            + Rem
-            + Sub
-            + IdentityValues
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Debug,
+        T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
     > std::fmt::Display for Polynomial<T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -105,7 +92,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -136,7 +122,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -153,7 +138,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -415,7 +399,6 @@ impl<
             + Neg<Output = U>
             + Sized
             + New
-            + Rem
             + ModPowU64
             + FieldBatchInversion
             + Sub<Output = U>
@@ -695,7 +678,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -854,7 +836,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -877,7 +858,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -900,7 +880,6 @@ impl<
         U: Add<Output = U>
             + Div
             + Mul
-            + Rem
             + Sub
             + IdentityValues
             + Clone
@@ -935,7 +914,6 @@ impl<
         U: Add
             + Div
             + Mul
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -967,18 +945,7 @@ impl<
 }
 
 impl<
-        U: Add
-            + Div
-            + Mul
-            + Rem
-            + Sub
-            + IdentityValues
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Debug
-            + Display,
+        U: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Debug + Display,
     > Polynomial<U>
 {
     pub fn degree(&self) -> isize {
@@ -990,7 +957,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
