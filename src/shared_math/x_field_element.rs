@@ -1,6 +1,7 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{IdentityValues, ModPowU64};
+use crate::utils::generate_random_numbers;
 use serde::{Deserialize, Serialize};
 
 use std::ops::Div;
@@ -53,6 +54,21 @@ impl XFieldElement {
 
     pub fn new(coefficients: [BFieldElement; 3]) -> Self {
         Self { coefficients }
+    }
+
+    pub fn random_elements(length: u32) -> Vec<Self> {
+        let rands: Vec<i128> =
+            generate_random_numbers(3 * length as usize, BFieldElement::QUOTIENT as i128);
+        let mut ret: Vec<XFieldElement> = Vec::with_capacity(length as usize);
+        for i in 0..length as usize {
+            ret.push(XFieldElement::new([
+                BFieldElement::new(rands[3 * i] as u128),
+                BFieldElement::new(rands[3 * i + 1] as u128),
+                BFieldElement::new(rands[3 * i + 2] as u128),
+            ]));
+        }
+
+        ret
     }
 
     pub fn new_const(element: BFieldElement) -> Self {
@@ -326,10 +342,7 @@ impl ModPowU64 for XFieldElement {
 mod x_field_element_test {
     use itertools::izip;
 
-    use crate::{
-        shared_math::{b_field_element::*, ntt, x_field_element::*},
-        utils::generate_random_numbers,
-    };
+    use crate::shared_math::{b_field_element::*, ntt, x_field_element::*};
     // use proptest::prelude::*;
 
     #[test]
@@ -652,14 +665,8 @@ mod x_field_element_test {
     #[test]
     fn x_field_inversion_pbt() {
         let test_iterations = 100;
-        let rands: Vec<i128> =
-            generate_random_numbers(3 * test_iterations, BFieldElement::QUOTIENT as i128);
-        for i in 0..test_iterations {
-            let mut rand = XFieldElement::new([
-                BFieldElement::new(rands[3 * i] as u128),
-                BFieldElement::new(rands[3 * i + 1] as u128),
-                BFieldElement::new(rands[3 * i + 2] as u128),
-            ]);
+        let rands = XFieldElement::random_elements(test_iterations);
+        for mut rand in rands {
             let rand_inv_original = rand.inv();
             assert!((rand * rand_inv_original).is_one());
             assert!((rand_inv_original * rand).is_one());
