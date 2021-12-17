@@ -326,7 +326,10 @@ impl ModPowU64 for XFieldElement {
 mod x_field_element_test {
     use itertools::izip;
 
-    use crate::shared_math::{b_field_element::*, ntt, x_field_element::*};
+    use crate::{
+        shared_math::{b_field_element::*, ntt, x_field_element::*},
+        utils::generate_random_numbers,
+    };
     // use proptest::prelude::*;
 
     #[test]
@@ -396,7 +399,6 @@ mod x_field_element_test {
         val.incr(0);
         val.incr(0);
         val.incr(0);
-        println!("val = {}", val);
         assert!(val.is_zero());
         val.incr(1);
         assert_eq!(one_x, val);
@@ -645,6 +647,45 @@ mod x_field_element_test {
         let x_inv = x.inv();
         assert!((x_inv * x).is_one());
         assert!((x * x_inv).is_one());
+    }
+
+    #[test]
+    fn x_field_inversion_pbt() {
+        let test_iterations = 100;
+        let rands: Vec<i128> =
+            generate_random_numbers(3 * test_iterations, BFieldElement::QUOTIENT as i128);
+        for i in 0..test_iterations {
+            let mut rand = XFieldElement::new([
+                BFieldElement::new(rands[3 * i] as u128),
+                BFieldElement::new(rands[3 * i + 1] as u128),
+                BFieldElement::new(rands[3 * i + 2] as u128),
+            ]);
+            let rand_inv_original = rand.inv();
+            assert!((rand * rand_inv_original).is_one());
+            assert!((rand_inv_original * rand).is_one());
+
+            // Negative test, verify that when decrementing and incrementing
+            // by one in the different indices, we get something
+            rand.incr(0);
+            assert!((rand * rand.inv()).is_one());
+            assert!((rand.inv() * rand).is_one());
+            assert!(!(rand * rand_inv_original).is_one());
+            assert!(!(rand_inv_original * rand).is_one());
+            rand.decr(0);
+
+            rand.incr(1);
+            assert!((rand * rand.inv()).is_one());
+            assert!((rand.inv() * rand).is_one());
+            assert!(!(rand * rand_inv_original).is_one());
+            assert!(!(rand_inv_original * rand).is_one());
+            rand.decr(1);
+
+            rand.incr(2);
+            assert!((rand * rand.inv()).is_one());
+            assert!((rand.inv() * rand).is_one());
+            assert!(!(rand * rand_inv_original).is_one());
+            assert!(!(rand_inv_original * rand).is_one());
+        }
     }
 
     #[test]
