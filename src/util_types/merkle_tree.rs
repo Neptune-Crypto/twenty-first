@@ -511,6 +511,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
 #[cfg(test)]
 mod merkle_tree_test {
     use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
     use crate::utils::{decode_hex, generate_random_numbers};
     use itertools::Itertools;
@@ -597,6 +598,13 @@ mod merkle_tree_test {
                 ));
             }
         }
+    }
+
+    #[test]
+    fn merkle_tree_get_multi_proof_dummy_test() {
+        let elements = generate_random_numbers(32, 1000)
+            .iter()
+            .map(BFieldElement::new);
     }
 
     #[test]
