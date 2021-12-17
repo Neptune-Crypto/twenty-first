@@ -1,5 +1,5 @@
 use crate::shared_math::traits::{IdentityValues, ModPowU64};
-use crate::utils::FIRST_THOUSAND_PRIMES;
+use crate::utils::{generate_random_numbers, FIRST_THOUSAND_PRIMES};
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -19,6 +19,16 @@ impl BFieldElement {
         Self {
             0: value % Self::QUOTIENT,
         }
+    }
+
+    pub fn random_elements(length: u32) -> Vec<Self> {
+        let rands: Vec<i128> =
+            generate_random_numbers(length as usize, BFieldElement::QUOTIENT as i128);
+
+        rands
+            .into_iter()
+            .map(|x| BFieldElement::new(x as u128))
+            .collect()
     }
 
     pub fn inv(&self) -> Self {
