@@ -153,6 +153,35 @@ impl XFieldElement {
         a.into()
     }
 
+    pub fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
+        // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
+        let input_length = input.len();
+        if input_length == 0 {
+            return Vec::<Self>::new();
+        }
+
+        let mut scratch: Vec<Self> = vec![Self::ring_zero(); input_length];
+        let mut acc = Self::ring_one();
+        scratch[0] = input[0];
+
+        for i in 0..input_length {
+            assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
+            scratch[i] = acc;
+            acc = acc * input[i];
+        }
+
+        acc = acc.inv();
+
+        let mut res = input;
+        for i in (0..input_length).rev() {
+            let tmp = acc * res[i];
+            res[i] = acc * scratch[i];
+            acc = tmp;
+        }
+
+        res
+    }
+
     pub fn get_primitive_root_of_unity(n: u128) -> (Option<XFieldElement>, Vec<u128>) {
         let (b_root, primes) = BFieldElement::get_primitive_root_of_unity(n);
         let x_root = b_root.map(XFieldElement::new_const);
@@ -660,13 +689,39 @@ mod x_field_element_test {
         let x_inv = x.inv();
         assert!((x_inv * x).is_one());
         assert!((x * x_inv).is_one());
+
+        // Test batch inversion
+        let mut inverses = XFieldElement::batch_inversion(vec![]);
+        assert!(inverses.is_empty());
+        inverses = XFieldElement::batch_inversion(vec![one]);
+        assert_eq!(1, inverses.len());
+        assert!(inverses[0].is_one());
+        inverses = XFieldElement::batch_inversion(vec![two]);
+        assert_eq!(1, inverses.len());
+        assert_eq!(two_inv, inverses[0]);
+        inverses = XFieldElement::batch_inversion(vec![x]);
+        assert_eq!(1, inverses.len());
+        assert_eq!(x_inv, inverses[0]);
+        inverses = XFieldElement::batch_inversion(vec![two, x]);
+        assert_eq!(2, inverses.len());
+        assert_eq!(two_inv, inverses[0]);
+        assert_eq!(x_inv, inverses[1]);
+
+        let input = vec![one, two, three, hundred, x];
+        inverses = XFieldElement::batch_inversion(input.clone());
+        let inverses_inverses = XFieldElement::batch_inversion(inverses.clone());
+        assert_eq!(input.len(), inverses.len());
+        for i in 0..input.len() {
+            assert!((inverses[i] * input[i]).is_one());
+            assert_eq!(input[i], inverses_inverses[i]);
+        }
     }
 
     #[test]
     fn x_field_inversion_pbt() {
         let test_iterations = 100;
         let rands = XFieldElement::random_elements(test_iterations);
-        for mut rand in rands {
+        for mut rand in rands.clone() {
             let rand_inv_original = rand.inv();
             assert!((rand * rand_inv_original).is_one());
             assert!((rand_inv_original * rand).is_one());
@@ -692,6 +747,13 @@ mod x_field_element_test {
             assert!((rand.inv() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());
             assert!(!(rand_inv_original * rand).is_one());
+        }
+
+        // Test batch inversion
+        let inverses = XFieldElement::batch_inversion(rands.clone());
+        for (val, inv) in izip!(rands, inverses) {
+            assert!(!val.is_one()); // Pretty small likely this could happen ^^
+            assert!((val * inv).is_one());
         }
     }
 
