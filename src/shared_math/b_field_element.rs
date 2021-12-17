@@ -40,6 +40,35 @@ impl BFieldElement {
         }
     }
 
+    pub fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
+        // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
+        let input_length = input.len();
+        if input_length == 0 {
+            return Vec::<BFieldElement>::new();
+        }
+
+        let mut scratch: Vec<BFieldElement> = vec![BFieldElement::ring_zero(); input_length];
+        let mut acc = BFieldElement::ring_one();
+        scratch[0] = input[0];
+
+        for i in 0..input_length {
+            assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
+            scratch[i] = acc;
+            acc = acc * input[i];
+        }
+
+        acc = acc.inv();
+
+        let mut res = input;
+        for i in (0..input_length).rev() {
+            let tmp = acc * res[i];
+            res[i] = acc * scratch[i];
+            acc = tmp;
+        }
+
+        res
+    }
+
     pub fn increment(&mut self) {
         self.0 = (self.0 + 1) % Self::QUOTIENT;
     }
@@ -328,6 +357,7 @@ mod b_prime_field_element_test {
         shared_math::{b_field_element::*, polynomial::Polynomial},
         utils::generate_random_numbers,
     };
+    use itertools::izip;
     use proptest::prelude::*;
 
     // TODO: Move this into separate file.
@@ -394,19 +424,79 @@ mod b_prime_field_element_test {
 
     #[test]
     fn inversion_test() {
-        assert_eq!(bfield_elem!(9223372034707292161), bfield_elem!(2).inv());
-        assert_eq!(bfield_elem!(12297829379609722881), bfield_elem!(3).inv());
-        assert_eq!(bfield_elem!(13835058052060938241), bfield_elem!(4).inv());
-        assert_eq!(bfield_elem!(14757395255531667457), bfield_elem!(5).inv());
-        assert_eq!(bfield_elem!(15372286724512153601), bfield_elem!(6).inv());
-        assert_eq!(bfield_elem!(2635249152773512046), bfield_elem!(7).inv());
-        assert_eq!(bfield_elem!(16140901060737761281), bfield_elem!(8).inv());
-        assert_eq!(bfield_elem!(4099276459869907627), bfield_elem!(9).inv());
-        assert_eq!(bfield_elem!(16602069662473125889), bfield_elem!(10).inv());
+        let one_inv = bfield_elem!(1);
+        let two_inv = bfield_elem!(9223372034707292161);
+        let three_inv = bfield_elem!(12297829379609722881);
+        let four_inv = bfield_elem!(13835058052060938241);
+        let five_inv = bfield_elem!(14757395255531667457);
+        let six_inv = bfield_elem!(15372286724512153601);
+        let seven_inv = bfield_elem!(2635249152773512046);
+        let eight_inv = bfield_elem!(16140901060737761281);
+        let nine_inv = bfield_elem!(4099276459869907627);
+        let ten_inv = bfield_elem!(16602069662473125889);
+        let eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv =
+            bfield_elem!(13115294102219178839);
+        assert_eq!(two_inv, bfield_elem!(2).inv());
+        assert_eq!(three_inv, bfield_elem!(3).inv());
+        assert_eq!(four_inv, bfield_elem!(4).inv());
+        assert_eq!(five_inv, bfield_elem!(5).inv());
+        assert_eq!(six_inv, bfield_elem!(6).inv());
+        assert_eq!(seven_inv, bfield_elem!(7).inv());
+        assert_eq!(eight_inv, bfield_elem!(8).inv());
+        assert_eq!(nine_inv, bfield_elem!(9).inv());
+        assert_eq!(ten_inv, bfield_elem!(10).inv());
         assert_eq!(
-            bfield_elem!(11826576560539181984),
-            bfield_elem!(8567106).inv()
+            eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv,
+            bfield_elem!(85671106).inv()
         );
+
+        let inverses = [
+            one_inv,
+            two_inv,
+            three_inv,
+            four_inv,
+            five_inv,
+            six_inv,
+            seven_inv,
+            eight_inv,
+            nine_inv,
+            ten_inv,
+            eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv,
+        ];
+        let values = [
+            bfield_elem!(1),
+            bfield_elem!(2),
+            bfield_elem!(3),
+            bfield_elem!(4),
+            bfield_elem!(5),
+            bfield_elem!(6),
+            bfield_elem!(7),
+            bfield_elem!(8),
+            bfield_elem!(9),
+            bfield_elem!(10),
+            bfield_elem!(85671106),
+        ];
+        let calculated_inverses = BFieldElement::batch_inversion(values.to_vec());
+        assert_eq!(values.len(), calculated_inverses.len());
+        let calculated_inverse_inverses =
+            BFieldElement::batch_inversion(calculated_inverses.to_vec());
+        for i in 0..calculated_inverses.len() {
+            assert_eq!(inverses[i], calculated_inverses[i]);
+            assert_eq!(calculated_inverse_inverses[i], values[i]);
+        }
+
+        let empty_inversion = BFieldElement::batch_inversion(vec![]);
+        assert!(empty_inversion.is_empty());
+
+        let singleton_inversion = BFieldElement::batch_inversion(vec![bfield_elem!(2)]);
+        assert_eq!(1, singleton_inversion.len());
+        assert_eq!(two_inv, singleton_inversion[0]);
+
+        let duplet_inversion =
+            BFieldElement::batch_inversion(vec![bfield_elem!(2), bfield_elem!(1)]);
+        assert_eq!(2, duplet_inversion.len());
+        assert_eq!(two_inv, duplet_inversion[0]);
+        assert_eq!(one_inv, duplet_inversion[1]);
     }
 
     #[test]
@@ -414,6 +504,23 @@ mod b_prime_field_element_test {
         let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::MAX as i128);
         for rand in rands {
             assert!((bfield_elem!(rand as u128).inv() * bfield_elem!(rand as u128)).is_one());
+        }
+    }
+
+    #[test]
+    fn batch_inversion_pbt() {
+        let test_iterations = 100;
+        for i in 0..test_iterations {
+            let rands: Vec<BFieldElement> = BFieldElement::random_elements(i);
+            let rands_inv: Vec<BFieldElement> = BFieldElement::batch_inversion(rands.clone());
+            assert_eq!(i as usize, rands_inv.len());
+            for (mut rand, rand_inv) in izip!(rands, rands_inv) {
+                assert!((rand * rand_inv).is_one());
+                assert!((rand_inv * rand).is_one());
+                assert_eq!(rand.inv(), rand_inv);
+                rand.increment();
+                assert!(!(rand * rand_inv).is_one());
+            }
         }
     }
 
