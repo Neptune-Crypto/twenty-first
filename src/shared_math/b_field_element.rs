@@ -30,6 +30,14 @@ impl BFieldElement {
         }
     }
 
+    pub fn increment(&mut self) {
+        self.0 = (self.0 + 1) % Self::QUOTIENT;
+    }
+
+    pub fn decrement(&mut self) {
+        self.0 = (Self::MAX + self.0) % Self::QUOTIENT
+    }
+
     // TODO: Name this collection of traits as something like... FieldElementInternalNumRepresentation
     pub fn xgcd<
         T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,
@@ -330,6 +338,34 @@ mod b_prime_field_element_test {
         assert!(one.is_one());
         assert!(bfield_elem!(BFieldElement::MAX + 1).is_zero());
         assert!(bfield_elem!(BFieldElement::MAX + 2).is_one());
+    }
+
+    #[test]
+    fn increment_and_decrement_test() {
+        let mut val_a = bfield_elem!(0);
+        let mut val_b = bfield_elem!(1);
+        let mut val_c = bfield_elem!(BFieldElement::MAX - 1);
+        let max = BFieldElement::new(BFieldElement::MAX);
+        val_a.increment();
+        assert!(val_a.is_one());
+        val_b.increment();
+        assert!(!val_b.is_one());
+        assert_eq!(BFieldElement::new(2), val_b);
+        val_b.increment();
+        assert_eq!(BFieldElement::new(3), val_b);
+        assert_ne!(max, val_c);
+        val_c.increment();
+        assert_eq!(max, val_c);
+        val_c.increment();
+        assert!(val_c.is_zero());
+        val_c.increment();
+        assert!(val_c.is_one());
+        val_c.decrement();
+        assert!(val_c.is_zero());
+        val_c.decrement();
+        assert_eq!(max, val_c);
+        val_c.decrement();
+        assert_eq!(bfield_elem!(BFieldElement::MAX - 1), val_c);
     }
 
     proptest! {
