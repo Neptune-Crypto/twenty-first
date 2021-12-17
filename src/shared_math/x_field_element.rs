@@ -696,6 +696,20 @@ mod x_field_element_test {
     }
 
     #[test]
+    fn x_field_division_mul_pbt() {
+        let test_iterations = 100;
+        let rands_a = XFieldElement::random_elements(test_iterations);
+        let rands_b = XFieldElement::random_elements(test_iterations);
+        for (a, b) in izip!(rands_a, rands_b) {
+            let ab = a * b;
+            let ba = b * a;
+            assert_eq!(ab, ba);
+            assert_eq!(ab / b, a);
+            assert_eq!(ab / a, b);
+        }
+    }
+
+    #[test]
     fn x_field_mod_pow_test() {
         let const_poly = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
 
