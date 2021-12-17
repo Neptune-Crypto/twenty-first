@@ -44,11 +44,11 @@ impl BFieldElement {
         // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
         let input_length = input.len();
         if input_length == 0 {
-            return Vec::<BFieldElement>::new();
+            return Vec::<Self>::new();
         }
 
-        let mut scratch: Vec<BFieldElement> = vec![BFieldElement::ring_zero(); input_length];
-        let mut acc = BFieldElement::ring_one();
+        let mut scratch: Vec<Self> = vec![Self::ring_zero(); input_length];
+        let mut acc = Self::ring_one();
         scratch[0] = input[0];
 
         for i in 0..input_length {
