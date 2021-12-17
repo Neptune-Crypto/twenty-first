@@ -144,6 +144,15 @@ impl XFieldElement {
         (x_root, primes)
     }
 
+    // `incr` and `decr` are mainly used for testing purposes
+    pub fn incr(&mut self, index: usize) {
+        self.coefficients[index].increment();
+    }
+
+    pub fn decr(&mut self, index: usize) {
+        self.coefficients[index].decrement();
+    }
+
     // TODO: legendre_symbol
 }
 
@@ -319,6 +328,106 @@ mod x_field_element_test {
 
     use crate::shared_math::{b_field_element::*, ntt, x_field_element::*};
     // use proptest::prelude::*;
+
+    #[test]
+    fn one_zero_test() {
+        let one = XFieldElement::ring_one();
+        assert!(one.is_one());
+        assert!(one.coefficients[0].is_one());
+        assert!(one.coefficients[1].is_zero());
+        assert!(one.coefficients[2].is_zero());
+        let zero = XFieldElement::ring_zero();
+        assert!(zero.is_zero());
+        assert!(zero.coefficients[0].is_zero());
+        assert!(zero.coefficients[1].is_zero());
+        assert!(zero.coefficients[2].is_zero());
+        let two = XFieldElement::new([
+            BFieldElement::new(2),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+        ]);
+        assert!(!two.is_one());
+        assert!(!zero.is_one());
+        let one_as_constant_term_0 = XFieldElement::new([
+            BFieldElement::new(1),
+            BFieldElement::ring_one(),
+            BFieldElement::ring_zero(),
+        ]);
+        let one_as_constant_term_1 = XFieldElement::new([
+            BFieldElement::new(1),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_one(),
+        ]);
+        assert!(!one_as_constant_term_0.is_one());
+        assert!(!one_as_constant_term_1.is_one());
+        assert!(!one_as_constant_term_0.is_zero());
+        assert!(!one_as_constant_term_1.is_zero());
+    }
+
+    #[test]
+    fn incr_decr_test() {
+        let one_const = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
+        let two_const = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
+        let one_x = XFieldElement::new([0, 1, 0].map(BFieldElement::new));
+        let two_x = XFieldElement::new([0, 2, 0].map(BFieldElement::new));
+        let one_x_squared = XFieldElement::new([0, 0, 1].map(BFieldElement::new));
+        let two_x_squared = XFieldElement::new([0, 0, 2].map(BFieldElement::new));
+        let max_const = XFieldElement::new([BFieldElement::MAX, 0, 0].map(BFieldElement::new));
+        let max_x = XFieldElement::new([0, BFieldElement::MAX, 0].map(BFieldElement::new));
+        let max_x_squared = XFieldElement::new([0, 0, BFieldElement::MAX].map(BFieldElement::new));
+        let mut val = XFieldElement::ring_zero();
+        val.incr(0);
+        assert!(val.is_one());
+        val.incr(0);
+        assert_eq!(two_const, val);
+        val.decr(0);
+        assert!(val.is_one());
+        val.decr(0);
+        assert!(val.is_zero());
+        val.decr(0);
+        assert_eq!(max_const, val);
+        val.decr(0);
+        assert_eq!(max_const - XFieldElement::ring_one(), val);
+        val.decr(0);
+        assert_eq!(
+            max_const - XFieldElement::ring_one() - XFieldElement::ring_one(),
+            val
+        );
+        val.incr(0);
+        val.incr(0);
+        val.incr(0);
+        println!("val = {}", val);
+        assert!(val.is_zero());
+        val.incr(1);
+        assert_eq!(one_x, val);
+        val.incr(1);
+        assert_eq!(two_x, val);
+        val.decr(1);
+        val.decr(1);
+        assert!(val.is_zero());
+        val.decr(1);
+        assert_eq!(max_x, val);
+        val.incr(1);
+        val.incr(2);
+        assert_eq!(one_x_squared, val);
+        val.incr(2);
+        assert_eq!(two_x_squared, val);
+        val.decr(2);
+        val.decr(2);
+        assert!(val.is_zero());
+        val.decr(2);
+        assert_eq!(max_x_squared, val);
+        val.decr(1);
+        val.decr(0);
+        assert_eq!(max_x_squared + max_x + max_const, val);
+        val.decr(2);
+        val.decr(1);
+        val.decr(0);
+        assert_eq!(
+            max_x_squared + max_x + max_const - one_const - one_x - one_x_squared,
+            val
+        );
+    }
 
     #[test]
     fn x_field_add_test() {
