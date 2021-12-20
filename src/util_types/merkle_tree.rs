@@ -229,7 +229,6 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         self.nodes.len() / 2
     }
 
-    // XXX
     pub fn verify_multi_proof(
         root_hash: Blake3Hash,
         indices: &[usize],
@@ -245,11 +244,17 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
             return false;
         }
 
+        if indices.is_empty() {
+            return true;
+        }
+
         let mut partial_tree: HashMap<u64, Node<T>> = HashMap::new();
         let mut proof_clone: Vec<PartialAuthenticationPath<T>> = proof.to_owned();
         let half_tree_size = 2u64.pow(proof_clone[0].0.len() as u32 - 1);
+
         for (i, b) in indices.iter().zip(proof_clone.iter()) {
             let mut index = half_tree_size + *i as u64;
+
             partial_tree.insert(index, b.0[0].clone().unwrap());
             for elem in b.0.iter().skip(1) {
                 if let Some(i) = elem.clone() {
@@ -263,7 +268,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         let mut hasher = blake3::Hasher::new();
         while !complete {
             complete = true;
-            //let mut keys: Vec<usize> = partial_tree.iter().copied().map(|x| x / 2).collect();
+
             let mut keys: Vec<u64> = partial_tree.keys().copied().map(|x| x / 2).collect();
             keys.sort_by_key(|w| Reverse(*w));
             for key in keys {
@@ -273,11 +278,13 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
                 {
                     hasher.update(&partial_tree[&(key * 2)].hash[..]);
                     hasher.update(&partial_tree[&(key * 2 + 1)].hash[..]);
+
+                    let hash = *hasher.finalize().as_bytes();
                     partial_tree.insert(
                         key,
                         Node {
                             value: None,
-                            hash: *hasher.finalize().as_bytes(),
+                            hash: hash,
                         },
                     );
                     hasher.reset();
@@ -288,18 +295,22 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
 
         for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
             let mut index = half_tree_size + *i as u64;
+
             for elem in b.0.iter_mut().skip(1) {
+                let sibling = index ^ 1;
+
                 if *elem == None {
                     // If the Merkle tree/proof is manipulated, the value partial_tree[&(index ^ 1)]
                     // is not guaranteed to exist. So have to  check
                     // whether it exists and return false if it does not
-                    if !partial_tree.contains_key(&(index ^ 1)) {
+                    if !partial_tree.contains_key(&sibling) {
                         return false;
                     }
 
-                    *elem = Some(partial_tree[&(index ^ 1)].clone());
+                    *elem = Some(partial_tree[&sibling].clone());
                 }
-                partial_tree.insert(index ^ 1, elem.clone().unwrap());
+
+                partial_tree.insert(sibling, elem.clone().unwrap());
                 index /= 2;
             }
         }
@@ -311,8 +322,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
                 .into_iter()
                 .map(|x| x.unwrap())
                 .collect();
-            // println!("input_proof = {:?}", proof[i]);
-            // println!("proof_clone_unwrapped = {:?}", proof_clone_unwrapped);
+
             if !Self::verify_proof(root_hash, indices[i] as u64, proof_clone_unwrapped) {
                 return false;
             }
