@@ -254,13 +254,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
                     hasher.update(&partial_tree[&(key * 2 + 1)].hash[..]);
 
                     let hash = *hasher.finalize().as_bytes();
-                    partial_tree.insert(
-                        key,
-                        Node {
-                            value: None,
-                            hash: hash,
-                        },
-                    );
+                    partial_tree.insert(key, Node { value: None, hash });
                     hasher.reset();
                     complete = false;
                 }
@@ -422,7 +416,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
 
             // Insert hashes for known leaves from partial authentication paths.
             for hash_option in partial_auth_path.0.iter() {
-                if let Some(hash) = hash_option.clone() {
+                if let Some(hash) = *hash_option {
                     partial_tree.insert(index ^ 1, hash);
                 }
                 index /= 2;
@@ -475,9 +469,9 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
                         return false;
                     }
 
-                    *elem = Some(partial_tree[&sibling].clone());
+                    *elem = Some(partial_tree[&sibling]);
                 }
-                partial_tree.insert(sibling, elem.clone().unwrap());
+                partial_tree.insert(sibling, elem.unwrap());
                 index /= 2;
             }
         }

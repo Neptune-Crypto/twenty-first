@@ -843,6 +843,7 @@ pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
     values
 }
 
+#[allow(dead_code)]
 pub fn generate_random_numbers_u128(count: usize, modulus: Option<u128>) -> Vec<u128> {
     let mut prng = rand::thread_rng();
 

@@ -290,22 +290,22 @@ impl Mul for XFieldElement {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        // ax^2 + bx + c
-        let a = self.coefficients[2];
-        let b = self.coefficients[1];
-        let c = self.coefficients[0];
+        // a_0 * x^2 + b_0 * x + c_0
+        let a0 = self.coefficients[2];
+        let b0 = self.coefficients[1];
+        let c0 = self.coefficients[0];
 
-        // dx^2 + ex + f
-        let d = other.coefficients[2];
-        let e = other.coefficients[1];
-        let f = other.coefficients[0];
+        // a_1 * x^2 + b_1 * x + c_1
+        let a1 = other.coefficients[2];
+        let b1 = other.coefficients[1];
+        let c1 = other.coefficients[0];
 
-        // (ax^2 + bx + c) * (dx^2 + ex + f)
+        // (a_0 * x^2 + b_0 * x + c_0) * (a_1 * x^2 + b_1 * x + c_1)
         Self {
             coefficients: [
-                c * f - a * e - b * d,                 // * x^0
-                b * f + c * e - a * d + a * e + b * d, // * x^1
-                a * f + b * e + c * d + a * d,         // * x^2
+                c0 * c1 - a0 * b1 - b0 * a1,                     // * x^0
+                b0 * c1 + c0 * b1 - a0 * a1 + a0 * b1 + b0 * a1, // * x^1
+                a0 * c1 + b0 * b1 + c0 * a1 + a0 * a1,           // * x^2
             ],
         }
     }
