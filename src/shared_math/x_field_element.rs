@@ -124,7 +124,8 @@ impl XFieldElement {
 
         // The result is valid up to a coefficient, so we normalize the result,
         // to ensure that x has a leading coefficient of 1.
-        let lc = x.leading_coefficient(BFieldElement::ring_zero());
+        // TODO: What happens if x is zero here, can it be?
+        let lc = x.leading_coefficient().unwrap();
         let scale = lc.inv();
         (
             x.scalar_mul(scale),

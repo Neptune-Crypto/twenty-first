@@ -194,12 +194,10 @@ impl<
         acc
     }
 
-    pub fn leading_coefficient(&self, zero: U) -> U {
-        assert!(zero.is_zero(), "zero must be zero. Got: {}", zero);
-        let degree = self.degree();
-        match degree {
-            -1 => zero,
-            n => self.coefficients[n as usize].clone(),
+    pub fn leading_coefficient(&self) -> Option<U> {
+        match self.degree() {
+            -1 => None,
+            n => Some(self.coefficients[n as usize].clone()),
         }
     }
 
@@ -794,8 +792,7 @@ impl<
         remainder.normalize();
 
         // a divisor coefficient is guaranteed to exist since the divisor is non-zero
-        // we need a divisor coefficient to get a `zero` field element to send to `leading_coefficient`.
-        let dlc: U = divisor.leading_coefficient(divisor.coefficients.first().unwrap().ring_zero());
+        let dlc: U = divisor.leading_coefficient().unwrap();
         let inv = dlc.ring_one() / dlc;
 
         let mut i = 0;
@@ -1135,6 +1132,7 @@ mod test_polynomials {
 
     #[test]
     fn leading_coefficient_test() {
+        // Verify that the leading coefficient for the zero-polynomial is `None`
         let _14 = BFieldElement::new(14);
         let _0 = BFieldElement::ring_zero();
         let _1 = BFieldElement::ring_one();
@@ -1142,33 +1140,41 @@ mod test_polynomials {
         let lc_0_0: Polynomial<BFieldElement> = Polynomial::new(vec![]);
         let lc_0_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0]);
         let lc_0_2: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0]);
-        assert_eq!(_0, lc_0_0.leading_coefficient(_0));
-        assert_eq!(_0, lc_0_1.leading_coefficient(_0));
-        assert_eq!(_0, lc_0_2.leading_coefficient(_0));
+        assert_eq!(None, lc_0_0.leading_coefficient());
+        assert_eq!(None, lc_0_1.leading_coefficient());
+        assert_eq!(None, lc_0_2.leading_coefficient());
 
         // Other numbers as LC
         let lc_1_0: Polynomial<BFieldElement> = Polynomial::new(vec![_1]);
         let lc_1_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0, _1]);
         let lc_1_2: Polynomial<BFieldElement> = Polynomial::new(vec![_max, _14, _0, _max, _1]);
-        assert_eq!(_1, lc_1_0.leading_coefficient(_0));
-        assert_eq!(_1, lc_1_1.leading_coefficient(_0));
-        assert_eq!(_1, lc_1_2.leading_coefficient(_0));
+        let lc_1_3: Polynomial<BFieldElement> = Polynomial::new(vec![_max, _14, _0, _max, _1, _0]);
+        let lc_1_4: Polynomial<BFieldElement> = Polynomial::new(vec![
+            _max, _14, _0, _max, _1, _0, _0, _0, _0, _0, _0, _0, _0, _0, _0,
+        ]);
+        assert_eq!(Some(_1), lc_1_0.leading_coefficient());
+        assert_eq!(Some(_1), lc_1_1.leading_coefficient());
+        assert_eq!(Some(_1), lc_1_2.leading_coefficient());
+        assert_eq!(Some(_1), lc_1_3.leading_coefficient());
+        assert_eq!(Some(_1), lc_1_4.leading_coefficient());
 
         let lc_14_0: Polynomial<BFieldElement> = Polynomial::new(vec![_14]);
         let lc_14_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0, _14]);
         let lc_14_2: Polynomial<BFieldElement> =
             Polynomial::new(vec![_max, _14, _0, _max, _14, _0, _0, _0]);
-        assert_eq!(_14, lc_14_0.leading_coefficient(_0));
-        assert_eq!(_14, lc_14_1.leading_coefficient(_0));
-        assert_eq!(_14, lc_14_2.leading_coefficient(_0));
+        let lc_14_3: Polynomial<BFieldElement> = Polynomial::new(vec![_14, _0]);
+        assert_eq!(Some(_14), lc_14_0.leading_coefficient());
+        assert_eq!(Some(_14), lc_14_1.leading_coefficient());
+        assert_eq!(Some(_14), lc_14_2.leading_coefficient());
+        assert_eq!(Some(_14), lc_14_3.leading_coefficient());
 
         let lc_max_0: Polynomial<BFieldElement> = Polynomial::new(vec![_max]);
         let lc_max_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0, _max]);
         let lc_max_2: Polynomial<BFieldElement> =
             Polynomial::new(vec![_max, _14, _0, _max, _max, _0, _0, _0]);
-        assert_eq!(_max, lc_max_0.leading_coefficient(_0));
-        assert_eq!(_max, lc_max_1.leading_coefficient(_0));
-        assert_eq!(_max, lc_max_2.leading_coefficient(_0));
+        assert_eq!(Some(_max), lc_max_0.leading_coefficient());
+        assert_eq!(Some(_max), lc_max_1.leading_coefficient());
+        assert_eq!(Some(_max), lc_max_2.leading_coefficient());
     }
 
     #[test]
