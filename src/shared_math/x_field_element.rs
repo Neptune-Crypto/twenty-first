@@ -33,7 +33,6 @@ impl From<Polynomial<BFieldElement>> for XFieldElement {
         let zero = BFieldElement::ring_zero();
         let mut rem_arr: [BFieldElement; 3] = [zero; 3];
 
-        // XXX
         for i in 0..rem.degree() + 1 {
             rem_arr[i as usize] = rem.coefficients[i as usize];
         }

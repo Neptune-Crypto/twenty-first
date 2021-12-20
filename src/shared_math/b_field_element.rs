@@ -336,7 +336,6 @@ impl Sub for BFieldElement {
 impl Div for BFieldElement {
     type Output = Self;
 
-    // XXX
     fn div(self, other: Self) -> Self {
         Self {
             0: (other.inv().0 * self.0) % Self::QUOTIENT,

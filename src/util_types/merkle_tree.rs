@@ -507,7 +507,6 @@ mod merkle_tree_test {
     use itertools::Itertools;
     use rand::RngCore;
 
-    // XXX
     // `verify_authentication_path_dummy' has same interface as `verify_authentication_path_dummy',
     // but uses `verify_proof' internally. This helps to verify equivalence between the two.
     fn verify_authentication_path_dummy<T: Serialize + Clone + Debug + PartialEq>(
