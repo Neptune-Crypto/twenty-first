@@ -1,4 +1,5 @@
 use crate::shared_math::other::log_2_floor;
+use crate::utils::blake3_digest_serialize;
 use itertools::izip;
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
@@ -65,14 +66,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
             hasher.reset();
             mut_index /= 2;
         }
-        let expected_hash = *blake3::hash(
-            bincode::serialize(&proof[0].value.clone().unwrap())
-                .expect("Encoding failed")
-                .as_slice(),
-        )
-        .as_bytes();
-        // println!("root_hash = {:?}", root_hash);
-        // println!("v.hash = {:?}", v.hash);
+        let expected_hash = blake3_digest_serialize(&proof[0].value.clone().unwrap());
         v.hash == root_hash && expected_hash == proof[0].hash
     }
 
@@ -97,8 +91,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
             2 * values.len()
         ];
         for i in 0..values.len() {
-            nodes[values.len() + i].hash =
-                *blake3::hash(bincode::serialize(&values[i]).unwrap().as_slice()).as_bytes();
+            nodes[values.len() + i].hash = blake3_digest_serialize(&values[i]);
             nodes[values.len() + i].value = Some(values[i].clone());
         }
 
@@ -179,12 +172,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         let path_length = auth_path.len() as u32;
         let mut hasher = blake3::Hasher::new();
 
-        let value_hash = *blake3::hash(
-            bincode::serialize(&value)
-                .expect("Encoding failed")
-                .as_slice(),
-        )
-        .as_bytes();
+        let value_hash = blake3_digest_serialize(&value);
 
         // Initialize `acc_hash' as H(value)
         let mut acc_hash = value_hash;
@@ -215,12 +203,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         value: T,
         auth_path: Vec<Blake3Hash>,
     ) -> bool {
-        let value_hash = *blake3::hash(
-            bincode::serialize(&value)
-                .expect("Encoding failed")
-                .as_slice(),
-        )
-        .as_bytes();
+        let value_hash = blake3_digest_serialize(&value);
         let leaf_node = Node {
             value: Some(value),
             hash: value_hash,
