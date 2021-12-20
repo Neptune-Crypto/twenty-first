@@ -517,7 +517,7 @@ fn fri_prover_iteration_bigint(
 
     let mut x: BigInt = BigInt::one();
     for i in 0..new_codeword.len() {
-        let (_, x_inv, _) = PrimeFieldElementBig::eea(x.clone(), modulus.to_owned());
+        let (_, x_inv, _) = PrimeFieldElementBig::xgcd(x.clone(), modulus.to_owned());
         // If codeword is the evaluation of a polynomial of degree N,
         // this is an evaluation of a polynomial of degree N/2
         new_codeword[i] = (((1 + challenge * x_inv.clone()) * codeword[i].clone()
@@ -542,7 +542,7 @@ fn fri_prover_iteration_i128(
 
     let mut x = 1i128;
     for i in 0..new_codeword.len() {
-        let (_, x_inv, _) = PrimeFieldElement::eea(x, *modulus);
+        let (_, x_inv, _) = PrimeFieldElement::xgcd(x, *modulus);
         // If codeword is the evaluation of a polynomial of degree N,
         // this is an evaluation of a polynomial of degree N/2
         new_codeword[i] = (((1 + challenge * x_inv) * codeword[i]
@@ -616,7 +616,7 @@ pub fn prover_bigint(
     let mut ab_proofs: Vec<Vec<PartialAuthenticationPath<BigInt>>> = vec![];
 
     // commit phase
-    let (_, _, inv2_temp) = PrimeFieldElementBig::eea(modulus.clone(), bigint(2));
+    let (_, _, inv2_temp) = PrimeFieldElementBig::xgcd(modulus.clone(), bigint(2));
     let inv2 = (inv2_temp + modulus.clone()) % modulus.clone();
     let mut primitive_root_of_unity_temp = primitive_root_of_unity.clone();
     let mut challenge_hash_preimages: Vec<Vec<u8>> = vec![];
@@ -742,7 +742,7 @@ pub fn prover_i128(
     let mut mut_codeword: Vec<i128> = codeword.to_vec();
 
     // commit phase
-    let (_, _, inv2_temp) = PrimeFieldElement::eea(modulus, 2);
+    let (_, _, inv2_temp) = PrimeFieldElement::xgcd(modulus, 2);
     let inv2 = (inv2_temp + modulus) % modulus;
     let mut primitive_root_of_unity_temp = primitive_root_of_unity;
     let mut challenge_hash_preimages: Vec<Vec<u8>> = vec![];

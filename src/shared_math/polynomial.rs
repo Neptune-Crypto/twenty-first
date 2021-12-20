@@ -16,9 +16,7 @@ use std::ops::{Add, Neg};
 
 use super::traits::{FieldBatchInversion, ModPowU64, New};
 
-fn degree_raw<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
-    coefficients: &[T],
-) -> isize {
+fn degree_raw<T: Add + Div + Mul + Sub + IdentityValues + Display>(coefficients: &[T]) -> isize {
     let mut deg = coefficients.len() as isize - 1;
     while deg >= 0 && coefficients[deg as usize].is_zero() {
         deg -= 1;
@@ -27,7 +25,7 @@ fn degree_raw<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
     deg // -1 for the zero polynomial
 }
 
-fn pretty_print_coefficients_generic<T: Add + Div + Mul + Rem + Sub + IdentityValues + Display>(
+fn pretty_print_coefficients_generic<T: Add + Div + Mul + Sub + IdentityValues + Display>(
     coefficients: &[T],
 ) -> String {
     let degree = degree_raw(coefficients);
@@ -72,24 +70,13 @@ fn pretty_print_coefficients_generic<T: Add + Div + Mul + Rem + Sub + IdentityVa
 
 #[derive(Debug, Clone)]
 pub struct Polynomial<
-    T: Add + Div + Mul + Rem + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
+    T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
 > {
     pub coefficients: Vec<T>,
 }
 
 impl<
-        T: Add
-            + Div
-            + Mul
-            + Rem
-            + Sub
-            + IdentityValues
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Debug,
+        T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
     > std::fmt::Display for Polynomial<T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -105,7 +92,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -136,7 +122,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -153,7 +138,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -164,6 +148,16 @@ impl<
             + Hash,
     > Polynomial<U>
 {
+    pub fn new(coefficients: Vec<U>) -> Self {
+        Self { coefficients }
+    }
+
+    pub fn new_const(element: U) -> Self {
+        Self {
+            coefficients: vec![element],
+        }
+    }
+
     pub fn normalize(&mut self) {
         while !self.coefficients.is_empty() && self.coefficients.last().unwrap().is_zero() {
             self.coefficients.pop();
@@ -198,6 +192,13 @@ impl<
         }
 
         acc
+    }
+
+    pub fn leading_coefficient(&self) -> Option<U> {
+        match self.degree() {
+            -1 => None,
+            n => Some(self.coefficients[n as usize].clone()),
+        }
     }
 
     // Return the polynomial which corresponds to the transformation `x -> alpha * x`
@@ -396,7 +397,6 @@ impl<
             + Neg<Output = U>
             + Sized
             + New
-            + Rem
             + ModPowU64
             + FieldBatchInversion
             + Sub<Output = U>
@@ -676,7 +676,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -792,7 +791,8 @@ impl<
         let mut remainder = self.clone();
         remainder.normalize();
 
-        let dlc: U = divisor.coefficients[degree_rhs as usize].clone(); // divisor leading coefficient
+        // a divisor coefficient is guaranteed to exist since the divisor is non-zero
+        let dlc: U = divisor.leading_coefficient().unwrap();
         let inv = dlc.ring_one() / dlc;
 
         let mut i = 0;
@@ -814,7 +814,7 @@ impl<
                 remainder.coefficients[rem_length - j - 1] = remainder.coefficients
                     [rem_length - j - 1]
                     .clone()
-                    - q.clone() * divisor.coefficients[divisor.coefficients.len() - j - 2].clone();
+                    - q.clone() * divisor.coefficients[(degree_rhs + 1) as usize - j - 2].clone();
             }
 
             i += 1;
@@ -833,7 +833,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -856,7 +855,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -879,7 +877,6 @@ impl<
         U: Add<Output = U>
             + Div
             + Mul
-            + Rem
             + Sub
             + IdentityValues
             + Clone
@@ -914,7 +911,6 @@ impl<
         U: Add
             + Div
             + Mul
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -946,18 +942,7 @@ impl<
 }
 
 impl<
-        U: Add
-            + Div
-            + Mul
-            + Rem
-            + Sub
-            + IdentityValues
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Debug
-            + Display,
+        U: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Debug + Display,
     > Polynomial<U>
 {
     pub fn degree(&self) -> isize {
@@ -969,7 +954,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -995,6 +979,8 @@ mod test_polynomials {
     use super::super::prime_field_element::{PrimeField, PrimeFieldElement};
     use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::x_field_element::XFieldElement;
     use crate::utils::generate_random_numbers;
     use num_bigint::BigInt;
 
@@ -1142,6 +1128,53 @@ mod test_polynomials {
             PrimeFieldElement::new(26, &_71),
             parabola.evaluate(&PrimeFieldElement::new(6, &_71))
         );
+    }
+
+    #[test]
+    fn leading_coefficient_test() {
+        // Verify that the leading coefficient for the zero-polynomial is `None`
+        let _14 = BFieldElement::new(14);
+        let _0 = BFieldElement::ring_zero();
+        let _1 = BFieldElement::ring_one();
+        let _max = BFieldElement::new(BFieldElement::MAX);
+        let lc_0_0: Polynomial<BFieldElement> = Polynomial::new(vec![]);
+        let lc_0_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0]);
+        let lc_0_2: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0]);
+        assert_eq!(None, lc_0_0.leading_coefficient());
+        assert_eq!(None, lc_0_1.leading_coefficient());
+        assert_eq!(None, lc_0_2.leading_coefficient());
+
+        // Other numbers as LC
+        let lc_1_0: Polynomial<BFieldElement> = Polynomial::new(vec![_1]);
+        let lc_1_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0, _1]);
+        let lc_1_2: Polynomial<BFieldElement> = Polynomial::new(vec![_max, _14, _0, _max, _1]);
+        let lc_1_3: Polynomial<BFieldElement> = Polynomial::new(vec![_max, _14, _0, _max, _1, _0]);
+        let lc_1_4: Polynomial<BFieldElement> = Polynomial::new(vec![
+            _max, _14, _0, _max, _1, _0, _0, _0, _0, _0, _0, _0, _0, _0, _0,
+        ]);
+        assert_eq!(Some(_1), lc_1_0.leading_coefficient());
+        assert_eq!(Some(_1), lc_1_1.leading_coefficient());
+        assert_eq!(Some(_1), lc_1_2.leading_coefficient());
+        assert_eq!(Some(_1), lc_1_3.leading_coefficient());
+        assert_eq!(Some(_1), lc_1_4.leading_coefficient());
+
+        let lc_14_0: Polynomial<BFieldElement> = Polynomial::new(vec![_14]);
+        let lc_14_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0, _14]);
+        let lc_14_2: Polynomial<BFieldElement> =
+            Polynomial::new(vec![_max, _14, _0, _max, _14, _0, _0, _0]);
+        let lc_14_3: Polynomial<BFieldElement> = Polynomial::new(vec![_14, _0]);
+        assert_eq!(Some(_14), lc_14_0.leading_coefficient());
+        assert_eq!(Some(_14), lc_14_1.leading_coefficient());
+        assert_eq!(Some(_14), lc_14_2.leading_coefficient());
+        assert_eq!(Some(_14), lc_14_3.leading_coefficient());
+
+        let lc_max_0: Polynomial<BFieldElement> = Polynomial::new(vec![_max]);
+        let lc_max_1: Polynomial<BFieldElement> = Polynomial::new(vec![_0, _0, _0, _max]);
+        let lc_max_2: Polynomial<BFieldElement> =
+            Polynomial::new(vec![_max, _14, _0, _max, _max, _0, _0, _0]);
+        assert_eq!(Some(_max), lc_max_0.leading_coefficient());
+        assert_eq!(Some(_max), lc_max_1.leading_coefficient());
+        assert_eq!(Some(_max), lc_max_2.leading_coefficient());
     }
 
     #[test]
@@ -1759,20 +1792,18 @@ mod test_polynomials {
         let _71 = PrimeField::new(prime_modulus);
         let a_degree = 20;
         for i in 0..20 {
-            let mut a = Polynomial::<PrimeFieldElement> {
+            let a = Polynomial::<PrimeFieldElement> {
                 coefficients: generate_random_numbers(a_degree, prime_modulus)
                     .iter()
                     .map(|x| PrimeFieldElement::new(*x, &_71))
                     .collect(),
             };
-            a.normalize();
-            let mut b = Polynomial::<PrimeFieldElement> {
+            let b = Polynomial::<PrimeFieldElement> {
                 coefficients: generate_random_numbers(a_degree + i, prime_modulus)
                     .iter()
                     .map(|x| PrimeFieldElement::new(*x, &_71))
                     .collect(),
             };
-            b.normalize();
 
             let mul_a_b: Polynomial<PrimeFieldElement> = a.clone() * b.clone();
             let mul_b_a: Polynomial<PrimeFieldElement> = b.clone() * a.clone();
@@ -1782,22 +1813,16 @@ mod test_polynomials {
             let sub_b_a: Polynomial<PrimeFieldElement> = b.clone() - a.clone();
 
             let mut res = mul_a_b.clone() / b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = mul_b_a.clone() / a.clone();
-            res.normalize();
             assert_eq!(res, b);
             res = add_a_b.clone() - b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = sub_a_b.clone() + b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = add_b_a.clone() - a.clone();
-            res.normalize();
             assert_eq!(res, b);
             res = sub_b_a.clone() + a.clone();
-            res.normalize();
             assert_eq!(res, b);
             assert_eq!(add_a_b, add_b_a);
             assert_eq!(mul_a_b, mul_b_a);
@@ -1821,20 +1846,18 @@ mod test_polynomials {
         let _71 = PrimeFieldBig::new(b(prime_modulus));
         let a_degree = 20;
         for i in 0..20 {
-            let mut a = Polynomial::<PrimeFieldElementBig> {
+            let a = Polynomial::<PrimeFieldElementBig> {
                 coefficients: generate_random_numbers(a_degree, prime_modulus)
                     .iter()
                     .map(|x| pfb(*x, &_71))
                     .collect(),
             };
-            a.normalize();
-            let mut b = Polynomial::<PrimeFieldElementBig> {
+            let b = Polynomial::<PrimeFieldElementBig> {
                 coefficients: generate_random_numbers(a_degree + i, prime_modulus)
                     .iter()
                     .map(|x| pfb(*x, &_71))
                     .collect(),
             };
-            b.normalize();
 
             let mul_a_b: Polynomial<PrimeFieldElementBig> = a.clone() * b.clone();
             let mul_b_a: Polynomial<PrimeFieldElementBig> = b.clone() * a.clone();
@@ -1844,22 +1867,16 @@ mod test_polynomials {
             let sub_b_a: Polynomial<PrimeFieldElementBig> = b.clone() - a.clone();
 
             let mut res = mul_a_b.clone() / b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = mul_b_a.clone() / a.clone();
-            res.normalize();
             assert_eq!(res, b);
             res = add_a_b.clone() - b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = sub_a_b.clone() + b.clone();
-            res.normalize();
             assert_eq!(res, a);
             res = add_b_a.clone() - a.clone();
-            res.normalize();
             assert_eq!(res, b);
             res = sub_b_a.clone() + a.clone();
-            res.normalize();
             assert_eq!(res, b);
             assert_eq!(add_a_b, add_b_a);
             assert_eq!(mul_a_b, mul_b_a);
@@ -1871,6 +1888,72 @@ mod test_polynomials {
             let one = mul_a_b.clone() / mul_a_b.clone();
             assert!(one.is_one());
         }
+    }
+
+    // This test was used to catch a bug where the polynomial division
+    // was wrong when the divisor has a leading zero coefficient, i.e.
+    // when it was not normalized
+    #[test]
+    fn pol_div_bug_detection_test() {
+        // x^3 + 18446744069414584320x + 1 / y = x
+        let numerator = Polynomial::new(vec![
+            BFieldElement::new(1),
+            -BFieldElement::new(1),
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+        ]);
+        let divisor_normalized =
+            Polynomial::new(vec![BFieldElement::new(0), BFieldElement::new(1)]);
+        let divisor_not_normalized = Polynomial::new(vec![
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+            BFieldElement::new(0),
+        ]);
+
+        let divisor_more_leading_zeros = Polynomial::new(vec![
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+        ]);
+
+        let numerator_with_leading_zero = Polynomial::new(vec![
+            BFieldElement::new(1),
+            -BFieldElement::new(1),
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+            BFieldElement::new(0),
+        ]);
+
+        let expected = Polynomial::new(vec![
+            -BFieldElement::new(1),
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+        ]);
+
+        // Verify that the divisor need not be normalized
+        let res_correct = numerator.clone() / divisor_normalized.clone();
+        let res_not_normalized = numerator.clone() / divisor_not_normalized.clone();
+        assert_eq!(expected, res_correct);
+        assert_eq!(res_correct, res_not_normalized);
+        let res_more_leading_zeros = numerator / divisor_more_leading_zeros.clone();
+        assert_eq!(expected, res_more_leading_zeros);
+
+        // Verify that numerator need not be normalized
+        let res_numerator_not_normalized_0 =
+            numerator_with_leading_zero.clone() / divisor_normalized;
+        let res_numerator_not_normalized_1 =
+            numerator_with_leading_zero.clone() / divisor_not_normalized;
+        let res_numerator_not_normalized_2 =
+            numerator_with_leading_zero / divisor_more_leading_zeros;
+        assert_eq!(expected, res_numerator_not_normalized_0);
+        assert_eq!(expected, res_numerator_not_normalized_1);
+        assert_eq!(expected, res_numerator_not_normalized_2);
     }
 
     #[test]
@@ -2495,5 +2578,59 @@ mod test_polynomials {
             "30x^6 + 16x^5 + 64x^4 + 11x^3 + 25x^2 + 48x",
             prod.to_string()
         );
+    }
+
+    #[test]
+    pub fn polynomial_divide_test() {
+        let minus_one = BFieldElement::QUOTIENT - 1;
+        let zero = BFieldElement::ring_zero();
+        let one = BFieldElement::ring_one();
+        let two = BFieldElement::new(2);
+        // let three = BFieldElement::new(3);
+        // let four = BFieldElement::new(4);
+        // let five = BFieldElement::new(5);
+
+        let a: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(30));
+        let b: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(5));
+
+        let (actual_quot, actual_rem) = a.divide(b);
+        let expected_quot: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(6));
+
+        assert_eq!(expected_quot, actual_quot);
+        assert!(actual_rem.is_zero());
+
+        // Shah-polynomial test
+        let shah = XFieldElement::shah_polynomial();
+        let c = Polynomial::new(vec![
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_one(),
+        ]);
+        let (actual_quot, actual_rem) = shah.divide(c);
+        println!("actual_quot = {}", actual_quot);
+        println!("actual_rem = {}", actual_rem);
+
+        let expected_quot = Polynomial::new_const(BFieldElement::new(1));
+        let expected_rem = Polynomial::new(vec![
+            BFieldElement::ring_one(),
+            BFieldElement::new(minus_one),
+        ]);
+        assert_eq!(expected_quot, actual_quot);
+        assert_eq!(expected_rem, actual_rem);
+
+        // x^6
+        let c: Polynomial<BFieldElement> = Polynomial::new(vec![one]).shift_coefficients(6, zero);
+
+        let (actual_sixth_quot, actual_sixth_rem) = c.divide(shah);
+
+        // x^3 + x - 1
+        let expected_sixth_quot: Polynomial<BFieldElement> =
+            Polynomial::new(vec![-one, one, zero, one]);
+        // x^2 - 2x + 1
+        let expected_sixth_rem: Polynomial<BFieldElement> = Polynomial::new(vec![one, -two, one]);
+
+        assert_eq!(expected_sixth_quot, actual_sixth_quot);
+        assert_eq!(expected_sixth_rem, actual_sixth_rem);
     }
 }

@@ -35,6 +35,7 @@ fn rpsss_bench_verify(c: &mut Criterion) {
     let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
     let field = PrimeFieldBig::new(modulus);
     let (mut stark, rp) = get_tutorial_stark(&field);
+    stark.prover_preprocess();
     let rpsss = RPSSS {
         field: field.clone(),
         stark: stark.clone(),
@@ -42,9 +43,6 @@ fn rpsss_bench_verify(c: &mut Criterion) {
     };
     let document_string: String = "Hello Neptune!".to_string();
     let document: Vec<u8> = document_string.clone().into_bytes();
-
-    // Calculate the index, AKA preprocessing
-    stark.prover_preprocess();
 
     let (sk, pk) = rpsss.keygen();
     let signature: Signature = rpsss.sign(&sk, &document).unwrap();

@@ -52,7 +52,7 @@ impl<U: num_traits::Num + Clone + Copy + Debug> Num for Fraction<U> {
 
 impl<T: num_traits::Num + Clone + Copy + Debug> Fraction<T> {
     pub fn reduce(mut dividend: T, mut divisor: T) -> Self {
-        let (reducer, ..) = PrimeFieldElement::eea(dividend, divisor);
+        let (reducer, ..) = PrimeFieldElement::xgcd(dividend, divisor);
         if reducer != num_traits::one() {
             dividend = dividend / reducer;
             divisor = divisor / reducer;

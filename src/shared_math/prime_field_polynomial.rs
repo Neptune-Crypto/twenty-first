@@ -322,7 +322,7 @@ impl<'a> PrimeFieldPolynomial<'a> {
         let dominant_divisor: i128 = *divisor_coeffs.last().unwrap();
         let mut inv: i128 = 1;
         if dominant_divisor != 1 {
-            let (_, inv0, _) = PrimeFieldElement::eea(dominant_divisor, self.pqr.q);
+            let (_, inv0, _) = PrimeFieldElement::xgcd(dominant_divisor, self.pqr.q);
             inv = inv0;
         }
         let mut i = 0;

@@ -99,9 +99,9 @@ impl Fri {
         let mut codeword_local = codeword.to_vec();
         let one: BigInt = 1.into();
         let two: BigInt = 2.into();
-        let (_, two_inv_res, _) = PrimeFieldElementBig::eea(two.clone(), self.modulus.clone());
+        let (_, two_inv_res, _) = PrimeFieldElementBig::xgcd(two.clone(), self.modulus.clone());
 
-        // Ensure that 2^(-1) > 0 as eea may return negative values
+        // Ensure that 2^(-1) > 0 as xgcd may return negative values
         let two_inv = (two_inv_res + self.modulus.clone()) % self.modulus.clone();
 
         assert!(
