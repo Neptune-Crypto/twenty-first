@@ -1,4 +1,5 @@
 use rand::RngCore;
+use serde::Serialize;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::num::ParseIntError;
@@ -842,8 +843,31 @@ pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
     values
 }
 
+#[allow(dead_code)]
+pub fn generate_random_numbers_u128(count: usize, modulus: Option<u128>) -> Vec<u128> {
+    let mut prng = rand::thread_rng();
+
+    (0..count)
+        .map(|_| {
+            let upper = (prng.next_u64() as u128) << 64;
+            let lower = prng.next_u64() as u128;
+
+            match modulus {
+                Some(m) => (upper | lower) % m,
+                None => upper | lower,
+            }
+        })
+        .collect()
+}
+
 pub fn blake3_digest(input: &[u8]) -> [u8; 32] {
     *blake3::hash(input).as_bytes()
+}
+
+pub fn blake3_digest_serialize<T: ?Sized + Serialize>(value: &T) -> [u8; 32] {
+    let bytes: Vec<u8> = bincode::serialize(&value).expect("Encoding failed");
+
+    *blake3::hash(bytes.as_slice()).as_bytes()
 }
 
 pub fn get_n_hash_rounds(input: &[u8], n: u32) -> Vec<[u8; 32]> {
