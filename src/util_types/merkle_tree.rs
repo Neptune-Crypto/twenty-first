@@ -195,32 +195,6 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         acc_hash == root_hash
     }
 
-    // `verify_authentication_path_dummy' has same interface as `verify_authentication_path_dummy',
-    // but uses `verify_proof' internally. This helps to verify equivalence between the two.
-    pub fn verify_authentication_path_dummy(
-        root_hash: Blake3Hash,
-        index: u32,
-        value: T,
-        auth_path: Vec<Blake3Hash>,
-    ) -> bool {
-        let value_hash = blake3_digest_serialize(&value);
-        let leaf_node = Node {
-            value: Some(value),
-            hash: value_hash,
-        };
-        let auth_path_nodes: Vec<Node<T>> = auth_path
-            .iter()
-            .map(|hash| Node {
-                value: None,
-                hash: *hash,
-            })
-            .collect();
-        let mut proof = vec![leaf_node];
-        proof.extend(auth_path_nodes);
-
-        Self::verify_proof(root_hash, index as u64, proof)
-    }
-
     pub fn get_root(&self) -> [u8; 32] {
         self.root_hash
     }
@@ -388,9 +362,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     // Compact Merkle Multiproof Generation
     //
     // Leafless (produce authentication paths, not Vec<Node<T>>s with leaf values in it).
-    //
-    // `_dummy' because it relies on the existing `get_multi_proof'.
-    pub fn get_leafless_multi_proof_dummy(
+    pub fn get_leafless_multi_proof(
         &self,
         indices: &[usize],
     ) -> Vec<LeaflessPartialAuthenticationPath> {
@@ -541,6 +513,33 @@ mod merkle_tree_test {
     use itertools::Itertools;
     use rand::RngCore;
 
+    // XXX
+    // `verify_authentication_path_dummy' has same interface as `verify_authentication_path_dummy',
+    // but uses `verify_proof' internally. This helps to verify equivalence between the two.
+    fn verify_authentication_path_dummy<T: Serialize + Clone + Debug + PartialEq>(
+        root_hash: Blake3Hash,
+        index: u32,
+        value: T,
+        auth_path: Vec<Blake3Hash>,
+    ) -> bool {
+        let value_hash = blake3_digest_serialize(&value);
+        let leaf_node = Node {
+            value: Some(value),
+            hash: value_hash,
+        };
+        let auth_path_nodes: Vec<Node<T>> = auth_path
+            .iter()
+            .map(|hash| Node {
+                value: None,
+                hash: *hash,
+            })
+            .collect();
+        let mut proof = vec![leaf_node];
+        proof.extend(auth_path_nodes);
+
+        MerkleTree::verify_proof(root_hash, index as u64, proof)
+    }
+
     #[test]
     fn merkle_tree_test_32() {
         let field = PrimeField::new(1009);
@@ -634,7 +633,7 @@ mod merkle_tree_test {
 
         // Degenerate example
         let empty_values: Vec<u128> = vec![];
-        let empty_leafless_proof = tree.get_leafless_multi_proof_dummy(&vec![]);
+        let empty_leafless_proof = tree.get_leafless_multi_proof(&vec![]);
         assert!(MerkleTree::verify_leafless_multi_proof(
             tree.root_hash,
             &vec![],
@@ -665,7 +664,7 @@ mod merkle_tree_test {
         let some_indices: Vec<usize> = vec![0, 1];
         let some_values: Vec<u128> = some_indices.iter().map(|i| elements[*i]).collect();
         let some_leafless_proof: Vec<LeaflessPartialAuthenticationPath> =
-            tree.get_leafless_multi_proof_dummy(&some_indices);
+            tree.get_leafless_multi_proof(&some_indices);
 
         // TODO: Test all paths
         for partial_auth_path in some_leafless_proof.clone() {
@@ -719,7 +718,7 @@ mod merkle_tree_test {
 
             let values: Vec<BFieldElement> = indices.iter().map(|i| elements[*i]).collect();
             let proof: Vec<LeaflessPartialAuthenticationPath> =
-                tree.get_leafless_multi_proof_dummy(&indices);
+                tree.get_leafless_multi_proof(&indices);
 
             for path in proof.iter() {
                 assert_eq!(expected_path_length, path.0.len());
@@ -936,7 +935,7 @@ mod merkle_tree_test {
                 auth_path.clone(),
             );
 
-            let verified_2 = MerkleTree::verify_authentication_path_dummy(
+            let verified_2 = verify_authentication_path_dummy(
                 tree.root_hash,
                 index as u32,
                 value,
