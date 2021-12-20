@@ -843,6 +843,22 @@ pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
     values
 }
 
+pub fn generate_random_numbers_u128(count: usize, modulus: Option<u128>) -> Vec<u128> {
+    let mut prng = rand::thread_rng();
+
+    (0..count)
+        .map(|_| {
+            let upper = (prng.next_u64() as u128) << 64;
+            let lower = prng.next_u64() as u128;
+
+            match modulus {
+                Some(m) => (upper | lower) % m,
+                None => upper | lower,
+            }
+        })
+        .collect()
+}
+
 pub fn blake3_digest(input: &[u8]) -> [u8; 32] {
     *blake3::hash(input).as_bytes()
 }

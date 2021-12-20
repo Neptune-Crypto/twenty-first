@@ -406,37 +406,52 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         let auth_path_hashes: Vec<Option<Blake3Hash>> = auth_path_nodes
             .0
             .iter()
+            .skip(1) // drop leaf node from `get_multi_proof' output
             .map(|node_opt| node_opt.clone().map(|node| node.hash))
             .collect();
 
         LeaflessPartialAuthenticationPath(auth_path_hashes)
     }
 
-    // Nearly copy-paste of `verify_multi_proof', but modified for
-    // `LeaflessPartialAuthenticationPath'.
     pub fn verify_leafless_multi_proof(
         root_hash: Blake3Hash,
         indices: &[usize],
         values: &[T],
-        partial_auth_paths: &[LeaflessPartialAuthenticationPath],
+        proof: &[LeaflessPartialAuthenticationPath],
     ) -> bool {
-        if indices.len() != partial_auth_paths.len() {
+        if indices.len() != proof.len() || indices.len() != values.len() {
+            debug_assert!(indices.len() == proof.len());
+            debug_assert!(indices.len() == values.len());
+
             return false;
         }
 
-        if indices.len() != values.len() {
-            return false;
+        if indices.is_empty() {
+            return true;
         }
 
+        let mut partial_auth_paths: Vec<LeaflessPartialAuthenticationPath> = proof.to_owned();
         let mut partial_tree: HashMap<u64, Blake3Hash> = HashMap::new();
-        let mut proof_clone: Vec<LeaflessPartialAuthenticationPath> = partial_auth_paths.to_owned();
-        let half_tree_size = 2u64.pow(proof_clone[0].0.len() as u32 - 1);
-        for (i, b) in indices.iter().zip(proof_clone.iter()) {
+
+        // FIXME: We find the offset from which leaf nodes occur in the tree by looking at the
+        // first partial authentication path. This is a bit hacked, since what if not all
+        // partial authentication paths have the same length, and what if one has a
+        // different length than the tree's height?
+        let auth_path_length = partial_auth_paths[0].0.len();
+        let half_tree_size = 2u64.pow(auth_path_length as u32);
+
+        // Bootstrap partial tree
+        for (i, value, partial_auth_path) in izip!(indices, values, partial_auth_paths.clone()) {
             let mut index = half_tree_size + *i as u64;
-            partial_tree.insert(index, b.0[0].clone().unwrap());
-            for elem in b.0.iter().skip(1) {
-                if let Some(i) = elem.clone() {
-                    partial_tree.insert(index ^ 1, i);
+            let value_hash = blake3_digest_serialize(&value);
+
+            // Insert hashes for known leaves from values.
+            partial_tree.insert(index, value_hash);
+
+            // Insert hashes for known leaves from partial authentication paths.
+            for hash_option in partial_auth_path.0.iter() {
+                if let Some(hash) = hash_option.clone() {
+                    partial_tree.insert(index ^ 1, hash);
                 }
                 index /= 2;
             }
@@ -446,40 +461,56 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         let mut hasher = blake3::Hasher::new();
         while !complete {
             complete = true;
-            let mut keys: Vec<u64> = partial_tree.keys().copied().map(|x| x / 2).collect();
-            keys.sort_by_key(|w| Reverse(*w));
-            for key in keys {
-                if partial_tree.contains_key(&(key * 2))
-                    && partial_tree.contains_key(&(key * 2 + 1))
-                    && !partial_tree.contains_key(&key)
+
+            let mut parent_keys: Vec<u64> = partial_tree.keys().copied().map(|x| x / 2).collect();
+            parent_keys.sort_by_key(|w| Reverse(*w));
+
+            for parent_key in parent_keys {
+                let left_child_key = parent_key * 2;
+                let right_child_key = parent_key * 2 + 1;
+
+                // Populate partial tree with parent key/hashes for known children
+                if partial_tree.contains_key(&left_child_key)
+                    && partial_tree.contains_key(&right_child_key)
+                    && !partial_tree.contains_key(&parent_key)
                 {
-                    hasher.update(&partial_tree[&(key * 2)]);
-                    hasher.update(&partial_tree[&(key * 2 + 1)]);
-                    partial_tree.insert(key, *hasher.finalize().as_bytes());
+                    hasher.update(&partial_tree[&(parent_key * 2)]);
+                    hasher.update(&partial_tree[&(parent_key * 2 + 1)]);
+
+                    let hash: Blake3Hash = *hasher.finalize().as_bytes();
                     hasher.reset();
+
+                    partial_tree.insert(parent_key, hash);
                     complete = false;
                 }
             }
         }
 
-        for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
+        // Use partial tree to insert missing elements in partial authentication paths,
+        // making them full authentication paths.
+        for (i, partial_auth_path) in indices.iter().zip(partial_auth_paths.iter_mut()) {
             let mut index = half_tree_size + *i as u64;
-            for elem in b.0.iter_mut().skip(1) {
+
+            for elem in partial_auth_path.0.iter_mut() {
+                let sibling = index ^ 1;
+
                 if *elem == None {
                     // If the Merkle tree/proof is manipulated, the value partial_tree[&(index ^ 1)]
                     // is not guaranteed to exist. So have to  check
                     // whether it exists and return false if it does not
-                    if !partial_tree.contains_key(&(index ^ 1)) {
+
+                    if !partial_tree.contains_key(&sibling) {
                         return false;
                     }
 
-                    *elem = Some(partial_tree[&(index ^ 1)].clone());
+                    *elem = Some(partial_tree[&sibling].clone());
                 }
-                partial_tree.insert(index ^ 1, elem.clone().unwrap());
+                partial_tree.insert(sibling, elem.clone().unwrap());
                 index /= 2;
             }
         }
 
+        // Remove 'Some' constructors from partial auth paths
         let auth_paths = partial_auth_paths
             .iter()
             .map(Self::unwrap_leafless_partial_authentication_path);
@@ -506,8 +537,9 @@ mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
-    use crate::utils::{decode_hex, generate_random_numbers};
+    use crate::utils::{decode_hex, generate_random_numbers, generate_random_numbers_u128};
     use itertools::Itertools;
+    use rand::RngCore;
 
     #[test]
     fn merkle_tree_test_32() {
@@ -594,10 +626,112 @@ mod merkle_tree_test {
     }
 
     #[test]
-    fn merkle_tree_get_multi_proof_dummy_test() {
-        let elements = generate_random_numbers(32, 1000)
+    fn merkle_tree_verify_multi_proof_degenerate_test() {
+        // Number of Merkle tree leaves
+        let n_values = 8;
+        let elements: Vec<u128> = generate_random_numbers_u128(n_values, Some(100));
+        let tree = MerkleTree::from_vec(&elements);
+
+        // Degenerate example
+        let empty_values: Vec<u128> = vec![];
+        let empty_leafless_proof = tree.get_leafless_multi_proof_dummy(&vec![]);
+        assert!(MerkleTree::verify_leafless_multi_proof(
+            tree.root_hash,
+            &vec![],
+            &empty_values,
+            &empty_leafless_proof,
+        ));
+
+        let empty_leafy_proof = tree.get_multi_proof(&vec![]);
+        assert!(MerkleTree::verify_multi_proof(
+            tree.root_hash,
+            &vec![],
+            &empty_leafy_proof,
+        ));
+    }
+
+    #[test]
+    fn merkle_tree_verify_multi_proof_equivalence_test() {
+        // This test asserts that verify_multi_proof and verify_leafless_multi_proof
+        // behave equivalently.
+
+        // Number of Merkle tree leaves
+        let n_values = 8;
+        let expected_path_length = 3; // log2(128), root node not included
+        let elements: Vec<u128> = generate_random_numbers_u128(n_values, Some(100));
+        let tree = MerkleTree::from_vec(&elements);
+
+        // Single non-
+        let some_indices: Vec<usize> = vec![0, 1];
+        let some_values: Vec<u128> = some_indices.iter().map(|i| elements[*i]).collect();
+        let some_leafless_proof: Vec<LeaflessPartialAuthenticationPath> =
+            tree.get_leafless_multi_proof_dummy(&some_indices);
+
+        // TODO: Test all paths
+        for partial_auth_path in some_leafless_proof.clone() {
+            assert_eq!(
+                expected_path_length,
+                partial_auth_path.0.len(),
+                "A generated authentication path must have length the height of the tree (not counting the root)"
+            );
+        }
+
+        let leafless = MerkleTree::verify_leafless_multi_proof(
+            tree.root_hash,
+            &some_indices,
+            &some_values,
+            &some_leafless_proof,
+        );
+
+        let some_leafy_proof: Vec<PartialAuthenticationPath<u128>> =
+            tree.get_multi_proof(&some_indices);
+
+        let leafy =
+            MerkleTree::verify_multi_proof(tree.root_hash, &some_indices, &some_leafy_proof);
+
+        assert_eq!(leafless, leafy);
+    }
+
+    #[test]
+    fn merkle_tree_verify_leafless_multi_proof_test() {
+        let mut prng = rand::thread_rng();
+
+        // Number of Merkle tree leaves
+        let n_values = 128;
+        let expected_path_length = 7; // log2(128), root node not included
+        let elements: Vec<BFieldElement> = generate_random_numbers_u128(n_values, Some(100))
             .iter()
-            .map(BFieldElement::new);
+            .map(|x| BFieldElement::new(*x))
+            .collect();
+        let tree = MerkleTree::from_vec(&elements);
+
+        for _ in 0..10 {
+            // Ask for an arbitrary amount of indices less than the total
+            let n_indices = (prng.next_u64() % n_values as u64) as usize;
+
+            // Generate that amount of indices in the valid index range [0,128)
+            let indices: Vec<usize> =
+                generate_random_numbers_u128(n_indices, Some(n_values as u128))
+                    .iter()
+                    .map(|x| *x as usize)
+                    .unique()
+                    .collect();
+
+            let values: Vec<BFieldElement> = indices.iter().map(|i| elements[*i]).collect();
+            let proof: Vec<LeaflessPartialAuthenticationPath> =
+                tree.get_leafless_multi_proof_dummy(&indices);
+
+            for path in proof.iter() {
+                assert_eq!(expected_path_length, path.0.len());
+            }
+
+            assert!(MerkleTree::verify_leafless_multi_proof(
+                tree.root_hash,
+                &indices,
+                &values,
+                &proof,
+            ));
+        }
     }
 
     #[test]
