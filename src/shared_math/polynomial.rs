@@ -655,7 +655,7 @@ impl<
         let lhs_codeword = ntt(&scaled_lhs_coefficients, &root);
         let rhs_codeword = ntt(&scaled_rhs_coefficients, &root);
 
-        let rhs_inverses = primitive_root.batch_inversion(rhs_codeword);
+        let rhs_inverses = U::batch_inversion(rhs_codeword);
         let quotient_codeword: Vec<U> = lhs_codeword
             .iter()
             .zip(rhs_inverses)

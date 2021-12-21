@@ -1,16 +1,16 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::{IdentityValues, ModPowU64};
+use crate::shared_math::traits::{
+    CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
+    PrimeFieldElement,
+};
 use crate::utils::generate_random_numbers;
 use serde::{Deserialize, Serialize};
-
 use std::ops::Div;
 use std::{
     fmt::Display,
     ops::{Add, Mul, Neg, Sub},
 };
-
-use super::traits::New;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -133,27 +133,33 @@ impl XFieldElement {
         )
     }
 
-    pub fn get_cyclic_group(&self) -> Vec<XFieldElement> {
-        let mut val = *self;
-        let mut ret: Vec<XFieldElement> = vec![XFieldElement::ring_one()];
-
-        loop {
-            ret.push(val);
-            val = val * *self;
-            if val.is_one() {
-                break;
-            }
-        }
-        ret
-    }
-
     pub fn inv(&self) -> Self {
         let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
         let (_, a, _) = Self::xgcd(self_as_poly, Self::shah_polynomial());
         a.into()
     }
 
-    pub fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
+    pub fn get_primitive_root_of_unity(n: u128) -> (Option<XFieldElement>, Vec<u128>) {
+        let (b_root, primes) = BFieldElement::get_primitive_root_of_unity(n);
+        let x_root = b_root.map(XFieldElement::new_const);
+
+        (x_root, primes)
+    }
+
+    // `incr` and `decr` are mainly used for testing purposes
+    pub fn incr(&mut self, index: usize) {
+        self.coefficients[index].increment();
+    }
+
+    pub fn decr(&mut self, index: usize) {
+        self.coefficients[index].decrement();
+    }
+
+    // TODO: legendre_symbol
+}
+
+impl FieldBatchInversion for XFieldElement {
+    fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
         // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
         let input_length = input.len();
         if input_length == 0 {
@@ -181,24 +187,22 @@ impl XFieldElement {
 
         res
     }
+}
 
-    pub fn get_primitive_root_of_unity(n: u128) -> (Option<XFieldElement>, Vec<u128>) {
-        let (b_root, primes) = BFieldElement::get_primitive_root_of_unity(n);
-        let x_root = b_root.map(XFieldElement::new_const);
+impl CyclicGroupGenerator for XFieldElement {
+    fn get_cyclic_group(&self) -> Vec<Self> {
+        let mut val = *self;
+        let mut ret: Vec<Self> = vec![Self::ring_one()];
 
-        (x_root, primes)
+        loop {
+            ret.push(val);
+            val = val * *self;
+            if val.is_one() {
+                break;
+            }
+        }
+        ret
     }
-
-    // `incr` and `decr` are mainly used for testing purposes
-    pub fn incr(&mut self, index: usize) {
-        self.coefficients[index].increment();
-    }
-
-    pub fn decr(&mut self, index: usize) {
-        self.coefficients[index].decrement();
-    }
-
-    // TODO: legendre_symbol
 }
 
 impl Display for XFieldElement {
@@ -209,6 +213,26 @@ impl Display for XFieldElement {
             self.coefficients[2], self.coefficients[1], self.coefficients[0]
         )
     }
+}
+
+impl From<Vec<u8>> for XFieldElement {
+    fn from(bytes: Vec<u8>) -> Self {
+        // TODO: See note in BFieldElement's From<Vec<u8>>.
+        let bytesize = std::mem::size_of::<u64>();
+        let (first_eight_bytes, rest) = bytes.as_slice().split_at(bytesize);
+        let (second_eight_bytes, rest2) = rest.split_at(bytesize);
+        let (third_eight_bytes, _rest3) = rest2.split_at(bytesize);
+
+        XFieldElement::new([
+            first_eight_bytes.to_vec().into(),
+            second_eight_bytes.to_vec().into(),
+            third_eight_bytes.to_vec().into(),
+        ])
+    }
+}
+
+impl PrimeFieldElement for XFieldElement {
+    type Elem = XFieldElement;
 }
 
 impl IdentityValues for XFieldElement {
@@ -365,7 +389,13 @@ impl ModPowU64 for XFieldElement {
     }
 }
 
-// TODO: ModPow64
+impl ModPowU32 for XFieldElement {
+    fn mod_pow_u32(&self, exp: u32) -> Self {
+        // TODO: This can be sped up by a factor 2 by implementing
+        // it for u32 and not using the 64-bit version
+        self.mod_pow_u64(exp as u64)
+    }
+}
 
 #[cfg(test)]
 mod x_field_element_test {
