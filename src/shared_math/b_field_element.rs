@@ -1,7 +1,11 @@
-use crate::shared_math::traits::{IdentityValues, ModPowU64};
+use crate::shared_math::traits::{
+    CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
+    PrimeFieldElement,
+};
 use crate::utils::{generate_random_numbers, FIRST_THOUSAND_PRIMES};
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 use std::{
     fmt::{self, Display},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
@@ -38,35 +42,6 @@ impl BFieldElement {
             0: ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
                 as u128,
         }
-    }
-
-    pub fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
-        // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
-        let input_length = input.len();
-        if input_length == 0 {
-            return Vec::<Self>::new();
-        }
-
-        let mut scratch: Vec<Self> = vec![Self::ring_zero(); input_length];
-        let mut acc = Self::ring_one();
-        scratch[0] = input[0];
-
-        for i in 0..input_length {
-            assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
-            scratch[i] = acc;
-            acc = acc * input[i];
-        }
-
-        acc = acc.inv();
-
-        let mut res = input;
-        for i in (0..input_length).rev() {
-            let tmp = acc * res[i];
-            res[i] = acc * scratch[i];
-            acc = tmp;
-        }
-
-        res
     }
 
     pub fn increment(&mut self) {
@@ -244,6 +219,86 @@ impl fmt::Display for BFieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
+}
+
+impl ModPowU32 for BFieldElement {
+    fn mod_pow_u32(&self, exp: u32) -> Self {
+        // TODO: This can be sped up by a factor 2 by implementing
+        // it for u32 and not using the 64-bit version
+        self.mod_pow(exp as u64)
+    }
+}
+
+impl FieldBatchInversion for BFieldElement {
+    fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
+        // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
+        let input_length = input.len();
+        if input_length == 0 {
+            return Vec::<Self>::new();
+        }
+
+        let mut scratch: Vec<Self> = vec![Self::ring_zero(); input_length];
+        let mut acc = Self::ring_one();
+        scratch[0] = input[0];
+
+        for i in 0..input_length {
+            assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
+            scratch[i] = acc;
+            acc = acc * input[i];
+        }
+
+        acc = acc.inv();
+
+        let mut res = input;
+        for i in (0..input_length).rev() {
+            let tmp = acc * res[i];
+            res[i] = acc * scratch[i];
+            acc = tmp;
+        }
+
+        res
+    }
+}
+
+impl CyclicGroupGenerator for BFieldElement {
+    fn get_cyclic_group(&self) -> Vec<Self> {
+        let mut val = *self;
+        let mut ret: Vec<Self> = vec![Self::ring_one()];
+
+        loop {
+            ret.push(val);
+            val = val * *self;
+            if val.is_one() {
+                break;
+            }
+        }
+        ret
+    }
+}
+
+impl New for BFieldElement {
+    fn new_from_usize(&self, value: usize) -> Self {
+        Self::new(value as u128)
+    }
+}
+
+// This is used for: Convert a hash value to a BFieldElement. Consider making From<Blake3Hash> trait
+impl From<Vec<u8>> for BFieldElement {
+    fn from(bytes: Vec<u8>) -> Self {
+        // TODO: Right now we only accept if 'bytes' has 8 bytes; while that is true in
+        // the single call site this is used, it also seems unnecessarily fragile (when we
+        // change from BLAKE3 to Rescue-Prime, the hash length will change and this will be
+        // be wrong). We should make this a From<Blake3Hash> to ensure that it has the right
+        // length.
+        let (eight_bytes, _rest) = bytes.as_slice().split_at(std::mem::size_of::<u64>());
+        let coerced: [u8; 8] = eight_bytes.try_into().unwrap();
+        let n: u64 = u64::from_ne_bytes(coerced);
+        BFieldElement::new(n as u128)
+    }
+}
+
+impl PrimeFieldElement for BFieldElement {
+    type Elem = BFieldElement;
 }
 
 // TODO: We implement IdentityValues so this module works in existing code, but we want to replace IdentityValues with Zero and One eventually.

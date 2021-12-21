@@ -218,8 +218,13 @@ impl<'a> ModPowU64 for PrimeFieldElement<'a> {
 }
 
 impl<'a> FieldBatchInversion for PrimeFieldElement<'a> {
-    fn batch_inversion(&self, rhs: Vec<Self>) -> Vec<Self> {
-        self.field.batch_inversion_elements(rhs)
+    fn batch_inversion(rhs: Vec<Self>) -> Vec<Self> {
+        if rhs.is_empty() {
+            rhs
+        } else {
+            let field = rhs[0].field;
+            field.batch_inversion_elements(rhs)
+        }
     }
 }
 
