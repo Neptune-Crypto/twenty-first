@@ -221,6 +221,75 @@ impl<
         (a, b)
     }
 
+    pub fn are_colinear_3(p0: (U, U), p1: (U, U), p2: (U, U)) -> bool {
+        if p0.0 == p1.0 || p1.0 == p2.0 || p2.0 == p0.0 {
+            return false;
+        }
+
+        let dy = p0.1.clone() - p1.1.clone();
+        let dx = p0.0.clone() - p1.0;
+        let a = dy / dx; // Can we implement this without division?
+        let b = p0.1.clone() - a.clone() * p0.0;
+        let expected_p2_y = a * p2.0.clone() + b;
+
+        p2.1 == expected_p2_y
+    }
+
+    // Calculates a reversed representation of the coefficients of
+    // prod_{i=0}^{N}((x- q_i))
+    fn prod_helper<T: IdentityValues + Sub<Output = T> + Mul<Output = T> + Clone>(
+        input: &[T],
+    ) -> Vec<T> {
+        if let Some((q_j, elements)) = input.split_first() {
+            let one: T = q_j.ring_one();
+            let zero: T = q_j.ring_zero();
+            let minus_q_j = zero.clone() - q_j.to_owned();
+            match elements {
+                // base case is `x - q_j` := [1, -q_j]
+                [] => vec![one, minus_q_j],
+                _ => {
+                    // The recursive call calculates (x-q_j)*rec = x*rec - q_j*rec := [0, rec] .- q_j*[rec]
+                    let mut rec = Self::prod_helper(elements);
+                    rec.push(zero);
+                    let mut i = rec.len() - 1;
+                    while i > 0 {
+                        rec[i] = rec[i].clone() - q_j.to_owned() * rec[i - 1].clone();
+                        i -= 1;
+                    }
+                    rec
+                }
+            }
+        } else {
+            panic!("Empty array received");
+        }
+    }
+
+    pub fn get_polynomial_with_roots(roots: &[U]) -> Self {
+        let mut coefficients = Self::prod_helper(roots);
+        coefficients.reverse();
+        Polynomial { coefficients }
+    }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Neg<Output = U>
+            + Sized
+            + New
+            + ModPowU64
+            + FieldBatchInversion
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + std::fmt::Debug
+            + std::fmt::Display
+            + PartialEq
+            + Eq
+            + Hash,
+    > Polynomial<U>
+{
     pub fn are_colinear(points: &[(U, U)]) -> bool {
         if points.len() < 3 {
             println!("Too few points received. Got: {} points", points.len());
@@ -259,41 +328,6 @@ impl<
         }
 
         true
-    }
-
-    // Calculates a reversed representation of the coefficients of
-    // prod_{i=0}^{N}((x- q_i))
-    fn prod_helper<T: IdentityValues + Sub<Output = T> + Mul<Output = T> + Clone>(
-        input: &[T],
-    ) -> Vec<T> {
-        if let Some((q_j, elements)) = input.split_first() {
-            let one: T = q_j.ring_one();
-            let zero: T = q_j.ring_zero();
-            let minus_q_j = zero.clone() - q_j.to_owned();
-            match elements {
-                // base case is `x - q_j` := [1, -q_j]
-                [] => vec![one, minus_q_j],
-                _ => {
-                    // The recursive call calculates (x-q_j)*rec = x*rec - q_j*rec := [0, rec] .- q_j*[rec]
-                    let mut rec = Self::prod_helper(elements);
-                    rec.push(zero);
-                    let mut i = rec.len() - 1;
-                    while i > 0 {
-                        rec[i] = rec[i].clone() - q_j.to_owned() * rec[i - 1].clone();
-                        i -= 1;
-                    }
-                    rec
-                }
-            }
-        } else {
-            panic!("Empty array received");
-        }
-    }
-
-    pub fn get_polynomial_with_roots(roots: &[U]) -> Self {
-        let mut coefficients = Self::prod_helper(roots);
-        coefficients.reverse();
-        Polynomial { coefficients }
     }
 
     fn slow_lagrange_interpolation_internal(xs: &[U], ys: &[U]) -> Self {
@@ -1502,6 +1536,63 @@ mod test_polynomials {
                 &(pfb(2, &field_big), pfb(3, &field_big))
             )
         );
+    }
+
+    #[test]
+    fn polynomial_are_colinear_3_test() {
+        let field = PrimeField::new(5);
+        assert!(Polynomial::are_colinear_3(
+            (pf(1, &field), pf(1, &field)),
+            (pf(2, &field), pf(2, &field)),
+            (pf(3, &field), pf(3, &field))
+        ));
+        assert!(Polynomial::are_colinear_3(
+            (pf(1, &field), pf(1, &field)),
+            (pf(2, &field), pf(7, &field)),
+            (pf(3, &field), pf(3, &field))
+        ));
+        assert!(Polynomial::are_colinear_3(
+            (pf(1, &field), pf(3, &field)),
+            (pf(2, &field), pf(2, &field)),
+            (pf(3, &field), pf(1, &field))
+        ));
+        assert!(Polynomial::are_colinear_3(
+            (pf(1, &field), pf(1, &field)),
+            (pf(7, &field), pf(7, &field)),
+            (pf(3, &field), pf(3, &field))
+        ));
+        assert!(!Polynomial::are_colinear_3(
+            (pf(1, &field), pf(1, &field)),
+            (pf(2, &field), pf(2, &field)),
+            (pf(3, &field), pf(4, &field))
+        ));
+        assert!(!Polynomial::are_colinear_3(
+            (pf(1, &field), pf(1, &field)),
+            (pf(2, &field), pf(3, &field)),
+            (pf(3, &field), pf(3, &field))
+        ));
+        assert!(!Polynomial::are_colinear_3(
+            (pf(1, &field), pf(0, &field)),
+            (pf(2, &field), pf(3, &field)),
+            (pf(3, &field), pf(3, &field))
+        ));
+        assert!(Polynomial::are_colinear_3(
+            (pf(15, &field), pf(92, &field)),
+            (pf(11, &field), pf(76, &field)),
+            (pf(19, &field), pf(108, &field))
+        ));
+        assert!(!Polynomial::are_colinear_3(
+            (pf(12, &field), pf(92, &field)),
+            (pf(11, &field), pf(76, &field)),
+            (pf(19, &field), pf(108, &field))
+        ));
+
+        // Disallow repeated x-values
+        assert!(!Polynomial::are_colinear_3(
+            (pf(12, &field), pf(92, &field)),
+            (pf(11, &field), pf(76, &field)),
+            (pf(11, &field), pf(108, &field))
+        ));
     }
 
     #[test]
