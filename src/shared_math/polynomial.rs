@@ -70,14 +70,13 @@ fn pretty_print_coefficients_generic<T: Add + Div + Mul + Sub + IdentityValues +
 
 #[derive(Debug, Clone)]
 pub struct Polynomial<
-    T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
+    T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Display + Debug,
 > {
     pub coefficients: Vec<T>,
 }
 
-impl<
-        T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
-    > std::fmt::Display for Polynomial<T>
+impl<T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Display + Debug>
+    std::fmt::Display for Polynomial<T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
@@ -97,7 +96,6 @@ impl<
             + Clone
             + PartialEq
             + Eq
-            + Hash
             + Display
             + Debug,
     > PartialEq for Polynomial<U>
@@ -127,7 +125,6 @@ impl<
             + Clone
             + PartialEq
             + Eq
-            + Hash
             + Display
             + Debug,
     > Eq for Polynomial<U>
@@ -144,8 +141,7 @@ impl<
             + Display
             + Debug
             + PartialEq
-            + Eq
-            + Hash,
+            + Eq,
     > Polynomial<U>
 {
     pub fn new(coefficients: Vec<U>) -> Self {
@@ -405,8 +401,7 @@ impl<
             + std::fmt::Debug
             + std::fmt::Display
             + PartialEq
-            + Eq
-            + Hash,
+            + Eq,
     > Polynomial<U>
 {
     pub fn fast_multiply(lhs: &Self, rhs: &Self, primitive_root: &U, root_order: usize) -> Self {
@@ -682,8 +677,7 @@ impl<
             + std::fmt::Debug
             + std::fmt::Display
             + PartialEq
-            + Eq
-            + Hash,
+            + Eq,
     > Polynomial<U>
 {
     pub fn multiply(self, other: Self) -> Self {
@@ -839,8 +833,7 @@ impl<
             + PartialEq
             + Eq
             + Display
-            + Debug
-            + Hash,
+            + Debug,
     > Div for Polynomial<U>
 {
     type Output = Self;
@@ -860,7 +853,6 @@ impl<
             + Clone
             + PartialEq
             + Eq
-            + Hash
             + Display
             + Debug,
     > Rem for Polynomial<U>
@@ -882,7 +874,6 @@ impl<
             + Clone
             + PartialEq
             + Eq
-            + Hash
             + Display
             + Debug,
     > Add for Polynomial<U>
@@ -916,7 +907,6 @@ impl<
             + Clone
             + PartialEq
             + Eq
-            + Hash
             + Display
             + Debug,
     > Sub for Polynomial<U>
@@ -941,9 +931,8 @@ impl<
     }
 }
 
-impl<
-        U: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Debug + Display,
-    > Polynomial<U>
+impl<U: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Debug + Display>
+    Polynomial<U>
 {
     pub fn degree(&self) -> isize {
         degree_raw(&self.coefficients)
@@ -960,8 +949,7 @@ impl<
             + std::fmt::Debug
             + std::fmt::Display
             + PartialEq
-            + Eq
-            + Hash,
+            + Eq,
     > Mul for Polynomial<U>
 {
     type Output = Self;
