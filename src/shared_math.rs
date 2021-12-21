@@ -21,3 +21,4 @@ pub mod stark;
 pub mod traits;
 pub mod vector;
 pub mod x_field_element;
+pub mod x_field_fri;
