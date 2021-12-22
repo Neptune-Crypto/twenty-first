@@ -1158,7 +1158,6 @@ mod merkle_tree_test {
         );
         assert_eq!(3, tree_a.salts_per_value);
         assert_eq!(3 * 4, tree_a.salts.len());
-        println!("{:?}", tree_a.salts);
 
         // 2: Get the path for value '4' (index: 2)
         let auth_path_a_and_salt = tree_a.get_authentication_path(2);
@@ -1347,6 +1346,83 @@ mod merkle_tree_test {
             value_b,
             auth_path_b.0.clone(),
             auth_path_b.1.clone(),
+        ));
+
+        // 9: Verify that simple multipath authentication paths work
+        let auth_path_b_multi_0 = tree_b.get_leafless_multi_proof(&[0, 1]);
+        let multi_values_0 = vec![BFieldElement::new(3), BFieldElement::new(1)];
+        assert!(SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[0, 1],
+            &multi_values_0,
+            &auth_path_b_multi_0
+        ));
+
+        let auth_path_b_multi_1 = tree_b.get_leafless_multi_proof(&[1]);
+        let multi_values_1 = vec![BFieldElement::new(1)];
+        assert!(SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[1],
+            &multi_values_1,
+            &auth_path_b_multi_1
+        ));
+
+        let auth_path_b_multi_2 = tree_b.get_leafless_multi_proof(&[1, 0]);
+        let multi_values_2 = vec![BFieldElement::new(1), BFieldElement::new(3)];
+        assert!(SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[1, 0],
+            &multi_values_2,
+            &auth_path_b_multi_2
+        ));
+
+        let mut auth_path_b_multi_3 = tree_b.get_leafless_multi_proof(&[1, 0, 4, 7, 2]);
+        let mut multi_values_3 = vec![
+            BFieldElement::new(1),
+            BFieldElement::new(3),
+            BFieldElement::new(5),
+            BFieldElement::new(6),
+            BFieldElement::new(4),
+        ];
+        assert!(SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[1, 0, 4, 7, 2],
+            &multi_values_3,
+            &auth_path_b_multi_3
+        ));
+
+        // change a hash, verify failure
+        auth_path_b_multi_3[1].1[0].increment();
+        assert!(!SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[1, 0, 4, 7, 2],
+            &multi_values_3,
+            &auth_path_b_multi_3
+        ));
+
+        auth_path_b_multi_3[1].1[0].decrement();
+        assert!(SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[1, 0, 4, 7, 2],
+            &multi_values_3,
+            &auth_path_b_multi_3
+        ));
+
+        // change a value, verify failure
+        multi_values_3[0].increment();
+        assert!(!SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[1, 0, 4, 7, 2],
+            &multi_values_3,
+            &auth_path_b_multi_3
+        ));
+
+        multi_values_3[0].decrement();
+        assert!(SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[1, 0, 4, 7, 2],
+            &multi_values_3,
+            &auth_path_b_multi_3
         ));
     }
 }
