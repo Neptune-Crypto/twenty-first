@@ -1310,7 +1310,7 @@ mod merkle_tree_test {
             "sibling e"
         );
 
-        let root_hash_b = tree_b.get_root();
+        let mut root_hash_b = tree_b.get_root();
         assert!(SaltedMerkleTree::verify_authentication_path(
             root_hash_b,
             6,
@@ -1391,7 +1391,7 @@ mod merkle_tree_test {
             &auth_path_b_multi_3
         ));
 
-        // change a hash, verify failure
+        // 10: change a hash, verify failure
         auth_path_b_multi_3[1].1[0].increment();
         assert!(!SaltedMerkleTree::verify_leafless_multi_proof(
             root_hash_b,
@@ -1408,7 +1408,7 @@ mod merkle_tree_test {
             &auth_path_b_multi_3
         ));
 
-        // change a value, verify failure
+        // 11: change a value, verify failure
         multi_values_3[0].increment();
         assert!(!SaltedMerkleTree::verify_leafless_multi_proof(
             root_hash_b,
@@ -1418,6 +1418,23 @@ mod merkle_tree_test {
         ));
 
         multi_values_3[0].decrement();
+        assert!(SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[1, 0, 4, 7, 2],
+            &multi_values_3,
+            &auth_path_b_multi_3
+        ));
+
+        // Change root hash, verify failue
+        root_hash_b[4] ^= 1;
+        assert!(!SaltedMerkleTree::verify_leafless_multi_proof(
+            root_hash_b,
+            &[1, 0, 4, 7, 2],
+            &multi_values_3,
+            &auth_path_b_multi_3
+        ));
+
+        root_hash_b[4] ^= 1;
         assert!(SaltedMerkleTree::verify_leafless_multi_proof(
             root_hash_b,
             &[1, 0, 4, 7, 2],
