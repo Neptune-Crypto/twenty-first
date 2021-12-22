@@ -1,5 +1,6 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
     PrimeFieldElement,
@@ -53,21 +54,6 @@ impl XFieldElement {
 
     pub fn new(coefficients: [BFieldElement; 3]) -> Self {
         Self { coefficients }
-    }
-
-    pub fn random_elements(length: u32) -> Vec<Self> {
-        let rands: Vec<i128> =
-            generate_random_numbers(3 * length as usize, BFieldElement::QUOTIENT as i128);
-        let mut ret: Vec<XFieldElement> = Vec::with_capacity(length as usize);
-        for i in 0..length as usize {
-            ret.push(XFieldElement::new([
-                BFieldElement::new(rands[3 * i] as u128),
-                BFieldElement::new(rands[3 * i + 1] as u128),
-                BFieldElement::new(rands[3 * i + 2] as u128),
-            ]));
-        }
-
-        ret
     }
 
     pub fn new_const(element: BFieldElement) -> Self {
@@ -186,6 +172,23 @@ impl FieldBatchInversion for XFieldElement {
         }
 
         res
+    }
+}
+
+impl GetRandomElements for XFieldElement {
+    fn random_elements(length: u32) -> Vec<Self> {
+        let rands: Vec<i128> =
+            generate_random_numbers(3 * length as usize, BFieldElement::QUOTIENT as i128);
+        let mut ret: Vec<XFieldElement> = Vec::with_capacity(length as usize);
+        for i in 0..length as usize {
+            ret.push(XFieldElement::new([
+                BFieldElement::new(rands[3 * i] as u128),
+                BFieldElement::new(rands[3 * i + 1] as u128),
+                BFieldElement::new(rands[3 * i + 2] as u128),
+            ]));
+        }
+
+        ret
     }
 }
 

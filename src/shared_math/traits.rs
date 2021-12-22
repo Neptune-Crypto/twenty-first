@@ -25,6 +25,13 @@ where
     fn batch_inversion(elements: Vec<Self>) -> Vec<Self>;
 }
 
+pub trait GetRandomElements
+where
+    Self: Sized,
+{
+    fn random_elements(length: u32) -> Vec<Self>;
+}
+
 pub trait ModPowU64 {
     fn mod_pow_u64(&self, pow: u64) -> Self;
 }

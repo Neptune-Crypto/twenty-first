@@ -1,3 +1,4 @@
+use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
     PrimeFieldElement,
@@ -23,16 +24,6 @@ impl BFieldElement {
         Self {
             0: value % Self::QUOTIENT,
         }
-    }
-
-    pub fn random_elements(length: u32) -> Vec<Self> {
-        let rands: Vec<i128> =
-            generate_random_numbers(length as usize, BFieldElement::QUOTIENT as i128);
-
-        rands
-            .into_iter()
-            .map(|x| BFieldElement::new(x as u128))
-            .collect()
     }
 
     pub fn inv(&self) -> Self {
@@ -273,6 +264,18 @@ impl CyclicGroupGenerator for BFieldElement {
             }
         }
         ret
+    }
+}
+
+impl GetRandomElements for BFieldElement {
+    fn random_elements(length: u32) -> Vec<Self> {
+        let rands: Vec<i128> =
+            generate_random_numbers(length as usize, BFieldElement::QUOTIENT as i128);
+
+        rands
+            .into_iter()
+            .map(|x| BFieldElement::new(x as u128))
+            .collect()
     }
 }
 
