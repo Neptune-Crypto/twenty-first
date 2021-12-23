@@ -703,6 +703,7 @@ mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
+    use crate::shared_math::x_field_element::XFieldElement;
     use crate::utils::{decode_hex, generate_random_numbers, generate_random_numbers_u128};
     use itertools::Itertools;
     use rand::RngCore;
@@ -1472,6 +1473,110 @@ mod merkle_tree_test {
             &[0, 1, 2, 4, 7],
             &multi_values_3,
             &auth_path_b_multi_3
+        ));
+    }
+
+    #[test]
+    fn salted_merkle_tree_get_authentication_path_xfields_test() {
+        // 1: Create Merkle tree
+        //
+        //     root
+        //    /    \
+        //   x      y
+        //  / \    / \
+        // 3   6  9   12
+        let tree_a = SaltedMerkleTree::from_vec(
+            &[
+                XFieldElement::new([3, 3, 3].map(BFieldElement::new)),
+                XFieldElement::new([1, 1, 1].map(BFieldElement::new)),
+                XFieldElement::new([4, 4, 4].map(BFieldElement::new)),
+                XFieldElement::new([5, 5, 5].map(BFieldElement::new)),
+            ],
+            3,
+        );
+        assert_eq!(3, tree_a.salts_per_value);
+        assert_eq!(3 * 4, tree_a.salts.len());
+
+        // 2: Get the path for value '4' (index: 2)
+        let mut auth_path_a_and_salt = tree_a.get_authentication_path(2);
+
+        // 3: Verify that the proof, along with the salt, works
+        let root_hash_a = tree_a.get_root();
+        let mut value = XFieldElement::new([4, 4, 4].map(BFieldElement::new));
+        assert!(SaltedMerkleTree::verify_authentication_path(
+            root_hash_a,
+            2,
+            value,
+            auth_path_a_and_salt.0.clone(),
+            auth_path_a_and_salt.1.clone(),
+        ));
+
+        // 4: Change value and verify that it fails
+        value.incr(1);
+        assert!(!SaltedMerkleTree::verify_authentication_path(
+            root_hash_a,
+            2,
+            value,
+            auth_path_a_and_salt.0.clone(),
+            auth_path_a_and_salt.1.clone(),
+        ));
+        value.decr(1);
+        assert!(SaltedMerkleTree::verify_authentication_path(
+            root_hash_a,
+            2,
+            value,
+            auth_path_a_and_salt.0.clone(),
+            auth_path_a_and_salt.1.clone(),
+        ));
+        value.decr(2);
+        assert!(!SaltedMerkleTree::verify_authentication_path(
+            root_hash_a,
+            2,
+            value,
+            auth_path_a_and_salt.0.clone(),
+            auth_path_a_and_salt.1.clone(),
+        ));
+        value.incr(2);
+        assert!(SaltedMerkleTree::verify_authentication_path(
+            root_hash_a,
+            2,
+            value,
+            auth_path_a_and_salt.0.clone(),
+            auth_path_a_and_salt.1.clone(),
+        ));
+        value.incr(0);
+        assert!(!SaltedMerkleTree::verify_authentication_path(
+            root_hash_a,
+            2,
+            value,
+            auth_path_a_and_salt.0.clone(),
+            auth_path_a_and_salt.1.clone(),
+        ));
+        value.decr(0);
+        assert!(SaltedMerkleTree::verify_authentication_path(
+            root_hash_a,
+            2,
+            value,
+            auth_path_a_and_salt.0.clone(),
+            auth_path_a_and_salt.1.clone(),
+        ));
+
+        // 5: Change salt and verify that it fails
+        auth_path_a_and_salt.1[0].decr(1);
+        assert!(!SaltedMerkleTree::verify_authentication_path(
+            root_hash_a,
+            2,
+            value,
+            auth_path_a_and_salt.0.clone(),
+            auth_path_a_and_salt.1.clone(),
+        ));
+        auth_path_a_and_salt.1[0].incr(1);
+        assert!(SaltedMerkleTree::verify_authentication_path(
+            root_hash_a,
+            2,
+            value,
+            auth_path_a_and_salt.0.clone(),
+            auth_path_a_and_salt.1.clone(),
         ));
     }
 }
