@@ -402,7 +402,7 @@ impl ModPowU32 for XFieldElement {
 
 #[cfg(test)]
 mod x_field_element_test {
-    use itertools::izip;
+    use itertools::{izip, Itertools};
 
     use crate::shared_math::{b_field_element::*, ntt, x_field_element::*};
     // use proptest::prelude::*;
@@ -440,6 +440,25 @@ mod x_field_element_test {
         assert!(!one_as_constant_term_1.is_one());
         assert!(!one_as_constant_term_0.is_zero());
         assert!(!one_as_constant_term_1.is_zero());
+    }
+
+    #[test]
+    fn x_field_random_element_generation_test() {
+        let rand_xs = XFieldElement::random_elements(14);
+
+        // Assert correct length
+        assert_eq!(14, rand_xs.len());
+
+        // Assert uniqueness of all generated elements
+        assert_eq!(
+            rand_xs.len(),
+            rand_xs
+                .clone()
+                .into_iter()
+                .unique()
+                .collect::<Vec<XFieldElement>>()
+                .len()
+        );
     }
 
     #[test]
