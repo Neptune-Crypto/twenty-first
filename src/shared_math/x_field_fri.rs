@@ -138,32 +138,54 @@ impl<F: PrimeFieldElement> Fri<F> {
         Ok(merkle_trees)
     }
 
+    // Return the c-indices for the 1st round of FRI
     fn sample_indices(&self, seed: &[u8]) -> Vec<usize> {
-        let snd_codeword_length = self.domain_length / 2;
-        let last_codeword_len = snd_codeword_length >> (self.num_rounds().0 - 1);
+        // This algorithm starts with the inner-most indices to pick up
+        // to `last_codeword_length` indices from the codeword in the last round.
+        // It then calculates the indices in the subsequent rounds by choosing
+        // between the two possible next indices in the next round until we get
+        // the c-indices for the first round.
+        let num_rounds = self.num_rounds().0;
+        let last_codeword_length = self.domain_length >> num_rounds;
         assert!(
-            self.colinearity_checks_count <= last_codeword_len,
+            self.colinearity_checks_count <= last_codeword_length,
             "Requested number of indices must not exceed length of last codeword"
         );
-        assert!(
-            self.colinearity_checks_count <= 2 * last_codeword_len,
-            "Not enough entropy in indices wrt last codeword"
-        );
 
-        let mut indices: Vec<usize> = vec![];
-        let mut reduced_indices: Vec<usize> = vec![];
+        let mut last_indices: Vec<usize> = vec![];
+        let mut remaining_last_round_exponents: Vec<usize> = (0..last_codeword_length).collect();
         let mut counter = 0u32;
-        while indices.len() < self.colinearity_checks_count {
+        for _ in 0..self.colinearity_checks_count {
             let mut seed_local: Vec<u8> = seed.to_vec();
             seed_local.append(&mut counter.to_be_bytes().into());
-            let hash = blake3_digest(seed_local.as_slice());
-            let index = get_index_from_bytes(&hash, snd_codeword_length);
-            let reduced_index = index % last_codeword_len;
+            let hash = blake3_digest(&seed_local);
+            let index: usize = get_index_from_bytes(&hash, remaining_last_round_exponents.len());
+            last_indices.push(remaining_last_round_exponents.remove(index));
             counter += 1;
-            if !reduced_indices.contains(&reduced_index) {
-                indices.push(index);
-                reduced_indices.push(reduced_index);
+        }
+
+        // Use last indices to derive first c-indices
+        let mut indices = last_indices;
+        for i in 1..num_rounds {
+            let codeword_length = last_codeword_length << i;
+
+            let mut new_indices: Vec<usize> = vec![];
+            for index in indices {
+                let mut seed_local: Vec<u8> = seed.to_vec();
+                seed_local.append(&mut counter.to_be_bytes().into());
+                let hash = blake3_digest(&seed_local);
+                let reduce_modulo: bool = get_index_from_bytes(&hash, 2) == 0;
+                let new_index = if reduce_modulo {
+                    index + codeword_length / 2
+                } else {
+                    index
+                };
+                new_indices.push(new_index);
+
+                counter += 1;
             }
+
+            indices = new_indices;
         }
 
         indices
@@ -331,10 +353,9 @@ impl<F: PrimeFieldElement> Fri<F> {
         let max_degree = (self.domain_length / self.expansion_factor) - 1;
         let mut rounds_count = log_2_ceil(max_degree as u64 + 1) as u8;
         let mut max_degree_of_last_round = 0u32;
-        if self.expansion_factor < 2 * self.colinearity_checks_count {
+        if self.expansion_factor < self.colinearity_checks_count {
             let num_missed_rounds = log_2_ceil(
-                (2f64 * self.colinearity_checks_count as f64 / self.expansion_factor as f64).ceil()
-                    as u64,
+                (self.colinearity_checks_count as f64 / self.expansion_factor as f64).ceil() as u64,
             ) as u8;
             rounds_count -= num_missed_rounds;
             max_degree_of_last_round = 2u32.pow(num_missed_rounds as u32) - 1;
@@ -345,12 +366,72 @@ impl<F: PrimeFieldElement> Fri<F> {
 }
 
 #[cfg(test)]
-mod test_fri {
+mod test_x_field_fri {
     use itertools::Itertools;
 
     use crate::shared_math::{b_field_element::BFieldElement, x_field_element::XFieldElement};
 
     use super::*;
+
+    #[test]
+    fn get_rounds_count_test() {
+        let subgroup_order = 512;
+        let expansion_factor = 4;
+        let mut fri: Fri<XFieldElement> =
+            get_x_field_fri_test_object(subgroup_order, expansion_factor, 2);
+        assert_eq!((7, 0), fri.num_rounds());
+        fri.colinearity_checks_count = 8;
+        assert_eq!((6, 1), fri.num_rounds());
+        fri.colinearity_checks_count = 10;
+        assert_eq!((5, 3), fri.num_rounds());
+        fri.colinearity_checks_count = 16;
+        assert_eq!((5, 3), fri.num_rounds());
+        fri.colinearity_checks_count = 17;
+        assert_eq!((4, 7), fri.num_rounds());
+        fri.colinearity_checks_count = 18;
+        assert_eq!((4, 7), fri.num_rounds());
+        fri.colinearity_checks_count = 31;
+        assert_eq!((4, 7), fri.num_rounds());
+        fri.colinearity_checks_count = 32;
+        assert_eq!((4, 7), fri.num_rounds());
+        fri.colinearity_checks_count = 33;
+        assert_eq!((3, 15), fri.num_rounds());
+
+        fri.domain_length = 256;
+        assert_eq!((2, 15), fri.num_rounds());
+        fri.colinearity_checks_count = 32;
+        assert_eq!((3, 7), fri.num_rounds());
+
+        fri.colinearity_checks_count = 32;
+        fri.domain_length = 1048576;
+        fri.expansion_factor = 8;
+        assert_eq!((15, 3), fri.num_rounds());
+
+        fri.colinearity_checks_count = 33;
+        fri.domain_length = 1048576;
+        fri.expansion_factor = 8;
+        assert_eq!((14, 7), fri.num_rounds());
+
+        fri.colinearity_checks_count = 63;
+        fri.domain_length = 1048576;
+        fri.expansion_factor = 8;
+        assert_eq!((14, 7), fri.num_rounds());
+
+        fri.colinearity_checks_count = 64;
+        fri.domain_length = 1048576;
+        fri.expansion_factor = 8;
+        assert_eq!((14, 7), fri.num_rounds());
+
+        fri.colinearity_checks_count = 65;
+        fri.domain_length = 1048576;
+        fri.expansion_factor = 8;
+        assert_eq!((13, 15), fri.num_rounds());
+
+        fri.domain_length = 256;
+        fri.expansion_factor = 4;
+        fri.colinearity_checks_count = 17;
+        assert_eq!((3, 7), fri.num_rounds());
+    }
 
     #[test]
     fn fri_on_b_field_test() {
@@ -369,7 +450,9 @@ mod test_fri {
     fn fri_on_x_field_test() {
         let subgroup_order = 1024;
         let expansion_factor = 4;
-        let fri: Fri<XFieldElement> = get_x_field_fri_test_object(subgroup_order, expansion_factor);
+        let colinearity_check_count = 6;
+        let fri: Fri<XFieldElement> =
+            get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
         let mut proof_stream: ProofStream = ProofStream::default();
         let subgroup = fri.omega.get_cyclic_group();
 
@@ -382,7 +465,9 @@ mod test_fri {
     fn fri_x_field_limit_test() {
         let subgroup_order = 1024;
         let expansion_factor = 4;
-        let fri: Fri<XFieldElement> = get_x_field_fri_test_object(subgroup_order, expansion_factor);
+        let colinearity_check_count = 6;
+        let fri: Fri<XFieldElement> =
+            get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
         let subgroup = fri.omega.get_cyclic_group();
 
         let mut points: Vec<XFieldElement>;
@@ -442,6 +527,7 @@ mod test_fri {
     fn get_x_field_fri_test_object(
         subgroup_order: u128,
         expansion_factor: usize,
+        colinearity_checks: usize,
     ) -> Fri<XFieldElement> {
         let (omega, _primes1): (Option<XFieldElement>, Vec<u128>) =
             XFieldElement::get_primitive_root_of_unity(subgroup_order);
@@ -450,8 +536,6 @@ mod test_fri {
         // `get_b_field_fri_test_object`. It does not generate the full Z_p\{0}, but
         // we're not sure it needs to, Alan?
         let offset: Option<XFieldElement> = Some(XFieldElement::new_const(BFieldElement::new(7)));
-
-        let colinearity_checks = 6;
 
         let fri: Fri<XFieldElement> = Fri::<XFieldElement>::new(
             offset.unwrap(),
