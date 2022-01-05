@@ -44,7 +44,7 @@ pub struct StarkPreprocessedValues<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Stark<'a> {
+pub struct StarkPrimeFieldElementBig<'a> {
     expansion_factor: usize,
     field: PrimeFieldBig,
     fri: Fri,
@@ -60,7 +60,7 @@ pub struct Stark<'a> {
     preprocessed_values: Option<StarkPreprocessedValues<'a>>,
 }
 
-impl<'a> Stark<'a> {
+impl<'a> StarkPrimeFieldElementBig<'a> {
     pub fn new(
         field: &'a PrimeFieldBig,
         expansion_factor: usize,
@@ -262,7 +262,7 @@ fn get_boundary_zerofiers<'a>(
         .collect()
 }
 
-impl<'a> Stark<'a> {
+impl<'a> StarkPrimeFieldElementBig<'a> {
     // Return the degrees of the boundary quotients
     fn boundary_quotient_degree_bounds(
         &self,
@@ -819,11 +819,13 @@ impl<'a> Stark<'a> {
 pub mod test_stark {
     use num_bigint::BigInt;
 
-    use crate::shared_math::rescue_prime_stark::RescuePrime;
+    use crate::shared_math::rescue_prime_pfe_big::RescuePrime;
 
     use super::*;
 
-    pub fn get_tutorial_stark<'a>(field: &'a PrimeFieldBig) -> (Stark<'a>, RescuePrime<'a>) {
+    pub fn get_tutorial_stark<'a>(
+        field: &'a PrimeFieldBig,
+    ) -> (StarkPrimeFieldElementBig<'a>, RescuePrime<'a>) {
         let expansion_factor = 4;
         let colinearity_checks_count = 2;
         let rescue_prime = RescuePrime::from_tutorial(&field);
@@ -834,7 +836,7 @@ pub mod test_stark {
             PrimeFieldElementBig::new(85408008396924667383611388730472331217u128.into(), &field);
 
         (
-            Stark::new(
+            StarkPrimeFieldElementBig::new(
                 &field,
                 expansion_factor,
                 colinearity_checks_count,

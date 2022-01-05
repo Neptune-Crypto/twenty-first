@@ -18,6 +18,7 @@ pub mod rescue_prime_stark;
 pub mod rpsss;
 pub mod slow_stark;
 pub mod stark;
+pub mod stark_pfe_big;
 pub mod traits;
 pub mod vector;
 pub mod x_field_element;

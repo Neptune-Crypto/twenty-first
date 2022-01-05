@@ -3,7 +3,7 @@ use crate::shared_math::low_degree_test::LowDegreeProof;
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
-use crate::shared_math::stark::{StarkProofError, StarkVerifyError};
+use crate::shared_math::stark_pfe_big::{StarkProofError, StarkVerifyError};
 use crate::shared_math::traits::IdentityValues;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::utils;

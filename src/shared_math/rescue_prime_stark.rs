@@ -1,7 +1,7 @@
 use num_bigint::BigInt;
 
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
-use crate::shared_math::stark::BoundaryConstraint;
+use crate::shared_math::stark_pfe_big::BoundaryConstraint;
 use crate::shared_math::traits::IdentityValues;
 
 use super::mpolynomial::MPolynomial;
@@ -404,7 +404,10 @@ impl<'a> RescuePrime<'a> {
 
 #[cfg(test)]
 mod rescue_prime_start_test {
-    use crate::{shared_math::stark::Stark, util_types::proof_stream::ProofStream};
+    use crate::{
+        shared_math::stark_pfe_big::StarkPrimeFieldElementBig,
+        util_types::proof_stream::ProofStream,
+    };
 
     use super::*;
 
@@ -511,7 +514,7 @@ mod rescue_prime_start_test {
             PrimeFieldElementBig::new(85408008396924667383611388730472331217u128.into(), &field);
         let rescue_prime_stark = RescuePrime::from_tutorial(&field);
 
-        let mut stark = Stark::new(
+        let mut stark = StarkPrimeFieldElementBig::new(
             &field,
             expansion_factor,
             colinearity_checks_count,

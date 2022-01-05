@@ -12,7 +12,7 @@ use crate::{shared_math::polynomial::Polynomial, util_types::proof_stream::Proof
 
 use super::fri::Fri;
 use super::other::log_2_ceil;
-use super::stark::BoundaryConstraint;
+use super::stark_pfe_big::BoundaryConstraint;
 use super::{
     mpolynomial::MPolynomial,
     prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig},
@@ -681,7 +681,7 @@ impl<'a> Stark<'a> {
 pub mod test_slow_stark {
     use num_bigint::BigInt;
 
-    use crate::shared_math::rescue_prime_stark::RescuePrime;
+    use crate::shared_math::rescue_prime_pfe_big::RescuePrime;
 
     use super::*;
 

@@ -2,12 +2,14 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use num_bigint::BigInt;
 use twenty_first::shared_math::{
     prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig},
-    rescue_prime_stark::RescuePrime,
+    rescue_prime_pfe_big::RescuePrime,
     rpsss::{Signature, RPSSS},
-    stark::Stark,
+    stark_pfe_big::StarkPrimeFieldElementBig,
 };
 
-pub fn get_tutorial_stark<'a>(field: &'a PrimeFieldBig) -> (Stark<'a>, RescuePrime<'a>) {
+pub fn get_tutorial_stark<'a>(
+    field: &'a PrimeFieldBig,
+) -> (StarkPrimeFieldElementBig<'a>, RescuePrime<'a>) {
     let expansion_factor = 4;
     let colinearity_checks_count = 2;
     let rescue_prime = RescuePrime::from_tutorial(&field);
@@ -18,7 +20,7 @@ pub fn get_tutorial_stark<'a>(field: &'a PrimeFieldBig) -> (Stark<'a>, RescuePri
         PrimeFieldElementBig::new(85408008396924667383611388730472331217u128.into(), &field);
 
     (
-        Stark::new(
+        StarkPrimeFieldElementBig::new(
             &field,
             expansion_factor,
             colinearity_checks_count,

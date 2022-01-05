@@ -4,7 +4,7 @@ use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element::PrimeFieldElement;
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
-use crate::shared_math::stark::{StarkProofError, StarkVerifyError};
+use crate::shared_math::stark_pfe_big::{StarkProofError, StarkVerifyError};
 use crate::shared_math::traits::{IdentityValues, New};
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::utils;

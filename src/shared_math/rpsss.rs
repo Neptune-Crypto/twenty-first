@@ -1,6 +1,6 @@
 use super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
-use super::stark::{Stark, DOCUMENT_HASH_LENGTH};
-use crate::shared_math::rescue_prime_stark::RescuePrime;
+use super::stark_pfe_big::{StarkPrimeFieldElementBig, DOCUMENT_HASH_LENGTH};
+use crate::shared_math::rescue_prime_pfe_big::RescuePrime;
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils::blake3_digest;
 use rand::RngCore;
@@ -24,7 +24,7 @@ pub struct Signature {
 pub struct RPSSS<'a> {
     pub field: PrimeFieldBig,
     pub rp: RescuePrime<'a>,
-    pub stark: Stark<'a>,
+    pub stark: StarkPrimeFieldElementBig<'a>,
 }
 
 impl<'a> RPSSS<'a> {
@@ -83,7 +83,7 @@ impl<'a> RPSSS<'a> {
 mod test_rpsss {
     use std::time::Instant;
 
-    use super::super::stark::test_stark;
+    use super::super::stark_pfe_big::test_stark;
     use super::*;
     use crate::shared_math::prime_field_element_big::PrimeFieldBig;
     use num_bigint::BigInt;
@@ -92,7 +92,8 @@ mod test_rpsss {
     fn sign_verify_test() {
         let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
         let field = PrimeFieldBig::new(modulus);
-        let (mut stark, rp): (Stark, RescuePrime) = test_stark::get_tutorial_stark(&field);
+        let (mut stark, rp): (StarkPrimeFieldElementBig, RescuePrime) =
+            test_stark::get_tutorial_stark(&field);
         let rpsss_no_preprocess = RPSSS {
             field: field.clone(),
             stark: stark.clone(),
