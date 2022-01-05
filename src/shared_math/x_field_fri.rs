@@ -12,7 +12,7 @@ use super::polynomial::Polynomial;
 use crate::shared_math::ntt::intt;
 
 // Module for performing FRI on XFieldElement
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Fri<F: PrimeFieldElement> {
     offset: F::Elem,                 // Offset for subgroup generator
     omega: F::Elem,                  // Generator of the expanded domain
