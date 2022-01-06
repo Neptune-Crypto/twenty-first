@@ -59,31 +59,52 @@ pub struct Fri {
 impl Fri {
     // Return the c-indices for the 1st round of FRI
     fn sample_indices(&self, seed: &[u8]) -> Vec<usize> {
-        let snd_codeword_length = self.domain_length / 2;
-        let last_codeword_len = snd_codeword_length >> (self.num_rounds().0 - 1);
+        // This algorithm starts with the inner-most indices to pick up
+        // to `last_codeword_length` indices from the codeword in the last round.
+        // It then calculates the indices in the subsequent rounds by choosing
+        // between the two possible next indices in the next round until we get
+        // the c-indices for the first round.
+        let num_rounds = self.num_rounds().0;
+        let last_codeword_length = self.domain_length >> num_rounds;
         assert!(
-            self.colinearity_checks_count <= last_codeword_len,
+            self.colinearity_checks_count <= last_codeword_length,
             "Requested number of indices must not exceed length of last codeword"
         );
-        assert!(
-            self.colinearity_checks_count <= 2 * last_codeword_len,
-            "Not enough entropy in indices wrt last codeword"
-        );
 
-        let mut indices: Vec<usize> = vec![];
-        let mut reduced_indices: Vec<usize> = vec![];
+        let mut last_indices: Vec<usize> = vec![];
+        let mut remaining_last_round_exponents: Vec<usize> = (0..last_codeword_length).collect();
         let mut counter = 0u32;
-        while indices.len() < self.colinearity_checks_count {
+        for _ in 0..self.colinearity_checks_count {
             let mut seed_local: Vec<u8> = seed.to_vec();
             seed_local.append(&mut counter.to_be_bytes().into());
-            let hash = blake3_digest(seed_local.as_slice());
-            let index = get_index_from_bytes(&hash, snd_codeword_length);
-            let reduced_index = index % last_codeword_len;
+            let hash = blake3_digest(&seed_local);
+            let index: usize = get_index_from_bytes(&hash, remaining_last_round_exponents.len());
+            last_indices.push(remaining_last_round_exponents.remove(index));
             counter += 1;
-            if !reduced_indices.contains(&reduced_index) {
-                indices.push(index);
-                reduced_indices.push(reduced_index);
+        }
+
+        // Use last indices to derive first c-indices
+        let mut indices = last_indices;
+        for i in 1..num_rounds {
+            let codeword_length = last_codeword_length << i;
+
+            let mut new_indices: Vec<usize> = vec![];
+            for index in indices {
+                let mut seed_local: Vec<u8> = seed.to_vec();
+                seed_local.append(&mut counter.to_be_bytes().into());
+                let hash = blake3_digest(&seed_local);
+                let reduce_modulo: bool = get_index_from_bytes(&hash, 2) == 0;
+                let new_index = if reduce_modulo {
+                    index + codeword_length / 2
+                } else {
+                    index
+                };
+                new_indices.push(new_index);
+
+                counter += 1;
             }
+
+            indices = new_indices;
         }
 
         indices
@@ -172,10 +193,9 @@ impl Fri {
         let max_degree = (self.domain_length / self.expansion_factor) - 1;
         let mut rounds_count = log_2_ceil(max_degree as u64 + 1) as u8;
         let mut max_degree_of_last_round = 0u32;
-        if self.expansion_factor < 2 * self.colinearity_checks_count {
+        if self.expansion_factor < self.colinearity_checks_count {
             let num_missed_rounds = log_2_ceil(
-                (2f64 * self.colinearity_checks_count as f64 / self.expansion_factor as f64).ceil()
-                    as u64,
+                (self.colinearity_checks_count as f64 / self.expansion_factor as f64).ceil() as u64,
             ) as u8;
             rounds_count -= num_missed_rounds;
             max_degree_of_last_round = 2u32.pow(num_missed_rounds as u32) - 1;
@@ -414,7 +434,7 @@ impl Fri {
 
 #[cfg(test)]
 mod test_fri {
-    use crate::shared_math::polynomial::Polynomial;
+    use crate::{shared_math::polynomial::Polynomial, utils::has_unique_elements};
 
     use super::*;
 
@@ -446,56 +466,65 @@ mod test_fri {
         let mut fri = get_fri_test_object();
         assert_eq!((7, 0), fri.num_rounds());
         fri.colinearity_checks_count = 8;
-        assert_eq!((5, 3), fri.num_rounds());
+        assert_eq!((6, 1), fri.num_rounds());
         fri.colinearity_checks_count = 10;
-        assert_eq!((4, 7), fri.num_rounds());
+        assert_eq!((5, 3), fri.num_rounds());
         fri.colinearity_checks_count = 16;
-        assert_eq!((4, 7), fri.num_rounds());
+        assert_eq!((5, 3), fri.num_rounds());
         fri.colinearity_checks_count = 17;
-        assert_eq!((3, 15), fri.num_rounds());
+        assert_eq!((4, 7), fri.num_rounds());
         fri.colinearity_checks_count = 18;
-        assert_eq!((3, 15), fri.num_rounds());
+        assert_eq!((4, 7), fri.num_rounds());
         fri.colinearity_checks_count = 31;
-        assert_eq!((3, 15), fri.num_rounds());
+        assert_eq!((4, 7), fri.num_rounds());
         fri.colinearity_checks_count = 32;
-        assert_eq!((3, 15), fri.num_rounds());
+        assert_eq!((4, 7), fri.num_rounds());
         fri.colinearity_checks_count = 33;
-        assert_eq!((2, 31), fri.num_rounds());
+        assert_eq!((3, 15), fri.num_rounds());
 
         fri.domain_length = 256;
-        assert_eq!((1, 31), fri.num_rounds());
-        fri.colinearity_checks_count = 32;
         assert_eq!((2, 15), fri.num_rounds());
+        fri.colinearity_checks_count = 32;
+        assert_eq!((3, 7), fri.num_rounds());
 
         fri.colinearity_checks_count = 32;
+        fri.domain_length = 1048576;
+        fri.expansion_factor = 8;
+        assert_eq!((15, 3), fri.num_rounds());
+
+        fri.colinearity_checks_count = 33;
         fri.domain_length = 1048576;
         fri.expansion_factor = 8;
         assert_eq!((14, 7), fri.num_rounds());
 
-        fri.colinearity_checks_count = 33;
-        fri.domain_length = 1048576;
-        fri.expansion_factor = 8;
-        assert_eq!((13, 15), fri.num_rounds());
-
         fri.colinearity_checks_count = 63;
         fri.domain_length = 1048576;
         fri.expansion_factor = 8;
-        assert_eq!((13, 15), fri.num_rounds());
+        assert_eq!((14, 7), fri.num_rounds());
 
         fri.colinearity_checks_count = 64;
         fri.domain_length = 1048576;
         fri.expansion_factor = 8;
-        assert_eq!((13, 15), fri.num_rounds());
+        assert_eq!((14, 7), fri.num_rounds());
 
         fri.colinearity_checks_count = 65;
         fri.domain_length = 1048576;
         fri.expansion_factor = 8;
-        assert_eq!((12, 31), fri.num_rounds());
+        assert_eq!((13, 15), fri.num_rounds());
 
         fri.domain_length = 256;
         fri.expansion_factor = 4;
         fri.colinearity_checks_count = 17;
-        assert_eq!((2, 15), fri.num_rounds());
+        assert_eq!((3, 7), fri.num_rounds());
+    }
+
+    #[test]
+    fn sample_indices_test() {
+        let fri = get_fri_test_object();
+        let hash = [0u8; 32];
+        let indices = fri.sample_indices(&hash);
+        assert_eq!(fri.colinearity_checks_count, indices.len());
+        assert!(has_unique_elements(indices));
     }
 
     #[test]
