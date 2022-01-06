@@ -7,6 +7,7 @@ use crate::util_types::proof_stream::ProofStream;
 use crate::utils::{blake3_digest, get_index_from_bytes};
 use std::error::Error;
 
+use super::b_field_element::BFieldElement;
 use super::other::log_2_ceil;
 use super::polynomial::Polynomial;
 use super::x_field_fri::Fri;
@@ -49,4 +50,12 @@ impl<F: PrimeFieldElement, G: PrimeFieldElement> Stark<F, G> {
         let original_trace_length = cycle_count;
         let randomized_trace_length = original_trace_length + num_randomizers;
     }
+}
+
+// TODO: Make this work for XFieldElement via trait.
+#[derive(Clone, Debug)]
+pub struct BoundaryConstraint {
+    pub cycle: usize,
+    pub register: usize,
+    pub value: BFieldElement,
 }
