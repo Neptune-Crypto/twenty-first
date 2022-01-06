@@ -33,6 +33,13 @@ where
     fn random_elements(length: usize, rng: &mut ThreadRng) -> Vec<Self>;
 }
 
+pub trait GetGeneratorDomain
+where
+    Self: Sized,
+{
+    fn get_generator_domain(&self) -> Vec<Self>;
+}
+
 pub trait ModPowU64 {
     fn mod_pow_u64(&self, pow: u64) -> Self;
 }

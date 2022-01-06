@@ -14,6 +14,8 @@ use std::{
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
+use super::traits::GetGeneratorDomain;
+
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct BFieldElement(u128);
@@ -285,6 +287,23 @@ impl GetRandomElements for BFieldElement {
         }
 
         values
+    }
+}
+
+impl GetGeneratorDomain for BFieldElement {
+    fn get_generator_domain(&self) -> Vec<Self> {
+        let mut value = self.to_owned();
+        let mut domain: Vec<Self> = vec![Self::ring_one()];
+
+        loop {
+            domain.push(value.clone());
+            value = value.clone() * self.to_owned();
+            if value.is_one() {
+                break;
+            }
+        }
+
+        domain
     }
 }
 
