@@ -14,7 +14,7 @@ pub mod polynomial_quotient_ring;
 pub mod prime_field_element;
 pub mod prime_field_element_big;
 pub mod prime_field_polynomial;
-pub mod rescue_prime_stark;
+pub mod rescue_prime_pfe_big;
 pub mod rpsss;
 pub mod slow_stark;
 pub mod stark;
