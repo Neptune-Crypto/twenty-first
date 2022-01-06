@@ -1,3 +1,4 @@
+use rand::prelude::ThreadRng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::convert::From;
@@ -29,7 +30,7 @@ pub trait GetRandomElements
 where
     Self: Sized,
 {
-    fn random_elements(length: u32) -> Vec<Self>;
+    fn random_elements(length: usize, rng: &mut ThreadRng) -> Vec<Self>;
 }
 
 pub trait ModPowU64 {

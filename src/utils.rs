@@ -834,15 +834,17 @@ where
     iter.into_iter().all(move |x| uniq.insert(x))
 }
 
-pub fn generate_random_numbers(size: usize, modulus: i128) -> Vec<i128> {
+// TODO: Not uniform. We only use this for testing right now.
+pub fn generate_random_numbers(count: usize, modulus: i128) -> Vec<i128> {
     let mut prng = rand::thread_rng();
 
-    let values: Vec<i128> = (0..size)
+    let values: Vec<i128> = (0..count)
         .map(|_| (((prng.next_u64() as i128) << 63) | (prng.next_u64() as i128) >> 1) % modulus)
         .collect();
     values
 }
 
+// TODO: Not uniform. We only use this for testing right now.
 #[allow(dead_code)]
 pub fn generate_random_numbers_u128(count: usize, modulus: Option<u128>) -> Vec<u128> {
     let mut prng = rand::thread_rng();

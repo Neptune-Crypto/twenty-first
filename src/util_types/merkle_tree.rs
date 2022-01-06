@@ -2,26 +2,27 @@ use crate::shared_math::other::log_2_floor;
 use crate::shared_math::traits::GetRandomElements;
 use crate::utils::blake3_digest_serialize;
 use itertools::izip;
+use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
-pub type Blake3Hash = [u8; 32];
+pub type Blake3Digest = [u8; 32];
 
-pub const BLAKE3ZERO: Blake3Hash = [0u8; 32];
+pub const BLAKE3ZERO: Blake3Digest = [0u8; 32];
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Node<T> {
     pub value: Option<T>,
-    pub hash: Blake3Hash,
+    pub hash: Blake3Digest,
 }
 
 #[derive(Clone, Debug)]
 pub struct MerkleTree<T> {
-    pub root_hash: Blake3Hash,
+    pub root_hash: Blake3Digest,
     pub nodes: Vec<Node<T>>,
-    pub height: u64,
+    pub height: u8,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -30,7 +31,7 @@ pub struct PartialAuthenticationPath<T: Clone + Debug + PartialEq + Serialize>(
 );
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct LeaflessPartialAuthenticationPath(pub Vec<Option<Blake3Hash>>);
+pub struct LeaflessPartialAuthenticationPath(pub Vec<Option<Blake3Digest>>);
 
 /// Method for extracting the value for which a compressed Merkle proof element is for.
 impl<T: Clone + Debug + Serialize + PartialEq> PartialAuthenticationPath<T> {
@@ -51,7 +52,7 @@ impl<T: Clone + Debug + Serialize + PartialEq> PartialAuthenticationPath<T> {
 }
 
 impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
-    pub fn verify_proof(root_hash: Blake3Hash, index: u64, proof: Vec<Node<T>>) -> bool {
+    pub fn verify_proof(root_hash: Blake3Digest, index: u64, proof: Vec<Node<T>>) -> bool {
         let mut mut_index = index + 2u64.pow(proof.len() as u32);
         let mut v = proof[0].clone();
         let mut hasher = blake3::Hasher::new();
@@ -109,7 +110,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         MerkleTree {
             root_hash: nodes[1].hash,
             nodes,
-            height: log_2_floor(values.len() as u64) + 1,
+            height: log_2_floor(values.len() as u64) as u8 + 1,
         }
     }
 
@@ -139,8 +140,8 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     //   vec![ H(d), H(H(a)+H(b)) ]
     //
     // ... so a criss-cross of siblings upwards.
-    pub fn get_authentication_path(&self, index: usize) -> Vec<Blake3Hash> {
-        let mut auth_path: Vec<Blake3Hash> = Vec::with_capacity(self.height as usize);
+    pub fn get_authentication_path(&self, index: usize) -> Vec<Blake3Digest> {
+        let mut auth_path: Vec<Blake3Digest> = Vec::with_capacity(self.height as usize);
 
         let mut i = index + self.nodes.len() / 2;
         while i > 1 {
@@ -158,10 +159,10 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     }
 
     fn verify_authentication_path_from_leaf_hash(
-        root_hash: Blake3Hash,
+        root_hash: Blake3Digest,
         index: u32,
-        leaf_hash: Blake3Hash,
-        auth_path: Vec<Blake3Hash>,
+        leaf_hash: Blake3Digest,
+        auth_path: Vec<Blake3Digest>,
     ) -> bool {
         let path_length = auth_path.len() as u32;
         let mut hasher = blake3::Hasher::new();
@@ -195,10 +196,10 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     //
     // The `index' is to know if a given path element is a left- or a right-sibling.
     pub fn verify_authentication_path(
-        root_hash: Blake3Hash,
+        root_hash: Blake3Digest,
         index: u32,
         value: T,
-        auth_path: Vec<Blake3Hash>,
+        auth_path: Vec<Blake3Digest>,
     ) -> bool {
         let value_hash = blake3_digest_serialize(&value);
 
@@ -215,7 +216,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     }
 
     pub fn verify_multi_proof(
-        root_hash: Blake3Hash,
+        root_hash: Blake3Digest,
         indices: &[usize],
         proof: &[PartialAuthenticationPath<T>],
     ) -> bool {
@@ -380,7 +381,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     fn convert_pat_leafless(
         auth_path_nodes: PartialAuthenticationPath<T>,
     ) -> LeaflessPartialAuthenticationPath {
-        let auth_path_hashes: Vec<Option<Blake3Hash>> = auth_path_nodes
+        let auth_path_hashes: Vec<Option<Blake3Digest>> = auth_path_nodes
             .0
             .iter()
             .skip(1) // drop leaf node from `get_multi_proof' output
@@ -391,9 +392,9 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     }
 
     fn verify_leafless_multi_proof_from_leaf_hashes(
-        root_hash: Blake3Hash,
+        root_hash: Blake3Digest,
         indices: &[usize],
-        leaf_hashes: &[Blake3Hash],
+        leaf_hashes: &[Blake3Digest],
         proof: &[LeaflessPartialAuthenticationPath],
     ) -> bool {
         if indices.len() != proof.len() || indices.len() != leaf_hashes.len() {
@@ -408,7 +409,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         }
 
         let mut partial_auth_paths: Vec<LeaflessPartialAuthenticationPath> = proof.to_owned();
-        let mut partial_tree: HashMap<u64, Blake3Hash> = HashMap::new();
+        let mut partial_tree: HashMap<u64, Blake3Digest> = HashMap::new();
 
         // FIXME: We find the offset from which leaf nodes occur in the tree by looking at the
         // first partial authentication path. This is a bit hacked, since what if not all
@@ -455,7 +456,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
                     hasher.update(&partial_tree[&(parent_key * 2)]);
                     hasher.update(&partial_tree[&(parent_key * 2 + 1)]);
 
-                    let hash: Blake3Hash = *hasher.finalize().as_bytes();
+                    let hash: Blake3Digest = *hasher.finalize().as_bytes();
                     hasher.reset();
 
                     partial_tree.insert(parent_key, hash);
@@ -504,7 +505,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     }
 
     pub fn verify_leafless_multi_proof(
-        root_hash: Blake3Hash,
+        root_hash: Blake3Digest,
         indices: &[usize],
         values: &[T],
         proof: &[LeaflessPartialAuthenticationPath],
@@ -520,7 +521,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
             return true;
         }
 
-        let leaf_hashes: Vec<Blake3Hash> =
+        let leaf_hashes: Vec<Blake3Digest> =
             values.iter().map(|x| blake3_digest_serialize(x)).collect();
 
         Self::verify_leafless_multi_proof_from_leaf_hashes(root_hash, indices, &leaf_hashes, proof)
@@ -528,7 +529,7 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
 
     fn unwrap_leafless_partial_authentication_path(
         partial_auth_path: &LeaflessPartialAuthenticationPath,
-    ) -> Vec<Blake3Hash> {
+    ) -> Vec<Blake3Digest> {
         partial_auth_path
             .clone()
             .0
@@ -547,7 +548,7 @@ pub struct SaltedMerkleTree<T> {
 
 impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleTree<T> {
     // Build a salted Merkle tree from a slice of serializable values
-    pub fn from_vec(values: &[T], salts_per_element: usize) -> Self {
+    pub fn from_vec(values: &[T], salts_per_element: usize, mut rng: &mut ThreadRng) -> Self {
         // verify that length of input is power of 2
         if values.len() & (values.len() - 1) != 0 {
             panic!("Size of input for Merkle tree must be a power of 2");
@@ -561,7 +562,7 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
             2 * values.len()
         ];
 
-        let salts: Vec<T> = T::random_elements((salts_per_element * values.len()) as u32);
+        let salts: Vec<T> = T::random_elements(salts_per_element * values.len(), &mut rng);
         for i in 0..values.len() {
             let mut leaf_hash_preimage: Vec<u8> =
                 bincode::serialize(&values[i]).expect("Encoding failed");
@@ -588,7 +589,7 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
         let internal_merkle_tree = MerkleTree {
             root_hash: nodes[1].hash,
             nodes,
-            height: log_2_floor(values.len() as u64) + 1,
+            height: log_2_floor(values.len() as u64) as u8 + 1,
         };
 
         Self {
@@ -602,7 +603,7 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
         self.internal_merkle_tree.to_vec()
     }
 
-    pub fn get_authentication_path(&self, index: usize) -> (Vec<Blake3Hash>, Vec<T>) {
+    pub fn get_authentication_path(&self, index: usize) -> (Vec<Blake3Digest>, Vec<T>) {
         let authentication_path = self.internal_merkle_tree.get_authentication_path(index);
         let mut salts = Vec::<T>::with_capacity(self.salts_per_value);
         for i in 0..self.salts_per_value {
@@ -613,10 +614,10 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
     }
 
     pub fn verify_authentication_path(
-        root_hash: Blake3Hash,
+        root_hash: Blake3Digest,
         index: u32,
         value: T,
-        auth_path: Vec<Blake3Hash>,
+        auth_path: Vec<Blake3Digest>,
         salts: Vec<T>,
     ) -> bool {
         let mut leaf_hash_preimage: Vec<u8> = bincode::serialize(&value).expect("Encoding failed");
@@ -660,7 +661,7 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
     }
 
     pub fn verify_leafless_multi_proof(
-        root_hash: Blake3Hash,
+        root_hash: Blake3Digest,
         indices: &[usize],
         values: &[T],
         proof: &[(LeaflessPartialAuthenticationPath, Vec<T>)],
@@ -676,7 +677,7 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
             return true;
         }
 
-        let mut leaf_hashes: Vec<Blake3Hash> = Vec::with_capacity(indices.len());
+        let mut leaf_hashes: Vec<Blake3Digest> = Vec::with_capacity(indices.len());
         for (value, proof) in izip!(values, proof) {
             let mut leaf_hash_preimage: Vec<u8> =
                 bincode::serialize(&value).expect("Encoding failed");
@@ -725,10 +726,10 @@ mod merkle_tree_test {
     // `verify_authentication_path_dummy' has same interface as `verify_authentication_path_dummy',
     // but uses `verify_proof' internally. This helps to verify equivalence between the two.
     fn verify_authentication_path_dummy<T: Serialize + Clone + Debug + PartialEq>(
-        root_hash: Blake3Hash,
+        root_hash: Blake3Digest,
         index: u32,
         value: T,
-        auth_path: Vec<Blake3Hash>,
+        auth_path: Vec<Blake3Digest>,
     ) -> bool {
         let value_hash = blake3_digest_serialize(&value);
         let leaf_node = Node {
@@ -949,14 +950,14 @@ mod merkle_tree_test {
                 .expect("Decoding failed"),
             single_mt_one.root_hash
         );
-        assert_eq!(1u64, single_mt_one.height);
+        assert_eq!(1u8, single_mt_one.height);
         let single_mt_two: MerkleTree<i128> = MerkleTree::from_vec(&[2i128]);
         assert_eq!(
             decode_hex("65706bf07e4e656de8a6b898dfbc64c076e001253f384043a40c437e1d5fb124")
                 .expect("Decoding failed"),
             single_mt_two.root_hash
         );
-        assert_eq!(1u64, single_mt_two.height);
+        assert_eq!(1u8, single_mt_two.height);
 
         let mt: MerkleTree<i128> = MerkleTree::from_vec(&[1i128, 2]);
         assert_eq!(
@@ -964,7 +965,7 @@ mod merkle_tree_test {
                 .expect("Decoding failed"),
             mt.root_hash
         );
-        assert_eq!(2u64, mt.height);
+        assert_eq!(2u8, mt.height);
         let mut proof = mt.get_proof(1);
         assert!(MerkleTree::verify_proof(mt.root_hash, 1, proof.clone()));
         assert_eq!(Some(2), proof[0].value);
@@ -979,7 +980,7 @@ mod merkle_tree_test {
                 .expect("Decoding failed"),
             mt_reverse.root_hash
         );
-        assert_eq!(2u64, mt_reverse.height);
+        assert_eq!(2u8, mt_reverse.height);
 
         let mut mt_four: MerkleTree<i128> = MerkleTree::from_vec(&[1i128, 2, 3, 4]);
         assert_eq!(
@@ -987,7 +988,7 @@ mod merkle_tree_test {
             mt_four.root_hash
         );
         assert_ne!(mt.root_hash, mt_reverse.root_hash);
-        assert_eq!(3u64, mt_four.height);
+        assert_eq!(3u8, mt_four.height);
         proof = mt_four.get_proof(1);
         assert_eq!(3usize, proof.len());
         assert!(MerkleTree::verify_proof(
@@ -1162,6 +1163,7 @@ mod merkle_tree_test {
         //   x      y
         //  / \    / \
         // 3   6  9   12
+        let mut rng = rand::thread_rng();
         let tree_a = SaltedMerkleTree::from_vec(
             &[
                 BFieldElement::new(3),
@@ -1170,6 +1172,7 @@ mod merkle_tree_test {
                 BFieldElement::new(5),
             ],
             3,
+            &mut rng,
         );
         assert_eq!(3, tree_a.salts_per_value);
         assert_eq!(3 * 4, tree_a.salts.len());
@@ -1291,8 +1294,12 @@ mod merkle_tree_test {
         //   a     b      c     d
         //  / \   / \    / \   / \
         // 3   1 4   1  5   9 8   6
-        let tree_b: SaltedMerkleTree<BFieldElement> =
-            SaltedMerkleTree::from_vec(&[3, 1, 4, 1, 5, 9, 8, 6].map(BFieldElement::new), 4);
+        let mut rng = rand::thread_rng();
+        let tree_b: SaltedMerkleTree<BFieldElement> = SaltedMerkleTree::from_vec(
+            &[3, 1, 4, 1, 5, 9, 8, 6].map(BFieldElement::new),
+            4,
+            &mut rng,
+        );
 
         // auth path: 8 ~> c ~> e
         let mut auth_path_b = tree_b.get_authentication_path(6);
@@ -1485,6 +1492,7 @@ mod merkle_tree_test {
         //   x      y
         //  / \    / \
         // 3   6  9   12
+        let mut rng = rand::thread_rng();
         let tree_a = SaltedMerkleTree::from_vec(
             &[
                 XFieldElement::new([3, 3, 3].map(BFieldElement::new)),
@@ -1493,6 +1501,7 @@ mod merkle_tree_test {
                 XFieldElement::new([5, 5, 5].map(BFieldElement::new)),
             ],
             3,
+            &mut rng,
         );
         assert_eq!(3, tree_a.salts_per_value);
         assert_eq!(3 * 4, tree_a.salts.len());
