@@ -1,3 +1,4 @@
+use rand::prelude::ThreadRng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::convert::From;
@@ -23,6 +24,13 @@ where
     Self: Sized,
 {
     fn batch_inversion(elements: Vec<Self>) -> Vec<Self>;
+}
+
+pub trait GetRandomElements
+where
+    Self: Sized,
+{
+    fn random_elements(length: usize, rng: &mut ThreadRng) -> Vec<Self>;
 }
 
 pub trait ModPowU64 {

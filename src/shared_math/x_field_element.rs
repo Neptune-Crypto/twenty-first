@@ -1,10 +1,11 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
     PrimeFieldElement,
 };
-use crate::utils::generate_random_numbers;
+use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
 use std::ops::Div;
 use std::{
@@ -53,21 +54,6 @@ impl XFieldElement {
 
     pub fn new(coefficients: [BFieldElement; 3]) -> Self {
         Self { coefficients }
-    }
-
-    pub fn random_elements(length: u32) -> Vec<Self> {
-        let rands: Vec<i128> =
-            generate_random_numbers(3 * length as usize, BFieldElement::QUOTIENT as i128);
-        let mut ret: Vec<XFieldElement> = Vec::with_capacity(length as usize);
-        for i in 0..length as usize {
-            ret.push(XFieldElement::new([
-                BFieldElement::new(rands[3 * i] as u128),
-                BFieldElement::new(rands[3 * i + 1] as u128),
-                BFieldElement::new(rands[3 * i + 2] as u128),
-            ]));
-        }
-
-        ret
     }
 
     pub fn new_const(element: BFieldElement) -> Self {
@@ -186,6 +172,23 @@ impl FieldBatchInversion for XFieldElement {
         }
 
         res
+    }
+}
+
+impl GetRandomElements for XFieldElement {
+    fn random_elements(length: usize, mut rng: &mut ThreadRng) -> Vec<Self> {
+        let b_values: Vec<BFieldElement> = BFieldElement::random_elements(length * 3, &mut rng);
+
+        let mut values: Vec<XFieldElement> = Vec::with_capacity(length as usize);
+        for i in 0..length as usize {
+            values.push(XFieldElement::new([
+                b_values[3 * i],
+                b_values[3 * i + 1],
+                b_values[3 * i + 2],
+            ]));
+        }
+
+        values
     }
 }
 
@@ -399,7 +402,7 @@ impl ModPowU32 for XFieldElement {
 
 #[cfg(test)]
 mod x_field_element_test {
-    use itertools::izip;
+    use itertools::{izip, Itertools};
 
     use crate::shared_math::{b_field_element::*, ntt, x_field_element::*};
     // use proptest::prelude::*;
@@ -437,6 +440,27 @@ mod x_field_element_test {
         assert!(!one_as_constant_term_1.is_one());
         assert!(!one_as_constant_term_0.is_zero());
         assert!(!one_as_constant_term_1.is_zero());
+    }
+
+    #[test]
+    fn x_field_random_element_generation_test() {
+        let mut rng = rand::thread_rng();
+        let rand_xs = XFieldElement::random_elements(14, &mut rng);
+
+        // Assert correct length
+        assert_eq!(14, rand_xs.len());
+
+        // TODO: Consider doing a statistical test.
+        // Assert (probable) uniqueness of all generated elements
+        assert_eq!(
+            rand_xs.len(),
+            rand_xs
+                .clone()
+                .into_iter()
+                .unique()
+                .collect::<Vec<XFieldElement>>()
+                .len()
+        );
     }
 
     #[test]
@@ -750,7 +774,8 @@ mod x_field_element_test {
     #[test]
     fn x_field_inversion_pbt() {
         let test_iterations = 100;
-        let rands = XFieldElement::random_elements(test_iterations);
+        let mut rng = rand::thread_rng();
+        let rands = XFieldElement::random_elements(test_iterations, &mut rng);
         for mut rand in rands.clone() {
             let rand_inv_original = rand.inv();
             assert!((rand * rand_inv_original).is_one());
@@ -790,8 +815,9 @@ mod x_field_element_test {
     #[test]
     fn x_field_division_mul_pbt() {
         let test_iterations = 100;
-        let rands_a = XFieldElement::random_elements(test_iterations);
-        let rands_b = XFieldElement::random_elements(test_iterations);
+        let mut rng = rand::thread_rng();
+        let rands_a = XFieldElement::random_elements(test_iterations, &mut rng);
+        let rands_b = XFieldElement::random_elements(test_iterations, &mut rng);
         for (a, b) in izip!(rands_a, rands_b) {
             let ab = a * b;
             let ba = b * a;

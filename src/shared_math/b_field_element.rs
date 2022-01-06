@@ -1,9 +1,12 @@
+use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
     PrimeFieldElement,
 };
-use crate::utils::{generate_random_numbers, FIRST_THOUSAND_PRIMES};
+use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
+use rand::prelude::ThreadRng;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::{
@@ -23,16 +26,6 @@ impl BFieldElement {
         Self {
             0: value % Self::QUOTIENT,
         }
-    }
-
-    pub fn random_elements(length: u32) -> Vec<Self> {
-        let rands: Vec<i128> =
-            generate_random_numbers(length as usize, BFieldElement::QUOTIENT as i128);
-
-        rands
-            .into_iter()
-            .map(|x| BFieldElement::new(x as u128))
-            .collect()
     }
 
     pub fn inv(&self) -> Self {
@@ -273,6 +266,25 @@ impl CyclicGroupGenerator for BFieldElement {
             }
         }
         ret
+    }
+}
+
+impl GetRandomElements for BFieldElement {
+    fn random_elements(length: usize, prng: &mut ThreadRng) -> Vec<Self> {
+        let mut values: Vec<BFieldElement> = Vec::with_capacity(length);
+        let max = BFieldElement::MAX as u64;
+
+        while values.len() < length {
+            let n = prng.next_u64();
+
+            if n > max {
+                continue;
+            }
+
+            values.push(BFieldElement::new(n as u128));
+        }
+
+        values
     }
 }
 
@@ -565,7 +577,8 @@ mod b_prime_field_element_test {
     fn batch_inversion_pbt() {
         let test_iterations = 100;
         for i in 0..test_iterations {
-            let rands: Vec<BFieldElement> = BFieldElement::random_elements(i);
+            let mut rng = rand::thread_rng();
+            let rands: Vec<BFieldElement> = BFieldElement::random_elements(i, &mut rng);
             let rands_inv: Vec<BFieldElement> = BFieldElement::batch_inversion(rands.clone());
             assert_eq!(i as usize, rands_inv.len());
             for (mut rand, rand_inv) in izip!(rands, rands_inv) {
