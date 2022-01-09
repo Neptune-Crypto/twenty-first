@@ -13,11 +13,11 @@ pub struct RescuePrime {
     // rate: usize,
     // capacity: usize,
     pub steps_count: usize,
-    alpha: u64,
-    alpha_inv: u64,
-    mds: Vec<Vec<BFieldElement>>,
-    mds_inv: Vec<Vec<BFieldElement>>,
-    round_constants: Vec<BFieldElement>,
+    pub alpha: u64,
+    pub alpha_inv: u64,
+    pub mds: Vec<Vec<BFieldElement>>,
+    pub mds_inv: Vec<Vec<BFieldElement>>,
+    pub round_constants: Vec<BFieldElement>,
 }
 
 impl RescuePrime {
@@ -225,5 +225,39 @@ impl RescuePrime {
                 value: output_element.to_owned(),
             },
         ]
+    }
+}
+
+#[cfg(test)]
+mod rescue_prime_test {
+    use super::*;
+    use crate::shared_math::rescue_prime_params::rescue_prime_params;
+
+    #[test]
+    fn hash_test() {
+        let rp = rescue_prime_params();
+
+        // Calculated with stark-anatomy tutorial implementation, starting with hash(1)
+        let one = BFieldElement::new(1);
+        let expected_sequence: Vec<BFieldElement> = vec![
+            16408223883448864076,
+            14851226605068667585,
+            2638999062907144857,
+            11729682885064735215,
+            18241842748565968364,
+            12761136320817622587,
+            6569784252060404379,
+            7456670293305349839,
+            12092401435052133560,
+        ]
+        .iter()
+        .map(|elem| BFieldElement::new(*elem))
+        .collect();
+
+        let mut actual = rp.hash(&one);
+        for expected in expected_sequence {
+            assert_eq!(expected, actual);
+            actual = rp.hash(&expected);
+        }
     }
 }
