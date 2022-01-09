@@ -15,6 +15,7 @@ pub mod prime_field_element;
 pub mod prime_field_element_big;
 pub mod prime_field_polynomial;
 pub mod rescue_prime;
+pub mod rescue_prime_params;
 pub mod rescue_prime_pfe_big;
 pub mod rpsss;
 pub mod slow_stark;
