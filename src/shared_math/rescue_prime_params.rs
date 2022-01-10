@@ -864,6 +864,44 @@ pub fn rescue_prime_params_bfield_0() -> RescuePrime {
     }
 }
 
+pub fn rescue_prime_small_test_params() -> RescuePrime {
+    let mds: Vec<Vec<BFieldElement>> = to_matrix(vec![
+        vec![18446744069414584314, 8],
+        vec![18446744069414584265, 57],
+    ]);
+    let mds_inv: Vec<Vec<BFieldElement>> = to_matrix(vec![
+        vec![8282211623002466431, 10164532446412117891],
+        vec![2635249152773512047, 15811494916641072275],
+    ]);
+    let round_constants: Vec<BFieldElement> = vec![
+        2332150738039522007,
+        14509310212337904020,
+        10912091569337447457,
+        12063225951859934822,
+        229787765437407343,
+        2723460492895357694,
+        8662091204479247631,
+        1761576149899789034,
+        18199069885388719343,
+        5241040396775442401,
+        10943084231530266127,
+        2122639938091092999,
+    ]
+    .iter()
+    .map(|c| BFieldElement::new(*c))
+    .collect();
+
+    RescuePrime {
+        m: 2,
+        steps_count: 3,
+        alpha: 7,
+        alpha_inv: 10540996611094048183,
+        mds,
+        mds_inv,
+        round_constants,
+    }
+}
+
 fn to_matrix(entries: Vec<Vec<u128>>) -> Vec<Vec<BFieldElement>> {
     entries
         .iter()

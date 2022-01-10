@@ -311,6 +311,16 @@ impl<
         }
     }
 
+    pub fn scalar_mul_mut(&mut self, factor: U) {
+        if self.is_zero() || factor.is_one() {
+            return;
+        }
+
+        for (_k, v) in self.coefficients.iter_mut() {
+            *v = v.to_owned() * factor.clone();
+        }
+    }
+
     pub fn mod_pow(&self, pow: BigInt, one: U) -> Self {
         // Handle special case of 0^0
         if pow.is_zero() {
