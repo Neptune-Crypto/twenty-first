@@ -49,6 +49,10 @@ harness = false
 name = "rpsss_bench_verify"
 harness = false
 
+[[bench]]
+name = "rescue_prime_air_constraints"
+harness = false
+
 [profile.dev]
 opt-level = 0
 debug = true

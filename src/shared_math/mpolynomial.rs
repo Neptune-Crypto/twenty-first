@@ -322,6 +322,7 @@ impl<
             };
         }
 
+        // Handle 0^n for n > 0
         if self.is_zero() {
             return Self::zero();
         }
@@ -541,6 +542,8 @@ impl<
 #[cfg(test)]
 mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
+    use crate::shared_math::b_field_element::BFieldElement;
+
     use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
     use num_bigint::BigInt;

@@ -231,11 +231,11 @@ impl RescuePrime {
 #[cfg(test)]
 mod rescue_prime_test {
     use super::*;
-    use crate::shared_math::rescue_prime_params::rescue_prime_params;
+    use crate::shared_math::rescue_prime_params::rescue_prime_params_bfield_0;
 
     #[test]
     fn hash_test() {
-        let rp = rescue_prime_params();
+        let rp = rescue_prime_params_bfield_0();
 
         // Calculated with stark-anatomy tutorial implementation, starting with hash(1)
         let one = BFieldElement::new(1);
@@ -258,6 +258,62 @@ mod rescue_prime_test {
         for expected in expected_sequence {
             assert_eq!(expected, actual);
             actual = rp.hash(&expected);
+        }
+    }
+
+    #[test]
+    fn air_is_zero_on_execution_trace_test() {
+        let rp = rescue_prime_params_bfield_0();
+
+        // rescue prime test vector 1
+        let omicron_res = BFieldElement::get_primitive_root_of_unity(1 << 5);
+        let omicron = omicron_res.0.unwrap();
+
+        // Verify that the round constants polynomials are correct
+        let (fst_rc_pol, snd_rc_pol) = rp.get_round_constant_polynomials(omicron);
+        for step in 0..rp.steps_count {
+            let point = vec![omicron.mod_pow(step as u64)];
+            for register in 0..rp.m {
+                let fst_eval = fst_rc_pol[register].evaluate(&point);
+                assert_eq!(rp.round_constants[2 * step * rp.m + register], fst_eval);
+            }
+            for register in 0..rp.m {
+                let snd_eval = snd_rc_pol[register].evaluate(&point);
+                assert_eq!(
+                    rp.round_constants[2 * step * rp.m + rp.m + register],
+                    snd_eval
+                );
+            }
+        }
+
+        // There are 256 round constants, which is enough for 8 rounds (steps_count).
+        // But we only run with 7 rounds (steps_count), so we add 1 to count right.
+        let actual_round_constants = rp.round_constants.len();
+        let expected_round_constants = (rp.steps_count + 1) * 2 * rp.m;
+        assert_eq!(expected_round_constants, actual_round_constants);
+
+        // Verify that the AIR constraints evaluation over the trace is zero along the trace
+        println!("zomg!");
+        let input_2 = BFieldElement::new(42);
+        let trace = rp.trace(&input_2);
+        println!("zomg!");
+        let air_constraints = rp.get_air_constraints(omicron);
+        println!("zomg!");
+
+        for step in 0..rp.steps_count - 1 {
+            println!("Step {}", step);
+            for air_constraint in air_constraints.iter() {
+                let mut point = vec![];
+                point.push(omicron.mod_pow(step as u64));
+                for i in 0..rp.m {
+                    point.push(trace[step][i].clone());
+                    point.push(trace[step + 1][i].clone());
+                }
+                // point.push(trace[step][1].clone());
+                // point.push(trace[step + 1][1].clone());
+                let eval = air_constraint.evaluate(&point);
+                assert!(eval.is_zero());
+            }
         }
     }
 }

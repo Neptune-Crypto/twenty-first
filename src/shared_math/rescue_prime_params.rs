@@ -2,7 +2,7 @@ use crate::shared_math::rescue_prime::RescuePrime;
 
 use super::b_field_element::BFieldElement;
 
-pub fn rescue_prime_params() -> RescuePrime {
+pub fn rescue_prime_params_bfield_0() -> RescuePrime {
     let mds: Vec<Vec<BFieldElement>> = to_matrix(vec![
         vec![
             5910257123858819639,
@@ -589,7 +589,7 @@ pub fn rescue_prime_params() -> RescuePrime {
     // `fst_rc` values are indexed in the below array as:
     // `2 * round_number * register_counter + register_index`
     // `snd_rc` values are indexed in the below array as:
-    // `2 * round_number * register_counter + register_index`
+    // `2 * round_number * register_counter + register_index + 1`
     let round_constants_u128: Vec<u128> = vec![
         15139912583685767368,
         8372387753867525709,
