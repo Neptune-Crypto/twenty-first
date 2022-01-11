@@ -261,7 +261,7 @@ mod rescue_prime_test {
 
     #[test]
     fn air_is_zero_on_execution_trace_test() {
-        let rp = params::rescue_prime_medium_test_params();
+        let rp = params::rescue_prime_params_bfield_0();
 
         // rescue prime test vector 1
         let omicron_res = BFieldElement::get_primitive_root_of_unity(1 << 5);
