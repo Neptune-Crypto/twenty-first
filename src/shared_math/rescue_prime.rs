@@ -117,6 +117,7 @@ impl RescuePrime {
         Vec<MPolynomial<BFieldElement>>,
     ) {
         let domain = omicron.get_generator_domain();
+        let variable_count = 2 * self.m + 1;
         let mut first_round_constants: Vec<MPolynomial<BFieldElement>> = vec![];
         for i in 0..self.m {
             let values: Vec<BFieldElement> = self
@@ -134,7 +135,11 @@ impl RescuePrime {
                 .map(|(x, y)| (x.to_owned(), y.to_owned()))
                 .collect();
             let coefficients = Polynomial::slow_lagrange_interpolation(&points).coefficients;
-            first_round_constants.push(MPolynomial::lift(Polynomial { coefficients }, 0));
+            first_round_constants.push(MPolynomial::lift(
+                Polynomial { coefficients },
+                0,
+                variable_count,
+            ));
         }
 
         let mut second_round_constants: Vec<MPolynomial<BFieldElement>> = vec![];
@@ -154,7 +159,11 @@ impl RescuePrime {
                 .map(|(x, y)| (x.to_owned(), y.to_owned()))
                 .collect();
             let coefficients = Polynomial::slow_lagrange_interpolation(&points).coefficients;
-            second_round_constants.push(MPolynomial::lift(Polynomial { coefficients }, 0));
+            second_round_constants.push(MPolynomial::lift(
+                Polynomial { coefficients },
+                0,
+                variable_count,
+            ));
         }
 
         (first_round_constants, second_round_constants)
@@ -170,6 +179,7 @@ impl RescuePrime {
         let (first_step_constants, second_step_constants) =
             self.get_round_constant_polynomials(omicron);
 
+        let variable_count = 1 + 2 * self.m;
         let variables = MPolynomial::variables(1 + 2 * self.m, omicron.ring_one());
         let previous_state = &variables[1..(self.m + 1)];
         let next_state = &variables[(self.m + 1)..(2 * self.m + 1)];
@@ -186,13 +196,13 @@ impl RescuePrime {
         // ::mod_pow_u64(exp: u64)
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
-            let mut lhs = MPolynomial::from_constant(omicron.ring_zero());
+            let mut lhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
             for k in 0..self.m {
                 lhs += previous_state_pow_alpha[k].scalar_mul(self.mds[i][k]);
             }
             lhs += first_step_constants[i].clone();
 
-            let mut rhs = MPolynomial::from_constant(omicron.ring_zero());
+            let mut rhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
             for k in 0..self.m {
                 rhs += (next_state[k].clone() - second_step_constants[k].clone())
                     .scalar_mul(self.mds_inv[i][k]);
@@ -270,7 +280,13 @@ mod rescue_prime_test {
         // Verify that the round constants polynomials are correct
         let (fst_rc_pol, snd_rc_pol) = rp.get_round_constant_polynomials(omicron);
         for step in 0..rp.steps_count {
-            let point = vec![omicron.mod_pow(step as u64)];
+            let point = vec![
+                omicron.mod_pow(step as u64),
+                BFieldElement::ring_zero(),
+                BFieldElement::ring_zero(),
+                BFieldElement::ring_zero(),
+                BFieldElement::ring_zero(),
+            ];
             for register in 0..rp.m {
                 let fst_eval = fst_rc_pol[register].evaluate(&point);
                 assert_eq!(rp.round_constants[2 * step * rp.m + register], fst_eval);

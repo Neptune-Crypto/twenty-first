@@ -175,10 +175,10 @@ impl<
         str_elems.join("*")
     }
 
-    pub fn zero() -> Self {
+    pub fn zero(variable_count: usize) -> Self {
         Self {
             coefficients: HashMap::new(),
-            variable_count: 0,
+            variable_count,
         }
     }
 
@@ -196,11 +196,11 @@ impl<
         true
     }
 
-    pub fn from_constant(element: U) -> Self {
+    pub fn from_constant(element: U, variable_count: usize) -> Self {
         let mut cs: MCoefficients<U> = HashMap::new();
-        cs.insert(vec![0], element);
+        cs.insert(vec![0; variable_count], element);
         Self {
-            variable_count: 1,
+            variable_count,
             coefficients: cs,
         }
     }
@@ -262,28 +262,35 @@ impl<
         acc
     }
 
-    pub fn lift(univariate_polynomial: Polynomial<U>, variable_index: usize) -> Self {
+    pub fn lift(
+        univariate_polynomial: Polynomial<U>,
+        variable_index: usize,
+        variable_count: usize,
+    ) -> Self {
+        assert!(
+            variable_count > variable_index,
+            "number of variables must be at least one larger than the variable index"
+        );
         if univariate_polynomial.is_zero() {
-            return Self {
-                coefficients: HashMap::new(),
-                variable_count: 1,
-            };
+            return Self::zero(variable_count);
         }
 
         let one = univariate_polynomial.coefficients[0].ring_one();
         let mut coefficients: MCoefficients<U> = HashMap::new();
-        let mut key = vec![0u64; variable_index + 1];
+        let mut key = vec![0u64; variable_count];
         key[variable_index] = 1;
         coefficients.insert(key, one.clone());
         let indeterminate: MPolynomial<U> = Self {
-            variable_count: variable_index + 1,
+            variable_count,
             coefficients,
         };
 
-        let mut acc = MPolynomial::<U>::zero();
+        let mut acc = MPolynomial::<U>::zero(variable_count);
         for i in 0..univariate_polynomial.coefficients.len() {
-            acc += MPolynomial::from_constant(univariate_polynomial.coefficients[i].clone())
-                * indeterminate.mod_pow(i.into(), one.clone());
+            acc += MPolynomial::from_constant(
+                univariate_polynomial.coefficients[i].clone(),
+                variable_count,
+            ) * indeterminate.mod_pow(i.into(), one.clone());
         }
 
         acc
@@ -291,7 +298,7 @@ impl<
 
     pub fn scalar_mul(&self, factor: U) -> Self {
         if self.is_zero() {
-            return Self::zero();
+            return Self::zero(self.variable_count);
         }
 
         let mut output_coefficients: MCoefficients<U> = HashMap::new();
@@ -319,16 +326,16 @@ impl<
         // Handle special case of 0^0
         if pow.is_zero() {
             let mut coefficients: MCoefficients<U> = HashMap::new();
-            coefficients.insert(vec![0], one);
+            coefficients.insert(vec![0; self.variable_count], one);
             return MPolynomial {
-                variable_count: 1,
+                variable_count: self.variable_count,
                 coefficients,
             };
         }
 
         // Handle 0^n for n > 0
         if self.is_zero() {
-            return Self::zero();
+            return Self::zero(self.variable_count);
         }
 
         let one = self.coefficients.values().last().unwrap().ring_one();
@@ -354,7 +361,7 @@ impl<
 
     pub fn square(&self) -> Self {
         if self.is_zero() {
-            return Self::zero();
+            return Self::zero(self.variable_count);
         }
 
         let mut output_coefficients: MCoefficients<U> = HashMap::new();
@@ -428,12 +435,12 @@ impl<
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
+        let variable_count: usize = cmp::max(self.variable_count, other.variable_count);
         if self.is_zero() && other.is_zero() {
-            return Self::zero();
+            return Self::zero(variable_count);
         }
 
         let mut output_coefficients: MCoefficients<U> = HashMap::new();
-        let variable_count: usize = cmp::max(self.variable_count, other.variable_count);
         for (k, v) in self.coefficients.iter() {
             let mut pad = k.clone();
             pad.resize_with(variable_count, || 0);
@@ -517,12 +524,12 @@ impl<
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
+        let variable_count: usize = cmp::max(self.variable_count, other.variable_count);
         if self.is_zero() && other.is_zero() {
-            return Self::zero();
+            return Self::zero(variable_count);
         }
 
         let mut output_coefficients: MCoefficients<U> = HashMap::new();
-        let variable_count: usize = cmp::max(self.variable_count, other.variable_count);
         for (k, v) in self.coefficients.iter() {
             let mut pad = k.clone();
             pad.resize_with(variable_count, || 0);
@@ -602,12 +609,12 @@ impl<
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
+        let variable_count: usize = cmp::max(self.variable_count, other.variable_count);
         if self.is_zero() || other.is_zero() {
-            return Self::zero();
+            return Self::zero(variable_count);
         }
 
         let mut output_coefficients: MCoefficients<U> = HashMap::new();
-        let variable_count: usize = cmp::max(self.variable_count, other.variable_count);
         for (k0, v0) in self.coefficients.iter() {
             for (k1, v1) in other.coefficients.iter() {
                 let mut exponent = vec![0u64; variable_count];
@@ -848,12 +855,12 @@ mod test_mpolynomials {
         // Catch error fixed in sub where similar exponents in both terms of
         // `a(x,y) - b(x,y)` were calculated as `c_b - c_a` instead of as `c_a - c_b`,
         // as it should be.
-        let _0 = MPolynomial::from_constant(PrimeFieldElementBig::new(0.into(), &_13));
-        let _2 = MPolynomial::from_constant(PrimeFieldElementBig::new(2.into(), &_13));
-        let _3 = MPolynomial::from_constant(PrimeFieldElementBig::new(3.into(), &_13));
-        let _4 = MPolynomial::from_constant(PrimeFieldElementBig::new(4.into(), &_13));
-        let _6 = MPolynomial::from_constant(PrimeFieldElementBig::new(6.into(), &_13));
-        let _8 = MPolynomial::from_constant(PrimeFieldElementBig::new(8.into(), &_13));
+        let _0 = MPolynomial::from_constant(PrimeFieldElementBig::new(0.into(), &_13), 3);
+        let _2 = MPolynomial::from_constant(PrimeFieldElementBig::new(2.into(), &_13), 3);
+        let _3 = MPolynomial::from_constant(PrimeFieldElementBig::new(3.into(), &_13), 3);
+        let _4 = MPolynomial::from_constant(PrimeFieldElementBig::new(4.into(), &_13), 3);
+        let _6 = MPolynomial::from_constant(PrimeFieldElementBig::new(6.into(), &_13), 3);
+        let _8 = MPolynomial::from_constant(PrimeFieldElementBig::new(8.into(), &_13), 3);
         assert_eq!(_0, _2.clone() - _2.clone());
         assert_eq!(_0, _4.clone() - _4.clone());
         assert_eq!(_6, _8.clone() - _2.clone());
@@ -1084,19 +1091,19 @@ mod test_mpolynomials {
         let xs = Polynomial {
             coefficients: vec![pfb(0, &_13), pfb(1, &_13)],
         };
-        assert_eq!(xm, MPolynomial::lift(xs.clone(), 0));
-        assert_eq!(zm, MPolynomial::lift(xs.clone(), 2));
+        assert_eq!(xm, MPolynomial::lift(xs.clone(), 0, 3));
+        assert_eq!(zm, MPolynomial::lift(xs.clone(), 2, 3));
 
         let seven_s = Polynomial {
             coefficients: vec![pfb(7, &_13)],
         };
         assert_eq!(
-            MPolynomial::from_constant(pfb(7, &_13)),
-            MPolynomial::lift(seven_s.clone(), 0)
+            MPolynomial::from_constant(pfb(7, &_13), 3),
+            MPolynomial::lift(seven_s.clone(), 0, 3)
         );
         assert_ne!(
-            MPolynomial::from_constant(pfb(8, &_13)),
-            MPolynomial::lift(seven_s, 0)
+            MPolynomial::from_constant(pfb(8, &_13), 3),
+            MPolynomial::lift(seven_s, 0, 3)
         );
 
         let x_quartic_s = Polynomial {
@@ -1110,11 +1117,11 @@ mod test_mpolynomials {
         };
         assert_eq!(
             get_x_quartic(&_13),
-            MPolynomial::lift(x_quartic_s.clone(), 0)
+            MPolynomial::lift(x_quartic_s.clone(), 0, 3)
         );
         assert_eq!(
             get_x_quartic(&_13).scalar_mul(pfb(5, &_13)),
-            MPolynomial::lift(x_quartic_s.scalar_mul(pfb(5, &_13)).clone(), 0)
+            MPolynomial::lift(x_quartic_s.scalar_mul(pfb(5, &_13)).clone(), 0, 3)
         );
 
         let x_squared_s = Polynomial {
@@ -1122,7 +1129,7 @@ mod test_mpolynomials {
         };
         assert_eq!(
             get_x_quartic(&_13) + get_x_squared(&_13) + get_x(&_13),
-            MPolynomial::lift(x_quartic_s.clone() + x_squared_s.clone() + xs.clone(), 0)
+            MPolynomial::lift(x_quartic_s.clone() + x_squared_s.clone() + xs.clone(), 0, 3)
         );
         assert_eq!(
             get_x_quartic(&_13).scalar_mul(pfb(5, &_13))
@@ -1132,7 +1139,8 @@ mod test_mpolynomials {
                 x_quartic_s.scalar_mul(pfb(5, &_13))
                     + x_squared_s.scalar_mul(pfb(4, &_13))
                     + xs.scalar_mul(pfb(3, &_13)),
-                0
+                0,
+                3
             )
         );
     }
