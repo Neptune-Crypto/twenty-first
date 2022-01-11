@@ -488,7 +488,7 @@ impl<
 
         for (k, v1) in rhs.coefficients.iter() {
             if self.coefficients.contains_key(k) {
-                let v0 = self.coefficients[&(k.clone())].clone();
+                let v0 = self.coefficients[k].clone();
                 self.coefficients.insert(k.clone(), v0 + v1.to_owned());
             } else {
                 self.coefficients.insert(k.clone(), v1.to_owned());
