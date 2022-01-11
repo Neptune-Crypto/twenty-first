@@ -229,12 +229,11 @@ impl RescuePrime {
 #[cfg(test)]
 mod rescue_prime_test {
     use super::*;
-    use crate::shared_math::rescue_prime_params::rescue_prime_params_bfield_0;
-    use crate::shared_math::rescue_prime_params::rescue_prime_small_test_params;
+    use crate::shared_math::rescue_prime_params as params;
 
     #[test]
     fn hash_test() {
-        let rp = rescue_prime_params_bfield_0();
+        let rp = params::rescue_prime_params_bfield_0();
 
         // Calculated with stark-anatomy tutorial implementation, starting with hash(1)
         let one = BFieldElement::new(1);
@@ -262,7 +261,7 @@ mod rescue_prime_test {
 
     #[test]
     fn air_is_zero_on_execution_trace_test() {
-        let rp = rescue_prime_small_test_params();
+        let rp = params::rescue_prime_medium_test_params();
 
         // rescue prime test vector 1
         let omicron_res = BFieldElement::get_primitive_root_of_unity(1 << 5);
@@ -289,8 +288,10 @@ mod rescue_prime_test {
         let input_2 = BFieldElement::new(42);
         let trace = rp.trace(&input_2);
         println!("Computing get_air_constraints(omicron)...");
+        let now = std::time::Instant::now();
         let air_constraints = rp.get_air_constraints(omicron);
-        println!("Completed get_air_constraints(omicron)!");
+        let elapsed = now.elapsed();
+        println!("Completed get_air_constraints(omicron) in {:?}!", elapsed);
 
         for step in 0..rp.steps_count - 1 {
             println!("Step {}", step);
