@@ -5,8 +5,9 @@ authors = ["sword_smith <thorkilk@gmail.me>"]
 edition = "2018"
 
 [dev-dependencies]
+cargo-criterion = "1.1"
 criterion = "0.3"
-proptest = "1.0.0"
+proptest = "1.0"
 
 [dev-dependencies.cargo-husky]
 version = "1"
