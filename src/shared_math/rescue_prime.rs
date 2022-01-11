@@ -193,21 +193,18 @@ impl RescuePrime {
         for i in 0..self.m {
             let mut lhs = MPolynomial::from_constant(omicron.ring_zero());
             for k in 0..self.m {
-                // lhs = lhs + previous_state_pow_alpha[k].scalar_mul(self.mds[i][k].clone());
-                lhs = lhs
-                    + previous_state[k]
-                        .mod_pow(self.alpha.clone().into(), one.clone())
-                        .scalar_mul(self.mds[i][k].clone());
+                lhs += previous_state_pow_alpha[k].scalar_mul(self.mds[i][k]);
             }
-            lhs = lhs + first_step_constants[i].clone();
+            lhs += first_step_constants[i].clone();
 
             let mut rhs = MPolynomial::from_constant(omicron.ring_zero());
             for k in 0..self.m {
-                rhs = rhs
-                    + (next_state[k].clone() - second_step_constants[k].clone())
-                        .scalar_mul(self.mds_inv[i][k].clone());
+                rhs += (next_state[k].clone() - second_step_constants[k].clone())
+                    .scalar_mul(self.mds_inv[i][k]);
             }
-            rhs = rhs.mod_pow(self.alpha.clone().into(), one.clone());
+            // println!("rhs.variable_count = {}, rhs.degree() = {}", rhs.variable_count, rhs.degree());
+            rhs = rhs.mod_pow(self.alpha.into(), one);
+            // println!("done mod_pow'ing {}", i);
 
             air.push(lhs - rhs);
         }

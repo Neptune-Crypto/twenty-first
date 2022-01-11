@@ -287,9 +287,8 @@ impl<
 
         let mut acc = MPolynomial::<U>::zero();
         for i in 0..univariate_polynomial.coefficients.len() {
-            acc = acc
-                + MPolynomial::from_constant(univariate_polynomial.coefficients[i].clone())
-                    * indeterminate.mod_pow(i.into(), one.clone());
+            acc += MPolynomial::from_constant(univariate_polynomial.coefficients[i].clone())
+                * indeterminate.mod_pow(i.into(), one.clone());
         }
 
         acc
@@ -463,6 +462,42 @@ impl<
         Self {
             coefficients: output_coefficients,
             variable_count,
+        }
+    }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Rem
+            + Sub<Output = U>
+            + Neg<Output = U>
+            + IdentityValues
+            + ModPowU64
+            + Clone
+            + PartialEq
+            + Eq
+            + Hash
+            + Display
+            + Debug,
+    > AddAssign for MPolynomial<U>
+{
+    fn add_assign(&mut self, rhs: Self) {
+        if self.variable_count != rhs.variable_count {
+            let result = self.clone() + rhs;
+            self.variable_count = result.variable_count;
+            self.coefficients = result.coefficients;
+            return;
+        }
+
+        for (k, v1) in rhs.coefficients.iter() {
+            if self.coefficients.contains_key(k) {
+                let v0 = self.coefficients[&(k.clone())].clone();
+                self.coefficients.insert(k.clone(), v0 + v1.to_owned());
+            } else {
+                self.coefficients.insert(k.clone(), v1.to_owned());
+            }
         }
     }
 }
