@@ -296,8 +296,8 @@ impl GetGeneratorDomain for BFieldElement {
         let mut domain: Vec<Self> = vec![Self::ring_one()];
 
         loop {
-            domain.push(value.clone());
-            value = value.clone() * self.to_owned();
+            domain.push(value);
+            value = value * self.to_owned();
             if value.is_one() {
                 break;
             }

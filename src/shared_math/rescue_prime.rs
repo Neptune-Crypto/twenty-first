@@ -37,7 +37,7 @@ impl RescuePrime {
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
-                temp[i] = temp[i].clone() + self.mds[i][j].clone() * state[j].clone();
+                temp[i] = temp[i] + self.mds[i][j] * state[j];
             }
         }
 
@@ -45,22 +45,19 @@ impl RescuePrime {
         state = temp
             .into_iter()
             .enumerate()
-            .map(|(i, val)| val + self.round_constants[2 * round_number * self.m + i].clone())
+            .map(|(i, val)| val + self.round_constants[2 * round_number * self.m + i])
             .collect();
 
         // Backward half-round
         // S-box
-        state = state
-            .iter()
-            .map(|v| v.mod_pow(self.alpha_inv.clone()))
-            .collect();
+        state = state.iter().map(|v| v.mod_pow(self.alpha_inv)).collect();
 
         // Matrix
         temp = vec![input_state[0].ring_zero(); self.m];
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
-                temp[i] = temp[i].clone() + self.mds[i][j].clone() * state[j].clone();
+                temp[i] = temp[i] + self.mds[i][j] * state[j];
             }
         }
 
@@ -68,9 +65,7 @@ impl RescuePrime {
         state = temp
             .into_iter()
             .enumerate()
-            .map(|(i, val)| {
-                val + self.round_constants[2 * round_number * self.m + self.m + i].clone()
-            })
+            .map(|(i, val)| val + self.round_constants[2 * round_number * self.m + self.m + i])
             .collect();
 
         state
@@ -83,7 +78,7 @@ impl RescuePrime {
 
         state = (0..self.steps_count).fold(state, |state, i| self.hash_round(state, i));
 
-        state[0].clone()
+        state[0]
     }
 
     pub fn trace(&self, input: &BFieldElement) -> Vec<Vec<BFieldElement>> {
@@ -107,7 +102,7 @@ impl RescuePrime {
         input: &BFieldElement,
     ) -> (BFieldElement, Vec<Vec<BFieldElement>>) {
         let trace = self.trace(input);
-        let output = trace.last().unwrap()[0].clone();
+        let output = trace.last().unwrap()[0];
 
         (output, trace)
     }
@@ -183,7 +178,7 @@ impl RescuePrime {
 
         let previous_state_pow_alpha = previous_state
             .iter()
-            .map(|poly| poly.mod_pow(self.alpha.into(), one.clone()))
+            .map(|poly| poly.mod_pow(self.alpha.into(), one))
             .collect::<Vec<MPolynomial<BFieldElement>>>();
 
         // TODO: Consider refactoring MPolynomial<BFieldElement>
@@ -234,9 +229,8 @@ impl RescuePrime {
 #[cfg(test)]
 mod rescue_prime_test {
     use super::*;
-    use crate::shared_math::rescue_prime_params::{
-        rescue_prime_params_bfield_0, rescue_prime_small_test_params,
-    };
+    use crate::shared_math::rescue_prime_params::rescue_prime_params_bfield_0;
+    use crate::shared_math::rescue_prime_params::rescue_prime_small_test_params;
 
     #[test]
     fn hash_test() {
@@ -290,12 +284,6 @@ mod rescue_prime_test {
                 );
             }
         }
-
-        // There are 256 round constants, which is enough for 8 rounds (steps_count).
-        // But we only run with 7 rounds (steps_count), so we add 1 to count right.
-        let actual_round_constants = rp.round_constants.len();
-        let expected_round_constants = (rp.steps_count + 1) * 2 * rp.m;
-        // assert_eq!(expected_round_constants, actual_round_constants);
 
         // Verify that the AIR constraints evaluation over the trace is zero along the trace
         let input_2 = BFieldElement::new(42);

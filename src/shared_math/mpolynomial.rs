@@ -1,18 +1,13 @@
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::{IdentityValues, ModPowU64};
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::Zero;
-
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::{IdentityValues, ModPowU64};
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::ops::Div;
-use std::ops::Mul;
-use std::ops::Rem;
-use std::ops::Sub;
-use std::ops::{Add, Neg};
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub};
 
 type MCoefficients<T> = HashMap<Vec<u64>, T>;
 
@@ -451,7 +446,7 @@ impl<
             // TODO: This can probably be done smarter
             if output_coefficients.contains_key(&pad) {
                 output_coefficients.insert(
-                    pad.to_vec(),
+                    pad.clone(),
                     v.to_owned() + output_coefficients[&pad].clone(),
                 );
             } else {

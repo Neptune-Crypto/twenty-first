@@ -1,12 +1,14 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::rescue_prime::RescuePrime;
-use twenty_first::shared_math::rescue_prime_params::rescue_prime_params_bfield_0;
+use twenty_first::shared_math::rescue_prime_params::rescue_prime_small_test_params;
+// use twenty_first::shared_math::rescue_prime_params::rescue_prime_params_bfield_0;
 
 // Benchmark the RescuePrime AIR constraints compilation.
 
 fn rescue_prime_air_constraints(criterion: &mut Criterion) {
-    let mut rp_bench = rescue_prime_params_bfield_0();
+    // let mut rp_bench = rescue_prime_params_bfield_0();
+    let mut rp_bench: RescuePrime = rescue_prime_small_test_params();
     rp_bench.steps_count = 1;
     rp_bench.alpha = 4;
     let omicron = BFieldElement::get_primitive_root_of_unity(1 << 5)

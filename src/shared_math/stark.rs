@@ -1,24 +1,23 @@
-use rand::RngCore;
-
-use crate::shared_math::fri::ValidationError;
-use crate::shared_math::traits::{
-    CyclicGroupGenerator, FieldBatchInversion, GetGeneratorDomain, GetRandomElements,
-    IdentityValues, ModPowU32, PrimeFieldElement,
-};
+// use crate::shared_math::fri::ValidationError;
+// use crate::shared_math::traits::{
+//     FieldBatchInversion, GetGeneratorDomain, GetRandomElements,
+//     ModPowU32, PrimeFieldElement,
+// };
+// use crate::util_types::proof_stream::ProofStream;
+// use crate::utils::{blake3_digest, get_index_from_bytes};
+// use super::mpolynomial::MPolynomial;
+// use crate::shared_math::ntt::intt;
+use crate::shared_math::traits::{CyclicGroupGenerator, IdentityValues};
 use crate::shared_math::x_field_element::XFieldElement;
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
-use crate::util_types::proof_stream::ProofStream;
-use crate::utils::{blake3_digest, get_index_from_bytes};
+use crate::util_types::merkle_tree::MerkleTree;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
 use super::b_field_element::BFieldElement;
-use super::mpolynomial::MPolynomial;
 use super::other::log_2_ceil;
 use super::polynomial::Polynomial;
 use super::x_field_fri::Fri;
-use crate::shared_math::ntt::intt;
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
@@ -89,7 +88,7 @@ impl Stark {
 
         let fri = Fri::new(
             XFieldElement::new_const(field_generator),
-            XFieldElement::new_const(omega.clone()),
+            XFieldElement::new_const(omega),
             fri_domain_length as usize,
             expansion_factor as usize,
             colinearity_check_count as usize,
