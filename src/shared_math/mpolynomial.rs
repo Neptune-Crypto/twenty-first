@@ -347,7 +347,7 @@ impl<
         };
         let bit_length: u64 = pow.bits();
         for i in 0..bit_length {
-            acc = acc.clone() * acc.clone();
+            acc = acc.square();
             let set: bool =
                 !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
             if set {
@@ -356,6 +356,61 @@ impl<
         }
 
         acc
+    }
+
+    pub fn square(&self) -> Self {
+        if self.is_zero() {
+            return Self::zero();
+        }
+
+        let mut output_coefficients: MCoefficients<U> = HashMap::new();
+        let exponents = self.coefficients.keys().collect::<Vec<&Vec<u64>>>();
+        let c0 = self.coefficients.values().next().unwrap();
+        let two = c0.ring_one() + c0.ring_one();
+
+        for i in 0..exponents.len() {
+            let ki = exponents[i];
+            let v0 = self.coefficients[ki].clone();
+            let mut new_exponents = Vec::with_capacity(self.variable_count);
+            for exponent in ki {
+                new_exponents.push(exponent * 2);
+            }
+            if output_coefficients.contains_key(&new_exponents) {
+                output_coefficients.insert(
+                    new_exponents.to_vec(),
+                    v0.to_owned() * v0.to_owned() + output_coefficients[&new_exponents].clone(),
+                );
+            } else {
+                output_coefficients.insert(new_exponents.to_vec(), v0.to_owned() * v0.to_owned());
+            }
+
+            for kj in exponents.iter().skip(i + 1) {
+                let mut new_exponents = Vec::with_capacity(self.variable_count);
+                for k in 0..self.variable_count {
+                    // TODO: Can overflow.
+                    let exponent = ki[k] + kj[k];
+                    new_exponents.push(exponent);
+                }
+                let v1 = self.coefficients[*kj].clone();
+                if output_coefficients.contains_key(&new_exponents) {
+                    output_coefficients.insert(
+                        new_exponents.to_vec(),
+                        two.clone() * v0.to_owned() * v1.to_owned()
+                            + output_coefficients[&new_exponents].clone(),
+                    );
+                } else {
+                    output_coefficients.insert(
+                        new_exponents.to_vec(),
+                        two.clone() * v0.to_owned() * v1.to_owned(),
+                    );
+                }
+            }
+        }
+
+        Self {
+            coefficients: output_coefficients,
+            variable_count: self.variable_count,
+        }
     }
 }
 
@@ -553,10 +608,12 @@ impl<
 mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::utils::generate_random_numbers_u128;
 
     use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
     use num_bigint::BigInt;
+    use rand::RngCore;
 
     fn b(x: i128) -> BigInt {
         Into::<BigInt>::into(x)
@@ -1048,5 +1105,49 @@ mod test_mpolynomials {
                 0
             )
         );
+    }
+
+    #[test]
+    fn square_test() {
+        let poly = gen_polynomial();
+        let actual = poly.square();
+        let expected = poly.clone() * poly;
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn mul_commutative_test() {
+        let a = gen_polynomial();
+        let b = gen_polynomial();
+        let ab = a.clone() * b.clone();
+        let ba = b.clone() * a.clone();
+        assert_eq!(ab, ba);
+    }
+
+    fn gen_polynomial() -> MPolynomial<BFieldElement> {
+        let mut rng = rand::thread_rng();
+        let variable_count = rng.next_u64() as usize % 40;
+        let term_count = rng.next_u64() as usize % 40;
+        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+
+        for _ in 0..term_count {
+            let key = generate_random_numbers_u128(variable_count, None)
+                .iter()
+                .map(|x| (*x % u32::MAX as u128) as u64)
+                .collect::<Vec<u64>>();
+            let value = gen_bfield_element();
+            coefficients.insert(key, value);
+        }
+
+        MPolynomial {
+            variable_count,
+            coefficients,
+        }
+    }
+
+    fn gen_bfield_element() -> BFieldElement {
+        let mut rng = rand::thread_rng();
+        let elem = rng.next_u64();
+        BFieldElement::new(elem as u128)
     }
 }
