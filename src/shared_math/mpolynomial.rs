@@ -1138,11 +1138,35 @@ mod test_mpolynomials {
     }
 
     #[test]
+    fn add_assign_simple_test() {
+        for _ in 0..10 {
+            let mut a = gen_polynomial();
+            let a_clone = a.clone();
+            let mut b = gen_polynomial();
+            let b_clone = b.clone();
+            a += b_clone.clone();
+            assert_eq!(a_clone.clone() + b_clone.clone(), a);
+            b += a_clone.clone();
+            assert_eq!(a_clone + b_clone, b);
+        }
+    }
+
+    #[test]
+    fn square_test_simple() {
+        let _13 = PrimeFieldBig::new(b(13));
+        let xz = get_xz(&_13);
+        let xz_squared = get_x_squared_z_squared(&_13);
+        assert_eq!(xz_squared, xz.square());
+    }
+
+    #[test]
     fn square_test() {
-        let poly = gen_polynomial();
-        let actual = poly.square();
-        let expected = poly.clone() * poly;
-        assert_eq!(expected, actual);
+        for _ in 0..10 {
+            let poly = gen_polynomial();
+            let actual = poly.square();
+            let expected = poly.clone() * poly;
+            assert_eq!(expected, actual);
+        }
     }
 
     #[test]
