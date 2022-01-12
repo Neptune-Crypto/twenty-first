@@ -271,7 +271,9 @@ mod rescue_prime_test {
 
     #[test]
     fn air_is_zero_on_execution_trace_test() {
-        let rp = params::rescue_prime_medium_test_params();
+        let rp = params::rescue_prime_small_test_params();
+        // let rp = params::rescue_prime_medium_test_params();
+        // let rp = params::rescue_prime_params_bfield_0();
 
         // rescue prime test vector 1
         let omicron_res = BFieldElement::get_primitive_root_of_unity(1 << 5);
@@ -280,13 +282,9 @@ mod rescue_prime_test {
         // Verify that the round constants polynomials are correct
         let (fst_rc_pol, snd_rc_pol) = rp.get_round_constant_polynomials(omicron);
         for step in 0..rp.steps_count {
-            let point = vec![
-                omicron.mod_pow(step as u64),
-                BFieldElement::ring_zero(),
-                BFieldElement::ring_zero(),
-                BFieldElement::ring_zero(),
-                BFieldElement::ring_zero(),
-            ];
+            let mut point = vec![omicron.mod_pow(step as u64)];
+            point.append(&mut vec![BFieldElement::ring_zero(); 2 * rp.m]);
+
             for register in 0..rp.m {
                 let fst_eval = fst_rc_pol[register].evaluate(&point);
                 assert_eq!(rp.round_constants[2 * step * rp.m + register], fst_eval);
