@@ -23,6 +23,11 @@ pub fn log_2_ceil(x: u64) -> u64 {
     }
 }
 
+// Round up to the nearest power of 2
+pub fn roundup_npo2(x: u64) -> u64 {
+    1 << log_2_ceil(x)
+}
+
 // pub fn lagrange_interpolation_2
 
 #[cfg(test)]

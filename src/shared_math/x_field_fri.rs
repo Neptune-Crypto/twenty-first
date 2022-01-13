@@ -107,7 +107,7 @@ impl<F: PrimeFieldElement> Fri<F> {
             let alpha: F::Elem = proof_stream.prover_fiat_shamir().into();
 
             let x_offset: Vec<F::Elem> = generator
-                .get_cyclic_group()
+                .get_cyclic_group_elements(None)
                 .into_iter()
                 .map(|x| x * offset.clone())
                 .collect();
@@ -342,7 +342,7 @@ impl<F: PrimeFieldElement> Fri<F> {
     }
 
     pub fn get_evaluation_domain(&self) -> Vec<F::Elem> {
-        let omega_domain = self.omega.get_cyclic_group();
+        let omega_domain = self.omega.get_cyclic_group_elements(None);
         omega_domain
             .into_iter()
             .map(|x| x * self.offset.clone())
@@ -437,7 +437,7 @@ mod test_x_field_fri {
     fn fri_on_b_field_test() {
         let fri: Fri<BFieldElement> = get_b_field_fri_test_object();
         let mut proof_stream: ProofStream = ProofStream::default();
-        let subgroup = fri.omega.get_cyclic_group();
+        let subgroup = fri.omega.get_cyclic_group_elements(None);
 
         fri.prove(&subgroup, &mut proof_stream).unwrap();
         let verify_result = fri.verify(&mut proof_stream);
@@ -454,7 +454,7 @@ mod test_x_field_fri {
         let fri: Fri<XFieldElement> =
             get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
         let mut proof_stream: ProofStream = ProofStream::default();
-        let subgroup = fri.omega.get_cyclic_group();
+        let subgroup = fri.omega.get_cyclic_group_elements(None);
 
         fri.prove(&subgroup, &mut proof_stream).unwrap();
         let verify_result = fri.verify(&mut proof_stream);
@@ -468,7 +468,7 @@ mod test_x_field_fri {
         let colinearity_check_count = 6;
         let fri: Fri<XFieldElement> =
             get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
-        let subgroup = fri.omega.get_cyclic_group();
+        let subgroup = fri.omega.get_cyclic_group_elements(None);
 
         let mut points: Vec<XFieldElement>;
         for n in vec![1, 10, 50, 100, 255] {

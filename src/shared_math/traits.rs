@@ -16,7 +16,7 @@ pub trait CyclicGroupGenerator
 where
     Self: Sized,
 {
-    fn get_cyclic_group(&self) -> Vec<Self>;
+    fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self>;
 }
 
 pub trait FieldBatchInversion
@@ -33,6 +33,7 @@ where
     fn random_elements(length: usize, rng: &mut ThreadRng) -> Vec<Self>;
 }
 
+// TODO: Remove in favor of CyclicGroupGenerator
 pub trait GetGeneratorDomain
 where
     Self: Sized,

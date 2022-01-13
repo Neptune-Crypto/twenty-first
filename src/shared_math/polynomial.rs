@@ -198,13 +198,14 @@ impl<
     }
 
     // Return the polynomial which corresponds to the transformation `x -> alpha * x`
-    // x should probably be called alpha below
-    pub fn scale(&self, x: &U) -> Self {
-        let mut acc = x.ring_one();
+    // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
+    // then corresponds to evaluating P(alpha * x).
+    pub fn scale(&self, alpha: &U) -> Self {
+        let mut acc = alpha.ring_one();
         let mut return_coefficients = self.coefficients.clone();
         for elem in return_coefficients.iter_mut() {
             *elem = elem.clone() * acc.clone();
-            acc = acc * x.to_owned();
+            acc = acc * alpha.to_owned();
         }
 
         Self {

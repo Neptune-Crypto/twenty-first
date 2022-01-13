@@ -4,7 +4,7 @@ use crate::shared_math::traits::IdentityValues;
 
 use super::mpolynomial::MPolynomial;
 use super::polynomial::Polynomial;
-use super::traits::{GetGeneratorDomain, ModPowU64};
+use super::traits::{CyclicGroupGenerator, GetGeneratorDomain, ModPowU64};
 
 // TODO: Make this work for XFieldElement via trait.
 #[derive(Debug, Clone)]
@@ -116,7 +116,7 @@ impl RescuePrime {
         Vec<MPolynomial<BFieldElement>>,
         Vec<MPolynomial<BFieldElement>>,
     ) {
-        let domain = omicron.get_generator_domain();
+        let domain = omicron.get_cyclic_group_elements(None);
         let variable_count = 2 * self.m + 1;
         let mut first_round_constants: Vec<MPolynomial<BFieldElement>> = vec![];
         for i in 0..self.m {

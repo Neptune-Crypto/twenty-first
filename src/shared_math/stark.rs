@@ -10,13 +10,17 @@
 use crate::shared_math::traits::{CyclicGroupGenerator, IdentityValues};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::util_types::merkle_tree::MerkleTree;
+use crate::util_types::proof_stream::ProofStream;
+use crate::utils;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
 use super::b_field_element::BFieldElement;
-use super::other::log_2_ceil;
+use super::mpolynomial::MPolynomial;
+use super::other::{log_2_ceil, roundup_npo2};
 use super::polynomial::Polynomial;
+use super::traits::{GetGeneratorDomain, GetRandomElements};
 use super::x_field_fri::Fri;
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;

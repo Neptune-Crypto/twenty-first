@@ -256,14 +256,14 @@ impl FieldBatchInversion for BFieldElement {
 }
 
 impl CyclicGroupGenerator for BFieldElement {
-    fn get_cyclic_group(&self) -> Vec<Self> {
+    fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self> {
         let mut val = *self;
         let mut ret: Vec<Self> = vec![Self::ring_one()];
 
         loop {
             ret.push(val);
             val = val * *self;
-            if val.is_one() {
+            if val.is_one() || max.is_some() && ret.len() >= max.unwrap() {
                 break;
             }
         }
@@ -287,23 +287,6 @@ impl GetRandomElements for BFieldElement {
         }
 
         values
-    }
-}
-
-impl GetGeneratorDomain for BFieldElement {
-    fn get_generator_domain(&self) -> Vec<Self> {
-        let mut value = self.to_owned();
-        let mut domain: Vec<Self> = vec![Self::ring_one()];
-
-        loop {
-            domain.push(value);
-            value = value * self.to_owned();
-            if value.is_one() {
-                break;
-            }
-        }
-
-        domain
     }
 }
 

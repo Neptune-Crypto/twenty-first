@@ -193,14 +193,14 @@ impl GetRandomElements for XFieldElement {
 }
 
 impl CyclicGroupGenerator for XFieldElement {
-    fn get_cyclic_group(&self) -> Vec<Self> {
+    fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self> {
         let mut val = *self;
         let mut ret: Vec<Self> = vec![Self::ring_one()];
 
         loop {
             ret.push(val);
             val = val * *self;
-            if val.is_one() {
+            if val.is_one() || max.is_some() && ret.len() >= max.unwrap() {
                 break;
             }
         }
@@ -866,7 +866,7 @@ mod x_field_element_test {
             // The output should be equivalent to evaluating root^i, i = [0..4]
             // over the polynomium with coefficients 1, 2, 3, 4
             let pol_degree_i_minus_1: Polynomial<XFieldElement> = Polynomial::new(inputs.to_vec());
-            let x_domain = root.get_cyclic_group();
+            let x_domain = root.get_cyclic_group_elements(None);
             for i in 0..outputs.len() {
                 assert_eq!(pol_degree_i_minus_1.evaluate(&x_domain[i]), outputs[i]);
             }
