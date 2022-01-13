@@ -4,7 +4,7 @@ use crate::shared_math::traits::IdentityValues;
 
 use super::mpolynomial::MPolynomial;
 use super::polynomial::Polynomial;
-use super::traits::{CyclicGroupGenerator, GetGeneratorDomain, ModPowU64};
+use super::traits::{CyclicGroupGenerator, ModPowU64};
 
 // TODO: Make this work for XFieldElement via trait.
 #[derive(Debug, Clone)]

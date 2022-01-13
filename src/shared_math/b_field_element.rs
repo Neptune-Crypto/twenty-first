@@ -14,8 +14,6 @@ use std::{
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
-use super::traits::GetGeneratorDomain;
-
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct BFieldElement(u128);

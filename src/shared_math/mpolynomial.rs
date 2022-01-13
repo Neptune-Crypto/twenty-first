@@ -417,7 +417,7 @@ impl<
     pub fn degree(&self) -> u64 {
         self.coefficients
             .keys()
-            .map(|foo| foo.iter().sum::<u64>())
+            .map(|coefficients| coefficients.iter().sum::<u64>())
             .max()
             .unwrap_or(0) as u64
     }
