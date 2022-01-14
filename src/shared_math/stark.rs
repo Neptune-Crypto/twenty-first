@@ -158,6 +158,7 @@ impl Stark {
         let max_degree = roundup_npo2(tq_degree + 1) - 1; // The max degree bound provable by FRI
         let fri_domain_length = (max_degree + 1) * self.expansion_factor as u64;
         println!("prover: fri_domain_length = {}", fri_domain_length);
+        let blowup_factor_new = fri_domain_length / rounded_trace_length;
 
         // compute generators
         let omega = BFieldElement::get_primitive_root_of_unity(fri_domain_length as u128)
@@ -472,7 +473,7 @@ impl Stark {
         duplicated_indices.append(
             &mut indices
                 .into_iter()
-                .map(|i| (i + self.expansion_factor as usize) % fri_domain_length_usize)
+                .map(|i| (i + blowup_factor_new as usize) % fri_domain_length_usize)
                 .collect(),
         );
 
@@ -597,11 +598,22 @@ impl Stark {
             unlifted_values.ok_or(StarkVerifyError::UnexpectedFriValue)?;
         println!("values = {:?}", values);
 
+        // Because fri_domain_length = (max_degree + 1) * expansion_factor...
+        let max_degree = (fri_domain_length / self.expansion_factor) - 1;
+        let rounded_trace_length =
+            roundup_npo2((original_trace_length + self.min_num_randomizers) as u64);
+        let blowup_factor_new = fri_domain_length / rounded_trace_length as u32;
+        let omicron_domain_length = rounded_trace_length;
+        println!(
+            "verify: FRI domain length / omicron_domain_length = {}",
+            fri_domain_length / omicron_domain_length as u32
+        );
+
         let mut duplicated_indices = indices.clone();
         duplicated_indices.append(
             &mut indices
                 .iter()
-                .map(|i| (*i + self.expansion_factor as usize) % fri_domain_length as usize)
+                .map(|i| (*i + blowup_factor_new as usize) % fri_domain_length as usize)
                 .collect(),
         );
         duplicated_indices.sort_unstable();
@@ -680,16 +692,6 @@ impl Stark {
         //         );
         //     });
 
-        // Because fri_domain_length = (max_degree + 1) * expansion_factor...
-        let max_degree = (fri_domain_length / self.expansion_factor) - 1;
-        let rounded_trace_length =
-            roundup_npo2((original_trace_length + self.min_num_randomizers) as u64);
-        let omicron_domain_length = rounded_trace_length;
-        println!(
-            "verify: FRI domain length / omicron_domain_length = {}",
-            fri_domain_length / omicron_domain_length as u32
-        );
-
         // FIXME: Can we calculate this faster using omega?
         // FIXME: Can we calculate this faster using omega?
         let omicron = BFieldElement::get_primitive_root_of_unity(omicron_domain_length as u128)
@@ -742,7 +744,7 @@ impl Stark {
                 current_index, i, current_x
             );
             let next_index: usize =
-                (current_index + self.expansion_factor as usize) % fri_domain_length as usize;
+                (current_index + blowup_factor_new as usize) % fri_domain_length as usize;
             let next_x: BFieldElement =
                 self.field_generator.clone() * omega.mod_pow(next_index as u64);
             let mut current_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
@@ -811,11 +813,11 @@ impl Stark {
 
             println!("values[i] = {}", values[i]);
             println!("combination = {}", combination);
-            // if values[i] != combination {
-            //     return Err(Box::new(StarkVerifyError::LinearCombinationMismatch(
-            //         current_index,
-            //     )));
-            // }
+            if values[i] != combination {
+                return Err(Box::new(StarkVerifyError::LinearCombinationMismatch(
+                    current_index,
+                )));
+            }
         }
 
         // println!("values = {:?}", values.clone());
