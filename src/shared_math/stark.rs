@@ -318,9 +318,7 @@ impl Stark {
 
         // Commit to randomizer polynomial
         let randomizer_polynomial = Polynomial {
-            // TODO: MAKE RANDOM AGAIN
-            // coefficients: BFieldElement::random_elements(max_degree as usize + 1, &mut rng),
-            coefficients: vec![BFieldElement::ring_zero(); max_degree as usize + 1],
+            coefficients: BFieldElement::random_elements(max_degree as usize + 1, &mut rng),
         };
 
         let randomizer_codeword: Vec<BFieldElement> = randomizer_polynomial.fast_coset_evaluate(
@@ -669,9 +667,7 @@ impl Stark {
         num_randomizers: u64,
     ) {
         let mut randomizer_coset: Vec<Vec<BFieldElement>> = (0..num_randomizers)
-            // TODO: REPLACE WITH REAL RANDOMNESS!!
-            .map(|_| vec![BFieldElement::ring_zero(); self.num_registers as usize])
-            //.map(|_| BFieldElement::random_elements(self.num_registers as usize, &mut rng))
+            .map(|_| BFieldElement::random_elements(self.num_registers as usize, &mut rng))
             .collect();
 
         trace.append(&mut randomizer_coset);
