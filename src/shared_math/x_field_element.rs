@@ -64,6 +64,14 @@ impl XFieldElement {
         }
     }
 
+    pub fn unlift(&self) -> Option<BFieldElement> {
+        if self.coefficients[1].is_zero() && self.coefficients[2].is_zero() {
+            Some(self.coefficients[0])
+        } else {
+            None
+        }
+    }
+
     pub fn ring_zero() -> Self {
         Self {
             coefficients: [0, 0, 0].map(BFieldElement::new),
