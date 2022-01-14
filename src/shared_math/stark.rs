@@ -143,21 +143,14 @@ impl Stark {
             roundup_npo2(original_trace_length + self.min_num_randomizers as u64);
         let num_randomizers = rounded_trace_length - original_trace_length;
 
-        // for tq in transition_constraints.iter() {
-        //     println!("tq = {}", tq);
-        // }
-
         // let tp_degree = air_degree * (rounded_trace_length - 1);
         let tp_bounds =
             self.transition_degree_bounds(&transition_constraints, rounded_trace_length as usize);
         let tp_degree = tp_bounds.iter().max().unwrap();
 
-        // println!("tp_degree = {}", tp_degree);
-
         let tq_degree = tp_degree - (original_trace_length - 1);
         let max_degree = roundup_npo2(tq_degree + 1) - 1; // The max degree bound provable by FRI
         let fri_domain_length = (max_degree + 1) * self.expansion_factor as u64;
-        println!("prover: fri_domain_length = {}", fri_domain_length);
         let blowup_factor_new = fri_domain_length / rounded_trace_length;
 
         // compute generators
@@ -174,17 +167,11 @@ impl Stark {
             input_omicron, omicron,
             "Calculated omicron must match input omicron"
         );
-        println!(
-            "prover: FRI domain length / omicron_domain_length = {}",
-            fri_domain_length / omicron_domain_length
-        );
 
         // ...
         let mut rng = rand::thread_rng();
         let mut randomized_trace = trace.clone();
         self.randomize_trace(&mut rng, &mut randomized_trace, num_randomizers);
-
-        // let randomized_trace_domain = omicron.get_cyclic_group_elements(None);
 
         // ...
         let mut trace_interpolants = vec![];
@@ -198,19 +185,12 @@ impl Stark {
             let trace_interpolant = Polynomial {
                 coefficients: trace_interpolant_coefficients,
             };
-            // let trace_interpolant = Polynomial::fast_interpolate(
-            //     &randomized_trace_domain,
-            //     &trace_column,
-            //     &omega,
-            //     fri_domain_length as usize,
-            // );
 
             // Sanity checks; consider moving into unit tests.
             for (i, item) in trace.iter().enumerate() {
                 assert_eq!(
                     item[r],
                     trace_interpolant.evaluate(&omicron.mod_pow(i as u64)),
-                    // trace_interpolant.evaluate(&omega.mod_pow(i as u64)),
                     "Trace interpolant evaluates back to trace element"
                 );
             }
@@ -244,8 +224,6 @@ impl Stark {
         let mut boundary_quotients: Vec<Polynomial<BFieldElement>> =
             vec![Polynomial::ring_zero(); self.num_registers as usize];
 
-        // println!("bcs_formatted = {:?}", bcs_formatted);
-
         for r in 0..self.num_registers as usize {
             let div_res = (trace_interpolants[r].clone() - boundary_interpolants[r].clone())
                 .divide(boundary_zerofiers[r].clone());
@@ -258,7 +236,7 @@ impl Stark {
         }
 
         // Commit to boundary quotients
-        // FIXME: Use salted Merkle trees here.
+        // TODO: Consider salted Merkle trees here.
         let mut boundary_quotient_merkle_trees: Vec<MerkleTree<BFieldElement>> = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<BFieldElement> =
@@ -294,21 +272,11 @@ impl Stark {
             .map(|x| x.evaluate_symbolic(&point))
             .collect();
 
-        // println!(
-        //     "transition_polynomials degree(): {}",
-        //     transition_polynomials
-        //         .iter()
-        //         .map(|x| x.degree().to_string())
-        //         .collect::<Vec<String>>()
-        //         .join(", ")
-        // );
-
         // TODO: Sanity check REMOVE
         for tp in transition_polynomials.iter() {
             assert_eq!(*tp_degree, tp.degree() as u64);
             for i in 0..original_trace_length - 1 {
                 let x = omicron.mod_pow(i);
-                // println!("tp({}) = {}", x, tp.evaluate(&x));
                 assert!(tp.evaluate(&x).is_zero());
             }
         }
@@ -318,10 +286,6 @@ impl Stark {
             omicron_domain_length as usize,
             original_trace_length as usize,
         );
-        println!("prover: transition_zerofier = {}", transition_zerofier);
-
-        // println!("!!! {}", original_trace_length);
-        // println!("!!! {}", transition_zerofier.degree());
 
         // FIXME: Use this in combination with LeaflessPartialAuthenticationPaths.
         let _transition_zerofier_mt: MerkleTree<BFieldElement> = self.get_transition_zerofier_mt(
@@ -374,7 +338,6 @@ impl Stark {
         );
 
         // Sanity check; Consider moving to unit test,
-        // println!("original_trace_length = {}", original_trace_length);
         for r in 0..self.num_registers as usize {
             assert_eq!(
                 expected_tq_degrees[r] as isize,
@@ -391,7 +354,6 @@ impl Stark {
         for (tq, tq_degree) in transition_quotients.iter().zip(expected_tq_degrees.iter()) {
             terms.push(tq.to_owned());
             let shift = max_degree - tq_degree;
-            println!("prove: shift = {}", shift);
 
             // Make new polynomial with max_degree degree by shifting all terms up
             let shifted = tq.shift_coefficients(shift as usize, BFieldElement::ring_zero());
@@ -401,24 +363,11 @@ impl Stark {
         for (bq, bq_degree) in boundary_quotients.iter().zip(boundary_degrees.iter()) {
             terms.push(bq.to_owned());
             let shift = max_degree as usize - bq_degree;
-            println!("prove: shift = {}", shift);
+
+            // Make new polynomial with max_degree degree by shifting all terms up
             let shifted = bq.shift_coefficients(shift, BFieldElement::ring_zero());
             assert_eq!(max_degree as isize, shifted.degree()); // TODO: Can be removed
             terms.push(shifted);
-        }
-
-        println!("prover: transition_zerofier = {}", transition_zerofier);
-        for i in 0..self.num_registers as usize {
-            println!(
-                "prover: boundary_interpolants[{}] = {}",
-                i, boundary_interpolants[i]
-            );
-        }
-        for i in 0..self.num_registers as usize {
-            println!(
-                "prover: boundary_zerofiers[{}] = {}",
-                i, boundary_zerofiers[i]
-            );
         }
 
         // Take weighted sum
@@ -436,7 +385,6 @@ impl Stark {
             terms.len(),
             "weights and terms length must match"
         );
-        println!("prover: weights: {:?}", weights);
         let combination = weights
             .iter()
             .zip(terms.iter())
@@ -477,28 +425,6 @@ impl Stark {
                 .collect(),
         );
 
-        let xs = duplicated_indices
-            .iter()
-            .map(|i| omega.mod_pow(*i as u64) * self.field_generator)
-            .collect::<Vec<BFieldElement>>();
-
-        for x in xs.iter() {
-            let combination_evaluation = combination.evaluate(&x);
-            println!(
-                "prover: combination.eval({}) = {}",
-                x, combination_evaluation
-            );
-            for r in 0..self.num_registers as usize {
-                let tp_evaluation = trace_interpolants[r].evaluate(&x);
-                let tp_eval_scaled = trace_interpolants[r].scale(&omicron).evaluate(&x);
-                println!("prover: trace_interpolant.eval({}) = {}", x, tp_evaluation);
-                println!(
-                    "prover: trace_interpolant_scaled.eval({}) = {}",
-                    x, tp_eval_scaled
-                );
-            }
-        }
-
         let mut quadrupled_indices = duplicated_indices.clone();
         quadrupled_indices.append(
             &mut duplicated_indices
@@ -519,26 +445,11 @@ impl Stark {
         }
 
         // Open indicated positions in the randomizer
-        proof_stream
-            .enqueue_length_prepended(&randomizer_mt.get_multi_proof(&quadrupled_indices))?;
-        println!("prover: quadrupled_indices = {:?}", quadrupled_indices);
-        println!("prover: omega = {}", omega);
-        println!("prover: omicron = {}", omicron);
-        println!("prover: xs = {:?}", xs);
+        let randomizer_auth_path = randomizer_mt.get_multi_proof(&quadrupled_indices);
+        proof_stream.enqueue_length_prepended(&randomizer_auth_path)?;
 
         Ok((fri_domain_length as u32, omega))
     }
-
-    /*    pub fn prove(
-        &self,
-        // Trace is indexed as trace[cycle][register]
-        trace: Vec<Vec<BFieldElement>>,
-        transition_constraints: Vec<MPolynomial<BFieldElement>>,
-        boundary_constraints: Vec<BoundaryConstraint>,
-        proof_stream: &mut ProofStream,
-        input_omicron: BFieldElement,
-    ) -> Result<(), Box<dyn Error>> {
-    */
 
     pub fn verify(
         &self,
@@ -569,7 +480,6 @@ impl Stark {
             &fiat_shamir_hash,
             1 + 2 * boundary_quotient_mt_roots.len() + 2 * transition_constraints.len(),
         );
-        println!("verifier: weights: {:?}", weights);
 
         // Verify low degree of combination polynomial, and collect indices
         // Note that FRI verifier verifies number of samples, so we don't have
@@ -582,11 +492,7 @@ impl Stark {
             self.colinearity_check_count as usize,
         );
 
-        println!("verifier: fri_domain_length = {}", fri_domain_length);
-        println!("verifier: expansion factor = {}", self.expansion_factor);
-
         let polynomial_values = fri.verify(proof_stream)?;
-        println!("polynomial_values = {:?}", polynomial_values);
 
         let (indices, x_field_values): (Vec<usize>, Vec<XFieldElement>) =
             polynomial_values.into_iter().unzip();
@@ -596,7 +502,6 @@ impl Stark {
 
         let values: Vec<BFieldElement> =
             unlifted_values.ok_or(StarkVerifyError::UnexpectedFriValue)?;
-        println!("values = {:?}", values);
 
         // Because fri_domain_length = (max_degree + 1) * expansion_factor...
         let max_degree = (fri_domain_length / self.expansion_factor) - 1;
@@ -604,10 +509,6 @@ impl Stark {
             roundup_npo2((original_trace_length + self.min_num_randomizers) as u64);
         let blowup_factor_new = fri_domain_length / rounded_trace_length as u32;
         let omicron_domain_length = rounded_trace_length;
-        println!(
-            "verify: FRI domain length / omicron_domain_length = {}",
-            fri_domain_length / omicron_domain_length as u32
-        );
 
         let mut duplicated_indices = indices.clone();
         duplicated_indices.append(
@@ -617,8 +518,6 @@ impl Stark {
                 .collect(),
         );
         duplicated_indices.sort_unstable();
-        println!("verifier: indices = {:?}", indices);
-        println!("verifier: duplicated_indices = {:?}", duplicated_indices);
 
         // Read and verify boundary quotient leafs
         // revealed boundary quotient codeword values, indexed by (register, codeword index)
@@ -665,34 +564,6 @@ impl Stark {
                 randomizer_values.insert(*index, authentication_path.get_value());
             });
 
-        ///////////////////////////////////////////////////////////////////////////////////////// 1. transition_zerofier_*
-        // Read and verify transition zerofier leafs
-        // let transition_zerofier_authentication_paths: Vec<
-        //     PartialAuthenticationPath<BFieldElement>,
-        // > = proof_stream.dequeue_length_prepended()?;
-        // let valid = MerkleTree::verify_multi_proof(
-        //     transition_zerofier_mt_root.to_owned(),
-        //     &duplicated_indices,
-        //     &transition_zerofier_authentication_paths,
-        // );
-        // if !valid {
-        //     return Err(Box::new(StarkVerifyError::BadMerkleProof(
-        //         MerkleProofError::TransitionZerofierError,
-        //     )));
-        // }
-        //
-        // let mut transition_zerofier_values: HashMap<usize, PrimeFieldElementBig> = HashMap::new();
-        // duplicated_indices
-        //     .iter()
-        //     .zip(transition_zerofier_authentication_paths.iter())
-        //     .for_each(|(index, authentication_path)| {
-        //         transition_zerofier_values.insert(
-        //             *index,
-        //             PrimeFieldElementBig::new(authentication_path.get_value(), &self.field),
-        //         );
-        //     });
-
-        // FIXME: Can we calculate this faster using omega?
         // FIXME: Can we calculate this faster using omega?
         let omicron = BFieldElement::get_primitive_root_of_unity(omicron_domain_length as u128)
             .0
@@ -702,12 +573,6 @@ impl Stark {
         let formatted_bcs = self.format_boundary_constraints(omicron, boundary_constraints);
         let boundary_zerofiers = self.get_boundary_zerofiers(formatted_bcs.clone());
         let boundary_interpolants = self.get_boundary_interpolants(formatted_bcs);
-
-        println!("verify: omega = {}", omega);
-        println!("verify: omicron = {}", omicron);
-        println!("verify: max_degree = {}", max_degree);
-        println!("verify: rounded_trace_length = {}", rounded_trace_length);
-
         let boundary_degrees = self
             .boundary_quotient_degree_bounds(&boundary_zerofiers, rounded_trace_length as usize);
         let expected_tq_degrees = self.transition_quotient_degree_bounds(
@@ -722,27 +587,10 @@ impl Stark {
             omicron_domain_length as usize,
             original_trace_length as usize,
         );
-        println!("verifier: transition_zerofier = {}", transition_zerofier);
-        for i in 0..self.num_registers as usize {
-            println!(
-                "verifier: boundary_interpolants[{}] = {}",
-                i, boundary_interpolants[i]
-            );
-        }
-        for i in 0..self.num_registers as usize {
-            println!(
-                "verifier: boundary_zerofiers[{}] = {}",
-                i, boundary_zerofiers[i]
-            );
-        }
 
         for (i, current_index) in indices.into_iter().enumerate() {
             let current_x: BFieldElement =
                 self.field_generator.clone() * omega.mod_pow(current_index as u64);
-            println!(
-                "current_index = {}; i = {}; current_x = {}",
-                current_index, i, current_x
-            );
             let next_index: usize =
                 (current_index + blowup_factor_new as usize) % fri_domain_length as usize;
             let next_x: BFieldElement =
@@ -754,7 +602,6 @@ impl Stark {
                         + boundary_interpolants[r].evaluate(&current_x)
                 })
                 .collect();
-            for r in 0..self.num_registers as usize {}
             let mut next_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
                 .map(|r| {
                     boundary_quotients[r][&next_index].clone()
@@ -762,10 +609,6 @@ impl Stark {
                         + boundary_interpolants[r].evaluate(&next_x)
                 })
                 .collect();
-            for r in 0..self.num_registers as usize {
-                println!("verifier: ti({}) = {}", current_x, current_trace[r]);
-                println!("verifier: ti_next({}) = {}", current_x, next_trace[r]);
-            }
 
             let mut point: Vec<BFieldElement> = vec![current_x.clone()];
             point.append(&mut current_trace);
@@ -789,13 +632,11 @@ impl Stark {
                 let transition_quotient = *tcv / current_transition_zerofier_value;
                 terms.push(transition_quotient);
                 let shift = max_degree as u64 - tq_degree;
-                println!("verify: shift = {}", shift);
                 terms.push(transition_quotient * current_x.mod_pow(shift));
             }
             for (bqvs, bq_degree) in boundary_quotients.iter().zip(boundary_degrees.iter()) {
                 terms.push(bqvs[&current_index]);
                 let shift = max_degree as u64 - *bq_degree as u64;
-                println!("verify: shift = {}", shift);
                 terms.push(bqvs[&current_index] * current_x.mod_pow(shift));
             }
 
@@ -811,16 +652,12 @@ impl Stark {
                     sum + term.to_owned() * weight.to_owned()
                 });
 
-            println!("values[i] = {}", values[i]);
-            println!("combination = {}", combination);
             if values[i] != combination {
                 return Err(Box::new(StarkVerifyError::LinearCombinationMismatch(
                     current_index,
                 )));
             }
         }
-
-        // println!("values = {:?}", values.clone());
 
         Ok(())
     }
@@ -1004,18 +841,19 @@ pub mod test_stark {
         let boundary_constraints = rp.get_boundary_constraints(output);
         let mut proof_stream = ProofStream::default();
 
-        let (fri_domain_length, omega): (u32, BFieldElement) = stark
-            .prove(
-                &trace,
-                &air_constraints,
-                &boundary_constraints,
-                &mut proof_stream,
-                omicron,
-            )
-            .unwrap();
-        // FIXME: .is_ok()
+        let prove_result = stark.prove(
+            &trace,
+            &air_constraints,
+            &boundary_constraints,
+            &mut proof_stream,
+            omicron,
+        );
 
-        let hm = stark.verify(
+        assert!(prove_result.is_ok());
+
+        let (fri_domain_length, omega): (u32, BFieldElement) = prove_result.unwrap();
+
+        let verify_result = stark.verify(
             &mut proof_stream,
             &air_constraints,
             &boundary_constraints,
@@ -1024,6 +862,6 @@ pub mod test_stark {
             trace.len() as u32,
         );
 
-        println!("verify: {:?}", hm);
+        assert!(verify_result.is_ok());
     }
 }
