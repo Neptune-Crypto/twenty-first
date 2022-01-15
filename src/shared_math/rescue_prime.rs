@@ -221,18 +221,27 @@ impl RescuePrime {
         &self,
         output_element: BFieldElement,
     ) -> Vec<BoundaryConstraint> {
-        vec![
-            BoundaryConstraint {
+        let mut bcs = vec![];
+
+        // All but the first registers should be 0 in the first cycle.
+        for i in 1..self.m {
+            let bc = BoundaryConstraint {
                 cycle: 0,
-                register: 1,
-                value: output_element.ring_zero(),
-            },
-            BoundaryConstraint {
-                cycle: self.steps_count,
-                register: 0,
-                value: output_element.to_owned(),
-            },
-        ]
+                register: i,
+                value: BFieldElement::ring_zero(),
+            };
+            bcs.push(bc);
+        }
+
+        // Register 0 should have output_element as value in last cycle.
+        let end_constraint = BoundaryConstraint {
+            cycle: self.steps_count,
+            register: 0,
+            value: output_element.to_owned(),
+        };
+        bcs.push(end_constraint);
+
+        bcs
     }
 }
 

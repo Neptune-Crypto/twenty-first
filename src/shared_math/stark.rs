@@ -860,4 +860,42 @@ pub mod test_stark {
 
         assert!(verify_result.is_ok());
     }
+
+    #[test]
+    fn prove_and_verify_medium_stark_test() {
+        let rp: RescuePrime = params::rescue_prime_medium_test_params();
+        let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
+
+        let one = BFieldElement::ring_one();
+        let (output, trace) = rp.eval_and_trace(&one);
+        assert_eq!(6, trace.len());
+
+        let omicron = BFieldElement::get_primitive_root_of_unity(16).0.unwrap();
+        let air_constraints = rp.get_air_constraints(omicron);
+        let boundary_constraints = rp.get_boundary_constraints(output);
+        let mut proof_stream = ProofStream::default();
+
+        let prove_result = stark.prove(
+            &trace,
+            &air_constraints,
+            &boundary_constraints,
+            &mut proof_stream,
+            omicron,
+        );
+
+        assert!(prove_result.is_ok());
+
+        let (fri_domain_length, omega): (u32, BFieldElement) = prove_result.unwrap();
+
+        let verify_result = stark.verify(
+            &mut proof_stream,
+            &air_constraints,
+            &boundary_constraints,
+            fri_domain_length,
+            omega,
+            trace.len() as u32,
+        );
+
+        assert!(verify_result.is_ok());
+    }
 }
