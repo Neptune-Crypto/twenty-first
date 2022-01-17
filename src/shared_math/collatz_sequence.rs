@@ -305,10 +305,9 @@ fn get_composition_polynomial_codeword<'a>(
 ) -> Vec<PrimeFieldElement<'a>> {
     // Get an analytical representation of the composition polynomial
     let mut composition_polynomial = sum_transition_quotient_polynomial.clone();
-    composition_polynomial = composition_polynomial
-        + sum_transition_quotient_polynomial
-            .scalar_mul(composition_polynomial_coefficients[0])
-            .shift_coefficients(num_steps, omega.ring_zero());
+    composition_polynomial += sum_transition_quotient_polynomial
+        .scalar_mul(composition_polynomial_coefficients[0])
+        .shift_coefficients(num_steps, omega.ring_zero());
 
     for i in 0..num_registers {
         let scaled_btq = bit_transition_quotient_polynomials[i]

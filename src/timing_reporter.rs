@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
-    ops::Sub,
     time::{Duration, Instant},
 };
 
@@ -22,7 +21,7 @@ impl TimingReporter {
     pub fn start() -> Self {
         let timer = Instant::now();
         let durations = vec![];
-        let print_debug = std::env::var("DEBUG_TIMING").unwrap_or("0".to_string()) != "0";
+        let print_debug = std::env::var("DEBUG_TIMING").unwrap_or_else(|_| "0".to_string()) != "0";
 
         Self {
             timer,
@@ -47,7 +46,7 @@ impl TimingReporter {
             println!("{} in {:.2?}", label, rel_duration);
         }
 
-        self.durations.push((label.clone(), duration));
+        self.durations.push((label, duration));
     }
 
     pub fn finish(&self) -> TimingReport {
@@ -66,7 +65,6 @@ impl TimingReporter {
     }
 }
 
-// format!("{:0>8}", "110")
 impl Display for TimingReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let width = self
@@ -80,9 +78,9 @@ impl Display for TimingReport {
             write!(f, "{}", label)?;
             let padding = String::from_utf8(vec![b' '; width - label.len() + 1]).unwrap();
             write!(f, "{}", padding)?;
-            write!(f, "{:.2?}\n", duration)?;
+            writeln!(f, "{:.2?}", duration)?;
         }
 
-        write!(f, "\n")
+        writeln!(f)
     }
 }

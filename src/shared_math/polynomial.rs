@@ -8,11 +8,7 @@ use num_traits::Zero;
 use std::convert::From;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::ops::Div;
-use std::ops::Mul;
-use std::ops::Rem;
-use std::ops::Sub;
-use std::ops::{Add, Neg};
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub};
 
 use super::traits::{FieldBatchInversion, ModPowU64, New};
 

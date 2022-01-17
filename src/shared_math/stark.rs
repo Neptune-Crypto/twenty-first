@@ -1,21 +1,12 @@
 use crate::shared_math::ntt::intt;
-use crate::timing_reporter::TimingReporter;
-use rand::prelude::ThreadRng;
-use serde::{Deserialize, Serialize};
-// use crate::shared_math::fri::ValidationError;
-// use crate::shared_math::traits::{
-//     FieldBatchInversion, GetGeneratorDomain, GetRandomElements,
-//     ModPowU32, PrimeFieldElement,
-// };
-// use crate::util_types::proof_stream::ProofStream;
-// use crate::utils::{blake3_digest, get_index_from_bytes};
-// use super::mpolynomial::MPolynomial;
-// use crate::shared_math::ntt::intt;
-use crate::shared_math::traits::{CyclicGroupGenerator, IdentityValues};
+use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::x_field_element::XFieldElement;
+use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils;
+use rand::prelude::ThreadRng;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -132,9 +123,9 @@ impl Stark {
     pub fn prove(
         &self,
         // Trace is indexed as trace[cycle][register]
-        trace: &Vec<Vec<BFieldElement>>,
-        transition_constraints: &Vec<MPolynomial<BFieldElement>>,
-        boundary_constraints: &Vec<BoundaryConstraint>,
+        trace: &[Vec<BFieldElement>],
+        transition_constraints: &[MPolynomial<BFieldElement>],
+        boundary_constraints: &[BoundaryConstraint],
         proof_stream: &mut ProofStream,
         input_omicron: BFieldElement,
     ) -> Result<(u32, BFieldElement), Box<dyn Error>> {
@@ -146,7 +137,7 @@ impl Stark {
             roundup_npo2(original_trace_length + self.min_num_randomizers as u64);
         let num_randomizers = rounded_trace_length - original_trace_length;
         let tp_bounds =
-            self.transition_degree_bounds(&transition_constraints, rounded_trace_length as usize);
+            self.transition_degree_bounds(transition_constraints, rounded_trace_length as usize);
         let tp_degree = tp_bounds.iter().max().unwrap();
         let tq_degree = tp_degree - (original_trace_length - 1);
         let max_degree = roundup_npo2(tq_degree + 1) - 1; // The max degree bound provable by FRI
@@ -176,7 +167,7 @@ impl Stark {
 
         // ...
         let mut rng = rand::thread_rng();
-        let mut randomized_trace = trace.clone();
+        let mut randomized_trace = trace.to_owned();
         self.randomize_trace(&mut rng, &mut randomized_trace, num_randomizers);
 
         timer.elapsed("calculate and add randomizers");
@@ -229,7 +220,7 @@ impl Stark {
         let boundary_interpolants: Vec<Polynomial<BFieldElement>> =
             self.get_boundary_interpolants(bcs_formatted.clone());
         let boundary_zerofiers: Vec<Polynomial<BFieldElement>> =
-            self.get_boundary_zerofiers(bcs_formatted.clone());
+            self.get_boundary_zerofiers(bcs_formatted);
         let mut boundary_quotients: Vec<Polynomial<BFieldElement>> =
             vec![Polynomial::ring_zero(); self.num_registers as usize];
 
@@ -359,7 +350,7 @@ impl Stark {
         timer.elapsed("fast_coset_evaluate and commit randomizer codeword to proof stream");
 
         let expected_tq_degrees = self.transition_quotient_degree_bounds(
-            &transition_constraints,
+            transition_constraints,
             original_trace_length as usize,
             rounded_trace_length as usize,
         );
@@ -504,8 +495,8 @@ impl Stark {
     pub fn verify(
         &self,
         proof_stream: &mut ProofStream,
-        transition_constraints: &Vec<MPolynomial<BFieldElement>>,
-        boundary_constraints: &Vec<BoundaryConstraint>,
+        transition_constraints: &[MPolynomial<BFieldElement>],
+        boundary_constraints: &[BoundaryConstraint],
         fri_domain_length: u32,
         omega: BFieldElement,
         original_trace_length: u32,
@@ -626,7 +617,7 @@ impl Stark {
         let boundary_degrees = self
             .boundary_quotient_degree_bounds(&boundary_zerofiers, rounded_trace_length as usize);
         let expected_tq_degrees = self.transition_quotient_degree_bounds(
-            &transition_constraints,
+            transition_constraints,
             original_trace_length as usize,
             rounded_trace_length as usize,
         );
@@ -640,27 +631,25 @@ impl Stark {
 
         for (i, current_index) in indices.into_iter().enumerate() {
             let current_x: BFieldElement =
-                self.field_generator.clone() * omega.mod_pow(current_index as u64);
+                self.field_generator * omega.mod_pow(current_index as u64);
             let next_index: usize =
                 (current_index + blowup_factor_new as usize) % fri_domain_length as usize;
-            let next_x: BFieldElement =
-                self.field_generator.clone() * omega.mod_pow(next_index as u64);
+            let next_x: BFieldElement = self.field_generator * omega.mod_pow(next_index as u64);
             let mut current_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
                 .map(|r| {
-                    boundary_quotients[r][&current_index].clone()
+                    boundary_quotients[r][&current_index]
                         * boundary_zerofiers[r].evaluate(&current_x)
                         + boundary_interpolants[r].evaluate(&current_x)
                 })
                 .collect();
             let mut next_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
                 .map(|r| {
-                    boundary_quotients[r][&next_index].clone()
-                        * boundary_zerofiers[r].evaluate(&next_x)
+                    boundary_quotients[r][&next_index] * boundary_zerofiers[r].evaluate(&next_x)
                         + boundary_interpolants[r].evaluate(&next_x)
                 })
                 .collect();
 
-            let mut point: Vec<BFieldElement> = vec![current_x.clone()];
+            let mut point: Vec<BFieldElement> = vec![current_x];
             point.append(&mut current_trace);
             point.append(&mut next_trace);
 
@@ -729,7 +718,7 @@ impl Stark {
     fn format_boundary_constraints(
         &self,
         omicron: BFieldElement,
-        boundary_constraints: &Vec<BoundaryConstraint>,
+        boundary_constraints: &[BoundaryConstraint],
     ) -> Vec<Vec<(BFieldElement, BFieldElement)>> {
         let mut bcs: Vec<Vec<(BFieldElement, BFieldElement)>> =
             vec![vec![]; self.num_registers as usize];
