@@ -1,3 +1,7 @@
+use std::fmt::Display;
+
+use serde::{Deserialize, Serialize};
+
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::stark::BoundaryConstraint;
 use crate::shared_math::traits::IdentityValues;
@@ -7,7 +11,7 @@ use super::polynomial::Polynomial;
 use super::traits::{CyclicGroupGenerator, ModPowU64};
 
 // TODO: Make this work for XFieldElement via trait.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RescuePrime {
     pub m: usize,
     // rate: usize,
@@ -242,6 +246,16 @@ impl RescuePrime {
         bcs.push(end_constraint);
 
         bcs
+    }
+}
+
+impl Display for RescuePrime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "m = {}, N = {}, alpha = {}",
+            self.m, self.steps_count, self.alpha
+        )
     }
 }
 

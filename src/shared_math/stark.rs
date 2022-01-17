@@ -1,6 +1,7 @@
-use rand::prelude::ThreadRng;
-
 use crate::shared_math::ntt::intt;
+use crate::timing_reporter::TimingReporter;
+use rand::prelude::ThreadRng;
+use serde::{Deserialize, Serialize};
 // use crate::shared_math::fri::ValidationError;
 // use crate::shared_math::traits::{
 //     FieldBatchInversion, GetGeneratorDomain, GetRandomElements,
@@ -31,7 +32,7 @@ pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
 
 // TODO: Consider <B: PrimeFieldElement, X: PrimeFieldElement>
 // This requires a trait a la Lift<X> to generalise XFE::new_const().
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Stark {
     expansion_factor: u32,
     field_generator: BFieldElement,
@@ -137,31 +138,36 @@ impl Stark {
         proof_stream: &mut ProofStream,
         input_omicron: BFieldElement,
     ) -> Result<(u32, BFieldElement), Box<dyn Error>> {
+        let mut timer = TimingReporter::start();
+
         // infer details about computation
         let original_trace_length = trace.len() as u64;
         let rounded_trace_length =
             roundup_npo2(original_trace_length + self.min_num_randomizers as u64);
         let num_randomizers = rounded_trace_length - original_trace_length;
-
-        // let tp_degree = air_degree * (rounded_trace_length - 1);
         let tp_bounds =
             self.transition_degree_bounds(&transition_constraints, rounded_trace_length as usize);
         let tp_degree = tp_bounds.iter().max().unwrap();
-
         let tq_degree = tp_degree - (original_trace_length - 1);
         let max_degree = roundup_npo2(tq_degree + 1) - 1; // The max degree bound provable by FRI
         let fri_domain_length = (max_degree + 1) * self.expansion_factor as u64;
         let blowup_factor_new = fri_domain_length / rounded_trace_length;
+
+        timer.elapsed("calculate initial details");
 
         // compute generators
         let omega = BFieldElement::get_primitive_root_of_unity(fri_domain_length as u128)
             .0
             .unwrap();
 
+        timer.elapsed("calculate omega");
+
         let omicron_domain_length = rounded_trace_length;
         let omicron = BFieldElement::get_primitive_root_of_unity(omicron_domain_length as u128)
             .0
             .unwrap();
+
+        timer.elapsed("calculate omicron");
 
         assert_eq!(
             input_omicron, omicron,
@@ -173,6 +179,8 @@ impl Stark {
         let mut randomized_trace = trace.clone();
         self.randomize_trace(&mut rng, &mut randomized_trace, num_randomizers);
 
+        timer.elapsed("calculate and add randomizers");
+
         // ...
         let mut trace_interpolants = vec![];
         for r in 0..self.num_registers as usize {
@@ -181,32 +189,33 @@ impl Stark {
                 .map(|t| t[r])
                 .collect::<Vec<BFieldElement>>();
 
-            let trace_interpolant_coefficients = intt(trace_column, &omicron);
             let trace_interpolant = Polynomial {
-                coefficients: trace_interpolant_coefficients,
+                coefficients: intt(trace_column, &omicron),
             };
 
             // Sanity checks; consider moving into unit tests.
-            for (i, item) in trace.iter().enumerate() {
-                assert_eq!(
-                    item[r],
-                    trace_interpolant.evaluate(&omicron.mod_pow(i as u64)),
-                    "Trace interpolant evaluates back to trace element"
-                );
-            }
-            assert_eq!(
-                (randomized_trace.len() - 1) as isize,
-                trace_interpolant.degree(),
-                "Trace interpolant has one degree lower than the points"
-            );
+            // for (i, item) in trace.iter().enumerate() {
+            //     assert_eq!(
+            //         item[r],
+            //         trace_interpolant.evaluate(&omicron.mod_pow(i as u64)),
+            //         "Trace interpolant evaluates back to trace element"
+            //     );
+            // }
+            // assert_eq!(
+            //     (randomized_trace.len() - 1) as isize,
+            //     trace_interpolant.degree(),
+            //     "Trace interpolant has one degree lower than the points"
+            // );
 
             trace_interpolants.push(trace_interpolant);
         }
 
+        timer.elapsed("calculate intt for each column in trace");
+
         // Sanity check
-        for ti in trace_interpolants.iter() {
-            assert!(ti.degree() == rounded_trace_length as isize - 1);
-        }
+        // for ti in trace_interpolants.iter() {
+        //     assert!(ti.degree() == rounded_trace_length as isize - 1);
+        // }
 
         //// bq(x) = (ti(x) - bi(x)) / bz(x)
         //
@@ -224,6 +233,9 @@ impl Stark {
         let mut boundary_quotients: Vec<Polynomial<BFieldElement>> =
             vec![Polynomial::ring_zero(); self.num_registers as usize];
 
+        timer.elapsed("calculate intt for each column in trace");
+
+        // FIXME: Consider coset_divide
         for r in 0..self.num_registers as usize {
             let div_res = (trace_interpolants[r].clone() - boundary_interpolants[r].clone())
                 .divide(boundary_zerofiers[r].clone());
@@ -235,6 +247,8 @@ impl Stark {
             boundary_quotients[r] = div_res.0;
         }
 
+        timer.elapsed("calculate boundary quotients");
+
         // Commit to boundary quotients
         // TODO: Consider salted Merkle trees here.
         let mut boundary_quotient_merkle_trees: Vec<MerkleTree<BFieldElement>> = vec![];
@@ -245,6 +259,8 @@ impl Stark {
             proof_stream.enqueue(&bq_merkle_tree.get_root())?;
             boundary_quotient_merkle_trees.push(bq_merkle_tree);
         }
+
+        timer.elapsed("calculate boundary and commit quotient codewords to proof stream");
 
         //// tq(x) = tp(x) / tz(x)
         //
@@ -267,25 +283,32 @@ impl Stark {
                 .map(|ti| ti.scale(&omicron))
                 .collect(),
         );
+
+        timer.elapsed("scale trace interpolants");
+
         let transition_polynomials: Vec<Polynomial<BFieldElement>> = transition_constraints
             .iter()
             .map(|x| x.evaluate_symbolic(&point))
             .collect();
 
+        timer.elapsed("symbolically evaluate transition constraints");
+
         // TODO: Sanity check REMOVE
-        for tp in transition_polynomials.iter() {
-            assert_eq!(*tp_degree, tp.degree() as u64);
-            for i in 0..original_trace_length - 1 {
-                let x = omicron.mod_pow(i);
-                assert!(tp.evaluate(&x).is_zero());
-            }
-        }
+        // for tp in transition_polynomials.iter() {
+        //     assert_eq!(*tp_degree, tp.degree() as u64);
+        //     for i in 0..original_trace_length - 1 {
+        //         let x = omicron.mod_pow(i);
+        //         assert!(tp.evaluate(&x).is_zero());
+        //     }
+        // }
 
         let transition_zerofier: Polynomial<BFieldElement> = self.get_transition_zerofier(
             omicron,
             omicron_domain_length as usize,
             original_trace_length as usize,
         );
+
+        timer.elapsed("get transition zerofiers");
 
         // FIXME: Use this in combination with LeaflessPartialAuthenticationPaths.
         let _transition_zerofier_mt: MerkleTree<BFieldElement> = self.get_transition_zerofier_mt(
@@ -294,17 +317,19 @@ impl Stark {
             fri_domain_length as usize,
         );
 
+        timer.elapsed("get transition zerofier merkle trees");
+
         // divide out transition zerofier
         let transition_quotients: Vec<Polynomial<BFieldElement>> = transition_polynomials
             .iter()
             .map(|tp| {
                 // Sanity check, remove
-                let (_quot, rem) = tp.divide(transition_zerofier.clone());
-                assert_eq!(
-                    Polynomial::ring_zero(),
-                    rem,
-                    "Remainder must be zero when calculating transition quotient"
-                );
+                // let (_quot, rem) = tp.divide(transition_zerofier.clone());
+                // assert_eq!(
+                //     Polynomial::ring_zero(),
+                //     rem,
+                //     "Remainder must be zero when calculating transition quotient"
+                // );
 
                 Polynomial::fast_coset_divide(
                     tp,
@@ -315,6 +340,8 @@ impl Stark {
                 )
             })
             .collect();
+
+        timer.elapsed("fast_coset_divide each transition polynomial");
 
         // Commit to randomizer polynomial
         let randomizer_polynomial = Polynomial {
@@ -329,11 +356,15 @@ impl Stark {
         let randomizer_mt = MerkleTree::from_vec(&randomizer_codeword);
         proof_stream.enqueue(&randomizer_mt.get_root())?;
 
+        timer.elapsed("fast_coset_evaluate and commit randomizer codeword to proof stream");
+
         let expected_tq_degrees = self.transition_quotient_degree_bounds(
             &transition_constraints,
             original_trace_length as usize,
             rounded_trace_length as usize,
         );
+
+        timer.elapsed("calculate transition_quotient_degree_bounds");
 
         // Sanity check; Consider moving to unit test,
         for r in 0..self.num_registers as usize {
@@ -348,6 +379,8 @@ impl Stark {
         let boundary_degrees = self
             .boundary_quotient_degree_bounds(&boundary_zerofiers, rounded_trace_length as usize);
 
+        timer.elapsed("calculate boundary_quotient_degree_bounds");
+
         let mut terms: Vec<Polynomial<BFieldElement>> = vec![randomizer_polynomial];
         for (tq, tq_degree) in transition_quotients.iter().zip(expected_tq_degrees.iter()) {
             terms.push(tq.to_owned());
@@ -355,7 +388,7 @@ impl Stark {
 
             // Make new polynomial with max_degree degree by shifting all terms up
             let shifted = tq.shift_coefficients(shift as usize, BFieldElement::ring_zero());
-            assert_eq!(max_degree as isize, shifted.degree()); // TODO: Can be removed
+            assert_eq!(max_degree as isize, shifted.degree());
             terms.push(shifted);
         }
         for (bq, bq_degree) in boundary_quotients.iter().zip(boundary_degrees.iter()) {
@@ -364,9 +397,11 @@ impl Stark {
 
             // Make new polynomial with max_degree degree by shifting all terms up
             let shifted = bq.shift_coefficients(shift, BFieldElement::ring_zero());
-            assert_eq!(max_degree as isize, shifted.degree()); // TODO: Can be removed
+            assert_eq!(max_degree as isize, shifted.degree());
             terms.push(shifted);
         }
+
+        timer.elapsed("calculate terms");
 
         // Take weighted sum
         // # get weights for nonlinear combination
@@ -383,6 +418,9 @@ impl Stark {
             terms.len(),
             "weights and terms length must match"
         );
+
+        timer.elapsed("calculate prover_fiat_shamir");
+
         let combination = weights
             .iter()
             .zip(terms.iter())
@@ -390,11 +428,15 @@ impl Stark {
                 sum + pol.scalar_mul(weight.to_owned())
             });
 
+        timer.elapsed("calculate prover_fiat_shamir");
+
         let combined_codeword = combination.fast_coset_evaluate(
             &self.field_generator,
             &omega,
             fri_domain_length as usize,
         );
+
+        timer.elapsed("calculate fast_coset_evaluate of combination polynomial");
 
         // Prove low degree of combination polynomial, and collect indices
         let fri = Fri::<XFieldElement>::new(
@@ -412,6 +454,8 @@ impl Stark {
             .collect();
 
         let indices: Vec<usize> = fri.prove(&lifted_combined_codeword, proof_stream)?;
+
+        timer.elapsed("calculate fri.prove()");
 
         // Process indices
         let mut duplicated_indices = indices.clone();
@@ -432,6 +476,8 @@ impl Stark {
         );
         quadrupled_indices.sort_unstable();
 
+        timer.elapsed("sort quadrupled indices");
+
         // FIXME: Use newer leafless_* MT functions below. They don't currently export the subset of values.
         // Vec<LeaflessPartialAuthenticationPath> -> Vec<(LeaflessPartialAuthenticationPath, U)>
 
@@ -442,9 +488,15 @@ impl Stark {
             proof_stream.enqueue_length_prepended(&authentication_paths)?;
         }
 
+        timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for all boundary quotient merkle trees");
+
         // Open indicated positions in the randomizer
         let randomizer_auth_path = randomizer_mt.get_multi_proof(&quadrupled_indices);
         proof_stream.enqueue_length_prepended(&randomizer_auth_path)?;
+
+        timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for randomizer");
+        let report = timer.finish();
+        println!("{}", report);
 
         Ok((fri_domain_length as u32, omega))
     }
@@ -458,8 +510,8 @@ impl Stark {
         omega: BFieldElement,
         original_trace_length: u32,
     ) -> Result<(), Box<dyn Error>> {
-        assert!(omega.mod_pow(fri_domain_length as u64).is_one());
-        assert!(!omega.mod_pow((fri_domain_length / 2) as u64).is_one());
+        // assert!(omega.mod_pow(fri_domain_length as u64).is_one());
+        // assert!(!omega.mod_pow((fri_domain_length / 2) as u64).is_one());
 
         // Get Merkle root of boundary quotient codewords
         let mut boundary_quotient_mt_roots: Vec<[u8; 32]> = vec![];
@@ -822,6 +874,8 @@ pub mod test_stark {
     use super::*;
     use crate::shared_math::rescue_prime::RescuePrime;
     use crate::shared_math::rescue_prime_params as params;
+    use crate::timing_reporter::TimingReporter;
+    use serde_json;
 
     #[test]
     fn prove_something_test() {
@@ -863,16 +917,25 @@ pub mod test_stark {
 
     #[test]
     fn prove_and_verify_medium_stark_test() {
+        // let rp: RescuePrime = params::rescue_prime_params_bfield_0();
         let rp: RescuePrime = params::rescue_prime_medium_test_params();
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
         let one = BFieldElement::ring_one();
         let (output, trace) = rp.eval_and_trace(&one);
-        assert_eq!(6, trace.len());
+        // assert_eq!(stark.steps_count + 1, trace.len());
 
+        // FIXME: Don't hardcode omicron domain length
         let omicron = BFieldElement::get_primitive_root_of_unity(16).0.unwrap();
+
+        let mut timer = TimingReporter::start();
         let air_constraints = rp.get_air_constraints(omicron);
+        timer.elapsed("rp.get_air_constraints(omicron)");
         let boundary_constraints = rp.get_boundary_constraints(output);
+        timer.elapsed("rp.get_boundary_constraints(output)");
+        let report = timer.finish();
+        println!("{}", report);
+
         let mut proof_stream = ProofStream::default();
 
         let prove_result = stark.prove(
@@ -895,6 +958,9 @@ pub mod test_stark {
             omega,
             trace.len() as u32,
         );
+
+        println!("rescue-prime params: {}", rp);
+        println!("stark params: {}", serde_json::to_string(&stark).unwrap());
 
         assert!(verify_result.is_ok());
     }

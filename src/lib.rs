@@ -11,6 +11,7 @@ mod hello_world;
 pub mod homomorphic_encryption;
 mod primitives;
 pub mod shared_math;
+mod timing_reporter;
 mod types;
 pub mod util_types;
 mod utils;
