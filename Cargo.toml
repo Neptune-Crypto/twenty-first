@@ -55,6 +55,10 @@ harness = false
 name = "rescue_prime_air_constraints"
 harness = false
 
+[[bench]]
+name = "stark"
+harness = false
+
 [profile.dev]
 opt-level = 0
 debug = true
