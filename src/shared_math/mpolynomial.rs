@@ -256,7 +256,7 @@ impl<
             for i in 0..k.len() {
                 prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
             }
-            acc = acc + prod;
+            acc += prod;
         }
 
         acc

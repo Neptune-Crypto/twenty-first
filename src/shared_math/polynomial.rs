@@ -270,6 +270,35 @@ impl<
         coefficients.reverse();
         Polynomial { coefficients }
     }
+
+    pub fn square(&self) -> Self {
+        let degree = self.degree();
+        if degree == -1 {
+            return Self::ring_zero();
+        }
+
+        let squared_coefficient_len = self.degree() as usize * 2 + 1;
+        let zero = self.coefficients[0].ring_zero();
+        let one = zero.ring_one();
+        let two = one.clone() + one;
+        let mut squared_coefficients = vec![zero; squared_coefficient_len];
+
+        for i in 0..self.coefficients.len() {
+            let ci = self.coefficients[i].clone();
+            squared_coefficients[2 * i] =
+                squared_coefficients[2 * i].clone() + ci.clone() * ci.clone();
+
+            for j in i + 1..self.coefficients.len() {
+                let cj = self.coefficients[j].clone();
+                squared_coefficients[i + j] =
+                    squared_coefficients[i + j].clone() + two.clone() * ci.clone() * cj;
+            }
+        }
+
+        Self {
+            coefficients: squared_coefficients,
+        }
+    }
 }
 
 impl<
@@ -761,7 +790,7 @@ impl<
         let mut acc = Polynomial::from_constant(one);
         let bit_length: u64 = pow.bits();
         for i in 0..bit_length {
-            acc = acc.clone() * acc.clone();
+            acc = acc.square();
             let set: bool =
                 !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
             if set {
@@ -934,6 +963,33 @@ impl<
 }
 
 impl<
+        U: Add<Output = U>
+            + Div
+            + Mul
+            + Sub
+            + IdentityValues
+            + Clone
+            + PartialEq
+            + Eq
+            + Display
+            + Debug,
+    > AddAssign for Polynomial<U>
+{
+    fn add_assign(&mut self, rhs: Self) {
+        let rhs_len = rhs.coefficients.len();
+        let self_len = self.coefficients.len();
+        for i in 0..std::cmp::min(self_len, rhs_len) {
+            self.coefficients[i] = self.coefficients[i].clone() + rhs.coefficients[i].clone();
+        }
+
+        if rhs_len > self_len {
+            self.coefficients
+                .append(&mut rhs.coefficients[self_len..].to_vec());
+        }
+    }
+}
+
+impl<
         U: Add
             + Div
             + Mul
@@ -1003,9 +1059,11 @@ mod test_polynomials {
     use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::utils::generate_random_numbers;
     use num_bigint::BigInt;
+    use rand::RngCore;
 
     fn b(x: i128) -> BigInt {
         Into::<BigInt>::into(x)
@@ -1867,6 +1925,15 @@ mod test_polynomials {
     }
 
     #[test]
+    fn mod_pow_arbitrary_test() {
+        let poly = gen_polynomial();
+        let actual = poly.mod_pow(4.into(), BFieldElement::ring_one());
+        let expected = poly.clone() * poly.clone() * poly.clone() * poly.clone();
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
     fn polynomial_arithmetic_property_based_test() {
         let prime_modulus = 71;
         let _71 = PrimeField::new(prime_modulus);
@@ -2712,5 +2779,71 @@ mod test_polynomials {
 
         assert_eq!(expected_sixth_quot, actual_sixth_quot);
         assert_eq!(expected_sixth_rem, actual_sixth_rem);
+    }
+
+    #[test]
+    fn add_assign_test() {
+        for _ in 0..10 {
+            let poly1 = gen_polynomial();
+            let poly2 = gen_polynomial();
+            let expected = poly1.clone() + poly2.clone();
+            let mut actual = poly1.clone();
+            actual += poly2.clone();
+
+            assert_eq!(expected, actual);
+        }
+    }
+
+    #[test]
+    fn square_simple_test() {
+        let coefficients = vec![14, 1, 3, 4]
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect::<Vec<BFieldElement>>();
+        let poly = Polynomial { coefficients };
+        let expected = Polynomial {
+            coefficients: vec![
+                14 * 14,            // 0th degree
+                2 * 14,             // 1st degree
+                2 * 3 * 14 + 1,     // 2nd degree
+                2 * 3 + 2 * 4 * 14, // 3rd degree
+                3 * 3 + 2 * 1 * 4,  // 4th degree
+                2 * 3 * 4,          // 5th degree
+                4 * 4,              // 6th degree
+            ]
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect::<Vec<BFieldElement>>(),
+        };
+
+        assert_eq!(expected, poly.square());
+    }
+
+    #[test]
+    fn square_test() {
+        for _ in 0..10 {
+            let poly = gen_polynomial();
+            let actual = poly.square();
+            let expected = poly.clone() * poly;
+            assert_eq!(expected, actual);
+        }
+    }
+
+    #[test]
+    fn mul_commutative_test() {
+        let a = gen_polynomial();
+        let b = gen_polynomial();
+        let ab = a.clone() * b.clone();
+        let ba = b.clone() * a.clone();
+        assert_eq!(ab, ba);
+    }
+
+    fn gen_polynomial() -> Polynomial<BFieldElement> {
+        let mut rng = rand::thread_rng();
+        let coefficient_count = rng.next_u64() as usize % 40;
+
+        Polynomial {
+            coefficients: BFieldElement::random_elements(coefficient_count, &mut rng),
+        }
     }
 }
