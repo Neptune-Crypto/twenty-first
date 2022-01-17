@@ -67,20 +67,46 @@ impl TimingReporter {
 
 impl Display for TimingReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let width = self
+        let columns: Vec<(String, String)> = self
             .step_durations
+            .iter()
+            .map(|(label, duration)| (label.clone(), format!("{:.2?}", duration)))
+            .collect();
+
+        let label_width = columns
             .iter()
             .map(|(label, _)| label.len())
             .max()
             .unwrap_or(0);
 
-        for (label, duration) in self.step_durations.iter() {
-            write!(f, "{}", label)?;
-            let padding = String::from_utf8(vec![b' '; width - label.len() + 1]).unwrap();
-            write!(f, "{}", padding)?;
-            writeln!(f, "{:.2?}", duration)?;
+        let duration_width = columns
+            .iter()
+            .map(|(_, duration)| duration.len())
+            .max()
+            .unwrap_or(0);
+
+        let space = 2;
+        for (label, duration) in columns {
+            let padding = String::from_utf8(vec![b' '; label_width - label.len() + space]).unwrap();
+            writeln!(f, "{}{}{}", label, padding, duration)?;
         }
 
-        writeln!(f)
+        writeln!(
+            f,
+            "{}{}{}",
+            String::from_utf8(vec![b'-'; label_width]).unwrap(),
+            String::from_utf8(vec![b' '; space]).unwrap(),
+            String::from_utf8(vec![b'-'; duration_width]).unwrap()
+        )?;
+
+        let total_label = "total";
+        let total_padding =
+            String::from_utf8(vec![b' '; label_width - total_label.len() + space]).unwrap();
+
+        writeln!(
+            f,
+            "{}{}{:.2?}",
+            total_label, total_padding, self.total_duration
+        )
     }
 }

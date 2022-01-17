@@ -432,7 +432,7 @@ impl Stark {
                 sum + pol.scalar_mul(weight.to_owned())
             });
 
-        timer.elapsed("calculate prover_fiat_shamir");
+        timer.elapsed("calculate sum of combination polynomial");
 
         let combined_codeword = combination.fast_coset_evaluate(
             &self.field_generator,
@@ -970,6 +970,7 @@ pub mod test_stark {
 
         println!("rescue-prime params: {}", rp);
         println!("stark params: {}", serde_json::to_string(&stark).unwrap());
+        println!("proof_stream: {} bytes", proof_stream.len());
 
         assert!(verify_result.is_ok());
     }
