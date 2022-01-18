@@ -176,6 +176,10 @@ impl<
         self.degree() == 0 && self.coefficients[0].is_one()
     }
 
+    pub fn is_x(&self) -> bool {
+        self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
+    }
+
     pub fn evaluate(&self, x: &U) -> U {
         let mut acc = x.ring_zero();
         for c in self.coefficients.iter().rev() {
@@ -2788,6 +2792,52 @@ mod test_polynomials {
 
             assert_eq!(expected, actual);
         }
+    }
+
+    #[test]
+    fn is_x_test() {
+        let zero: Polynomial<BFieldElement> = Polynomial::ring_zero();
+        assert!(!zero.is_x());
+
+        let one: Polynomial<BFieldElement> = Polynomial {
+            coefficients: vec![BFieldElement::ring_one()],
+        };
+        assert!(!one.is_x());
+        let x: Polynomial<BFieldElement> = Polynomial {
+            coefficients: vec![BFieldElement::ring_zero(), BFieldElement::ring_one()],
+        };
+        assert!(x.is_x());
+        let x_alt: Polynomial<BFieldElement> = Polynomial {
+            coefficients: vec![
+                BFieldElement::ring_zero(),
+                BFieldElement::ring_one(),
+                BFieldElement::ring_zero(),
+            ],
+        };
+        assert!(x_alt.is_x());
+        let x_alt_alt: Polynomial<BFieldElement> = Polynomial {
+            coefficients: vec![
+                BFieldElement::ring_zero(),
+                BFieldElement::ring_one(),
+                BFieldElement::ring_zero(),
+                BFieldElement::ring_zero(),
+            ],
+        };
+        assert!(x_alt_alt.is_x());
+        let _2x: Polynomial<BFieldElement> = Polynomial {
+            coefficients: vec![
+                BFieldElement::ring_zero(),
+                BFieldElement::ring_one() + BFieldElement::ring_one(),
+            ],
+        };
+        assert!(!_2x.is_x());
+        let not_x = Polynomial {
+            coefficients: vec![14, 1, 3, 4]
+                .into_iter()
+                .map(BFieldElement::new)
+                .collect::<Vec<BFieldElement>>(),
+        };
+        assert!(!not_x.is_x());
     }
 
     #[test]
