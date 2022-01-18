@@ -548,7 +548,7 @@ pub struct SaltedMerkleTree<T> {
 
 impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleTree<T> {
     // Build a salted Merkle tree from a slice of serializable values
-    pub fn from_vec(values: &[T], salts_per_element: usize, mut rng: &mut ThreadRng) -> Self {
+    pub fn from_vec(values: &[T], salts_per_element: usize, rng: &mut ThreadRng) -> Self {
         // verify that length of input is power of 2
         if values.len() & (values.len() - 1) != 0 {
             panic!("Size of input for Merkle tree must be a power of 2");
@@ -562,7 +562,7 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
             2 * values.len()
         ];
 
-        let salts: Vec<T> = T::random_elements(salts_per_element * values.len(), &mut rng);
+        let salts: Vec<T> = T::random_elements(salts_per_element * values.len(), rng);
         for i in 0..values.len() {
             let mut leaf_hash_preimage: Vec<u8> =
                 bincode::serialize(&values[i]).expect("Encoding failed");
