@@ -4,13 +4,14 @@ use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
 use num_bigint::BigInt;
-use num_traits::Zero;
+use num_traits::{One, Zero};
 use std::convert::From;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub};
 
-use super::traits::{FieldBatchInversion, ModPowU64, New};
+use super::other::roundup_npo2;
+use super::traits::{FieldBatchInversion, GetPrimitiveRootOfUnity, ModPowU64, New};
 
 fn degree_raw<T: Add + Div + Mul + Sub + IdentityValues + Display>(coefficients: &[T]) -> isize {
     let mut deg = coefficients.len() as isize - 1;
@@ -184,7 +185,6 @@ impl<
         let mut acc = x.ring_zero();
         for c in self.coefficients.iter().rev() {
             acc = c.to_owned() + x.to_owned() * acc;
-            // acc = c + x * &acc;
         }
 
         acc
@@ -271,7 +271,8 @@ impl<
         Polynomial { coefficients }
     }
 
-    pub fn square(&self) -> Self {
+    // Slow square implementation that does not use NTT
+    pub fn slow_square(&self) -> Self {
         let degree = self.degree();
         if degree == -1 {
             return Self::ring_zero();
@@ -447,6 +448,129 @@ impl<
         let ys: Vec<U> = points.iter().map(|x| x.1.to_owned()).collect();
 
         Self::slow_lagrange_interpolation_internal(&xs, &ys)
+    }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Neg<Output = U>
+            + Sized
+            + New
+            + ModPowU64
+            + GetPrimitiveRootOfUnity
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + std::fmt::Debug
+            + std::fmt::Display
+            + PartialEq
+            + Eq,
+    > Polynomial<U>
+{
+    // It is the caller's responsibility that this function
+    // is called with sufficiently large input to be safe
+    // and to be faster than `square`.
+    pub fn fast_square(&self) -> Self {
+        let degree = self.degree();
+        if degree == -1 {
+            return Self::ring_zero();
+        }
+        if degree == 0 {
+            return Self::from_constant(
+                self.coefficients[0].clone() * self.coefficients[0].clone(),
+            );
+        }
+
+        let result_degree: u64 = 2 * self.degree() as u64;
+        let order = roundup_npo2(result_degree + 1);
+        let (root_res, _) = self.coefficients[0].get_primitive_root_of_unity(order as u128);
+        let root = match root_res {
+            Some(n) => n,
+            None => panic!("Failed to find primitive root for order = {}", order),
+        };
+
+        let mut coefficients = self.coefficients.to_vec();
+        coefficients.resize(order as usize, root.ring_zero());
+        let mut codeword: Vec<U> = ntt(&coefficients, &root);
+        for element in codeword.iter_mut() {
+            *element = element.to_owned() * element.to_owned();
+        }
+
+        let mut res_coefficients = intt(&codeword, &root);
+        res_coefficients.truncate(result_degree as usize + 1);
+
+        Polynomial {
+            coefficients: res_coefficients,
+        }
+    }
+
+    pub fn square(&self) -> Self {
+        let degree = self.degree();
+        if degree == -1 {
+            return Self::ring_zero();
+        }
+
+        // A benchmark run on sword_smith's PC revealed that
+        // `fast_square` was faster when the input size exceeds
+        // a length of 64.
+        let squared_coefficient_len = self.degree() as usize * 2 + 1;
+        if squared_coefficient_len > 64 {
+            return self.fast_square();
+        }
+
+        let zero = self.coefficients[0].ring_zero();
+        let one = zero.ring_one();
+        let two = one.clone() + one;
+        let mut squared_coefficients = vec![zero; squared_coefficient_len];
+
+        for i in 0..self.coefficients.len() {
+            let ci = self.coefficients[i].clone();
+            squared_coefficients[2 * i] =
+                squared_coefficients[2 * i].clone() + ci.clone() * ci.clone();
+
+            for j in i + 1..self.coefficients.len() {
+                let cj = self.coefficients[j].clone();
+                squared_coefficients[i + j] =
+                    squared_coefficients[i + j].clone() + two.clone() * ci.clone() * cj;
+            }
+        }
+
+        Self {
+            coefficients: squared_coefficients,
+        }
+    }
+
+    pub fn fast_mod_pow(&self, pow: BigInt, one: U) -> Self {
+        assert!(one.is_one(), "Provided one must be one");
+
+        // Special case to handle 0^0 = 1
+        if pow.is_zero() {
+            return Self::from_constant(one);
+        }
+
+        if self.is_zero() {
+            return Self::ring_zero();
+        }
+
+        if pow.is_one() {
+            return self.clone();
+        }
+
+        let one = self.coefficients.last().unwrap().ring_one();
+        let mut acc = Polynomial::from_constant(one);
+        let bit_length: u64 = pow.bits();
+        for i in 0..bit_length {
+            acc = acc.square();
+            let set: bool =
+                !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
+            if set {
+                acc = self.to_owned() * acc;
+            }
+        }
+
+        acc
     }
 }
 
@@ -790,7 +914,7 @@ impl<
         let mut acc = Polynomial::from_constant(one);
         let bit_length: u64 = pow.bits();
         for i in 0..bit_length {
-            acc = acc.square();
+            acc = acc.slow_square();
             let set: bool =
                 !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
             if set {
@@ -1926,11 +2050,20 @@ mod test_polynomials {
 
     #[test]
     fn mod_pow_arbitrary_test() {
-        let poly = gen_polynomial();
-        let actual = poly.mod_pow(4.into(), BFieldElement::ring_one());
-        let expected = poly.clone() * poly.clone() * poly.clone() * poly.clone();
+        for _ in 0..20 {
+            let poly = gen_polynomial();
+            for i in 0..15 {
+                let actual = poly.mod_pow(i.into(), BFieldElement::ring_one());
+                let fast_actual = poly.fast_mod_pow(i.into(), BFieldElement::ring_one());
+                let mut expected = Polynomial::from_constant(BFieldElement::ring_one());
+                for _ in 0..i {
+                    expected = expected.clone() * poly.clone();
+                }
 
-        assert_eq!(expected, actual);
+                assert_eq!(expected, actual);
+                assert_eq!(expected, fast_actual);
+            }
+        }
     }
 
     #[test]
@@ -2863,25 +2996,57 @@ mod test_polynomials {
         };
 
         assert_eq!(expected, poly.square());
+        assert_eq!(expected, poly.slow_square());
+    }
+
+    #[test]
+    fn fast_square_test() {
+        let mut poly: Polynomial<BFieldElement> = Polynomial {
+            coefficients: vec![],
+        };
+        assert!(poly.fast_square().is_zero());
+
+        // square P(x) = x + 1; (P(x))^2 = (x + 1)^2 = x^2 + 2x + 1
+        poly.coefficients = vec![1, 1].into_iter().map(BFieldElement::new).collect();
+        let mut expected: Polynomial<BFieldElement> = Polynomial {
+            coefficients: vec![1, 2, 1].into_iter().map(BFieldElement::new).collect(),
+        };
+        assert_eq!(expected, poly.fast_square());
+
+        // square P(x) = x^15; (P(x))^2 = (x^15)^2 = x^30
+        poly.coefficients = vec![0; 16].into_iter().map(BFieldElement::new).collect();
+        poly.coefficients[15] = BFieldElement::ring_one();
+        expected.coefficients = vec![0; 32].into_iter().map(BFieldElement::new).collect();
+        expected.coefficients[30] = BFieldElement::ring_one();
+        assert_eq!(expected, poly.fast_square());
     }
 
     #[test]
     fn square_test() {
-        for _ in 0..10 {
-            let poly = gen_polynomial();
+        let one_pol = Polynomial {
+            coefficients: vec![BFieldElement::ring_one()],
+        };
+        for _ in 0..1000 {
+            let poly = gen_polynomial() + one_pol.clone();
             let actual = poly.square();
+            let fast_square_actual = poly.fast_square();
+            let slow_square_actual = poly.slow_square();
             let expected = poly.clone() * poly;
             assert_eq!(expected, actual);
+            assert_eq!(expected, fast_square_actual);
+            assert_eq!(expected, slow_square_actual);
         }
     }
 
     #[test]
     fn mul_commutative_test() {
-        let a = gen_polynomial();
-        let b = gen_polynomial();
-        let ab = a.clone() * b.clone();
-        let ba = b.clone() * a.clone();
-        assert_eq!(ab, ba);
+        for _ in 0..10 {
+            let a = gen_polynomial();
+            let b = gen_polynomial();
+            let ab = a.clone() * b.clone();
+            let ba = b.clone() * a.clone();
+            assert_eq!(ab, ba);
+        }
     }
 
     fn gen_polynomial() -> Polynomial<BFieldElement> {
