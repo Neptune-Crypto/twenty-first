@@ -254,7 +254,15 @@ impl<
         for (k, v) in self.coefficients.iter() {
             let mut prod = Polynomial::from_constant(v.clone());
             for i in 0..k.len() {
-                prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
+                // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some small optimizations
+                // prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
+                prod = if k[i] == 0 {
+                    prod
+                } else if point[i].is_x() {
+                    prod * point[i].shift_coefficients(k[i] as usize - 1, v.ring_zero())
+                } else {
+                    prod * point[i].mod_pow(k[i].into(), v.ring_one())
+                };
             }
             acc += prod;
         }
