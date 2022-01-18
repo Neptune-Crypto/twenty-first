@@ -262,7 +262,7 @@ impl Display for RescuePrime {
 #[cfg(test)]
 mod rescue_prime_test {
     use super::*;
-    use crate::shared_math::rescue_prime_params as params;
+    use crate::shared_math::{rescue_prime_params as params, traits::GetPrimitiveRootOfUnity};
 
     #[test]
     fn hash_test() {
@@ -299,7 +299,7 @@ mod rescue_prime_test {
         // let rp = params::rescue_prime_params_bfield_0();
 
         // rescue prime test vector 1
-        let omicron_res = BFieldElement::get_primitive_root_of_unity(1 << 5);
+        let omicron_res = BFieldElement::ring_zero().get_primitive_root_of_unity(1 << 5);
         let omicron = omicron_res.0.unwrap();
 
         // Verify that the round constants polynomials are correct

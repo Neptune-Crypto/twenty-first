@@ -13,6 +13,8 @@ use std::{
     ops::{Add, Mul, Neg, Sub},
 };
 
+use super::traits::GetPrimitiveRootOfUnity;
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
     pub coefficients: [BFieldElement; 3],
@@ -133,13 +135,6 @@ impl XFieldElement {
         a.into()
     }
 
-    pub fn get_primitive_root_of_unity(n: u128) -> (Option<XFieldElement>, Vec<u128>) {
-        let (b_root, primes) = BFieldElement::get_primitive_root_of_unity(n);
-        let x_root = b_root.map(XFieldElement::new_const);
-
-        (x_root, primes)
-    }
-
     // `incr` and `decr` are mainly used for testing purposes
     pub fn incr(&mut self, index: usize) {
         self.coefficients[index].increment();
@@ -150,6 +145,15 @@ impl XFieldElement {
     }
 
     // TODO: legendre_symbol
+}
+
+impl GetPrimitiveRootOfUnity for XFieldElement {
+    fn get_primitive_root_of_unity(&self, n: u128) -> (Option<XFieldElement>, Vec<u128>) {
+        let (b_root, primes) = self.coefficients[0].get_primitive_root_of_unity(n);
+        let x_root = b_root.map(XFieldElement::new_const);
+
+        (x_root, primes)
+    }
 }
 
 impl FieldBatchInversion for XFieldElement {
@@ -184,8 +188,8 @@ impl FieldBatchInversion for XFieldElement {
 }
 
 impl GetRandomElements for XFieldElement {
-    fn random_elements(length: usize, mut rng: &mut ThreadRng) -> Vec<Self> {
-        let b_values: Vec<BFieldElement> = BFieldElement::random_elements(length * 3, &mut rng);
+    fn random_elements(length: usize, rng: &mut ThreadRng) -> Vec<Self> {
+        let b_values: Vec<BFieldElement> = BFieldElement::random_elements(length * 3, rng);
 
         let mut values: Vec<XFieldElement> = Vec::with_capacity(length as usize);
         for i in 0..length as usize {
@@ -866,7 +870,10 @@ mod x_field_element_test {
                 .iter()
                 .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
                 .collect();
-            let root = XFieldElement::get_primitive_root_of_unity(i).0.unwrap();
+            let root = XFieldElement::ring_zero()
+                .get_primitive_root_of_unity(i)
+                .0
+                .unwrap();
             let outputs = ntt::ntt(&inputs, &root);
             let inverted_outputs = ntt::intt(&outputs, &root);
             assert_eq!(inputs, inverted_outputs);

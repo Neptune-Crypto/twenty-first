@@ -23,6 +23,7 @@ itertools = "0.10"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 paw = "1.0"
+phf = { version = "0.10", features = ["macros"] }
 rand = "0.8"
 rand_distr = "0.4"
 rand_pcg = "0.3"

@@ -3,6 +3,7 @@ use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::rescue_prime::RescuePrime;
 use twenty_first::shared_math::rescue_prime_params as params;
 use twenty_first::shared_math::stark::Stark;
+use twenty_first::shared_math::traits::GetPrimitiveRootOfUnity;
 use twenty_first::util_types::proof_stream::ProofStream;
 
 fn stark_medium(criterion: &mut Criterion) {
@@ -16,7 +17,10 @@ fn stark_medium(criterion: &mut Criterion) {
         bencher.iter(|| {
             let one = BFieldElement::ring_one();
             let (output, trace) = rp.eval_and_trace(&one);
-            let omicron = BFieldElement::get_primitive_root_of_unity(16).0.unwrap();
+            let omicron = BFieldElement::ring_zero()
+                .get_primitive_root_of_unity(16)
+                .0
+                .unwrap();
             let air_constraints = rp.get_air_constraints(omicron);
             let boundary_constraints = rp.get_boundary_constraints(output);
             let mut proof_stream = ProofStream::default();

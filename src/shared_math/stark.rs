@@ -15,7 +15,7 @@ use super::b_field_element::BFieldElement;
 use super::mpolynomial::MPolynomial;
 use super::other::roundup_npo2;
 use super::polynomial::Polynomial;
-use super::traits::GetRandomElements;
+use super::traits::{GetPrimitiveRootOfUnity, GetRandomElements};
 use super::x_field_fri::Fri;
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
@@ -147,14 +147,16 @@ impl Stark {
         timer.elapsed("calculate initial details");
 
         // compute generators
-        let omega = BFieldElement::get_primitive_root_of_unity(fri_domain_length as u128)
+        let omega = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(fri_domain_length as u128)
             .0
             .unwrap();
 
         timer.elapsed("calculate omega");
 
         let omicron_domain_length = rounded_trace_length;
-        let omicron = BFieldElement::get_primitive_root_of_unity(omicron_domain_length as u128)
+        let omicron = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(omicron_domain_length as u128)
             .0
             .unwrap();
 
@@ -606,7 +608,8 @@ impl Stark {
             });
 
         // FIXME: Can we calculate this faster using omega?
-        let omicron = BFieldElement::get_primitive_root_of_unity(omicron_domain_length as u128)
+        let omicron = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(omicron_domain_length as u128)
             .0
             .unwrap();
 
@@ -703,12 +706,12 @@ impl Stark {
 
     fn randomize_trace(
         &self,
-        mut rng: &mut ThreadRng,
+        rng: &mut ThreadRng,
         trace: &mut Vec<Vec<BFieldElement>>,
         num_randomizers: u64,
     ) {
         let mut randomizer_coset: Vec<Vec<BFieldElement>> = (0..num_randomizers)
-            .map(|_| BFieldElement::random_elements(self.num_registers as usize, &mut rng))
+            .map(|_| BFieldElement::random_elements(self.num_registers as usize, rng))
             .collect();
 
         trace.append(&mut randomizer_coset);
@@ -875,7 +878,10 @@ pub mod test_stark {
         let (output, trace) = rp.eval_and_trace(&one);
         assert_eq!(4, trace.len());
 
-        let omicron = BFieldElement::get_primitive_root_of_unity(16).0.unwrap();
+        let omicron = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(16)
+            .0
+            .unwrap();
         let air_constraints = rp.get_air_constraints(omicron);
         let boundary_constraints = rp.get_boundary_constraints(output);
         let mut proof_stream = ProofStream::default();
@@ -915,7 +921,10 @@ pub mod test_stark {
         // assert_eq!(stark.steps_count + 1, trace.len());
 
         // FIXME: Don't hardcode omicron domain length
-        let omicron = BFieldElement::get_primitive_root_of_unity(16).0.unwrap();
+        let omicron = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(16)
+            .0
+            .unwrap();
 
         let mut timer = TimingReporter::start();
         let air_constraints = rp.get_air_constraints(omicron);

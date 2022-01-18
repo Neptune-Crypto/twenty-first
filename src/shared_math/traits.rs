@@ -26,6 +26,13 @@ where
     fn batch_inversion(elements: Vec<Self>) -> Vec<Self>;
 }
 
+pub trait GetPrimitiveRootOfUnity
+where
+    Self: Sized,
+{
+    fn get_primitive_root_of_unity(&self, n: u128) -> (Option<Self>, Vec<u128>);
+}
+
 pub trait GetRandomElements
 where
     Self: Sized,
@@ -73,5 +80,6 @@ pub trait PrimeFieldElement {
         + New
         + CyclicGroupGenerator
         + FieldBatchInversion
-        + ModPowU32;
+        + ModPowU32
+        + GetPrimitiveRootOfUnity;
 }

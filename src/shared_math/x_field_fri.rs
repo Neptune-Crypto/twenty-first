@@ -369,7 +369,10 @@ impl<F: PrimeFieldElement> Fri<F> {
 mod test_x_field_fri {
     use itertools::Itertools;
 
-    use crate::shared_math::{b_field_element::BFieldElement, x_field_element::XFieldElement};
+    use crate::shared_math::{
+        b_field_element::BFieldElement, traits::GetPrimitiveRootOfUnity,
+        x_field_element::XFieldElement,
+    };
 
     use super::*;
 
@@ -508,9 +511,10 @@ mod test_x_field_fri {
 
     fn get_b_field_fri_test_object() -> Fri<BFieldElement> {
         let subgroup_order = 1024;
-        let (omega, _primes1) = BFieldElement::get_primitive_root_of_unity(subgroup_order);
+        let (omega, _primes1) =
+            BFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
         let (offset, _primes2) =
-            BFieldElement::get_primitive_root_of_unity(BFieldElement::QUOTIENT - 1);
+            BFieldElement::ring_zero().get_primitive_root_of_unity(BFieldElement::QUOTIENT - 1);
 
         let expansion_factor = 4;
         let colinearity_checks = 6;
@@ -530,7 +534,7 @@ mod test_x_field_fri {
         colinearity_checks: usize,
     ) -> Fri<XFieldElement> {
         let (omega, _primes1): (Option<XFieldElement>, Vec<u128>) =
-            XFieldElement::get_primitive_root_of_unity(subgroup_order);
+            XFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
 
         // The following offset was picked arbitrarily by copying the one found in
         // `get_b_field_fri_test_object`. It does not generate the full Z_p\{0}, but
