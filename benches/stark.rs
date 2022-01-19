@@ -12,9 +12,9 @@ fn stark_medium(criterion: &mut Criterion) {
     let rp: RescuePrime = params::rescue_prime_medium_test_params();
     let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-    let mut group = criterion.benchmark_group("rescue_prime_air_constraints");
+    let mut group = criterion.benchmark_group("stark");
     group.sample_size(10);
-    let benchmark_id = BenchmarkId::new("stark", 5);
+    let benchmark_id = BenchmarkId::new("medium", 5);
     group.bench_function(benchmark_id, |bencher| {
         bencher.iter(|| {
             let mut timer = TimingReporter::start();
