@@ -32,7 +32,7 @@ fn stark_medium(criterion: &mut Criterion) {
 
     let mut group = criterion.benchmark_group("stark");
     group.sample_size(10);
-    let benchmark_id = BenchmarkId::new("large", 5);
+    let benchmark_id = BenchmarkId::new("medium", 5);
     group.bench_function(benchmark_id, |bencher| {
         bencher.iter(|| {
             let mut proof_stream = ProofStream::default();
@@ -47,18 +47,16 @@ fn stark_medium(criterion: &mut Criterion) {
 
             let (fri_domain_length, omega): (u32, BFieldElement) = prove_result.unwrap();
 
-            stark
-                .verify(
-                    &mut proof_stream,
-                    &air_constraints,
-                    &boundary_constraints,
-                    fri_domain_length,
-                    omega,
-                    trace.len() as u32,
-                )
-                .unwrap();
-
+            let verify_result = stark.verify(
+                &mut proof_stream,
+                &air_constraints,
+                &boundary_constraints,
+                fri_domain_length,
+                omega,
+                trace.len() as u32,
+            );
             println!("proof_stream: {} bytes", proof_stream.len());
+            assert!(verify_result.is_ok());
         });
     });
 }
