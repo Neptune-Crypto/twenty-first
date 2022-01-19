@@ -257,45 +257,37 @@ impl<
             point.len(),
             "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
         );
+        let points_are_x: Vec<bool> = point.iter().map(|p| p.is_x()).collect();
+        let k_len: usize = self.variable_count;
         let mut acc: Polynomial<U> = Polynomial::ring_zero();
         for (k, v) in self.coefficients.iter() {
-            // let mut prod = Polynomial::from_constant(v.clone());
             let mut prod = Polynomial::from_constant(v.ring_one());
-            for i in 0..k.len() {
-                // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some optimizations
+            for i in 0..k_len {
+                // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some optimizations,
+                // mainly memoization.
                 // prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
-                let mod_pow_key = (i, k[i]);
+                let mul_key = (prod.clone(), (i, k[i]));
                 prod = if k[i] == 0 {
                     prod
-                } else if point[i].is_x() {
+                } else if points_are_x[i] {
                     prod.shift_coefficients(k[i] as usize, v.ring_zero())
+                } else if mul_memoization.contains_key(&mul_key) {
+                    // This should be the common case
+                    mul_memoization[&mul_key].clone()
                 } else if k[i] == 1 {
-                    // return prod * point[i]
-                    let mul_key = (prod.clone(), mod_pow_key);
-
-                    if mul_memoization.contains_key(&mul_key) {
-                        mul_memoization[&mul_key].clone()
-                    } else {
-                        let mul_res = prod.clone() * point[i].clone();
-                        mul_memoization.insert(mul_key, mul_res.clone());
-                        mul_res
-                    }
-                } else if mod_pow_memoization.contains_key(&mod_pow_key) {
-                    let mul_key = (prod.clone(), mod_pow_key);
-                    // return prod * mod_pow_memoization[mod_pow_key];
-                    if mul_memoization.contains_key(&mul_key) {
-                        mul_memoization[&mul_key].clone()
-                    } else {
-                        let mul_res = prod.clone() * mod_pow_memoization[&mod_pow_key].clone();
-                        mul_memoization.insert(mul_key, mul_res.clone());
-                        mul_res
-                    }
+                    let mul_res = prod.clone() * point[i].clone();
+                    mul_memoization.insert(mul_key, mul_res.clone());
+                    mul_res
                 } else {
-                    // return prod * point[i].mod_pow(k[i].into(), v.ring_one());
-                    let mod_pow_res = point[i].mod_pow(k[i].into(), v.ring_one());
-                    mod_pow_memoization.insert(mod_pow_key, mod_pow_res.clone());
-                    let mul_key = (prod.clone(), mod_pow_key);
-                    let mul_res = prod.clone() * mod_pow_res.clone();
+                    let mod_pow_key = (i, k[i]);
+                    let mod_pow = if mod_pow_memoization.contains_key(&mod_pow_key) {
+                        mod_pow_memoization[&mod_pow_key].clone()
+                    } else {
+                        let mod_pow_res = point[i].mod_pow(k[i].into(), v.ring_one());
+                        mod_pow_memoization.insert(mod_pow_key, mod_pow_res.clone());
+                        mod_pow_res
+                    };
+                    let mul_res = prod.clone() * mod_pow;
                     mul_memoization.insert(mul_key, mul_res.clone());
                     mul_res
                 }
