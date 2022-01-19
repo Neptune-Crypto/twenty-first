@@ -251,7 +251,11 @@ impl<
         point: &[Polynomial<U>],
         mod_pow_memoization: &mut HashMap<(usize, u64), Polynomial<U>>,
         mul_memoization: &mut HashMap<(Polynomial<U>, (usize, u64)), Polynomial<U>>,
+        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<U>>,
     ) -> Polynomial<U> {
+        // Notice that the `exponents_memoization` only gives a speedup if this function is evaluated multiple
+        // times for the same `point` input. This condition holds when evaluating the AIR constraints
+        // symbolically in a generic STARK prover.
         assert_eq!(
             self.variable_count,
             point.len(),
@@ -260,42 +264,49 @@ impl<
         let points_are_x: Vec<bool> = point.iter().map(|p| p.is_x()).collect();
         let mut acc: Polynomial<U> = Polynomial::ring_zero();
         for (k, v) in self.coefficients.iter() {
-            let mut prod = Polynomial::from_constant(v.ring_one());
-            let mut k_sorted: Vec<(usize, u64)> = k.clone().into_iter().enumerate().collect();
-            k_sorted.sort_by_key(|k| k.1);
-            for (i, ki) in k_sorted.into_iter() {
-                // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some optimizations,
-                // mainly memoization.
-                // prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
+            let mut prod: Polynomial<U>;
+            if exponents_memoization.contains_key(k) {
+                prod = exponents_memoization[k].clone();
+            } else {
+                prod = Polynomial::from_constant(v.ring_one());
+                let mut k_sorted: Vec<(usize, u64)> = k.clone().into_iter().enumerate().collect();
+                k_sorted.sort_by_key(|k| k.1);
+                for (i, ki) in k_sorted.into_iter() {
+                    // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some optimizations,
+                    // mainly memoization.
+                    // prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
 
-                if ki == 0 {
-                    // This should be the common (branch-predicted) case for the early iterations of the inner loop
-                    continue;
-                }
+                    if ki == 0 {
+                        // This should be the common (branch-predicted) case for the early iterations of the inner loop
+                        continue;
+                    }
 
-                let mul_key = (prod.clone(), (i, ki));
-                prod = if points_are_x[i] {
-                    prod.shift_coefficients(ki as usize, v.ring_zero())
-                } else if mul_memoization.contains_key(&mul_key) {
-                    // This should be the common case for the late iterations of the inner loop
-                    mul_memoization[&mul_key].clone()
-                } else if ki == 1 {
-                    let mul_res = prod.clone() * point[i].clone();
-                    mul_memoization.insert(mul_key, mul_res.clone());
-                    mul_res
-                } else {
-                    let mod_pow_key = (i, ki);
-                    let mod_pow = if mod_pow_memoization.contains_key(&mod_pow_key) {
-                        mod_pow_memoization[&mod_pow_key].clone()
+                    let mul_key = (prod.clone(), (i, ki));
+                    prod = if points_are_x[i] {
+                        prod.shift_coefficients(ki as usize, v.ring_zero())
+                    } else if mul_memoization.contains_key(&mul_key) {
+                        // This should be the common case for the late iterations of the inner loop
+                        mul_memoization[&mul_key].clone()
+                    } else if ki == 1 {
+                        let mul_res = prod.clone() * point[i].clone();
+                        mul_memoization.insert(mul_key, mul_res.clone());
+                        mul_res
                     } else {
-                        let mod_pow_res = point[i].mod_pow(ki.into(), v.ring_one());
-                        mod_pow_memoization.insert(mod_pow_key, mod_pow_res.clone());
-                        mod_pow_res
-                    };
-                    let mul_res = prod.clone() * mod_pow;
-                    mul_memoization.insert(mul_key, mul_res.clone());
-                    mul_res
+                        let mod_pow_key = (i, ki);
+                        let mod_pow = if mod_pow_memoization.contains_key(&mod_pow_key) {
+                            mod_pow_memoization[&mod_pow_key].clone()
+                        } else {
+                            let mod_pow_res = point[i].mod_pow(ki.into(), v.ring_one());
+                            mod_pow_memoization.insert(mod_pow_key, mod_pow_res.clone());
+                            mod_pow_res
+                        };
+                        let mul_res = prod.clone() * mod_pow;
+                        mul_memoization.insert(mul_key, mul_res.clone());
+                        mul_res
+                    }
                 }
+
+                exponents_memoization.insert(k.to_vec(), prod.clone());
             }
             prod.scalar_mul_mut(v.clone());
             acc += prod;
