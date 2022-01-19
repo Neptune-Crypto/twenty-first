@@ -55,10 +55,10 @@ impl<
                 .iter()
                 .sorted_by_key(|x| x.0[0])
                 .map(|(k, v)| Self::term_print(k, v));
-            output = term_strings.join(" + ");
+            output = term_strings.join("\n+ ");
         }
 
-        write!(f, "{}", output)
+        write!(f, "\n  {}", output)
     }
 }
 
