@@ -245,11 +245,12 @@ impl<
 
     // Substitute the variables in a multivariate polynomial with univariate polynomials
     #[allow(clippy::map_entry)]
+    #[allow(clippy::type_complexity)]
     pub fn evaluate_symbolic_with_memoization(
         &self,
         point: &[Polynomial<U>],
         mod_pow_memoization: &mut HashMap<(usize, u64), Polynomial<U>>,
-        mul_memoization: &mut HashMap<(Polynomial<U>, Polynomial<U>), Polynomial<U>>,
+        mul_memoization: &mut HashMap<(Polynomial<U>, (usize, u64)), Polynomial<U>>,
     ) -> Polynomial<U> {
         assert_eq!(
             self.variable_count,
@@ -270,7 +271,7 @@ impl<
                     prod.shift_coefficients(k[i] as usize, v.ring_zero())
                 } else if k[i] == 1 {
                     // return prod * point[i]
-                    let mul_key = (prod.clone(), point[i].clone());
+                    let mul_key = (prod.clone(), mod_pow_key);
 
                     if mul_memoization.contains_key(&mul_key) {
                         mul_memoization[&mul_key].clone()
@@ -280,7 +281,7 @@ impl<
                         mul_res
                     }
                 } else if mod_pow_memoization.contains_key(&mod_pow_key) {
-                    let mul_key = (prod.clone(), mod_pow_memoization[&mod_pow_key].clone());
+                    let mul_key = (prod.clone(), mod_pow_key);
                     // return prod * mod_pow_memoization[mod_pow_key];
                     if mul_memoization.contains_key(&mul_key) {
                         mul_memoization[&mul_key].clone()
@@ -293,7 +294,7 @@ impl<
                     // return prod * point[i].mod_pow(k[i].into(), v.ring_one());
                     let mod_pow_res = point[i].mod_pow(k[i].into(), v.ring_one());
                     mod_pow_memoization.insert(mod_pow_key, mod_pow_res.clone());
-                    let mul_key = (prod.clone(), mod_pow_res.clone());
+                    let mul_key = (prod.clone(), mod_pow_key);
                     let mul_res = prod.clone() * mod_pow_res.clone();
                     mul_memoization.insert(mul_key, mul_res.clone());
                     mul_res
