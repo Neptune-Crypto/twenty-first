@@ -244,6 +244,46 @@ impl<
     }
 
     // Substitute the variables in a multivariate polynomial with univariate polynomials
+    #[allow(clippy::map_entry)]
+    pub fn evaluate_symbolic_with_memoization(
+        &self,
+        point: &[Polynomial<U>],
+        mod_pow_memoization: &mut HashMap<(usize, u64), Polynomial<U>>,
+    ) -> Polynomial<U> {
+        assert_eq!(
+            self.variable_count,
+            point.len(),
+            "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
+        );
+        let mut acc: Polynomial<U> = Polynomial::ring_zero();
+        for (k, v) in self.coefficients.iter() {
+            // let mut prod = Polynomial::from_constant(v.clone());
+            let mut prod = Polynomial::from_constant(v.ring_one());
+            for i in 0..k.len() {
+                // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some small optimizations
+                // prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
+                prod = if k[i] == 0 {
+                    prod
+                } else if point[i].is_x() {
+                    prod.shift_coefficients(k[i] as usize, v.ring_zero())
+                } else if k[i] == 1 {
+                    prod * point[i].clone()
+                } else if mod_pow_memoization.contains_key(&(i, k[i])) {
+                    prod * mod_pow_memoization[&(i, k[i])].clone()
+                } else {
+                    let res = point[i].mod_pow(k[i].into(), v.ring_one());
+                    mod_pow_memoization.insert((i, k[i]), res.clone());
+                    prod * res
+                }
+            }
+            prod.scalar_mul_mut(v.clone());
+            acc += prod;
+        }
+
+        acc
+    }
+
+    // Substitute the variables in a multivariate polynomial with univariate polynomials
     pub fn evaluate_symbolic(&self, point: &[Polynomial<U>]) -> Polynomial<U> {
         assert_eq!(
             self.variable_count,

@@ -279,10 +279,12 @@ impl Stark {
 
         timer.elapsed("scale trace interpolants");
 
-        let transition_polynomials: Vec<Polynomial<BFieldElement>> = transition_constraints
-            .iter()
-            .map(|x| x.evaluate_symbolic(&point))
-            .collect();
+        let mut memoization: HashMap<(usize, u64), Polynomial<BFieldElement>> = HashMap::new();
+        let mut transition_polynomials: Vec<Polynomial<BFieldElement>> = vec![];
+        for constraint in transition_constraints {
+            transition_polynomials
+                .push(constraint.evaluate_symbolic_with_memoization(&point, &mut memoization))
+        }
 
         timer.elapsed("symbolically evaluate transition constraints");
 

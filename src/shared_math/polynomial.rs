@@ -936,6 +936,12 @@ impl<
         Polynomial { coefficients }
     }
 
+    pub fn scalar_mul_mut(&mut self, scalar: U) {
+        for coefficient in self.coefficients.iter_mut() {
+            *coefficient = coefficient.to_owned() * scalar.clone();
+        }
+    }
+
     pub fn scalar_mul(&self, scalar: U) -> Self {
         let mut coefficients: Vec<U> = vec![];
         for i in 0..self.coefficients.len() {
