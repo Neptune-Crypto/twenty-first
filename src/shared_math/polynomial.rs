@@ -65,7 +65,7 @@ fn pretty_print_coefficients_generic<T: Add + Div + Mul + Sub + IdentityValues +
     outputs.join("")
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct Polynomial<
     T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Display + Debug,
 > {

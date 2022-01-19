@@ -249,6 +249,7 @@ impl<
         &self,
         point: &[Polynomial<U>],
         mod_pow_memoization: &mut HashMap<(usize, u64), Polynomial<U>>,
+        mul_memoization: &mut HashMap<(Polynomial<U>, Polynomial<U>), Polynomial<U>>,
     ) -> Polynomial<U> {
         assert_eq!(
             self.variable_count,
@@ -260,20 +261,42 @@ impl<
             // let mut prod = Polynomial::from_constant(v.clone());
             let mut prod = Polynomial::from_constant(v.ring_one());
             for i in 0..k.len() {
-                // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some small optimizations
+                // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some optimizations
                 // prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
+                let mod_pow_key = (i, k[i]);
                 prod = if k[i] == 0 {
                     prod
                 } else if point[i].is_x() {
                     prod.shift_coefficients(k[i] as usize, v.ring_zero())
                 } else if k[i] == 1 {
-                    prod * point[i].clone()
-                } else if mod_pow_memoization.contains_key(&(i, k[i])) {
-                    prod * mod_pow_memoization[&(i, k[i])].clone()
+                    // return prod * point[i]
+                    let mul_key = (prod.clone(), point[i].clone());
+
+                    if mul_memoization.contains_key(&mul_key) {
+                        mul_memoization[&mul_key].clone()
+                    } else {
+                        let mul_res = prod.clone() * point[i].clone();
+                        mul_memoization.insert(mul_key, mul_res.clone());
+                        mul_res
+                    }
+                } else if mod_pow_memoization.contains_key(&mod_pow_key) {
+                    let mul_key = (prod.clone(), mod_pow_memoization[&mod_pow_key].clone());
+                    // return prod * mod_pow_memoization[mod_pow_key];
+                    if mul_memoization.contains_key(&mul_key) {
+                        mul_memoization[&mul_key].clone()
+                    } else {
+                        let mul_res = prod.clone() * mod_pow_memoization[&mod_pow_key].clone();
+                        mul_memoization.insert(mul_key, mul_res.clone());
+                        mul_res
+                    }
                 } else {
-                    let res = point[i].mod_pow(k[i].into(), v.ring_one());
-                    mod_pow_memoization.insert((i, k[i]), res.clone());
-                    prod * res
+                    // return prod * point[i].mod_pow(k[i].into(), v.ring_one());
+                    let mod_pow_res = point[i].mod_pow(k[i].into(), v.ring_one());
+                    mod_pow_memoization.insert(mod_pow_key, mod_pow_res.clone());
+                    let mul_key = (prod.clone(), mod_pow_res.clone());
+                    let mul_res = prod.clone() * mod_pow_res.clone();
+                    mul_memoization.insert(mul_key, mul_res.clone());
+                    mul_res
                 }
             }
             prod.scalar_mul_mut(v.clone());
