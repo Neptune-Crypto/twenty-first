@@ -721,6 +721,8 @@ impl<
 #[cfg(test)]
 mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
+    use std::collections::HashSet;
+
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::utils::generate_random_numbers_u128;
 
@@ -1224,10 +1226,10 @@ mod test_mpolynomials {
 
     #[test]
     fn add_assign_simple_test() {
-        for _ in 0..10 {
-            let mut a = gen_polynomial();
+        for i in 0..10 {
+            let mut a = gen_mpolynomial(i, i, 14, u64::MAX);
             let a_clone = a.clone();
-            let mut b = gen_polynomial();
+            let mut b = gen_mpolynomial(i, i, 140, u64::MAX);
             let b_clone = b.clone();
             a += b_clone.clone();
             assert_eq!(a_clone.clone() + b_clone.clone(), a);
@@ -1246,8 +1248,8 @@ mod test_mpolynomials {
 
     #[test]
     fn square_test() {
-        for _ in 0..10 {
-            let poly = gen_polynomial();
+        for i in 0..10 {
+            let poly = gen_mpolynomial(i, i, 7, u64::MAX);
             let actual = poly.square();
             let expected = poly.clone() * poly;
             assert_eq!(expected, actual);
@@ -1256,25 +1258,52 @@ mod test_mpolynomials {
 
     #[test]
     fn mul_commutative_test() {
-        let a = gen_polynomial();
-        let b = gen_polynomial();
+        let a = gen_mpolynomial(40, 40, 100, u64::MAX);
+        let b = gen_mpolynomial(20, 20, 1000, u64::MAX);
         let ab = a.clone() * b.clone();
         let ba = b.clone() * a.clone();
         assert_eq!(ab, ba);
     }
 
-    fn gen_polynomial() -> MPolynomial<BFieldElement> {
-        let mut rng = rand::thread_rng();
-        let variable_count = rng.next_u64() as usize % 40;
-        let term_count = rng.next_u64() as usize % 40;
+    #[test]
+    fn mod_pow_test() {
+        let a = gen_mpolynomial(4, 6, 2, 20);
+        let mut acc = MPolynomial::from_constant(BFieldElement::ring_one(), 4);
+        for i in 0..10 {
+            let mod_pow = a.mod_pow(i.into(), BFieldElement::ring_one());
+            println!(
+                "mod_pow.coefficients.len() = {}",
+                mod_pow.coefficients.len()
+            );
+            assert!(unique_exponent_vectors(&mod_pow));
+            assert_eq!(acc, mod_pow);
+            acc = acc.clone() * a.clone();
+        }
+    }
+
+    fn unique_exponent_vectors(input: &MPolynomial<BFieldElement>) -> bool {
+        let mut hashset: HashSet<Vec<u64>> = HashSet::new();
+
+        input
+            .coefficients
+            .iter()
+            .all(|(k, _v)| hashset.insert(k.clone()))
+    }
+
+    fn gen_mpolynomial(
+        variable_count: usize,
+        term_count: usize,
+        exponenent_limit: u128,
+        coefficient_limit: u64,
+    ) -> MPolynomial<BFieldElement> {
         let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
 
         for _ in 0..term_count {
             let key = generate_random_numbers_u128(variable_count, None)
                 .iter()
-                .map(|x| (*x % u32::MAX as u128) as u64)
+                .map(|x| (*x % exponenent_limit) as u64)
                 .collect::<Vec<u64>>();
-            let value = gen_bfield_element();
+            let value = gen_bfield_element(coefficient_limit);
             coefficients.insert(key, value);
         }
 
@@ -1284,9 +1313,9 @@ mod test_mpolynomials {
         }
     }
 
-    fn gen_bfield_element() -> BFieldElement {
+    fn gen_bfield_element(limit: u64) -> BFieldElement {
         let mut rng = rand::thread_rng();
-        let elem = rng.next_u64();
+        let elem = rng.next_u64() % limit;
         BFieldElement::new(elem as u128)
     }
 }
