@@ -243,7 +243,7 @@ impl<
         acc
     }
 
-    // Substitute the variables in a multivariate polynomial with univariate polynomials
+    // Substitute the variables in a multivariate polynomial with univariate polynomials, fast
     #[allow(clippy::map_entry)]
     #[allow(clippy::type_complexity)]
     pub fn evaluate_symbolic_with_memoization(
@@ -267,11 +267,14 @@ impl<
                 // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some optimizations,
                 // mainly memoization.
                 // prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
+
+                if ki == 0 {
+                    // This should be the common (branch-predicted) case for the early iterations of the inner loop
+                    continue;
+                }
+
                 let mul_key = (prod.clone(), (i, ki));
-                prod = if ki == 0 {
-                    // This should be the common case for the early iterations of the inner loop
-                    prod
-                } else if points_are_x[i] {
+                prod = if points_are_x[i] {
                     prod.shift_coefficients(ki as usize, v.ring_zero())
                 } else if mul_memoization.contains_key(&mul_key) {
                     // This should be the common case for the late iterations of the inner loop
