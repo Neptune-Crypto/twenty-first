@@ -86,6 +86,7 @@ impl Display for TimingReport {
             .unwrap_or(0);
 
         let space = 2;
+        writeln!(f, "\n")?; // Add at least one empty line before report
         for (label, duration) in columns {
             let padding = String::from_utf8(vec![b' '; label_width - label.len() + space]).unwrap();
             writeln!(f, "{}{}{}", label, padding, duration)?;
