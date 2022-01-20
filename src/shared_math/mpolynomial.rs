@@ -1,15 +1,172 @@
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{IdentityValues, ModPowU64};
+use crate::timing_reporter::TimingReporter;
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::Zero;
-use std::cmp;
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub};
+use std::rc::Rc;
+use std::{cmp, fmt};
 
 type MCoefficients<T> = HashMap<Vec<u64>, T>;
+
+const EDMONDS_WEIGHT_CUTOFF_FACTOR: u64 = 2;
+
+#[derive(Debug, Clone)]
+pub struct PolynomialEvaluationDataNode {
+    diff_exponents: Vec<u64>,
+    abs_exponents: Vec<u64>,
+    single_point: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Node<T: Sized> {
+    children: Vec<Rc<RefCell<Node<T>>>>,
+
+    // Must have same length as number of variables in associated mpol
+    data: T,
+}
+
+impl<'a, T: Sized> Node<T> {
+    pub fn traverse_tree<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Sub<Output = U>
+            + IdentityValues
+            + Clone
+            + Display
+            + Debug
+            + PartialEq
+            + Eq,
+    >(
+        nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>>,
+        point: &[Polynomial<U>],
+        one: U,
+        polynomium_products: &mut HashMap<Vec<u64>, Polynomial<U>>,
+    ) {
+        // We might be able to avoid the `clone()` of exponents_list elements here, if we are smart
+        polynomium_products.insert(
+            nodes[0].borrow().data.abs_exponents.clone(),
+            Polynomial::from_constant(one.clone()),
+        );
+
+        // Consider if there might be a speedup in sorting `point` values
+        // after complexity (degree)
+        let mut count = 0;
+        for node in nodes {
+            for child_item in node.borrow().children.iter() {
+                let child = child_item.borrow();
+                let PolynomialEvaluationDataNode {
+                    diff_exponents: child_diff_exponents,
+                    abs_exponents: child_abs_exponents,
+                    single_point,
+                } = &child.data;
+                let mul = if single_point.is_some() {
+                    point[single_point.unwrap()].clone()
+                } else if polynomium_products.contains_key(child_diff_exponents) {
+                    if count < 100 {
+                        // println!("Caught {:?}", child_diff_exponents);
+                        count += 1;
+                    }
+                    polynomium_products[child_diff_exponents].clone()
+                } else {
+                    if count < 100 {
+                        // println!("Missed {:?}", child_diff_exponents);
+                        count += 1;
+                    }
+                    let mut intermediate_mul: Polynomial<U> =
+                        Polynomial::from_constant(one.clone());
+                    let mut intermediate_exponents: Vec<u64> = vec![0; point.len()];
+                    let mut remaining_exponents: Vec<u64> = child_diff_exponents.clone();
+                    let mut mod_pow_exponents: Vec<u64> = vec![0; point.len()];
+                    // Would it be faster to traverse this list in random order?
+                    for (i, diff_exponent) in child_diff_exponents
+                        .iter()
+                        .enumerate()
+                        .filter(|(_i, d)| **d != 0)
+                    {
+                        // TODO: Insert both each intermediate mul *and* each mod_pow in tree here
+                        // println!("Hi! i = {}, diff_exponent = {}", i, diff_exponent);
+                        // println!("intermediate_exponents = {:?}", intermediate_exponents);
+                        // println!("remaining_exponents = {:?}", remaining_exponents);
+                        // println!("mod_pow_exponents = {:?}", mod_pow_exponents);
+
+                        if polynomium_products.contains_key(&remaining_exponents) {
+                            // TODO: Consider fast multiplication here
+                            intermediate_mul = intermediate_mul
+                                * polynomium_products[&remaining_exponents].clone();
+                            break;
+                        }
+
+                        mod_pow_exponents[i] = *diff_exponent;
+                        let mod_pow = if polynomium_products.contains_key(&mod_pow_exponents) {
+                            polynomium_products[&mod_pow_exponents].clone()
+                        } else {
+                            // println!("Calculating mod_pow");
+                            let mut mod_pow_intermediate: Option<Polynomial<U>> = None;
+                            let mut mod_pow_reduced = mod_pow_exponents.clone();
+                            while mod_pow_reduced[i] > 2 {
+                                mod_pow_reduced[i] -= 1;
+                                // println!("looking for {:?}", mod_pow_reduced);
+                                if polynomium_products.contains_key(&mod_pow_reduced) {
+                                    // println!("Found result for {:?}", mod_pow_reduced);
+                                    mod_pow_intermediate =
+                                        Some(polynomium_products[&mod_pow_reduced].clone());
+                                    break;
+                                }
+                            }
+
+                            match mod_pow_intermediate {
+                                None => {
+                                    // println!("Missed reduced mod_pow result!");
+                                    let mod_pow_intermediate =
+                                        point[i].mod_pow((*diff_exponent).into(), one.clone());
+                                    polynomium_products.insert(
+                                        mod_pow_exponents.clone(),
+                                        mod_pow_intermediate.clone(),
+                                    );
+                                    mod_pow_intermediate
+                                }
+                                Some(res) => {
+                                    // println!("Found reduced mod_pow result!");
+                                    point[i].mod_pow(
+                                        (*diff_exponent - mod_pow_reduced[i]).into(),
+                                        one.clone(),
+                                    ) * res
+                                }
+                            }
+                        };
+
+                        // TODO: Consider fast multiplication here
+                        intermediate_mul = intermediate_mul * mod_pow;
+                        intermediate_exponents[i] = *diff_exponent;
+
+                        if polynomium_products.contains_key(&intermediate_exponents) {
+                            // TODO: Consider what this branch means!
+                            // println!("Contained!");
+                        } else {
+                            polynomium_products
+                                .insert(intermediate_exponents.clone(), intermediate_mul.clone());
+                        }
+                        remaining_exponents[i] = 0;
+                        mod_pow_exponents[i] = 0;
+                    }
+                    intermediate_mul
+                };
+
+                // TODO: Add fast multiplication (with NTT) here
+                let res = mul * polynomium_products[&node.borrow().data.abs_exponents].clone();
+                polynomium_products.insert(child_abs_exponents.clone(), res);
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct MPolynomial<
@@ -26,6 +183,21 @@ pub struct MPolynomial<
     // }
     pub variable_count: usize,
     pub coefficients: HashMap<Vec<u64>, T>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PrecalculationError {
+    EmptyInput,
+    LengthMismatch,
+    ZeroDegreeInput,
+}
+
+impl Error for PrecalculationError {}
+
+impl fmt::Display for PrecalculationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl<
@@ -243,6 +415,146 @@ impl<
         acc
     }
 
+    pub fn precalculate_exponents_memoization(
+        mpols: &[Self],
+        point: &[Polynomial<U>],
+        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<U>>,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut timer = TimingReporter::start();
+        if mpols.is_empty() || point.is_empty() {
+            return Err(Box::new(PrecalculationError::EmptyInput));
+        }
+
+        let variable_count = mpols[0].variable_count;
+
+        if point.iter().any(|p| p.degree() <= 0) {
+            return Err(Box::new(PrecalculationError::ZeroDegreeInput));
+        }
+
+        if point.len() != variable_count {
+            return Err(Box::new(PrecalculationError::LengthMismatch));
+        }
+
+        timer.elapsed("init stuff");
+        let one: U = point[0].coefficients[0].ring_one(); // guaranteed to exist because of above checks
+        let exponents_set: HashSet<Vec<u64>> = mpols
+            .iter()
+            .map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
+            .flatten()
+            .collect();
+        timer.elapsed("calculated exponents_set");
+        let mut exponents_list: Vec<Vec<u64>> = if exponents_set.contains(&vec![0; variable_count])
+        {
+            vec![]
+        } else {
+            vec![vec![0; variable_count]]
+        };
+        exponents_list.append(&mut exponents_set.into_iter().collect());
+        timer.elapsed("calculated exponents_list");
+
+        for i in 0..variable_count {
+            exponents_list.sort_by_cached_key(|exponents| exponents[i]);
+        }
+        timer.elapsed("sorted exponents_list");
+
+        // Calculate the relevant weight for making a calculation from one list of exponents another
+        // Use these weights to pick the minimal edges.
+        // This algorithm i a variation of Edmond's algorithm for finding the minimal spanning tree
+        // in a directed graph. Only, we don't calculate all edges but instead look for the ones that
+        // are minimal while calculating their weights.
+        let mut chosen_edges: Vec<u64> = vec![0; exponents_list.len()];
+        'outer: for i in 1..exponents_list.len() {
+            let mut min_weight = u64::MAX;
+            'middle: for j in 1..=i {
+                let index = i - j;
+
+                // Check if calculation from `index` to `i` can be made.
+                // If just one of the `exponents_list[i][k]`s is bigger than the `exponents_list[index][k]` it cannot be made
+                // through multiplication but would have to be constructed through division. This would never be worthwhile
+                // so we simply discard that possibility.
+                '_inner: for k in 0..variable_count {
+                    if exponents_list[i][k] < exponents_list[index][k] {
+                        continue 'middle;
+                    }
+                }
+
+                // let mut diff = 0;
+                // diff += exponents_list[i][k] - exponents_list[index][k];
+                let diff: u64 = exponents_list[i]
+                    .iter()
+                    .zip(exponents_list[index].iter())
+                    .map(|(ei, ej)| *ei - *ej)
+                    .sum();
+
+                if diff < min_weight {
+                    min_weight = diff;
+                    chosen_edges[i] = index as u64;
+                    // println!("(min_weight, index) = {:?}", (min_weight, index));
+
+                    // If we found a minimum possible weight, corresponding to the multiplication
+                    // with *one* polynomial with the lowest degree, then we are done with the middle
+                    // loop and can continue to the next iteration in the outer loop.
+                    // Good enough
+                    if min_weight <= EDMONDS_WEIGHT_CUTOFF_FACTOR {
+                        // println!("continuing");
+                        continue 'outer;
+                    }
+                }
+            }
+        }
+
+        timer.elapsed("chose edges");
+
+        // data: (diff, abs)
+        let nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>> = exponents_list
+            .into_iter()
+            .map(|exponents| {
+                Rc::new(RefCell::new(Node {
+                    children: vec![],
+                    data: PolynomialEvaluationDataNode {
+                        abs_exponents: exponents,
+                        diff_exponents: vec![0; variable_count],
+                        single_point: None,
+                    },
+                }))
+            })
+            .collect();
+        timer.elapsed("initialized nodes");
+        for (end, start) in chosen_edges.into_iter().enumerate().skip(1) {
+            // println!("({} => {})", end, start);
+            nodes[start as usize]
+                .borrow_mut()
+                .children
+                .push(nodes[end].clone());
+            let diff_exponents: Vec<u64> = nodes[end as usize]
+                .borrow()
+                .data
+                .abs_exponents
+                .iter()
+                .zip(nodes[start as usize].borrow().data.abs_exponents.iter())
+                .map(|(end_exponent, start_exponent)| end_exponent - start_exponent)
+                .collect();
+            if diff_exponents.iter().sum::<u64>() == 1u64 {
+                nodes[end as usize].borrow_mut().data.single_point =
+                    Some(diff_exponents.iter().position(|&x| x == 1).unwrap());
+            }
+            nodes[end as usize].borrow_mut().data.diff_exponents = diff_exponents;
+        }
+        timer.elapsed("built nodes");
+
+        Node::<PolynomialEvaluationDataNode>::traverse_tree::<U>(
+            nodes,
+            point,
+            one,
+            exponents_memoization,
+        );
+        timer.elapsed("traversed tree");
+        let report = timer.finish();
+        println!("{}", report);
+
+        Ok(())
+    }
+
     // Substitute the variables in a multivariate polynomial with univariate polynomials, fast
     #[allow(clippy::map_entry)]
     #[allow(clippy::type_complexity)]
@@ -263,11 +575,24 @@ impl<
         );
         let points_are_x: Vec<bool> = point.iter().map(|p| p.is_x()).collect();
         let mut acc: Polynomial<U> = Polynomial::ring_zero();
+        // Sort k after complexity
+        // let mut ks: Vec<(Vec<u64>, U)> = self.coefficients.clone().into_iter().collect();
+        // ks.sort_by_key(|k: (Vec<u64>, U)| k.0.iter().sum());
+        // ks.sort_by_cached_key::<u64, _>(|k| {
+        //     k.0.iter()
+        //         .enumerate()
+        //         .filter(|(i, _)| !points_are_x[*i])
+        //         .map(|(_, x)| x)
+        //         .sum()
+        // });
+
         for (k, v) in self.coefficients.iter() {
+            // for (k, v) in ks.iter() {
             let mut prod: Polynomial<U>;
             if exponents_memoization.contains_key(k) {
                 prod = exponents_memoization[k].clone();
             } else {
+                println!("Missed!");
                 prod = Polynomial::from_constant(v.ring_one());
                 let mut k_sorted: Vec<(usize, u64)> = k.clone().into_iter().enumerate().collect();
                 k_sorted.sort_by_key(|k| k.1);
@@ -1330,6 +1655,37 @@ mod test_mpolynomials {
         }
     }
 
+    #[test]
+    fn precalculate_exponents_memoization_test() {
+        for _ in 0..100 {
+            let a = gen_mpolynomial(4, 5, 3, 12);
+            let b = gen_mpolynomial(4, 4, 6, 12);
+            let point = gen_upolynomials(4, 4, 16);
+            let mut exponents_memoization: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
+                HashMap::new();
+            let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+                &vec![a, b],
+                &point,
+                &mut exponents_memoization,
+            );
+            match precalculation_result {
+                Ok(_) => (),
+                Err(e) => panic!("error: {}", e),
+            };
+
+            // println!("************** precalculation_result **************");
+            for (k, v) in exponents_memoization.iter() {
+                let mut expected_result = Polynomial::from_constant(BFieldElement::ring_one());
+                for (i, &exponent) in k.iter().enumerate() {
+                    expected_result = expected_result
+                        * point[i].mod_pow(exponent.into(), BFieldElement::ring_one())
+                }
+                // println!("{:?} => {}", k, v);
+                assert_eq!(&expected_result, v);
+            }
+        }
+    }
+
     fn unique_exponent_vectors(input: &MPolynomial<BFieldElement>) -> bool {
         let mut hashset: HashSet<Vec<u64>> = HashSet::new();
 
@@ -1337,6 +1693,23 @@ mod test_mpolynomials {
             .coefficients
             .iter()
             .all(|(k, _v)| hashset.insert(k.clone()))
+    }
+
+    fn gen_upolynomials(
+        degree: usize,
+        count: usize,
+        coefficient_limit: u128,
+    ) -> Vec<Polynomial<BFieldElement>> {
+        let mut ret: Vec<Polynomial<BFieldElement>> = vec![];
+        for _ in 0..count {
+            let coefficients: Vec<BFieldElement> = generate_random_numbers_u128(degree + 1, None)
+                .into_iter()
+                .map(|x| BFieldElement::new(x % coefficient_limit + 1))
+                .collect();
+            ret.push(Polynomial { coefficients });
+        }
+
+        ret
     }
 
     fn gen_mpolynomial(
@@ -1364,7 +1737,9 @@ mod test_mpolynomials {
 
     fn gen_bfield_element(limit: u64) -> BFieldElement {
         let mut rng = rand::thread_rng();
-        let elem = rng.next_u64() % limit;
+
+        // adding 1 prevents us from building multivariate polynomial containing zero-coefficients
+        let elem = rng.next_u64() % limit + 1;
         BFieldElement::new(elem as u128)
     }
 }
