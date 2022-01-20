@@ -328,6 +328,7 @@ impl<
                         } else if mod_pow_memoization.contains_key(&mod_pow_key) {
                             mod_pow_memoization[&mod_pow_key].clone()
                         } else {
+                            // With precalculation of `mod_pow_memoization`, this should never happen
                             println!("missed mod_pow_memoization!");
                             let mod_pow_res = point[i].mod_pow(mod_pow_key.1.into(), v.ring_one());
                             mod_pow_memoization.insert(mod_pow_key, mod_pow_res.clone());
