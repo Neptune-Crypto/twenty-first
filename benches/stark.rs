@@ -8,8 +8,10 @@ use twenty_first::timing_reporter::TimingReporter;
 use twenty_first::util_types::proof_stream::ProofStream;
 
 fn stark_medium(criterion: &mut Criterion) {
-    // let rp: RescuePrime = params::rescue_prime_params_bfield_0();
-    let rp: RescuePrime = params::rescue_prime_medium_test_params();
+    let rp: RescuePrime = params::rescue_prime_params_bfield_0();
+    let benchmark_id = BenchmarkId::new("large", 7);
+    // let rp: RescuePrime = params::rescue_prime_medium_test_params();
+    // let benchmark_id = BenchmarkId::new("medium", 5);
     let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
     let mut timer = TimingReporter::start();
@@ -32,7 +34,6 @@ fn stark_medium(criterion: &mut Criterion) {
 
     let mut group = criterion.benchmark_group("stark");
     group.sample_size(10);
-    let benchmark_id = BenchmarkId::new("medium", 5);
     group.bench_function(benchmark_id, |bencher| {
         bencher.iter(|| {
             let mut proof_stream = ProofStream::default();
