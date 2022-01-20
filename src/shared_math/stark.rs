@@ -288,6 +288,20 @@ impl Stark {
             HashMap::new();
         let mut exponents_memoization: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
             HashMap::new();
+
+        // Precalculate `point` exponentiations for faster symbolic evaluation
+        // TODO: I'm a bit unsure about the upper limit of the outer loop.
+        // Getting this number right will just mean slightly faster code. It shouldn't
+        // lead to errors if the number is too high or too low.
+        let mut point_exponents = point.clone();
+        for i in 2..tp_degree / rounded_trace_length + 2 {
+            for j in 1..point.len() {
+                point_exponents[j] = point_exponents[j].clone() * point[j].clone();
+                mod_pow_memoization.insert((j, i), point_exponents[j].clone());
+            }
+        }
+        timer.elapsed("Precalculate mod_pow values");
+
         let mut transition_polynomials: Vec<Polynomial<BFieldElement>> = vec![];
         for constraint in transition_constraints {
             transition_polynomials.push(constraint.evaluate_symbolic_with_memoization(
