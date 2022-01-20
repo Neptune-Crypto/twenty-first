@@ -295,7 +295,7 @@ impl Stark {
         // lead to errors if the number is too high or too low.
         let mut point_exponents = point.clone();
         for i in 2..tp_degree / rounded_trace_length + 2 {
-            for j in 1..point.len() {
+            for j in 0..point.len() {
                 point_exponents[j] = point_exponents[j].clone() * point[j].clone();
                 mod_pow_memoization.insert((j, i), point_exponents[j].clone());
             }
