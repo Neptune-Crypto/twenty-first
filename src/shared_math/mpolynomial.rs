@@ -303,15 +303,40 @@ impl<
                         mul_memoization.insert(mul_key, mul_res.clone());
                         mul_res
                     } else {
-                        let mod_pow_key = (i, ki);
-                        let mod_pow = if mod_pow_memoization.contains_key(&mod_pow_key) {
+                        // Check if we have already done multiplications with a lower power of `point[i]`
+                        // than what we are looking for. If we have, then we use this multiplication
+                        // as a starting point to calculation the next.
+
+                        let mut reduced_mul_result: Option<Polynomial<U>> = None;
+                        let mut reduced_mul_key = (prod.clone(), (i, ki));
+                        for j in 1..ki - 1 {
+                            reduced_mul_key.1 .1 = ki - j;
+                            if mul_memoization.contains_key(&reduced_mul_key) {
+                                reduced_mul_result =
+                                    Some(mul_memoization[&reduced_mul_key].clone());
+                                break;
+                            }
+                        }
+
+                        let mod_pow_key = match reduced_mul_result {
+                            None => (i, ki),
+                            // i = 1, ki = 5, found reduced result for (i=1, ki = 2), need mod_pow_key = (i = 1, ki = 3)
+                            Some(_) => (i, ki - reduced_mul_key.1 .1),
+                        };
+                        let mod_pow = if mod_pow_key.1 == 1 {
+                            point[i].clone()
+                        } else if mod_pow_memoization.contains_key(&mod_pow_key) {
                             mod_pow_memoization[&mod_pow_key].clone()
                         } else {
-                            let mod_pow_res = point[i].mod_pow(ki.into(), v.ring_one());
+                            println!("missed mod_pow_memoization!");
+                            let mod_pow_res = point[i].mod_pow(mod_pow_key.1.into(), v.ring_one());
                             mod_pow_memoization.insert(mod_pow_key, mod_pow_res.clone());
                             mod_pow_res
                         };
-                        let mul_res = prod.clone() * mod_pow;
+                        let mul_res = match reduced_mul_result {
+                            Some(reduced) => reduced * mod_pow,
+                            None => prod.clone() * mod_pow,
+                        };
                         mul_memoization.insert(mul_key, mul_res.clone());
                         mul_res
                     }
