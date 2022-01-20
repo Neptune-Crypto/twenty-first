@@ -925,6 +925,10 @@ impl<
         acc
     }
 
+    pub fn shift_coefficients_mut(&mut self, power: usize, zero: U) {
+        self.coefficients.splice(0..0, vec![zero; power]);
+    }
+
     // Multiply a polynomial with x^power
     pub fn shift_coefficients(&self, power: usize, zero: U) -> Self {
         if !zero.is_zero() {

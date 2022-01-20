@@ -271,6 +271,7 @@ impl<
                 prod = Polynomial::from_constant(v.ring_one());
                 let mut k_sorted: Vec<(usize, u64)> = k.clone().into_iter().enumerate().collect();
                 k_sorted.sort_by_key(|k| k.1);
+                let mut x_pow_mul = 0;
                 for (i, ki) in k_sorted.into_iter() {
                     // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some optimizations,
                     // mainly memoization.
@@ -281,10 +282,20 @@ impl<
                         continue;
                     }
 
+                    // Decrease the number of `mul_memoization` misses by doing all powers of x after this inner loop
+                    if points_are_x[i] {
+                        x_pow_mul += ki;
+                        continue;
+                    }
+
+                    // With this `mul_key` to lookup previous multiplications there is no risk that we miss
+                    // already done calculations in terms of the commutation of multiplication. Since the `ki`
+                    // values are sorted there is no risk that we do double work by first calculating
+                    // `point[2].mod_pow(2) * point[4].mod_pow(3)` (1) and then
+                    // `point[4].mod_pow(3) * point[2].mod_pow(2)` (2). The sorting of the `ki`s ensure that
+                    // the calculation will always be done as (1) and never as (2).
                     let mul_key = (prod.clone(), (i, ki));
-                    prod = if points_are_x[i] {
-                        prod.shift_coefficients(ki as usize, v.ring_zero())
-                    } else if mul_memoization.contains_key(&mul_key) {
+                    prod = if mul_memoization.contains_key(&mul_key) {
                         // This should be the common case for the late iterations of the inner loop
                         mul_memoization[&mul_key].clone()
                     } else if ki == 1 {
@@ -306,6 +317,7 @@ impl<
                     }
                 }
 
+                prod.shift_coefficients_mut(x_pow_mul as usize, v.ring_zero());
                 exponents_memoization.insert(k.to_vec(), prod.clone());
             }
             prod.scalar_mul_mut(v.clone());
