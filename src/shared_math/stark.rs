@@ -898,9 +898,9 @@ pub mod test_stark {
     use serde_json;
 
     #[test]
-    fn prove_something_test() {
+    fn prove_and_verify_small_stark_test() {
         let rp: RescuePrime = params::rescue_prime_small_test_params();
-        let stark: Stark = Stark::new(16, 2, 2, BFieldElement::new(7));
+        let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
         let one = BFieldElement::ring_one();
         let (output, trace) = rp.eval_and_trace(&one);
