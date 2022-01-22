@@ -65,7 +65,7 @@ impl<'a, T: Sized> Node<T> {
                     diff_exponents: child_diff_exponents,
                     abs_exponents: child_abs_exponents,
                     single_point,
-                    diff_sum,
+                    diff_sum: _,
                     x_powers,
                     // index,
                 } = &child.data;
@@ -487,7 +487,7 @@ impl<
         let x_point_indices: Vec<usize> = points_are_x
             .iter()
             .enumerate()
-            .filter(|(i, is_x)| **is_x)
+            .filter(|(_i, is_x)| **is_x)
             .map(|(i, _)| i)
             .collect();
 
@@ -547,7 +547,7 @@ impl<
         let nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>> = exponents_list
             .into_iter()
             .enumerate()
-            .map(|(i, exponents)| {
+            .map(|(_i, exponents)| {
                 // .map(|exponents| {
                 Rc::new(RefCell::new(Node {
                     children: vec![],
