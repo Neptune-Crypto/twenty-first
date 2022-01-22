@@ -56,7 +56,6 @@ impl<'a, T: Sized> Node<T> {
 
         // Consider if there might be a speedup in sorting `point` values
         // after complexity (degree)
-        // let mut count = 0;
         for node in nodes {
             for child_item in node.borrow().children.iter() {
                 let child = child_item.borrow();
@@ -66,19 +65,8 @@ impl<'a, T: Sized> Node<T> {
                     single_point,
                     diff_sum: _,
                     x_powers,
-                    // index,
                 } = &child.data;
 
-                // let mut x_pow = 0;
-                // if x_point_indices
-                //     .iter()
-                //     .any(|x_index| child_diff_exponents[*x_index] != 0)
-                // {
-                //     for index in x_point_indices.iter() {
-                //         x_pow += child_diff_exponents[*index];
-                //         child_diff_exponents[*index] = 0;
-                //     }
-                // }
                 if child_diff_exponents.iter().all(|e| *e == 0) {
                     // println!(
                     //     "Hit x-power optimization for child with diff_exponents: {:?}",
