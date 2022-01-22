@@ -24,11 +24,12 @@ pub struct PolynomialEvaluationDataNode {
     diff_sum: u64,
     abs_exponents: Vec<u64>,
     single_point: Option<usize>,
+    x_powers: usize,
     // index: usize,
 }
 
 impl<'a, T: Sized> Node<T> {
-    pub fn traverse_tree<
+    fn traverse_tree<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
@@ -45,6 +46,8 @@ impl<'a, T: Sized> Node<T> {
         one: U,
         polynomium_products: &mut HashMap<Vec<u64>, Polynomial<U>>,
     ) {
+        let zero = point[0].coefficients[0].ring_zero();
+
         // We might be able to avoid the `clone()` of exponents_list elements here, if we are smart
         polynomium_products.insert(
             nodes[0].borrow().data.abs_exponents.clone(),
@@ -63,8 +66,33 @@ impl<'a, T: Sized> Node<T> {
                     abs_exponents: child_abs_exponents,
                     single_point,
                     diff_sum,
+                    x_powers,
                     // index,
                 } = &child.data;
+
+                // let mut x_pow = 0;
+                // if x_point_indices
+                //     .iter()
+                //     .any(|x_index| child_diff_exponents[*x_index] != 0)
+                // {
+                //     for index in x_point_indices.iter() {
+                //         x_pow += child_diff_exponents[*index];
+                //         child_diff_exponents[*index] = 0;
+                //     }
+                // }
+                if child_diff_exponents.iter().all(|e| *e == 0) {
+                    // println!(
+                    //     "Hit x-power optimization for child with diff_exponents: {:?}",
+                    //     child_diff_exponents
+                    // );
+                    // println!("child_abs_exponents: {:?}", child_abs_exponents);
+                    // println!("x_powers: {}", x_powers);
+                    let mut res = polynomium_products[&node.borrow().data.abs_exponents].clone();
+                    res.shift_coefficients_mut(*x_powers, zero.clone());
+                    polynomium_products.insert(child_abs_exponents.clone(), res);
+                    continue;
+                }
+
                 let mul = if single_point.is_some() {
                     point[single_point.unwrap()].clone()
                 } else if polynomium_products.contains_key(child_diff_exponents) {
@@ -455,6 +483,16 @@ impl<
         }
         timer.elapsed("sorted exponents_list");
 
+        let points_are_x: Vec<bool> = point.iter().map(|x| x.is_x()).collect();
+        let x_point_indices: Vec<usize> = points_are_x
+            .iter()
+            .enumerate()
+            .filter(|(i, is_x)| **is_x)
+            .map(|(i, _)| i)
+            .collect();
+
+        println!("choosing edges");
+
         // Calculate the relevant weight for making a calculation from one list of exponents another
         // Use these weights to pick the minimal edges.
         // This algorithm i a variation of Edmond's algorithm for finding the minimal spanning tree
@@ -502,14 +540,15 @@ impl<
             }
         }
 
+        println!("chose edges");
         timer.elapsed("chose edges");
 
         // data: (diff, abs)
         let nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>> = exponents_list
             .into_iter()
-            // .enumerate()
-            // .map(|(i, exponents)| {
-            .map(|exponents| {
+            .enumerate()
+            .map(|(i, exponents)| {
+                // .map(|exponents| {
                 Rc::new(RefCell::new(Node {
                     children: vec![],
                     data: PolynomialEvaluationDataNode {
@@ -517,6 +556,7 @@ impl<
                         diff_exponents: vec![0; variable_count],
                         single_point: None,
                         diff_sum: 0,
+                        x_powers: 0,
                         // index: i,
                     },
                 }))
@@ -525,11 +565,12 @@ impl<
         timer.elapsed("initialized nodes");
         for (end, (start, weight)) in chosen_edges.into_iter().enumerate().skip(1) {
             // println!("({} => {})", end, start);
+
             nodes[start as usize]
                 .borrow_mut()
                 .children
                 .push(nodes[end].clone());
-            let diff_exponents: Vec<u64> = nodes[end as usize]
+            let mut diff_exponents: Vec<u64> = nodes[end as usize]
                 .borrow()
                 .data
                 .abs_exponents
@@ -537,12 +578,18 @@ impl<
                 .zip(nodes[start as usize].borrow().data.abs_exponents.iter())
                 .map(|(end_exponent, start_exponent)| end_exponent - start_exponent)
                 .collect();
-            if weight == 1u64 {
+            let mut x_power = 0;
+            for x_point_index in x_point_indices.iter() {
+                x_power += diff_exponents[*x_point_index];
+                diff_exponents[*x_point_index] = 0;
+            }
+            if diff_exponents.iter().sum::<u64>() == 1u64 {
                 nodes[end as usize].borrow_mut().data.single_point =
                     Some(diff_exponents.iter().position(|&x| x == 1).unwrap());
             }
             nodes[end as usize].borrow_mut().data.diff_exponents = diff_exponents;
             nodes[end as usize].borrow_mut().data.diff_sum = weight;
+            nodes[end as usize].borrow_mut().data.x_powers = x_power as usize;
         }
         timer.elapsed("built nodes");
 
