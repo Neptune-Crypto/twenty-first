@@ -174,7 +174,8 @@ impl<'a, T: Sized> Node<T> {
                 };
 
                 // TODO: Add fast multiplication (with NTT) here
-                let res = mul * polynomium_products[&node.borrow().data.abs_exponents].clone();
+                let mut res = mul * polynomium_products[&node.borrow().data.abs_exponents].clone();
+                res.shift_coefficients_mut(*x_powers, zero.clone());
                 polynomium_products.insert(child_abs_exponents.clone(), res);
             }
         }
@@ -1439,6 +1440,15 @@ mod test_mpolynomials {
 
     #[test]
     fn evaluate_symbolic_test() {
+        let empty_intermediate_results: HashMap<Vec<u64>, Polynomial<PrimeFieldElementBig>> =
+            HashMap::new();
+        let empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<PrimeFieldElementBig>> =
+            HashMap::new();
+        let empty_mul_memoization: HashMap<
+            (Polynomial<PrimeFieldElementBig>, (usize, u64)),
+            Polynomial<PrimeFieldElementBig>,
+        > = HashMap::new();
+
         let _13 = PrimeFieldBig::new(b(13));
         let zero = PrimeFieldElementBig::new(0.into(), &_13);
         let one = PrimeFieldElementBig::new(1.into(), &_13);
@@ -1447,11 +1457,44 @@ mod test_mpolynomials {
         let xyz_m = get_xyz(&_13);
         let x: Polynomial<PrimeFieldElementBig> =
             Polynomial::from_constant(one.clone()).shift_coefficients(1, zero.clone());
+
+        let mut precalculated_intermediate_results: HashMap<
+            Vec<u64>,
+            Polynomial<PrimeFieldElementBig>,
+        > = HashMap::new();
+        let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+            &[xyz_m.clone()],
+            &vec![x.clone(), x.clone(), x.clone()],
+            &mut precalculated_intermediate_results,
+        );
+        match precalculation_result {
+            Ok(_) => (),
+            Err(e) => panic!("error: {}", e),
+        };
+
         let x_cubed: Polynomial<PrimeFieldElementBig> =
             Polynomial::from_constant(one.clone()).shift_coefficients(3, zero.clone());
         assert_eq!(
             x_cubed,
-            xyz_m.evaluate_symbolic(&vec![x.clone(), x.clone(), x])
+            xyz_m.evaluate_symbolic(&vec![x.clone(), x.clone(), x.clone()])
+        );
+        assert_eq!(
+            x_cubed,
+            xyz_m.evaluate_symbolic_with_memoization(
+                &vec![x.clone(), x.clone(), x.clone()],
+                &mut empty_mod_pow_memoization.clone(),
+                &mut empty_mul_memoization.clone(),
+                &mut empty_intermediate_results.clone()
+            )
+        );
+        assert_eq!(
+            x_cubed,
+            xyz_m.evaluate_symbolic_with_memoization(
+                &vec![x.clone(), x.clone(), x],
+                &mut empty_mod_pow_memoization.clone(),
+                &mut empty_mul_memoization.clone(),
+                &mut precalculated_intermediate_results.clone()
+            )
         );
 
         // More complex
@@ -1481,8 +1524,8 @@ mod test_mpolynomials {
         let pol_m = get_x_plus_xz_minus_17y(&_13);
         let evaluated_pol_u = pol_m.evaluate_symbolic(&vec![
             univariate_pol_1.clone(),
-            univariate_pol_1,
-            univariate_pol_2,
+            univariate_pol_1.clone(),
+            univariate_pol_2.clone(),
         ]);
 
         // Calculated on Wolfram Alpha
@@ -1504,7 +1547,16 @@ mod test_mpolynomials {
             ],
         };
 
-        assert_eq!(expected_result, evaluated_pol_u)
+        assert_eq!(expected_result, evaluated_pol_u);
+        assert_eq!(
+            expected_result,
+            pol_m.evaluate_symbolic_with_memoization(
+                &vec![univariate_pol_1.clone(), univariate_pol_1, univariate_pol_2,],
+                &mut empty_mod_pow_memoization.clone(),
+                &mut empty_mul_memoization.clone(),
+                &mut empty_intermediate_results.clone()
+            )
+        );
     }
 
     #[test]
@@ -1518,7 +1570,25 @@ mod test_mpolynomials {
         let zero_upol: Polynomial<PrimeFieldElementBig> = Polynomial::ring_zero();
         assert_eq!(
             xu,
-            xm.evaluate_symbolic(&vec![xu.clone(), zero_upol.clone(), zero_upol])
+            xm.evaluate_symbolic(&vec![xu.clone(), zero_upol.clone(), zero_upol.clone()])
+        );
+
+        let empty_intermediate_results: HashMap<Vec<u64>, Polynomial<PrimeFieldElementBig>> =
+            HashMap::new();
+        let empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<PrimeFieldElementBig>> =
+            HashMap::new();
+        let empty_mul_memoization: HashMap<
+            (Polynomial<PrimeFieldElementBig>, (usize, u64)),
+            Polynomial<PrimeFieldElementBig>,
+        > = HashMap::new();
+        assert_eq!(
+            xu,
+            xm.evaluate_symbolic_with_memoization(
+                &vec![xu.clone(), zero_upol.clone(), zero_upol],
+                &mut empty_mod_pow_memoization.clone(),
+                &mut empty_mul_memoization.clone(),
+                &mut empty_intermediate_results.clone()
+            )
         );
     }
 
@@ -1695,31 +1765,70 @@ mod test_mpolynomials {
 
     #[test]
     fn precalculate_exponents_memoization_test() {
-        for _ in 0..100 {
-            let a = gen_mpolynomial(4, 5, 3, 12);
-            let b = gen_mpolynomial(4, 4, 6, 12);
-            let point = gen_upolynomials(4, 4, 16);
-            let mut exponents_memoization: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
-                HashMap::new();
+        for _ in 0..30 {
+            let variable_count = 6;
+            let a = gen_mpolynomial(variable_count, 12, 7, BFieldElement::MAX as u64);
+            let b = gen_mpolynomial(variable_count, 12, 7, BFieldElement::MAX as u64);
+            let c = gen_mpolynomial(variable_count, 12, 7, BFieldElement::MAX as u64);
+            let mpolynomials = vec![a, b, c];
+            let mut point = gen_upolynomials(variable_count - 1, 5, BFieldElement::MAX);
+
+            // Add an x-value to the list of polynomials to verify that I didn't mess up the optimization
+            // used for x-polynomials
+            point.push(Polynomial {
+                coefficients: vec![BFieldElement::ring_zero(), BFieldElement::ring_one()],
+            });
+
+            let mut precalculated_intermediate_results: HashMap<
+                Vec<u64>,
+                Polynomial<BFieldElement>,
+            > = HashMap::new();
             let precalculation_result = MPolynomial::precalculate_exponents_memoization(
-                &vec![a, b],
+                &mpolynomials,
                 &point,
-                &mut exponents_memoization,
+                &mut precalculated_intermediate_results,
             );
             match precalculation_result {
                 Ok(_) => (),
                 Err(e) => panic!("error: {}", e),
             };
 
+            // Verify precalculation results
             // println!("************** precalculation_result **************");
-            for (k, v) in exponents_memoization.iter() {
+            for (k, v) in precalculated_intermediate_results.iter() {
                 let mut expected_result = Polynomial::from_constant(BFieldElement::ring_one());
                 for (i, &exponent) in k.iter().enumerate() {
                     expected_result = expected_result
                         * point[i].mod_pow(exponent.into(), BFieldElement::ring_one())
                 }
-                // println!("{:?} => {}", k, v);
+                // println!("k = {:?}", k);
                 assert_eq!(&expected_result, v);
+            }
+
+            // Verify that function gets the same result with and without precalculated values
+            let mut empty_intermediate_results: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
+                HashMap::new();
+            let mut empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<BFieldElement>> =
+                HashMap::new();
+            let mut empty_mul_memoization: HashMap<
+                (Polynomial<BFieldElement>, (usize, u64)),
+                Polynomial<BFieldElement>,
+            > = HashMap::new();
+
+            for mpolynomial in mpolynomials {
+                let with_precalculation = mpolynomial.evaluate_symbolic_with_memoization(
+                    &point,
+                    &mut empty_mod_pow_memoization,
+                    &mut empty_mul_memoization,
+                    &mut precalculated_intermediate_results,
+                );
+                let without_precalculation = mpolynomial.evaluate_symbolic_with_memoization(
+                    &point,
+                    &mut empty_mod_pow_memoization.clone(),
+                    &mut empty_mul_memoization.clone(),
+                    &mut empty_intermediate_results,
+                );
+                assert_eq!(with_precalculation, without_precalculation);
             }
         }
     }
