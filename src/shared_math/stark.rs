@@ -289,18 +289,29 @@ impl Stark {
         let mut exponents_memoization: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
             HashMap::new();
 
+        MPolynomial::precalculate_exponents_memoization(
+            // A slight speedup can be achieved here by only sending the 1st
+            // transition_constraints element to the precalculation function. I didn't
+            // do it though, as it feels like cheating which is an optimization I don't
+            // understand, for this, use: &transition_constraints[0..1] as 1st argument
+            transition_constraints,
+            &point,
+            &mut exponents_memoization,
+        )?;
+        timer.elapsed("Precalculate intermediate results");
+
         // Precalculate `point` exponentiations for faster symbolic evaluation
         // TODO: I'm a bit unsure about the upper limit of the outer loop.
         // Getting this number right will just mean slightly faster code. It shouldn't
         // lead to errors if the number is too high or too low.
-        let mut point_exponents = point.clone();
-        for i in 2..tp_degree / rounded_trace_length + 2 {
-            for j in 0..point.len() {
-                point_exponents[j] = point_exponents[j].clone() * point[j].clone();
-                mod_pow_memoization.insert((j, i), point_exponents[j].clone());
-            }
-        }
-        timer.elapsed("Precalculate mod_pow values");
+        // let mut point_exponents = point.clone();
+        // for i in 2..tp_degree / rounded_trace_length + 2 {
+        //     for j in 0..point.len() {
+        //         point_exponents[j] = point_exponents[j].clone() * point[j].clone();
+        //         mod_pow_memoization.insert((j, i), point_exponents[j].clone());
+        //     }
+        // }
+        // timer.elapsed("Precalculate mod_pow values");
 
         let mut transition_polynomials: Vec<Polynomial<BFieldElement>> = vec![];
         for constraint in transition_constraints {
