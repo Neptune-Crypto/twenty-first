@@ -714,6 +714,19 @@ mod test_modular_arithmetic_big {
     }
 
     #[test]
+    fn get_primitive_roots_of_unity_12289() {
+        let field = PrimeFieldBig::new(b(12289));
+        let root = field.get_primitive_root_of_unity(1024).0.unwrap();
+        assert!(root.mod_pow(1024.into()).is_one());
+        assert!(!root.mod_pow(512.into()).is_one());
+
+        let _8193 = PrimeFieldElementBig::new(8193.into(), &field);
+        assert!(_8193.mod_pow(1024.into()).is_one());
+        assert!(_8193.mod_pow(512.into()).is_one());
+        assert!(!_8193.mod_pow(256.into()).is_one());
+    }
+
+    #[test]
     fn roots_of_unity_big() {
         let mut field = PrimeFieldBig::new(b(17));
         for i in 2..17 {

@@ -113,7 +113,9 @@ pub fn intt<
 mod ntt_tests {
     use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::polynomial::Polynomial;
+    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use num_bigint::BigInt;
 
     fn b(x: i128) -> BigInt {
@@ -146,7 +148,108 @@ mod ntt_tests {
     }
 
     #[test]
+    fn b_field_ntt_with_length_4() {
+        let input = vec![
+            BFieldElement::new(1),
+            BFieldElement::new(4),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+        ];
+        let omega = BFieldElement::ring_one()
+            .get_primitive_root_of_unity(4)
+            .0
+            .unwrap();
+        let actual_output = ntt(&input, &omega);
+        let expected = vec![
+            BFieldElement::new(5),
+            BFieldElement::new(1125899906842625),
+            BFieldElement::new(18446744069414584318),
+            BFieldElement::new(18445618169507741698),
+        ];
+        assert_eq!(expected, actual_output);
+        println!("actual_output = {:?}", actual_output);
+    }
 
+    #[test]
+    fn b_field_ntt_with_length_32() {
+        let input = vec![
+            BFieldElement::new(1),
+            BFieldElement::new(4),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+            BFieldElement::new(4),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+            BFieldElement::new(4),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(1),
+            BFieldElement::new(4),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+        ];
+        let omega = BFieldElement::ring_one()
+            .get_primitive_root_of_unity(32)
+            .0
+            .unwrap();
+        let actual_output = ntt(&input, &omega);
+        println!("actual_output = {:?}", actual_output);
+        let expected = vec![
+            BFieldElement::new(20),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(18446744069146148869),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(4503599627370500),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(18446726477228544005),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(18446744069414584309),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(268435460),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(18442240469787213829),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(17592186040324),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+        ];
+        assert_eq!(expected, actual_output);
+    }
+
+    #[test]
     fn test_ntt_simple_4() {
         let field = pfb(5);
         let generator = pfeb(2, &field);
