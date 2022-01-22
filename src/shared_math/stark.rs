@@ -950,8 +950,8 @@ pub mod test_stark {
 
     #[test]
     fn prove_and_verify_medium_stark_test() {
-        // let rp: RescuePrime = params::rescue_prime_params_bfield_0();
-        let rp: RescuePrime = params::rescue_prime_medium_test_params();
+        let rp: RescuePrime = params::rescue_prime_params_bfield_0();
+        // let rp: RescuePrime = params::rescue_prime_medium_test_params();
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
         let one = BFieldElement::ring_one();
