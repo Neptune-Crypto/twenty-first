@@ -1,6 +1,7 @@
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{IdentityValues, ModPowU64};
 use crate::timing_reporter::TimingReporter;
+use crate::util_types::tree_m_ary::Node;
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::Zero;
@@ -22,14 +23,6 @@ pub struct PolynomialEvaluationDataNode {
     diff_exponents: Vec<u64>,
     abs_exponents: Vec<u64>,
     single_point: Option<usize>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Node<T: Sized> {
-    children: Vec<Rc<RefCell<Node<T>>>>,
-
-    // Must have same length as number of variables in associated mpol
-    data: T,
 }
 
 impl<'a, T: Sized> Node<T> {
