@@ -292,7 +292,8 @@ impl Stark {
         MPolynomial::precalculate_exponents_memoization(
             // A slight speedup can be achieved here by only sending the 1st
             // transition_constraints element to the precalculation function. I didn't
-            // do it though, as it feels like cheating (optimization I don't understand)
+            // do it though, as it feels like cheating which is an optimization I don't
+            // understand, for this, use: &transition_constraints[0..1] as 1st argument
             transition_constraints,
             &point,
             &mut exponents_memoization,
