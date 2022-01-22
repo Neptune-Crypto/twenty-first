@@ -41,7 +41,7 @@ impl<'a, T: Sized> Node<T> {
             + PartialEq
             + Eq,
     >(
-        mut nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>>,
+        nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>>,
         point: &[Polynomial<U>],
         one: U,
         polynomium_products: &mut HashMap<Vec<u64>, Polynomial<U>>,
@@ -53,7 +53,6 @@ impl<'a, T: Sized> Node<T> {
             nodes[0].borrow().data.abs_exponents.clone(),
             Polynomial::from_constant(one.clone()),
         );
-        nodes.sort_by_cached_key(|n| n.borrow().data.diff_sum);
 
         // Consider if there might be a speedup in sorting `point` values
         // after complexity (degree)
