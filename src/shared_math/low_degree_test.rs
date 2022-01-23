@@ -848,7 +848,7 @@ pub fn prover_i128(
 mod test_low_degree_proof {
     use super::*;
     use crate::fft::fast_polynomial_evaluate;
-    use crate::shared_math::ntt::ntt;
+    use crate::shared_math::ntt::slow_ntt;
     use crate::shared_math::prime_field_element::PrimeField;
     use crate::utils::generate_random_numbers;
     use num_traits::Zero;
@@ -1362,7 +1362,7 @@ mod test_low_degree_proof {
         println!("length of expanded coefficients = {}", coefficients.len());
         let primitive_root_of_unity: PrimeFieldElementBig =
             PrimeFieldElementBig::new(primitive_root_of_unity_bi.clone(), &field);
-        let y_values_pfes = ntt(
+        let y_values_pfes = slow_ntt(
             coefficients_pfes.as_slice(),
             &primitive_root_of_unity.clone(),
         );

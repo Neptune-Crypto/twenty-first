@@ -8,7 +8,7 @@ use crate::util_types::merkle_tree::PartialAuthenticationPath;
 use crate::util_types::{merkle_tree::MerkleTree, proof_stream::ProofStream};
 use crate::utils::{blake3_digest, get_index_from_bytes};
 
-use super::ntt::intt;
+use super::ntt::slow_intt;
 use super::{
     other::log_2_ceil,
     prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig},
@@ -339,7 +339,7 @@ impl Fri {
             .iter()
             .map(|x| PrimeFieldElementBig::new(x.clone(), &field))
             .collect();
-        let coefficients = intt(&last_codeword_fes, &last_omega_fe);
+        let coefficients = slow_intt(&last_codeword_fes, &last_omega_fe);
         let last_poly_degree: isize = (Polynomial { coefficients }).degree();
         if last_poly_degree > degree_of_last_round as isize {
             return Err(Box::new(ValidationError::LastIterationTooHighDegree));

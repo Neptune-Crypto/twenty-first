@@ -1,6 +1,6 @@
 use crate::shared_math::low_degree_test;
 use crate::shared_math::low_degree_test::LowDegreeProof;
-use crate::shared_math::ntt::{intt, ntt};
+use crate::shared_math::ntt::{slow_intt, slow_ntt};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::shared_math::stark_pfe_big::{StarkProofError, StarkVerifyError};
@@ -52,7 +52,7 @@ pub fn get_extended_computational_traces<'a>(
     // Interpolate the polynomium for each bit-register value
     for i in 0..num_registers {
         let bit_values: Vec<PrimeFieldElement> = binary_trace.iter().map(|x| x[i]).collect();
-        let coefficients = intt(&bit_values, omicron);
+        let coefficients = slow_intt(&bit_values, omicron);
         trace_interpolants.push(Polynomial {
             coefficients: coefficients.clone(),
         });
@@ -63,7 +63,7 @@ pub fn get_extended_computational_traces<'a>(
             extended_length - num_trace_elements
         ]);
 
-        let extended_trace = ntt(&padded_trace_interpolant_coefficients, omega);
+        let extended_trace = slow_ntt(&padded_trace_interpolant_coefficients, omega);
         for j in 0..extended_length {
             extended_traces[j][i] = extended_trace[j];
         }
@@ -140,7 +140,7 @@ fn build_bit_airs<'a>(
         let register_values: Vec<PrimeFieldElement> =
             air_codewords.iter().map(|x| x[register]).collect();
         air_polynomials.push(Polynomial {
-            coefficients: intt(&register_values, omega),
+            coefficients: slow_intt(&register_values, omega),
         });
     }
 
@@ -180,7 +180,7 @@ fn build_sum_air<'a>(
 
     // Build and return AIR polynomial
     Polynomial {
-        coefficients: intt(&air_codeword, omega),
+        coefficients: slow_intt(&air_codeword, omega),
     }
 }
 
@@ -339,7 +339,7 @@ fn get_composition_polynomial_codeword<'a>(
     ]);
 
     // Evaluate the composition polynomial over the omega domain, and return this codeword
-    ntt(&coefficients, &omega)
+    slow_ntt(&coefficients, &omega)
 }
 
 fn get_composition_polynomial_weights<'a>(
@@ -666,7 +666,7 @@ pub fn stark_of_collatz_sequence_prove(
             extended_domain_length
                 - num_coefficients
         ]);
-        let boundary_quotient_codeword = ntt(&boundary_constraint_coefficients_padded, &omega);
+        let boundary_quotient_codeword = slow_ntt(&boundary_constraint_coefficients_padded, &omega);
         boundary_quotient_polynomials.push(boundary_quotient_polynomial);
         for j in 0..extended_domain_length {
             boundary_quotient_codewords[j][i] = boundary_quotient_codeword[j];

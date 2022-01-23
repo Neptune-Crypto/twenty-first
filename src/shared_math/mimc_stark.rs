@@ -1,6 +1,6 @@
 use crate::shared_math::low_degree_test;
 use crate::shared_math::low_degree_test::LowDegreeProof;
-use crate::shared_math::ntt::{intt, ntt};
+use crate::shared_math::ntt::{slow_intt, slow_ntt};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element::PrimeFieldElement;
 use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
@@ -105,7 +105,7 @@ fn get_extended_computational_trace<
     expansion_factor: usize,
     computational_trace: &[T],
 ) -> (Vec<T>, Polynomial<T>) {
-    let trace_interpolant_coefficients = intt(computational_trace, omicron);
+    let trace_interpolant_coefficients = slow_intt(computational_trace, omicron);
     let trace_interpolant = Polynomial {
         coefficients: trace_interpolant_coefficients.clone(),
     };
@@ -115,7 +115,7 @@ fn get_extended_computational_trace<
         (expansion_factor - 1) * (num_steps + 1)
     ]);
     (
-        ntt(&padded_trace_interpolant_coefficients, omega),
+        slow_ntt(&padded_trace_interpolant_coefficients, omega),
         trace_interpolant,
     )
 }
@@ -142,7 +142,7 @@ fn get_round_constants_coefficients<
 ) -> Vec<T> {
     let mut mimc_round_constants_padded = mimc_round_constants.to_vec();
     mimc_round_constants_padded.append(&mut vec![omicron.ring_zero()]);
-    intt(&mimc_round_constants_padded, omicron)
+    slow_intt(&mimc_round_constants_padded, omicron)
 }
 
 fn get_extended_round_constant<
@@ -175,7 +175,7 @@ fn get_extended_round_constant<
         (expansion_factor - 1) * (num_steps + 1)
     ]);
 
-    ntt(&padded_round_constants_interpolant, omega)
+    slow_ntt(&padded_round_constants_interpolant, omega)
 }
 
 fn get_boundary_zerofier_polynomial<
@@ -825,7 +825,7 @@ pub fn stark_of_mimc_prove(
     }
 
     // It's important to interpolate across the *extended* domain, not the original smaller domain, because the degree of air(x) is greater than num_steps
-    let air_polynomial_coefficients = intt(&air_codeword, &omega);
+    let air_polynomial_coefficients = slow_intt(&air_codeword, &omega);
     let air_polynomial = Polynomial {
         coefficients: air_polynomial_coefficients,
     };
@@ -854,7 +854,7 @@ pub fn stark_of_mimc_prove(
         extended_domain_length
             - transition_quotient_coefficients.len()
     ]);
-    let transition_quotient_codeword = ntt(&transition_quotient_coefficients, &omega);
+    let transition_quotient_codeword = slow_ntt(&transition_quotient_coefficients, &omega);
 
     // compute the boundary-zerofier
     let boundary_zerofier_polynomial = get_boundary_zerofier_polynomial(xlast);
@@ -878,7 +878,7 @@ pub fn stark_of_mimc_prove(
                 .coefficients
                 .len()
     ]);
-    let boundary_quotient_codeword = ntt(&boundary_constraint_coefficients_padded, &omega);
+    let boundary_quotient_codeword = slow_ntt(&boundary_constraint_coefficients_padded, &omega);
 
     // Commit to all evaluations by constructing a Merkle tree of the polynomial evaluations
     // TODO: We also need the offset values of the ect, since this is needed to verify that

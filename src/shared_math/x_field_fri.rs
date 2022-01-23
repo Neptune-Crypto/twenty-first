@@ -9,7 +9,7 @@ use std::error::Error;
 
 use super::other::log_2_ceil;
 use super::polynomial::Polynomial;
-use crate::shared_math::ntt::intt;
+use crate::shared_math::ntt::slow_intt;
 
 // Module for performing FRI on XFieldElement
 #[derive(Debug, Clone)]
@@ -252,7 +252,7 @@ impl<F: PrimeFieldElement> Fri<F> {
         // Note that we don't have to scale the polynomial back to the
         // trace subgroup since we only check its degree and don't use
         // it further.
-        let coefficients = intt(&last_codeword, &last_omega);
+        let coefficients = slow_intt(&last_codeword, &last_omega);
         let last_poly_degree: isize = (Polynomial { coefficients }).degree();
         if last_poly_degree > degree_of_last_round as isize {
             return Err(Box::new(ValidationError::LastIterationTooHighDegree));

@@ -930,8 +930,8 @@ mod x_field_element_test {
                 .get_primitive_root_of_unity(i)
                 .0
                 .unwrap();
-            let outputs = ntt::ntt(&inputs, &root);
-            let inverted_outputs = ntt::intt(&outputs, &root);
+            let outputs = ntt::slow_ntt(&inputs, &root);
+            let inverted_outputs = ntt::slow_intt(&outputs, &root);
             assert_eq!(inputs, inverted_outputs);
 
             // The output should be equivalent to evaluating root^i, i = [0..4]

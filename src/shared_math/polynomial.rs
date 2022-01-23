@@ -1,4 +1,4 @@
-use crate::shared_math::ntt::{intt, ntt};
+use crate::shared_math::ntt::{slow_intt, slow_ntt};
 use crate::shared_math::traits::IdentityValues;
 use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
@@ -493,12 +493,12 @@ impl<
 
         let mut coefficients = self.coefficients.to_vec();
         coefficients.resize(order as usize, root.ring_zero());
-        let mut codeword: Vec<U> = ntt(&coefficients, &root);
+        let mut codeword: Vec<U> = slow_ntt(&coefficients, &root);
         for element in codeword.iter_mut() {
             *element = element.to_owned() * element.to_owned();
         }
 
-        let mut res_coefficients = intt(&codeword, &root);
+        let mut res_coefficients = slow_intt(&codeword, &root);
         res_coefficients.truncate(result_degree as usize + 1);
 
         Polynomial {
@@ -630,8 +630,8 @@ impl<
             rhs_coefficients.push(root.ring_zero());
         }
 
-        let lhs_codeword: Vec<U> = ntt(&lhs_coefficients, &root);
-        let rhs_codeword: Vec<U> = ntt(&rhs_coefficients, &root);
+        let lhs_codeword: Vec<U> = slow_ntt(&lhs_coefficients, &root);
+        let rhs_codeword: Vec<U> = slow_ntt(&rhs_coefficients, &root);
 
         let hadamard_product: Vec<U> = rhs_codeword
             .into_iter()
@@ -639,7 +639,7 @@ impl<
             .map(|(r, l)| r * l)
             .collect();
 
-        let mut res_coefficients = intt(&hadamard_product, &root);
+        let mut res_coefficients = slow_intt(&hadamard_product, &root);
         res_coefficients.truncate(degree + 1);
 
         Polynomial {
@@ -774,7 +774,7 @@ impl<
     pub fn fast_coset_evaluate(&self, offset: &U, generator: &U, order: usize) -> Vec<U> {
         let mut coefficients = self.scale(offset).coefficients;
         coefficients.append(&mut vec![generator.ring_zero(); order - coefficients.len()]);
-        ntt(&coefficients, generator)
+        slow_ntt(&coefficients, generator)
     }
 
     /// Divide two polynomials under the homomorphism of evaluation for a N^2 -> N*log(N) speedup
@@ -835,8 +835,8 @@ impl<
             order - scaled_rhs_coefficients.len()
         ]);
 
-        let lhs_codeword = ntt(&scaled_lhs_coefficients, &root);
-        let rhs_codeword = ntt(&scaled_rhs_coefficients, &root);
+        let lhs_codeword = slow_ntt(&scaled_lhs_coefficients, &root);
+        let rhs_codeword = slow_ntt(&scaled_rhs_coefficients, &root);
 
         let rhs_inverses = U::batch_inversion(rhs_codeword);
         let quotient_codeword: Vec<U> = lhs_codeword
@@ -845,7 +845,7 @@ impl<
             .map(|(l, r)| l.to_owned() * r)
             .collect();
 
-        let scaled_quotient_coefficients = intt(&quotient_codeword, &root);
+        let scaled_quotient_coefficients = slow_intt(&quotient_codeword, &root);
 
         let scaled_quotient = Polynomial {
             coefficients: scaled_quotient_coefficients,

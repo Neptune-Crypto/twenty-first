@@ -5,14 +5,14 @@ use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Neg;
 
-pub fn ntt_base_case<T: Add<Output = T> + Mul<Output = T> + Clone>(x: &[T], omega: &T) -> Vec<T> {
+fn slow_ntt_base_case<T: Add<Output = T> + Mul<Output = T> + Clone>(x: &[T], omega: &T) -> Vec<T> {
     vec![
         x[0].clone() + x[1].clone(),
         x[0].clone() + omega.to_owned() * x[1].clone(),
     ]
 }
 
-pub fn ntt_recursive<
+fn slow_ntt_recursive<
     T: Add<Output = T> + Mul<Output = T> + Neg<Output = T> + IdentityValues + Clone,
 >(
     x: &[T],
@@ -20,7 +20,7 @@ pub fn ntt_recursive<
 ) -> Vec<T> {
     let n: usize = x.len();
     if n == 2 {
-        return ntt_base_case(x, omega);
+        return slow_ntt_base_case(x, omega);
     }
     // else,
     // split by parity
@@ -38,8 +38,8 @@ pub fn ntt_recursive<
     // recursion step
     let omega_squared = omega.to_owned() * omega.to_owned();
     let (even, odd) = (
-        ntt_recursive(&evens, &omega_squared),
-        ntt_recursive(&odds, &omega_squared),
+        slow_ntt_recursive(&evens, &omega_squared),
+        slow_ntt_recursive(&odds, &omega_squared),
     );
 
     // hadamard product
@@ -58,7 +58,7 @@ pub fn ntt_recursive<
     result
 }
 
-pub fn ntt<T: Add<Output = T> + Mul<Output = T> + Neg<Output = T> + IdentityValues + Clone>(
+pub fn slow_ntt<T: Add<Output = T> + Mul<Output = T> + Neg<Output = T> + IdentityValues + Clone>(
     x: &[T],
     omega: &T,
 ) -> Vec<T> {
@@ -83,10 +83,10 @@ pub fn ntt<T: Add<Output = T> + Mul<Output = T> + Neg<Output = T> + IdentityValu
         panic!("ntt needs primitive nth root of unity but order of omega does not match n");
     }
 
-    ntt_recursive(x, omega)
+    slow_ntt_recursive(x, omega)
 }
 
-pub fn intt<
+pub fn slow_intt<
     T: Add<Output = T>
         + Mul<Output = T>
         + Neg<Output = T>
@@ -103,7 +103,7 @@ pub fn intt<
     // }
     let n: T = omega.new_from_usize(x.len());
     // let n: T = omega.new(x.len().to_bytes());
-    ntt(x, &(omega.ring_one() / omega.to_owned()))
+    slow_ntt(x, &(omega.ring_one() / omega.to_owned()))
         .into_iter()
         .map(|x: T| x / n.clone())
         .collect()
@@ -143,7 +143,7 @@ mod ntt_tests {
         let generator = pfeb(4, &field);
         let input = vec![pfeb(1, &field), pfeb(4, &field)];
         let expected_output = vec![pfeb(0, &field), pfeb(2, &field)];
-        let actual_output = ntt(&input, &generator);
+        let actual_output = slow_ntt(&input, &generator);
         assert_eq!(expected_output, actual_output);
     }
 
@@ -159,7 +159,7 @@ mod ntt_tests {
             .get_primitive_root_of_unity(4)
             .0
             .unwrap();
-        let actual_output = ntt(&input, &omega);
+        let actual_output = slow_ntt(&input, &omega);
         let expected = vec![
             BFieldElement::new(5),
             BFieldElement::new(1125899906842625),
@@ -210,7 +210,7 @@ mod ntt_tests {
             .get_primitive_root_of_unity(32)
             .0
             .unwrap();
-        let actual_output = ntt(&input, &omega);
+        let actual_output = slow_ntt(&input, &omega);
         println!("actual_output = {:?}", actual_output);
         let expected = vec![
             BFieldElement::new(20),
@@ -265,7 +265,7 @@ mod ntt_tests {
             pfeb(2, &field),
             pfeb(3, &field),
         ];
-        let actual_output = ntt(&input, &generator);
+        let actual_output = slow_ntt(&input, &generator);
         assert_eq!(expected_output, actual_output);
     }
 
@@ -280,9 +280,9 @@ mod ntt_tests {
             let (root_option, _): (Option<PrimeFieldElementBig>, Vec<BigInt>) =
                 field.get_primitive_root_of_unity(size);
             let coefficients: Vec<PrimeFieldElementBig> =
-                intt(&input_y_values, &root_option.clone().unwrap());
+                slow_intt(&input_y_values, &root_option.clone().unwrap());
             let output_y_values: Vec<PrimeFieldElementBig> =
-                ntt(&coefficients, &root_option.clone().unwrap());
+                slow_ntt(&coefficients, &root_option.clone().unwrap());
             assert_eq!(input_y_values, output_y_values);
             assert_ne!(input_y_values, coefficients);
 

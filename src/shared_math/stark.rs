@@ -1,4 +1,4 @@
-use crate::shared_math::ntt::intt;
+use crate::shared_math::ntt::slow_intt;
 use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
@@ -183,7 +183,7 @@ impl Stark {
                 .collect::<Vec<BFieldElement>>();
 
             let trace_interpolant = Polynomial {
-                coefficients: intt(trace_column, &omicron),
+                coefficients: slow_intt(trace_column, &omicron),
             };
 
             // Sanity checks; consider moving into unit tests.
