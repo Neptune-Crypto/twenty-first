@@ -300,6 +300,7 @@ impl New for XFieldElement {
 impl Add for XFieldElement {
     type Output = Self;
 
+    #[inline]
     fn add(self, other: Self) -> Self {
         Self {
             coefficients: [
@@ -327,6 +328,7 @@ impl Add for XFieldElement {
 impl Mul for XFieldElement {
     type Output = Self;
 
+    #[inline]
     fn mul(self, other: Self) -> Self {
         // a_0 * x^2 + b_0 * x + c_0
         let a0 = self.coefficients[2];
@@ -352,6 +354,7 @@ impl Mul for XFieldElement {
 impl Neg for XFieldElement {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self {
         Self {
             coefficients: [
@@ -366,12 +369,14 @@ impl Neg for XFieldElement {
 impl Sub for XFieldElement {
     type Output = Self;
 
+    #[inline]
     fn sub(self, other: Self) -> Self {
         -other + self
     }
 }
 
 impl AddAssign for XFieldElement {
+    #[inline]
     fn add_assign(&mut self, rhs: Self) {
         self.coefficients[0] += rhs.coefficients[0];
         self.coefficients[1] += rhs.coefficients[1];
@@ -380,6 +385,7 @@ impl AddAssign for XFieldElement {
 }
 
 impl SubAssign for XFieldElement {
+    #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         self.coefficients[0] -= rhs.coefficients[0];
         self.coefficients[1] -= rhs.coefficients[1];
@@ -388,6 +394,7 @@ impl SubAssign for XFieldElement {
 }
 
 impl MulAssign for XFieldElement {
+    #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         // a_0 * x^2 + b_0 * x + c_0
         let a0 = self.coefficients[2];

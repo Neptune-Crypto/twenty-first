@@ -334,6 +334,7 @@ impl IdentityValues for BFieldElement {
 impl Add for BFieldElement {
     type Output = Self;
 
+    #[inline]
     fn add(self, other: Self) -> Self {
         Self {
             0: (self.0 + other.0) % Self::QUOTIENT,
@@ -342,18 +343,21 @@ impl Add for BFieldElement {
 }
 
 impl AddAssign for BFieldElement {
+    #[inline]
     fn add_assign(&mut self, rhs: Self) {
         self.0 = (self.0 + rhs.0) % Self::QUOTIENT;
     }
 }
 
 impl SubAssign for BFieldElement {
+    #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         self.0 = (Self::QUOTIENT - rhs.0 + self.0) % Self::QUOTIENT;
     }
 }
 
 impl MulAssign for BFieldElement {
+    #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         self.0 = (self.0 * rhs.0) % Self::QUOTIENT;
     }
@@ -362,6 +366,7 @@ impl MulAssign for BFieldElement {
 impl Mul for BFieldElement {
     type Output = Self;
 
+    #[inline]
     fn mul(self, other: Self) -> Self {
         Self {
             0: (self.0 * other.0) % Self::QUOTIENT,
@@ -372,6 +377,7 @@ impl Mul for BFieldElement {
 impl Neg for BFieldElement {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self {
         Self {
             0: Self::QUOTIENT - self.0,
@@ -392,6 +398,7 @@ impl Rem for BFieldElement {
 impl Sub for BFieldElement {
     type Output = Self;
 
+    #[inline]
     fn sub(self, other: Self) -> Self {
         -other + self
     }
