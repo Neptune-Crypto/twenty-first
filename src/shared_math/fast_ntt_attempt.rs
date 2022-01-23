@@ -202,6 +202,34 @@ mod fast_ntt_attempt_tests {
     }
 
     #[test]
+    fn bfield_max_value_test_of_chu_ntt() {
+        let mut input_output = vec![
+            BFieldElement::new(BFieldElement::MAX),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+            BFieldElement::new(0),
+        ];
+        let original_input = input_output.clone();
+        let expected = vec![
+            BFieldElement::new(BFieldElement::MAX),
+            BFieldElement::new(BFieldElement::MAX),
+            BFieldElement::new(BFieldElement::MAX),
+            BFieldElement::new(BFieldElement::MAX),
+        ];
+        let omega = BFieldElement::ring_one()
+            .get_primitive_root_of_unity(4)
+            .0
+            .unwrap();
+
+        chu_ntt::<BFieldElement>(&mut input_output, omega, 2);
+        assert_eq!(expected, input_output);
+
+        // Verify that INTT(NTT(x)) = x
+        chu_intt::<BFieldElement>(&mut input_output, omega, 2);
+        assert_eq!(original_input, input_output);
+    }
+
+    #[test]
     fn b_field_ntt_with_length_32() {
         let mut input_output = vec![
             BFieldElement::new(1),
