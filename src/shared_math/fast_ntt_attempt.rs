@@ -69,12 +69,112 @@ pub fn chu_ntt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of
 
 #[cfg(test)]
 mod fast_ntt_attempt_tests {
-    use crate::shared_math::{b_field_element::BFieldElement, traits::GetPrimitiveRootOfUnity};
+    use crate::shared_math::{
+        b_field_element::BFieldElement,
+        traits::{GetPrimitiveRootOfUnity, GetRandomElements},
+        x_field_element::XFieldElement,
+    };
 
     use super::*;
 
     #[test]
-    fn basic_test_of_chu_ntt() {
+    fn chu_ntt_b_field_prop_test() {
+        let mut rng = rand::thread_rng();
+        for log_2_n in 1..10 {
+            let n = 1 << log_2_n;
+            for _ in 0..10 {
+                let mut values = BFieldElement::random_elements(n, &mut rng);
+                let original_values = values.clone();
+                let omega = BFieldElement::ring_one()
+                    .get_primitive_root_of_unity(n as u128)
+                    .0
+                    .unwrap();
+                chu_ntt::<BFieldElement>(&mut values, omega, log_2_n);
+                assert_ne!(original_values, values);
+                chu_intt::<BFieldElement>(&mut values, omega, log_2_n);
+                assert_eq!(original_values, values);
+
+                values[0] = BFieldElement::new(BFieldElement::MAX);
+                let original_values_with_max_element = values.clone();
+                chu_ntt::<BFieldElement>(&mut values, omega, log_2_n);
+                assert_ne!(original_values, values);
+                chu_intt::<BFieldElement>(&mut values, omega, log_2_n);
+                assert_eq!(original_values_with_max_element, values);
+            }
+        }
+    }
+
+    #[test]
+    fn chu_ntt_x_field_prop_test() {
+        let mut rng = rand::thread_rng();
+        for log_2_n in 1..10 {
+            let n = 1 << log_2_n;
+            for _ in 0..10 {
+                let mut values = XFieldElement::random_elements(n, &mut rng);
+                let original_values = values.clone();
+                let omega = XFieldElement::ring_one()
+                    .get_primitive_root_of_unity(n as u128)
+                    .0
+                    .unwrap();
+                chu_ntt::<XFieldElement>(&mut values, omega, log_2_n);
+                assert_ne!(original_values, values);
+                chu_intt::<XFieldElement>(&mut values, omega, log_2_n);
+                assert_eq!(original_values, values);
+
+                // Verify that we are not just operating in the B-field
+                // statistically this should hold except one out of
+                // ~ (2^64)^2 times this test runs
+                assert!(
+                    !original_values[1].coefficients[1].is_zero()
+                        || !original_values[1].coefficients[2].is_zero()
+                );
+
+                values[0] = XFieldElement::new([
+                    BFieldElement::new(BFieldElement::MAX),
+                    BFieldElement::new(BFieldElement::MAX),
+                    BFieldElement::new(BFieldElement::MAX),
+                ]);
+                let original_values_with_max_element = values.clone();
+                chu_ntt::<XFieldElement>(&mut values, omega, log_2_n);
+                assert_ne!(original_values, values);
+                chu_intt::<XFieldElement>(&mut values, omega, log_2_n);
+                assert_eq!(original_values_with_max_element, values);
+            }
+        }
+    }
+
+    #[test]
+    fn xfield_basic_test_of_chu_ntt() {
+        let mut input_output = vec![
+            XFieldElement::new_const(BFieldElement::ring_one()),
+            XFieldElement::new_const(BFieldElement::ring_zero()),
+            XFieldElement::new_const(BFieldElement::ring_zero()),
+            XFieldElement::new_const(BFieldElement::ring_zero()),
+        ];
+        let original_input = input_output.clone();
+        let expected = vec![
+            XFieldElement::new_const(BFieldElement::ring_one()),
+            XFieldElement::new_const(BFieldElement::ring_one()),
+            XFieldElement::new_const(BFieldElement::ring_one()),
+            XFieldElement::new_const(BFieldElement::ring_one()),
+        ];
+        let omega = XFieldElement::ring_one()
+            .get_primitive_root_of_unity(4)
+            .0
+            .unwrap();
+
+        println!("input_output = {:?}", input_output);
+        chu_ntt::<XFieldElement>(&mut input_output, omega, 2);
+        assert_eq!(expected, input_output);
+        println!("input_output = {:?}", input_output);
+
+        // Verify that INTT(NTT(x)) = x
+        chu_intt::<XFieldElement>(&mut input_output, omega, 2);
+        assert_eq!(original_input, input_output);
+    }
+
+    #[test]
+    fn bfield_basic_test_of_chu_ntt() {
         let mut input_output = vec![
             BFieldElement::new(1),
             BFieldElement::new(4),
