@@ -1,4 +1,5 @@
-use crate::shared_math::ntt::slow_intt;
+use crate::shared_math::ntt::intt;
+use crate::shared_math::other::log_2_ceil;
 use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
@@ -177,13 +178,18 @@ impl Stark {
         // ...
         let mut trace_interpolants = vec![];
         for r in 0..self.num_registers as usize {
-            let trace_column = &randomized_trace
+            let mut trace_interpolant: Vec<BFieldElement> = randomized_trace
                 .iter()
                 .map(|t| t[r])
                 .collect::<Vec<BFieldElement>>();
 
+            intt::<BFieldElement>(
+                &mut trace_interpolant,
+                omicron,
+                log_2_ceil(omicron_domain_length) as u32,
+            );
             let trace_interpolant = Polynomial {
-                coefficients: slow_intt(trace_column, &omicron),
+                coefficients: trace_interpolant,
             };
 
             // Sanity checks; consider moving into unit tests.
