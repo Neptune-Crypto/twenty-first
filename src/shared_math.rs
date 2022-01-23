@@ -1,7 +1,6 @@
 pub mod b_field_element;
 pub mod collatz_sequence;
 pub mod complex_number;
-pub mod fast_ntt_attempt;
 pub mod fraction;
 pub mod fri;
 pub mod integer_ring_polynomial;
