@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use twenty_first::shared_math::{
     b_field_element::BFieldElement,
-    fast_ntt_attempt,
+    ntt,
     traits::{GetPrimitiveRootOfUnity, GetRandomElements},
     x_field_element::XFieldElement,
 };
@@ -35,7 +35,9 @@ fn ntt_forward(c: &mut Criterion) {
                 BenchmarkId::new("ntt_bfield", log2_of_size),
                 &size,
                 |b, _| {
-                    b.iter(|| twenty_first::shared_math::ntt::ntt(&input, &unity_root.unwrap()));
+                    b.iter(|| {
+                        twenty_first::shared_math::ntt::slow_ntt(&input, &unity_root.unwrap())
+                    });
                 },
             )
             .sample_size(10);
@@ -52,7 +54,7 @@ fn ntt_forward(c: &mut Criterion) {
                 &size,
                 |b, _| {
                     b.iter(|| {
-                        fast_ntt_attempt::chu_ntt::<BFieldElement>(
+                        ntt::ntt::<BFieldElement>(
                             &mut input,
                             unity_root.unwrap(),
                             log2_of_size as u32,
@@ -74,7 +76,7 @@ fn ntt_forward(c: &mut Criterion) {
                 &size,
                 |b, _| {
                     b.iter(|| {
-                        fast_ntt_attempt::chu_ntt::<XFieldElement>(
+                        ntt::ntt::<XFieldElement>(
                             &mut input,
                             unity_root.unwrap(),
                             log2_of_size as u32,
