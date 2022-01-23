@@ -7,7 +7,7 @@ use crate::shared_math::traits::{
 };
 use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
-use std::ops::Div;
+use std::ops::{AddAssign, Div, MulAssign, SubAssign};
 use std::{
     fmt::Display,
     ops::{Add, Mul, Neg, Sub},
@@ -171,7 +171,7 @@ impl FieldBatchInversion for XFieldElement {
         for i in 0..input_length {
             assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
             scratch[i] = acc;
-            acc = acc * input[i];
+            acc *= input[i];
         }
 
         acc = acc.inv();
@@ -211,7 +211,7 @@ impl CyclicGroupGenerator for XFieldElement {
 
         loop {
             ret.push(val);
-            val = val * *self;
+            val *= *self;
             if val.is_one() || max.is_some() && ret.len() >= max.unwrap() {
                 break;
             }
@@ -371,6 +371,42 @@ impl Sub for XFieldElement {
     }
 }
 
+impl AddAssign for XFieldElement {
+    fn add_assign(&mut self, rhs: Self) {
+        self.coefficients[0] += rhs.coefficients[0];
+        self.coefficients[1] += rhs.coefficients[1];
+        self.coefficients[2] += rhs.coefficients[2];
+    }
+}
+
+impl SubAssign for XFieldElement {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.coefficients[0] -= rhs.coefficients[0];
+        self.coefficients[1] -= rhs.coefficients[1];
+        self.coefficients[2] -= rhs.coefficients[2];
+    }
+}
+
+impl MulAssign for XFieldElement {
+    fn mul_assign(&mut self, rhs: Self) {
+        // a_0 * x^2 + b_0 * x + c_0
+        let a0 = self.coefficients[2];
+        let b0 = self.coefficients[1];
+        let c0 = self.coefficients[0];
+
+        // a_1 * x^2 + b_1 * x + c_1
+        let a1 = rhs.coefficients[2];
+        let b1 = rhs.coefficients[1];
+        let c1 = rhs.coefficients[0];
+        // (a_0 * x^2 + b_0 * x + c_0) * (a_1 * x^2 + b_1 * x + c_1)
+        self.coefficients = [
+            c0 * c1 - a0 * b1 - b0 * a1,                     // * x^0
+            b0 * c1 + c0 * b1 - a0 * a1 + a0 * b1 + b0 * a1, // * x^1
+            a0 * c1 + b0 * b1 + c0 * a1 + a0 * a1,           // * x^2
+        ];
+    }
+}
+
 impl Div for XFieldElement {
     type Output = Self;
 
@@ -393,10 +429,10 @@ impl ModPowU64 for XFieldElement {
 
         while i > 0 {
             if i % 2 == 1 {
-                result = result * x;
+                result *= x;
             }
 
-            x = x * x;
+            x *= x;
             i >>= 1;
         }
 
@@ -826,7 +862,7 @@ mod x_field_element_test {
 
     #[test]
     fn x_field_division_mul_pbt() {
-        let test_iterations = 100;
+        let test_iterations = 1000;
         let mut rng = rand::thread_rng();
         let rands_a = XFieldElement::random_elements(test_iterations, &mut rng);
         let rands_b = XFieldElement::random_elements(test_iterations, &mut rng);
@@ -836,6 +872,19 @@ mod x_field_element_test {
             assert_eq!(ab, ba);
             assert_eq!(ab / b, a);
             assert_eq!(ab / a, b);
+
+            // Test the add/sub/mul assign operators
+            let mut a_minus_b = a.clone();
+            a_minus_b -= b;
+            assert_eq!(a - b, a_minus_b);
+
+            let mut a_plus_b = a.clone();
+            a_plus_b += b;
+            assert_eq!(a + b, a_plus_b);
+
+            let mut a_mul_b = a.clone();
+            a_mul_b *= b;
+            assert_eq!(a * b, a_mul_b);
         }
     }
 

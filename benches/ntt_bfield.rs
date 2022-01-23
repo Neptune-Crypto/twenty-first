@@ -20,8 +20,6 @@ fn generate_ntt_input<'a>(log2_of_size: usize) -> Vec<BFieldElement> {
 fn generate_xfield_elements<'a>(log2_of_size: usize) -> Vec<XFieldElement> {
     let size: usize = 2usize.pow(log2_of_size as u32);
     let mut rng = rand::thread_rng();
-    let mut output: Vec<XFieldElement> = Vec::with_capacity(size);
-
     XFieldElement::random_elements(size, &mut rng)
 }
 

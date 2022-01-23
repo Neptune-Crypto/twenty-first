@@ -41,7 +41,7 @@ impl RescuePrime {
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
-                temp[i] = temp[i] + self.mds[i][j] * state[j];
+                temp[i] += self.mds[i][j] * state[j];
             }
         }
 
@@ -61,7 +61,7 @@ impl RescuePrime {
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
-                temp[i] = temp[i] + self.mds[i][j] * state[j];
+                temp[i] += self.mds[i][j] * state[j];
             }
         }
 

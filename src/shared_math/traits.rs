@@ -3,7 +3,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::convert::From;
 use std::fmt::{Debug, Display};
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 pub trait IdentityValues {
     fn is_zero(&self) -> bool;
@@ -72,6 +72,9 @@ pub trait PrimeFieldElement {
         + Debug
         + IdentityValues
         + Add<Output = Self::Elem>
+        + AddAssign
+        + SubAssign
+        + MulAssign
         + Sub<Output = Self::Elem>
         + Mul<Output = Self::Elem>
         + Div<Output = Self::Elem>

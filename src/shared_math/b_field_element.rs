@@ -10,6 +10,7 @@ use rand::prelude::ThreadRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
+use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
     fmt::{self, Display},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
@@ -215,7 +216,7 @@ impl FieldBatchInversion for BFieldElement {
         for i in 0..input_length {
             assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
             scratch[i] = acc;
-            acc = acc * input[i];
+            acc *= input[i];
         }
 
         acc = acc.inv();
@@ -238,7 +239,7 @@ impl CyclicGroupGenerator for BFieldElement {
 
         loop {
             ret.push(val);
-            val = val * *self;
+            val *= *self;
             if val.is_one() || max.is_some() && ret.len() >= max.unwrap() {
                 break;
             }
@@ -337,6 +338,24 @@ impl Add for BFieldElement {
         Self {
             0: (self.0 + other.0) % Self::QUOTIENT,
         }
+    }
+}
+
+impl AddAssign for BFieldElement {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 = (self.0 + rhs.0) % Self::QUOTIENT;
+    }
+}
+
+impl SubAssign for BFieldElement {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.0 = (Self::QUOTIENT - rhs.0 + self.0) % Self::QUOTIENT;
+    }
+}
+
+impl MulAssign for BFieldElement {
+    fn mul_assign(&mut self, rhs: Self) {
+        self.0 = (self.0 * rhs.0) % Self::QUOTIENT;
     }
 }
 
@@ -640,7 +659,7 @@ mod b_prime_field_element_test {
 
     #[test]
     fn mul_div_plus_minus_property_based_test() {
-        let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::QUOTIENT as i128);
+        let rands: Vec<i128> = generate_random_numbers(300, BFieldElement::QUOTIENT as i128);
         for i in 1..rands.len() {
             let a = bfield_elem!(rands[i - 1] as u128);
             let b = bfield_elem!(rands[i] as u128);
@@ -656,6 +675,19 @@ mod b_prime_field_element_test {
             assert_eq!(b - a + a, b);
             assert!((a - a).is_zero());
             assert!((b - b).is_zero());
+
+            // Test the add/sub/mul assign operators
+            let mut a_minus_b = a.clone();
+            a_minus_b -= b;
+            assert_eq!(a - b, a_minus_b);
+
+            let mut a_plus_b = a.clone();
+            a_plus_b += b;
+            assert_eq!(a + b, a_plus_b);
+
+            let mut a_mul_b = a.clone();
+            a_mul_b *= b;
+            assert_eq!(a * b, a_mul_b);
         }
     }
 
