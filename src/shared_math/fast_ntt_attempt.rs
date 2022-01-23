@@ -1,6 +1,6 @@
 use crate::shared_math::traits::{IdentityValues, ModPowU32};
 
-use super::traits::PrimeFieldElement;
+use super::traits::{New, PrimeFieldElement};
 
 // This NTT implementation is adapted from inspired by Longa and Naehrig[0]
 // and from dusk network/Plon[1]
@@ -16,8 +16,17 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
     r
 }
 
-pub fn chu_ntt<T: PrimeFieldElement>(a: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
-    let n = a.len() as u32;
+pub fn chu_intt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
+    let n: T::Elem = omega.new_from_usize(x.len());
+    let n_inv: T::Elem = omega.ring_one() / n;
+    chu_ntt::<T>(x, omega.ring_one() / omega, log_2_of_n);
+    for elem in x.iter_mut() {
+        *elem = elem.to_owned() * n_inv.clone();
+    }
+}
+
+pub fn chu_ntt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
+    let n = x.len() as u32;
     assert_eq!(
         n,
         1 << log_2_of_n,
@@ -29,7 +38,7 @@ pub fn chu_ntt<T: PrimeFieldElement>(a: &mut [T::Elem], omega: T::Elem, log_2_of
     for k in 0..n {
         let rk = bitreverse(k, log_2_of_n);
         if k < rk {
-            a.swap(rk as usize, k as usize);
+            x.swap(rk as usize, k as usize);
         }
     }
 
@@ -42,12 +51,12 @@ pub fn chu_ntt<T: PrimeFieldElement>(a: &mut [T::Elem], omega: T::Elem, log_2_of
         while k < n {
             let mut w = omega.ring_one();
             for j in 0..m {
-                let mut t = a[(k + j + m) as usize].clone();
+                let mut t = x[(k + j + m) as usize].clone();
                 t *= w.clone();
-                let mut tmp = a[(k + j) as usize].clone();
+                let mut tmp = x[(k + j) as usize].clone();
                 tmp -= t.clone();
-                a[(k + j + m) as usize] = tmp;
-                a[(k + j) as usize] += t;
+                x[(k + j + m) as usize] = tmp;
+                x[(k + j) as usize] += t;
                 w *= w_m.clone();
             }
 
@@ -65,13 +74,14 @@ mod fast_ntt_attempt_tests {
     use super::*;
 
     #[test]
-    fn basic_test_of_fast_ntt() {
+    fn basic_test_of_chu_ntt() {
         let mut input_output = vec![
             BFieldElement::new(1),
             BFieldElement::new(4),
             BFieldElement::new(0),
             BFieldElement::new(0),
         ];
+        let original_input = input_output.clone();
         let expected = vec![
             BFieldElement::new(5),
             BFieldElement::new(1125899906842625),
@@ -85,6 +95,10 @@ mod fast_ntt_attempt_tests {
 
         chu_ntt::<BFieldElement>(&mut input_output, omega, 2);
         assert_eq!(expected, input_output);
+
+        // Verify that INTT(NTT(x)) = x
+        chu_intt::<BFieldElement>(&mut input_output, omega, 2);
+        assert_eq!(original_input, input_output);
     }
 
     #[test]
@@ -123,6 +137,7 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(0),
             BFieldElement::new(0),
         ];
+        let original_input = input_output.clone();
         let omega = BFieldElement::ring_one()
             .get_primitive_root_of_unity(32)
             .0
@@ -165,14 +180,9 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(0),
         ];
         assert_eq!(expected, input_output);
+
+        // Verify that INTT(NTT(x)) = x
+        chu_intt::<BFieldElement>(&mut input_output, omega, 5);
+        assert_eq!(original_input, input_output);
     }
 }
-
-// input
-// BFieldElement::new(1),
-// BFieldElement::new(4),
-// BFieldElement::new(0),
-// BFieldElement::new(0),
-
-// output
-// BFieldElement(5), BFieldElement(1125899906842625), BFieldElement(18446744069414584318), BFieldElement(18445618169507741698)
