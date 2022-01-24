@@ -3,6 +3,7 @@
 A collection of cryptography functions written in Rust.
 
 ## Setup
+
 ### Ubuntu
  - curl -- `sudo apt install curl`
  - rustup -- `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` (installs rustup, cargo, rustc etc.)
@@ -13,6 +14,7 @@ A collection of cryptography functions written in Rust.
  - install `vscode`
  - in `vscode` install the plugin `rust-analyzer`
  - in `vscode` activate format-on-save via `File` > `Preferences` > `Settings` then check the box for "Format on Save"
+ - install Criterion with `cargo install cargo-criterion`
 
 ## Cheatsheet
 
@@ -23,7 +25,7 @@ A collection of cryptography functions written in Rust.
  - To build, use `make build`.
  - To install, use `make install`.
  - To run lint, compile, and run tests use `make all`. Note that this does *not* run install.
- - To run the benchmarks and generate the benchmark report, use `make bench`.
+ - To run the benchmarks and generate the benchmark report, use `make bench`, or run `cargo criterion <specific-benchmark>`.
 
 ## Notes
 
