@@ -13,7 +13,7 @@ use std::{
     ops::{Add, Mul, Neg, Sub},
 };
 
-use super::traits::GetPrimitiveRootOfUnity;
+use super::traits::{FromVecu8, GetPrimitiveRootOfUnity};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -230,19 +230,18 @@ impl Display for XFieldElement {
     }
 }
 
-impl From<Vec<u8>> for XFieldElement {
-    fn from(bytes: Vec<u8>) -> Self {
+impl FromVecu8 for XFieldElement {
+    fn from_vecu8(&self, bytes: Vec<u8>) -> Self {
         // TODO: See note in BFieldElement's From<Vec<u8>>.
         let bytesize = std::mem::size_of::<u64>();
         let (first_eight_bytes, rest) = bytes.as_slice().split_at(bytesize);
         let (second_eight_bytes, rest2) = rest.split_at(bytesize);
         let (third_eight_bytes, _rest3) = rest2.split_at(bytesize);
 
-        XFieldElement::new([
-            first_eight_bytes.to_vec().into(),
-            second_eight_bytes.to_vec().into(),
-            third_eight_bytes.to_vec().into(),
-        ])
+        let coefficient0 = self.coefficients[0].from_vecu8(first_eight_bytes.to_vec());
+        let coefficient1 = self.coefficients[0].from_vecu8(second_eight_bytes.to_vec());
+        let coefficient2 = self.coefficients[0].from_vecu8(third_eight_bytes.to_vec());
+        XFieldElement::new([coefficient0, coefficient1, coefficient2])
     }
 }
 

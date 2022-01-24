@@ -16,7 +16,7 @@ use super::b_field_element::BFieldElement;
 use super::mpolynomial::MPolynomial;
 use super::other::roundup_npo2;
 use super::polynomial::Polynomial;
-use super::traits::{GetPrimitiveRootOfUnity, GetRandomElements};
+use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomElements};
 use super::x_field_fri::Fri;
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
@@ -901,7 +901,7 @@ impl Stark {
         // Make sure we change this when changing the hash function.
         k_seeds
             .iter()
-            .map(|seed| BFieldElement::from(seed.to_vec()))
+            .map(|seed| BFieldElement::ring_zero().from_vecu8(seed.to_vec()))
             .collect::<Vec<BFieldElement>>()
     }
 }

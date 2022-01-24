@@ -9,6 +9,7 @@ use std::error::Error;
 
 use super::other::log_2_ceil;
 use super::polynomial::Polynomial;
+use super::traits::FromVecu8;
 use crate::shared_math::ntt::slow_intt;
 
 // Module for performing FRI on XFieldElement
@@ -103,8 +104,9 @@ impl<F: PrimeFieldElement> Fri<F> {
             // Sanity check to verify that generator has the right order; requires ModPowU64
             //assert!(generator.inv() == generator.mod_pow((n - 1).into())); // TODO: REMOVE
 
-            // Get challenge
-            let alpha: F::Elem = proof_stream.prover_fiat_shamir().into();
+            // Get challenge, one just acts as *any* element in this field -- the field element
+            // is completely determined from the byte stream.
+            let alpha: F::Elem = one.from_vecu8(proof_stream.prover_fiat_shamir());
 
             let x_offset: Vec<F::Elem> = generator
                 .get_cyclic_group_elements(None)
@@ -226,7 +228,8 @@ impl<F: PrimeFieldElement> Fri<F> {
         let mut alphas: Vec<F::Elem> = vec![];
         roots.push(proof_stream.dequeue::<[u8; 32]>(32)?);
         for _ in 0..num_rounds {
-            let alpha: F::Elem = proof_stream.verifier_fiat_shamir().into();
+            // Get a challenge from the proof stream
+            let alpha: F::Elem = omega.from_vecu8(proof_stream.verifier_fiat_shamir());
             alphas.push(alpha);
             roots.push(proof_stream.dequeue::<[u8; 32]>(32)?);
         }
