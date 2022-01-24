@@ -25,18 +25,23 @@ fn generate_xfield_elements<'a>(log2_of_size: usize) -> Vec<XFieldElement> {
 
 fn ntt_forward(c: &mut Criterion) {
     let mut group = c.benchmark_group("ntt_bfield");
+
     for &log2_of_size in [3, 5, 7, 12usize, 13, 16, 18].iter() {
         let size = 2u128.pow(log2_of_size as u32);
-        let (unity_root, _) = BFieldElement::ring_zero().get_primitive_root_of_unity(size);
-        let input = generate_ntt_input(log2_of_size);
+        let (unity_root, _) = XFieldElement::ring_zero().get_primitive_root_of_unity(size);
+        let mut input = generate_xfield_elements(log2_of_size);
         group.throughput(Throughput::Elements(size as u64));
         group
             .bench_with_input(
-                BenchmarkId::new("ntt_bfield", log2_of_size),
+                BenchmarkId::new("chu_ntt x-field", log2_of_size),
                 &size,
                 |b, _| {
                     b.iter(|| {
-                        twenty_first::shared_math::ntt::slow_ntt(&input, &unity_root.unwrap())
+                        ntt::ntt::<XFieldElement>(
+                            &mut input,
+                            unity_root.unwrap(),
+                            log2_of_size as u32,
+                        )
                     });
                 },
             )
@@ -67,20 +72,16 @@ fn ntt_forward(c: &mut Criterion) {
 
     for &log2_of_size in [3, 5, 7, 12usize, 13, 16, 18].iter() {
         let size = 2u128.pow(log2_of_size as u32);
-        let (unity_root, _) = XFieldElement::ring_zero().get_primitive_root_of_unity(size);
-        let mut input = generate_xfield_elements(log2_of_size);
+        let (unity_root, _) = BFieldElement::ring_zero().get_primitive_root_of_unity(size);
+        let input = generate_ntt_input(log2_of_size);
         group.throughput(Throughput::Elements(size as u64));
         group
             .bench_with_input(
-                BenchmarkId::new("chu_ntt x-field", log2_of_size),
+                BenchmarkId::new("ntt_bfield", log2_of_size),
                 &size,
                 |b, _| {
                     b.iter(|| {
-                        ntt::ntt::<XFieldElement>(
-                            &mut input,
-                            unity_root.unwrap(),
-                            log2_of_size as u32,
-                        )
+                        twenty_first::shared_math::ntt::slow_ntt(&input, &unity_root.unwrap())
                     });
                 },
             )
