@@ -9,11 +9,28 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 use crate::utils::FIRST_TEN_THOUSAND_PRIMES;
 
 use super::traits::{
-    CyclicGroupGenerator, FieldBatchInversion, GetPrimitiveRootOfUnity, IdentityValues, ModPowU32,
-    New,
+    CyclicGroupGenerator, FieldBatchInversion, FromVecu8, GetPrimitiveRootOfUnity, IdentityValues,
+    ModPowU32, New, PrimeFieldElement,
 };
 
 use serde::de::Deserializer;
+
+pub fn get_prime_with_primitive_root_of_unity(
+    n: u128,
+    min_value: u128,
+) -> Option<PrimeFieldElementFlexible> {
+    for prime in FIRST_TEN_THOUSAND_PRIMES
+        .iter()
+        .filter(|&x| *x as u128 > min_value)
+    {
+        let field_element = PrimeFieldElementFlexible::new(1.into(), (*prime).into());
+        if let (Some(j), _) = field_element.get_primitive_root_of_unity(n) {
+            return Some(j);
+        }
+    }
+
+    None
+}
 
 // Can only be used to represent up to 256 bits numbers, I think. Because mul.
 // If bigger primes are needed, you could convert to BigInt when needed
@@ -358,9 +375,40 @@ impl<'a> Div for PrimeFieldElementFlexible {
     }
 }
 
-// impl PrimeFieldElement for PrimeFieldElementFlexible {
-//     type Elem = PrimeFieldElementFlexible;
-// }
+impl PrimeFieldElement for PrimeFieldElementFlexible {
+    type Elem = PrimeFieldElementFlexible;
+}
+
+impl FromVecu8 for PrimeFieldElementFlexible {
+    fn from_vecu8(&self, bytes: Vec<u8>) -> Self {
+        // value
+        let bytesize = std::mem::size_of::<u64>();
+        let (first_eight_bytes, rest) = bytes.as_slice().split_at(bytesize);
+        let (second_eight_bytes, rest) = rest.split_at(bytesize);
+        let (third_eight_bytes, rest) = rest.split_at(bytesize);
+        let (fourth_eight_bytes, rest) = rest.split_at(bytesize);
+        let (fifth_eight_bytes, rest) = rest.split_at(bytesize);
+        let (sixth_eight_bytes, rest) = rest.split_at(bytesize);
+        let (seventh_eight_bytes, rest) = rest.split_at(bytesize);
+        let (eighth_eight_bytes, _rest) = rest.split_at(bytesize);
+        let mut u512_bytes: Vec<u8> = vec![];
+        u512_bytes.extend_from_slice(first_eight_bytes);
+        u512_bytes.extend_from_slice(second_eight_bytes);
+        u512_bytes.extend_from_slice(third_eight_bytes);
+        u512_bytes.extend_from_slice(fourth_eight_bytes);
+        u512_bytes.extend_from_slice(fifth_eight_bytes);
+        u512_bytes.extend_from_slice(sixth_eight_bytes);
+        u512_bytes.extend_from_slice(seventh_eight_bytes);
+        u512_bytes.extend_from_slice(eighth_eight_bytes);
+
+        let val_u512 = U512::from_big_endian(&u512_bytes);
+
+        PrimeFieldElementFlexible {
+            value: val_u512,
+            q: self.q,
+        }
+    }
+}
 
 impl IdentityValues for PrimeFieldElementFlexible {
     fn is_zero(&self) -> bool {
@@ -608,6 +656,16 @@ mod test_modular_arithmetic_flexible {
 
         // test for equality
         assert!(e1 == e2); // test passes => equality test folows all pointers to test end-values
+    }
+
+    #[test]
+    fn get_prime_with_primitive_root_of_unity_test() {
+        let a = get_prime_with_primitive_root_of_unity(17, 300).unwrap();
+        let _307: U512 = 307.into();
+        assert_eq!(_307, a.q);
+        let _273: U512 = 273.into();
+        assert_eq!(_273, a.value);
+        assert!(a.mod_pow(17.into()).is_one());
     }
 
     #[test]
