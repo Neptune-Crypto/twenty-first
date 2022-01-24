@@ -340,6 +340,15 @@ impl Mul for XFieldElement {
         let b1 = other.coefficients[1];
         let c1 = other.coefficients[0];
 
+        // Optimization for multiplying an X field with a B field element
+        // This optimization is very relevant when doing NTT on the X field
+        // because the `omega` (here: `rhs` live in the B field)
+        if a1.is_zero() && b1.is_zero() {
+            return Self {
+                coefficients: [c0 * c1, b0 * c1, a0 * c1],
+            };
+        }
+
         // (a_0 * x^2 + b_0 * x + c_0) * (a_1 * x^2 + b_1 * x + c_1)
         Self {
             coefficients: [
@@ -405,6 +414,15 @@ impl MulAssign for XFieldElement {
         let a1 = rhs.coefficients[2];
         let b1 = rhs.coefficients[1];
         let c1 = rhs.coefficients[0];
+
+        // Optimization for multiplying an X field with a B field element
+        // This optimization is very relevant when doing NTT on the X field
+        // because the `omega` (here: `rhs` live in the B field)
+        if a1.is_zero() && b1.is_zero() {
+            self.coefficients = [c0 * c1, b0 * c1, a0 * c1];
+            return;
+        }
+
         // (a_0 * x^2 + b_0 * x + c_0) * (a_1 * x^2 + b_1 * x + c_1)
         self.coefficients = [
             c0 * c1 - a0 * b1 - b0 * a1,                     // * x^0
@@ -892,6 +910,14 @@ mod x_field_element_test {
             let mut a_mul_b = a.clone();
             a_mul_b *= b;
             assert_eq!(a * b, a_mul_b);
+
+            // Test the add/sub/mul assign operators, when the higher coefficients are zero
+            let b_field_b = XFieldElement::new_const(b.coefficients[0]);
+            let mut a_mul_b_field_b = a.clone();
+            a_mul_b_field_b *= b_field_b;
+            assert_eq!(a * b_field_b, a_mul_b_field_b);
+            assert_eq!(a, a_mul_b_field_b / b_field_b);
+            assert_eq!(b_field_b, a_mul_b_field_b / a);
         }
     }
 
