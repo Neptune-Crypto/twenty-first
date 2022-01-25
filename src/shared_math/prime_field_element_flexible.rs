@@ -1,19 +1,16 @@
+use crate::shared_math::traits::{
+    CyclicGroupGenerator, FieldBatchInversion, FromVecu8, GetPrimitiveRootOfUnity, IdentityValues,
+    ModPowU32, ModPowU64, New, PrimeFieldElement,
+};
+use crate::utils::FIRST_TEN_THOUSAND_PRIMES;
 use num_bigint::{BigInt, Sign};
 use num_traits::{One, Zero};
 use parity_scale_codec::Encode;
 use primitive_types::{U256, U512};
+use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
-
-use crate::utils::FIRST_TEN_THOUSAND_PRIMES;
-
-use super::traits::{
-    CyclicGroupGenerator, FieldBatchInversion, FromVecu8, GetPrimitiveRootOfUnity, IdentityValues,
-    ModPowU32, ModPowU64, New, PrimeFieldElement,
-};
-
-use serde::de::Deserializer;
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 pub fn get_prime_with_primitive_root_of_unity(
     n: u128,
@@ -170,9 +167,9 @@ impl PrimeFieldElementFlexible {
         }
     }
 
-    // pub fn new_from_u512(value: U512, q: U512) -> Self {
-    //     Self { q, value }
-    // }
+    pub fn new_from_u512(value: U512, q: U512) -> Self {
+        Self { q, value }
+    }
 
     pub fn inv(&self) -> Self {
         let mut q_bytes: Vec<u8> = vec![0; 64];

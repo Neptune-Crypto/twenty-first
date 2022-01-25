@@ -7,7 +7,7 @@ mod flow_of_control;
 mod formatted_print;
 mod functions;
 mod hello_world;
-pub mod homomorphic_encryption;
+// pub mod homomorphic_encryption;
 mod primitives;
 pub mod shared_math;
 pub mod timing_reporter;

@@ -22,8 +22,12 @@ pub struct RescuePrime {
 }
 
 impl RescuePrime {
+    pub fn prime_from_tutorial() -> U256 {
+        (407u128 * (1 << 119) + 1).into()
+    }
+
     pub fn from_tutorial() -> Self {
-        let prime: U256 = (407u128 * (1 << 119) + 1).into();
+        let prime: U256 = Self::prime_from_tutorial();
         let mds: Vec<Vec<PrimeFieldElementFlexible>> = vec![
             vec![
                 PrimeFieldElementFlexible::new(
@@ -536,7 +540,6 @@ mod rescue_prime_start_test {
     #[test]
     fn rp_stark_test() {
         let prime: U256 = (407u128 * (1 << 119) + 1).into();
-        let rescue_prime_stark = RescuePrime::from_tutorial();
         let expansion_factor = 4usize;
         let colinearity_checks_count = 2usize;
         let transition_constraints_degree = 2usize;

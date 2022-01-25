@@ -86,12 +86,9 @@ mod test_rpsss {
 
     use super::super::stark_pfe_flexible::test_stark;
     use super::*;
-    use primitive_types::U256;
 
     #[test]
     fn sign_verify_test() {
-        let prime: U256 = (407u128 * (1 << 119) + 1).into();
-        let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let (mut stark, rp): (StarkPrimeFieldElementFlexible, RescuePrime) =
             test_stark::get_tutorial_stark();
         let rpsss_no_preprocess = RPSSS {

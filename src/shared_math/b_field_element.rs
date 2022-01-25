@@ -1,3 +1,4 @@
+use super::traits::{FromVecu8, GetPrimitiveRootOfUnity};
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
@@ -15,8 +16,6 @@ use std::{
     fmt::{self, Display},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
-
-use super::traits::{FromVecu8, GetPrimitiveRootOfUnity};
 
 static PRIMITIVE_ROOTS: phf::Map<u64, u128> = phf_map! {
     2u64 => 18446744069414584320,

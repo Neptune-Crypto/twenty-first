@@ -1,7 +1,10 @@
 use super::polynomial_quotient_ring::PolynomialQuotientRing;
+use super::prime_field_element_flexible::PrimeFieldElementFlexible;
+use super::traits::IdentityValues;
 use crate::utils::{generate_random_numbers, has_unique_elements};
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
+use primitive_types::U256;
 use rand::Rng;
 use rand_distr::Normal;
 use std::convert::From;
@@ -79,7 +82,7 @@ impl std::fmt::Display for PrimeFieldPolynomial<'_> {
 impl<'a> PrimeFieldPolynomial<'a> {
     // Verify that N > 2 points are colinear
     // Also demand that all x-values are unique??
-    pub fn are_colinear_raw(points: &[(i128, i128)], modulus: i128) -> bool {
+    pub fn are_colinear_raw(points: &[(i128, i128)], modulus: u128) -> bool {
         if points.len() < 3 {
             println!("Too few points received. Got: {}", points.len());
             return false;
@@ -90,23 +93,37 @@ impl<'a> PrimeFieldPolynomial<'a> {
         //     return false;
         // }
 
+        // let points_: Vec<U256, U256> = points
+        //     .into_iter()
+        //     .map(|(x, y)| (x.into(), y.into()))
+        //     .collect();
+        let x0 = PrimeFieldElementFlexible::new(points[0].0.into(), modulus.into());
+        let x1 = PrimeFieldElementFlexible::new(points[1].0.into(), modulus.into());
+        let y0 = PrimeFieldElementFlexible::new(points[0].1.into(), modulus.into());
+        let y1 = PrimeFieldElementFlexible::new(points[1].1.into(), modulus.into());
+
+        let xdiff0: U256 = (points[0].0 - points[1].0).into();
+        let ydiff0: U256 = (points[0].1 - points[1].1).into();
+
         // Find 1st degree polynomial from first two points
-        let field = PrimeField::new(modulus);
-        let x_diff = PrimeFieldElement::new(points[0].0 - points[1].0, &field);
+        let x_diff = PrimeFieldElementFlexible::new(xdiff0, modulus.into());
         let x_diff_inv = x_diff.inv();
+        let y_diff = PrimeFieldElementFlexible::new(ydiff0, modulus.into());
         // println!("x_diff = {} => x_diff_inv = {}", x_diff.value, x_diff_inv);
-        let a = ((points[0].1 - points[1].1) * x_diff_inv.value % modulus + modulus) % modulus;
-        let b = ((points[0].1 - a * points[0].0) % modulus + modulus) % modulus;
+        let a = x_diff * x_diff_inv;
+        let b = y0 - a * x0;
         for point in points.iter().skip(2) {
             // A decent speedup could be achieved by removing the two last modulus
             // expressions here and demand that the input x-values are all elements
             // in the finite field
-            let expected = ((a * point.0 + b) % modulus + modulus) % modulus;
-            if (point.1 % modulus + modulus) % modulus != expected {
+            let xp = PrimeFieldElementFlexible::new(point.0.into(), modulus.into());
+            let yp = PrimeFieldElementFlexible::new(point.1.into(), modulus.into());
+            let expected = a * xp + b;
+            if yp != expected {
                 println!(
                     "L({}) = {}, expected L({}) = {}, Found: L(x) = {}x + {} mod {} from {{({},{}),({},{})}}",
                     point.0,
-                    (point.1 % modulus + modulus) % modulus,
+                    point.1,
                     point.0,
                     expected,
                     a,
@@ -146,37 +163,41 @@ impl<'a> PrimeFieldPolynomial<'a> {
         }
     }
 
-    pub fn evaluate<'d>(&self, x: &'d PrimeFieldElement) -> PrimeFieldElement<'d> {
-        let zero = PrimeFieldElement::new(0, x.field);
+    pub fn evaluate(&self, x: PrimeFieldElementFlexible) -> PrimeFieldElementFlexible {
+        let zero = x.ring_zero();
+        let prime = zero.q;
         self.coefficients
             .iter()
             .enumerate()
-            .map(|(i, &c)| PrimeFieldElement::new(c, x.field) * x.mod_pow(i as i128))
+            .map(|(i, &c)| {
+                PrimeFieldElementFlexible::new_from_u512(c.into(), prime) * x.mod_pow(i.into())
+            })
             .fold(zero, |sum, val| sum + val)
     }
 
-    pub fn finite_field_lagrange_interpolation<'b>(
-        points: &'b [(PrimeFieldElement, PrimeFieldElement)],
-        pqr: &'a PolynomialQuotientRing,
+    pub fn finite_field_lagrange_interpolation(
+        points: &[(PrimeFieldElementFlexible, PrimeFieldElementFlexible)],
+        pqr: &PolynomialQuotientRing,
     ) -> Self {
         // calculate a reversed representation of the coefficients of
         // prod_{i=0}^{N}((x- q_i))
-        fn prod_helper<'c>(input: &[PrimeFieldElement<'c>]) -> Vec<PrimeFieldElement<'c>> {
+        fn prod_helper(input: &[PrimeFieldElementFlexible]) -> Vec<PrimeFieldElementFlexible> {
             if let Some((q_j, elements)) = input.split_first() {
                 match elements {
                     // base case is `x - q_j` := [1, -q_j]
                     [] => vec![
-                        PrimeFieldElement::new(1, q_j.field),
-                        PrimeFieldElement::new(-q_j.value, q_j.field),
+                        PrimeFieldElementFlexible::new_from_u512(1.into(), q_j.q),
+                        PrimeFieldElementFlexible::new_from_u512(q_j.q - q_j.value, q_j.q),
                     ],
                     _ => {
                         // The recursive call calculates (x-q_j)*rec = x*rec - q_j*rec := [0, rec] .- q_j*[rec]
                         let mut rec = prod_helper(elements);
-                        rec.push(PrimeFieldElement::new(0, q_j.field));
+                        rec.push(PrimeFieldElementFlexible::new_from_u512(0.into(), q_j.q));
                         let mut i = rec.len() - 1;
                         while i > 0 {
-                            rec[i] =
-                                rec[i] - PrimeFieldElement::new(q_j.value, q_j.field) * rec[i - 1];
+                            rec[i] = rec[i]
+                                - PrimeFieldElementFlexible::new_from_u512(q_j.value, q_j.q)
+                                    * rec[i - 1];
                             i -= 1;
                         }
                         rec
@@ -191,7 +212,7 @@ impl<'a> PrimeFieldPolynomial<'a> {
             panic!("Repeated x values received. Got: {:?}", points);
         }
 
-        let roots: Vec<PrimeFieldElement> = points.iter().map(|x| x.0).collect();
+        let roots: Vec<PrimeFieldElementFlexible> = points.iter().map(|x| x.0).collect();
         let mut big_pol_coeffs = prod_helper(&roots);
 
         big_pol_coeffs.reverse();
@@ -199,8 +220,8 @@ impl<'a> PrimeFieldPolynomial<'a> {
             coefficients: big_pol_coeffs.iter().map(|&x| x.value).collect(),
             pqr,
         };
-        let mut coefficients: Vec<PrimeFieldElement> =
-            vec![PrimeFieldElement::new(0, points[0].0.field); points.len()];
+        let mut coefficients: Vec<PrimeFieldElementFlexible> =
+            vec![PrimeFieldElementFlexible::new(0, points[0].0.field); points.len()];
         for point in points.iter() {
             // create a PrimeFieldPolynomial that is zero at all other points than this
             // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))

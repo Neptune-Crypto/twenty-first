@@ -860,7 +860,6 @@ pub mod test_stark {
     #[test]
     fn boundary_quotient_degree_bounds_test() {
         let prime: U256 = (407u128 * (1 << 119) + 1).into();
-        let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let (stark, rescue_prime) = get_tutorial_stark();
         let input = PrimeFieldElementFlexible::new(228894434762048332457318u128.into(), prime);
         let output_element = rescue_prime.hash(&input);
@@ -874,8 +873,6 @@ pub mod test_stark {
 
     #[test]
     fn max_degree_test() {
-        let prime: U256 = (407u128 * (1 << 119) + 1).into();
-        let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let (stark, rescue_prime) = get_tutorial_stark();
         let res = stark.max_degree(&rescue_prime.get_air_constraints(stark.omicron));
         assert_eq!(127usize, res);
@@ -883,8 +880,6 @@ pub mod test_stark {
 
     #[test]
     fn transition_quotient_degree_bounds_test() {
-        let prime: U256 = (407u128 * (1 << 119) + 1).into();
-        let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let (stark, rescue_prime) = get_tutorial_stark();
         let res = stark
             .transition_quotient_degree_bounds(&rescue_prime.get_air_constraints(stark.omicron));
@@ -896,8 +891,6 @@ pub mod test_stark {
 
     #[test]
     fn transition_degree_bounds_test() {
-        let prime: U256 = (407u128 * (1 << 119) + 1).into();
-        let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let (stark, rescue_prime) = get_tutorial_stark();
         let res = stark.transition_degree_bounds(&rescue_prime.get_air_constraints(stark.omicron));
         assert_eq!(vec![105, 105], res);
@@ -906,7 +899,6 @@ pub mod test_stark {
     #[test]
     fn rescue_prime_stark() {
         let prime: U256 = (407u128 * (1 << 119) + 1).into();
-        let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let (mut stark, rescue_prime) = get_tutorial_stark();
         stark.prover_preprocess(); // Prepare STARK for proving
 
