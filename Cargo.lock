@@ -1294,6 +1294,7 @@ dependencies = [
  "rand",
  "rand_distr",
  "rand_pcg",
+ "rayon",
  "ring",
  "serde",
  "serde_json",

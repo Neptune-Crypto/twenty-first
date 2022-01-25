@@ -5,6 +5,7 @@ use crate::util_types::tree_m_ary::Node;
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::Zero;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -320,6 +321,45 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
+            + Sub<Output = U>
+            + Neg<Output = U>
+            + IdentityValues
+            + ModPowU64
+            + Clone
+            + Display
+            + Debug
+            + PartialEq
+            + Eq
+            + Send
+            + Sync
+            + Hash,
+    > MPolynomial<U>
+{
+    pub fn evaluate_symbolic_with_memoization_precalculated(
+        &self,
+        point: &[Polynomial<U>],
+        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<U>>,
+    ) -> Polynomial<U> {
+        assert_eq!(
+            self.variable_count,
+            point.len(),
+            "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
+        );
+        let acc = self
+            .coefficients
+            .par_iter()
+            .map(|(k, v)| exponents_memoization[k].clone().scalar_mul(v.clone()))
+            .reduce(|| Polynomial::ring_zero(), |a, b| a + b);
+
+        acc
+    }
+}
+
+impl<
+        U: Add<Output = U>
+            + Div<Output = U>
+            + Mul<Output = U>
+            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
