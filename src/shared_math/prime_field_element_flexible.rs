@@ -4,7 +4,7 @@ use parity_scale_codec::Encode;
 use primitive_types::{U256, U512};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 
 use crate::utils::FIRST_TEN_THOUSAND_PRIMES;
 
