@@ -1129,13 +1129,8 @@ mod test_mpolynomials {
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
     use crate::utils::generate_random_numbers_u128;
-    use num_bigint::BigInt;
     use rand::RngCore;
     use std::collections::HashSet;
-
-    fn one(q: u64) -> PrimeFieldElementFlexible {
-        PrimeFieldElementFlexible::ring_one(q)
-    }
 
     fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
         PrimeFieldElementFlexible::new(n.into(), q.into())
@@ -1354,7 +1349,7 @@ mod test_mpolynomials {
     #[test]
     fn simple_modpow_test() {
         let q = 13;
-        let one = one(q);
+        let one = pfb(1, q);
         let x = get_x(q);
         let x_squared = get_x_squared(q);
         let x_quartic = get_x_quartic(q);
@@ -1430,10 +1425,10 @@ mod test_mpolynomials {
         > = HashMap::new();
 
         let q = 13;
-        let zero = PrimeFieldElementFlexible::new(0.into(), q);
-        let one = PrimeFieldElementFlexible::new(1.into(), q);
-        let two = PrimeFieldElementFlexible::new(1.into(), q);
-        let seven = PrimeFieldElementFlexible::new(7.into(), q);
+        let zero = pfb(0.into(), q);
+        let one = pfb(1.into(), q);
+        let two = pfb(1.into(), q);
+        let seven = pfb(7.into(), q);
         let xyz_m = get_xyz(q);
         let x: Polynomial<PrimeFieldElementFlexible> =
             Polynomial::from_constant(one.clone()).shift_coefficients(1, zero.clone());
