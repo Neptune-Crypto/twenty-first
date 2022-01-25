@@ -3,11 +3,12 @@ use primitive_types::U256;
 
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 
-use crate::shared_math::stark_pfe_big::BoundaryConstraint;
+use crate::shared_math::stark_pfe_flexible::BoundaryConstraint;
 use crate::shared_math::traits::IdentityValues;
 
 use super::mpolynomial::MPolynomial;
 use super::polynomial::Polynomial;
+use super::traits::CyclicGroupGenerator;
 
 #[derive(Debug, Clone)]
 pub struct RescuePrime {
@@ -302,7 +303,7 @@ impl RescuePrime {
         Vec<MPolynomial<PrimeFieldElementFlexible>>,
         Vec<MPolynomial<PrimeFieldElementFlexible>>,
     ) {
-        let domain = omicron.get_generator_domain();
+        let domain = omicron.get_cyclic_group_elements(None);
         let mut first_round_constants: Vec<MPolynomial<PrimeFieldElementFlexible>> = vec![];
         let variable_count = 1 + 2 * self.m;
         for i in 0..self.m {
@@ -419,7 +420,9 @@ impl RescuePrime {
 #[cfg(test)]
 mod rescue_prime_start_test {
     use crate::{
-        shared_math::stark_pfe_big::StarkPrimeFieldElementBig,
+        shared_math::{
+            stark_pfe_flexible::StarkPrimeFieldElementFlexible, traits::GetPrimitiveRootOfUnity,
+        },
         util_types::proof_stream::ProofStream,
     };
 
@@ -478,7 +481,7 @@ mod rescue_prime_start_test {
         let omicron = omicron_res.0.unwrap();
 
         // Verify that the round constants polynomials are correct
-        let (fst_rc_pol, snd_rc_pol) = rescue_prime_stark.get_round_constant_polynomials(&omicron);
+        let (fst_rc_pol, snd_rc_pol) = rescue_prime_stark.get_round_constant_polynomials(omicron);
         for step in 0..rescue_prime_stark.steps_count {
             let point = vec![
                 omicron.mod_pow(step.into()),
@@ -517,7 +520,7 @@ mod rescue_prime_start_test {
             prime,
         );
         let trace = rescue_prime_stark.trace(&input_2);
-        let air_constraints = rescue_prime_stark.get_air_constraints(&omicron);
+        let air_constraints = rescue_prime_stark.get_air_constraints(omicron);
 
         for step in 0..rescue_prime_stark.steps_count - 1 {
             for air_constraint in air_constraints.iter() {
@@ -546,7 +549,7 @@ mod rescue_prime_start_test {
         );
         let rescue_prime_stark = RescuePrime::from_tutorial();
 
-        let mut stark = StarkPrimeFieldElementBig::new(
+        let mut stark = StarkPrimeFieldElementFlexible::new(
             prime,
             expansion_factor,
             colinearity_checks_count,
@@ -559,10 +562,10 @@ mod rescue_prime_start_test {
 
         let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let trace = rescue_prime_stark.trace(&one);
-        let air_constraints = rescue_prime_stark.get_air_constraints(&stark.omicron);
+        let air_constraints = rescue_prime_stark.get_air_constraints(stark.omicron);
         let hash_result = trace.last().unwrap()[0].clone();
         let boundary_constraints: Vec<BoundaryConstraint> =
-            rescue_prime_stark.get_boundary_constraints(&hash_result);
+            rescue_prime_stark.get_boundary_constraints(hash_result);
         let mut proof_stream = ProofStream::default();
         let _proof = stark.prove(
             trace,

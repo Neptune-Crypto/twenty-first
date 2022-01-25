@@ -1,5 +1,6 @@
 use super::prime_field_element_flexible::PrimeFieldElementFlexible;
-use super::stark_pfe_big::{StarkPrimeFieldElementFlexible, DOCUMENT_HASH_LENGTH};
+use super::stark_pfe_flexible::{StarkPrimeFieldElementFlexible, DOCUMENT_HASH_LENGTH};
+use super::traits::FromVecu8;
 use crate::shared_math::rescue_prime_pfe_big::RescuePrime;
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils::blake3_digest;
@@ -32,11 +33,12 @@ impl RPSSS {
         let mut bytes = vec![0u8; 17];
         prng.fill_bytes(&mut bytes);
         let sk: SecretKey = SecretKey {
-            value: self.field.from_bytes(&bytes),
+            value: self.stark.omicron.from_vecu8(bytes.to_vec()),
         };
         let pk = PublicKey {
             value: self.rp.hash(&sk.value),
         };
+
         (sk, pk)
     }
 
@@ -50,8 +52,8 @@ impl RPSSS {
         let mut proof_stream: ProofStream = signature.proof.clone().into();
         proof_stream.set_index(DOCUMENT_HASH_LENGTH);
 
-        let boundary_constraints = self.rp.get_boundary_constraints(&public_key.value);
-        let transition_constraints = self.rp.get_air_constraints(&self.stark.omicron);
+        let boundary_constraints = self.rp.get_boundary_constraints(public_key.value);
+        let transition_constraints = self.rp.get_air_constraints(self.stark.omicron);
         let res = self.stark.verify(
             &mut proof_stream,
             transition_constraints,
@@ -67,8 +69,8 @@ impl RPSSS {
         let mut proof_stream = ProofStream::new_with_prefix(&document_hash);
         self.stark.prove(
             trace,
-            self.rp.get_air_constraints(&self.stark.omicron),
-            self.rp.get_boundary_constraints(&output),
+            self.rp.get_air_constraints(self.stark.omicron),
+            self.rp.get_boundary_constraints(output),
             &mut proof_stream,
         )?;
 
@@ -82,19 +84,17 @@ impl RPSSS {
 mod test_rpsss {
     use std::time::Instant;
 
-    use super::super::stark_pfe_big::test_stark;
+    use super::super::stark_pfe_flexible::test_stark;
     use super::*;
-    use crate::shared_math::prime_field_element_big::PrimeFieldBig;
-    use num_bigint::BigInt;
+    use primitive_types::U256;
 
     #[test]
     fn sign_verify_test() {
-        let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
-        let field = PrimeFieldBig::new(modulus);
+        let prime: U256 = (407u128 * (1 << 119) + 1).into();
+        let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let (mut stark, rp): (StarkPrimeFieldElementFlexible, RescuePrime) =
-            test_stark::get_tutorial_stark(&field);
+            test_stark::get_tutorial_stark();
         let rpsss_no_preprocess = RPSSS {
-            field: field.clone(),
             stark: stark.clone(),
             rp: rp.clone(),
         };
@@ -108,7 +108,6 @@ mod test_rpsss {
 
         stark.prover_preprocess();
         let rpsss = RPSSS {
-            field: field.clone(),
             stark: stark.clone(),
             rp,
         };

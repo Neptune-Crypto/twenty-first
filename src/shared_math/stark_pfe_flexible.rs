@@ -797,8 +797,6 @@ impl StarkPrimeFieldElementFlexible {
 
 #[cfg(test)]
 pub mod test_stark {
-    use num_bigint::BigInt;
-
     use crate::shared_math::rescue_prime_pfe_big::RescuePrime;
 
     use super::*;
