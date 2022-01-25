@@ -3,7 +3,6 @@ use anyhow::{bail, Result};
 mod conversion;
 mod custom_types;
 mod expressions;
-pub mod fft;
 mod flow_of_control;
 mod formatted_print;
 mod functions;
