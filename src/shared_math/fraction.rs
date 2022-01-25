@@ -9,7 +9,7 @@ use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::Sub;
 
-use super::prime_field_element::PrimeFieldElement;
+use super::b_field_element::BFieldElement;
 
 // A simple implementation of fractions, with integers, not with finite fields
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -52,7 +52,7 @@ impl<U: num_traits::Num + Clone + Copy + Debug> Num for Fraction<U> {
 
 impl<T: num_traits::Num + Clone + Copy + Debug> Fraction<T> {
     pub fn reduce(mut dividend: T, mut divisor: T) -> Self {
-        let (reducer, ..) = PrimeFieldElement::xgcd(dividend, divisor);
+        let (reducer, ..) = BFieldElement::xgcd(dividend, divisor);
         if reducer != num_traits::one() {
             dividend = dividend / reducer;
             divisor = divisor / reducer;

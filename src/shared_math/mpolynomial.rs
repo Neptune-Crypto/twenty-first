@@ -1139,165 +1139,170 @@ mod test_mpolynomials {
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::utils::generate_random_numbers_u128;
 
-    use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
+    use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
     use num_bigint::BigInt;
+    use primitive_types::U256;
     use rand::RngCore;
 
     fn b(x: i128) -> BigInt {
         Into::<BigInt>::into(x)
     }
 
-    #[allow(clippy::needless_lifetimes)] // Suppress wrong warning (fails to compile without lifetime, I think)
-    fn pfb<'a>(value: i128, field: &'a PrimeFieldBig) -> PrimeFieldElementBig {
-        PrimeFieldElementBig::new(b(value), field)
-    }
-
-    fn get_x<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut x_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        x_coefficients.insert(vec![1, 0, 0], pfb(1, field));
+    fn get_x() -> MPolynomial<BFieldElement> {
+        let mut x_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        x_coefficients.insert(vec![1, 0, 0], BFieldElement::ring_one());
         MPolynomial {
             coefficients: x_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_squared<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xs_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xs_coefficients.insert(vec![2, 0, 0], pfb(1, field));
+    fn get_x_squared() -> MPolynomial<BFieldElement> {
+        let mut x_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        xs_coefficients.insert(vec![2, 0, 0], BFieldElement::ring_one());
         MPolynomial {
             coefficients: xs_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_quartic<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xs_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xs_coefficients.insert(vec![4, 0, 0], pfb(1, field));
+    fn get_x_quartic() -> MPolynomial<BFieldElement> {
+        let mut x_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        xs_coefficients.insert(vec![4, 0, 0], BFieldElement::ring_one());
         MPolynomial {
             coefficients: xs_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_y<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        coefficients.insert(vec![0, 1, 0], pfb(1, field));
+    fn get_y() -> MPolynomial<BFieldElement> {
+        let mut x_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        coefficients.insert(vec![0, 1, 0], BFieldElement::ring_one());
         MPolynomial {
             coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_z<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut z_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        z_coefficients.insert(vec![0, 0, 1], pfb(1, field));
+    fn get_z() -> MPolynomial<BFieldElement> {
+        let mut z_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        z_coefficients.insert(vec![0, 0, 1], BFieldElement::ring_one());
         MPolynomial {
             coefficients: z_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_xz<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xz_coefficients.insert(vec![1, 0, 1], pfb(1, field));
+    fn get_xz() -> MPolynomial<BFieldElement> {
+        let mut xz_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        xz_coefficients.insert(vec![1, 0, 1], BFieldElement::ring_one());
         MPolynomial {
             coefficients: xz_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_squared_z_squared<'a>(
-        field: &'a PrimeFieldBig,
-    ) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xz_coefficients.insert(vec![2, 0, 2], pfb(1, field));
+    fn get_x_squared_z_squared() -> MPolynomial<BFieldElement> {
+        let mut xz_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        xz_coefficients.insert(vec![2, 0, 2], BFieldElement::ring_one());
         MPolynomial {
             coefficients: xz_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_xyz<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xyz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xyz_coefficients.insert(vec![1, 1, 1], pfb(1, field));
+    fn get_xyz() -> MPolynomial<BFieldElement> {
+        let mut xyz_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        xyz_coefficients.insert(vec![1, 1, 1], BFieldElement::ring_one());
         MPolynomial {
             coefficients: xyz_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_plus_xz<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut x_plus_xz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        x_plus_xz_coefficients.insert(vec![1, 0, 1], pfb(1, field));
-        x_plus_xz_coefficients.insert(vec![1, 0, 0], pfb(1, field));
+    fn get_x_plus_xz() -> MPolynomial<BFieldElement> {
+        let mut x_plus_xz_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        x_plus_xz_coefficients.insert(vec![1, 0, 1], BFieldElement::ring_one());
+        x_plus_xz_coefficients.insert(vec![1, 0, 0], BFieldElement::ring_one());
         MPolynomial {
             coefficients: x_plus_xz_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_minus_xz<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut x_minus_xz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        x_minus_xz_coefficients.insert(vec![1, 0, 1], pfb(-1, field));
-        x_minus_xz_coefficients.insert(vec![1, 0, 0], pfb(1, field));
+    fn get_x_minus_xz() -> MPolynomial<BFieldElement> {
+        let mut x_minus_xz_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        x_minus_xz_coefficients.insert(vec![1, 0, 1], -BFieldElement::ring_one());
+        x_minus_xz_coefficients.insert(vec![1, 0, 0], BFieldElement::ring_one());
         MPolynomial {
             coefficients: x_minus_xz_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_minus_17y<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut _17y_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        _17y_coefficients.insert(vec![0, 1, 0], pfb(-17, field));
+    fn get_minus_17y() -> MPolynomial<BFieldElement> {
+        let mut _17y_coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        _17y_coefficients.insert(
+            vec![0, 1, 0],
+            BFieldElement::new(BFieldElement::QUOTIENT - 17),
+        );
         MPolynomial {
             coefficients: _17y_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_plus_xz_minus_17y<'a>(
-        field: &'a PrimeFieldBig,
-    ) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut x_plus_xz_minus_17_y_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> =
+    fn get_x_plus_xz_minus_17y() -> MPolynomial<BFieldElement> {
+        let mut x_plus_xz_minus_17_y_coefficients: HashMap<Vec<u64>, BFieldElement> =
             HashMap::new();
-        x_plus_xz_minus_17_y_coefficients.insert(vec![1, 0, 1], pfb(1, field));
-        x_plus_xz_minus_17_y_coefficients.insert(vec![1, 0, 0], pfb(1, field));
-        x_plus_xz_minus_17_y_coefficients.insert(vec![0, 1, 0], pfb(9, field));
+        x_plus_xz_minus_17_y_coefficients.insert(vec![1, 0, 1], BFieldElement::ring_one());
+        x_plus_xz_minus_17_y_coefficients.insert(vec![1, 0, 0], BFieldElement::ring_one());
+        x_plus_xz_minus_17_y_coefficients.insert(vec![0, 1, 0], BFieldElement::new(9));
         MPolynomial {
             coefficients: x_plus_xz_minus_17_y_coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_big_mpol<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut big_c: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        big_c.insert(vec![0, 0, 1, 0, 0], pfb(1, field));
-        big_c.insert(vec![0, 1, 0, 0, 0], pfb(1, field));
-        big_c.insert(vec![10, 3, 8, 0, 3], pfb(-9, field));
-        big_c.insert(vec![2, 3, 4, 0, 0], pfb(12, field));
-        big_c.insert(vec![5, 5, 5, 0, 8], pfb(-4, field));
-        big_c.insert(vec![0, 6, 0, 0, 1], pfb(3, field));
-        big_c.insert(vec![1, 4, 11, 0, 0], pfb(10, field));
-        big_c.insert(vec![1, 0, 12, 0, 2], pfb(2, field));
+    fn get_big_mpol() -> MPolynomial<BFieldElement> {
+        let mut big_c: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        big_c.insert(vec![0, 0, 1, 0, 0], BFieldElement::ring_one());
+        big_c.insert(vec![0, 1, 0, 0, 0], BFieldElement::ring_one());
+        big_c.insert(
+            vec![10, 3, 8, 0, 3],
+            BFieldElement::new(BFieldElement::QUOTIENT - 9),
+        );
+        big_c.insert(vec![2, 3, 4, 0, 0], BFieldElement::new(12));
+        big_c.insert(
+            vec![5, 5, 5, 0, 8],
+            BFieldElement::new(BFieldElement::QUOTIENT - 4),
+        );
+        big_c.insert(vec![0, 6, 0, 0, 1], BFieldElement::new(3));
+        big_c.insert(vec![1, 4, 11, 0, 0], BFieldElement::new(10));
+        big_c.insert(vec![1, 0, 12, 0, 2], BFieldElement::new(2));
         MPolynomial {
             coefficients: big_c,
             variable_count: 5,
         }
     }
 
-    fn get_big_mpol_extra_variabel<'a>(
-        field: &'a PrimeFieldBig,
-    ) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut big_c: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        big_c.insert(vec![0, 0, 1, 0, 0, 0], pfb(1, field));
-        big_c.insert(vec![0, 1, 0, 0, 0, 0], pfb(1, field));
-        big_c.insert(vec![10, 3, 8, 0, 3, 0], pfb(-9, field));
-        big_c.insert(vec![2, 3, 4, 0, 0, 0], pfb(12, field));
-        big_c.insert(vec![5, 5, 5, 0, 8, 0], pfb(-4, field));
-        big_c.insert(vec![0, 6, 0, 0, 1, 0], pfb(3, field));
-        big_c.insert(vec![1, 4, 11, 0, 0, 0], pfb(10, field));
-        big_c.insert(vec![1, 0, 12, 0, 2, 0], pfb(2, field));
+    fn get_big_mpol_extra_variabel() -> MPolynomial<BFieldElement> {
+        let mut big_c: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        big_c.insert(vec![0, 0, 1, 0, 0, 0], BFieldElement::ring_one());
+        big_c.insert(vec![0, 1, 0, 0, 0, 0], BFieldElement::ring_one());
+        big_c.insert(
+            vec![10, 3, 8, 0, 3, 0],
+            BFieldElement::new(BFieldElement::QUOTIENT - 9),
+        );
+        big_c.insert(vec![2, 3, 4, 0, 0, 0], BFieldElement::new(12));
+        big_c.insert(
+            vec![5, 5, 5, 0, 8, 0],
+            BFieldElement::new(BFieldElement::QUOTIENT - 4),
+        );
+        big_c.insert(vec![0, 6, 0, 0, 1, 0], BFieldElement::new(3));
+        big_c.insert(vec![1, 4, 11, 0, 0, 0], BFieldElement::new(10));
+        big_c.insert(vec![1, 0, 12, 0, 2, 0], BFieldElement::new(2));
         MPolynomial {
             coefficients: big_c,
             variable_count: 6,
@@ -1306,36 +1311,30 @@ mod test_mpolynomials {
 
     #[test]
     fn equality_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        assert_eq!(get_big_mpol(&_13), get_big_mpol_extra_variabel(&_13));
-        assert_ne!(
-            get_big_mpol(&_13),
-            get_big_mpol_extra_variabel(&_13) + get_x(&&_13)
-        );
+        assert_eq!(get_big_mpol(), get_big_mpol_extra_variabel());
+        assert_ne!(get_big_mpol(), get_big_mpol_extra_variabel() + get_x());
     }
 
     #[test]
     fn simple_add_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let x = get_x(&_13);
-        let xz = get_xz(&_13);
-        let x_plus_xz = get_x_plus_xz(&_13);
+        let x = get_x();
+        let xz = get_xz();
+        let x_plus_xz = get_x_plus_xz();
         assert_eq!(x_plus_xz, x.clone() + xz.clone());
 
-        let minus_17y = get_minus_17y(&_13);
-        let x_plus_xz_minus_17_y = get_x_plus_xz_minus_17y(&_13);
+        let minus_17y = get_minus_17y();
+        let x_plus_xz_minus_17_y = get_x_plus_xz_minus_17y();
         assert_eq!(x_plus_xz_minus_17_y, x + xz + minus_17y);
     }
 
     #[test]
     fn simple_sub_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let x = get_x(&_13);
-        let xz = get_xz(&_13);
-        let x_minus_xz = get_x_minus_xz(&_13);
+        let x = get_x();
+        let xz = get_xz();
+        let x_minus_xz = get_x_minus_xz();
         assert_eq!(x_minus_xz, x.clone() - xz.clone());
 
-        let big = get_big_mpol(&_13);
+        let big = get_big_mpol();
         assert_eq!(big.clone(), big.clone() - x.clone() + x.clone());
         assert_eq!(big.clone(), big.clone() - xz.clone() + xz.clone());
         assert_eq!(big.clone(), big.clone() - big.clone() + big.clone());
