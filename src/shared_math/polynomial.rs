@@ -1197,7 +1197,11 @@ mod test_polynomials {
     use std::vec;
 
     fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
-        pfb(n.into(), q.into())
+        if n < 0 {
+            -PrimeFieldElementFlexible::new((-n).into(), q.into())
+        } else {
+            PrimeFieldElementFlexible::new(n.into(), q.into())
+        }
     }
 
     #[test]

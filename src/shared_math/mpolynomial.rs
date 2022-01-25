@@ -1133,7 +1133,11 @@ mod test_mpolynomials {
     use std::collections::HashSet;
 
     fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
-        PrimeFieldElementFlexible::new(n.into(), q.into())
+        if n < 0 {
+            -PrimeFieldElementFlexible::new((-n).into(), q.into())
+        } else {
+            PrimeFieldElementFlexible::new(n.into(), q.into())
+        }
     }
 
     fn get_x(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
@@ -1241,7 +1245,7 @@ mod test_mpolynomials {
         let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
         coefficients.insert(vec![1, 0, 1], pfb(1, q));
         coefficients.insert(vec![1, 0, 0], pfb(1, q));
-        coefficients.insert(vec![0, 1, 0], pfb(9, q));
+        coefficients.insert(vec![0, 1, 0], pfb(-17, q));
         MPolynomial {
             coefficients,
             variable_count: 3,
@@ -1282,14 +1286,14 @@ mod test_mpolynomials {
 
     #[test]
     fn equality_test() {
-        let q = 13;
+        let q = 23;
         assert_eq!(get_big_mpol(q), get_big_mpol_extra_variabel(q));
         assert_ne!(get_big_mpol(q), get_big_mpol_extra_variabel(q) + get_x(q));
     }
 
     #[test]
     fn simple_add_test() {
-        let q = 13;
+        let q = 23;
         let x = get_x(q);
         let xz = get_xz(q);
         let x_plus_xz = get_x_plus_xz(q);
@@ -1302,7 +1306,7 @@ mod test_mpolynomials {
 
     #[test]
     fn simple_sub_test() {
-        let q = 13;
+        let q = 65537;
         let x = get_x(q);
         let xz = get_xz(q);
         let x_minus_xz = get_x_minus_xz(q);
@@ -1326,13 +1330,14 @@ mod test_mpolynomials {
         let _4 = MPolynomial::from_constant(pfb(4, q), 3);
         let _6 = MPolynomial::from_constant(pfb(6, q), 3);
         let _8 = MPolynomial::from_constant(pfb(8, q), 3);
+        let _16 = MPolynomial::from_constant(pfb(16, q), 3);
         assert_eq!(_0, _2.clone() - _2.clone());
         assert_eq!(_0, _4.clone() - _4.clone());
         assert_eq!(_6, _8.clone() - _2.clone());
         assert_eq!(_4, _6.clone() - _2.clone());
         assert_eq!(_2, _4.clone() - _2.clone());
         assert_eq!(_6, _4.clone() + _2.clone());
-        assert_eq!(_3, _8.clone() + _8.clone());
+        assert_eq!(_16, _8.clone() + _8.clone());
     }
 
     #[test]

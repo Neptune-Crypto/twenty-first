@@ -217,7 +217,7 @@ impl RescuePrime {
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
-                temp[i] = temp[i].clone() + self.mds[i][j].clone() * state[j].clone();
+                temp[i] += self.mds[i][j] * state[j];
             }
         }
 
@@ -225,7 +225,7 @@ impl RescuePrime {
         state = temp
             .into_iter()
             .enumerate()
-            .map(|(i, val)| val + self.round_constants[2 * round_number * self.m + i].clone())
+            .map(|(i, val)| val + self.round_constants[2 * round_number * self.m + i])
             .collect();
 
         // Backward half-round
@@ -240,7 +240,7 @@ impl RescuePrime {
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
-                temp[i] = temp[i].clone() + self.mds[i][j].clone() * state[j].clone();
+                temp[i] += self.mds[i][j] * state[j];
             }
         }
 
@@ -248,9 +248,7 @@ impl RescuePrime {
         state = temp
             .into_iter()
             .enumerate()
-            .map(|(i, val)| {
-                val + self.round_constants[2 * round_number * self.m + self.m + i].clone()
-            })
+            .map(|(i, val)| val + self.round_constants[2 * round_number * self.m + self.m + i])
             .collect();
 
         state
@@ -263,7 +261,7 @@ impl RescuePrime {
 
         state = (0..self.steps_count).fold(state, |state, i| self.hash_round(state, i));
 
-        state[0].clone()
+        state[0]
     }
 
     pub fn trace(&self, input: &PrimeFieldElementFlexible) -> Vec<Vec<PrimeFieldElementFlexible>> {
@@ -290,7 +288,7 @@ impl RescuePrime {
         Vec<Vec<PrimeFieldElementFlexible>>,
     ) {
         let trace = self.trace(input);
-        let output = trace.last().unwrap()[0].clone();
+        let output = trace.last().unwrap()[0];
 
         (output, trace)
     }
@@ -381,17 +379,17 @@ impl RescuePrime {
             let mut lhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
             for k in 0..self.m {
                 lhs += previous_state[k]
-                    .mod_pow(self.alpha.clone(), one.clone())
-                    .scalar_mul(self.mds[i][k].clone());
+                    .mod_pow(self.alpha.clone(), one)
+                    .scalar_mul(self.mds[i][k]);
             }
             lhs += first_step_constants[i].clone();
 
             let mut rhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
             for k in 0..self.m {
                 rhs += (next_state[k].clone() - second_step_constants[k].clone())
-                    .scalar_mul(self.mds_inv[i][k].clone());
+                    .scalar_mul(self.mds_inv[i][k]);
             }
-            rhs = rhs.mod_pow(self.alpha.clone(), one.clone());
+            rhs = rhs.mod_pow(self.alpha.clone(), one);
 
             air.push(lhs - rhs);
         }

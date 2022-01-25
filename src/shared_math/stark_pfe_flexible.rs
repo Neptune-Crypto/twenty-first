@@ -408,7 +408,7 @@ impl StarkPrimeFieldElementFlexible {
                 &randomized_trace_domain,
                 &randomized_trace
                     .iter()
-                    .map(|t| t[r].clone())
+                    .map(|t| t[r])
                     .collect::<Vec<PrimeFieldElementFlexible>>(),
                 &self.omicron,
                 self.omicron_domain_length,
@@ -420,7 +420,7 @@ impl StarkPrimeFieldElementFlexible {
         let boundary_interpolants: Vec<Polynomial<PrimeFieldElementFlexible>> =
             get_boundary_interpolants(bcs_formatted.clone());
         let boundary_zerofiers: Vec<Polynomial<PrimeFieldElementFlexible>> =
-            get_boundary_zerofiers(bcs_formatted.clone());
+            get_boundary_zerofiers(bcs_formatted);
         let mut boundary_quotients: Vec<Polynomial<PrimeFieldElementFlexible>> =
             vec![Polynomial::ring_zero(); self.register_count];
         for r in 0..self.register_count {
@@ -447,7 +447,7 @@ impl StarkPrimeFieldElementFlexible {
         let x = Polynomial {
             coefficients: vec![self.omega.ring_zero(), self.omega.ring_one()],
         };
-        let mut point: Vec<Polynomial<PrimeFieldElementFlexible>> = vec![x.clone()];
+        let mut point: Vec<Polynomial<PrimeFieldElementFlexible>> = vec![x];
 
         // add polynomial representing trace[x_i] and trace[x_{i+1}]
         point.append(&mut trace_polynomials.clone());
@@ -631,7 +631,7 @@ impl StarkPrimeFieldElementFlexible {
 
         let indices: Vec<usize> = polynomial_values.iter().map(|(i, _y)| *i).collect();
         let values: Vec<PrimeFieldElementFlexible> =
-            polynomial_values.iter().map(|(_i, y)| y.clone()).collect();
+            polynomial_values.iter().map(|(_i, y)| *y).collect();
 
         let mut duplicated_indices = indices.clone();
         duplicated_indices.append(
@@ -721,27 +721,26 @@ impl StarkPrimeFieldElementFlexible {
         let expected_tq_degrees = self.transition_quotient_degree_bounds(&transition_constraints);
         for (i, current_index) in indices.into_iter().enumerate() {
             let current_x: PrimeFieldElementFlexible =
-                self.field_generator.clone() * self.omega.mod_pow(current_index.into());
+                self.field_generator * self.omega.mod_pow(current_index.into());
             let next_index: usize =
                 (current_index + self.expansion_factor) % self.fri.domain_length;
             let next_x: PrimeFieldElementFlexible =
-                self.field_generator.clone() * self.omega.mod_pow(next_index.into());
+                self.field_generator * self.omega.mod_pow(next_index.into());
             let mut current_trace: Vec<PrimeFieldElementFlexible> = (0..self.register_count)
                 .map(|r| {
-                    boundary_quotients[r][&current_index].clone()
+                    boundary_quotients[r][&current_index]
                         * boundary_zerofiers[r].evaluate(&current_x)
                         + boundary_interpolants[r].evaluate(&current_x)
                 })
                 .collect();
             let mut next_trace: Vec<PrimeFieldElementFlexible> = (0..self.register_count)
                 .map(|r| {
-                    boundary_quotients[r][&next_index].clone()
-                        * boundary_zerofiers[r].evaluate(&next_x)
+                    boundary_quotients[r][&next_index] * boundary_zerofiers[r].evaluate(&next_x)
                         + boundary_interpolants[r].evaluate(&next_x)
                 })
                 .collect();
 
-            let mut point: Vec<PrimeFieldElementFlexible> = vec![current_x.clone()];
+            let mut point: Vec<PrimeFieldElementFlexible> = vec![current_x];
             point.append(&mut current_trace);
             point.append(&mut next_trace);
 
@@ -753,22 +752,21 @@ impl StarkPrimeFieldElementFlexible {
 
             // Get combination polynomial evaluation value
             // Loop over all registers for transition quotient values, and for boundary quotient values
-            let mut terms: Vec<PrimeFieldElementFlexible> =
-                vec![randomizer_values[&current_index].clone()];
+            let mut terms: Vec<PrimeFieldElementFlexible> = vec![randomizer_values[&current_index]];
             for (tcv, tq_degree) in transition_constraint_values
                 .iter()
                 .zip(expected_tq_degrees.iter())
             {
                 let transition_quotient =
-                    tcv.to_owned() / transition_zerofier_values[&current_index].clone();
-                terms.push(transition_quotient.clone());
+                    tcv.to_owned() / transition_zerofier_values[&current_index];
+                terms.push(transition_quotient);
                 let shift = max_degree - tq_degree;
                 terms.push(transition_quotient * current_x.mod_pow(shift.into()));
             }
             for (bqvs, bq_degree) in boundary_quotients.iter().zip(boundary_degrees.iter()) {
-                terms.push(bqvs[&current_index].clone());
+                terms.push(bqvs[&current_index]);
                 let shift = max_degree - bq_degree;
-                terms.push(bqvs[&current_index].clone() * current_x.mod_pow(shift.into()));
+                terms.push(bqvs[&current_index] * current_x.mod_pow(shift.into()));
             }
 
             assert_eq!(

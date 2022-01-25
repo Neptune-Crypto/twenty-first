@@ -135,6 +135,7 @@ pub fn intt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n:
     }
 }
 
+#[allow(clippy::many_single_char_names)]
 pub fn ntt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
     let n = x.len() as u32;
     assert_eq!(
