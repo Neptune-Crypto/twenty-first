@@ -11,7 +11,7 @@ pub mod prime_field_element_flexible;
 pub mod prime_field_polynomial;
 pub mod rescue_prime;
 pub mod rescue_prime_params;
-pub mod rescue_prime_pfe_big;
+pub mod rescue_prime_pfe_flexible;
 pub mod rpsss;
 pub mod stark;
 pub mod stark_pfe_flexible;

@@ -1,4 +1,3 @@
-use num_bigint::BigInt;
 use primitive_types::U256;
 use rand::{RngCore, SeedableRng};
 
@@ -328,7 +327,7 @@ impl StarkPrimeFieldElementFlexible {
         (1 << l2) - 1
     }
 
-    fn sample_weights(self, randomness: &[u8], number: usize) -> Vec<PrimeFieldElementFlexible> {
+    fn sample_weights(&self, randomness: &[u8], number: usize) -> Vec<PrimeFieldElementFlexible> {
         let k_seeds = utils::get_n_hash_rounds(randomness, number as u32);
         k_seeds
             .iter()
@@ -797,7 +796,7 @@ impl StarkPrimeFieldElementFlexible {
 
 #[cfg(test)]
 pub mod test_stark {
-    use crate::shared_math::rescue_prime_pfe_big::RescuePrime;
+    use crate::shared_math::rescue_prime_pfe_flexible::RescuePrime;
 
     use super::*;
 

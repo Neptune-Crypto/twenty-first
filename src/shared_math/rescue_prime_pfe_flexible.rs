@@ -1,14 +1,11 @@
+use crate::shared_math::mpolynomial::MPolynomial;
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
+use crate::shared_math::stark_pfe_flexible::BoundaryConstraint;
+use crate::shared_math::traits::CyclicGroupGenerator;
+use crate::shared_math::traits::IdentityValues;
 use num_bigint::BigInt;
 use primitive_types::U256;
-
-use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
-
-use crate::shared_math::stark_pfe_flexible::BoundaryConstraint;
-use crate::shared_math::traits::IdentityValues;
-
-use super::mpolynomial::MPolynomial;
-use super::polynomial::Polynomial;
-use super::traits::CyclicGroupGenerator;
 
 #[derive(Debug, Clone)]
 pub struct RescuePrime {

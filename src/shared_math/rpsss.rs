@@ -1,7 +1,7 @@
 use super::prime_field_element_flexible::PrimeFieldElementFlexible;
 use super::stark_pfe_flexible::{StarkPrimeFieldElementFlexible, DOCUMENT_HASH_LENGTH};
 use super::traits::FromVecu8;
-use crate::shared_math::rescue_prime_pfe_big::RescuePrime;
+use crate::shared_math::rescue_prime_pfe_flexible::RescuePrime;
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils::blake3_digest;
 use rand::RngCore;
@@ -28,7 +28,7 @@ pub struct RPSSS {
 }
 
 impl RPSSS {
-    pub fn keygen(self) -> (SecretKey, PublicKey) {
+    pub fn keygen(&self) -> (SecretKey, PublicKey) {
         let mut prng = rand::thread_rng();
         let mut bytes = vec![0u8; 17];
         prng.fill_bytes(&mut bytes);
