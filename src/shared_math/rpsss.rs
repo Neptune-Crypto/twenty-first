@@ -1,5 +1,5 @@
-use super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
-use super::stark_pfe_big::{StarkPrimeFieldElementBig, DOCUMENT_HASH_LENGTH};
+use super::prime_field_element_flexible::PrimeFieldElementFlexible;
+use super::stark_pfe_big::{StarkPrimeFieldElementFlexible, DOCUMENT_HASH_LENGTH};
 use crate::shared_math::rescue_prime_pfe_big::RescuePrime;
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils::blake3_digest;
@@ -7,13 +7,13 @@ use rand::RngCore;
 use std::error::Error;
 
 #[derive(Clone, Debug)]
-pub struct SecretKey<'a> {
-    pub value: PrimeFieldElementBig<'a>,
+pub struct SecretKey {
+    pub value: PrimeFieldElementFlexible,
 }
 
 #[derive(Clone, Debug)]
-pub struct PublicKey<'a> {
-    pub value: PrimeFieldElementBig<'a>,
+pub struct PublicKey {
+    pub value: PrimeFieldElementFlexible,
 }
 
 #[derive(Clone, Debug)]
@@ -21,14 +21,13 @@ pub struct Signature {
     pub proof: Vec<u8>,
 }
 
-pub struct RPSSS<'a> {
-    pub field: PrimeFieldBig,
-    pub rp: RescuePrime<'a>,
-    pub stark: StarkPrimeFieldElementBig<'a>,
+pub struct RPSSS {
+    pub rp: RescuePrime,
+    pub stark: StarkPrimeFieldElementFlexible,
 }
 
-impl<'a> RPSSS<'a> {
-    pub fn keygen(&'a self) -> (SecretKey<'a>, PublicKey<'a>) {
+impl RPSSS {
+    pub fn keygen(self) -> (SecretKey, PublicKey) {
         let mut prng = rand::thread_rng();
         let mut bytes = vec![0u8; 17];
         prng.fill_bytes(&mut bytes);
@@ -92,7 +91,7 @@ mod test_rpsss {
     fn sign_verify_test() {
         let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
         let field = PrimeFieldBig::new(modulus);
-        let (mut stark, rp): (StarkPrimeFieldElementBig, RescuePrime) =
+        let (mut stark, rp): (StarkPrimeFieldElementFlexible, RescuePrime) =
             test_stark::get_tutorial_stark(&field);
         let rpsss_no_preprocess = RPSSS {
             field: field.clone(),

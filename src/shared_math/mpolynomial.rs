@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
 use std::rc::Rc;
 use std::{cmp, fmt};
 
@@ -218,7 +218,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + ModPowU64
@@ -252,7 +251,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -306,7 +304,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -323,7 +320,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -909,7 +905,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -962,7 +957,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -998,7 +992,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -1051,7 +1044,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -1083,7 +1075,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues

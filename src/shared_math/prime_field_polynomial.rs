@@ -1,5 +1,4 @@
 use super::polynomial_quotient_ring::PolynomialQuotientRing;
-use super::prime_field_element::{PrimeField, PrimeFieldElement};
 use crate::utils::{generate_random_numbers, has_unique_elements};
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;

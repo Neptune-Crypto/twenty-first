@@ -36,7 +36,7 @@ impl<T: num_traits::Num + Clone + Copy + Display> std::fmt::Display for Fraction
     }
 }
 
-impl<U: num_traits::Num + Clone + Copy + Debug> Num for Fraction<U> {
+impl<U: num_traits::Num + Clone + Copy + Debug + Display> Num for Fraction<U> {
     type FromStrRadixErr = &'static str;
     fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
         let dividend = U::from_str_radix(str, radix);
@@ -50,7 +50,7 @@ impl<U: num_traits::Num + Clone + Copy + Debug> Num for Fraction<U> {
     }
 }
 
-impl<T: num_traits::Num + Clone + Copy + Debug> Fraction<T> {
+impl<T: num_traits::Num + Clone + Copy + Debug + Display> Fraction<T> {
     pub fn reduce(mut dividend: T, mut divisor: T) -> Self {
         let (reducer, ..) = BFieldElement::xgcd(dividend, divisor);
         if reducer != num_traits::one() {
@@ -102,13 +102,13 @@ impl<T: num_traits::Num + Clone + Copy + Debug> Fraction<T> {
     }
 }
 
-impl<U: num_traits::Num + Clone + Copy + Debug> One for Fraction<U> {
+impl<U: num_traits::Num + Clone + Copy + Debug + Display> One for Fraction<U> {
     fn one() -> Self {
         Fraction::one()
     }
 }
 
-impl<U: num_traits::Num + Clone + Copy + Debug> Zero for Fraction<U> {
+impl<U: num_traits::Num + Clone + Copy + Debug + Display> Zero for Fraction<U> {
     fn zero() -> Self {
         Fraction::zero()
     }
@@ -118,7 +118,7 @@ impl<U: num_traits::Num + Clone + Copy + Debug> Zero for Fraction<U> {
     }
 }
 
-impl<U: num_traits::Num + Clone + Copy + Debug> Div for Fraction<U> {
+impl<U: num_traits::Num + Clone + Copy + Debug + Display> Div for Fraction<U> {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
@@ -126,7 +126,7 @@ impl<U: num_traits::Num + Clone + Copy + Debug> Div for Fraction<U> {
     }
 }
 
-impl<U: num_traits::Num + Clone + Copy + Debug> Add for Fraction<U> {
+impl<U: num_traits::Num + Clone + Copy + Debug + Display> Add for Fraction<U> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -136,7 +136,7 @@ impl<U: num_traits::Num + Clone + Copy + Debug> Add for Fraction<U> {
     }
 }
 
-impl<U: num_traits::Num + Clone + Copy + Debug> Sub for Fraction<U> {
+impl<U: num_traits::Num + Clone + Copy + Debug + Display> Sub for Fraction<U> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -146,7 +146,7 @@ impl<U: num_traits::Num + Clone + Copy + Debug> Sub for Fraction<U> {
     }
 }
 
-impl<U: num_traits::Num + Clone + Copy + Debug> Mul for Fraction<U> {
+impl<U: num_traits::Num + Clone + Copy + Debug + Display> Mul for Fraction<U> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -154,7 +154,7 @@ impl<U: num_traits::Num + Clone + Copy + Debug> Mul for Fraction<U> {
     }
 }
 
-impl<U: num_traits::Num + Clone + Copy> Rem for Fraction<U> {
+impl<U: num_traits::Num + Clone + Copy + Display> Rem for Fraction<U> {
     type Output = Self;
 
     fn rem(self, _: Self) -> Self {

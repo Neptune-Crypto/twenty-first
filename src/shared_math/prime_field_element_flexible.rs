@@ -10,7 +10,7 @@ use crate::utils::FIRST_TEN_THOUSAND_PRIMES;
 
 use super::traits::{
     CyclicGroupGenerator, FieldBatchInversion, FromVecu8, GetPrimitiveRootOfUnity, IdentityValues,
-    ModPowU32, New, PrimeFieldElement,
+    ModPowU32, ModPowU64, New, PrimeFieldElement,
 };
 
 use serde::de::Deserializer;
@@ -104,6 +104,14 @@ impl FieldBatchInversion for PrimeFieldElementFlexible {
 
 impl ModPowU32 for PrimeFieldElementFlexible {
     fn mod_pow_u32(&self, exp: u32) -> Self {
+        // TODO: This can be sped up by a factor 2 by implementing
+        // it for u32 and not using the 64-bit version
+        self.mod_pow(exp.into())
+    }
+}
+
+impl ModPowU64 for PrimeFieldElementFlexible {
+    fn mod_pow_u64(&self, exp: u64) -> Self {
         // TODO: This can be sped up by a factor 2 by implementing
         // it for u32 and not using the 64-bit version
         self.mod_pow(exp.into())
