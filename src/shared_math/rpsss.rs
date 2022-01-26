@@ -30,7 +30,7 @@ pub struct RPSSS {
 impl RPSSS {
     pub fn keygen(&self) -> (SecretKey, PublicKey) {
         let mut prng = rand::thread_rng();
-        let mut bytes = vec![0u8; 17];
+        let mut bytes = vec![0u8; 32];
         prng.fill_bytes(&mut bytes);
         let sk: SecretKey = SecretKey {
             value: self.stark.omicron.from_vecu8(bytes.to_vec()),
