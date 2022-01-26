@@ -1129,12 +1129,17 @@ mod test_mpolynomials {
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
     use crate::utils::generate_random_numbers_u128;
+    use primitive_types::U256;
     use rand::RngCore;
     use std::collections::HashSet;
 
     fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
         if n < 0 {
-            -PrimeFieldElementFlexible::new((-n).into(), q.into())
+            let positive_n: U256 = (-n).into();
+            let q_u256: U256 = q.into();
+            let field_element_n: U256 = positive_n % q_u256;
+
+            -PrimeFieldElementFlexible::new(field_element_n, q.into())
         } else {
             PrimeFieldElementFlexible::new(n.into(), q.into())
         }
