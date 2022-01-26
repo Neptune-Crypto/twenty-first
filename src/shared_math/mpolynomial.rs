@@ -359,7 +359,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
