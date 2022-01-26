@@ -453,9 +453,7 @@ impl<
         timer.elapsed("init stuff");
         let one: U = point[0].coefficients[0].ring_one(); // guaranteed to exist because of above checks
         let exponents_set: HashSet<Vec<u64>> = mpols
-            .iter()
-            .map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
-            .flatten()
+            .iter().flat_map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
             .collect();
         timer.elapsed("calculated exponents_set");
         let mut exponents_list: Vec<Vec<u64>> = if exponents_set.contains(&vec![0; variable_count])

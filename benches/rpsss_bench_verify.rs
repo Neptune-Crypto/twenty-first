@@ -37,7 +37,7 @@ fn rpsss_bench_verify(c: &mut Criterion) {
     };
 
     let document_string: String = "Hello Neptune!".to_string();
-    let document: Vec<u8> = document_string.clone().into_bytes();
+    let document: Vec<u8> = document_string.into_bytes();
 
     let (sk, pk) = rpsss.keygen();
     let signature: Signature = rpsss.sign(&sk, &document).unwrap();
