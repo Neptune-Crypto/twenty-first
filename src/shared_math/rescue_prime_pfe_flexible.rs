@@ -548,7 +548,6 @@ mod rescue_prime_start_test {
         let rescue_prime_stark = RescuePrime::from_tutorial();
 
         let mut stark = StarkPrimeFieldElementFlexible::new(
-            prime,
             expansion_factor,
             colinearity_checks_count,
             rescue_prime_stark.m,

@@ -1,4 +1,3 @@
-use primitive_types::U256;
 use rand::{RngCore, SeedableRng};
 
 use rand_pcg::Pcg64;
@@ -44,7 +43,6 @@ pub struct StarkPreprocessedValues {
 #[derive(Clone, Debug)]
 pub struct StarkPrimeFieldElementFlexible {
     expansion_factor: usize,
-    prime: U256,
     fri: Fri<PrimeFieldElementFlexible>,
     field_generator: PrimeFieldElementFlexible,
     randomizer_count: usize,
@@ -60,7 +58,6 @@ pub struct StarkPrimeFieldElementFlexible {
 
 impl<'a> StarkPrimeFieldElementFlexible {
     pub fn new(
-        prime: U256,
         expansion_factor: usize,
         colinearity_check_count: usize,
         register_count: usize,
@@ -109,7 +106,6 @@ impl<'a> StarkPrimeFieldElementFlexible {
         );
 
         Self {
-            prime,
             expansion_factor,
             field_generator: generator,
             randomizer_count: num_randomizers,
@@ -794,6 +790,8 @@ impl StarkPrimeFieldElementFlexible {
 
 #[cfg(test)]
 pub mod test_stark {
+    use primitive_types::U256;
+
     use crate::shared_math::rescue_prime_pfe_flexible::RescuePrime;
 
     use super::*;
@@ -813,7 +811,6 @@ pub mod test_stark {
 
         (
             StarkPrimeFieldElementFlexible::new(
-                prime,
                 expansion_factor,
                 colinearity_checks_count,
                 register_count,
