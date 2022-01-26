@@ -1134,14 +1134,16 @@ mod test_mpolynomials {
     use std::collections::HashSet;
 
     fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
+        let q_u256: U256 = q.into();
         if n < 0 {
             let positive_n: U256 = (-n).into();
-            let q_u256: U256 = q.into();
             let field_element_n: U256 = positive_n % q_u256;
 
-            -PrimeFieldElementFlexible::new(field_element_n, q.into())
+            -PrimeFieldElementFlexible::new(field_element_n, q_u256)
         } else {
-            PrimeFieldElementFlexible::new(n.into(), q.into())
+            let positive_n: U256 = n.into();
+            let field_element_n: U256 = positive_n % q_u256;
+            PrimeFieldElementFlexible::new(field_element_n, q_u256)
         }
     }
 

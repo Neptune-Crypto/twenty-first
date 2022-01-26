@@ -37,9 +37,11 @@ pub struct PrimeFieldElementFlexible {
     pub value: U512,
 }
 
+// Implemented by just displaying the value. If you want the prime, you should call
+// the Debug print with `{:?}`.
 impl Display for PrimeFieldElementFlexible {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} mod {}", self.value, self.q)
+        write!(f, "{}", self.value)
     }
 }
 

@@ -1193,14 +1193,21 @@ mod test_polynomials {
     use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::utils::generate_random_numbers;
+    use primitive_types::U256;
     use rand::RngCore;
     use std::vec;
 
     fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
+        let q_u256: U256 = q.into();
         if n < 0 {
-            -PrimeFieldElementFlexible::new((-n).into(), q.into())
+            let positive_n: U256 = (-n).into();
+            let field_element_n: U256 = positive_n % q_u256;
+
+            -PrimeFieldElementFlexible::new(field_element_n, q_u256)
         } else {
-            PrimeFieldElementFlexible::new(n.into(), q.into())
+            let positive_n: U256 = n.into();
+            let field_element_n: U256 = positive_n % q_u256;
+            PrimeFieldElementFlexible::new(field_element_n, q_u256)
         }
     }
 
