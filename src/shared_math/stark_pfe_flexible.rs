@@ -1,18 +1,15 @@
-use rand::{RngCore, SeedableRng};
-
-use rand_pcg::Pcg64;
-
+use crate::shared_math::fri::Fri;
+use crate::shared_math::mpolynomial::MPolynomial;
+use crate::shared_math::other::log_2_ceil;
+use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
+use crate::shared_math::traits::FromVecu8;
 use crate::shared_math::traits::{CyclicGroupGenerator, GetPrimitiveRootOfUnity, IdentityValues};
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::{shared_math::polynomial::Polynomial, util_types::proof_stream::ProofStream, utils};
+use rand::{RngCore, SeedableRng};
+use rand_pcg::Pcg64;
 use std::fmt;
 use std::{collections::HashMap, error::Error};
-
-use crate::{shared_math::polynomial::Polynomial, util_types::proof_stream::ProofStream, utils};
-
-use super::other::log_2_ceil;
-use super::traits::FromVecu8;
-use super::x_field_fri::Fri;
-use super::{mpolynomial::MPolynomial, prime_field_element_flexible::PrimeFieldElementFlexible};
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;

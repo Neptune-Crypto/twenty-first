@@ -1,6 +1,12 @@
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::fri::Fri;
+use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::ntt::intt;
 use crate::shared_math::other::log_2_ceil;
+use crate::shared_math::other::roundup_npo2;
+use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::CyclicGroupGenerator;
+use crate::shared_math::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomElements};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
@@ -11,13 +17,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-
-use super::b_field_element::BFieldElement;
-use super::mpolynomial::MPolynomial;
-use super::other::roundup_npo2;
-use super::polynomial::Polynomial;
-use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomElements};
-use super::x_field_fri::Fri;
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
