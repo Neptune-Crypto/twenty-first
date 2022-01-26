@@ -1,7 +1,6 @@
 use rand::prelude::ThreadRng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::convert::From;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
@@ -62,6 +61,10 @@ pub trait New {
     fn new_from_usize(&self, value: usize) -> Self;
 }
 
+pub trait FromVecu8 {
+    fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
+}
+
 pub trait PrimeFieldElement {
     type Elem: Clone
         + Eq
@@ -79,7 +82,7 @@ pub trait PrimeFieldElement {
         + Mul<Output = Self::Elem>
         + Div<Output = Self::Elem>
         + Neg<Output = Self::Elem>
-        + From<Vec<u8>> // TODO: Replace with From<Blake3Hash>
+        + FromVecu8 // TODO: Replace with From<Blake3Hash>
         + New
         + CyclicGroupGenerator
         + FieldBatchInversion

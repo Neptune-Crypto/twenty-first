@@ -1187,162 +1187,111 @@ impl<
 #[cfg(test)]
 mod test_polynomials {
     #![allow(clippy::just_underscores_and_digits)]
-    use std::vec;
-
-    use super::super::prime_field_element::{PrimeField, PrimeFieldElement};
-    use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
     use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::utils::generate_random_numbers;
-    use num_bigint::BigInt;
+    use primitive_types::U256;
     use rand::RngCore;
+    use std::vec;
 
-    fn b(x: i128) -> BigInt {
-        Into::<BigInt>::into(x)
-    }
+    fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
+        let q_u256: U256 = q.into();
+        if n < 0 {
+            let positive_n: U256 = (-n).into();
+            let field_element_n: U256 = positive_n % q_u256;
 
-    fn pf(value: i128, field: &PrimeField) -> PrimeFieldElement {
-        PrimeFieldElement::new(value, field)
-    }
-
-    #[allow(clippy::needless_lifetimes)] // Suppress wrong warning (fails to compile without lifetime, I think)
-    fn pfb<'a>(value: i128, field: &'a PrimeFieldBig) -> PrimeFieldElementBig {
-        PrimeFieldElementBig::new(b(value), field)
+            -PrimeFieldElementFlexible::new(field_element_n, q_u256)
+        } else {
+            let positive_n: U256 = n.into();
+            let field_element_n: U256 = positive_n % q_u256;
+            PrimeFieldElementFlexible::new(field_element_n, q_u256)
+        }
     }
 
     #[test]
     fn polynomial_display_test() {
-        let prime_modulus = 71;
-        let _71 = PrimeFieldBig::new(b(prime_modulus));
-        let empty = Polynomial::<PrimeFieldElementBig> {
+        let q = 71;
+        let empty = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![],
         };
         assert_eq!("0", empty.to_string());
-        let zero = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![pfb(0, &_71)],
+        let zero = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(0, q)],
         };
         assert_eq!("0", zero.to_string());
-        let double_zero = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![pfb(0, &_71), pfb(0, &_71)],
+        let double_zero = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(0, q), pfb(0, q)],
         };
         assert_eq!("0", double_zero.to_string());
-        let one = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![pfb(1, &_71)],
+        let one = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(1, q)],
         };
         assert_eq!("1", one.to_string());
-        let zero_one = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![pfb(1, &_71), pfb(0, &_71)],
+        let zero_one = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(1, q), pfb(0, q)],
         };
         assert_eq!("1", zero_one.to_string());
-        let zero_zero_one = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![pfb(1, &_71), pfb(0, &_71), pfb(0, &_71)],
+        let zero_zero_one = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(1, q), pfb(0, q), pfb(0, q)],
         };
         assert_eq!("1", zero_zero_one.to_string());
-        let one_zero = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![pfb(0, &_71), pfb(1, &_71)],
+        let one_zero = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(0, q), pfb(1, q)],
         };
         assert_eq!("x", one_zero.to_string());
-        let one = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![pfb(1, &_71)],
+        let one = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(1, q)],
         };
         assert_eq!("1", one.to_string());
-        let x_plus_one = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![pfb(1, &_71), pfb(1, &_71)],
+        let x_plus_one = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(1, q), pfb(1, q)],
         };
         assert_eq!("x + 1", x_plus_one.to_string());
-        let many_zeros = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![
-                pfb(1, &_71),
-                pfb(1, &_71),
-                pfb(0, &_71),
-                pfb(0, &_71),
-                pfb(0, &_71),
-            ],
+        let many_zeros = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(1, q), pfb(1, q), pfb(0, q), pfb(0, q), pfb(0, q)],
         };
         assert_eq!("x + 1", many_zeros.to_string());
-        let also_many_zeros = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![
-                pfb(0, &_71),
-                pfb(0, &_71),
-                pfb(0, &_71),
-                pfb(1, &_71),
-                pfb(1, &_71),
-            ],
+        let also_many_zeros = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(0, q), pfb(0, q), pfb(0, q), pfb(1, q), pfb(1, q)],
         };
         assert_eq!("x^4 + x^3", also_many_zeros.to_string());
-        let yet_many_zeros = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![
-                pfb(1, &_71),
-                pfb(0, &_71),
-                pfb(0, &_71),
-                pfb(0, &_71),
-                pfb(1, &_71),
-            ],
+        let yet_many_zeros = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(1, q), pfb(0, q), pfb(0, q), pfb(0, q), pfb(1, q)],
         };
         assert_eq!("x^4 + 1", yet_many_zeros.to_string());
     }
 
     #[test]
     fn polynomial_evaluate_test_big() {
-        let prime_modulus = 71;
-        let _71 = PrimeFieldBig::new(b(prime_modulus));
-        let parabola = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![
-                PrimeFieldElementBig::new(b(7), &_71),
-                PrimeFieldElementBig::new(b(3), &_71),
-                PrimeFieldElementBig::new(b(2), &_71),
-            ],
+        let q = 71;
+        let parabola = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(7, q), pfb(3, q), pfb(2, q)],
         };
-        assert_eq!(pfb(7, &_71), parabola.evaluate(&pfb(0, &_71)));
-        assert_eq!(pfb(12, &_71), parabola.evaluate(&pfb(1, &_71)));
-        assert_eq!(pfb(21, &_71), parabola.evaluate(&pfb(2, &_71)));
-        assert_eq!(pfb(34, &_71), parabola.evaluate(&pfb(3, &_71)));
-        assert_eq!(pfb(51, &_71), parabola.evaluate(&pfb(4, &_71)));
-        assert_eq!(pfb(1, &_71), parabola.evaluate(&pfb(5, &_71)));
-        assert_eq!(pfb(26, &_71), parabola.evaluate(&pfb(6, &_71)));
+        assert_eq!(pfb(7, q), parabola.evaluate(&pfb(0, q)));
+        assert_eq!(pfb(12, q), parabola.evaluate(&pfb(1, q)));
+        assert_eq!(pfb(21, q), parabola.evaluate(&pfb(2, q)));
+        assert_eq!(pfb(34, q), parabola.evaluate(&pfb(3, q)));
+        assert_eq!(pfb(51, q), parabola.evaluate(&pfb(4, q)));
+        assert_eq!(pfb(1, q), parabola.evaluate(&pfb(5, q)));
+        assert_eq!(pfb(26, q), parabola.evaluate(&pfb(6, q)));
     }
 
     #[test]
     fn polynomial_evaluate_test() {
-        let prime_modulus = 71;
-        let _71 = PrimeField::new(prime_modulus);
-        let parabola = Polynomial::<PrimeFieldElement> {
-            coefficients: vec![
-                PrimeFieldElement::new(7, &_71),
-                PrimeFieldElement::new(3, &_71),
-                PrimeFieldElement::new(2, &_71),
-            ],
+        let q = 71;
+        let parabola = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(7, q), pfb(3, q), pfb(2, q)],
         };
-        assert_eq!(
-            PrimeFieldElement::new(7, &_71),
-            parabola.evaluate(&PrimeFieldElement::new(0, &_71))
-        );
-        assert_eq!(
-            PrimeFieldElement::new(12, &_71),
-            parabola.evaluate(&PrimeFieldElement::new(1, &_71))
-        );
-        assert_eq!(
-            PrimeFieldElement::new(21, &_71),
-            parabola.evaluate(&PrimeFieldElement::new(2, &_71))
-        );
-        assert_eq!(
-            PrimeFieldElement::new(34, &_71),
-            parabola.evaluate(&PrimeFieldElement::new(3, &_71))
-        );
-        assert_eq!(
-            PrimeFieldElement::new(51, &_71),
-            parabola.evaluate(&PrimeFieldElement::new(4, &_71))
-        );
-        assert_eq!(
-            PrimeFieldElement::new(1, &_71),
-            parabola.evaluate(&PrimeFieldElement::new(5, &_71))
-        );
-        assert_eq!(
-            PrimeFieldElement::new(26, &_71),
-            parabola.evaluate(&PrimeFieldElement::new(6, &_71))
-        );
+        assert_eq!(pfb(7, q), parabola.evaluate(&pfb(0, q)));
+        assert_eq!(pfb(12, q), parabola.evaluate(&pfb(1, q)));
+        assert_eq!(pfb(21, q), parabola.evaluate(&pfb(2, q)));
+        assert_eq!(pfb(34, q), parabola.evaluate(&pfb(3, q)));
+        assert_eq!(pfb(51, q), parabola.evaluate(&pfb(4, q)));
+        assert_eq!(pfb(1, q), parabola.evaluate(&pfb(5, q)));
+        assert_eq!(pfb(26, q), parabola.evaluate(&pfb(6, q)));
     }
 
     #[test]
@@ -1394,17 +1343,16 @@ mod test_polynomials {
 
     #[test]
     fn scale_test() {
-        let prime_modulus = 71;
-        let _71 = PrimeField::new(prime_modulus);
-        let _0_71 = PrimeFieldElement::new(0, &_71);
-        let _1_71 = PrimeFieldElement::new(1, &_71);
-        let _2_71 = PrimeFieldElement::new(2, &_71);
-        let _3_71 = PrimeFieldElement::new(3, &_71);
-        let _6_71 = PrimeFieldElement::new(6, &_71);
-        let _12_71 = PrimeFieldElement::new(12, &_71);
-        let _36_71 = PrimeFieldElement::new(36, &_71);
-        let _37_71 = PrimeFieldElement::new(37, &_71);
-        let _40_71 = PrimeFieldElement::new(40, &_71);
+        let q = 71;
+        let _0_71 = pfb(0, q);
+        let _1_71 = pfb(1, q);
+        let _2_71 = pfb(2, q);
+        let _3_71 = pfb(3, q);
+        let _6_71 = pfb(6, q);
+        let _12_71 = pfb(12, q);
+        let _36_71 = pfb(36, q);
+        let _37_71 = pfb(37, q);
+        let _40_71 = pfb(40, q);
         let mut input = Polynomial {
             coefficients: vec![_1_71, _6_71],
         };
@@ -1430,21 +1378,20 @@ mod test_polynomials {
 
     #[test]
     fn normalize_test() {
-        let prime_modulus = 71;
-        let _71 = PrimeField::new(prime_modulus);
-        let _0_71 = PrimeFieldElement::new(0, &_71);
-        let _1_71 = PrimeFieldElement::new(1, &_71);
-        let _6_71 = PrimeFieldElement::new(6, &_71);
-        let _12_71 = PrimeFieldElement::new(12, &_71);
-        let _71 = PrimeField::new(prime_modulus);
-        let zero: Polynomial<PrimeFieldElement> = Polynomial::ring_zero();
-        let mut mut_one: Polynomial<PrimeFieldElement> = Polynomial::<PrimeFieldElement> {
+        let q = 71;
+        let _0_71 = pfb(0, q);
+        let _1_71 = pfb(1, q);
+        let _6_71 = pfb(6, q);
+        let _12_71 = pfb(12, q);
+        let zero: Polynomial<PrimeFieldElementFlexible> = Polynomial::ring_zero();
+        let mut mut_one: Polynomial<PrimeFieldElementFlexible> =
+            Polynomial::<PrimeFieldElementFlexible> {
+                coefficients: vec![_1_71],
+            };
+        let one: Polynomial<PrimeFieldElementFlexible> = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_1_71],
         };
-        let one: Polynomial<PrimeFieldElement> = Polynomial::<PrimeFieldElement> {
-            coefficients: vec![_1_71],
-        };
-        let mut a = Polynomial::<PrimeFieldElement> {
+        let mut a = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![],
         };
         a.normalize();
@@ -1453,54 +1400,54 @@ mod test_polynomials {
         assert_eq!(one, mut_one);
 
         // trailing zeros are removed
-        a = Polynomial::<PrimeFieldElement> {
+        a = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_1_71, _0_71],
         };
         a.normalize();
         assert_eq!(
-            Polynomial::<PrimeFieldElement> {
+            Polynomial::<PrimeFieldElementFlexible> {
                 coefficients: vec![_1_71],
             },
             a
         );
-        a = Polynomial::<PrimeFieldElement> {
+        a = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_1_71, _0_71, _0_71],
         };
         a.normalize();
         assert_eq!(
-            Polynomial::<PrimeFieldElement> {
+            Polynomial::<PrimeFieldElementFlexible> {
                 coefficients: vec![_1_71],
             },
             a
         );
 
         // but leading zeros are not removed
-        a = Polynomial::<PrimeFieldElement> {
+        a = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_0_71, _1_71, _0_71, _0_71],
         };
         a.normalize();
         assert_eq!(
-            Polynomial::<PrimeFieldElement> {
+            Polynomial::<PrimeFieldElementFlexible> {
                 coefficients: vec![_0_71, _1_71],
             },
             a
         );
-        a = Polynomial::<PrimeFieldElement> {
+        a = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_0_71, _1_71],
         };
         a.normalize();
         assert_eq!(
-            Polynomial::<PrimeFieldElement> {
+            Polynomial::<PrimeFieldElementFlexible> {
                 coefficients: vec![_0_71, _1_71],
             },
             a
         );
-        a = Polynomial::<PrimeFieldElement> {
+        a = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_0_71],
         };
         a.normalize();
         assert_eq!(
-            Polynomial::<PrimeFieldElement> {
+            Polynomial::<PrimeFieldElementFlexible> {
                 coefficients: vec![],
             },
             a
@@ -1509,55 +1456,50 @@ mod test_polynomials {
 
     #[test]
     fn get_polynomial_with_roots_test() {
-        let field = PrimeField::new(31);
+        let q = 31;
         assert_eq!(
             Polynomial {
-                coefficients: vec![pf(30, &field), pf(0, &field), pf(1, &field)],
+                coefficients: vec![pfb(30, q), pfb(0, q), pfb(1, q)],
             },
-            Polynomial::get_polynomial_with_roots(&[pf(1, &field), pf(30, &field)])
+            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(30, q)])
         );
         assert_eq!(
             Polynomial {
-                coefficients: vec![pf(0, &field), pf(30, &field), pf(0, &field), pf(1, &field)],
+                coefficients: vec![pfb(0, q), pfb(30, q), pfb(0, q), pfb(1, q)],
             },
-            Polynomial::get_polynomial_with_roots(&[pf(1, &field), pf(30, &field), pf(0, &field)])
+            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(30, q), pfb(0, q)])
         );
         assert_eq!(
             Polynomial {
-                coefficients: vec![
-                    pf(25, &field),
-                    pf(11, &field),
-                    pf(25, &field),
-                    pf(1, &field)
-                ],
+                coefficients: vec![pfb(25, q), pfb(11, q), pfb(25, q), pfb(1, q)],
             },
-            Polynomial::get_polynomial_with_roots(&[pf(1, &field), pf(2, &field), pf(3, &field)])
+            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(2, q), pfb(3, q)])
         );
     }
 
     #[test]
     fn slow_lagrange_interpolation_test() {
-        let field = PrimeField::new(7);
+        let q = 7;
 
         // Verify that interpolation works with just one point
-        let one_point = &[(pf(2, &field), pf(5, &field))];
+        let one_point = &[(pfb(2, q), pfb(5, q))];
         let mut interpolation_result = Polynomial::slow_lagrange_interpolation(one_point);
         println!("interpolation_result = {}", interpolation_result);
         let mut expected_result = Polynomial {
-            coefficients: vec![pf(5, &field)],
+            coefficients: vec![pfb(5, q)],
         };
         assert_eq!(expected_result, interpolation_result);
 
         // Test with three points
         let points = &[
-            (pf(0, &field), pf(6, &field)),
-            (pf(1, &field), pf(6, &field)),
-            (pf(2, &field), pf(2, &field)),
+            (pfb(0, q), pfb(6, q)),
+            (pfb(1, q), pfb(6, q)),
+            (pfb(2, q), pfb(2, q)),
         ];
 
         interpolation_result = Polynomial::slow_lagrange_interpolation(points);
         expected_result = Polynomial {
-            coefficients: vec![pf(6, &field), pf(2, &field), pf(5, &field)],
+            coefficients: vec![pfb(6, q), pfb(2, q), pfb(5, q)],
         };
         assert_eq!(expected_result, interpolation_result);
 
@@ -1567,29 +1509,26 @@ mod test_polynomials {
         }
 
         // Test linear interpolation, when there are only two points given as input
-        let two_points = &[
-            (pf(0, &field), pf(6, &field)),
-            (pf(2, &field), pf(2, &field)),
-        ];
+        let two_points = &[(pfb(0, q), pfb(6, q)), (pfb(2, q), pfb(2, q))];
         interpolation_result = Polynomial::slow_lagrange_interpolation(two_points);
         expected_result = Polynomial {
-            coefficients: vec![pf(6, &field), pf(5, &field)],
+            coefficients: vec![pfb(6, q), pfb(5, q)],
         };
         assert_eq!(expected_result, interpolation_result);
     }
 
     #[test]
     fn slow_lagrange_interpolation_test_big() {
-        let field = PrimeFieldBig::new(b(7));
+        let q = 7;
         let points = &[
-            (pfb(0, &field), pfb(6, &field)),
-            (pfb(1, &field), pfb(6, &field)),
-            (pfb(2, &field), pfb(2, &field)),
+            (pfb(0, q), pfb(6, q)),
+            (pfb(1, q), pfb(6, q)),
+            (pfb(2, q), pfb(2, q)),
         ];
 
         let interpolation_result = Polynomial::slow_lagrange_interpolation(points);
         let expected_result = Polynomial {
-            coefficients: vec![pfb(6, &field), pfb(2, &field), pfb(5, &field)],
+            coefficients: vec![pfb(6, q), pfb(2, q), pfb(5, q)],
         };
         assert_eq!(expected_result, interpolation_result);
 
@@ -1605,27 +1544,27 @@ mod test_polynomials {
         // We start by autogenerating the polynomial, as we would get a polynomial
         // with fractional coefficients if we autogenerated the points and derived the polynomium
         // from that.
-        let field = PrimeField::new(999983i128);
+        let q: u64 = 999983;
         let number_of_points = 50usize;
-        let coefficients: Vec<PrimeFieldElement> =
-            generate_random_numbers(number_of_points, field.q)
+        let coefficients: Vec<PrimeFieldElementFlexible> =
+            generate_random_numbers(number_of_points, q as i128)
                 .iter()
-                .map(|x| PrimeFieldElement::new(*x as i128, &field))
+                .map(|x| pfb(*x as i64, q))
                 .collect();
 
-        let pol: Polynomial<PrimeFieldElement> = Polynomial { coefficients };
+        let pol: Polynomial<PrimeFieldElementFlexible> = Polynomial { coefficients };
 
         // Evaluate polynomial in `number_of_points` points
-        let points: Vec<(PrimeFieldElement, PrimeFieldElement)> = (0..number_of_points)
+        let points = (0..number_of_points)
             .map(|x| {
-                let x = PrimeFieldElement::new(x as i128, &field);
+                let x = pfb(x as i64, q);
                 (x, pol.evaluate(&x))
             })
-            .collect();
+            .collect::<Vec<(PrimeFieldElementFlexible, PrimeFieldElementFlexible)>>();
 
         // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
         // evaluate the point values, and verify that they match the original values
-        let interpolation_result: Polynomial<PrimeFieldElement> =
+        let interpolation_result: Polynomial<PrimeFieldElementFlexible> =
             Polynomial::slow_lagrange_interpolation(&points);
         assert_eq!(interpolation_result, pol);
         for point in points {
@@ -1639,27 +1578,28 @@ mod test_polynomials {
         // We start by autogenerating the polynomial, as we would get a polynomial
         // with fractional coefficients if we autogenerated the points and derived the polynomium
         // from that.
-        let field = PrimeFieldBig::new(b(999983i128));
+        let q: u64 = 999983;
         let number_of_points = 50usize;
-        let coefficients: Vec<PrimeFieldElementBig> =
-            generate_random_numbers(number_of_points, 999983i128)
+        let coefficients: Vec<PrimeFieldElementFlexible> =
+            generate_random_numbers(number_of_points, q as i128)
                 .iter()
-                .map(|x| pfb(*x as i128, &field))
+                .map(|x| pfb(*x as i64, q))
                 .collect();
 
-        let pol: Polynomial<PrimeFieldElementBig> = Polynomial { coefficients };
+        let pol: Polynomial<PrimeFieldElementFlexible> = Polynomial { coefficients };
 
         // Evaluate polynomial in `number_of_points` points
-        let points: Vec<(PrimeFieldElementBig, PrimeFieldElementBig)> = (0..number_of_points)
+        let points: Vec<(PrimeFieldElementFlexible, PrimeFieldElementFlexible)> = (0
+            ..number_of_points)
             .map(|x| {
-                let x = pfb(x as i128, &field);
+                let x = pfb(x as i64, q);
                 (x.clone(), pol.evaluate(&x))
             })
             .collect();
 
         // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
         // evaluate the point values, and verify that they match the original values
-        let interpolation_result: Polynomial<PrimeFieldElementBig> =
+        let interpolation_result: Polynomial<PrimeFieldElementFlexible> =
             Polynomial::slow_lagrange_interpolation(&points);
         assert_eq!(interpolation_result, pol);
         for point in points {
@@ -1669,297 +1609,265 @@ mod test_polynomials {
 
     #[test]
     fn lagrange_interpolation_2_test() {
-        let field = PrimeField::new(5);
+        let q = 5;
         assert_eq!(
-            (pf(1, &field), pf(0, &field)),
-            Polynomial::lagrange_interpolation_2(
-                &(pf(1, &field), pf(1, &field)),
-                &(pf(2, &field), pf(2, &field))
-            )
+            (pfb(1, q), pfb(0, q)),
+            Polynomial::lagrange_interpolation_2(&(pfb(1, q), pfb(1, q)), &(pfb(2, q), pfb(2, q)))
         );
         assert_eq!(
-            (pf(4, &field), pf(4, &field)),
-            Polynomial::lagrange_interpolation_2(
-                &(pf(1, &field), pf(3, &field)),
-                &(pf(2, &field), pf(2, &field))
-            )
+            (pfb(4, q), pfb(4, q)),
+            Polynomial::lagrange_interpolation_2(&(pfb(1, q), pfb(3, q)), &(pfb(2, q), pfb(2, q)))
         );
         assert_eq!(
-            (pf(4, &field), pf(2, &field)),
+            (pfb(4, q), pfb(2, q)),
             Polynomial::lagrange_interpolation_2(
-                &(pf(15, &field), pf(92, &field)),
-                &(pf(19, &field), pf(108, &field))
+                &(pfb(15, q), pfb(92, q)),
+                &(pfb(19, q), pfb(108, q))
             )
         );
 
         assert_eq!(
-            (pf(3, &field), pf(2, &field)),
-            Polynomial::lagrange_interpolation_2(
-                &(pf(1, &field), pf(0, &field)),
-                &(pf(2, &field), pf(3, &field))
-            )
+            (pfb(3, q), pfb(2, q)),
+            Polynomial::lagrange_interpolation_2(&(pfb(1, q), pfb(0, q)), &(pfb(2, q), pfb(3, q)))
         );
 
-        let field_big = PrimeFieldBig::new(b(5));
+        let q = 5;
         assert_eq!(
-            (pfb(1, &field_big), pfb(0, &field_big)),
+            (pfb(1, q), pfb(0, q)),
+            Polynomial::lagrange_interpolation_2(&(pfb(1, q), pfb(1, q)), &(pfb(2, q), pfb(2, q)))
+        );
+        assert_eq!(
+            (pfb(4, q), pfb(4, q)),
+            Polynomial::lagrange_interpolation_2(&(pfb(1, q), pfb(3, q)), &(pfb(2, q), pfb(2, q)))
+        );
+        assert_eq!(
+            (pfb(4, q), pfb(2, q)),
             Polynomial::lagrange_interpolation_2(
-                &(pfb(1, &field_big), pfb(1, &field_big)),
-                &(pfb(2, &field_big), pfb(2, &field_big))
+                &(pfb(15, q), pfb(92, q)),
+                &(pfb(19, q), pfb(108, q))
             )
         );
         assert_eq!(
-            (pfb(4, &field_big), pfb(4, &field_big)),
-            Polynomial::lagrange_interpolation_2(
-                &(pfb(1, &field_big), pfb(3, &field_big)),
-                &(pfb(2, &field_big), pfb(2, &field_big))
-            )
-        );
-        assert_eq!(
-            (pfb(4, &field_big), pfb(2, &field_big)),
-            Polynomial::lagrange_interpolation_2(
-                &(pfb(15, &field_big), pfb(92, &field_big)),
-                &(pfb(19, &field_big), pfb(108, &field_big))
-            )
-        );
-        assert_eq!(
-            (pfb(3, &field_big), pfb(2, &field_big)),
-            Polynomial::lagrange_interpolation_2(
-                &(pfb(1, &field_big), pfb(0, &field_big)),
-                &(pfb(2, &field_big), pfb(3, &field_big))
-            )
+            (pfb(3, q), pfb(2, q)),
+            Polynomial::lagrange_interpolation_2(&(pfb(1, q), pfb(0, q)), &(pfb(2, q), pfb(3, q)))
         );
     }
 
     #[test]
     fn polynomial_are_colinear_3_test() {
-        let field = PrimeField::new(5);
+        let q = 5;
         assert!(Polynomial::are_colinear_3(
-            (pf(1, &field), pf(1, &field)),
-            (pf(2, &field), pf(2, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(2, q)),
+            (pfb(3, q), pfb(3, q))
         ));
         assert!(Polynomial::are_colinear_3(
-            (pf(1, &field), pf(1, &field)),
-            (pf(2, &field), pf(7, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(7, q)),
+            (pfb(3, q), pfb(3, q))
         ));
         assert!(Polynomial::are_colinear_3(
-            (pf(1, &field), pf(3, &field)),
-            (pf(2, &field), pf(2, &field)),
-            (pf(3, &field), pf(1, &field))
+            (pfb(1, q), pfb(3, q)),
+            (pfb(2, q), pfb(2, q)),
+            (pfb(3, q), pfb(1, q))
         ));
         assert!(Polynomial::are_colinear_3(
-            (pf(1, &field), pf(1, &field)),
-            (pf(7, &field), pf(7, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(7, q), pfb(7, q)),
+            (pfb(3, q), pfb(3, q))
         ));
         assert!(!Polynomial::are_colinear_3(
-            (pf(1, &field), pf(1, &field)),
-            (pf(2, &field), pf(2, &field)),
-            (pf(3, &field), pf(4, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(2, q)),
+            (pfb(3, q), pfb(4, q))
         ));
         assert!(!Polynomial::are_colinear_3(
-            (pf(1, &field), pf(1, &field)),
-            (pf(2, &field), pf(3, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(3, q)),
+            (pfb(3, q), pfb(3, q))
         ));
         assert!(!Polynomial::are_colinear_3(
-            (pf(1, &field), pf(0, &field)),
-            (pf(2, &field), pf(3, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(0, q)),
+            (pfb(2, q), pfb(3, q)),
+            (pfb(3, q), pfb(3, q))
         ));
         assert!(Polynomial::are_colinear_3(
-            (pf(15, &field), pf(92, &field)),
-            (pf(11, &field), pf(76, &field)),
-            (pf(19, &field), pf(108, &field))
+            (pfb(15, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q)),
+            (pfb(19, q), pfb(108, q))
         ));
         assert!(!Polynomial::are_colinear_3(
-            (pf(12, &field), pf(92, &field)),
-            (pf(11, &field), pf(76, &field)),
-            (pf(19, &field), pf(108, &field))
+            (pfb(12, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q)),
+            (pfb(19, q), pfb(108, q))
         ));
 
         // Disallow repeated x-values
         assert!(!Polynomial::are_colinear_3(
-            (pf(12, &field), pf(92, &field)),
-            (pf(11, &field), pf(76, &field)),
-            (pf(11, &field), pf(108, &field))
+            (pfb(12, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q)),
+            (pfb(11, q), pfb(108, q))
         ));
     }
 
     #[test]
     fn polynomial_are_colinear_test() {
-        let field = PrimeField::new(5);
+        let q = 5;
         assert!(Polynomial::are_colinear(&[
-            (pf(1, &field), pf(1, &field)),
-            (pf(2, &field), pf(2, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(2, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(Polynomial::are_colinear(&[
-            (pf(1, &field), pf(1, &field)),
-            (pf(2, &field), pf(7, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(7, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(Polynomial::are_colinear(&[
-            (pf(1, &field), pf(3, &field)),
-            (pf(2, &field), pf(2, &field)),
-            (pf(3, &field), pf(1, &field))
+            (pfb(1, q), pfb(3, q)),
+            (pfb(2, q), pfb(2, q)),
+            (pfb(3, q), pfb(1, q))
         ]));
         assert!(Polynomial::are_colinear(&[
-            (pf(1, &field), pf(1, &field)),
-            (pf(7, &field), pf(7, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(7, q), pfb(7, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(!Polynomial::are_colinear(&[
-            (pf(1, &field), pf(1, &field)),
-            (pf(2, &field), pf(2, &field)),
-            (pf(3, &field), pf(4, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(2, q)),
+            (pfb(3, q), pfb(4, q))
         ]));
         assert!(!Polynomial::are_colinear(&[
-            (pf(1, &field), pf(1, &field)),
-            (pf(2, &field), pf(3, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(3, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(!Polynomial::are_colinear(&[
-            (pf(1, &field), pf(0, &field)),
-            (pf(2, &field), pf(3, &field)),
-            (pf(3, &field), pf(3, &field))
+            (pfb(1, q), pfb(0, q)),
+            (pfb(2, q), pfb(3, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(Polynomial::are_colinear(&[
-            (pf(15, &field), pf(92, &field)),
-            (pf(11, &field), pf(76, &field)),
-            (pf(19, &field), pf(108, &field))
+            (pfb(15, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q)),
+            (pfb(19, q), pfb(108, q))
         ]));
         assert!(!Polynomial::are_colinear(&[
-            (pf(12, &field), pf(92, &field)),
-            (pf(11, &field), pf(76, &field)),
-            (pf(19, &field), pf(108, &field))
+            (pfb(12, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q)),
+            (pfb(19, q), pfb(108, q))
         ]));
 
         // Disallow repeated x-values
         assert!(!Polynomial::are_colinear(&[
-            (pf(12, &field), pf(92, &field)),
-            (pf(11, &field), pf(76, &field)),
-            (pf(11, &field), pf(108, &field))
+            (pfb(12, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q)),
+            (pfb(11, q), pfb(108, q))
         ]));
 
         // Disallow args with less than three points
         assert!(!Polynomial::are_colinear(&[
-            (pf(12, &field), pf(92, &field)),
-            (pf(11, &field), pf(76, &field))
+            (pfb(12, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q))
         ]));
     }
 
     #[test]
     fn polynomial_are_colinear_test_big() {
-        let field = PrimeFieldBig::new(b(5));
+        let q = 5;
         assert!(Polynomial::are_colinear(&[
-            (pfb(1, &field), pfb(1, &field)),
-            (pfb(2, &field), pfb(2, &field)),
-            (pfb(3, &field), pfb(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(2, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(Polynomial::are_colinear(&[
-            (pfb(1, &field), pfb(1, &field)),
-            (pfb(2, &field), pfb(7, &field)),
-            (pfb(3, &field), pfb(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(7, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(Polynomial::are_colinear(&[
-            (pfb(1, &field), pfb(3, &field)),
-            (pfb(2, &field), pfb(2, &field)),
-            (pfb(3, &field), pfb(1, &field))
+            (pfb(1, q), pfb(3, q)),
+            (pfb(2, q), pfb(2, q)),
+            (pfb(3, q), pfb(1, q))
         ]));
         assert!(Polynomial::are_colinear(&[
-            (pfb(1, &field), pfb(1, &field)),
-            (pfb(7, &field), pfb(7, &field)),
-            (pfb(3, &field), pfb(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(7, q), pfb(7, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(!Polynomial::are_colinear(&[
-            (pfb(1, &field), pfb(1, &field)),
-            (pfb(2, &field), pfb(2, &field)),
-            (pfb(3, &field), pfb(4, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(2, q)),
+            (pfb(3, q), pfb(4, q))
         ]));
         assert!(!Polynomial::are_colinear(&[
-            (pfb(1, &field), pfb(1, &field)),
-            (pfb(2, &field), pfb(3, &field)),
-            (pfb(3, &field), pfb(3, &field))
+            (pfb(1, q), pfb(1, q)),
+            (pfb(2, q), pfb(3, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(!Polynomial::are_colinear(&[
-            (pfb(1, &field), pfb(0, &field)),
-            (pfb(2, &field), pfb(3, &field)),
-            (pfb(3, &field), pfb(3, &field))
+            (pfb(1, q), pfb(0, q)),
+            (pfb(2, q), pfb(3, q)),
+            (pfb(3, q), pfb(3, q))
         ]));
         assert!(Polynomial::are_colinear(&[
-            (pfb(15, &field), pfb(92, &field)),
-            (pfb(11, &field), pfb(76, &field)),
-            (pfb(19, &field), pfb(108, &field))
+            (pfb(15, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q)),
+            (pfb(19, q), pfb(108, q))
         ]));
         assert!(!Polynomial::are_colinear(&[
-            (pfb(12, &field), pfb(92, &field)),
-            (pfb(11, &field), pfb(76, &field)),
-            (pfb(19, &field), pfb(108, &field))
+            (pfb(12, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q)),
+            (pfb(19, q), pfb(108, q))
         ]));
 
         // Disallow repeated x-values
         assert!(!Polynomial::are_colinear(&[
-            (pfb(12, &field), pfb(92, &field)),
-            (pfb(11, &field), pfb(76, &field)),
-            (pfb(11, &field), pfb(108, &field))
+            (pfb(12, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q)),
+            (pfb(11, q), pfb(108, q))
         ]));
 
         // Disallow args with less than three points
         assert!(!Polynomial::are_colinear(&[
-            (pfb(12, &field), pfb(92, &field)),
-            (pfb(11, &field), pfb(76, &field))
+            (pfb(12, q), pfb(92, q)),
+            (pfb(11, q), pfb(76, q))
         ]));
     }
 
     #[test]
     fn polynomial_shift_test() {
-        let prime_modulus = 71;
-        let _71 = PrimeField::new(prime_modulus);
+        let q = 71;
         let pol = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(17, &_71),
-                PrimeFieldElement::new(14, &_71),
-            ],
+            coefficients: vec![pfb(17, q), pfb(14, q)],
         };
         assert_eq!(
             vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(17, &_71),
-                PrimeFieldElement::new(14, &_71)
+                pfb(0, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(17, q),
+                pfb(14, q)
             ],
-            pol.shift_coefficients(4, PrimeFieldElement::new(0, &_71))
-                .coefficients
+            pol.shift_coefficients(4, pfb(0, q)).coefficients
         );
         assert_eq!(
-            vec![
-                PrimeFieldElement::new(17, &_71),
-                PrimeFieldElement::new(14, &_71)
-            ],
-            pol.shift_coefficients(0, PrimeFieldElement::new(0, &_71))
-                .coefficients
+            vec![pfb(17, q), pfb(14, q)],
+            pol.shift_coefficients(0, pfb(0, q)).coefficients
         );
         assert_eq!(
-            vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(17, &_71),
-                PrimeFieldElement::new(14, &_71)
-            ],
-            pol.shift_coefficients(1, PrimeFieldElement::new(0, &_71))
-                .coefficients
+            vec![pfb(0, q), pfb(17, q), pfb(14, q)],
+            pol.shift_coefficients(1, pfb(0, q)).coefficients
         );
     }
 
     #[test]
     fn mod_pow_test() {
-        let _71 = PrimeField::new(71);
-        let zero = PrimeFieldElement::new(0, &_71);
-        let one = PrimeFieldElement::new(1, &_71);
+        let q = 71;
+        let zero = pfb(0, q);
+        let one = pfb(1, q);
         let one_pol = Polynomial::from_constant(one);
 
         assert_eq!(one_pol, one_pol.mod_pow(0.into(), one));
@@ -1977,32 +1885,32 @@ mod test_polynomials {
         let pol = Polynomial {
             coefficients: vec![
                 zero,
-                PrimeFieldElement::new(14, &_71),
+                pfb(14, q),
                 zero,
-                PrimeFieldElement::new(4, &_71),
+                pfb(4, q),
                 zero,
-                PrimeFieldElement::new(8, &_71),
+                pfb(8, q),
                 zero,
-                PrimeFieldElement::new(3, &_71),
+                pfb(3, q),
             ],
         };
         let pol_squared = Polynomial {
             coefficients: vec![
                 zero,
                 zero,
-                PrimeFieldElement::new(196, &_71),
+                pfb(196, q),
                 zero,
-                PrimeFieldElement::new(112, &_71),
+                pfb(112, q),
                 zero,
-                PrimeFieldElement::new(240, &_71),
+                pfb(240, q),
                 zero,
-                PrimeFieldElement::new(148, &_71),
+                pfb(148, q),
                 zero,
-                PrimeFieldElement::new(88, &_71),
+                pfb(88, q),
                 zero,
-                PrimeFieldElement::new(48, &_71),
+                pfb(48, q),
                 zero,
-                PrimeFieldElement::new(9, &_71),
+                pfb(9, q),
             ],
         };
         let pol_cubed = Polynomial {
@@ -2010,25 +1918,25 @@ mod test_polynomials {
                 zero,
                 zero,
                 zero,
-                PrimeFieldElement::new(2744, &_71),
+                pfb(2744, q),
                 zero,
-                PrimeFieldElement::new(2352, &_71),
+                pfb(2352, q),
                 zero,
-                PrimeFieldElement::new(5376, &_71),
+                pfb(5376, q),
                 zero,
-                PrimeFieldElement::new(4516, &_71),
+                pfb(4516, q),
                 zero,
-                PrimeFieldElement::new(4080, &_71),
+                pfb(4080, q),
                 zero,
-                PrimeFieldElement::new(2928, &_71),
+                pfb(2928, q),
                 zero,
-                PrimeFieldElement::new(1466, &_71),
+                pfb(1466, q),
                 zero,
-                PrimeFieldElement::new(684, &_71),
+                pfb(684, q),
                 zero,
-                PrimeFieldElement::new(216, &_71),
+                pfb(216, q),
                 zero,
-                PrimeFieldElement::new(27, &_71),
+                pfb(27, q),
             ],
         };
 
@@ -2038,19 +1946,15 @@ mod test_polynomials {
         assert_eq!(pol_cubed, pol.mod_pow(3.into(), one));
 
         let parabola = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(5, &_71),
-                PrimeFieldElement::new(41, &_71),
-                PrimeFieldElement::new(19, &_71),
-            ],
+            coefficients: vec![pfb(5, q), pfb(41, q), pfb(19, q)],
         };
         let parabola_squared = Polynomial {
             coefficients: vec![
-                PrimeFieldElement::new(25, &_71),
-                PrimeFieldElement::new(410, &_71),
-                PrimeFieldElement::new(1871, &_71),
-                PrimeFieldElement::new(1558, &_71),
-                PrimeFieldElement::new(361, &_71),
+                pfb(25, q),
+                pfb(410, q),
+                pfb(1871, q),
+                pfb(1558, q),
+                pfb(361, q),
             ],
         };
         assert_eq!(one_pol, parabola.mod_pow(0.into(), one));
@@ -2078,29 +1982,28 @@ mod test_polynomials {
 
     #[test]
     fn polynomial_arithmetic_property_based_test() {
-        let prime_modulus = 71;
-        let _71 = PrimeField::new(prime_modulus);
+        let q: u64 = 71;
         let a_degree = 20;
         for i in 0..20 {
-            let a = Polynomial::<PrimeFieldElement> {
-                coefficients: generate_random_numbers(a_degree, prime_modulus)
+            let a = Polynomial::<PrimeFieldElementFlexible> {
+                coefficients: generate_random_numbers(a_degree, q as i128)
                     .iter()
-                    .map(|x| PrimeFieldElement::new(*x, &_71))
+                    .map(|x| pfb(*x as i64, q))
                     .collect(),
             };
-            let b = Polynomial::<PrimeFieldElement> {
-                coefficients: generate_random_numbers(a_degree + i, prime_modulus)
+            let b = Polynomial::<PrimeFieldElementFlexible> {
+                coefficients: generate_random_numbers(a_degree + i, q as i128)
                     .iter()
-                    .map(|x| PrimeFieldElement::new(*x, &_71))
+                    .map(|x| pfb(*x as i64, q))
                     .collect(),
             };
 
-            let mul_a_b: Polynomial<PrimeFieldElement> = a.clone() * b.clone();
-            let mul_b_a: Polynomial<PrimeFieldElement> = b.clone() * a.clone();
-            let add_a_b: Polynomial<PrimeFieldElement> = a.clone() + b.clone();
-            let add_b_a: Polynomial<PrimeFieldElement> = b.clone() + a.clone();
-            let sub_a_b: Polynomial<PrimeFieldElement> = a.clone() - b.clone();
-            let sub_b_a: Polynomial<PrimeFieldElement> = b.clone() - a.clone();
+            let mul_a_b = a.clone() * b.clone();
+            let mul_b_a = b.clone() * a.clone();
+            let add_a_b = a.clone() + b.clone();
+            let add_b_a = b.clone() + a.clone();
+            let sub_a_b = a.clone() - b.clone();
+            let sub_b_a = b.clone() - a.clone();
 
             let mut res = mul_a_b.clone() / b.clone();
             assert_eq!(res, a);
@@ -2132,29 +2035,28 @@ mod test_polynomials {
 
     #[test]
     fn polynomial_arithmetic_property_based_test_big() {
-        let prime_modulus = 71;
-        let _71 = PrimeFieldBig::new(b(prime_modulus));
+        let q: u64 = 71;
         let a_degree = 20;
         for i in 0..20 {
-            let a = Polynomial::<PrimeFieldElementBig> {
-                coefficients: generate_random_numbers(a_degree, prime_modulus)
+            let a = Polynomial::<PrimeFieldElementFlexible> {
+                coefficients: generate_random_numbers(a_degree, q as i128)
                     .iter()
-                    .map(|x| pfb(*x, &_71))
+                    .map(|x| pfb(*x as i64, q))
                     .collect(),
             };
-            let b = Polynomial::<PrimeFieldElementBig> {
-                coefficients: generate_random_numbers(a_degree + i, prime_modulus)
+            let b = Polynomial::<PrimeFieldElementFlexible> {
+                coefficients: generate_random_numbers(a_degree + i, q as i128)
                     .iter()
-                    .map(|x| pfb(*x, &_71))
+                    .map(|x| pfb(*x as i64, q))
                     .collect(),
             };
 
-            let mul_a_b: Polynomial<PrimeFieldElementBig> = a.clone() * b.clone();
-            let mul_b_a: Polynomial<PrimeFieldElementBig> = b.clone() * a.clone();
-            let add_a_b: Polynomial<PrimeFieldElementBig> = a.clone() + b.clone();
-            let add_b_a: Polynomial<PrimeFieldElementBig> = b.clone() + a.clone();
-            let sub_a_b: Polynomial<PrimeFieldElementBig> = a.clone() - b.clone();
-            let sub_b_a: Polynomial<PrimeFieldElementBig> = b.clone() - a.clone();
+            let mul_a_b = a.clone() * b.clone();
+            let mul_b_a = b.clone() * a.clone();
+            let add_a_b = a.clone() + b.clone();
+            let add_b_a = b.clone() + a.clone();
+            let sub_a_b = a.clone() - b.clone();
+            let sub_b_a = b.clone() - a.clone();
 
             let mut res = mul_a_b.clone() / b.clone();
             assert_eq!(res, a);
@@ -2248,24 +2150,24 @@ mod test_polynomials {
 
     #[test]
     fn polynomial_arithmetic_division_test() {
-        let _71 = PrimeField::new(71);
-        let a = Polynomial::<PrimeFieldElement> {
-            coefficients: vec![PrimeFieldElement::new(17, &_71)],
+        let q = 71;
+        let a = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(17, q)],
         };
-        let b = Polynomial::<PrimeFieldElement> {
-            coefficients: vec![PrimeFieldElement::new(17, &_71)],
+        let b = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(17, q)],
         };
-        let one = Polynomial::<PrimeFieldElement> {
-            coefficients: vec![PrimeFieldElement::new(1, &_71)],
+        let one = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(1, q)],
         };
-        let zero = Polynomial::<PrimeFieldElement> {
+        let zero = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![],
         };
-        let zero_alt = Polynomial::<PrimeFieldElement> {
-            coefficients: vec![PrimeFieldElement::new(0, &_71)],
+        let zero_alt = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(0, q)],
         };
-        let zero_alt_alt = Polynomial::<PrimeFieldElement> {
-            coefficients: vec![PrimeFieldElement::new(0, &_71); 4],
+        let zero_alt_alt = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(0, q); 4],
         };
         assert_eq!(one, a / b.clone());
         let div_with_zero = zero.clone() / b.clone();
@@ -2281,123 +2183,96 @@ mod test_polynomials {
         assert!(div_with_zero_alt.coefficients.is_empty());
         assert!(div_with_zero_alt_alt.coefficients.is_empty());
 
-        let x: Polynomial<PrimeFieldElement> = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(1, &_71),
-            ],
+        let x: Polynomial<PrimeFieldElementFlexible> = Polynomial {
+            coefficients: vec![pfb(0, q), pfb(1, q)],
         };
         let mut prod_x = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(1, &_71),
-            ],
+            coefficients: vec![pfb(0, q), pfb(1, q)],
         };
         let mut expected_quotient = Polynomial {
-            coefficients: vec![PrimeFieldElement::new(1, &_71)],
+            coefficients: vec![pfb(1, q)],
         };
         assert_eq!(expected_quotient, prod_x / x.clone());
         assert_eq!(zero, zero.clone() / b);
 
         prod_x = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(1, &_71),
-            ],
+            coefficients: vec![pfb(0, q), pfb(0, q), pfb(1, q)],
         };
         expected_quotient = Polynomial {
-            coefficients: vec![PrimeFieldElement::new(1, &_71)],
+            coefficients: vec![pfb(1, q)],
         };
         assert_eq!(expected_quotient, prod_x / (x.clone() * x.clone()));
 
         prod_x = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(1, &_71),
-                PrimeFieldElement::new(2, &_71),
-            ],
+            coefficients: vec![pfb(0, q), pfb(1, q), pfb(2, q)],
         };
         expected_quotient = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(1, &_71),
-                PrimeFieldElement::new(2, &_71),
-            ],
+            coefficients: vec![pfb(1, q), pfb(2, q)],
+        };
+        assert_eq!(expected_quotient, prod_x / x.clone());
+
+        prod_x = Polynomial {
+            coefficients: vec![pfb(1, q), pfb(0, q), pfb(2, q)],
+        };
+        expected_quotient = Polynomial {
+            coefficients: vec![pfb(0, q), pfb(2, q)],
         };
         assert_eq!(expected_quotient, prod_x / x.clone());
 
         prod_x = Polynomial {
             coefficients: vec![
-                PrimeFieldElement::new(1, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(2, &_71),
+                pfb(0, q),
+                pfb(48, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(25, q),
+                pfb(11, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(64, q),
+                pfb(16, q),
+                pfb(0, q),
+                pfb(30, q),
             ],
         };
         expected_quotient = Polynomial {
             coefficients: vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(2, &_71),
-            ],
-        };
-        assert_eq!(expected_quotient, prod_x / x.clone());
-
-        prod_x = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(48, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(25, &_71),
-                PrimeFieldElement::new(11, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(64, &_71),
-                PrimeFieldElement::new(16, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(30, &_71),
-            ],
-        };
-        expected_quotient = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(48, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(25, &_71),
-                PrimeFieldElement::new(11, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(64, &_71),
-                PrimeFieldElement::new(16, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(30, &_71),
+                pfb(48, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(25, q),
+                pfb(11, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(64, q),
+                pfb(16, q),
+                pfb(0, q),
+                pfb(30, q),
             ],
         };
         assert_eq!(expected_quotient, prod_x.clone() / x.clone());
 
         expected_quotient = Polynomial {
             coefficients: vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(25, &_71),
-                PrimeFieldElement::new(11, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(64, &_71),
-                PrimeFieldElement::new(16, &_71),
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(30, &_71),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(25, q),
+                pfb(11, q),
+                pfb(0, q),
+                pfb(0, q),
+                pfb(64, q),
+                pfb(16, q),
+                pfb(0, q),
+                pfb(30, q),
             ],
         };
         assert_eq!(expected_quotient, prod_x.clone() / (x.clone() * x.clone()));
         assert_eq!(
             Polynomial {
-                coefficients: vec![
-                    PrimeFieldElement::new(0, &_71),
-                    PrimeFieldElement::new(48, &_71),
-                ],
+                coefficients: vec![pfb(0, q), pfb(48, q),],
             },
             prod_x % (x.clone() * x.clone())
         );
@@ -2405,52 +2280,47 @@ mod test_polynomials {
 
     #[test]
     fn polynomial_arithmetic_test_linear_combination() {
-        let field = PrimeFieldBig::new(b(167772161));
-        let tq = Polynomial::<PrimeFieldElementBig> {
+        let q = 167772161;
+        let tq = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![
-                pfb(76432291, &field),
-                pfb(6568597, &field),
-                pfb(37593670, &field),
-                pfb(164656139, &field),
-                pfb(100728053, &field),
-                pfb(8855557, &field),
-                pfb(84827854, &field),
+                pfb(76432291, q),
+                pfb(6568597, q),
+                pfb(37593670, q),
+                pfb(164656139, q),
+                pfb(100728053, q),
+                pfb(8855557, q),
+                pfb(84827854, q),
             ],
         };
-        let ti = Polynomial::<PrimeFieldElementBig> {
+        let ti = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![
-                pfb(137616711, &field),
-                pfb(15613095, &field),
-                pfb(114041830, &field),
-                pfb(68272686, &field),
+                pfb(137616711, q),
+                pfb(15613095, q),
+                pfb(114041830, q),
+                pfb(68272686, q),
             ],
         };
-        let bq = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![pfb(43152288, &field), pfb(68272686, &field)],
+        let bq = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(43152288, q), pfb(68272686, q)],
         };
-        let x_to_3 = Polynomial::<PrimeFieldElementBig> {
-            coefficients: vec![
-                pfb(0, &field),
-                pfb(0, &field),
-                pfb(0, &field),
-                pfb(1, &field),
-            ],
+        let x_to_3 = Polynomial::<PrimeFieldElementFlexible> {
+            coefficients: vec![pfb(0, q), pfb(0, q), pfb(0, q), pfb(1, q)],
         };
         let ks = vec![
-            pfb(132934501, &field),
-            pfb(57662258, &field),
-            pfb(76229169, &field),
-            pfb(82319948, &field),
+            pfb(132934501, q),
+            pfb(57662258, q),
+            pfb(76229169, q),
+            pfb(82319948, q),
         ];
-        let expected_lc = Polynomial::<PrimeFieldElementBig> {
+        let expected_lc = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![
-                pfb(2792937, &field),
-                pfb(39162406, &field),
-                pfb(7217300, &field),
-                pfb(58955792, &field),
-                pfb(3275580, &field),
-                pfb(58708383, &field),
-                pfb(3119620, &field),
+                pfb(2792937, q),
+                pfb(39162406, q),
+                pfb(7217300, q),
+                pfb(58955792, q),
+                pfb(3275580, q),
+                pfb(58708383, q),
+                pfb(3119620, q),
             ],
         };
         let linear_combination = tq
@@ -2460,41 +2330,41 @@ mod test_polynomials {
             + (bq * x_to_3).scalar_mul(ks[3].clone());
         assert_eq!(expected_lc, linear_combination);
 
-        let x_values: Vec<PrimeFieldElementBig> = vec![
-            pfb(1, &field),
-            pfb(116878283, &field),
-            pfb(71493608, &field),
-            pfb(131850885, &field),
-            pfb(65249968, &field),
-            pfb(26998229, &field),
-            pfb(30406922, &field),
-            pfb(40136459, &field),
-            pfb(167772160, &field),
-            pfb(50893878, &field),
-            pfb(96278553, &field),
-            pfb(35921276, &field),
-            pfb(102522193, &field),
-            pfb(140773932, &field),
-            pfb(137365239, &field),
-            pfb(127635702, &field),
+        let x_values: Vec<PrimeFieldElementFlexible> = vec![
+            pfb(1, q),
+            pfb(116878283, q),
+            pfb(71493608, q),
+            pfb(131850885, q),
+            pfb(65249968, q),
+            pfb(26998229, q),
+            pfb(30406922, q),
+            pfb(40136459, q),
+            pfb(167772160, q),
+            pfb(50893878, q),
+            pfb(96278553, q),
+            pfb(35921276, q),
+            pfb(102522193, q),
+            pfb(140773932, q),
+            pfb(137365239, q),
+            pfb(127635702, q),
         ];
-        let expected_y_values: Vec<PrimeFieldElementBig> = vec![
-            pfb(5459857, &field),
-            pfb(148657471, &field),
-            pfb(30002611, &field),
-            pfb(66137138, &field),
-            pfb(8094868, &field),
-            pfb(56386222, &field),
-            pfb(156375138, &field),
-            pfb(54481212, &field),
-            pfb(27351017, &field),
-            pfb(142491681, &field),
-            pfb(27138843, &field),
-            pfb(146662298, &field),
-            pfb(151140487, &field),
-            pfb(131629901, &field),
-            pfb(120097158, &field),
-            pfb(114758378, &field),
+        let expected_y_values: Vec<PrimeFieldElementFlexible> = vec![
+            pfb(5459857, q),
+            pfb(148657471, q),
+            pfb(30002611, q),
+            pfb(66137138, q),
+            pfb(8094868, q),
+            pfb(56386222, q),
+            pfb(156375138, q),
+            pfb(54481212, q),
+            pfb(27351017, q),
+            pfb(142491681, q),
+            pfb(27138843, q),
+            pfb(146662298, q),
+            pfb(151140487, q),
+            pfb(131629901, q),
+            pfb(120097158, q),
+            pfb(114758378, q),
         ];
         for i in 0..16 {
             assert_eq!(
@@ -2506,35 +2376,35 @@ mod test_polynomials {
 
     #[test]
     fn fast_multiply_test() {
-        let _65537 = PrimeFieldBig::new(65537.into());
-        let primitive_root = _65537.get_primitive_root_of_unity(32).0.unwrap();
+        let q = 65537;
+        let primitive_root = pfb(1, q).get_primitive_root_of_unity(32).0.unwrap();
         println!("primitive_root = {}", primitive_root);
-        let a: Polynomial<PrimeFieldElementBig> = Polynomial {
+        let a: Polynomial<PrimeFieldElementFlexible> = Polynomial {
             coefficients: vec![
-                pfb(1, &_65537),
-                pfb(2, &_65537),
-                pfb(3, &_65537),
-                pfb(4, &_65537),
-                pfb(5, &_65537),
-                pfb(6, &_65537),
-                pfb(7, &_65537),
-                pfb(8, &_65537),
-                pfb(9, &_65537),
-                pfb(10, &_65537),
+                pfb(1, q),
+                pfb(2, q),
+                pfb(3, q),
+                pfb(4, q),
+                pfb(5, q),
+                pfb(6, q),
+                pfb(7, q),
+                pfb(8, q),
+                pfb(9, q),
+                pfb(10, q),
             ],
         };
-        let b: Polynomial<PrimeFieldElementBig> = Polynomial {
+        let b: Polynomial<PrimeFieldElementFlexible> = Polynomial {
             coefficients: vec![
-                pfb(1, &_65537),
-                pfb(2, &_65537),
-                pfb(3, &_65537),
-                pfb(4, &_65537),
-                pfb(5, &_65537),
-                pfb(6, &_65537),
-                pfb(7, &_65537),
-                pfb(8, &_65537),
-                pfb(9, &_65537),
-                pfb(17, &_65537),
+                pfb(1, q),
+                pfb(2, q),
+                pfb(3, q),
+                pfb(4, q),
+                pfb(5, q),
+                pfb(6, q),
+                pfb(7, q),
+                pfb(8, q),
+                pfb(9, q),
+                pfb(17, q),
             ],
         };
         let c_fast = Polynomial::fast_multiply(&a, &b, &primitive_root, 32);
@@ -2551,40 +2421,40 @@ mod test_polynomials {
             Polynomial::fast_multiply(&a, &Polynomial::ring_zero(), &primitive_root, 32)
         );
 
-        let one: Polynomial<PrimeFieldElementBig> = Polynomial {
-            coefficients: vec![pfb(1, &_65537)],
+        let one: Polynomial<PrimeFieldElementFlexible> = Polynomial {
+            coefficients: vec![pfb(1, q)],
         };
         assert_eq!(a, Polynomial::fast_multiply(&a, &one, &primitive_root, 32));
         assert_eq!(a, Polynomial::fast_multiply(&one, &a, &primitive_root, 32));
         assert_eq!(b, Polynomial::fast_multiply(&b, &one, &primitive_root, 32));
         assert_eq!(b, Polynomial::fast_multiply(&one, &b, &primitive_root, 32));
-        let x: Polynomial<PrimeFieldElementBig> = Polynomial {
-            coefficients: vec![pfb(0, &_65537), pfb(1, &_65537)],
+        let x: Polynomial<PrimeFieldElementFlexible> = Polynomial {
+            coefficients: vec![pfb(0, q), pfb(1, q)],
         };
         assert_eq!(
-            a.shift_coefficients(1, _65537.ring_zero()),
+            a.shift_coefficients(1, pfb(0, q)),
             Polynomial::fast_multiply(&x, &a, &primitive_root, 32)
         );
         assert_eq!(
-            a.shift_coefficients(1, _65537.ring_zero()),
+            a.shift_coefficients(1, pfb(0, q)),
             Polynomial::fast_multiply(&a, &x, &primitive_root, 32)
         );
         assert_eq!(
-            b.shift_coefficients(1, _65537.ring_zero()),
+            b.shift_coefficients(1, pfb(0, q)),
             Polynomial::fast_multiply(&x, &b, &primitive_root, 32)
         );
         assert_eq!(
-            b.shift_coefficients(1, _65537.ring_zero()),
+            b.shift_coefficients(1, pfb(0, q)),
             Polynomial::fast_multiply(&b, &x, &primitive_root, 32)
         );
     }
 
     #[test]
     fn fast_zerofier_test() {
-        let _17 = PrimeField::new(17);
-        let _1_17 = PrimeFieldElement::new(1, &_17);
-        let _5_17 = PrimeFieldElement::new(5, &_17);
-        let _9_17 = PrimeFieldElement::new(9, &_17);
+        let q = 17;
+        let _1_17 = pfb(1, q);
+        let _5_17 = pfb(5, q);
+        let _9_17 = pfb(9, q);
         let root_order = 8;
         let domain = vec![_1_17, _5_17];
         let actual = Polynomial::fast_zerofier(&domain, &_9_17, root_order);
@@ -2604,9 +2474,9 @@ mod test_polynomials {
             actual
         );
 
-        let _3_17 = PrimeFieldElement::new(3, &_17);
-        let _7_17 = PrimeFieldElement::new(7, &_17);
-        let _10_17 = PrimeFieldElement::new(10, &_17);
+        let _3_17 = pfb(3, q);
+        let _7_17 = pfb(7, q);
+        let _10_17 = pfb(10, q);
         let root_order_2 = 16;
         let domain_2 = vec![_7_17, _10_17];
         let actual_2 = Polynomial::fast_zerofier(&domain_2, &_3_17, root_order_2);
@@ -2624,46 +2494,46 @@ mod test_polynomials {
 
     #[test]
     fn fast_evaluate_test() {
-        let _17 = PrimeField::new(17);
-        let _0_17 = _17.ring_zero();
-        let _1_17 = _17.ring_one();
-        let _3_17 = PrimeFieldElement::new(3, &_17);
-        let _5_17 = PrimeFieldElement::new(5, &_17);
+        let q = 17;
+        let _0_17 = pfb(0, q);
+        let _1_17 = pfb(1, q);
+        let _3_17 = pfb(3, q);
+        let _5_17 = pfb(5, q);
 
         // x^5 + x^3
         let poly = Polynomial {
             coefficients: vec![_0_17, _0_17, _0_17, _1_17, _0_17, _1_17],
         };
 
-        let _6_17 = PrimeFieldElement::new(6, &_17);
-        let _12_17 = PrimeFieldElement::new(12, &_17);
+        let _6_17 = pfb(6, q);
+        let _12_17 = pfb(12, q);
         let domain = vec![_6_17, _12_17];
 
         let actual = poly.fast_evaluate(&domain, &_3_17, 16);
-        let expected_6 = _6_17.mod_pow(5) + _6_17.mod_pow(3);
+        let expected_6 = _6_17.mod_pow(5.into()) + _6_17.mod_pow(3.into());
         assert_eq!(expected_6, actual[0]);
 
-        let expected_12 = _12_17.mod_pow(5) + _12_17.mod_pow(3);
+        let expected_12 = _12_17.mod_pow(5.into()) + _12_17.mod_pow(3.into());
         assert_eq!(expected_12, actual[1]);
     }
 
     #[test]
     fn fast_interpolate_test() {
-        let _17 = PrimeField::new(17);
-        let _0_17 = _17.ring_zero();
-        let _1_17 = _17.ring_one();
-        let _13_17 = PrimeFieldElement::new(13, &_17);
-        let _5_17 = PrimeFieldElement::new(5, &_17);
+        let q = 17;
+        let _0_17 = pfb(0, q);
+        let _1_17 = pfb(1, q);
+        let _13_17 = pfb(13, q);
+        let _5_17 = pfb(5, q);
 
         // x^3 + x^1
         let poly = Polynomial {
             coefficients: vec![_0_17, _1_17, _0_17, _1_17],
         };
 
-        let _6_17 = PrimeFieldElement::new(6, &_17);
-        let _7_17 = PrimeFieldElement::new(7, &_17);
-        let _8_17 = PrimeFieldElement::new(8, &_17);
-        let _9_17 = PrimeFieldElement::new(9, &_17);
+        let _6_17 = pfb(6, q);
+        let _7_17 = pfb(7, q);
+        let _8_17 = pfb(8, q);
+        let _9_17 = pfb(9, q);
         let domain = vec![_6_17, _7_17, _8_17, _9_17];
 
         let evals = poly.fast_evaluate(&domain, &_13_17, 4);
@@ -2673,11 +2543,11 @@ mod test_polynomials {
 
     #[test]
     fn fast_coset_evaluate_test() {
-        let _17 = PrimeField::new(17);
-        let _0_17 = _17.ring_zero();
-        let _1_17 = _17.ring_one();
-        let _3_17 = PrimeFieldElement::new(3, &_17);
-        let _9_17 = PrimeFieldElement::new(9, &_17);
+        let q = 17;
+        let _0_17 = pfb(0, q);
+        let _1_17 = pfb(1, q);
+        let _3_17 = pfb(3, q);
+        let _9_17 = pfb(9, q);
 
         // x^5 + x^3
         let poly = Polynomial {
@@ -2698,36 +2568,36 @@ mod test_polynomials {
 
     #[test]
     fn fast_coset_divide_test() {
-        let _65537 = PrimeFieldBig::new(65537.into());
-        let offset = _65537.get_primitive_root_of_unity(64).0.unwrap();
-        let primitive_root = _65537.get_primitive_root_of_unity(32).0.unwrap();
+        let q = 65537;
+        let offset = pfb(1, q).get_primitive_root_of_unity(64).0.unwrap();
+        let primitive_root = pfb(1, q).get_primitive_root_of_unity(32).0.unwrap();
         println!("primitive_root = {}", primitive_root);
-        let a: Polynomial<PrimeFieldElementBig> = Polynomial {
+        let a: Polynomial<PrimeFieldElementFlexible> = Polynomial {
             coefficients: vec![
-                pfb(1, &_65537),
-                pfb(2, &_65537),
-                pfb(3, &_65537),
-                pfb(4, &_65537),
-                pfb(5, &_65537),
-                pfb(6, &_65537),
-                pfb(7, &_65537),
-                pfb(8, &_65537),
-                pfb(9, &_65537),
-                pfb(10, &_65537),
+                pfb(1, q),
+                pfb(2, q),
+                pfb(3, q),
+                pfb(4, q),
+                pfb(5, q),
+                pfb(6, q),
+                pfb(7, q),
+                pfb(8, q),
+                pfb(9, q),
+                pfb(10, q),
             ],
         };
-        let b: Polynomial<PrimeFieldElementBig> = Polynomial {
+        let b: Polynomial<PrimeFieldElementFlexible> = Polynomial {
             coefficients: vec![
-                pfb(1, &_65537),
-                pfb(2, &_65537),
-                pfb(3, &_65537),
-                pfb(4, &_65537),
-                pfb(5, &_65537),
-                pfb(6, &_65537),
-                pfb(7, &_65537),
-                pfb(8, &_65537),
-                pfb(9, &_65537),
-                pfb(17, &_65537),
+                pfb(1, q),
+                pfb(2, q),
+                pfb(3, q),
+                pfb(4, q),
+                pfb(5, q),
+                pfb(6, q),
+                pfb(7, q),
+                pfb(8, q),
+                pfb(9, q),
+                pfb(17, q),
             ],
         };
         let c_fast = Polynomial::fast_multiply(&a, &b, &primitive_root, 32);
@@ -2741,24 +2611,24 @@ mod test_polynomials {
 
     #[test]
     fn polynomial_arithmetic_test() {
-        let _71 = PrimeField::new(71);
-        let _6_71 = PrimeFieldElement::new(6, &_71);
-        let _12_71 = PrimeFieldElement::new(12, &_71);
-        let _16_71 = PrimeFieldElement::new(16, &_71);
-        let _17_71 = PrimeFieldElement::new(17, &_71);
-        let _22_71 = PrimeFieldElement::new(22, &_71);
-        let _28_71 = PrimeFieldElement::new(28, &_71);
-        let _33_71 = PrimeFieldElement::new(33, &_71);
-        let _38_71 = PrimeFieldElement::new(38, &_71);
-        let _49_71 = PrimeFieldElement::new(49, &_71);
-        let _60_71 = PrimeFieldElement::new(60, &_71);
-        let _64_71 = PrimeFieldElement::new(64, &_71);
-        let _65_71 = PrimeFieldElement::new(65, &_71);
-        let _66_71 = PrimeFieldElement::new(66, &_71);
-        let mut a = Polynomial::<PrimeFieldElement> {
+        let q = 71;
+        let _6_71 = pfb(6, q);
+        let _12_71 = pfb(12, q);
+        let _16_71 = pfb(16, q);
+        let _17_71 = pfb(17, q);
+        let _22_71 = pfb(22, q);
+        let _28_71 = pfb(28, q);
+        let _33_71 = pfb(33, q);
+        let _38_71 = pfb(38, q);
+        let _49_71 = pfb(49, q);
+        let _60_71 = pfb(60, q);
+        let _64_71 = pfb(64, q);
+        let _65_71 = pfb(65, q);
+        let _66_71 = pfb(66, q);
+        let mut a = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_17_71],
         };
-        let mut b = Polynomial::<PrimeFieldElement> {
+        let mut b = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_16_71],
         };
         let mut sum = a + b;
@@ -2768,10 +2638,10 @@ mod test_polynomials {
         assert_eq!(expected_sum, sum);
 
         // Verify overflow handling
-        a = Polynomial::<PrimeFieldElement> {
+        a = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_66_71],
         };
-        b = Polynomial::<PrimeFieldElement> {
+        b = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_65_71],
         };
         sum = a + b;
@@ -2781,10 +2651,10 @@ mod test_polynomials {
         assert_eq!(expected_sum, sum);
 
         // Verify handling of multiple indices
-        a = Polynomial::<PrimeFieldElement> {
+        a = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_66_71, _66_71, _66_71],
         };
-        b = Polynomial::<PrimeFieldElement> {
+        b = Polynomial::<PrimeFieldElementFlexible> {
             coefficients: vec![_33_71, _33_71, _17_71, _65_71],
         };
         sum = a.clone() + b.clone();
@@ -2809,12 +2679,12 @@ mod test_polynomials {
         let mut prod = a.clone() * b.clone();
         let mut expected_prod = Polynomial {
             coefficients: vec![
-                PrimeFieldElement::new(48, &_71),
-                PrimeFieldElement::new(25, &_71),
-                PrimeFieldElement::new(11, &_71),
-                PrimeFieldElement::new(64, &_71),
-                PrimeFieldElement::new(16, &_71),
-                PrimeFieldElement::new(30, &_71),
+                pfb(48, q),
+                pfb(25, q),
+                pfb(11, q),
+                pfb(64, q),
+                pfb(16, q),
+                pfb(30, q),
             ],
         };
         assert_eq!(expected_prod, prod);
@@ -2822,22 +2692,16 @@ mod test_polynomials {
         assert_eq!(2, a.degree());
         assert_eq!(3, b.degree());
 
-        let zero: Polynomial<PrimeFieldElement> = Polynomial {
+        let zero: Polynomial<PrimeFieldElementFlexible> = Polynomial {
             coefficients: vec![],
         };
-        let zero_alt: Polynomial<PrimeFieldElement> = Polynomial::ring_zero();
+        let zero_alt: Polynomial<PrimeFieldElementFlexible> = Polynomial::ring_zero();
         assert_eq!(zero, zero_alt);
-        let one: Polynomial<PrimeFieldElement> = Polynomial {
-            coefficients: vec![PrimeFieldElement::new(1, &_71)],
+        let one: Polynomial<PrimeFieldElementFlexible> = Polynomial {
+            coefficients: vec![pfb(1, q)],
         };
-        // let five: Polynomial<PrimeFieldElement> = Polynomial {
-        //     coefficients: vec![PrimeFieldElement::new(5, &_71)],
-        // };
-        let x: Polynomial<PrimeFieldElement> = Polynomial {
-            coefficients: vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(1, &_71),
-            ],
+        let x: Polynomial<PrimeFieldElementFlexible> = Polynomial {
+            coefficients: vec![pfb(0, q), pfb(1, q)],
         };
         assert_eq!(-1, zero.degree());
         assert_eq!(0, one.degree());
@@ -2853,13 +2717,13 @@ mod test_polynomials {
 
         expected_prod = Polynomial {
             coefficients: vec![
-                PrimeFieldElement::new(0, &_71),
-                PrimeFieldElement::new(48, &_71),
-                PrimeFieldElement::new(25, &_71),
-                PrimeFieldElement::new(11, &_71),
-                PrimeFieldElement::new(64, &_71),
-                PrimeFieldElement::new(16, &_71),
-                PrimeFieldElement::new(30, &_71),
+                pfb(0, q),
+                pfb(48, q),
+                pfb(25, q),
+                pfb(11, q),
+                pfb(64, q),
+                pfb(16, q),
+                pfb(30, q),
             ],
         };
         prod = prod.clone() * x.clone();
@@ -2876,9 +2740,6 @@ mod test_polynomials {
         let zero = BFieldElement::ring_zero();
         let one = BFieldElement::ring_one();
         let two = BFieldElement::new(2);
-        // let three = BFieldElement::new(3);
-        // let four = BFieldElement::new(4);
-        // let five = BFieldElement::new(5);
 
         let a: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(30));
         let b: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(5));

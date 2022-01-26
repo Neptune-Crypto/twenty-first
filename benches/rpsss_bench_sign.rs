@@ -1,45 +1,37 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use num_bigint::BigInt;
-use twenty_first::shared_math::{
-    prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig},
-    rescue_prime_pfe_big::RescuePrime,
-    rpsss::RPSSS,
-    stark_pfe_big::StarkPrimeFieldElementBig,
-};
+use primitive_types::U256;
+use twenty_first::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
+use twenty_first::shared_math::rescue_prime_pfe_flexible::RescuePrime;
+use twenty_first::shared_math::rpsss::RPSSS;
+use twenty_first::shared_math::stark_pfe_flexible::StarkPrimeFieldElementFlexible;
 
-pub fn get_tutorial_stark<'a>(
-    field: &'a PrimeFieldBig,
-) -> (StarkPrimeFieldElementBig<'a>, RescuePrime<'a>) {
+pub fn get_tutorial_stark(prime: U256) -> (StarkPrimeFieldElementFlexible, RescuePrime) {
     let expansion_factor = 4;
     let colinearity_checks_count = 2;
-    let rescue_prime = RescuePrime::from_tutorial(&field);
+    let rescue_prime = RescuePrime::from_tutorial();
     let register_count = rescue_prime.m;
     let cycles_count = rescue_prime.steps_count + 1;
     let transition_constraints_degree = 2;
     let generator =
-        PrimeFieldElementBig::new(85408008396924667383611388730472331217u128.into(), &field);
+        PrimeFieldElementFlexible::new(85408008396924667383611388730472331217u128.into(), prime);
 
-    (
-        StarkPrimeFieldElementBig::new(
-            &field,
-            expansion_factor,
-            colinearity_checks_count,
-            register_count,
-            cycles_count,
-            transition_constraints_degree,
-            generator,
-        ),
-        rescue_prime,
-    )
+    let stark = StarkPrimeFieldElementFlexible::new(
+        expansion_factor,
+        colinearity_checks_count,
+        register_count,
+        cycles_count,
+        transition_constraints_degree,
+        generator,
+    );
+
+    (stark, rescue_prime)
 }
 
 fn rpsss_bench_sign(c: &mut Criterion) {
-    let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
-    let field = PrimeFieldBig::new(modulus);
-    let (mut stark, rp) = get_tutorial_stark(&field);
+    let prime = (407u128 * (1 << 119) + 1).into();
+    let (mut stark, rp) = get_tutorial_stark(prime);
     stark.prover_preprocess();
     let rpsss = RPSSS {
-        field: field.clone(),
         stark: stark.clone(),
         rp,
     };

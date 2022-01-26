@@ -1,3 +1,4 @@
+use super::traits::{FromVecu8, GetPrimitiveRootOfUnity};
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
@@ -15,8 +16,6 @@ use std::{
     fmt::{self, Display},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
-
-use super::traits::GetPrimitiveRootOfUnity;
 
 static PRIMITIVE_ROOTS: phf::Map<u64, u128> = phf_map! {
     2u64 => 18446744069414584320,
@@ -235,7 +234,7 @@ impl FieldBatchInversion for BFieldElement {
 impl CyclicGroupGenerator for BFieldElement {
     fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self> {
         let mut val = *self;
-        let mut ret: Vec<Self> = vec![Self::ring_one()];
+        let mut ret: Vec<Self> = vec![self.ring_one()];
 
         loop {
             ret.push(val);
@@ -274,8 +273,8 @@ impl New for BFieldElement {
 }
 
 // This is used for: Convert a hash value to a BFieldElement. Consider making From<Blake3Hash> trait
-impl From<Vec<u8>> for BFieldElement {
-    fn from(bytes: Vec<u8>) -> Self {
+impl FromVecu8 for BFieldElement {
+    fn from_vecu8(&self, bytes: Vec<u8>) -> Self {
         // TODO: Right now we only accept if 'bytes' has 8 bytes; while that is true in
         // the single call site this is used, it also seems unnecessarily fragile (when we
         // change from BLAKE3 to Rescue-Prime, the hash length will change and this will be

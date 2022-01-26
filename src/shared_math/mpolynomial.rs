@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
 use std::rc::Rc;
 use std::{cmp, fmt};
 
@@ -184,7 +184,7 @@ impl<'a, T: Sized> Node<T> {
 
 #[derive(Debug, Clone)]
 pub struct MPolynomial<
-    T: Add + Div + Mul + Rem + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
+    T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
 > {
     // Multivariate polynomials are represented as hash maps with exponent vectors
     // as keys and coefficients as values. E.g.:
@@ -218,7 +218,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + ModPowU64
@@ -252,7 +251,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -306,7 +304,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + IdentityValues
             + Clone
@@ -323,7 +320,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -909,7 +905,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -962,7 +957,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -998,7 +992,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -1051,7 +1044,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -1083,7 +1075,6 @@ impl<
         U: Add<Output = U>
             + Div<Output = U>
             + Mul<Output = U>
-            + Rem
             + Sub<Output = U>
             + Neg<Output = U>
             + IdentityValues
@@ -1134,170 +1125,166 @@ impl<
 #[cfg(test)]
 mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
+    use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
+    use crate::utils::generate_random_numbers_u128;
+    use primitive_types::U256;
+    use rand::RngCore;
     use std::collections::HashSet;
 
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::utils::generate_random_numbers_u128;
+    fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
+        let q_u256: U256 = q.into();
+        if n < 0 {
+            let positive_n: U256 = (-n).into();
+            let field_element_n: U256 = positive_n % q_u256;
 
-    use super::super::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
-    use super::*;
-    use num_bigint::BigInt;
-    use rand::RngCore;
-
-    fn b(x: i128) -> BigInt {
-        Into::<BigInt>::into(x)
-    }
-
-    #[allow(clippy::needless_lifetimes)] // Suppress wrong warning (fails to compile without lifetime, I think)
-    fn pfb<'a>(value: i128, field: &'a PrimeFieldBig) -> PrimeFieldElementBig {
-        PrimeFieldElementBig::new(b(value), field)
-    }
-
-    fn get_x<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut x_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        x_coefficients.insert(vec![1, 0, 0], pfb(1, field));
-        MPolynomial {
-            coefficients: x_coefficients,
-            variable_count: 3,
+            -PrimeFieldElementFlexible::new(field_element_n, q_u256)
+        } else {
+            let positive_n: U256 = n.into();
+            let field_element_n: U256 = positive_n % q_u256;
+            PrimeFieldElementFlexible::new(field_element_n, q_u256)
         }
     }
 
-    fn get_x_squared<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xs_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xs_coefficients.insert(vec![2, 0, 0], pfb(1, field));
-        MPolynomial {
-            coefficients: xs_coefficients,
-            variable_count: 3,
-        }
-    }
-
-    fn get_x_quartic<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xs_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xs_coefficients.insert(vec![4, 0, 0], pfb(1, field));
-        MPolynomial {
-            coefficients: xs_coefficients,
-            variable_count: 3,
-        }
-    }
-
-    fn get_y<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        coefficients.insert(vec![0, 1, 0], pfb(1, field));
+    fn get_x(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![1, 0, 0], pfb(1, q));
         MPolynomial {
             coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_z<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut z_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        z_coefficients.insert(vec![0, 0, 1], pfb(1, field));
+    fn get_x_squared(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![2, 0, 0], pfb(1, q));
         MPolynomial {
-            coefficients: z_coefficients,
+            coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_xz<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xz_coefficients.insert(vec![1, 0, 1], pfb(1, field));
+    fn get_x_quartic(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![4, 0, 0], pfb(1, q));
         MPolynomial {
-            coefficients: xz_coefficients,
+            coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_squared_z_squared<'a>(
-        field: &'a PrimeFieldBig,
-    ) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xz_coefficients.insert(vec![2, 0, 2], pfb(1, field));
+    fn get_y(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![0, 1, 0], pfb(1, q));
         MPolynomial {
-            coefficients: xz_coefficients,
+            coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_xyz<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut xyz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        xyz_coefficients.insert(vec![1, 1, 1], pfb(1, field));
+    fn get_z(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![0, 0, 1], pfb(1, q));
         MPolynomial {
-            coefficients: xyz_coefficients,
+            coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_plus_xz<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut x_plus_xz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        x_plus_xz_coefficients.insert(vec![1, 0, 1], pfb(1, field));
-        x_plus_xz_coefficients.insert(vec![1, 0, 0], pfb(1, field));
+    fn get_xz(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![1, 0, 1], pfb(1, q));
         MPolynomial {
-            coefficients: x_plus_xz_coefficients,
+            coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_minus_xz<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut x_minus_xz_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        x_minus_xz_coefficients.insert(vec![1, 0, 1], pfb(-1, field));
-        x_minus_xz_coefficients.insert(vec![1, 0, 0], pfb(1, field));
+    fn get_x_squared_z_squared(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![2, 0, 2], pfb(1, q));
         MPolynomial {
-            coefficients: x_minus_xz_coefficients,
+            coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_minus_17y<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut _17y_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        _17y_coefficients.insert(vec![0, 1, 0], pfb(-17, field));
+    fn get_xyz(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![1, 1, 1], pfb(1, q));
         MPolynomial {
-            coefficients: _17y_coefficients,
+            coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_x_plus_xz_minus_17y<'a>(
-        field: &'a PrimeFieldBig,
-    ) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut x_plus_xz_minus_17_y_coefficients: HashMap<Vec<u64>, PrimeFieldElementBig> =
-            HashMap::new();
-        x_plus_xz_minus_17_y_coefficients.insert(vec![1, 0, 1], pfb(1, field));
-        x_plus_xz_minus_17_y_coefficients.insert(vec![1, 0, 0], pfb(1, field));
-        x_plus_xz_minus_17_y_coefficients.insert(vec![0, 1, 0], pfb(9, field));
+    fn get_x_plus_xz(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![1, 0, 1], pfb(1, q));
+        coefficients.insert(vec![1, 0, 0], pfb(1, q));
         MPolynomial {
-            coefficients: x_plus_xz_minus_17_y_coefficients,
+            coefficients,
             variable_count: 3,
         }
     }
 
-    fn get_big_mpol<'a>(field: &'a PrimeFieldBig) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut big_c: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        big_c.insert(vec![0, 0, 1, 0, 0], pfb(1, field));
-        big_c.insert(vec![0, 1, 0, 0, 0], pfb(1, field));
-        big_c.insert(vec![10, 3, 8, 0, 3], pfb(-9, field));
-        big_c.insert(vec![2, 3, 4, 0, 0], pfb(12, field));
-        big_c.insert(vec![5, 5, 5, 0, 8], pfb(-4, field));
-        big_c.insert(vec![0, 6, 0, 0, 1], pfb(3, field));
-        big_c.insert(vec![1, 4, 11, 0, 0], pfb(10, field));
-        big_c.insert(vec![1, 0, 12, 0, 2], pfb(2, field));
+    fn get_x_minus_xz(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![1, 0, 1], pfb(-1, q));
+        coefficients.insert(vec![1, 0, 0], pfb(1, q));
+        MPolynomial {
+            coefficients,
+            variable_count: 3,
+        }
+    }
+
+    fn get_minus_17y(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![0, 1, 0], pfb(-17, q));
+        MPolynomial {
+            coefficients,
+            variable_count: 3,
+        }
+    }
+
+    fn get_x_plus_xz_minus_17y(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut coefficients: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        coefficients.insert(vec![1, 0, 1], pfb(1, q));
+        coefficients.insert(vec![1, 0, 0], pfb(1, q));
+        coefficients.insert(vec![0, 1, 0], pfb(-17, q));
+        MPolynomial {
+            coefficients,
+            variable_count: 3,
+        }
+    }
+
+    fn get_big_mpol(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut big_c: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        big_c.insert(vec![0, 0, 1, 0, 0], pfb(1, q));
+        big_c.insert(vec![0, 1, 0, 0, 0], pfb(1, q));
+        big_c.insert(vec![10, 3, 8, 0, 3], pfb(-9, q));
+        big_c.insert(vec![2, 3, 4, 0, 0], pfb(12, q));
+        big_c.insert(vec![5, 5, 5, 0, 8], pfb(-4, q));
+        big_c.insert(vec![0, 6, 0, 0, 1], pfb(3, q));
+        big_c.insert(vec![1, 4, 11, 0, 0], pfb(10, q));
+        big_c.insert(vec![1, 0, 12, 0, 2], pfb(2, q));
         MPolynomial {
             coefficients: big_c,
             variable_count: 5,
         }
     }
 
-    fn get_big_mpol_extra_variabel<'a>(
-        field: &'a PrimeFieldBig,
-    ) -> MPolynomial<PrimeFieldElementBig<'a>> {
-        let mut big_c: HashMap<Vec<u64>, PrimeFieldElementBig> = HashMap::new();
-        big_c.insert(vec![0, 0, 1, 0, 0, 0], pfb(1, field));
-        big_c.insert(vec![0, 1, 0, 0, 0, 0], pfb(1, field));
-        big_c.insert(vec![10, 3, 8, 0, 3, 0], pfb(-9, field));
-        big_c.insert(vec![2, 3, 4, 0, 0, 0], pfb(12, field));
-        big_c.insert(vec![5, 5, 5, 0, 8, 0], pfb(-4, field));
-        big_c.insert(vec![0, 6, 0, 0, 1, 0], pfb(3, field));
-        big_c.insert(vec![1, 4, 11, 0, 0, 0], pfb(10, field));
-        big_c.insert(vec![1, 0, 12, 0, 2, 0], pfb(2, field));
+    fn get_big_mpol_extra_variabel(q: u64) -> MPolynomial<PrimeFieldElementFlexible> {
+        let mut big_c: HashMap<Vec<u64>, PrimeFieldElementFlexible> = HashMap::new();
+        big_c.insert(vec![0, 0, 1, 0, 0, 0], pfb(1, q));
+        big_c.insert(vec![0, 1, 0, 0, 0, 0], pfb(1, q));
+        big_c.insert(vec![10, 3, 8, 0, 3, 0], pfb(-9, q));
+        big_c.insert(vec![2, 3, 4, 0, 0, 0], pfb(12, q));
+        big_c.insert(vec![5, 5, 5, 0, 8, 0], pfb(-4, q));
+        big_c.insert(vec![0, 6, 0, 0, 1, 0], pfb(3, q));
+        big_c.insert(vec![1, 4, 11, 0, 0, 0], pfb(10, q));
+        big_c.insert(vec![1, 0, 12, 0, 2, 0], pfb(2, q));
         MPolynomial {
             coefficients: big_c,
             variable_count: 6,
@@ -1306,36 +1293,33 @@ mod test_mpolynomials {
 
     #[test]
     fn equality_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        assert_eq!(get_big_mpol(&_13), get_big_mpol_extra_variabel(&_13));
-        assert_ne!(
-            get_big_mpol(&_13),
-            get_big_mpol_extra_variabel(&_13) + get_x(&&_13)
-        );
+        let q = 23;
+        assert_eq!(get_big_mpol(q), get_big_mpol_extra_variabel(q));
+        assert_ne!(get_big_mpol(q), get_big_mpol_extra_variabel(q) + get_x(q));
     }
 
     #[test]
     fn simple_add_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let x = get_x(&_13);
-        let xz = get_xz(&_13);
-        let x_plus_xz = get_x_plus_xz(&_13);
+        let q = 23;
+        let x = get_x(q);
+        let xz = get_xz(q);
+        let x_plus_xz = get_x_plus_xz(q);
         assert_eq!(x_plus_xz, x.clone() + xz.clone());
 
-        let minus_17y = get_minus_17y(&_13);
-        let x_plus_xz_minus_17_y = get_x_plus_xz_minus_17y(&_13);
+        let minus_17y = get_minus_17y(q);
+        let x_plus_xz_minus_17_y = get_x_plus_xz_minus_17y(q);
         assert_eq!(x_plus_xz_minus_17_y, x + xz + minus_17y);
     }
 
     #[test]
     fn simple_sub_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let x = get_x(&_13);
-        let xz = get_xz(&_13);
-        let x_minus_xz = get_x_minus_xz(&_13);
+        let q = 65537;
+        let x = get_x(q);
+        let xz = get_xz(q);
+        let x_minus_xz = get_x_minus_xz(q);
         assert_eq!(x_minus_xz, x.clone() - xz.clone());
 
-        let big = get_big_mpol(&_13);
+        let big = get_big_mpol(q);
         assert_eq!(big.clone(), big.clone() - x.clone() + x.clone());
         assert_eq!(big.clone(), big.clone() - xz.clone() + xz.clone());
         assert_eq!(big.clone(), big.clone() - big.clone() + big.clone());
@@ -1347,120 +1331,123 @@ mod test_mpolynomials {
         // Catch error fixed in sub where similar exponents in both terms of
         // `a(x,y) - b(x,y)` were calculated as `c_b - c_a` instead of as `c_a - c_b`,
         // as it should be.
-        let _0 = MPolynomial::from_constant(PrimeFieldElementBig::new(0.into(), &_13), 3);
-        let _2 = MPolynomial::from_constant(PrimeFieldElementBig::new(2.into(), &_13), 3);
-        let _3 = MPolynomial::from_constant(PrimeFieldElementBig::new(3.into(), &_13), 3);
-        let _4 = MPolynomial::from_constant(PrimeFieldElementBig::new(4.into(), &_13), 3);
-        let _6 = MPolynomial::from_constant(PrimeFieldElementBig::new(6.into(), &_13), 3);
-        let _8 = MPolynomial::from_constant(PrimeFieldElementBig::new(8.into(), &_13), 3);
+        let _0 = MPolynomial::from_constant(pfb(0, q), 3);
+        let _2 = MPolynomial::from_constant(pfb(2, q), 3);
+        let _3 = MPolynomial::from_constant(pfb(3, q), 3);
+        let _4 = MPolynomial::from_constant(pfb(4, q), 3);
+        let _6 = MPolynomial::from_constant(pfb(6, q), 3);
+        let _8 = MPolynomial::from_constant(pfb(8, q), 3);
+        let _16 = MPolynomial::from_constant(pfb(16, q), 3);
         assert_eq!(_0, _2.clone() - _2.clone());
         assert_eq!(_0, _4.clone() - _4.clone());
         assert_eq!(_6, _8.clone() - _2.clone());
         assert_eq!(_4, _6.clone() - _2.clone());
         assert_eq!(_2, _4.clone() - _2.clone());
         assert_eq!(_6, _4.clone() + _2.clone());
-        assert_eq!(_3, _8.clone() + _8.clone());
+        assert_eq!(_16, _8.clone() + _8.clone());
     }
 
     #[test]
     fn simple_mul_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let x = get_x(&_13);
-        let z = get_z(&_13);
-        let x_squared = get_x_squared(&_13);
-        let xz = get_xz(&_13);
+        let q = 13;
+        let x = get_x(q);
+        let z = get_z(q);
+        let x_squared = get_x_squared(q);
+        let xz = get_xz(q);
         assert_eq!(x_squared, x.clone() * x.clone());
         assert_eq!(xz, x.clone() * z.clone());
     }
 
     #[test]
     fn simple_modpow_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let one = _13.ring_one();
-        let x = get_x(&_13);
-        let x_squared = get_x_squared(&_13);
-        let x_quartic = get_x_quartic(&_13);
-        assert_eq!(x_squared, x.mod_pow(b(2), one.clone()));
-        assert_eq!(x_quartic, x.mod_pow(b(4), one.clone()));
-        assert_eq!(x_quartic, x_squared.mod_pow(b(2), one.clone()));
+        let q = 13;
+        let one = pfb(1, q);
+        let x = get_x(q);
+        let x_squared = get_x_squared(q);
+        let x_quartic = get_x_quartic(q);
+        assert_eq!(x_squared, x.mod_pow(2.into(), one.clone()));
+        assert_eq!(x_quartic, x.mod_pow(4.into(), one.clone()));
+        assert_eq!(x_quartic, x_squared.mod_pow(2.into(), one.clone()));
         assert_eq!(
-            get_x_squared_z_squared(&_13),
-            get_xz(&_13).mod_pow(b(2), one.clone())
+            get_x_squared_z_squared(q),
+            get_xz(q).mod_pow(2.into(), one.clone())
         );
 
         assert_eq!(
-            x_squared.scalar_mul(pfb(9, &_13)),
-            x.scalar_mul(pfb(3, &_13)).mod_pow(b(2), one.clone())
+            x_squared.scalar_mul(pfb(9, q)),
+            x.scalar_mul(pfb(3, q)).mod_pow(2.into(), one.clone())
         );
         assert_eq!(
-            x_squared.scalar_mul(pfb(16, &_13)),
-            x.scalar_mul(pfb(4, &_13)).mod_pow(b(2), one.clone())
+            x_squared.scalar_mul(pfb(16, q)),
+            x.scalar_mul(pfb(4, q)).mod_pow(2.into(), one.clone())
         );
         assert_eq!(
-            x_quartic.scalar_mul(pfb(16, &_13)),
-            x.scalar_mul(pfb(2, &_13)).mod_pow(b(4), one.clone())
+            x_quartic.scalar_mul(pfb(16, q)),
+            x.scalar_mul(pfb(2, q)).mod_pow(4.into(), one.clone())
         );
-        assert_eq!(x_quartic, x.mod_pow(b(4), one.clone()));
-        assert_eq!(x_quartic, x_squared.mod_pow(b(2), one.clone()));
+        assert_eq!(x_quartic, x.mod_pow(4.into(), one.clone()));
+        assert_eq!(x_quartic, x_squared.mod_pow(2.into(), one.clone()));
         assert_eq!(
-            get_x_squared_z_squared(&_13),
-            get_xz(&_13).mod_pow(b(2), one.clone())
-        );
-        assert_eq!(
-            get_x_squared_z_squared(&_13).scalar_mul(pfb(25, &_13)),
-            get_xz(&_13)
-                .scalar_mul(pfb(5, &_13))
-                .mod_pow(b(2), one.clone())
+            get_x_squared_z_squared(q),
+            get_xz(q).mod_pow(2.into(), one.clone())
         );
         assert_eq!(
-            get_big_mpol(&_13) * get_big_mpol(&_13),
-            get_big_mpol(&_13).mod_pow(b(2), one.clone())
+            get_x_squared_z_squared(q).scalar_mul(pfb(25, q)),
+            get_xz(q)
+                .scalar_mul(pfb(5, q))
+                .mod_pow(2.into(), one.clone())
         );
         assert_eq!(
-            get_big_mpol(&_13).scalar_mul(pfb(25, &_13)) * get_big_mpol(&_13),
-            get_big_mpol(&_13)
-                .scalar_mul(pfb(5, &_13))
-                .mod_pow(b(2), one.clone())
+            get_big_mpol(q) * get_big_mpol(q),
+            get_big_mpol(q).mod_pow(2.into(), one.clone())
+        );
+        assert_eq!(
+            get_big_mpol(q).scalar_mul(pfb(25, q)) * get_big_mpol(q),
+            get_big_mpol(q)
+                .scalar_mul(pfb(5, q))
+                .mod_pow(2.into(), one.clone())
         );
     }
 
     #[test]
     fn variables_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let one = pfb(1, &_13);
+        let q = 13;
+        let one = pfb(1, q);
         let vars_1 = MPolynomial::variables(1, one.clone());
         assert_eq!(1usize, vars_1.len());
-        assert_eq!(get_x(&_13), vars_1[0]);
+        assert_eq!(get_x(q), vars_1[0]);
         let vars_3 = MPolynomial::variables(3, one);
         assert_eq!(3usize, vars_3.len());
-        assert_eq!(get_x(&_13), vars_3[0]);
-        assert_eq!(get_y(&_13), vars_3[1]);
-        assert_eq!(get_z(&_13), vars_3[2]);
+        assert_eq!(get_x(q), vars_3[0]);
+        assert_eq!(get_y(q), vars_3[1]);
+        assert_eq!(get_z(q), vars_3[2]);
     }
 
     #[test]
     fn evaluate_symbolic_test() {
-        let empty_intermediate_results: HashMap<Vec<u64>, Polynomial<PrimeFieldElementBig>> =
+        let empty_intermediate_results: HashMap<Vec<u64>, Polynomial<PrimeFieldElementFlexible>> =
             HashMap::new();
-        let empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<PrimeFieldElementBig>> =
-            HashMap::new();
+        let empty_mod_pow_memoization: HashMap<
+            (usize, u64),
+            Polynomial<PrimeFieldElementFlexible>,
+        > = HashMap::new();
         let empty_mul_memoization: HashMap<
-            (Polynomial<PrimeFieldElementBig>, (usize, u64)),
-            Polynomial<PrimeFieldElementBig>,
+            (Polynomial<PrimeFieldElementFlexible>, (usize, u64)),
+            Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
 
-        let _13 = PrimeFieldBig::new(b(13));
-        let zero = PrimeFieldElementBig::new(0.into(), &_13);
-        let one = PrimeFieldElementBig::new(1.into(), &_13);
-        let two = PrimeFieldElementBig::new(1.into(), &_13);
-        let seven = PrimeFieldElementBig::new(7.into(), &_13);
-        let xyz_m = get_xyz(&_13);
-        let x: Polynomial<PrimeFieldElementBig> =
+        let q = 13;
+        let zero = pfb(0.into(), q);
+        let one = pfb(1.into(), q);
+        let two = pfb(1.into(), q);
+        let seven = pfb(7.into(), q);
+        let xyz_m = get_xyz(q);
+        let x: Polynomial<PrimeFieldElementFlexible> =
             Polynomial::from_constant(one.clone()).shift_coefficients(1, zero.clone());
 
         let mut precalculated_intermediate_results: HashMap<
             Vec<u64>,
-            Polynomial<PrimeFieldElementBig>,
+            Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
         let precalculation_result = MPolynomial::precalculate_exponents_memoization(
             &[xyz_m.clone()],
@@ -1472,7 +1459,7 @@ mod test_mpolynomials {
             Err(e) => panic!("error: {}", e),
         };
 
-        let x_cubed: Polynomial<PrimeFieldElementBig> =
+        let x_cubed: Polynomial<PrimeFieldElementFlexible> =
             Polynomial::from_constant(one.clone()).shift_coefficients(3, zero.clone());
         assert_eq!(
             x_cubed,
@@ -1521,7 +1508,7 @@ mod test_mpolynomials {
                 two.clone(),
             ],
         };
-        let pol_m = get_x_plus_xz_minus_17y(&_13);
+        let pol_m = get_x_plus_xz_minus_17y(q);
         let evaluated_pol_u = pol_m.evaluate_symbolic(&vec![
             univariate_pol_1.clone(),
             univariate_pol_1.clone(),
@@ -1530,21 +1517,10 @@ mod test_mpolynomials {
 
         // Calculated on Wolfram Alpha
         let expected_result = Polynomial {
-            coefficients: vec![
-                PrimeFieldElementBig::new(11.into(), &_13),
-                PrimeFieldElementBig::new(6.into(), &_13),
-                PrimeFieldElementBig::new(9.into(), &_13),
-                PrimeFieldElementBig::new(7.into(), &_13),
-                PrimeFieldElementBig::new(7.into(), &_13),
-                PrimeFieldElementBig::new(5.into(), &_13),
-                PrimeFieldElementBig::new(8.into(), &_13),
-                PrimeFieldElementBig::new(2.into(), &_13),
-                PrimeFieldElementBig::new(12.into(), &_13),
-                PrimeFieldElementBig::new(2.into(), &_13),
-                PrimeFieldElementBig::new(5.into(), &_13),
-                PrimeFieldElementBig::new(1.into(), &_13),
-                PrimeFieldElementBig::new(7.into(), &_13),
-            ],
+            coefficients: vec![11, 6, 9, 7, 7, 5, 8, 2, 12, 2, 5, 1, 7]
+                .iter()
+                .map(|&x| pfb(x, q))
+                .collect(),
         };
 
         assert_eq!(expected_result, evaluated_pol_u);
@@ -1561,25 +1537,27 @@ mod test_mpolynomials {
 
     #[test]
     fn evaluate_symbolic_with_zeros_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let one = PrimeFieldElementBig::new(1.into(), &_13);
-        let zero = PrimeFieldElementBig::new(0.into(), &_13);
-        let xm = get_x(&_13);
-        let xu: Polynomial<PrimeFieldElementBig> =
+        let q = 13;
+        let one = pfb(1, q);
+        let zero = pfb(0, q);
+        let xm = get_x(q);
+        let xu: Polynomial<PrimeFieldElementFlexible> =
             Polynomial::from_constant(one).shift_coefficients(1, zero);
-        let zero_upol: Polynomial<PrimeFieldElementBig> = Polynomial::ring_zero();
+        let zero_upol: Polynomial<PrimeFieldElementFlexible> = Polynomial::ring_zero();
         assert_eq!(
             xu,
             xm.evaluate_symbolic(&vec![xu.clone(), zero_upol.clone(), zero_upol.clone()])
         );
 
-        let empty_intermediate_results: HashMap<Vec<u64>, Polynomial<PrimeFieldElementBig>> =
+        let empty_intermediate_results: HashMap<Vec<u64>, Polynomial<PrimeFieldElementFlexible>> =
             HashMap::new();
-        let empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<PrimeFieldElementBig>> =
-            HashMap::new();
+        let empty_mod_pow_memoization: HashMap<
+            (usize, u64),
+            Polynomial<PrimeFieldElementFlexible>,
+        > = HashMap::new();
         let empty_mul_memoization: HashMap<
-            (Polynomial<PrimeFieldElementBig>, (usize, u64)),
-            Polynomial<PrimeFieldElementBig>,
+            (Polynomial<PrimeFieldElementFlexible>, (usize, u64)),
+            Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
         assert_eq!(
             xu,
@@ -1594,112 +1572,106 @@ mod test_mpolynomials {
 
     #[test]
     fn evaluate_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let x = get_x(&_13);
+        let q = 13;
+        let x = get_x(q);
         assert_eq!(
-            pfb(12, &_13),
-            x.evaluate(&vec![pfb(12, &_13), pfb(0, &_13), pfb(0, &_13)])
+            pfb(12, q),
+            x.evaluate(&vec![pfb(12, q), pfb(0, q), pfb(0, q)])
         );
         assert_eq!(
-            pfb(12, &_13),
-            x.evaluate(&vec![pfb(12, &_13), pfb(12, &_13), pfb(12, &_13)])
+            pfb(12, q),
+            x.evaluate(&vec![pfb(12, q), pfb(12, q), pfb(12, q)])
         );
 
-        let xszs = get_x_squared_z_squared(&_13);
+        let xszs = get_x_squared_z_squared(q);
         assert_eq!(
-            pfb(1, &_13),
-            xszs.evaluate(&vec![pfb(12, &_13), pfb(0, &_13), pfb(1, &_13)])
+            pfb(1, q),
+            xszs.evaluate(&vec![pfb(12, q), pfb(0, q), pfb(1, q)])
         );
         assert_eq!(
-            pfb(1, &_13),
-            xszs.evaluate(&vec![pfb(12, &_13), pfb(12, &_13), pfb(12, &_13)])
+            pfb(1, q),
+            xszs.evaluate(&vec![pfb(12, q), pfb(12, q), pfb(12, q)])
         );
         assert_eq!(
-            pfb(3, &_13),
-            xszs.evaluate(&vec![pfb(6, &_13), pfb(3, &_13), pfb(8, &_13)])
+            pfb(3, q),
+            xszs.evaluate(&vec![pfb(6, q), pfb(3, q), pfb(8, q)])
         );
         assert_eq!(
-            pfb(9, &_13),
-            xszs.evaluate(&vec![pfb(8, &_13), pfb(12, &_13), pfb(2, &_13)])
+            pfb(9, q),
+            xszs.evaluate(&vec![pfb(8, q), pfb(12, q), pfb(2, q)])
         );
         assert_eq!(
-            pfb(3, &_13),
-            xszs.evaluate(&vec![pfb(4, &_13), pfb(8, &_13), pfb(1, &_13)])
+            pfb(3, q),
+            xszs.evaluate(&vec![pfb(4, q), pfb(8, q), pfb(1, q)])
         );
         assert_eq!(
-            pfb(12, &_13),
-            xszs.evaluate(&vec![pfb(4, &_13), pfb(9, &_13), pfb(11, &_13)])
+            pfb(12, q),
+            xszs.evaluate(&vec![pfb(4, q), pfb(9, q), pfb(11, q)])
         );
         assert_eq!(
-            pfb(4, &_13),
-            xszs.evaluate(&vec![pfb(1, &_13), pfb(0, &_13), pfb(11, &_13)])
+            pfb(4, q),
+            xszs.evaluate(&vec![pfb(1, q), pfb(0, q), pfb(11, q)])
         );
         assert_eq!(
-            pfb(0, &_13),
-            xszs.evaluate(&vec![pfb(1, &_13), pfb(11, &_13), pfb(0, &_13)])
+            pfb(0, q),
+            xszs.evaluate(&vec![pfb(1, q), pfb(11, q), pfb(0, q)])
         );
         assert_eq!(
-            pfb(4, &_13),
-            xszs.evaluate(&vec![pfb(11, &_13), pfb(0, &_13), pfb(1, &_13)])
+            pfb(4, q),
+            xszs.evaluate(&vec![pfb(11, q), pfb(0, q), pfb(1, q)])
         );
     }
 
     #[test]
     fn lift_test() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let xm = get_x(&_13);
-        let zm = get_z(&_13);
+        let q = 13;
+        let xm = get_x(q);
+        let zm = get_z(q);
         let xs = Polynomial {
-            coefficients: vec![pfb(0, &_13), pfb(1, &_13)],
+            coefficients: vec![pfb(0, q), pfb(1, q)],
         };
         assert_eq!(xm, MPolynomial::lift(xs.clone(), 0, 3));
         assert_eq!(zm, MPolynomial::lift(xs.clone(), 2, 3));
 
         let seven_s = Polynomial {
-            coefficients: vec![pfb(7, &_13)],
+            coefficients: vec![pfb(7, q)],
         };
         assert_eq!(
-            MPolynomial::from_constant(pfb(7, &_13), 3),
+            MPolynomial::from_constant(pfb(7, q), 3),
             MPolynomial::lift(seven_s.clone(), 0, 3)
         );
         assert_ne!(
-            MPolynomial::from_constant(pfb(8, &_13), 3),
+            MPolynomial::from_constant(pfb(8, q), 3),
             MPolynomial::lift(seven_s, 0, 3)
         );
 
         let x_quartic_s = Polynomial {
-            coefficients: vec![
-                pfb(0, &_13),
-                pfb(0, &_13),
-                pfb(0, &_13),
-                pfb(0, &_13),
-                pfb(1, &_13),
-            ],
+            coefficients: vec![pfb(0, q), pfb(0, q), pfb(0, q), pfb(0, q), pfb(1, q)],
         };
         assert_eq!(
-            get_x_quartic(&_13),
+            get_x_quartic(q),
             MPolynomial::lift(x_quartic_s.clone(), 0, 3)
         );
         assert_eq!(
-            get_x_quartic(&_13).scalar_mul(pfb(5, &_13)),
-            MPolynomial::lift(x_quartic_s.scalar_mul(pfb(5, &_13)).clone(), 0, 3)
+            get_x_quartic(q).scalar_mul(pfb(5, q)),
+            MPolynomial::lift(x_quartic_s.scalar_mul(pfb(5, q)).clone(), 0, 3)
         );
 
         let x_squared_s = Polynomial {
-            coefficients: vec![pfb(0, &_13), pfb(0, &_13), pfb(1, &_13)],
+            coefficients: vec![pfb(0, q), pfb(0, q), pfb(1, q)],
         };
         assert_eq!(
-            get_x_quartic(&_13) + get_x_squared(&_13) + get_x(&_13),
+            get_x_quartic(q) + get_x_squared(q) + get_x(q),
             MPolynomial::lift(x_quartic_s.clone() + x_squared_s.clone() + xs.clone(), 0, 3)
         );
         assert_eq!(
-            get_x_quartic(&_13).scalar_mul(pfb(5, &_13))
-                + get_x_squared(&_13).scalar_mul(pfb(4, &_13))
-                + get_x(&_13).scalar_mul(pfb(3, &_13)),
+            get_x_quartic(q).scalar_mul(pfb(5, q))
+                + get_x_squared(q).scalar_mul(pfb(4, q))
+                + get_x(q).scalar_mul(pfb(3, q)),
             MPolynomial::lift(
-                x_quartic_s.scalar_mul(pfb(5, &_13))
-                    + x_squared_s.scalar_mul(pfb(4, &_13))
-                    + xs.scalar_mul(pfb(3, &_13)),
+                x_quartic_s.scalar_mul(pfb(5, q))
+                    + x_squared_s.scalar_mul(pfb(4, q))
+                    + xs.scalar_mul(pfb(3, q)),
                 0,
                 3
             )
@@ -1722,9 +1694,9 @@ mod test_mpolynomials {
 
     #[test]
     fn square_test_simple() {
-        let _13 = PrimeFieldBig::new(b(13));
-        let xz = get_xz(&_13);
-        let xz_squared = get_x_squared_z_squared(&_13);
+        let q = 13;
+        let xz = get_xz(q);
+        let xz_squared = get_x_squared_z_squared(q);
         assert_eq!(xz_squared, xz.square());
     }
 

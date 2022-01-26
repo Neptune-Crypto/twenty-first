@@ -1,48 +1,41 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use num_bigint::BigInt;
-use twenty_first::shared_math::{
-    prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig},
-    rescue_prime_pfe_big::RescuePrime,
-    rpsss::{Signature, RPSSS},
-    stark_pfe_big::StarkPrimeFieldElementBig,
-};
+use twenty_first::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
+use twenty_first::shared_math::rescue_prime_pfe_flexible::RescuePrime;
+use twenty_first::shared_math::rpsss::{Signature, RPSSS};
+use twenty_first::shared_math::stark_pfe_flexible::StarkPrimeFieldElementFlexible;
 
-pub fn get_tutorial_stark<'a>(
-    field: &'a PrimeFieldBig,
-) -> (StarkPrimeFieldElementBig<'a>, RescuePrime<'a>) {
+pub fn get_tutorial_stark<'a>() -> (StarkPrimeFieldElementFlexible, RescuePrime) {
     let expansion_factor = 4;
     let colinearity_checks_count = 2;
-    let rescue_prime = RescuePrime::from_tutorial(&field);
+    let prime = RescuePrime::prime_from_tutorial();
+    let rescue_prime = RescuePrime::from_tutorial();
     let register_count = rescue_prime.m;
     let cycles_count = rescue_prime.steps_count + 1;
     let transition_constraints_degree = 2;
-    let generator =
-        PrimeFieldElementBig::new(85408008396924667383611388730472331217u128.into(), &field);
+    let generator_value: u128 = 85408008396924667383611388730472331217;
+    let generator = PrimeFieldElementFlexible::new(generator_value.into(), prime);
 
-    (
-        StarkPrimeFieldElementBig::new(
-            &field,
-            expansion_factor,
-            colinearity_checks_count,
-            register_count,
-            cycles_count,
-            transition_constraints_degree,
-            generator,
-        ),
-        rescue_prime,
-    )
+    let stark = StarkPrimeFieldElementFlexible::new(
+        expansion_factor,
+        colinearity_checks_count,
+        register_count,
+        cycles_count,
+        transition_constraints_degree,
+        generator,
+    );
+
+    (stark, rescue_prime)
 }
 
 fn rpsss_bench_verify(c: &mut Criterion) {
-    let modulus: BigInt = (407u128 * (1 << 119) + 1).into();
-    let field = PrimeFieldBig::new(modulus);
-    let (mut stark, rp) = get_tutorial_stark(&field);
+    let (mut stark, rp) = get_tutorial_stark();
+
     stark.prover_preprocess();
     let rpsss = RPSSS {
-        field: field.clone(),
         stark: stark.clone(),
         rp,
     };
+
     let document_string: String = "Hello Neptune!".to_string();
     let document: Vec<u8> = document_string.clone().into_bytes();
 
