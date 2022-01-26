@@ -610,7 +610,7 @@ impl<
             .coefficients
             .par_iter()
             .map(|(k, v)| exponents_memoization[k].clone().scalar_mul(v.clone()))
-            .reduce(|| Polynomial::ring_zero(), |a, b| a + b);
+            .reduce(Polynomial::ring_zero, |a, b| a + b);
 
         acc
     }
