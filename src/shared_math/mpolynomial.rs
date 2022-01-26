@@ -228,6 +228,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > Display for MPolynomial<U>
 {
@@ -330,45 +332,9 @@ impl<
             + Debug
             + PartialEq
             + Eq
+            + Hash
             + Send
-            + Sync
-            + Hash,
-    > MPolynomial<U>
-{
-    pub fn evaluate_symbolic_with_memoization_precalculated(
-        &self,
-        point: &[Polynomial<U>],
-        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<U>>,
-    ) -> Polynomial<U> {
-        assert_eq!(
-            self.variable_count,
-            point.len(),
-            "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
-        );
-        let acc = self
-            .coefficients
-            .par_iter()
-            .map(|(k, v)| exponents_memoization[k].clone().scalar_mul(v.clone()))
-            .reduce(|| Polynomial::ring_zero(), |a, b| a + b);
-
-        acc
-    }
-}
-
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + Neg<Output = U>
-            + IdentityValues
-            + ModPowU64
-            + Clone
-            + Display
-            + Debug
-            + PartialEq
-            + Eq
-            + Hash,
+            + Sync,
     > MPolynomial<U>
 {
     fn term_print(exponents: &[u64], coefficient: &U) -> String {
@@ -627,6 +593,28 @@ impl<
         println!("{}", report);
 
         Ok(())
+    }
+
+    // Substitute the variables in a multivariate polynomial with univariate polynomials in parallel.
+    // All "intermediate results" **must** be present in `exponents_memoization` or this function
+    // will panic.
+    pub fn evaluate_symbolic_with_memoization_precalculated(
+        &self,
+        point: &[Polynomial<U>],
+        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<U>>,
+    ) -> Polynomial<U> {
+        assert_eq!(
+            self.variable_count,
+            point.len(),
+            "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
+        );
+        let acc = self
+            .coefficients
+            .par_iter()
+            .map(|(k, v)| exponents_memoization[k].clone().scalar_mul(v.clone()))
+            .reduce(|| Polynomial::ring_zero(), |a, b| a + b);
+
+        acc
     }
 
     // Substitute the variables in a multivariate polynomial with univariate polynomials, fast
@@ -953,6 +941,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > Add for MPolynomial<U>
 {
@@ -1005,6 +995,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > AddAssign for MPolynomial<U>
 {
@@ -1040,6 +1032,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > Sub for MPolynomial<U>
 {
@@ -1123,6 +1117,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > Mul for MPolynomial<U>
 {
