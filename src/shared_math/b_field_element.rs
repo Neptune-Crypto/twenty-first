@@ -56,9 +56,6 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u128> = phf_map! {
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct BFieldElement(u128);
 
-unsafe impl Send for BFieldElement {}
-unsafe impl Sync for BFieldElement {}
-
 impl BFieldElement {
     pub const QUOTIENT: u128 = 0xffff_ffff_0000_0001u128; // 2^64 - 2^32 + 1
     pub const MAX: u128 = Self::QUOTIENT - 1;
