@@ -285,13 +285,6 @@ impl Stark {
 
         timer.elapsed("scale trace interpolants");
 
-        #[allow(clippy::type_complexity)]
-        let mut mul_memoization: HashMap<
-            (Polynomial<BFieldElement>, (usize, u64)),
-            Polynomial<BFieldElement>,
-        > = HashMap::new();
-        let mut mod_pow_memoization: HashMap<(usize, u64), Polynomial<BFieldElement>> =
-            HashMap::new();
         let mut exponents_memoization: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
             HashMap::new();
 
@@ -321,12 +314,12 @@ impl Stark {
 
         let mut transition_polynomials: Vec<Polynomial<BFieldElement>> = vec![];
         for constraint in transition_constraints {
-            transition_polynomials.push(constraint.evaluate_symbolic_with_memoization(
-                &point,
-                &mut mod_pow_memoization,
-                &mut mul_memoization,
-                &mut exponents_memoization,
-            ))
+            transition_polynomials.push(
+                constraint.evaluate_symbolic_with_memoization_precalculated(
+                    &point,
+                    &mut exponents_memoization,
+                ),
+            );
         }
 
         timer.elapsed("symbolically evaluate transition constraints");

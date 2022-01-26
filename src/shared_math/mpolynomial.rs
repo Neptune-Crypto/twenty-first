@@ -5,6 +5,7 @@ use crate::util_types::tree_m_ary::Node;
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::Zero;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -227,6 +228,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > Display for MPolynomial<U>
 {
@@ -329,7 +332,9 @@ impl<
             + Debug
             + PartialEq
             + Eq
-            + Hash,
+            + Hash
+            + Send
+            + Sync,
     > MPolynomial<U>
 {
     fn term_print(exponents: &[u64], coefficient: &U) -> String {
@@ -588,6 +593,28 @@ impl<
         println!("{}", report);
 
         Ok(())
+    }
+
+    // Substitute the variables in a multivariate polynomial with univariate polynomials in parallel.
+    // All "intermediate results" **must** be present in `exponents_memoization` or this function
+    // will panic.
+    pub fn evaluate_symbolic_with_memoization_precalculated(
+        &self,
+        point: &[Polynomial<U>],
+        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<U>>,
+    ) -> Polynomial<U> {
+        assert_eq!(
+            self.variable_count,
+            point.len(),
+            "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
+        );
+        let acc = self
+            .coefficients
+            .par_iter()
+            .map(|(k, v)| exponents_memoization[k].clone().scalar_mul(v.clone()))
+            .reduce(|| Polynomial::ring_zero(), |a, b| a + b);
+
+        acc
     }
 
     // Substitute the variables in a multivariate polynomial with univariate polynomials, fast
@@ -914,6 +941,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > Add for MPolynomial<U>
 {
@@ -966,6 +995,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > AddAssign for MPolynomial<U>
 {
@@ -1001,6 +1032,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > Sub for MPolynomial<U>
 {
@@ -1084,6 +1117,8 @@ impl<
             + Eq
             + Hash
             + Display
+            + Send
+            + Sync
             + Debug,
     > Mul for MPolynomial<U>
 {
@@ -1477,9 +1512,16 @@ mod test_mpolynomials {
         assert_eq!(
             x_cubed,
             xyz_m.evaluate_symbolic_with_memoization(
-                &vec![x.clone(), x.clone(), x],
+                &vec![x.clone(), x.clone(), x.clone()],
                 &mut empty_mod_pow_memoization.clone(),
                 &mut empty_mul_memoization.clone(),
+                &mut precalculated_intermediate_results.clone()
+            )
+        );
+        assert_eq!(
+            x_cubed,
+            xyz_m.evaluate_symbolic_with_memoization_precalculated(
+                &vec![x.clone(), x.clone(), x],
                 &mut precalculated_intermediate_results.clone()
             )
         );
@@ -1524,13 +1566,44 @@ mod test_mpolynomials {
         };
 
         assert_eq!(expected_result, evaluated_pol_u);
+        // evaluate_symbolic_with_memoization_precalculated
         assert_eq!(
             expected_result,
             pol_m.evaluate_symbolic_with_memoization(
-                &vec![univariate_pol_1.clone(), univariate_pol_1, univariate_pol_2,],
+                &vec![
+                    univariate_pol_1.clone(),
+                    univariate_pol_1.clone(),
+                    univariate_pol_2.clone(),
+                ],
                 &mut empty_mod_pow_memoization.clone(),
                 &mut empty_mul_memoization.clone(),
                 &mut empty_intermediate_results.clone()
+            )
+        );
+
+        // Verify symbolic evaluation function with precalculated "intermediate results"
+        let mut new_precalculated_intermediate_results: HashMap<
+            Vec<u64>,
+            Polynomial<PrimeFieldElementFlexible>,
+        > = HashMap::new();
+        let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+            &[pol_m.clone()],
+            &vec![
+                univariate_pol_1.clone(),
+                univariate_pol_1.clone(),
+                univariate_pol_2.clone(),
+            ],
+            &mut new_precalculated_intermediate_results,
+        );
+        match precalculation_result {
+            Ok(_) => (),
+            Err(e) => panic!("error: {}", e),
+        };
+        assert_eq!(
+            expected_result,
+            pol_m.evaluate_symbolic_with_memoization_precalculated(
+                &vec![univariate_pol_1.clone(), univariate_pol_1, univariate_pol_2,],
+                &mut new_precalculated_intermediate_results
             )
         );
     }
@@ -1794,13 +1867,20 @@ mod test_mpolynomials {
                     &mut empty_mul_memoization,
                     &mut precalculated_intermediate_results,
                 );
+                let with_precalculation_parallel = mpolynomial
+                    .evaluate_symbolic_with_memoization_precalculated(
+                        &point,
+                        &mut precalculated_intermediate_results,
+                    );
                 let without_precalculation = mpolynomial.evaluate_symbolic_with_memoization(
                     &point,
                     &mut empty_mod_pow_memoization.clone(),
                     &mut empty_mul_memoization.clone(),
                     &mut empty_intermediate_results,
                 );
+
                 assert_eq!(with_precalculation, without_precalculation);
+                assert_eq!(with_precalculation, with_precalculation_parallel);
             }
         }
     }
