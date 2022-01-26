@@ -789,7 +789,7 @@ impl StarkPrimeFieldElementFlexible {
 }
 
 #[cfg(test)]
-pub mod test_stark {
+pub mod test_stark_pfef {
     use primitive_types::U256;
 
     use crate::shared_math::rescue_prime_pfe_flexible::RescuePrime;

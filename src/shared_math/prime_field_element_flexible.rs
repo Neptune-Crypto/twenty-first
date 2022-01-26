@@ -388,30 +388,25 @@ impl PrimeFieldElement for PrimeFieldElementFlexible {
 
 impl FromVecu8 for PrimeFieldElementFlexible {
     fn from_vecu8(&self, bytes: Vec<u8>) -> Self {
-        // value
+        // Beware! This function can only generate values between 0 and 2^256.
+        // If you want this function to be able to create values up to 2^512,
+        // then it would need to read 64 bytes instead of 32 as now. And if
+        // feeding it a hash, it would need to be fed a 64 byte hash.
         let bytesize = std::mem::size_of::<u64>();
         let (first_eight_bytes, rest) = bytes.as_slice().split_at(bytesize);
         let (second_eight_bytes, rest) = rest.split_at(bytesize);
         let (third_eight_bytes, rest) = rest.split_at(bytesize);
-        let (fourth_eight_bytes, rest) = rest.split_at(bytesize);
-        let (fifth_eight_bytes, rest) = rest.split_at(bytesize);
-        let (sixth_eight_bytes, rest) = rest.split_at(bytesize);
-        let (seventh_eight_bytes, rest) = rest.split_at(bytesize);
-        let (eighth_eight_bytes, _rest) = rest.split_at(bytesize);
-        let mut u512_bytes: Vec<u8> = vec![];
-        u512_bytes.extend_from_slice(first_eight_bytes);
-        u512_bytes.extend_from_slice(second_eight_bytes);
-        u512_bytes.extend_from_slice(third_eight_bytes);
-        u512_bytes.extend_from_slice(fourth_eight_bytes);
-        u512_bytes.extend_from_slice(fifth_eight_bytes);
-        u512_bytes.extend_from_slice(sixth_eight_bytes);
-        u512_bytes.extend_from_slice(seventh_eight_bytes);
-        u512_bytes.extend_from_slice(eighth_eight_bytes);
+        let (fourth_eight_bytes, _rest) = rest.split_at(bytesize);
+        let mut u256_bytes: Vec<u8> = vec![];
+        u256_bytes.extend_from_slice(first_eight_bytes);
+        u256_bytes.extend_from_slice(second_eight_bytes);
+        u256_bytes.extend_from_slice(third_eight_bytes);
+        u256_bytes.extend_from_slice(fourth_eight_bytes);
 
-        let val_u512 = U512::from_big_endian(&u512_bytes);
+        let val_u512 = U512::from_big_endian(&u256_bytes);
 
         PrimeFieldElementFlexible {
-            value: val_u512,
+            value: val_u512 % self.q,
             q: self.q,
         }
     }

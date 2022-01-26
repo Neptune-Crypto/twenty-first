@@ -84,13 +84,13 @@ impl RPSSS {
 mod test_rpsss {
     use std::time::Instant;
 
-    use super::super::stark_pfe_flexible::test_stark;
+    use super::super::stark_pfe_flexible::test_stark_pfef;
     use super::*;
 
     #[test]
     fn sign_verify_test() {
         let (mut stark, rp): (StarkPrimeFieldElementFlexible, RescuePrime) =
-            test_stark::get_tutorial_stark();
+            test_stark_pfef::get_tutorial_stark();
         let rpsss_no_preprocess = RPSSS {
             stark: stark.clone(),
             rp: rp.clone(),
