@@ -2,6 +2,7 @@ use rand::prelude::ThreadRng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 pub trait IdentityValues {
@@ -97,5 +98,7 @@ pub trait PrimeFieldElement {
         + ModPowU32
         + GetPrimitiveRootOfUnity
         + Send
-        + Sync;
+        + Sync
+        + Copy
+        + Hash;
 }
