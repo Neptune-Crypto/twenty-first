@@ -142,6 +142,7 @@ impl PrimeFieldElementFlexible {
         Self { q, value }
     }
 
+    #[must_use]
     pub fn inv(&self) -> Self {
         let mut q_bytes: Vec<u8> = vec![0; 64];
         self.q.to_little_endian(&mut q_bytes);
@@ -163,6 +164,7 @@ impl PrimeFieldElementFlexible {
         }
     }
 
+    #[must_use]
     pub fn mod_pow(&self, pow: BigInt) -> Self {
         // Special case for handling 0^0 = 1
         if pow.is_zero() {

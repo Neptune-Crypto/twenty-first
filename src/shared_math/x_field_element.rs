@@ -129,6 +129,7 @@ impl XFieldElement {
         )
     }
 
+    #[must_use]
     pub fn inv(&self) -> Self {
         let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
         let (_, a, _) = Self::xgcd(self_as_poly, Self::shah_polynomial());

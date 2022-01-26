@@ -93,10 +93,12 @@ impl<T: num_traits::Num + Clone + Copy + Debug + Display> Fraction<T> {
         }
     }
 
+    #[must_use]
     pub fn scalar_mul(&self, scalar: T) -> Self {
         Self::reduce(scalar * self.dividend, self.divisor)
     }
 
+    #[must_use]
     pub fn scalar_div(&self, scalar: T) -> Self {
         Self::reduce(self.dividend, scalar * self.divisor)
     }

@@ -64,11 +64,14 @@ impl BFieldElement {
         Self(value % Self::QUOTIENT)
     }
 
+    #[must_use]
     pub fn inv(&self) -> Self {
         let (_, _, a) = Self::xgcd(Self::QUOTIENT as i128, self.0 as i128);
 
-        Self(((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
-                as u128)
+        Self(
+            ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
+                as u128,
+        )
     }
 
     pub fn increment(&mut self) {
@@ -142,6 +145,7 @@ impl BFieldElement {
         Self(1)
     }
 
+    #[must_use]
     pub fn mod_pow(&self, pow: u64) -> Self {
         Self(self.mod_pow_raw(pow))
     }

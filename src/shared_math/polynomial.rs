@@ -200,6 +200,7 @@ impl<
     // Return the polynomial which corresponds to the transformation `x -> alpha * x`
     // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
     // then corresponds to evaluating P(alpha * x).
+    #[must_use]
     pub fn scale(&self, alpha: &U) -> Self {
         let mut acc = alpha.ring_one();
         let mut return_coefficients = self.coefficients.clone();
@@ -272,6 +273,7 @@ impl<
     }
 
     // Slow square implementation that does not use NTT
+    #[must_use]
     pub fn slow_square(&self) -> Self {
         let degree = self.degree();
         if degree == -1 {
@@ -472,6 +474,7 @@ impl<
     // It is the caller's responsibility that this function
     // is called with sufficiently large input to be safe
     // and to be faster than `square`.
+    #[must_use]
     pub fn fast_square(&self) -> Self {
         let degree = self.degree();
         if degree == -1 {
@@ -506,6 +509,7 @@ impl<
         }
     }
 
+    #[must_use]
     pub fn square(&self) -> Self {
         let degree = self.degree();
         if degree == -1 {
@@ -542,6 +546,7 @@ impl<
         }
     }
 
+    #[must_use]
     pub fn fast_mod_pow(&self, pow: BigInt, one: U) -> Self {
         assert!(one.is_one(), "Provided one must be one");
 
@@ -868,6 +873,7 @@ impl<
             + Eq,
     > Polynomial<U>
 {
+    #[must_use]
     pub fn multiply(self, other: Self) -> Self {
         let degree_lhs = self.degree();
         let degree_rhs = other.degree();
@@ -898,6 +904,7 @@ impl<
     }
 
     // Multiply a polynomial with itself `pow` times
+    #[must_use]
     pub fn mod_pow(&self, pow: BigInt, one: U) -> Self {
         assert!(one.is_one(), "Provided one must be one");
 
@@ -930,6 +937,7 @@ impl<
     }
 
     // Multiply a polynomial with x^power
+    #[must_use]
     pub fn shift_coefficients(&self, power: usize, zero: U) -> Self {
         if !zero.is_zero() {
             panic!("`zero` was not zero. Don't do this.");
@@ -946,6 +954,7 @@ impl<
         }
     }
 
+    #[must_use]
     pub fn scalar_mul(&self, scalar: U) -> Self {
         let mut coefficients: Vec<U> = vec![];
         for i in 0..self.coefficients.len() {
@@ -974,12 +983,11 @@ impl<
 
         // quotient is built from back to front so must be reversed
         // Preallocate space for quotient coefficients
-        let mut quotient: Vec<U>;
-        if degree_lhs - degree_rhs >= 0 {
-            quotient = Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize);
+        let mut quotient: Vec<U> = if degree_lhs - degree_rhs >= 0 {
+            Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize)
         } else {
-            quotient = vec![];
-        }
+            vec![]
+        };
         let mut remainder = self.clone();
         remainder.normalize();
 

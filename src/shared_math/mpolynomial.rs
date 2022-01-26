@@ -234,17 +234,16 @@ impl<
     > Display for MPolynomial<U>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let output;
-        if self.is_zero() {
-            output = "0".to_string();
+        let output = if self.is_zero() {
+            "0".to_string()
         } else {
             let mut term_strings = self
                 .coefficients
                 .iter()
                 .sorted_by_key(|x| x.0[0])
                 .map(|(k, v)| Self::term_print(k, v));
-            output = term_strings.join("\n+ ");
-        }
+            term_strings.join("\n+ ")
+        };
 
         write!(f, "\n  {}", output)
     }
@@ -453,7 +452,8 @@ impl<
         timer.elapsed("init stuff");
         let one: U = point[0].coefficients[0].ring_one(); // guaranteed to exist because of above checks
         let exponents_set: HashSet<Vec<u64>> = mpols
-            .iter().flat_map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
+            .iter()
+            .flat_map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
             .collect();
         timer.elapsed("calculated exponents_set");
         let mut exponents_list: Vec<Vec<u64>> = if exponents_set.contains(&vec![0; variable_count])
@@ -799,6 +799,7 @@ impl<
         acc
     }
 
+    #[must_use]
     pub fn scalar_mul(&self, factor: U) -> Self {
         if self.is_zero() {
             return Self::zero(self.variable_count);
@@ -825,6 +826,7 @@ impl<
         }
     }
 
+    #[must_use]
     pub fn mod_pow(&self, pow: BigInt, one: U) -> Self {
         // Handle special case of 0^0
         if pow.is_zero() {
@@ -862,6 +864,7 @@ impl<
         acc
     }
 
+    #[must_use]
     pub fn square(&self) -> Self {
         if self.is_zero() {
             return Self::zero(self.variable_count);
