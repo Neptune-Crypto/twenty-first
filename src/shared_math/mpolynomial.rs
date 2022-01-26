@@ -1512,9 +1512,16 @@ mod test_mpolynomials {
         assert_eq!(
             x_cubed,
             xyz_m.evaluate_symbolic_with_memoization(
-                &vec![x.clone(), x.clone(), x],
+                &vec![x.clone(), x.clone(), x.clone()],
                 &mut empty_mod_pow_memoization.clone(),
                 &mut empty_mul_memoization.clone(),
+                &mut precalculated_intermediate_results.clone()
+            )
+        );
+        assert_eq!(
+            x_cubed,
+            xyz_m.evaluate_symbolic_with_memoization_precalculated(
+                &vec![x.clone(), x.clone(), x],
                 &mut precalculated_intermediate_results.clone()
             )
         );
@@ -1559,13 +1566,44 @@ mod test_mpolynomials {
         };
 
         assert_eq!(expected_result, evaluated_pol_u);
+        // evaluate_symbolic_with_memoization_precalculated
         assert_eq!(
             expected_result,
             pol_m.evaluate_symbolic_with_memoization(
-                &vec![univariate_pol_1.clone(), univariate_pol_1, univariate_pol_2,],
+                &vec![
+                    univariate_pol_1.clone(),
+                    univariate_pol_1.clone(),
+                    univariate_pol_2.clone(),
+                ],
                 &mut empty_mod_pow_memoization.clone(),
                 &mut empty_mul_memoization.clone(),
                 &mut empty_intermediate_results.clone()
+            )
+        );
+
+        // Verify symbolic evaluation function with precalculated "intermediate results"
+        let mut new_precalculated_intermediate_results: HashMap<
+            Vec<u64>,
+            Polynomial<PrimeFieldElementFlexible>,
+        > = HashMap::new();
+        let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+            &[pol_m.clone()],
+            &vec![
+                univariate_pol_1.clone(),
+                univariate_pol_1.clone(),
+                univariate_pol_2.clone(),
+            ],
+            &mut new_precalculated_intermediate_results,
+        );
+        match precalculation_result {
+            Ok(_) => (),
+            Err(e) => panic!("error: {}", e),
+        };
+        assert_eq!(
+            expected_result,
+            pol_m.evaluate_symbolic_with_memoization_precalculated(
+                &vec![univariate_pol_1.clone(), univariate_pol_1, univariate_pol_2,],
+                &mut new_precalculated_intermediate_results
             )
         );
     }
@@ -1829,13 +1867,20 @@ mod test_mpolynomials {
                     &mut empty_mul_memoization,
                     &mut precalculated_intermediate_results,
                 );
+                let with_precalculation_parallel = mpolynomial
+                    .evaluate_symbolic_with_memoization_precalculated(
+                        &point,
+                        &mut precalculated_intermediate_results,
+                    );
                 let without_precalculation = mpolynomial.evaluate_symbolic_with_memoization(
                     &point,
                     &mut empty_mod_pow_memoization.clone(),
                     &mut empty_mul_memoization.clone(),
                     &mut empty_intermediate_results,
                 );
+
                 assert_eq!(with_precalculation, without_precalculation);
+                assert_eq!(with_precalculation, with_precalculation_parallel);
             }
         }
     }
