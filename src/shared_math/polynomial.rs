@@ -63,7 +63,6 @@ fn pretty_print_coefficients_generic<T: PrimeFieldElement>(coefficients: &[T::El
     outputs.join("")
 }
 
-#[derive(Hash)]
 pub struct Polynomial<T: PrimeFieldElement> {
     pub coefficients: Vec<T::Elem>,
 }
@@ -81,6 +80,12 @@ impl<T: PrimeFieldElement> Debug for Polynomial<T> {
         f.debug_struct("Polynomial")
             .field("coefficients", &self.coefficients)
             .finish()
+    }
+}
+
+impl<T: PrimeFieldElement> Hash for Polynomial<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.coefficients.hash(state);
     }
 }
 
@@ -515,7 +520,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             let set: bool =
                 !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
             if set {
-                acc = *self * acc;
+                acc = self.to_owned() * acc;
             }
         }
 

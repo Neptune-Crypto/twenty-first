@@ -140,7 +140,7 @@ impl<'a> StarkPrimeFieldElementFlexible {
             self.omicron_domain.len(),
         );
         let transition_zerofier_codeword: Vec<PrimeFieldElementFlexible> = transition_zerofier
-            .fast_coset_evaluate(&self.field_generator, &self.omega, self.fri.domain_length);
+            .fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain_length);
         let transition_zerofier_mt = MerkleTree::from_vec(&transition_zerofier_codeword);
         let transition_zerofier_mt_root = transition_zerofier_mt.get_root();
 
@@ -430,7 +430,7 @@ impl StarkPrimeFieldElementFlexible {
         let mut boundary_quotient_merkle_trees: Vec<MerkleTree<PrimeFieldElementFlexible>> = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<PrimeFieldElementFlexible> =
-                bq.fast_coset_evaluate(&self.field_generator, &self.omega, self.fri.domain_length);
+                bq.fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain_length);
             let bq_merkle_tree = MerkleTree::from_vec(&boundary_quotient_codeword);
             proof_stream.enqueue(&bq_merkle_tree.get_root())?;
             boundary_quotient_merkle_trees.push(bq_merkle_tree);
@@ -465,8 +465,8 @@ impl StarkPrimeFieldElementFlexible {
                     Polynomial::fast_coset_divide(
                         tp,
                         &transition_zerofier,
-                        &self.field_generator,
-                        &self.omicron,
+                        self.field_generator,
+                        self.omicron,
                         self.omicron_domain.len(),
                     )
                 })
@@ -486,7 +486,7 @@ impl StarkPrimeFieldElementFlexible {
         };
 
         let randomizer_codeword: Vec<PrimeFieldElementFlexible> = randomizer_polynomial
-            .fast_coset_evaluate(&self.field_generator, &self.omega, self.fri.domain_length);
+            .fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain_length);
         let randomizer_mt = MerkleTree::from_vec(&randomizer_codeword);
         proof_stream.enqueue(&randomizer_mt.get_root())?;
 
@@ -542,7 +542,7 @@ impl StarkPrimeFieldElementFlexible {
 
         let combined_codeword = combination.fast_coset_evaluate(
             &self.field_generator,
-            &self.omega,
+            self.omega,
             self.fri.domain_length,
         );
 

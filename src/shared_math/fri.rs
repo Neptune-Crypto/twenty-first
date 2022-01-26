@@ -274,7 +274,7 @@ impl<F: PrimeFieldElement> Fri<F> {
         // trace subgroup since we only check its degree and don't use
         // it further.
         let coefficients = slow_intt(&last_codeword, &last_omega);
-        let last_poly_degree: isize = (Polynomial { coefficients }).degree();
+        let last_poly_degree: isize = (Polynomial::<F> { coefficients }).degree();
         if last_poly_degree > degree_of_last_round as isize {
             return Err(Box::new(ValidationError::LastIterationTooHighDegree));
         }
@@ -338,7 +338,7 @@ impl<F: PrimeFieldElement> Fri<F> {
                 .collect();
 
             if (0..self.colinearity_checks_count).any(|i| {
-                !Polynomial::are_colinear_3(
+                !Polynomial::<F>::are_colinear_3(
                     (axs[i].clone(), ays[i].clone()),
                     (bxs[i].clone(), bys[i].clone()),
                     (cx.clone(), cys[i].clone()),

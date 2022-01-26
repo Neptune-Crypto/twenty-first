@@ -1,5 +1,5 @@
 use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::{IdentityValues, ModPowU64};
+use crate::shared_math::traits::{IdentityValues, ModPowU32};
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::tree_m_ary::Node;
 use itertools::Itertools;
@@ -10,10 +10,11 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Debug, Display};
-use std::hash::Hash;
-use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 use std::rc::Rc;
 use std::{cmp, fmt};
+
+use super::traits::PrimeFieldElement;
 
 type MCoefficients<T> = HashMap<Vec<u64>, T>;
 
@@ -30,22 +31,11 @@ pub struct PolynomialEvaluationDataNode {
 }
 
 impl<'a, T: Sized> Node<T> {
-    fn traverse_tree<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + IdentityValues
-            + Clone
-            + Display
-            + Debug
-            + PartialEq
-            + Eq,
-    >(
+    fn traverse_tree<PF: PrimeFieldElement>(
         nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>>,
-        point: &[Polynomial<U>],
-        one: U,
-        polynomium_products: &mut HashMap<Vec<u64>, Polynomial<U>>,
+        point: &[Polynomial<PF>],
+        one: PF::Elem,
+        polynomium_products: &mut HashMap<Vec<u64>, Polynomial<PF>>,
     ) {
         let zero = point[0].coefficients[0].ring_zero();
 
@@ -94,7 +84,7 @@ impl<'a, T: Sized> Node<T> {
                     //     // println!("Missed {:?}", child_diff_exponents);
                     //     count += 1;
                     // }
-                    let mut intermediate_mul: Polynomial<U> =
+                    let mut intermediate_mul: Polynomial<PF> =
                         Polynomial::from_constant(one.clone());
                     let mut intermediate_exponents: Vec<u64> = vec![0; point.len()];
                     let mut remaining_exponents: Vec<u64> = child_diff_exponents.clone();
@@ -123,7 +113,7 @@ impl<'a, T: Sized> Node<T> {
                             polynomium_products[&mod_pow_exponents].clone()
                         } else {
                             // println!("Calculating mod_pow");
-                            let mut mod_pow_intermediate: Option<Polynomial<U>> = None;
+                            let mut mod_pow_intermediate: Option<Polynomial<PF>> = None;
                             let mut mod_pow_reduced = mod_pow_exponents.clone();
                             while mod_pow_reduced[i] > 2 {
                                 mod_pow_reduced[i] -= 1;
@@ -183,10 +173,7 @@ impl<'a, T: Sized> Node<T> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct MPolynomial<
-    T: Add + Div + Mul + Sub + IdentityValues + Clone + PartialEq + Eq + Hash + Display + Debug,
-> {
+pub struct MPolynomial<T: PrimeFieldElement> {
     // Multivariate polynomials are represented as hash maps with exponent vectors
     // as keys and coefficients as values. E.g.:
     // f(x,y,z) = 17 + 2xy + 42z - 19x^6*y^3*z^12 is represented as:
@@ -197,7 +184,25 @@ pub struct MPolynomial<
     //     [6,3,12] => -19,
     // }
     pub variable_count: usize,
-    pub coefficients: HashMap<Vec<u64>, T>,
+    pub coefficients: HashMap<Vec<u64>, T::Elem>,
+}
+
+impl<T: PrimeFieldElement> Clone for MPolynomial<T> {
+    fn clone(&self) -> Self {
+        Self {
+            variable_count: self.variable_count.clone(),
+            coefficients: self.coefficients.clone(),
+        }
+    }
+}
+
+impl<T: PrimeFieldElement> Debug for MPolynomial<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MPolynomial")
+            .field("variable_count", &self.variable_count)
+            .field("coefficients", &self.coefficients)
+            .finish()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -215,24 +220,7 @@ impl fmt::Display for PrecalculationError {
     }
 }
 
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + Neg<Output = U>
-            + ModPowU64
-            + IdentityValues
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Send
-            + Sync
-            + Debug,
-    > Display for MPolynomial<U>
-{
+impl<PF: PrimeFieldElement> Display for MPolynomial<PF> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let output = if self.is_zero() {
             "0".to_string()
@@ -249,20 +237,7 @@ impl<
     }
 }
 
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + IdentityValues
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Debug,
-    > PartialEq for MPolynomial<U>
-{
+impl<PF: PrimeFieldElement> PartialEq for MPolynomial<PF> {
     fn eq(&self, other: &Self) -> bool {
         let (shortest, var_count, longest) = if self.variable_count > other.variable_count {
             (
@@ -278,7 +253,7 @@ impl<
             )
         };
 
-        let mut padded: HashMap<Vec<u64>, U> = HashMap::new();
+        let mut padded: HashMap<Vec<u64>, PF::Elem> = HashMap::new();
         for (k, v) in shortest.iter() {
             let mut pad = k.clone();
             pad.resize_with(var_count, || 0);
@@ -302,41 +277,10 @@ impl<
     }
 }
 
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + IdentityValues
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Debug,
-    > Eq for MPolynomial<U>
-{
-}
+impl<PF: PrimeFieldElement> Eq for MPolynomial<PF> {}
 
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + Neg<Output = U>
-            + IdentityValues
-            + ModPowU64
-            + Clone
-            + Display
-            + Debug
-            + PartialEq
-            + Eq
-            + Hash
-            + Send
-            + Sync,
-    > MPolynomial<U>
-{
-    fn term_print(exponents: &[u64], coefficient: &U) -> String {
+impl<PF: PrimeFieldElement> MPolynomial<PF> {
+    fn term_print(exponents: &[u64], coefficient: &PF::Elem) -> String {
         if coefficient.is_zero() {
             return "".to_string();
         }
@@ -382,8 +326,8 @@ impl<
         true
     }
 
-    pub fn from_constant(element: U, variable_count: usize) -> Self {
-        let mut cs: MCoefficients<U> = HashMap::new();
+    pub fn from_constant(element: PF::Elem, variable_count: usize) -> Self {
+        let mut cs: MCoefficients<PF::Elem> = HashMap::new();
         cs.insert(vec![0; variable_count], element);
         Self {
             variable_count,
@@ -394,13 +338,13 @@ impl<
     // Returns the multivariate polynomials representing each indeterminates linear function
     // with a leading coefficient of one. For three indeterminates, returns:
     // [f(x,y,z) = x, f(x,y,z) = y, f(x,y,z) = z]
-    pub fn variables(variable_count: usize, one: U) -> Vec<Self> {
+    pub fn variables(variable_count: usize, one: PF::Elem) -> Vec<Self> {
         assert!(one.is_one(), "Provided one must be one");
         let mut res: Vec<Self> = vec![];
         for i in 0..variable_count {
             let mut exponent = vec![0u64; variable_count];
             exponent[i] = 1;
-            let mut coefficients: MCoefficients<U> = HashMap::new();
+            let mut coefficients: MCoefficients<PF::Elem> = HashMap::new();
             coefficients.insert(exponent, one.clone());
             res.push(Self {
                 variable_count,
@@ -411,7 +355,7 @@ impl<
         res
     }
 
-    pub fn evaluate(&self, point: &[U]) -> U {
+    pub fn evaluate(&self, point: &[PF::Elem]) -> PF::Elem {
         assert_eq!(
             self.variable_count,
             point.len(),
@@ -421,7 +365,9 @@ impl<
         for (k, v) in self.coefficients.iter() {
             let mut prod = v.clone();
             for i in 0..k.len() {
-                prod = prod.clone() * point[i].mod_pow_u64(k[i]);
+                // FIXME: We really don't want to cast to 'u32' here, but
+                // refactoring k: Vec<u32> is a bit of a task, too. See issue ...
+                prod = prod.clone() * point[i].mod_pow_u32(k[i] as u32);
             }
             acc = acc + prod;
         }
@@ -431,8 +377,8 @@ impl<
 
     pub fn precalculate_exponents_memoization(
         mpols: &[Self],
-        point: &[Polynomial<U>],
-        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<U>>,
+        point: &[Polynomial<PF>],
+        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<PF>>,
     ) -> Result<(), Box<dyn Error>> {
         let mut timer = TimingReporter::start();
         if mpols.is_empty() || point.is_empty() {
@@ -450,7 +396,7 @@ impl<
         }
 
         timer.elapsed("init stuff");
-        let one: U = point[0].coefficients[0].ring_one(); // guaranteed to exist because of above checks
+        let one: PF::Elem = point[0].coefficients[0].ring_one(); // guaranteed to exist because of above checks
         let exponents_set: HashSet<Vec<u64>> = mpols
             .iter()
             .flat_map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
@@ -580,7 +526,7 @@ impl<
         }
         timer.elapsed("built nodes");
 
-        Node::<PolynomialEvaluationDataNode>::traverse_tree::<U>(
+        Node::<PolynomialEvaluationDataNode>::traverse_tree::<PF>(
             nodes,
             point,
             one,
@@ -598,9 +544,9 @@ impl<
     // will panic.
     pub fn evaluate_symbolic_with_memoization_precalculated(
         &self,
-        point: &[Polynomial<U>],
-        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<U>>,
-    ) -> Polynomial<U> {
+        point: &[Polynomial<PF>],
+        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<PF>>,
+    ) -> Polynomial<PF> {
         assert_eq!(
             self.variable_count,
             point.len(),
@@ -620,11 +566,11 @@ impl<
     #[allow(clippy::type_complexity)]
     pub fn evaluate_symbolic_with_memoization(
         &self,
-        point: &[Polynomial<U>],
-        mod_pow_memoization: &mut HashMap<(usize, u64), Polynomial<U>>,
-        mul_memoization: &mut HashMap<(Polynomial<U>, (usize, u64)), Polynomial<U>>,
-        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<U>>,
-    ) -> Polynomial<U> {
+        point: &[Polynomial<PF>],
+        mod_pow_memoization: &mut HashMap<(usize, u64), Polynomial<PF>>,
+        mul_memoization: &mut HashMap<(Polynomial<PF>, (usize, u64)), Polynomial<PF>>,
+        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<PF>>,
+    ) -> Polynomial<PF> {
         // Notice that the `exponents_memoization` only gives a speedup if this function is evaluated multiple
         // times for the same `point` input. This condition holds when evaluating the AIR constraints
         // symbolically in a generic STARK prover.
@@ -634,7 +580,7 @@ impl<
             "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
         );
         let points_are_x: Vec<bool> = point.iter().map(|p| p.is_x()).collect();
-        let mut acc: Polynomial<U> = Polynomial::ring_zero();
+        let mut acc: Polynomial<PF> = Polynomial::ring_zero();
         // Sort k after complexity
         // let mut ks: Vec<(Vec<u64>, U)> = self.coefficients.clone().into_iter().collect();
         // ks.sort_by_key(|k: (Vec<u64>, U)| k.0.iter().sum());
@@ -648,7 +594,7 @@ impl<
 
         for (k, v) in self.coefficients.iter() {
             // for (k, v) in ks.iter() {
-            let mut prod: Polynomial<U>;
+            let mut prod: Polynomial<PF>;
             if exponents_memoization.contains_key(k) {
                 prod = exponents_memoization[k].clone();
             } else {
@@ -692,7 +638,7 @@ impl<
                         // than what we are looking for. If we have, then we use this multiplication
                         // as a starting point to calculation the next.
 
-                        let mut reduced_mul_result: Option<Polynomial<U>> = None;
+                        let mut reduced_mul_result: Option<Polynomial<PF>> = None;
                         let mut reduced_mul_key = (prod.clone(), (i, ki));
                         for j in 1..ki - 1 {
                             reduced_mul_key.1 .1 = ki - j;
@@ -739,13 +685,13 @@ impl<
     }
 
     // Substitute the variables in a multivariate polynomial with univariate polynomials
-    pub fn evaluate_symbolic(&self, point: &[Polynomial<U>]) -> Polynomial<U> {
+    pub fn evaluate_symbolic(&self, point: &[Polynomial<PF>]) -> Polynomial<PF> {
         assert_eq!(
             self.variable_count,
             point.len(),
             "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
         );
-        let mut acc: Polynomial<U> = Polynomial::ring_zero();
+        let mut acc: Polynomial<PF> = Polynomial::ring_zero();
         for (k, v) in self.coefficients.iter() {
             let mut prod = Polynomial::from_constant(v.clone());
             for i in 0..k.len() {
@@ -766,7 +712,7 @@ impl<
     }
 
     pub fn lift(
-        univariate_polynomial: Polynomial<U>,
+        univariate_polynomial: Polynomial<PF>,
         variable_index: usize,
         variable_count: usize,
     ) -> Self {
@@ -779,16 +725,16 @@ impl<
         }
 
         let one = univariate_polynomial.coefficients[0].ring_one();
-        let mut coefficients: MCoefficients<U> = HashMap::new();
+        let mut coefficients: MCoefficients<PF::Elem> = HashMap::new();
         let mut key = vec![0u64; variable_count];
         key[variable_index] = 1;
         coefficients.insert(key, one.clone());
-        let indeterminate: MPolynomial<U> = Self {
+        let indeterminate: MPolynomial<PF> = Self {
             variable_count,
             coefficients,
         };
 
-        let mut acc = MPolynomial::<U>::zero(variable_count);
+        let mut acc = MPolynomial::<PF>::zero(variable_count);
         for i in 0..univariate_polynomial.coefficients.len() {
             acc += MPolynomial::from_constant(
                 univariate_polynomial.coefficients[i].clone(),
@@ -800,12 +746,12 @@ impl<
     }
 
     #[must_use]
-    pub fn scalar_mul(&self, factor: U) -> Self {
+    pub fn scalar_mul(&self, factor: PF::Elem) -> Self {
         if self.is_zero() {
             return Self::zero(self.variable_count);
         }
 
-        let mut output_coefficients: MCoefficients<U> = HashMap::new();
+        let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
         for (k, v) in self.coefficients.iter() {
             output_coefficients.insert(k.to_vec(), v.clone() * factor.clone());
         }
@@ -816,7 +762,7 @@ impl<
         }
     }
 
-    pub fn scalar_mul_mut(&mut self, factor: U) {
+    pub fn scalar_mul_mut(&mut self, factor: PF::Elem) {
         if self.is_zero() || factor.is_one() {
             return;
         }
@@ -827,10 +773,10 @@ impl<
     }
 
     #[must_use]
-    pub fn mod_pow(&self, pow: BigInt, one: U) -> Self {
+    pub fn mod_pow(&self, pow: BigInt, one: PF::Elem) -> Self {
         // Handle special case of 0^0
         if pow.is_zero() {
-            let mut coefficients: MCoefficients<U> = HashMap::new();
+            let mut coefficients: MCoefficients<PF::Elem> = HashMap::new();
             coefficients.insert(vec![0; self.variable_count], one);
             return MPolynomial {
                 variable_count: self.variable_count,
@@ -845,9 +791,9 @@ impl<
 
         let one = self.coefficients.values().last().unwrap().ring_one();
         let exp = vec![0u64; self.variable_count];
-        let mut acc_coefficients_init: MCoefficients<U> = HashMap::new();
+        let mut acc_coefficients_init: MCoefficients<PF::Elem> = HashMap::new();
         acc_coefficients_init.insert(exp, one);
-        let mut acc: MPolynomial<U> = Self {
+        let mut acc: MPolynomial<PF> = Self {
             variable_count: self.variable_count,
             coefficients: acc_coefficients_init,
         };
@@ -870,7 +816,7 @@ impl<
             return Self::zero(self.variable_count);
         }
 
-        let mut output_coefficients: MCoefficients<U> = HashMap::new();
+        let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
         let exponents = self.coefficients.keys().collect::<Vec<&Vec<u64>>>();
         let c0 = self.coefficients.values().next().unwrap();
         let two = c0.ring_one() + c0.ring_one();
@@ -929,24 +875,7 @@ impl<
     }
 }
 
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + Neg<Output = U>
-            + IdentityValues
-            + ModPowU64
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Send
-            + Sync
-            + Debug,
-    > Add for MPolynomial<U>
-{
+impl<PF: PrimeFieldElement> Add for MPolynomial<PF> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -955,7 +884,7 @@ impl<
             return Self::zero(variable_count);
         }
 
-        let mut output_coefficients: MCoefficients<U> = HashMap::new();
+        let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
         for (k, v) in self.coefficients.iter() {
             let mut pad = k.clone();
             pad.resize_with(variable_count, || 0);
@@ -983,24 +912,7 @@ impl<
     }
 }
 
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + Neg<Output = U>
-            + IdentityValues
-            + ModPowU64
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Send
-            + Sync
-            + Debug,
-    > AddAssign for MPolynomial<U>
-{
+impl<PF: PrimeFieldElement> AddAssign for MPolynomial<PF> {
     fn add_assign(&mut self, rhs: Self) {
         if self.variable_count != rhs.variable_count {
             let result = self.clone() + rhs;
@@ -1020,24 +932,7 @@ impl<
     }
 }
 
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + Neg<Output = U>
-            + IdentityValues
-            + ModPowU64
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Send
-            + Sync
-            + Debug,
-    > Sub for MPolynomial<U>
-{
+impl<PF: PrimeFieldElement> Sub for MPolynomial<PF> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -1046,7 +941,7 @@ impl<
             return Self::zero(variable_count);
         }
 
-        let mut output_coefficients: MCoefficients<U> = HashMap::new();
+        let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
         for (k, v) in self.coefficients.iter() {
             let mut pad = k.clone();
             pad.resize_with(variable_count, || 0);
@@ -1074,26 +969,11 @@ impl<
     }
 }
 
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + Neg<Output = U>
-            + IdentityValues
-            + ModPowU64
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Debug,
-    > Neg for MPolynomial<U>
-{
+impl<PF: PrimeFieldElement> Neg for MPolynomial<PF> {
     type Output = Self;
 
     fn neg(self) -> Self {
-        let mut output_coefficients: MCoefficients<U> = HashMap::new();
+        let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
         for (k, v) in self.coefficients.iter() {
             output_coefficients.insert(k.to_vec(), -v.clone());
         }
@@ -1105,24 +985,7 @@ impl<
     }
 }
 
-impl<
-        U: Add<Output = U>
-            + Div<Output = U>
-            + Mul<Output = U>
-            + Sub<Output = U>
-            + Neg<Output = U>
-            + IdentityValues
-            + ModPowU64
-            + Clone
-            + PartialEq
-            + Eq
-            + Hash
-            + Display
-            + Send
-            + Sync
-            + Debug,
-    > Mul for MPolynomial<U>
-{
+impl<PF: PrimeFieldElement> Mul for MPolynomial<PF> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -1131,7 +994,7 @@ impl<
             return Self::zero(variable_count);
         }
 
-        let mut output_coefficients: MCoefficients<U> = HashMap::new();
+        let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
         for (k0, v0) in self.coefficients.iter() {
             for (k1, v1) in other.coefficients.iter() {
                 let mut exponent = vec![0u64; variable_count];
@@ -1364,12 +1227,12 @@ mod test_mpolynomials {
         // Catch error fixed in sub where similar exponents in both terms of
         // `a(x,y) - b(x,y)` were calculated as `c_b - c_a` instead of as `c_a - c_b`,
         // as it should be.
-        let _0 = MPolynomial::from_constant(pfb(0, q), 3);
-        let _2 = MPolynomial::from_constant(pfb(2, q), 3);
-        let _3 = MPolynomial::from_constant(pfb(3, q), 3);
-        let _4 = MPolynomial::from_constant(pfb(4, q), 3);
-        let _6 = MPolynomial::from_constant(pfb(6, q), 3);
-        let _8 = MPolynomial::from_constant(pfb(8, q), 3);
+        let _0: MPolynomial<PrimeFieldElementFlexible> = MPolynomial::from_constant(pfb(0, q), 3);
+        let _2: MPolynomial<PrimeFieldElementFlexible> = MPolynomial::from_constant(pfb(2, q), 3);
+        let _3: MPolynomial<PrimeFieldElementFlexible> = MPolynomial::from_constant(pfb(3, q), 3);
+        let _4: MPolynomial<PrimeFieldElementFlexible> = MPolynomial::from_constant(pfb(4, q), 3);
+        let _6: MPolynomial<PrimeFieldElementFlexible> = MPolynomial::from_constant(pfb(6, q), 3);
+        let _8: MPolynomial<PrimeFieldElementFlexible> = MPolynomial::from_constant(pfb(8, q), 3);
         let _16 = MPolynomial::from_constant(pfb(16, q), 3);
         assert_eq!(_0, _2.clone() - _2.clone());
         assert_eq!(_0, _4.clone() - _4.clone());
@@ -1674,7 +1537,7 @@ mod test_mpolynomials {
         assert_eq!(xm, MPolynomial::lift(xs.clone(), 0, 3));
         assert_eq!(zm, MPolynomial::lift(xs.clone(), 2, 3));
 
-        let seven_s = Polynomial {
+        let seven_s: Polynomial<PrimeFieldElementFlexible> = Polynomial {
             coefficients: vec![pfb(7, q)],
         };
         assert_eq!(
