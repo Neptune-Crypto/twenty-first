@@ -87,5 +87,7 @@ pub trait PrimeFieldElement {
         + CyclicGroupGenerator
         + FieldBatchInversion
         + ModPowU32
-        + GetPrimitiveRootOfUnity;
+        + GetPrimitiveRootOfUnity
+        + Send
+        + Sync;
 }
