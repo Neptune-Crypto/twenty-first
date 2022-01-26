@@ -1,14 +1,14 @@
-use num_bigint::BigInt;
-
-use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
-use crate::shared_math::stark::BoundaryConstraint;
+use crate::shared_math::mpolynomial::MPolynomial;
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
+use crate::shared_math::stark_pfe_flexible::BoundaryConstraint;
+use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::traits::IdentityValues;
-
-use super::mpolynomial::MPolynomial;
-use super::polynomial::Polynomial;
+use num_bigint::BigInt;
+use primitive_types::U256;
 
 #[derive(Debug, Clone)]
-pub struct RescuePrime<'a> {
+pub struct RescuePrime {
     // field: PrimeFieldBig,
     pub m: usize,
     // rate: usize,
@@ -16,48 +16,53 @@ pub struct RescuePrime<'a> {
     pub steps_count: usize,
     alpha: BigInt,
     alpha_inv: BigInt,
-    mds: Vec<Vec<PrimeFieldElementBig<'a>>>,
-    mds_inv: Vec<Vec<PrimeFieldElementBig<'a>>>,
-    round_constants: Vec<PrimeFieldElementBig<'a>>,
+    mds: Vec<Vec<PrimeFieldElementFlexible>>,
+    mds_inv: Vec<Vec<PrimeFieldElementFlexible>>,
+    round_constants: Vec<PrimeFieldElementFlexible>,
 }
 
-impl<'a> RescuePrime<'a> {
-    pub fn from_tutorial(field: &'a PrimeFieldBig) -> Self {
-        let required_field = PrimeFieldBig::new((407u128 * (1 << 119) + 1).into());
-        assert!(
-            field.q == required_field.q,
-            "Field must be p = 407*2^119 + 1"
-        );
-        // let required_field = PrimeFieldBig::new((407u128 * (1 << 119) + 1).into());
-        let mds: Vec<Vec<PrimeFieldElementBig<'a>>> = vec![
+impl RescuePrime {
+    pub fn prime_from_tutorial() -> U256 {
+        (407u128 * (1 << 119) + 1).into()
+    }
+
+    pub fn from_tutorial() -> Self {
+        let prime: U256 = Self::prime_from_tutorial();
+        let mds: Vec<Vec<PrimeFieldElementFlexible>> = vec![
             vec![
-                PrimeFieldElementBig::new(
+                PrimeFieldElementFlexible::new(
                     270497897142230380135924736767050121214u128.into(),
-                    field,
+                    prime,
                 ),
-                PrimeFieldElementBig::new(4.into(), field),
+                PrimeFieldElementFlexible::new(4u128.into(), prime),
             ],
             vec![
-                PrimeFieldElementBig::new(
+                PrimeFieldElementFlexible::new(
                     270497897142230380135924736767050121205u128.into(),
-                    field,
+                    prime,
                 ),
-                PrimeFieldElementBig::new(13.into(), field),
+                PrimeFieldElementFlexible::new(13u128.into(), prime),
             ],
         ];
-        let mds_inv: Vec<Vec<PrimeFieldElementBig<'a>>> = vec![
+        let mds_inv: Vec<Vec<PrimeFieldElementFlexible>> = vec![
             vec![
-                PrimeFieldElementBig::new(
+                PrimeFieldElementFlexible::new(
                     210387253332845851216830350818816760948u128.into(),
-                    field,
+                    prime,
                 ),
-                PrimeFieldElementBig::new(60110643809384528919094385948233360270u128.into(), field),
+                PrimeFieldElementFlexible::new(
+                    60110643809384528919094385948233360270u128.into(),
+                    prime,
+                ),
             ],
             vec![
-                PrimeFieldElementBig::new(90165965714076793378641578922350040407u128.into(), field),
-                PrimeFieldElementBig::new(
+                PrimeFieldElementFlexible::new(
+                    90165965714076793378641578922350040407u128.into(),
+                    prime,
+                ),
+                PrimeFieldElementFlexible::new(
                     180331931428153586757283157844700080811u128.into(),
-                    field,
+                    prime,
                 ),
             ],
         ];
@@ -177,9 +182,9 @@ impl<'a> RescuePrime<'a> {
             261991152616933455169437121254310265934u128,
             18450316039330448878816627264054416127u128,
         ];
-        let round_constants: Vec<PrimeFieldElementBig<'a>> = round_constants_u128
+        let round_constants: Vec<PrimeFieldElementFlexible> = round_constants_u128
             .into_iter()
-            .map(|v| PrimeFieldElementBig::new(v.into(), field))
+            .map(|v| PrimeFieldElementFlexible::new(v.into(), prime))
             .collect();
 
         Self {
@@ -198,21 +203,21 @@ impl<'a> RescuePrime<'a> {
 
     fn hash_round(
         &self,
-        input_state: Vec<PrimeFieldElementBig<'a>>,
+        input_state: Vec<PrimeFieldElementFlexible>,
         round_number: usize,
-    ) -> Vec<PrimeFieldElementBig<'a>> {
+    ) -> Vec<PrimeFieldElementFlexible> {
         // S-box
-        let mut state: Vec<PrimeFieldElementBig<'a>> = input_state
+        let mut state: Vec<PrimeFieldElementFlexible> = input_state
             .iter()
             .map(|v| v.mod_pow(self.alpha.clone()))
             .collect();
 
         // Matrix
-        let mut temp: Vec<PrimeFieldElementBig> = vec![input_state[0].ring_zero(); self.m];
+        let mut temp: Vec<PrimeFieldElementFlexible> = vec![input_state[0].ring_zero(); self.m];
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
-                temp[i] = temp[i].clone() + self.mds[i][j].clone() * state[j].clone();
+                temp[i] += self.mds[i][j] * state[j];
             }
         }
 
@@ -220,7 +225,7 @@ impl<'a> RescuePrime<'a> {
         state = temp
             .into_iter()
             .enumerate()
-            .map(|(i, val)| val + self.round_constants[2 * round_number * self.m + i].clone())
+            .map(|(i, val)| val + self.round_constants[2 * round_number * self.m + i])
             .collect();
 
         // Backward half-round
@@ -235,7 +240,7 @@ impl<'a> RescuePrime<'a> {
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
-                temp[i] = temp[i].clone() + self.mds[i][j].clone() * state[j].clone();
+                temp[i] += self.mds[i][j] * state[j];
             }
         }
 
@@ -243,26 +248,24 @@ impl<'a> RescuePrime<'a> {
         state = temp
             .into_iter()
             .enumerate()
-            .map(|(i, val)| {
-                val + self.round_constants[2 * round_number * self.m + self.m + i].clone()
-            })
+            .map(|(i, val)| val + self.round_constants[2 * round_number * self.m + self.m + i])
             .collect();
 
         state
     }
 
     /// Return the Rescue-Prime hash value
-    pub fn hash(&self, input: &PrimeFieldElementBig<'a>) -> PrimeFieldElementBig<'a> {
+    pub fn hash(&self, input: &PrimeFieldElementFlexible) -> PrimeFieldElementFlexible {
         let mut state = vec![input.ring_zero(); self.m];
         state[0] = input.to_owned();
 
         state = (0..self.steps_count).fold(state, |state, i| self.hash_round(state, i));
 
-        state[0].clone()
+        state[0]
     }
 
-    pub fn trace(&self, input: &PrimeFieldElementBig<'a>) -> Vec<Vec<PrimeFieldElementBig>> {
-        let mut trace: Vec<Vec<PrimeFieldElementBig>> = vec![];
+    pub fn trace(&self, input: &PrimeFieldElementFlexible) -> Vec<Vec<PrimeFieldElementFlexible>> {
+        let mut trace: Vec<Vec<PrimeFieldElementFlexible>> = vec![];
         let mut state = vec![input.ring_zero(); self.m];
         state[0] = input.to_owned();
         trace.push(state.clone());
@@ -279,10 +282,13 @@ impl<'a> RescuePrime<'a> {
 
     pub fn eval_and_trace(
         &self,
-        input: &PrimeFieldElementBig<'a>,
-    ) -> (PrimeFieldElementBig, Vec<Vec<PrimeFieldElementBig>>) {
+        input: &PrimeFieldElementFlexible,
+    ) -> (
+        PrimeFieldElementFlexible,
+        Vec<Vec<PrimeFieldElementFlexible>>,
+    ) {
         let trace = self.trace(input);
-        let output = trace.last().unwrap()[0].clone();
+        let output = trace.last().unwrap()[0];
 
         (output, trace)
     }
@@ -291,15 +297,16 @@ impl<'a> RescuePrime<'a> {
     /// (first_round_constants[register], second_round_constants[register])
     pub fn get_round_constant_polynomials(
         &self,
-        omicron: &'a PrimeFieldElementBig,
+        omicron: PrimeFieldElementFlexible,
     ) -> (
-        Vec<MPolynomial<PrimeFieldElementBig<'a>>>,
-        Vec<MPolynomial<PrimeFieldElementBig<'a>>>,
+        Vec<MPolynomial<PrimeFieldElementFlexible>>,
+        Vec<MPolynomial<PrimeFieldElementFlexible>>,
     ) {
-        let domain = omicron.get_generator_domain();
-        let mut first_round_constants: Vec<MPolynomial<PrimeFieldElementBig>> = vec![];
+        let domain = omicron.get_cyclic_group_elements(None);
+        let mut first_round_constants: Vec<MPolynomial<PrimeFieldElementFlexible>> = vec![];
+        let variable_count = 1 + 2 * self.m;
         for i in 0..self.m {
-            let values: Vec<PrimeFieldElementBig> = self
+            let values: Vec<PrimeFieldElementFlexible> = self
                 .round_constants
                 .clone()
                 .into_iter()
@@ -307,19 +314,23 @@ impl<'a> RescuePrime<'a> {
                 .step_by(2 * self.m)
                 .collect();
             // let coefficients = intt(&values, omicron);
-            let points: Vec<(PrimeFieldElementBig, PrimeFieldElementBig)> = domain
+            let points: Vec<(PrimeFieldElementFlexible, PrimeFieldElementFlexible)> = domain
                 .clone()
                 .iter()
                 .zip(values.iter())
                 .map(|(x, y)| (x.to_owned(), y.to_owned()))
                 .collect();
             let coefficients = Polynomial::slow_lagrange_interpolation(&points).coefficients;
-            first_round_constants.push(MPolynomial::lift(Polynomial { coefficients }, 0));
+            first_round_constants.push(MPolynomial::lift(
+                Polynomial { coefficients },
+                0,
+                variable_count,
+            ));
         }
 
-        let mut second_round_constants: Vec<MPolynomial<PrimeFieldElementBig>> = vec![];
+        let mut second_round_constants: Vec<MPolynomial<PrimeFieldElementFlexible>> = vec![];
         for i in 0..self.m {
-            let values: Vec<PrimeFieldElementBig> = self
+            let values: Vec<PrimeFieldElementFlexible> = self
                 .round_constants
                 .clone()
                 .into_iter()
@@ -327,14 +338,18 @@ impl<'a> RescuePrime<'a> {
                 .step_by(2 * self.m)
                 .collect();
             // let coefficients = intt(&values, omicron);
-            let points: Vec<(PrimeFieldElementBig, PrimeFieldElementBig)> = domain
+            let points: Vec<(PrimeFieldElementFlexible, PrimeFieldElementFlexible)> = domain
                 .clone()
                 .iter()
                 .zip(values.iter())
                 .map(|(x, y)| (x.to_owned(), y.to_owned()))
                 .collect();
             let coefficients = Polynomial::slow_lagrange_interpolation(&points).coefficients;
-            second_round_constants.push(MPolynomial::lift(Polynomial { coefficients }, 0));
+            second_round_constants.push(MPolynomial::lift(
+                Polynomial { coefficients },
+                0,
+                variable_count,
+            ));
         }
 
         (first_round_constants, second_round_constants)
@@ -348,34 +363,33 @@ impl<'a> RescuePrime<'a> {
     // `domain` (scalar), `trace` (vector), `next_trace` (vector).
     pub fn get_air_constraints(
         &self,
-        omicron: &'a PrimeFieldElementBig,
-    ) -> Vec<MPolynomial<PrimeFieldElementBig<'a>>> {
+        omicron: PrimeFieldElementFlexible,
+    ) -> Vec<MPolynomial<PrimeFieldElementFlexible>> {
         let (first_step_constants, second_step_constants) =
             self.get_round_constant_polynomials(omicron);
 
-        let variables = MPolynomial::variables(1 + 2 * self.m, omicron.ring_one());
+        let variable_count = 1 + 2 * self.m;
+        let variables = MPolynomial::variables(variable_count, omicron.ring_one());
         let previous_state = &variables[1..(self.m + 1)];
         let next_state = &variables[(self.m + 1)..(2 * self.m + 1)];
         let one = omicron.ring_one();
-        let mut air: Vec<MPolynomial<PrimeFieldElementBig>> = vec![];
+        let mut air: Vec<MPolynomial<PrimeFieldElementFlexible>> = vec![];
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
-            let mut lhs = MPolynomial::from_constant(omicron.ring_zero());
+            let mut lhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
             for k in 0..self.m {
-                lhs = lhs
-                    + previous_state[k]
-                        .mod_pow(self.alpha.clone(), one.clone())
-                        .scalar_mul(self.mds[i][k].clone());
+                lhs += previous_state[k]
+                    .mod_pow(self.alpha.clone(), one)
+                    .scalar_mul(self.mds[i][k]);
             }
-            lhs = lhs + first_step_constants[i].clone();
+            lhs += first_step_constants[i].clone();
 
-            let mut rhs = MPolynomial::from_constant(omicron.ring_zero());
+            let mut rhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
             for k in 0..self.m {
-                rhs = rhs
-                    + (next_state[k].clone() - second_step_constants[k].clone())
-                        .scalar_mul(self.mds_inv[i][k].clone());
+                rhs += (next_state[k].clone() - second_step_constants[k].clone())
+                    .scalar_mul(self.mds_inv[i][k]);
             }
-            rhs = rhs.mod_pow(self.alpha.clone(), one.clone());
+            rhs = rhs.mod_pow(self.alpha.clone(), one);
 
             air.push(lhs - rhs);
         }
@@ -385,7 +399,7 @@ impl<'a> RescuePrime<'a> {
 
     pub fn get_boundary_constraints(
         &self,
-        output_element: &'a PrimeFieldElementBig,
+        output_element: PrimeFieldElementFlexible,
     ) -> Vec<BoundaryConstraint> {
         vec![
             BoundaryConstraint {
@@ -404,7 +418,12 @@ impl<'a> RescuePrime<'a> {
 
 #[cfg(test)]
 mod rescue_prime_start_test {
-    use crate::{shared_math::stark::Stark, util_types::proof_stream::ProofStream};
+    use crate::{
+        shared_math::{
+            stark_pfe_flexible::StarkPrimeFieldElementFlexible, traits::GetPrimitiveRootOfUnity,
+        },
+        util_types::proof_stream::ProofStream,
+    };
 
     use super::*;
 
@@ -412,13 +431,15 @@ mod rescue_prime_start_test {
     fn hash_test_vectors() {
         // Values found on:
         // https://github.com/aszepieniec/stark-anatomy/blob/master/code/test_rescue_prime.py
-        let field = PrimeFieldBig::new((407u128 * (1 << 119) + 1).into());
-        let rescue_prime_stark = RescuePrime::from_tutorial(&field);
+        let prime: U256 = (407u128 * (1 << 119) + 1).into();
+        let rescue_prime_stark = RescuePrime::from_tutorial();
 
         // rescue prime test vector 1
-        let one = PrimeFieldElementBig::new(1.into(), &field);
-        let expected_output_one =
-            PrimeFieldElementBig::new(244180265933090377212304188905974087294u128.into(), &field);
+        let one = PrimeFieldElementFlexible::new(1.into(), prime);
+        let expected_output_one = PrimeFieldElementFlexible::new(
+            244180265933090377212304188905974087294u128.into(),
+            prime,
+        );
         let calculated_output_of_one = rescue_prime_stark.hash(&one);
         assert_eq!(expected_output_one, calculated_output_of_one);
 
@@ -430,10 +451,14 @@ mod rescue_prime_start_test {
         );
 
         // rescue prime test vector 2
-        let input_2 =
-            PrimeFieldElementBig::new(57322816861100832358702415967512842988u128.into(), &field);
-        let expected_output_2 =
-            PrimeFieldElementBig::new(89633745865384635541695204788332415101u128.into(), &field);
+        let input_2 = PrimeFieldElementFlexible::new(
+            57322816861100832358702415967512842988u128.into(),
+            prime,
+        );
+        let expected_output_2 = PrimeFieldElementFlexible::new(
+            89633745865384635541695204788332415101u128.into(),
+            prime,
+        );
         let calculated_output_2 = rescue_prime_stark.hash(&input_2);
         assert_eq!(expected_output_2, calculated_output_2);
 
@@ -446,17 +471,24 @@ mod rescue_prime_start_test {
 
     #[test]
     fn air_is_zero_on_execution_trace() {
-        let field = PrimeFieldBig::new((407u128 * (1 << 119) + 1).into());
-        let rescue_prime_stark = RescuePrime::from_tutorial(&field);
+        let prime: U256 = (407u128 * (1 << 119) + 1).into();
+        let rescue_prime_stark = RescuePrime::from_tutorial();
+        let one = PrimeFieldElementFlexible::new(1.into(), prime);
 
         // rescue prime test vector 1
-        let omicron_res = field.get_primitive_root_of_unity(1 << 5);
+        let omicron_res = one.get_primitive_root_of_unity(1 << 5);
         let omicron = omicron_res.0.unwrap();
 
         // Verify that the round constants polynomials are correct
-        let (fst_rc_pol, snd_rc_pol) = rescue_prime_stark.get_round_constant_polynomials(&omicron);
+        let (fst_rc_pol, snd_rc_pol) = rescue_prime_stark.get_round_constant_polynomials(omicron);
         for step in 0..rescue_prime_stark.steps_count {
-            let point = vec![omicron.mod_pow(step.into())];
+            let point = vec![
+                omicron.mod_pow(step.into()),
+                omicron.ring_zero(),
+                omicron.ring_zero(),
+                omicron.ring_zero(),
+                omicron.ring_zero(),
+            ];
             for register in 0..rescue_prime_stark.m {
                 let fst_eval = fst_rc_pol[register].evaluate(&point);
                 assert_eq!(
@@ -482,10 +514,12 @@ mod rescue_prime_start_test {
 
         // Verify that the AIR constraints evaluation over the trace
         // is zero along the trace
-        let input_2 =
-            PrimeFieldElementBig::new(57322816861100832358702415967512842988u128.into(), &field);
+        let input_2 = PrimeFieldElementFlexible::new(
+            57322816861100832358702415967512842988u128.into(),
+            prime,
+        );
         let trace = rescue_prime_stark.trace(&input_2);
-        let air_constraints = rescue_prime_stark.get_air_constraints(&omicron);
+        let air_constraints = rescue_prime_stark.get_air_constraints(omicron);
 
         for step in 0..rescue_prime_stark.steps_count - 1 {
             for air_constraint in air_constraints.iter() {
@@ -503,16 +537,17 @@ mod rescue_prime_start_test {
 
     #[test]
     fn rp_stark_test() {
-        let field = PrimeFieldBig::new((407u128 * (1 << 119) + 1).into());
+        let prime: U256 = (407u128 * (1 << 119) + 1).into();
         let expansion_factor = 4usize;
         let colinearity_checks_count = 2usize;
         let transition_constraints_degree = 2usize;
-        let generator =
-            PrimeFieldElementBig::new(85408008396924667383611388730472331217u128.into(), &field);
-        let rescue_prime_stark = RescuePrime::from_tutorial(&field);
+        let generator = PrimeFieldElementFlexible::new(
+            85408008396924667383611388730472331217u128.into(),
+            prime,
+        );
+        let rescue_prime_stark = RescuePrime::from_tutorial();
 
-        let mut stark = Stark::new(
-            &field,
+        let mut stark = StarkPrimeFieldElementFlexible::new(
             expansion_factor,
             colinearity_checks_count,
             rescue_prime_stark.m,
@@ -522,12 +557,12 @@ mod rescue_prime_start_test {
         );
         stark.prover_preprocess();
 
-        let one = PrimeFieldElementBig::new(1.into(), &field);
+        let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let trace = rescue_prime_stark.trace(&one);
-        let air_constraints = rescue_prime_stark.get_air_constraints(&stark.omicron);
+        let air_constraints = rescue_prime_stark.get_air_constraints(stark.omicron);
         let hash_result = trace.last().unwrap()[0].clone();
         let boundary_constraints: Vec<BoundaryConstraint> =
-            rescue_prime_stark.get_boundary_constraints(&hash_result);
+            rescue_prime_stark.get_boundary_constraints(hash_result);
         let mut proof_stream = ProofStream::default();
         let _proof = stark.prove(
             trace,

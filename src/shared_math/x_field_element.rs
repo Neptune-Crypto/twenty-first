@@ -7,11 +7,13 @@ use crate::shared_math::traits::{
 };
 use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
-use std::ops::Div;
+use std::ops::{AddAssign, Div, MulAssign, SubAssign};
 use std::{
     fmt::Display,
     ops::{Add, Mul, Neg, Sub},
 };
+
+use super::traits::{FromVecu8, GetPrimitiveRootOfUnity};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -61,6 +63,14 @@ impl XFieldElement {
 
         Self {
             coefficients: [element, zero, zero],
+        }
+    }
+
+    pub fn unlift(&self) -> Option<BFieldElement> {
+        if self.coefficients[1].is_zero() && self.coefficients[2].is_zero() {
+            Some(self.coefficients[0])
+        } else {
+            None
         }
     }
 
@@ -125,13 +135,6 @@ impl XFieldElement {
         a.into()
     }
 
-    pub fn get_primitive_root_of_unity(n: u128) -> (Option<XFieldElement>, Vec<u128>) {
-        let (b_root, primes) = BFieldElement::get_primitive_root_of_unity(n);
-        let x_root = b_root.map(XFieldElement::new_const);
-
-        (x_root, primes)
-    }
-
     // `incr` and `decr` are mainly used for testing purposes
     pub fn incr(&mut self, index: usize) {
         self.coefficients[index].increment();
@@ -142,6 +145,15 @@ impl XFieldElement {
     }
 
     // TODO: legendre_symbol
+}
+
+impl GetPrimitiveRootOfUnity for XFieldElement {
+    fn get_primitive_root_of_unity(&self, n: u128) -> (Option<XFieldElement>, Vec<u128>) {
+        let (b_root, primes) = self.coefficients[0].get_primitive_root_of_unity(n);
+        let x_root = b_root.map(XFieldElement::new_const);
+
+        (x_root, primes)
+    }
 }
 
 impl FieldBatchInversion for XFieldElement {
@@ -159,7 +171,7 @@ impl FieldBatchInversion for XFieldElement {
         for i in 0..input_length {
             assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
             scratch[i] = acc;
-            acc = acc * input[i];
+            acc *= input[i];
         }
 
         acc = acc.inv();
@@ -176,8 +188,8 @@ impl FieldBatchInversion for XFieldElement {
 }
 
 impl GetRandomElements for XFieldElement {
-    fn random_elements(length: usize, mut rng: &mut ThreadRng) -> Vec<Self> {
-        let b_values: Vec<BFieldElement> = BFieldElement::random_elements(length * 3, &mut rng);
+    fn random_elements(length: usize, rng: &mut ThreadRng) -> Vec<Self> {
+        let b_values: Vec<BFieldElement> = BFieldElement::random_elements(length * 3, rng);
 
         let mut values: Vec<XFieldElement> = Vec::with_capacity(length as usize);
         for i in 0..length as usize {
@@ -193,14 +205,14 @@ impl GetRandomElements for XFieldElement {
 }
 
 impl CyclicGroupGenerator for XFieldElement {
-    fn get_cyclic_group(&self) -> Vec<Self> {
+    fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self> {
         let mut val = *self;
         let mut ret: Vec<Self> = vec![Self::ring_one()];
 
         loop {
             ret.push(val);
-            val = val * *self;
-            if val.is_one() {
+            val *= *self;
+            if val.is_one() || max.is_some() && ret.len() >= max.unwrap() {
                 break;
             }
         }
@@ -218,19 +230,18 @@ impl Display for XFieldElement {
     }
 }
 
-impl From<Vec<u8>> for XFieldElement {
-    fn from(bytes: Vec<u8>) -> Self {
+impl FromVecu8 for XFieldElement {
+    fn from_vecu8(&self, bytes: Vec<u8>) -> Self {
         // TODO: See note in BFieldElement's From<Vec<u8>>.
         let bytesize = std::mem::size_of::<u64>();
         let (first_eight_bytes, rest) = bytes.as_slice().split_at(bytesize);
         let (second_eight_bytes, rest2) = rest.split_at(bytesize);
         let (third_eight_bytes, _rest3) = rest2.split_at(bytesize);
 
-        XFieldElement::new([
-            first_eight_bytes.to_vec().into(),
-            second_eight_bytes.to_vec().into(),
-            third_eight_bytes.to_vec().into(),
-        ])
+        let coefficient0 = self.coefficients[0].from_vecu8(first_eight_bytes.to_vec());
+        let coefficient1 = self.coefficients[0].from_vecu8(second_eight_bytes.to_vec());
+        let coefficient2 = self.coefficients[0].from_vecu8(third_eight_bytes.to_vec());
+        XFieldElement::new([coefficient0, coefficient1, coefficient2])
     }
 }
 
@@ -288,6 +299,7 @@ impl New for XFieldElement {
 impl Add for XFieldElement {
     type Output = Self;
 
+    #[inline]
     fn add(self, other: Self) -> Self {
         Self {
             coefficients: [
@@ -315,6 +327,7 @@ impl Add for XFieldElement {
 impl Mul for XFieldElement {
     type Output = Self;
 
+    #[inline]
     fn mul(self, other: Self) -> Self {
         // a_0 * x^2 + b_0 * x + c_0
         let a0 = self.coefficients[2];
@@ -325,6 +338,15 @@ impl Mul for XFieldElement {
         let a1 = other.coefficients[2];
         let b1 = other.coefficients[1];
         let c1 = other.coefficients[0];
+
+        // Optimization for multiplying an X field with a B field element
+        // This optimization is very relevant when doing NTT on the X field
+        // because the `omega` (here: `rhs` live in the B field)
+        if a1.is_zero() && b1.is_zero() {
+            return Self {
+                coefficients: [c0 * c1, b0 * c1, a0 * c1],
+            };
+        }
 
         // (a_0 * x^2 + b_0 * x + c_0) * (a_1 * x^2 + b_1 * x + c_1)
         Self {
@@ -340,6 +362,7 @@ impl Mul for XFieldElement {
 impl Neg for XFieldElement {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self {
         Self {
             coefficients: [
@@ -354,8 +377,57 @@ impl Neg for XFieldElement {
 impl Sub for XFieldElement {
     type Output = Self;
 
+    #[inline]
     fn sub(self, other: Self) -> Self {
         -other + self
+    }
+}
+
+impl AddAssign for XFieldElement {
+    #[inline]
+    fn add_assign(&mut self, rhs: Self) {
+        self.coefficients[0] += rhs.coefficients[0];
+        self.coefficients[1] += rhs.coefficients[1];
+        self.coefficients[2] += rhs.coefficients[2];
+    }
+}
+
+impl SubAssign for XFieldElement {
+    #[inline]
+    fn sub_assign(&mut self, rhs: Self) {
+        self.coefficients[0] -= rhs.coefficients[0];
+        self.coefficients[1] -= rhs.coefficients[1];
+        self.coefficients[2] -= rhs.coefficients[2];
+    }
+}
+
+impl MulAssign for XFieldElement {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Self) {
+        // a_0 * x^2 + b_0 * x + c_0
+        let a0 = self.coefficients[2];
+        let b0 = self.coefficients[1];
+        let c0 = self.coefficients[0];
+
+        // a_1 * x^2 + b_1 * x + c_1
+        let a1 = rhs.coefficients[2];
+        let b1 = rhs.coefficients[1];
+        let c1 = rhs.coefficients[0];
+
+        // Optimization for multiplying an X field with a B field element
+        // This optimization is very relevant when doing NTT on the X field
+        // because the `omega` (here: `rhs` live in the B field)
+        if a1.is_zero() && b1.is_zero() {
+            self.coefficients = [c0 * c1, b0 * c1, a0 * c1];
+            return;
+        }
+
+        // (a_0 * x^2 + b_0 * x + c_0) * (a_1 * x^2 + b_1 * x + c_1)
+        self.coefficients = [
+            c0 * c1 - a0 * b1 - b0 * a1,                     // * x^0
+            b0 * c1 + c0 * b1 - a0 * a1 + a0 * b1 + b0 * a1, // * x^1
+            a0 * c1 + b0 * b1 + c0 * a1 + a0 * a1,           // * x^2
+        ];
     }
 }
 
@@ -381,10 +453,10 @@ impl ModPowU64 for XFieldElement {
 
         while i > 0 {
             if i % 2 == 1 {
-                result = result * x;
+                result *= x;
             }
 
-            x = x * x;
+            x *= x;
             i >>= 1;
         }
 
@@ -814,7 +886,7 @@ mod x_field_element_test {
 
     #[test]
     fn x_field_division_mul_pbt() {
-        let test_iterations = 100;
+        let test_iterations = 1000;
         let mut rng = rand::thread_rng();
         let rands_a = XFieldElement::random_elements(test_iterations, &mut rng);
         let rands_b = XFieldElement::random_elements(test_iterations, &mut rng);
@@ -824,6 +896,27 @@ mod x_field_element_test {
             assert_eq!(ab, ba);
             assert_eq!(ab / b, a);
             assert_eq!(ab / a, b);
+
+            // Test the add/sub/mul assign operators
+            let mut a_minus_b = a.clone();
+            a_minus_b -= b;
+            assert_eq!(a - b, a_minus_b);
+
+            let mut a_plus_b = a.clone();
+            a_plus_b += b;
+            assert_eq!(a + b, a_plus_b);
+
+            let mut a_mul_b = a.clone();
+            a_mul_b *= b;
+            assert_eq!(a * b, a_mul_b);
+
+            // Test the add/sub/mul assign operators, when the higher coefficients are zero
+            let b_field_b = XFieldElement::new_const(b.coefficients[0]);
+            let mut a_mul_b_field_b = a.clone();
+            a_mul_b_field_b *= b_field_b;
+            assert_eq!(a * b_field_b, a_mul_b_field_b);
+            assert_eq!(a, a_mul_b_field_b / b_field_b);
+            assert_eq!(b_field_b, a_mul_b_field_b / a);
         }
     }
 
@@ -858,15 +951,18 @@ mod x_field_element_test {
                 .iter()
                 .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
                 .collect();
-            let root = XFieldElement::get_primitive_root_of_unity(i).0.unwrap();
-            let outputs = ntt::ntt(&inputs, &root);
-            let inverted_outputs = ntt::intt(&outputs, &root);
+            let root = XFieldElement::ring_zero()
+                .get_primitive_root_of_unity(i)
+                .0
+                .unwrap();
+            let outputs = ntt::slow_ntt(&inputs, &root);
+            let inverted_outputs = ntt::slow_intt(&outputs, &root);
             assert_eq!(inputs, inverted_outputs);
 
             // The output should be equivalent to evaluating root^i, i = [0..4]
             // over the polynomium with coefficients 1, 2, 3, 4
             let pol_degree_i_minus_1: Polynomial<XFieldElement> = Polynomial::new(inputs.to_vec());
-            let x_domain = root.get_cyclic_group();
+            let x_domain = root.get_cyclic_group_elements(None);
             for i in 0..outputs.len() {
                 assert_eq!(pol_degree_i_minus_1.evaluate(&x_domain[i]), outputs[i]);
             }

@@ -835,6 +835,7 @@ where
 }
 
 // TODO: Not uniform. We only use this for testing right now.
+#[allow(dead_code)]
 pub fn generate_random_numbers(count: usize, modulus: i128) -> Vec<i128> {
     let mut prng = rand::thread_rng();
 

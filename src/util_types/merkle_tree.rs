@@ -548,7 +548,7 @@ pub struct SaltedMerkleTree<T> {
 
 impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleTree<T> {
     // Build a salted Merkle tree from a slice of serializable values
-    pub fn from_vec(values: &[T], salts_per_element: usize, mut rng: &mut ThreadRng) -> Self {
+    pub fn from_vec(values: &[T], salts_per_element: usize, rng: &mut ThreadRng) -> Self {
         // verify that length of input is power of 2
         if values.len() & (values.len() - 1) != 0 {
             panic!("Size of input for Merkle tree must be a power of 2");
@@ -562,7 +562,7 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
             2 * values.len()
         ];
 
-        let salts: Vec<T> = T::random_elements(salts_per_element * values.len(), &mut rng);
+        let salts: Vec<T> = T::random_elements(salts_per_element * values.len(), rng);
         for i in 0..values.len() {
             let mut leaf_hash_preimage: Vec<u8> =
                 bincode::serialize(&values[i]).expect("Encoding failed");
@@ -703,10 +703,11 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
 mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::prime_field_element::{PrimeField, PrimeFieldElement};
+    use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::utils::{decode_hex, generate_random_numbers, generate_random_numbers_u128};
     use itertools::Itertools;
+    use primitive_types::U256;
     use rand::RngCore;
 
     fn count_hashes(proof: &[(LeaflessPartialAuthenticationPath, Vec<BFieldElement>)]) -> usize {
@@ -751,10 +752,10 @@ mod merkle_tree_test {
 
     #[test]
     fn merkle_tree_test_32() {
-        let field = PrimeField::new(1009);
-        let elements: Vec<PrimeFieldElement> = generate_random_numbers(32, 1000)
-            .iter()
-            .map(|x| PrimeFieldElement::new(*x, &field))
+        let prime: U256 = 1009.into();
+        let elements: Vec<PrimeFieldElementFlexible> = generate_random_numbers(32, 1000)
+            .into_iter()
+            .map(|x| PrimeFieldElementFlexible::new(x.into(), prime))
             .collect();
         let mut mt_32 = MerkleTree::from_vec(&elements);
 
@@ -770,7 +771,7 @@ mod merkle_tree_test {
                     indices_usize.push(*elem as usize);
                 }
 
-                let proof: Vec<PartialAuthenticationPath<PrimeFieldElement>> =
+                let proof: Vec<PartialAuthenticationPath<PrimeFieldElementFlexible>> =
                     mt_32.get_multi_proof(&indices_usize);
                 assert!(MerkleTree::verify_multi_proof(
                     mt_32.get_root(),

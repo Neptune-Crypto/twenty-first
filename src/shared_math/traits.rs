@@ -1,9 +1,8 @@
 use rand::prelude::ThreadRng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::convert::From;
 use std::fmt::{Debug, Display};
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 pub trait IdentityValues {
     fn is_zero(&self) -> bool;
@@ -16,7 +15,7 @@ pub trait CyclicGroupGenerator
 where
     Self: Sized,
 {
-    fn get_cyclic_group(&self) -> Vec<Self>;
+    fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self>;
 }
 
 pub trait FieldBatchInversion
@@ -26,11 +25,26 @@ where
     fn batch_inversion(elements: Vec<Self>) -> Vec<Self>;
 }
 
+pub trait GetPrimitiveRootOfUnity
+where
+    Self: Sized,
+{
+    fn get_primitive_root_of_unity(&self, n: u128) -> (Option<Self>, Vec<u128>);
+}
+
 pub trait GetRandomElements
 where
     Self: Sized,
 {
     fn random_elements(length: usize, rng: &mut ThreadRng) -> Vec<Self>;
+}
+
+// TODO: Remove in favor of CyclicGroupGenerator
+pub trait GetGeneratorDomain
+where
+    Self: Sized,
+{
+    fn get_generator_domain(&self) -> Vec<Self>;
 }
 
 pub trait ModPowU64 {
@@ -47,6 +61,10 @@ pub trait New {
     fn new_from_usize(&self, value: usize) -> Self;
 }
 
+pub trait FromVecu8 {
+    fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
+}
+
 pub trait PrimeFieldElement {
     type Elem: Clone
         + Eq
@@ -57,13 +75,17 @@ pub trait PrimeFieldElement {
         + Debug
         + IdentityValues
         + Add<Output = Self::Elem>
+        + AddAssign
+        + SubAssign
+        + MulAssign
         + Sub<Output = Self::Elem>
         + Mul<Output = Self::Elem>
         + Div<Output = Self::Elem>
         + Neg<Output = Self::Elem>
-        + From<Vec<u8>> // TODO: Replace with From<Blake3Hash>
+        + FromVecu8 // TODO: Replace with From<Blake3Hash>
         + New
         + CyclicGroupGenerator
         + FieldBatchInversion
-        + ModPowU32;
+        + ModPowU32
+        + GetPrimitiveRootOfUnity;
 }

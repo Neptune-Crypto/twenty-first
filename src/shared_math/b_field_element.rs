@@ -1,3 +1,4 @@
+use super::traits::{FromVecu8, GetPrimitiveRootOfUnity};
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
@@ -5,13 +6,50 @@ use crate::shared_math::traits::{
 };
 use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
+use phf::phf_map;
 use rand::prelude::ThreadRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
+use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
     fmt::{self, Display},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
+};
+
+static PRIMITIVE_ROOTS: phf::Map<u64, u128> = phf_map! {
+    2u64 => 18446744069414584320,
+    4u64 => 281474976710656,
+    8u64 => 18446744069397807105,
+    16u64 => 17293822564807737345,
+    32u64 => 70368744161280,
+    64u64 => 549755813888,
+    128u64 => 17870292113338400769,
+    256u64 => 13797081185216407910,
+    512u64 => 1803076106186727246,
+    1024u64 => 11353340290879379826,
+    2048u64 => 455906449640507599,
+    4096u64 => 17492915097719143606,
+    8192u64 => 1532612707718625687,
+    16384u64 => 16207902636198568418,
+    32768u64 => 17776499369601055404,
+    65536u64 => 6115771955107415310,
+    131072u64 => 12380578893860276750,
+    262144u64 => 9306717745644682924,
+    524288u64 => 18146160046829613826,
+    1048576u64 => 3511170319078647661,
+    2097152u64 => 17654865857378133588,
+    4194304u64 => 5416168637041100469,
+    8388608u64 => 16905767614792059275,
+    16777216u64 => 9713644485405565297,
+    33554432u64 => 5456943929260765144,
+    67108864u64 => 17096174751763063430,
+    134217728u64 => 1213594585890690845,
+    268435456u64 => 6414415596519834757,
+    536870912u64 => 16116352524544190054,
+    1073741824u64 => 9123114210336311365,
+    2147483648u64 => 4614640910117430873,
+    4294967296u64 => 1753635133440165772,
 };
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
@@ -114,66 +152,6 @@ impl BFieldElement {
         }
     }
 
-    // TODO: Maybe make u128 into <T>?
-    pub fn get_primitive_root_of_unity(n: u128) -> (Option<BFieldElement>, Vec<u128>) {
-        let mut primes: Vec<u128> = vec![];
-
-        if n <= 1 {
-            return (Some(BFieldElement::ring_one()), primes);
-        }
-
-        // Calculate prime factorization of n
-        // Check if n = 2^k
-        if n & (n - 1) == 0 {
-            primes = vec![2];
-        } else {
-            let mut m = n;
-            for prime in FIRST_THOUSAND_PRIMES.iter().map(|&p| p as u128) {
-                if m == 1 {
-                    break;
-                }
-                if m % prime == 0 {
-                    primes.push(prime);
-                    while m % prime == 0 {
-                        m /= prime;
-                    }
-                }
-            }
-            // This might be prohibitively expensive
-            if m > 1 {
-                let mut other_primes = BFieldElement::primes_lt(m)
-                    .into_iter()
-                    .filter(|&x| n % x == 0)
-                    .collect();
-                primes.append(&mut other_primes);
-            }
-        };
-
-        // N must divide the field prime minus one for a primitive nth root of unity to exist
-        if !((Self::QUOTIENT - 1) % n).is_zero() {
-            return (None, primes);
-        }
-
-        let mut primitive_root: Option<BFieldElement> = None;
-        let mut candidate: BFieldElement = BFieldElement::ring_one();
-        #[allow(clippy::suspicious_operation_groupings)]
-        while primitive_root == None && candidate.0 < Self::QUOTIENT {
-            if (-candidate.legendre_symbol()).is_one()
-                && primes.iter().filter(|&x| n % x == 0).all(|x| {
-                    !candidate
-                        .mod_pow_raw(((Self::QUOTIENT - 1) / x) as u64)
-                        .is_one()
-                })
-            {
-                primitive_root = Some(candidate.mod_pow(((Self::QUOTIENT - 1) / n) as u64));
-            }
-
-            candidate.0 += 1;
-        }
-
-        (primitive_root, primes)
-    }
-
     // TODO: Abstract for both i128 and u128 so we don't keep multiple copies of the same algorithm.
     fn primes_lt(bound: u128) -> Vec<u128> {
         let mut primes: Vec<bool> = (0..bound + 1).map(|num| num == 2 || num & 1 != 0).collect();
@@ -237,7 +215,7 @@ impl FieldBatchInversion for BFieldElement {
         for i in 0..input_length {
             assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
             scratch[i] = acc;
-            acc = acc * input[i];
+            acc *= input[i];
         }
 
         acc = acc.inv();
@@ -254,14 +232,14 @@ impl FieldBatchInversion for BFieldElement {
 }
 
 impl CyclicGroupGenerator for BFieldElement {
-    fn get_cyclic_group(&self) -> Vec<Self> {
+    fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self> {
         let mut val = *self;
-        let mut ret: Vec<Self> = vec![Self::ring_one()];
+        let mut ret: Vec<Self> = vec![self.ring_one()];
 
         loop {
             ret.push(val);
-            val = val * *self;
-            if val.is_one() {
+            val *= *self;
+            if val.is_one() || max.is_some() && ret.len() >= max.unwrap() {
                 break;
             }
         }
@@ -295,8 +273,8 @@ impl New for BFieldElement {
 }
 
 // This is used for: Convert a hash value to a BFieldElement. Consider making From<Blake3Hash> trait
-impl From<Vec<u8>> for BFieldElement {
-    fn from(bytes: Vec<u8>) -> Self {
+impl FromVecu8 for BFieldElement {
+    fn from_vecu8(&self, bytes: Vec<u8>) -> Self {
         // TODO: Right now we only accept if 'bytes' has 8 bytes; while that is true in
         // the single call site this is used, it also seems unnecessarily fragile (when we
         // change from BLAKE3 to Rescue-Prime, the hash length will change and this will be
@@ -355,6 +333,7 @@ impl IdentityValues for BFieldElement {
 impl Add for BFieldElement {
     type Output = Self;
 
+    #[inline]
     fn add(self, other: Self) -> Self {
         Self {
             0: (self.0 + other.0) % Self::QUOTIENT,
@@ -362,9 +341,31 @@ impl Add for BFieldElement {
     }
 }
 
+impl AddAssign for BFieldElement {
+    #[inline]
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 = (self.0 + rhs.0) % Self::QUOTIENT;
+    }
+}
+
+impl SubAssign for BFieldElement {
+    #[inline]
+    fn sub_assign(&mut self, rhs: Self) {
+        self.0 = (Self::QUOTIENT - rhs.0 + self.0) % Self::QUOTIENT;
+    }
+}
+
+impl MulAssign for BFieldElement {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Self) {
+        self.0 = (self.0 * rhs.0) % Self::QUOTIENT;
+    }
+}
+
 impl Mul for BFieldElement {
     type Output = Self;
 
+    #[inline]
     fn mul(self, other: Self) -> Self {
         Self {
             0: (self.0 * other.0) % Self::QUOTIENT,
@@ -375,6 +376,7 @@ impl Mul for BFieldElement {
 impl Neg for BFieldElement {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self {
         Self {
             0: Self::QUOTIENT - self.0,
@@ -395,6 +397,7 @@ impl Rem for BFieldElement {
 impl Sub for BFieldElement {
     type Output = Self;
 
+    #[inline]
     fn sub(self, other: Self) -> Self {
         -other + self
     }
@@ -414,6 +417,75 @@ impl Div for BFieldElement {
 impl ModPowU64 for BFieldElement {
     fn mod_pow_u64(&self, pow: u64) -> Self {
         self.mod_pow(pow)
+    }
+}
+
+impl GetPrimitiveRootOfUnity for BFieldElement {
+    fn get_primitive_root_of_unity(&self, n: u128) -> (Option<BFieldElement>, Vec<u128>) {
+        // Check if n is one of the values for which we have pre-calculated roots
+        if PRIMITIVE_ROOTS.contains_key(&(n as u64)) {
+            return (
+                Some(BFieldElement::new(PRIMITIVE_ROOTS[&(n as u64)])),
+                vec![2],
+            );
+        }
+
+        let mut primes: Vec<u128> = vec![];
+
+        if n <= 1 {
+            return (Some(BFieldElement::ring_one()), primes);
+        }
+
+        // Calculate prime factorization of n
+        // Check if n = 2^k
+        if n & (n - 1) == 0 {
+            primes = vec![2];
+        } else {
+            let mut m = n;
+            for prime in FIRST_THOUSAND_PRIMES.iter().map(|&p| p as u128) {
+                if m == 1 {
+                    break;
+                }
+                if m % prime == 0 {
+                    primes.push(prime);
+                    while m % prime == 0 {
+                        m /= prime;
+                    }
+                }
+            }
+            // This might be prohibitively expensive
+            if m > 1 {
+                let mut other_primes = BFieldElement::primes_lt(m)
+                    .into_iter()
+                    .filter(|&x| n % x == 0)
+                    .collect();
+                primes.append(&mut other_primes);
+            }
+        };
+
+        // N must divide the field prime minus one for a primitive nth root of unity to exist
+        if !((Self::QUOTIENT - 1) % n).is_zero() {
+            return (None, primes);
+        }
+
+        let mut primitive_root: Option<BFieldElement> = None;
+        let mut candidate: BFieldElement = BFieldElement::ring_one();
+        #[allow(clippy::suspicious_operation_groupings)]
+        while primitive_root == None && candidate.0 < Self::QUOTIENT {
+            if (-candidate.legendre_symbol()).is_one()
+                && primes.iter().filter(|&x| n % x == 0).all(|x| {
+                    !candidate
+                        .mod_pow_raw(((Self::QUOTIENT - 1) / x) as u64)
+                        .is_one()
+                })
+            {
+                primitive_root = Some(candidate.mod_pow(((Self::QUOTIENT - 1) / n) as u64));
+            }
+
+            candidate.0 += 1;
+        }
+
+        (primitive_root, primes)
     }
 }
 
@@ -593,7 +665,7 @@ mod b_prime_field_element_test {
 
     #[test]
     fn mul_div_plus_minus_property_based_test() {
-        let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::QUOTIENT as i128);
+        let rands: Vec<i128> = generate_random_numbers(300, BFieldElement::QUOTIENT as i128);
         for i in 1..rands.len() {
             let a = bfield_elem!(rands[i - 1] as u128);
             let b = bfield_elem!(rands[i] as u128);
@@ -609,6 +681,19 @@ mod b_prime_field_element_test {
             assert_eq!(b - a + a, b);
             assert!((a - a).is_zero());
             assert!((b - b).is_zero());
+
+            // Test the add/sub/mul assign operators
+            let mut a_minus_b = a.clone();
+            a_minus_b -= b;
+            assert_eq!(a - b, a_minus_b);
+
+            let mut a_plus_b = a.clone();
+            a_plus_b += b;
+            assert_eq!(a + b, a_plus_b);
+
+            let mut a_mul_b = a.clone();
+            a_mul_b *= b;
+            assert_eq!(a * b, a_mul_b);
         }
     }
 
@@ -655,5 +740,20 @@ mod b_prime_field_element_test {
         assert!(BFieldElement::new(18446744069397807105).mod_pow(8).is_one());
         assert!(BFieldElement::new(2625919085333925275).mod_pow(10).is_one());
         assert!(BFieldElement::new(281474976645120).mod_pow(12).is_one());
+    }
+
+    #[test]
+    fn get_primitive_root_of_unity_test() {
+        for i in 1..33 {
+            let power = 1 << i;
+            let root_result = BFieldElement::ring_one().get_primitive_root_of_unity(power);
+            match root_result.0 {
+                Some(root) => println!("{} => {},", power, root),
+                None => println!("Found no primitive root of unity for n = {}", power),
+            };
+            let root = root_result.0.unwrap();
+            assert!(root.mod_pow(power as u64).is_one());
+            assert!(!root.mod_pow(power as u64 / 2).is_one());
+        }
     }
 }
