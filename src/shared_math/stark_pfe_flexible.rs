@@ -861,7 +861,7 @@ pub mod test_stark_pfef {
         let boundary_constraints = rescue_prime.get_boundary_constraints(output_element);
         let bcs_formatted = stark.format_boundary_constraints(boundary_constraints);
         let boundary_zerofiers: Vec<Polynomial<PrimeFieldElementFlexible>> =
-            get_boundary_zerofiers(bcs_formatted.clone());
+            get_boundary_zerofiers(bcs_formatted);
         let degrees = stark.boundary_quotient_degree_bounds(&boundary_zerofiers);
         assert_eq!(vec![34, 34], degrees);
     }
@@ -899,7 +899,7 @@ pub mod test_stark_pfef {
 
         let input = PrimeFieldElementFlexible::new(228894434762048332457318u128.into(), prime);
         let trace = rescue_prime.trace(&input);
-        let output_element = trace[rescue_prime.steps_count][0].clone();
+        let output_element = trace[rescue_prime.steps_count][0];
         let transition_constraints = rescue_prime.get_air_constraints(stark.omicron);
         let boundary_constraints = rescue_prime.get_boundary_constraints(output_element);
         let mut proof_stream = ProofStream::default();

@@ -671,15 +671,15 @@ mod b_prime_field_element_test {
             assert!((b - b).is_zero());
 
             // Test the add/sub/mul assign operators
-            let mut a_minus_b = a.clone();
+            let mut a_minus_b = a;
             a_minus_b -= b;
             assert_eq!(a - b, a_minus_b);
 
-            let mut a_plus_b = a.clone();
+            let mut a_plus_b = a;
             a_plus_b += b;
             assert_eq!(a + b, a_plus_b);
 
-            let mut a_mul_b = a.clone();
+            let mut a_mul_b = a;
             a_mul_b *= b;
             assert_eq!(a * b, a_mul_b);
         }

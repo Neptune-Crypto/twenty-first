@@ -495,21 +495,20 @@ mod test_x_field_fri {
         let subgroup = fri.omega.get_cyclic_group_elements(None);
 
         let mut points: Vec<XFieldElement>;
-        for n in vec![1, 10, 50, 100, 255] {
-            points = subgroup.clone().iter().map(|p| p.mod_pow_u32(n)).collect();
+        for n in &[1, 10, 50, 100, 255] {
+            points = subgroup.clone().iter().map(|p| p.mod_pow_u32(*n)).collect();
 
             // TODO: Test elsewhere that proof_stream can be re-used for multiple .prove().
             let mut proof_stream: ProofStream = ProofStream::default();
             fri.prove(&points, &mut proof_stream).unwrap();
 
             let verify_result = fri.verify(&mut proof_stream);
-            if !verify_result.is_ok() {
-                let unique_points = points.iter().unique().collect::<Vec<&XFieldElement>>();
+            if verify_result.is_err() {
                 println!(
                     "There are {} points, |<1024>^{}| = {}, and verify_result = {:?}",
                     points.len(),
                     n,
-                    unique_points.len(),
+                    points.iter().unique().count(),
                     verify_result
                 );
             }
@@ -519,11 +518,7 @@ mod test_x_field_fri {
 
         // Negative test
         let too_high = subgroup_order as u32 / expansion_factor as u32;
-        points = subgroup
-            .clone()
-            .iter()
-            .map(|p| p.mod_pow_u32(too_high))
-            .collect();
+        points = subgroup.iter().map(|p| p.mod_pow_u32(too_high)).collect();
         let mut proof_stream: ProofStream = ProofStream::default();
         fri.prove(&points, &mut proof_stream).unwrap();
         let verify_result = fri.verify(&mut proof_stream);

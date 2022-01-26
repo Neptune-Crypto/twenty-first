@@ -1601,7 +1601,7 @@ mod test_polynomials {
             ..number_of_points)
             .map(|x| {
                 let x = pfb(x as i64, q);
-                (x.clone(), pol.evaluate(&x))
+                (x, pol.evaluate(&x))
             })
             .collect();
 
@@ -2179,8 +2179,8 @@ mod test_polynomials {
         };
         assert_eq!(one, a / b.clone());
         let div_with_zero = zero.clone() / b.clone();
-        let div_with_zero_alt = zero_alt.clone() / b.clone();
-        let div_with_zero_alt_alt = zero_alt_alt.clone() / b.clone();
+        let div_with_zero_alt = zero_alt / b.clone();
+        let div_with_zero_alt_alt = zero_alt_alt / b.clone();
         assert!(div_with_zero.is_zero());
         assert!(!div_with_zero.is_one());
         assert!(div_with_zero_alt.is_zero());
@@ -2282,7 +2282,7 @@ mod test_polynomials {
             Polynomial {
                 coefficients: vec![pfb(0, q), pfb(48, q),],
             },
-            prod_x % (x.clone() * x.clone())
+            prod_x % (x.clone() * x)
         );
     }
 
@@ -2332,10 +2332,10 @@ mod test_polynomials {
             ],
         };
         let linear_combination = tq
-            + ti.scalar_mul(ks[0].clone())
-            + (ti * x_to_3.clone()).scalar_mul(ks[1].clone())
-            + bq.scalar_mul(ks[2].clone())
-            + (bq * x_to_3).scalar_mul(ks[3].clone());
+            + ti.scalar_mul(ks[0])
+            + (ti * x_to_3.clone()).scalar_mul(ks[1])
+            + bq.scalar_mul(ks[2])
+            + (bq * x_to_3).scalar_mul(ks[3]);
         assert_eq!(expected_lc, linear_combination);
 
         let x_values: Vec<PrimeFieldElementFlexible> = vec![
@@ -2565,7 +2565,7 @@ mod test_polynomials {
         let values = poly.fast_coset_evaluate(&_3_17, &_9_17, 8);
 
         let mut domain = vec![_0_17; 8];
-        domain[0] = _3_17.clone();
+        domain[0] = _3_17;
         for i in 1..8 {
             domain[i] = domain[i - 1].to_owned() * _9_17.to_owned();
         }
@@ -2734,7 +2734,7 @@ mod test_polynomials {
                 pfb(30, q),
             ],
         };
-        prod = prod.clone() * x.clone();
+        prod = prod.clone() * x;
         assert_eq!(expected_prod, prod);
         assert_eq!(
             "30x^6 + 16x^5 + 64x^4 + 11x^3 + 25x^2 + 48x",
@@ -2865,7 +2865,7 @@ mod test_polynomials {
                 2 * 14,             // 1st degree
                 2 * 3 * 14 + 1,     // 2nd degree
                 2 * 3 + 2 * 4 * 14, // 3rd degree
-                3 * 3 + 2 * 1 * 4,  // 4th degree
+                3 * 3 + 2 * 4,      // 4th degree
                 2 * 3 * 4,          // 5th degree
                 4 * 4,              // 6th degree
             ]

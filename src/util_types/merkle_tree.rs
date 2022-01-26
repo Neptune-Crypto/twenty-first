@@ -711,17 +711,7 @@ mod merkle_tree_test {
     use rand::RngCore;
 
     fn count_hashes(proof: &[(LeaflessPartialAuthenticationPath, Vec<BFieldElement>)]) -> usize {
-        proof
-            .iter()
-            .map(|y| {
-                y.0 .0
-                    .iter()
-                    .filter(|x| x.is_some())
-                    .map(|x| x.unwrap())
-                    .collect::<Vec<[u8; 32]>>()
-                    .len()
-            })
-            .sum()
+        proof.iter().map(|y| y.0 .0.iter().flatten().count()).sum()
     }
 
     // `verify_authentication_path_dummy' has same interface as `verify_authentication_path_dummy',
@@ -843,18 +833,18 @@ mod merkle_tree_test {
 
         // Degenerate example
         let empty_values: Vec<u128> = vec![];
-        let empty_leafless_proof = tree.get_leafless_multi_proof(&vec![]);
+        let empty_leafless_proof = tree.get_leafless_multi_proof(&[]);
         assert!(MerkleTree::verify_leafless_multi_proof(
             tree.root_hash,
-            &vec![],
+            &[],
             &empty_values,
             &empty_leafless_proof,
         ));
 
-        let empty_leafy_proof = tree.get_multi_proof(&vec![]);
+        let empty_leafy_proof = tree.get_multi_proof(&[]);
         assert!(MerkleTree::verify_multi_proof(
             tree.root_hash,
-            &vec![],
+            &[],
             &empty_leafy_proof,
         ));
     }
@@ -1312,13 +1302,7 @@ mod merkle_tree_test {
         // 6: Ensure that all salts are unique (statistically, they should be)
         assert_eq!(
             tree_b.salts.len(),
-            tree_b
-                .salts
-                .clone()
-                .into_iter()
-                .unique()
-                .collect::<Vec<BFieldElement>>()
-                .len()
+            tree_b.salts.clone().into_iter().unique().count()
         );
         assert_eq!(
             tree_b.internal_merkle_tree.nodes[15].hash, auth_path_b.0[0],

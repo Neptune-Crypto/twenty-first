@@ -308,12 +308,12 @@ mod rescue_prime_test {
             let mut point = vec![omicron.mod_pow(step as u64)];
             point.append(&mut vec![BFieldElement::ring_zero(); 2 * rp.m]);
 
-            for register in 0..rp.m {
-                let fst_eval = fst_rc_pol[register].evaluate(&point);
+            for (register, item) in fst_rc_pol.iter().enumerate().take(rp.m) {
+                let fst_eval = item.evaluate(&point);
                 assert_eq!(rp.round_constants[2 * step * rp.m + register], fst_eval);
             }
-            for register in 0..rp.m {
-                let snd_eval = snd_rc_pol[register].evaluate(&point);
+            for (register, item) in snd_rc_pol.iter().enumerate().take(rp.m) {
+                let snd_eval = item.evaluate(&point);
                 assert_eq!(
                     rp.round_constants[2 * step * rp.m + rp.m + register],
                     snd_eval
@@ -333,13 +333,12 @@ mod rescue_prime_test {
         for step in 0..rp.steps_count - 1 {
             println!("Step {}", step);
             for air_constraint in air_constraints.iter() {
-                let mut point = vec![];
-                point.push(omicron.mod_pow(step as u64));
+                let mut point = vec![omicron.mod_pow(step as u64)];
                 for i in 0..rp.m {
-                    point.push(trace[step][i].clone());
+                    point.push(trace[step][i]);
                 }
                 for i in 0..rp.m {
-                    point.push(trace[step + 1][i].clone());
+                    point.push(trace[step + 1][i]);
                 }
                 let eval = air_constraint.evaluate(&point);
                 assert!(eval.is_zero());
