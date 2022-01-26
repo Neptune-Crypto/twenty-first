@@ -5,9 +5,7 @@ use crate::shared_math::traits::{
 use crate::utils::FIRST_TEN_THOUSAND_PRIMES;
 use num_bigint::{BigInt, Sign};
 use num_traits::{One, Zero};
-use parity_scale_codec::Encode;
 use primitive_types::{U256, U512};
-use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
@@ -31,7 +29,7 @@ pub fn get_prime_with_primitive_root_of_unity(
 
 // Can only be used to represent up to 256 bits numbers, I think. Because mul.
 // If bigger primes are needed, you could convert to BigInt when needed
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct PrimeFieldElementFlexible {
     pub q: U512,
     pub value: U512,
@@ -114,35 +112,6 @@ impl ModPowU64 for PrimeFieldElementFlexible {
         // TODO: This can be sped up by a factor 2 by implementing
         // it for u32 and not using the 64-bit version
         self.mod_pow(exp.into())
-    }
-}
-
-impl<'de> Deserialize<'de> for PrimeFieldElementFlexible {
-    // TODO: Implement, somehow
-    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        // deserializer.deserialize_bytes(visitor)
-        // Ok(Self {
-        //     q: 1.into(),
-        //     value: 1.into(),
-        // })
-        todo!()
-    }
-}
-
-impl Serialize for PrimeFieldElementFlexible {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut bytes: Vec<u8> = Vec::with_capacity(128);
-        let mut q_bytes = self.q.encode();
-        let mut value_bytes = self.value.encode();
-        bytes.append(&mut q_bytes);
-        bytes.append(&mut value_bytes);
-        serializer.serialize_bytes(&bytes)
     }
 }
 
