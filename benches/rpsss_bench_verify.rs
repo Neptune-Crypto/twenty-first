@@ -16,7 +16,6 @@ pub fn get_tutorial_stark<'a>() -> (StarkPrimeFieldElementFlexible, RescuePrime)
     let generator = PrimeFieldElementFlexible::new(generator_value.into(), prime);
 
     let stark = StarkPrimeFieldElementFlexible::new(
-        prime,
         expansion_factor,
         colinearity_checks_count,
         register_count,

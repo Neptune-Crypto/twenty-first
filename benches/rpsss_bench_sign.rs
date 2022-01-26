@@ -16,7 +16,6 @@ pub fn get_tutorial_stark(prime: U256) -> (StarkPrimeFieldElementFlexible, Rescu
         PrimeFieldElementFlexible::new(85408008396924667383611388730472331217u128.into(), prime);
 
     let stark = StarkPrimeFieldElementFlexible::new(
-        prime,
         expansion_factor,
         colinearity_checks_count,
         register_count,
