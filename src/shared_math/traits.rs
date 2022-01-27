@@ -37,6 +37,7 @@ where
     fn get_primitive_root_of_unity(&self, n: u128) -> (Option<Self>, Vec<u128>);
 }
 
+// Used for testing.
 pub trait GetRandomElements
 where
     Self: Sized,
