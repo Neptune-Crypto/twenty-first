@@ -7,7 +7,11 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 pub trait IdentityValues {
     fn is_zero(&self) -> bool;
     fn is_one(&self) -> bool;
+
+    #[must_use]
     fn ring_zero(&self) -> Self;
+
+    #[must_use]
     fn ring_one(&self) -> Self;
 }
 
@@ -48,20 +52,24 @@ where
 }
 
 pub trait ModPowU64 {
+    #[must_use]
     fn mod_pow_u64(&self, pow: u64) -> Self;
 }
 
 pub trait ModPowU32 {
+    #[must_use]
     fn mod_pow_u32(&self, exp: u32) -> Self;
 }
 
 // We **cannot** use the std library From/Into traits as they cannot
 // capture which field the new element is a member of.
 pub trait New {
+    #[must_use]
     fn new_from_usize(&self, value: usize) -> Self;
 }
 
 pub trait FromVecu8 {
+    #[must_use]
     fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
 }
 

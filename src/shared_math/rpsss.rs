@@ -96,7 +96,7 @@ mod test_rpsss {
             rp: rp.clone(),
         };
         let document_string: String = "Hello Neptune!".to_string();
-        let document: Vec<u8> = document_string.clone().into_bytes();
+        let document: Vec<u8> = document_string.into_bytes();
 
         let (sk, pk) = rpsss_no_preprocess.keygen();
         println!("secret key = {}, public key = {}", sk.value, pk.value);
@@ -120,7 +120,7 @@ mod test_rpsss {
         println!("proof-size: {} bytes", signature.proof.len());
 
         if let Some(last) = signature.proof.last_mut() {
-            *last = *last ^ 0x01;
+            *last ^= 0x01;
         }
 
         assert!(!rpsss.verify(&pk, &signature, &document));
@@ -128,20 +128,20 @@ mod test_rpsss {
         // Set the last byte of the proof stream back and change the
         // first byte and verify that it still fails
         if let Some(last) = signature.proof.last_mut() {
-            *last = *last ^ 0x01;
+            *last ^= 0x01;
         }
         if let Some(first) = signature.proof.first_mut() {
-            *first = *first ^ 0x01;
+            *first ^= 0x01;
         }
 
         assert!(!rpsss.verify(&pk, &signature, &document));
 
         // A valid proof is rejected if the `document` argument is wrong
         if let Some(first) = signature.proof.first_mut() {
-            *first = *first ^ 0x01;
+            *first ^= 0x01;
         }
         let bad_document_string: String = "Hello Saturn!".to_string();
-        let bad_document: Vec<u8> = bad_document_string.clone().into_bytes();
+        let bad_document: Vec<u8> = bad_document_string.into_bytes();
         assert!(!rpsss.verify(&pk, &signature, &bad_document));
         assert!(rpsss.verify(&pk, &signature, &document));
     }

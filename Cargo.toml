@@ -5,7 +5,6 @@ authors = ["sword_smith <thorkilk@gmail.me>"]
 edition = "2018"
 
 [dev-dependencies]
-cargo-criterion = "1.1"
 criterion = "0.3"
 proptest = "1.0"
 

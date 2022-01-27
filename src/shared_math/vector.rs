@@ -131,6 +131,7 @@ where
         self.values[row]
     }
 
+    #[must_use]
     pub fn concat(&self, other: Vector<U>) -> Self {
         let mut values = self.values.clone();
         let mut others = other.values;
@@ -183,7 +184,8 @@ where
     // Returns a new vector, as the allocation for a new vector is needed
     // to prevent a wrong calculation anyway.
     // Also: the height may change as a result of matrix multiplication.
-    pub fn mul(&self, matrix: &Matrix<U>) -> Vector<U> {
+    #[must_use]
+    pub fn mul(&self, matrix: &Matrix<U>) -> Self {
         if self.height() != matrix.length {
             panic!(
                 "Incompatible matrix and vector size. vector height = {}, matrix length = {}",
@@ -204,6 +206,7 @@ where
         new_vector
     }
 
+    #[must_use]
     pub fn hadamard_product(self, other: Self) -> Self {
         if self.height() != other.height() {
             panic!(

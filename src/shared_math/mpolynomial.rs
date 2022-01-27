@@ -234,17 +234,16 @@ impl<
     > Display for MPolynomial<U>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let output;
-        if self.is_zero() {
-            output = "0".to_string();
+        let output = if self.is_zero() {
+            "0".to_string()
         } else {
             let mut term_strings = self
                 .coefficients
                 .iter()
                 .sorted_by_key(|x| x.0[0])
                 .map(|(k, v)| Self::term_print(k, v));
-            output = term_strings.join("\n+ ");
-        }
+            term_strings.join("\n+ ")
+        };
 
         write!(f, "\n  {}", output)
     }
@@ -454,8 +453,7 @@ impl<
         let one: U = point[0].coefficients[0].ring_one(); // guaranteed to exist because of above checks
         let exponents_set: HashSet<Vec<u64>> = mpols
             .iter()
-            .map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
-            .flatten()
+            .flat_map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
             .collect();
         timer.elapsed("calculated exponents_set");
         let mut exponents_list: Vec<Vec<u64>> = if exponents_set.contains(&vec![0; variable_count])
@@ -612,7 +610,7 @@ impl<
             .coefficients
             .par_iter()
             .map(|(k, v)| exponents_memoization[k].clone().scalar_mul(v.clone()))
-            .reduce(|| Polynomial::ring_zero(), |a, b| a + b);
+            .reduce(Polynomial::ring_zero, |a, b| a + b);
 
         acc
     }
@@ -801,6 +799,7 @@ impl<
         acc
     }
 
+    #[must_use]
     pub fn scalar_mul(&self, factor: U) -> Self {
         if self.is_zero() {
             return Self::zero(self.variable_count);
@@ -827,6 +826,7 @@ impl<
         }
     }
 
+    #[must_use]
     pub fn mod_pow(&self, pow: BigInt, one: U) -> Self {
         // Handle special case of 0^0
         if pow.is_zero() {
@@ -864,6 +864,7 @@ impl<
         acc
     }
 
+    #[must_use]
     pub fn square(&self) -> Self {
         if self.is_zero() {
             return Self::zero(self.variable_count);
@@ -1355,13 +1356,10 @@ mod test_mpolynomials {
         assert_eq!(x_minus_xz, x.clone() - xz.clone());
 
         let big = get_big_mpol(q);
-        assert_eq!(big.clone(), big.clone() - x.clone() + x.clone());
-        assert_eq!(big.clone(), big.clone() - xz.clone() + xz.clone());
-        assert_eq!(big.clone(), big.clone() - big.clone() + big.clone());
-        assert_eq!(
-            big.clone(),
-            big.clone() - x_minus_xz.clone() + x_minus_xz.clone()
-        );
+        assert_eq!(big, big.clone() - x.clone() + x);
+        assert_eq!(big, big.clone() - xz.clone() + xz);
+        assert_eq!(big, big.clone() - big.clone() + big.clone());
+        assert_eq!(big, big.clone() - x_minus_xz.clone() + x_minus_xz);
 
         // Catch error fixed in sub where similar exponents in both terms of
         // `a(x,y) - b(x,y)` were calculated as `c_b - c_a` instead of as `c_a - c_b`,
@@ -1378,8 +1376,8 @@ mod test_mpolynomials {
         assert_eq!(_6, _8.clone() - _2.clone());
         assert_eq!(_4, _6.clone() - _2.clone());
         assert_eq!(_2, _4.clone() - _2.clone());
-        assert_eq!(_6, _4.clone() + _2.clone());
-        assert_eq!(_16, _8.clone() + _8.clone());
+        assert_eq!(_6, _4 + _2);
+        assert_eq!(_16, _8.clone() + _8);
     }
 
     #[test]
@@ -1390,7 +1388,7 @@ mod test_mpolynomials {
         let x_squared = get_x_squared(q);
         let xz = get_xz(q);
         assert_eq!(x_squared, x.clone() * x.clone());
-        assert_eq!(xz, x.clone() * z.clone());
+        assert_eq!(xz, x * z);
     }
 
     #[test]
@@ -1400,47 +1398,37 @@ mod test_mpolynomials {
         let x = get_x(q);
         let x_squared = get_x_squared(q);
         let x_quartic = get_x_quartic(q);
-        assert_eq!(x_squared, x.mod_pow(2.into(), one.clone()));
-        assert_eq!(x_quartic, x.mod_pow(4.into(), one.clone()));
-        assert_eq!(x_quartic, x_squared.mod_pow(2.into(), one.clone()));
-        assert_eq!(
-            get_x_squared_z_squared(q),
-            get_xz(q).mod_pow(2.into(), one.clone())
-        );
+        assert_eq!(x_squared, x.mod_pow(2.into(), one));
+        assert_eq!(x_quartic, x.mod_pow(4.into(), one));
+        assert_eq!(x_quartic, x_squared.mod_pow(2.into(), one));
+        assert_eq!(get_x_squared_z_squared(q), get_xz(q).mod_pow(2.into(), one));
 
         assert_eq!(
             x_squared.scalar_mul(pfb(9, q)),
-            x.scalar_mul(pfb(3, q)).mod_pow(2.into(), one.clone())
+            x.scalar_mul(pfb(3, q)).mod_pow(2.into(), one)
         );
         assert_eq!(
             x_squared.scalar_mul(pfb(16, q)),
-            x.scalar_mul(pfb(4, q)).mod_pow(2.into(), one.clone())
+            x.scalar_mul(pfb(4, q)).mod_pow(2.into(), one)
         );
         assert_eq!(
             x_quartic.scalar_mul(pfb(16, q)),
-            x.scalar_mul(pfb(2, q)).mod_pow(4.into(), one.clone())
+            x.scalar_mul(pfb(2, q)).mod_pow(4.into(), one)
         );
-        assert_eq!(x_quartic, x.mod_pow(4.into(), one.clone()));
-        assert_eq!(x_quartic, x_squared.mod_pow(2.into(), one.clone()));
-        assert_eq!(
-            get_x_squared_z_squared(q),
-            get_xz(q).mod_pow(2.into(), one.clone())
-        );
+        assert_eq!(x_quartic, x.mod_pow(4.into(), one));
+        assert_eq!(x_quartic, x_squared.mod_pow(2.into(), one));
+        assert_eq!(get_x_squared_z_squared(q), get_xz(q).mod_pow(2.into(), one));
         assert_eq!(
             get_x_squared_z_squared(q).scalar_mul(pfb(25, q)),
-            get_xz(q)
-                .scalar_mul(pfb(5, q))
-                .mod_pow(2.into(), one.clone())
+            get_xz(q).scalar_mul(pfb(5, q)).mod_pow(2.into(), one)
         );
         assert_eq!(
             get_big_mpol(q) * get_big_mpol(q),
-            get_big_mpol(q).mod_pow(2.into(), one.clone())
+            get_big_mpol(q).mod_pow(2.into(), one)
         );
         assert_eq!(
             get_big_mpol(q).scalar_mul(pfb(25, q)) * get_big_mpol(q),
-            get_big_mpol(q)
-                .scalar_mul(pfb(5, q))
-                .mod_pow(2.into(), one.clone())
+            get_big_mpol(q).scalar_mul(pfb(5, q)).mod_pow(2.into(), one)
         );
     }
 
@@ -1448,7 +1436,7 @@ mod test_mpolynomials {
     fn variables_test() {
         let q = 13;
         let one = pfb(1, q);
-        let vars_1 = MPolynomial::variables(1, one.clone());
+        let vars_1 = MPolynomial::variables(1, one);
         assert_eq!(1usize, vars_1.len());
         assert_eq!(get_x(q), vars_1[0]);
         let vars_3 = MPolynomial::variables(3, one);
@@ -1460,13 +1448,16 @@ mod test_mpolynomials {
 
     #[test]
     fn evaluate_symbolic_test() {
-        let empty_intermediate_results: HashMap<Vec<u64>, Polynomial<PrimeFieldElementFlexible>> =
-            HashMap::new();
-        let empty_mod_pow_memoization: HashMap<
+        let mut empty_intermediate_results: HashMap<
+            Vec<u64>,
+            Polynomial<PrimeFieldElementFlexible>,
+        > = HashMap::new();
+        let mut empty_mod_pow_memoization: HashMap<
             (usize, u64),
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
-        let empty_mul_memoization: HashMap<
+        #[allow(clippy::type_complexity)]
+        let mut empty_mul_memoization: HashMap<
             (Polynomial<PrimeFieldElementFlexible>, (usize, u64)),
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
@@ -1478,7 +1469,7 @@ mod test_mpolynomials {
         let seven = pfb(7.into(), q);
         let xyz_m = get_xyz(q);
         let x: Polynomial<PrimeFieldElementFlexible> =
-            Polynomial::from_constant(one.clone()).shift_coefficients(1, zero.clone());
+            Polynomial::from_constant(one).shift_coefficients(1, zero);
 
         let mut precalculated_intermediate_results: HashMap<
             Vec<u64>,
@@ -1486,7 +1477,7 @@ mod test_mpolynomials {
         > = HashMap::new();
         let precalculation_result = MPolynomial::precalculate_exponents_memoization(
             &[xyz_m.clone()],
-            &vec![x.clone(), x.clone(), x.clone()],
+            &[x.clone(), x.clone(), x.clone()],
             &mut precalculated_intermediate_results,
         );
         match precalculation_result {
@@ -1495,15 +1486,15 @@ mod test_mpolynomials {
         };
 
         let x_cubed: Polynomial<PrimeFieldElementFlexible> =
-            Polynomial::from_constant(one.clone()).shift_coefficients(3, zero.clone());
+            Polynomial::from_constant(one).shift_coefficients(3, zero);
         assert_eq!(
             x_cubed,
-            xyz_m.evaluate_symbolic(&vec![x.clone(), x.clone(), x.clone()])
+            xyz_m.evaluate_symbolic(&[x.clone(), x.clone(), x.clone()])
         );
         assert_eq!(
             x_cubed,
             xyz_m.evaluate_symbolic_with_memoization(
-                &vec![x.clone(), x.clone(), x.clone()],
+                &[x.clone(), x.clone(), x.clone()],
                 &mut empty_mod_pow_memoization.clone(),
                 &mut empty_mul_memoization.clone(),
                 &mut empty_intermediate_results.clone()
@@ -1512,7 +1503,7 @@ mod test_mpolynomials {
         assert_eq!(
             x_cubed,
             xyz_m.evaluate_symbolic_with_memoization(
-                &vec![x.clone(), x.clone(), x.clone()],
+                &[x.clone(), x.clone(), x.clone()],
                 &mut empty_mod_pow_memoization.clone(),
                 &mut empty_mul_memoization.clone(),
                 &mut precalculated_intermediate_results.clone()
@@ -1521,37 +1512,20 @@ mod test_mpolynomials {
         assert_eq!(
             x_cubed,
             xyz_m.evaluate_symbolic_with_memoization_precalculated(
-                &vec![x.clone(), x.clone(), x],
+                &[x.clone(), x.clone(), x],
                 &mut precalculated_intermediate_results.clone()
             )
         );
 
         // More complex
         let univariate_pol_1 = Polynomial {
-            coefficients: vec![
-                one.clone(),
-                seven.clone(),
-                one.clone(),
-                seven.clone(),
-                seven.clone(),
-                zero.clone(),
-            ],
+            coefficients: vec![one, seven, one, seven, seven, zero],
         };
         let univariate_pol_2 = Polynomial {
-            coefficients: vec![
-                one.clone(),
-                seven.clone(),
-                one.clone(),
-                seven.clone(),
-                zero.clone(),
-                seven.clone(),
-                seven.clone(),
-                one.clone(),
-                two.clone(),
-            ],
+            coefficients: vec![one, seven, one, seven, zero, seven, seven, one, two],
         };
         let pol_m = get_x_plus_xz_minus_17y(q);
-        let evaluated_pol_u = pol_m.evaluate_symbolic(&vec![
+        let evaluated_pol_u = pol_m.evaluate_symbolic(&[
             univariate_pol_1.clone(),
             univariate_pol_1.clone(),
             univariate_pol_2.clone(),
@@ -1570,14 +1544,14 @@ mod test_mpolynomials {
         assert_eq!(
             expected_result,
             pol_m.evaluate_symbolic_with_memoization(
-                &vec![
+                &[
                     univariate_pol_1.clone(),
                     univariate_pol_1.clone(),
                     univariate_pol_2.clone(),
                 ],
-                &mut empty_mod_pow_memoization.clone(),
-                &mut empty_mul_memoization.clone(),
-                &mut empty_intermediate_results.clone()
+                &mut empty_mod_pow_memoization,
+                &mut empty_mul_memoization,
+                &mut empty_intermediate_results
             )
         );
 
@@ -1588,7 +1562,7 @@ mod test_mpolynomials {
         > = HashMap::new();
         let precalculation_result = MPolynomial::precalculate_exponents_memoization(
             &[pol_m.clone()],
-            &vec![
+            &[
                 univariate_pol_1.clone(),
                 univariate_pol_1.clone(),
                 univariate_pol_2.clone(),
@@ -1602,7 +1576,7 @@ mod test_mpolynomials {
         assert_eq!(
             expected_result,
             pol_m.evaluate_symbolic_with_memoization_precalculated(
-                &vec![univariate_pol_1.clone(), univariate_pol_1, univariate_pol_2,],
+                &[univariate_pol_1.clone(), univariate_pol_1, univariate_pol_2,],
                 &mut new_precalculated_intermediate_results
             )
         );
@@ -1619,26 +1593,29 @@ mod test_mpolynomials {
         let zero_upol: Polynomial<PrimeFieldElementFlexible> = Polynomial::ring_zero();
         assert_eq!(
             xu,
-            xm.evaluate_symbolic(&vec![xu.clone(), zero_upol.clone(), zero_upol.clone()])
+            xm.evaluate_symbolic(&[xu.clone(), zero_upol.clone(), zero_upol.clone()])
         );
 
-        let empty_intermediate_results: HashMap<Vec<u64>, Polynomial<PrimeFieldElementFlexible>> =
-            HashMap::new();
-        let empty_mod_pow_memoization: HashMap<
+        let mut empty_intermediate_results: HashMap<
+            Vec<u64>,
+            Polynomial<PrimeFieldElementFlexible>,
+        > = HashMap::new();
+        let mut empty_mod_pow_memoization: HashMap<
             (usize, u64),
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
-        let empty_mul_memoization: HashMap<
+        #[allow(clippy::type_complexity)]
+        let mut empty_mul_memoization: HashMap<
             (Polynomial<PrimeFieldElementFlexible>, (usize, u64)),
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
         assert_eq!(
             xu,
             xm.evaluate_symbolic_with_memoization(
-                &vec![xu.clone(), zero_upol.clone(), zero_upol],
-                &mut empty_mod_pow_memoization.clone(),
-                &mut empty_mul_memoization.clone(),
-                &mut empty_intermediate_results.clone()
+                &[xu.clone(), zero_upol.clone(), zero_upol],
+                &mut empty_mod_pow_memoization,
+                &mut empty_mul_memoization,
+                &mut empty_intermediate_results
             )
         );
     }
@@ -1647,51 +1624,42 @@ mod test_mpolynomials {
     fn evaluate_test() {
         let q = 13;
         let x = get_x(q);
+        assert_eq!(pfb(12, q), x.evaluate(&[pfb(12, q), pfb(0, q), pfb(0, q)]));
         assert_eq!(
             pfb(12, q),
-            x.evaluate(&vec![pfb(12, q), pfb(0, q), pfb(0, q)])
-        );
-        assert_eq!(
-            pfb(12, q),
-            x.evaluate(&vec![pfb(12, q), pfb(12, q), pfb(12, q)])
+            x.evaluate(&[pfb(12, q), pfb(12, q), pfb(12, q)])
         );
 
         let xszs = get_x_squared_z_squared(q);
         assert_eq!(
             pfb(1, q),
-            xszs.evaluate(&vec![pfb(12, q), pfb(0, q), pfb(1, q)])
+            xszs.evaluate(&[pfb(12, q), pfb(0, q), pfb(1, q)])
         );
         assert_eq!(
             pfb(1, q),
-            xszs.evaluate(&vec![pfb(12, q), pfb(12, q), pfb(12, q)])
+            xszs.evaluate(&[pfb(12, q), pfb(12, q), pfb(12, q)])
         );
-        assert_eq!(
-            pfb(3, q),
-            xszs.evaluate(&vec![pfb(6, q), pfb(3, q), pfb(8, q)])
-        );
+        assert_eq!(pfb(3, q), xszs.evaluate(&[pfb(6, q), pfb(3, q), pfb(8, q)]));
         assert_eq!(
             pfb(9, q),
-            xszs.evaluate(&vec![pfb(8, q), pfb(12, q), pfb(2, q)])
+            xszs.evaluate(&[pfb(8, q), pfb(12, q), pfb(2, q)])
         );
-        assert_eq!(
-            pfb(3, q),
-            xszs.evaluate(&vec![pfb(4, q), pfb(8, q), pfb(1, q)])
-        );
+        assert_eq!(pfb(3, q), xszs.evaluate(&[pfb(4, q), pfb(8, q), pfb(1, q)]));
         assert_eq!(
             pfb(12, q),
-            xszs.evaluate(&vec![pfb(4, q), pfb(9, q), pfb(11, q)])
+            xszs.evaluate(&[pfb(4, q), pfb(9, q), pfb(11, q)])
         );
         assert_eq!(
             pfb(4, q),
-            xszs.evaluate(&vec![pfb(1, q), pfb(0, q), pfb(11, q)])
+            xszs.evaluate(&[pfb(1, q), pfb(0, q), pfb(11, q)])
         );
         assert_eq!(
             pfb(0, q),
-            xszs.evaluate(&vec![pfb(1, q), pfb(11, q), pfb(0, q)])
+            xszs.evaluate(&[pfb(1, q), pfb(11, q), pfb(0, q)])
         );
         assert_eq!(
             pfb(4, q),
-            xszs.evaluate(&vec![pfb(11, q), pfb(0, q), pfb(1, q)])
+            xszs.evaluate(&[pfb(11, q), pfb(0, q), pfb(1, q)])
         );
     }
 
@@ -1727,7 +1695,7 @@ mod test_mpolynomials {
         );
         assert_eq!(
             get_x_quartic(q).scalar_mul(pfb(5, q)),
-            MPolynomial::lift(x_quartic_s.scalar_mul(pfb(5, q)).clone(), 0, 3)
+            MPolynomial::lift(x_quartic_s.scalar_mul(pfb(5, q)), 0, 3)
         );
 
         let x_squared_s = Polynomial {
@@ -1788,7 +1756,7 @@ mod test_mpolynomials {
         let a = gen_mpolynomial(40, 40, 100, u64::MAX);
         let b = gen_mpolynomial(20, 20, 1000, u64::MAX);
         let ab = a.clone() * b.clone();
-        let ba = b.clone() * a.clone();
+        let ba = b * a;
         assert_eq!(ab, ba);
     }
 
@@ -1855,6 +1823,7 @@ mod test_mpolynomials {
                 HashMap::new();
             let mut empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<BFieldElement>> =
                 HashMap::new();
+            #[allow(clippy::type_complexity)]
             let mut empty_mul_memoization: HashMap<
                 (Polynomial<BFieldElement>, (usize, u64)),
                 Polynomial<BFieldElement>,
@@ -1874,8 +1843,8 @@ mod test_mpolynomials {
                     );
                 let without_precalculation = mpolynomial.evaluate_symbolic_with_memoization(
                     &point,
-                    &mut empty_mod_pow_memoization.clone(),
-                    &mut empty_mul_memoization.clone(),
+                    &mut empty_mod_pow_memoization,
+                    &mut empty_mul_memoization,
                     &mut empty_intermediate_results,
                 );
 

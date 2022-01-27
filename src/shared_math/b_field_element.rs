@@ -61,18 +61,17 @@ impl BFieldElement {
     pub const MAX: u128 = Self::QUOTIENT - 1;
 
     pub fn new(value: u128) -> Self {
-        Self {
-            0: value % Self::QUOTIENT,
-        }
+        Self(value % Self::QUOTIENT)
     }
 
+    #[must_use]
     pub fn inv(&self) -> Self {
         let (_, _, a) = Self::xgcd(Self::QUOTIENT as i128, self.0 as i128);
 
-        Self {
-            0: ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
+        Self(
+            ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
                 as u128,
-        }
+        )
     }
 
     pub fn increment(&mut self) {
@@ -139,17 +138,16 @@ impl BFieldElement {
     // being able to refer to a zero/one element without having an element at hand. This
     // will go away when moving to Zero/One traits.
     pub fn ring_zero() -> Self {
-        Self { 0: 0 }
+        Self(0)
     }
 
     pub fn ring_one() -> Self {
-        Self { 0: 1 }
+        Self(1)
     }
 
+    #[must_use]
     pub fn mod_pow(&self, pow: u64) -> Self {
-        Self {
-            0: self.mod_pow_raw(pow),
-        }
+        Self(self.mod_pow_raw(pow))
     }
 
     // TODO: Abstract for both i128 and u128 so we don't keep multiple copies of the same algorithm.
@@ -335,9 +333,7 @@ impl Add for BFieldElement {
 
     #[inline]
     fn add(self, other: Self) -> Self {
-        Self {
-            0: (self.0 + other.0) % Self::QUOTIENT,
-        }
+        Self((self.0 + other.0) % Self::QUOTIENT)
     }
 }
 
@@ -367,9 +363,7 @@ impl Mul for BFieldElement {
 
     #[inline]
     fn mul(self, other: Self) -> Self {
-        Self {
-            0: (self.0 * other.0) % Self::QUOTIENT,
-        }
+        Self((self.0 * other.0) % Self::QUOTIENT)
     }
 }
 
@@ -378,9 +372,7 @@ impl Neg for BFieldElement {
 
     #[inline]
     fn neg(self) -> Self {
-        Self {
-            0: Self::QUOTIENT - self.0,
-        }
+        Self(Self::QUOTIENT - self.0)
     }
 }
 
@@ -388,9 +380,7 @@ impl Rem for BFieldElement {
     type Output = Self;
 
     fn rem(self, other: Self) -> Self {
-        Self {
-            0: self.0 % other.0,
-        }
+        Self(self.0 % other.0)
     }
 }
 
@@ -407,9 +397,7 @@ impl Div for BFieldElement {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
-        Self {
-            0: (other.inv().0 * self.0) % Self::QUOTIENT,
-        }
+        Self((other.inv().0 * self.0) % Self::QUOTIENT)
     }
 }
 
@@ -683,15 +671,15 @@ mod b_prime_field_element_test {
             assert!((b - b).is_zero());
 
             // Test the add/sub/mul assign operators
-            let mut a_minus_b = a.clone();
+            let mut a_minus_b = a;
             a_minus_b -= b;
             assert_eq!(a - b, a_minus_b);
 
-            let mut a_plus_b = a.clone();
+            let mut a_plus_b = a;
             a_plus_b += b;
             assert_eq!(a + b, a_plus_b);
 
-            let mut a_mul_b = a.clone();
+            let mut a_mul_b = a;
             a_mul_b *= b;
             assert_eq!(a * b, a_mul_b);
         }

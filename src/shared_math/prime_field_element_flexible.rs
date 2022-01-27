@@ -142,6 +142,7 @@ impl PrimeFieldElementFlexible {
         Self { q, value }
     }
 
+    #[must_use]
     pub fn inv(&self) -> Self {
         let mut q_bytes: Vec<u8> = vec![0; 64];
         self.q.to_little_endian(&mut q_bytes);
@@ -163,6 +164,7 @@ impl PrimeFieldElementFlexible {
         }
     }
 
+    #[must_use]
     pub fn mod_pow(&self, pow: BigInt) -> Self {
         // Special case for handling 0^0 = 1
         if pow.is_zero() {
@@ -480,7 +482,7 @@ mod test_modular_arithmetic_flexible {
 
     fn values(prime: u128, values: &[u128]) -> Vec<PrimeFieldElementFlexible> {
         values
-            .into_iter()
+            .iter()
             .map(|x| PrimeFieldElementFlexible {
                 q: prime.into(),
                 value: (*x).into(),
@@ -513,16 +515,16 @@ mod test_modular_arithmetic_flexible {
 
     #[test]
     fn batch_inversion_test_small_no_zeros() {
-        let input: Vec<PrimeFieldElementFlexible> = values(5, &vec![1, 2, 3, 4]);
+        let input: Vec<PrimeFieldElementFlexible> = values(5, &[1, 2, 3, 4]);
         let output = PrimeFieldElementFlexible::batch_inversion(input);
-        let expected_output: Vec<PrimeFieldElementFlexible> = values(5, &vec![1, 3, 2, 4]);
+        let expected_output: Vec<PrimeFieldElementFlexible> = values(5, &[1, 3, 2, 4]);
         assert_eq!(expected_output, output);
     }
 
     #[test]
     #[should_panic]
     fn batch_inversion_test_small_with_zeros() {
-        let input: Vec<PrimeFieldElementFlexible> = values(5, &vec![1, 2, 3, 4, 0]);
+        let input: Vec<PrimeFieldElementFlexible> = values(5, &[1, 2, 3, 4, 0]);
         PrimeFieldElementFlexible::batch_inversion(input);
     }
 
@@ -532,7 +534,7 @@ mod test_modular_arithmetic_flexible {
         let output = PrimeFieldElementFlexible::batch_inversion(input);
         let expected_output: Vec<PrimeFieldElementFlexible> = values(
             23,
-            &vec![
+            &[
                 1, 12, 8, 6, 14, 4, 10, 3, 18, 7, 21, 2, 16, 5, 20, 13, 19, 9, 17, 15, 11, 22,
             ],
         );
@@ -642,17 +644,11 @@ mod test_modular_arithmetic_flexible {
     #[test]
     fn primitive_root_property_based_test() {
         let primes = vec![773i128, 13367, 223, 379, 41];
-        for i in 0..primes.len() {
+        for prime in primes {
             // println!("Testing prime {}", prime);
-            let rands: Vec<i128> = generate_random_numbers(
-                30,
-                if primes[i] > 1000000 {
-                    1000000
-                } else {
-                    primes[i]
-                },
-            );
-            let one = PrimeFieldElementFlexible::new(1.into(), primes[i].into());
+            let rands: Vec<i128> =
+                generate_random_numbers(30, if prime > 1000000 { 1000000 } else { prime });
+            let one = PrimeFieldElementFlexible::new(1.into(), prime.into());
             for elem in rands.iter() {
                 let (root, prime_factors): (Option<PrimeFieldElementFlexible>, Vec<u128>) =
                     one.get_primitive_root_of_unity(*elem as u128);
@@ -668,7 +664,7 @@ mod test_modular_arithmetic_flexible {
                 let mut m: u128 = *elem as u128;
                 for prime in prime_factors.iter() {
                     while m % prime == 0 {
-                        m = m / prime;
+                        m /= prime;
                     }
                 }
                 assert!(m.is_one());

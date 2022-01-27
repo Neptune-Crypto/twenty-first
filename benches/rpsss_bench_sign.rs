@@ -36,7 +36,7 @@ fn rpsss_bench_sign(c: &mut Criterion) {
         rp,
     };
     let document_string: String = "Hello Neptune!".to_string();
-    let document: Vec<u8> = document_string.clone().into_bytes();
+    let document: Vec<u8> = document_string.into_bytes();
 
     let (sk, _pk) = rpsss.keygen();
     let mut group_sign = c.benchmark_group("rpsss_bench_sign");

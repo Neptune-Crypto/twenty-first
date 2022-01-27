@@ -129,6 +129,7 @@ impl XFieldElement {
         )
     }
 
+    #[must_use]
     pub fn inv(&self) -> Self {
         let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
         let (_, a, _) = Self::xgcd(self_as_poly, Self::shah_polynomial());
@@ -524,15 +525,7 @@ mod x_field_element_test {
 
         // TODO: Consider doing a statistical test.
         // Assert (probable) uniqueness of all generated elements
-        assert_eq!(
-            rand_xs.len(),
-            rand_xs
-                .clone()
-                .into_iter()
-                .unique()
-                .collect::<Vec<XFieldElement>>()
-                .len()
-        );
+        assert_eq!(rand_xs.len(), rand_xs.into_iter().unique().count());
     }
 
     #[test]
@@ -769,10 +762,8 @@ mod x_field_element_test {
                 x_field_element_poly.clone(),
                 XFieldElement::shah_polynomial(),
             );
-            let (gcd_1, b_1, a_1) = XFieldElement::xgcd(
-                XFieldElement::shah_polynomial(),
-                x_field_element.clone().into(),
-            );
+            let (gcd_1, b_1, a_1) =
+                XFieldElement::xgcd(XFieldElement::shah_polynomial(), (*x_field_element).into());
 
             // Verify symmetry, and that all elements are mutual primes, meaning that
             // they form a field
@@ -898,21 +889,21 @@ mod x_field_element_test {
             assert_eq!(ab / a, b);
 
             // Test the add/sub/mul assign operators
-            let mut a_minus_b = a.clone();
+            let mut a_minus_b = a;
             a_minus_b -= b;
             assert_eq!(a - b, a_minus_b);
 
-            let mut a_plus_b = a.clone();
+            let mut a_plus_b = a;
             a_plus_b += b;
             assert_eq!(a + b, a_plus_b);
 
-            let mut a_mul_b = a.clone();
+            let mut a_mul_b = a;
             a_mul_b *= b;
             assert_eq!(a * b, a_mul_b);
 
             // Test the add/sub/mul assign operators, when the higher coefficients are zero
             let b_field_b = XFieldElement::new_const(b.coefficients[0]);
-            let mut a_mul_b_field_b = a.clone();
+            let mut a_mul_b_field_b = a;
             a_mul_b_field_b *= b_field_b;
             assert_eq!(a * b_field_b, a_mul_b_field_b);
             assert_eq!(a, a_mul_b_field_b / b_field_b);

@@ -200,6 +200,7 @@ impl<
     // Return the polynomial which corresponds to the transformation `x -> alpha * x`
     // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
     // then corresponds to evaluating P(alpha * x).
+    #[must_use]
     pub fn scale(&self, alpha: &U) -> Self {
         let mut acc = alpha.ring_one();
         let mut return_coefficients = self.coefficients.clone();
@@ -272,6 +273,7 @@ impl<
     }
 
     // Slow square implementation that does not use NTT
+    #[must_use]
     pub fn slow_square(&self) -> Self {
         let degree = self.degree();
         if degree == -1 {
@@ -472,6 +474,7 @@ impl<
     // It is the caller's responsibility that this function
     // is called with sufficiently large input to be safe
     // and to be faster than `square`.
+    #[must_use]
     pub fn fast_square(&self) -> Self {
         let degree = self.degree();
         if degree == -1 {
@@ -506,6 +509,7 @@ impl<
         }
     }
 
+    #[must_use]
     pub fn square(&self) -> Self {
         let degree = self.degree();
         if degree == -1 {
@@ -542,6 +546,7 @@ impl<
         }
     }
 
+    #[must_use]
     pub fn fast_mod_pow(&self, pow: BigInt, one: U) -> Self {
         assert!(one.is_one(), "Provided one must be one");
 
@@ -868,6 +873,7 @@ impl<
             + Eq,
     > Polynomial<U>
 {
+    #[must_use]
     pub fn multiply(self, other: Self) -> Self {
         let degree_lhs = self.degree();
         let degree_rhs = other.degree();
@@ -898,6 +904,7 @@ impl<
     }
 
     // Multiply a polynomial with itself `pow` times
+    #[must_use]
     pub fn mod_pow(&self, pow: BigInt, one: U) -> Self {
         assert!(one.is_one(), "Provided one must be one");
 
@@ -930,6 +937,7 @@ impl<
     }
 
     // Multiply a polynomial with x^power
+    #[must_use]
     pub fn shift_coefficients(&self, power: usize, zero: U) -> Self {
         if !zero.is_zero() {
             panic!("`zero` was not zero. Don't do this.");
@@ -946,6 +954,7 @@ impl<
         }
     }
 
+    #[must_use]
     pub fn scalar_mul(&self, scalar: U) -> Self {
         let mut coefficients: Vec<U> = vec![];
         for i in 0..self.coefficients.len() {
@@ -974,12 +983,11 @@ impl<
 
         // quotient is built from back to front so must be reversed
         // Preallocate space for quotient coefficients
-        let mut quotient: Vec<U>;
-        if degree_lhs - degree_rhs >= 0 {
-            quotient = Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize);
+        let mut quotient: Vec<U> = if degree_lhs - degree_rhs >= 0 {
+            Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize)
         } else {
-            quotient = vec![];
-        }
+            vec![]
+        };
         let mut remainder = self.clone();
         remainder.normalize();
 
@@ -1593,7 +1601,7 @@ mod test_polynomials {
             ..number_of_points)
             .map(|x| {
                 let x = pfb(x as i64, q);
-                (x.clone(), pol.evaluate(&x))
+                (x, pol.evaluate(&x))
             })
             .collect();
 
@@ -2171,8 +2179,8 @@ mod test_polynomials {
         };
         assert_eq!(one, a / b.clone());
         let div_with_zero = zero.clone() / b.clone();
-        let div_with_zero_alt = zero_alt.clone() / b.clone();
-        let div_with_zero_alt_alt = zero_alt_alt.clone() / b.clone();
+        let div_with_zero_alt = zero_alt / b.clone();
+        let div_with_zero_alt_alt = zero_alt_alt / b.clone();
         assert!(div_with_zero.is_zero());
         assert!(!div_with_zero.is_one());
         assert!(div_with_zero_alt.is_zero());
@@ -2274,7 +2282,7 @@ mod test_polynomials {
             Polynomial {
                 coefficients: vec![pfb(0, q), pfb(48, q),],
             },
-            prod_x % (x.clone() * x.clone())
+            prod_x % (x.clone() * x)
         );
     }
 
@@ -2324,10 +2332,10 @@ mod test_polynomials {
             ],
         };
         let linear_combination = tq
-            + ti.scalar_mul(ks[0].clone())
-            + (ti * x_to_3.clone()).scalar_mul(ks[1].clone())
-            + bq.scalar_mul(ks[2].clone())
-            + (bq * x_to_3).scalar_mul(ks[3].clone());
+            + ti.scalar_mul(ks[0])
+            + (ti * x_to_3.clone()).scalar_mul(ks[1])
+            + bq.scalar_mul(ks[2])
+            + (bq * x_to_3).scalar_mul(ks[3]);
         assert_eq!(expected_lc, linear_combination);
 
         let x_values: Vec<PrimeFieldElementFlexible> = vec![
@@ -2557,7 +2565,7 @@ mod test_polynomials {
         let values = poly.fast_coset_evaluate(&_3_17, &_9_17, 8);
 
         let mut domain = vec![_0_17; 8];
-        domain[0] = _3_17.clone();
+        domain[0] = _3_17;
         for i in 1..8 {
             domain[i] = domain[i - 1].to_owned() * _9_17.to_owned();
         }
@@ -2726,7 +2734,7 @@ mod test_polynomials {
                 pfb(30, q),
             ],
         };
-        prod = prod.clone() * x.clone();
+        prod = prod.clone() * x;
         assert_eq!(expected_prod, prod);
         assert_eq!(
             "30x^6 + 16x^5 + 64x^4 + 11x^3 + 25x^2 + 48x",
@@ -2857,7 +2865,7 @@ mod test_polynomials {
                 2 * 14,             // 1st degree
                 2 * 3 * 14 + 1,     // 2nd degree
                 2 * 3 + 2 * 4 * 14, // 3rd degree
-                3 * 3 + 2 * 1 * 4,  // 4th degree
+                3 * 3 + 2 * 4,      // 4th degree
                 2 * 3 * 4,          // 5th degree
                 4 * 4,              // 6th degree
             ]

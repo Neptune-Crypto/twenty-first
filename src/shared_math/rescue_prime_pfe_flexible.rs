@@ -489,15 +489,15 @@ mod rescue_prime_start_test {
                 omicron.ring_zero(),
                 omicron.ring_zero(),
             ];
-            for register in 0..rescue_prime_stark.m {
-                let fst_eval = fst_rc_pol[register].evaluate(&point);
+            for (register, item) in fst_rc_pol.iter().enumerate().take(rescue_prime_stark.m) {
+                let fst_eval = item.evaluate(&point);
                 assert_eq!(
                     rescue_prime_stark.round_constants[2 * step * rescue_prime_stark.m + register],
                     fst_eval
                 );
             }
-            for register in 0..rescue_prime_stark.m {
-                let snd_eval = snd_rc_pol[register].evaluate(&point);
+            for (register, item) in snd_rc_pol.iter().enumerate().take(rescue_prime_stark.m) {
+                let snd_eval = item.evaluate(&point);
                 assert_eq!(
                     rescue_prime_stark.round_constants
                         [2 * step * rescue_prime_stark.m + rescue_prime_stark.m + register],
@@ -523,12 +523,13 @@ mod rescue_prime_start_test {
 
         for step in 0..rescue_prime_stark.steps_count - 1 {
             for air_constraint in air_constraints.iter() {
-                let mut point = vec![];
-                point.push(omicron.mod_pow(step.into()));
-                point.push(trace[step][0].clone());
-                point.push(trace[step][1].clone());
-                point.push(trace[step + 1][0].clone());
-                point.push(trace[step + 1][1].clone());
+                let point = vec![
+                    omicron.mod_pow(step.into()),
+                    trace[step][0],
+                    trace[step][1],
+                    trace[step + 1][0],
+                    trace[step + 1][1],
+                ];
                 let eval = air_constraint.evaluate(&point);
                 assert!(eval.is_zero());
             }
@@ -560,7 +561,7 @@ mod rescue_prime_start_test {
         let one = PrimeFieldElementFlexible::new(1.into(), prime);
         let trace = rescue_prime_stark.trace(&one);
         let air_constraints = rescue_prime_stark.get_air_constraints(stark.omicron);
-        let hash_result = trace.last().unwrap()[0].clone();
+        let hash_result = trace.last().unwrap()[0];
         let boundary_constraints: Vec<BoundaryConstraint> =
             rescue_prime_stark.get_boundary_constraints(hash_result);
         let mut proof_stream = ProofStream::default();

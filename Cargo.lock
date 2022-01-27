@@ -133,36 +133,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
-name = "cargo-criterion"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f62cde69bd45212662b4a0e126c2b038b1ed5bdae154d89061967c76aa11894e"
-dependencies = [
- "anyhow",
- "atty",
- "cast",
- "chrono",
- "clap",
- "criterion-plot",
- "lazy_static",
- "linked-hash-map",
- "linked_hash_set",
- "log",
- "num-traits",
- "oorandom",
- "plotters",
- "rayon",
- "serde",
- "serde_cbor",
- "serde_derive",
- "serde_json",
- "simplelog",
- "tinytemplate",
- "toml",
- "walkdir",
-]
-
-[[package]]
 name = "cargo-husky"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -188,20 +158,6 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
-
-[[package]]
-name = "chrono"
-version = "0.4.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
-dependencies = [
- "libc",
- "num-integer",
- "num-traits",
- "serde",
- "time",
- "winapi",
-]
 
 [[package]]
 name = "clap"
@@ -399,12 +355,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62aca2aba2d62b4a7f5b33f3712cb1b0692779a56fb510499d5c0aa594daeaf3"
 
 [[package]]
-name = "hashbrown"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
-
-[[package]]
 name = "heck"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -458,16 +408,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "indexmap"
-version = "1.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "282a6247722caba404c065016bbfa522806e51714c34f5dfc3e4a3a46fcb4223"
-dependencies = [
- "autocfg",
- "hashbrown",
-]
-
-[[package]]
 name = "itertools"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -517,21 +457,6 @@ name = "libm"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
-
-[[package]]
-name = "linked-hash-map"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
-
-[[package]]
-name = "linked_hash_set"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47186c6da4d81ca383c7c47c1bfc80f4b95f4720514d860a5407aaf4233f9588"
-dependencies = [
- "linked-hash-map",
-]
 
 [[package]]
 name = "log"
@@ -1114,17 +1039,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "simplelog"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85d04ae642154220ef00ee82c36fb07853c10a4f2a0ca6719f9991211d2eb959"
-dependencies = [
- "chrono",
- "log",
- "termcolor",
-]
-
-[[package]]
 name = "siphasher"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1205,15 +1119,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "termcolor"
-version = "1.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dfed899f0eb03f32ee8c6a0aabdb8a7949659e3466561fc0adf54e26d88c5f4"
-dependencies = [
- "winapi-util",
-]
-
-[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1243,16 +1148,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "time"
-version = "0.1.43"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca8a50ef2360fbd1eeb0ecd46795a87a19024eb4b53c5dc916ca1fd95fe62438"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
 name = "tinytemplate"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1268,7 +1163,6 @@ version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31142970826733df8241ef35dc040ef98c679ab14d7c3e54d827099b3acecaa"
 dependencies = [
- "indexmap",
  "serde",
 ]
 
@@ -1280,7 +1174,6 @@ dependencies = [
  "bincode",
  "blake3",
  "byteorder",
- "cargo-criterion",
  "cargo-husky",
  "criterion",
  "itertools 0.10.1",

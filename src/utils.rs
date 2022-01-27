@@ -3,7 +3,6 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::num::ParseIntError;
-use std::{mem, slice};
 
 pub const FIRST_TEN_THOUSAND_PRIMES: &[i128] = &[
     2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97,
@@ -878,12 +877,7 @@ pub fn get_n_hash_rounds(input: &[u8], n: u32) -> Vec<[u8; 32]> {
     for i in 0..n {
         let mut input_clone = input.to_vec();
 
-        // Convert i: usize into a byte array of length 4
-        let ip: *const u32 = &i;
-        let bp: *const u8 = ip as *const _;
-        let bs: &[u8] = unsafe { slice::from_raw_parts(bp, mem::size_of::<u32>()) };
-
-        input_clone.append(&mut bs.to_vec());
+        input_clone.extend_from_slice(&i.to_le_bytes());
         let hash = *blake3::hash(input_clone.as_slice()).as_bytes();
         output.push(hash);
     }

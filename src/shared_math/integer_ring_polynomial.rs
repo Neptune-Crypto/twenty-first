@@ -234,6 +234,7 @@ impl IntegerRingPolynomial {
         (quotient_pol, remainder_pol)
     }
 
+    #[must_use]
     pub fn mul(&self, other: &Self) -> Self {
         // If either polynomial is zero, return zero
         if self.coefficients.is_empty() || other.coefficients.is_empty() {
@@ -256,6 +257,7 @@ impl IntegerRingPolynomial {
         ret
     }
 
+    #[must_use]
     pub fn scalar_mul(&self, scalar: i128) -> Self {
         let mut coefficients = self.coefficients.clone();
         for i in 0..self.coefficients.len() {
@@ -264,6 +266,7 @@ impl IntegerRingPolynomial {
         Self { coefficients }
     }
 
+    #[must_use]
     pub fn scalar_modulus(&self, modulus: i128) -> Self {
         let mut coefficients = self.coefficients.clone();
         for i in 0..self.coefficients.len() {
@@ -272,6 +275,7 @@ impl IntegerRingPolynomial {
         Self { coefficients }
     }
 
+    #[must_use]
     pub fn scalar_mul_float(&self, float_scalar: f64) -> Self {
         // Function does not map coefficients into finite field. Should it?
         let mut coefficients = self.coefficients.clone();
@@ -281,6 +285,7 @@ impl IntegerRingPolynomial {
         Self { coefficients }
     }
 
+    #[must_use]
     pub fn add(&self, other: &Self) -> Self {
         let summed: Vec<i128> = self
             .coefficients
@@ -298,6 +303,7 @@ impl IntegerRingPolynomial {
         }
     }
 
+    #[must_use]
     pub fn sub(&self, other: &Self) -> Self {
         let diff: Vec<i128> = self
             .coefficients
