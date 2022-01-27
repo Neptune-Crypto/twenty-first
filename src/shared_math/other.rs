@@ -1,4 +1,8 @@
+use std::fmt::Display;
+use std::ops::{Div, Rem, Sub};
+
 use num_bigint::BigInt;
+use num_traits::{One, Zero};
 
 // Function for creating a bigint from an i128
 pub fn bigint(input: i128) -> BigInt {
@@ -28,7 +32,32 @@ pub fn roundup_npo2(x: u64) -> u64 {
     1 << log_2_ceil(x)
 }
 
-// pub fn lagrange_interpolation_2
+pub fn xgcd<
+    T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,
+>(
+    mut x: T,
+    mut y: T,
+) -> (T, T, T) {
+    let (mut a_factor, mut a1, mut b_factor, mut b1) = (T::one(), T::zero(), T::zero(), T::one());
+
+    while !y.is_zero() {
+        let (quotient, remainder) = (x.clone() / y.clone(), x.clone() % y.clone());
+        let (c, d) = (
+            a_factor - quotient.clone() * a1.clone(),
+            b_factor.clone() - quotient * b1.clone(),
+        );
+
+        x = y;
+        y = remainder;
+        a_factor = a1;
+        a1 = c;
+        b_factor = b1;
+        b1 = d;
+    }
+
+    // x is the gcd
+    (x, a_factor, b_factor)
+}
 
 #[cfg(test)]
 mod test_other {

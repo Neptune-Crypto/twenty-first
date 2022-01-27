@@ -86,6 +86,7 @@ impl XFieldElement {
         }
     }
 
+    // TODO: Move this into Polynomial when PrimeField can implement Zero + One.
     // Division in 𝔽_p[X], not 𝔽_{p^e} ≅ 𝔽[X]/p(x).
     pub fn xgcd(
         mut x: Polynomial<BFieldElement>,
