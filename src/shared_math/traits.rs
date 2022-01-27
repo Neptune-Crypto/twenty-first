@@ -2,6 +2,7 @@ use rand::prelude::ThreadRng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 pub trait IdentityValues {
@@ -73,7 +74,7 @@ pub trait FromVecu8 {
     fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
 }
 
-pub trait PrimeFieldElement {
+pub trait PrimeField {
     type Elem: Clone
         + Eq
         + Display
@@ -90,12 +91,14 @@ pub trait PrimeFieldElement {
         + Mul<Output = Self::Elem>
         + Div<Output = Self::Elem>
         + Neg<Output = Self::Elem>
-        + FromVecu8 // TODO: Replace with From<Blake3Hash>
+        + FromVecu8
         + New
         + CyclicGroupGenerator
         + FieldBatchInversion
         + ModPowU32
         + GetPrimitiveRootOfUnity
         + Send
-        + Sync;
+        + Sync
+        + Copy
+        + Hash;
 }

@@ -19,7 +19,7 @@ fn polynomial_square(c: &mut Criterion) {
         .collect();
     let mut rng = rand::thread_rng();
     for (size, log_of_size) in izip!(sizes, log_of_sizes) {
-        let polynomial = Polynomial {
+        let polynomial: Polynomial<BFieldElement> = Polynomial {
             coefficients: BFieldElement::random_elements(size, &mut rng),
         };
         group.throughput(Throughput::Elements(size as u64));

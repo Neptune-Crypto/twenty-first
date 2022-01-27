@@ -1,6 +1,6 @@
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, FromVecu8, GetPrimitiveRootOfUnity, IdentityValues,
-    ModPowU32, ModPowU64, New, PrimeFieldElement,
+    ModPowU32, ModPowU64, New, PrimeField,
 };
 use crate::utils::FIRST_TEN_THOUSAND_PRIMES;
 use num_bigint::{BigInt, Sign};
@@ -353,7 +353,7 @@ impl<'a> Div for PrimeFieldElementFlexible {
     }
 }
 
-impl PrimeFieldElement for PrimeFieldElementFlexible {
+impl PrimeField for PrimeFieldElementFlexible {
     type Elem = PrimeFieldElementFlexible;
 }
 

@@ -3,7 +3,7 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
-    PrimeFieldElement,
+    PrimeField,
 };
 use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
@@ -246,7 +246,7 @@ impl FromVecu8 for XFieldElement {
     }
 }
 
-impl PrimeFieldElement for XFieldElement {
+impl PrimeField for XFieldElement {
     type Elem = XFieldElement;
 }
 

@@ -1,12 +1,7 @@
 use crate::shared_math::traits::ModPowU32;
-// use crate::shared_math::prime_field_element_big::{PrimeFieldBig, PrimeFieldElementBig};
+use crate::shared_math::traits::PrimeField;
 use crate::shared_math::traits::{IdentityValues, New};
-use std::ops::Add;
-use std::ops::Div;
-use std::ops::Mul;
-use std::ops::Neg;
-
-use super::traits::PrimeFieldElement;
+use std::ops::{Add, Div, Mul, Neg};
 
 fn slow_ntt_base_case<T: Add<Output = T> + Mul<Output = T> + Clone>(x: &[T], omega: &T) -> Vec<T> {
     vec![
@@ -126,17 +121,17 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
     r
 }
 
-pub fn intt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
-    let n: T::Elem = omega.new_from_usize(x.len());
-    let n_inv: T::Elem = omega.ring_one() / n;
-    ntt::<T>(x, omega.ring_one() / omega, log_2_of_n);
+pub fn intt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
+    let n: PF::Elem = omega.new_from_usize(x.len());
+    let n_inv: PF::Elem = omega.ring_one() / n;
+    ntt::<PF>(x, omega.ring_one() / omega, log_2_of_n);
     for elem in x.iter_mut() {
-        *elem = elem.to_owned() * n_inv.clone();
+        *elem *= n_inv;
     }
 }
 
 #[allow(clippy::many_single_char_names)]
-pub fn ntt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
+pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
     let n = x.len() as u32;
     assert_eq!(
         n,
@@ -162,13 +157,13 @@ pub fn ntt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: 
         while k < n {
             let mut w = omega.ring_one();
             for j in 0..m {
-                let mut t = x[(k + j + m) as usize].clone();
-                t *= w.clone();
-                let mut tmp = x[(k + j) as usize].clone();
-                tmp -= t.clone();
+                let mut t = x[(k + j + m) as usize];
+                t *= w;
+                let mut tmp = x[(k + j) as usize];
+                tmp -= t;
                 x[(k + j + m) as usize] = tmp;
                 x[(k + j) as usize] += t;
-                w *= w_m.clone();
+                w *= w_m;
             }
 
             k += 2 * m;

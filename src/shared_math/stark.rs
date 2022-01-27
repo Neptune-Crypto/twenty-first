@@ -1,6 +1,12 @@
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::fri::Fri;
+use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::ntt::intt;
 use crate::shared_math::other::log_2_ceil;
+use crate::shared_math::other::roundup_npo2;
+use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::CyclicGroupGenerator;
+use crate::shared_math::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomElements};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
@@ -11,13 +17,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-
-use super::b_field_element::BFieldElement;
-use super::mpolynomial::MPolynomial;
-use super::other::roundup_npo2;
-use super::polynomial::Polynomial;
-use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomElements};
-use super::x_field_fri::Fri;
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
@@ -253,7 +252,7 @@ impl Stark {
         let mut boundary_quotient_merkle_trees: Vec<MerkleTree<BFieldElement>> = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<BFieldElement> =
-                bq.fast_coset_evaluate(&self.field_generator, &omega, fri_domain_length as usize);
+                bq.fast_coset_evaluate(&self.field_generator, omega, fri_domain_length as usize);
             let bq_merkle_tree = MerkleTree::from_vec(&boundary_quotient_codeword);
             proof_stream.enqueue(&bq_merkle_tree.get_root())?;
             boundary_quotient_merkle_trees.push(bq_merkle_tree);
@@ -365,8 +364,8 @@ impl Stark {
                 Polynomial::fast_coset_divide(
                     tp,
                     &transition_zerofier,
-                    &self.field_generator,
-                    &omega,
+                    self.field_generator,
+                    omega,
                     fri_domain_length as usize,
                 )
             })
@@ -381,7 +380,7 @@ impl Stark {
 
         let randomizer_codeword: Vec<BFieldElement> = randomizer_polynomial.fast_coset_evaluate(
             &self.field_generator,
-            &omega,
+            omega,
             fri_domain_length as usize,
         );
         let randomizer_mt = MerkleTree::from_vec(&randomizer_codeword);
@@ -463,7 +462,7 @@ impl Stark {
 
         let combined_codeword = combination.fast_coset_evaluate(
             &self.field_generator,
-            &omega,
+            omega,
             fri_domain_length as usize,
         );
 
@@ -882,7 +881,7 @@ impl Stark {
         fri_domain_length: usize,
     ) -> MerkleTree<BFieldElement> {
         let transition_zerofier_codeword: Vec<BFieldElement> = transition_zerofier
-            .fast_coset_evaluate(&self.field_generator, &omega, fri_domain_length);
+            .fast_coset_evaluate(&self.field_generator, omega, fri_domain_length);
 
         MerkleTree::from_vec(&transition_zerofier_codeword)
     }
