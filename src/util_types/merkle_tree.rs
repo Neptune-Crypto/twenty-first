@@ -941,40 +941,62 @@ mod merkle_tree_test {
         let mut prng = rand::thread_rng();
 
         // Number of Merkle tree leaves
-        let n_values = 128;
-        let expected_path_length = 7; // log2(128), root node not included
-        let elements: Vec<BFieldElement> = generate_random_numbers_u128(n_values, Some(100))
-            .iter()
-            .map(|x| BFieldElement::new(*x))
-            .collect();
-        let tree = MerkleTree::from_vec(&elements);
-
-        for _ in 0..10 {
-            // Ask for an arbitrary amount of indices less than the total
-            let n_indices = (prng.next_u64() % n_values as u64) as usize;
-
-            // Generate that amount of indices in the valid index range [0,128)
-            let indices: Vec<usize> =
-                generate_random_numbers_u128(n_indices, Some(n_values as u128))
+        let n_valuess = &[2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
+        let expected_path_lengths = &[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
+        for (n_values, expected_path_length) in izip!(n_valuess, expected_path_lengths) {
+            let elements: Vec<BFieldElement> =
+                generate_random_numbers_u128(*n_values, Some(1u128 << 63))
                     .iter()
-                    .map(|x| *x as usize)
-                    .unique()
+                    .map(|x| BFieldElement::new(*x))
                     .collect();
+            let tree = MerkleTree::from_vec(&elements);
 
-            let values: Vec<BFieldElement> = indices.iter().map(|i| elements[*i]).collect();
-            let proof: Vec<LeaflessPartialAuthenticationPath> =
-                tree.get_leafless_multi_proof(&indices);
+            for _ in 0..3 {
+                // Ask for an arbitrary amount of indices less than the total
+                let n_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
 
-            for path in proof.iter() {
-                assert_eq!(expected_path_length, path.0.len());
+                // Generate that amount of indices in the valid index range [0,128)
+                let indices: Vec<usize> =
+                    generate_random_numbers_u128(n_indices, Some(*n_values as u128))
+                        .iter()
+                        .map(|x| *x as usize)
+                        .unique()
+                        .collect();
+
+                let values: Vec<BFieldElement> = indices.iter().map(|i| elements[*i]).collect();
+                let proof: Vec<LeaflessPartialAuthenticationPath> =
+                    tree.get_leafless_multi_proof(&indices);
+
+                for path in proof.iter() {
+                    assert_eq!(*expected_path_length, path.0.len());
+                }
+
+                assert!(MerkleTree::verify_leafless_multi_proof(
+                    tree.root_hash,
+                    &indices,
+                    &values,
+                    &proof,
+                ));
+                let mut bad_root_hash = tree.root_hash;
+                bad_root_hash[0] ^= 0x1;
+                assert!(!MerkleTree::verify_leafless_multi_proof(
+                    bad_root_hash,
+                    &indices,
+                    &values,
+                    &proof,
+                ));
+                let mut bad_values = values.clone();
+                let random_index = (prng.next_u64() % n_indices as u64 / 2) as usize;
+                println!("bad_values[random_index] = {}", bad_values[random_index]);
+                bad_values[random_index].decrement();
+                println!("bad_values[random_index] = {}", bad_values[random_index]);
+                assert!(!MerkleTree::verify_leafless_multi_proof(
+                    tree.root_hash,
+                    &indices,
+                    &bad_values,
+                    &proof,
+                ));
             }
-
-            assert!(MerkleTree::verify_leafless_multi_proof(
-                tree.root_hash,
-                &indices,
-                &values,
-                &proof,
-            ));
         }
     }
 
