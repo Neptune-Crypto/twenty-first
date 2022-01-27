@@ -362,7 +362,7 @@ impl IdentityValues for PrimeFieldElementFlexible {
     }
 
     fn is_one(&self) -> bool {
-        (self.value - 1).is_zero()
+        self.value == U512::one()
     }
 
     fn ring_zero(&self) -> Self {
@@ -537,7 +537,7 @@ mod test_modular_arithmetic_flexible {
 
     #[test]
     fn batch_inversion_pbt() {
-        let test_iterations = 100;
+        let test_iterations = 400;
         for i in 0..test_iterations {
             let mut rng = rand::thread_rng();
             let prime = FIRST_TEN_THOUSAND_PRIMES
@@ -554,7 +554,7 @@ mod test_modular_arithmetic_flexible {
 
             assert_eq!(rands.len(), rands_inv.len());
 
-            for (rand, rand_inv) in izip!(rands, rands_inv) {
+            for (mut rand, rand_inv) in izip!(rands, rands_inv) {
                 assert_eq!(
                     one,
                     rand * rand_inv,
@@ -570,8 +570,9 @@ mod test_modular_arithmetic_flexible {
                     rand_inv,
                     "A batch-inverted value is equivalent to an inverted value"
                 );
-                // rand.increment();
-                // assert!(!(rand * rand_inv).is_one());
+
+                rand.increment();
+                assert!(!(rand * rand_inv).is_one());
             }
         }
     }
