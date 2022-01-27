@@ -72,6 +72,17 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         v.hash == root_hash && expected_hash == proof[0].hash
     }
 
+    fn get_value_by_index(&self, index: usize) -> T {
+        assert!(
+            index < self.nodes.len() / 2,
+            "Out of bounds index requested"
+        );
+        self.nodes[self.nodes.len() / 2 + index]
+            .value
+            .clone()
+            .unwrap()
+    }
+
     pub fn to_vec(&self) -> Vec<T> {
         self.nodes[self.nodes.len() / 2..self.nodes.len()]
             .iter()
@@ -635,6 +646,28 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
 
     pub fn get_root(&self) -> [u8; 32] {
         self.internal_merkle_tree.root_hash
+    }
+
+    // Returns vectors of length `indices.len()` of triplets (auth path, salts, value)
+    pub fn get_leafless_multi_proof_with_salts_and_values(
+        &self,
+        indices: &[usize],
+    ) -> Vec<(LeaflessPartialAuthenticationPath, Vec<T>, T)> {
+        // auth path and salts
+        let leafless_multi_proof: Vec<(LeaflessPartialAuthenticationPath, Vec<T>)> =
+            self.get_leafless_multi_proof(indices);
+        let mut ret: Vec<(LeaflessPartialAuthenticationPath, Vec<T>, T)> = vec![];
+
+        // Insert values in a for-loop
+        for (i, leafless_proof) in leafless_multi_proof.into_iter().enumerate() {
+            ret.push((
+                leafless_proof.0,
+                leafless_proof.1,
+                self.internal_merkle_tree.get_value_by_index(i),
+            ));
+        }
+
+        ret
     }
 
     pub fn get_leafless_multi_proof(
@@ -1370,6 +1403,17 @@ mod merkle_tree_test {
             count_hashes(&auth_path_b_multi_0),
             "paths [0,1] need two hashes"
         );
+
+        // Verify that we get values
+        let auth_paths_salts_values =
+            tree_b.get_leafless_multi_proof_with_salts_and_values(&[0, 1]);
+        assert_eq!(2, auth_paths_salts_values.len());
+        assert_eq!(auth_path_b_multi_0[0].0, auth_paths_salts_values[0].0);
+        assert_eq!(auth_path_b_multi_0[0].1, auth_paths_salts_values[0].1);
+        assert_eq!(auth_path_b_multi_0[1].0, auth_paths_salts_values[1].0);
+        assert_eq!(auth_path_b_multi_0[1].1, auth_paths_salts_values[1].1);
+        assert_eq!(BFieldElement::new(3), auth_paths_salts_values[0].2);
+        assert_eq!(BFieldElement::new(1), auth_paths_salts_values[1].2);
 
         let auth_path_b_multi_1 = tree_b.get_leafless_multi_proof(&[1]);
         let multi_values_1 = vec![BFieldElement::new(1)];
