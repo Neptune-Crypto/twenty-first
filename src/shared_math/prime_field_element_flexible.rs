@@ -554,7 +554,7 @@ mod test_modular_arithmetic_flexible {
 
     #[test]
     fn batch_inversion_pbt() {
-        let test_iterations = 400;
+        let test_iterations = 100;
         for i in 0..test_iterations {
             let mut rng = rand::thread_rng();
             let prime = FIRST_TEN_THOUSAND_PRIMES
