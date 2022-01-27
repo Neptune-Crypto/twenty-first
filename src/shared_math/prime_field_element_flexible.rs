@@ -508,6 +508,23 @@ mod test_modular_arithmetic_flexible {
     }
 
     #[test]
+    fn pfef_identity_test() {
+        let inputs = values(5, &[0, 1, 2, 3, 4]);
+        for i in 0..inputs.len() {
+            if i == 0 {
+                assert!(inputs[i].is_zero());
+                assert!(!inputs[i].is_one());
+            } else if i == 1 {
+                assert!(!inputs[i].is_zero());
+                assert!(inputs[i].is_one());
+            } else {
+                assert!(!inputs[i].is_zero());
+                assert!(!inputs[i].is_one());
+            }
+        }
+    }
+
+    #[test]
     fn batch_inversion_test_small_no_zeros() {
         let input: Vec<PrimeFieldElementFlexible> = values(5, &[1, 2, 3, 4]);
         let output = PrimeFieldElementFlexible::batch_inversion(input);
