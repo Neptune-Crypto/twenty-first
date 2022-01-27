@@ -20,6 +20,11 @@ type MCoefficients<T> = HashMap<Vec<u64>, T>;
 
 const EDMONDS_WEIGHT_CUTOFF_FACTOR: u64 = 2;
 
+/// This is the data contained in each node in the tree. It contains
+/// the information needed to calculate values for the
+/// `polynomium_products` hash map. The keys in this hash map are
+/// `abs_exponents` and the values are
+/// `polynomium_products[parent] * prod_{i=0}^N(point[i]^diff_exponents[i])`.
 #[derive(Debug, Clone)]
 pub struct PolynomialEvaluationDataNode {
     diff_exponents: Vec<u64>,
