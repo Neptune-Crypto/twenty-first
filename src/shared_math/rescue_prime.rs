@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
@@ -190,7 +191,6 @@ impl RescuePrime {
         let previous_state = &variables[1..(self.m + 1)];
         let next_state = &variables[(self.m + 1)..(2 * self.m + 1)];
         let one = omicron.ring_one();
-        let mut air: Vec<MPolynomial<BFieldElement>> = vec![];
 
         let previous_state_pow_alpha = previous_state
             .iter()
@@ -200,25 +200,28 @@ impl RescuePrime {
         // TODO: Consider refactoring MPolynomial<BFieldElement>
         // ::mod_pow(exp: BigInt, one: BFieldElement) into
         // ::mod_pow_u64(exp: u64)
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..self.m {
-            let mut lhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
-            for k in 0..self.m {
-                lhs += previous_state_pow_alpha[k].scalar_mul(self.mds[i][k]);
-            }
-            lhs += first_step_constants[i].clone();
+        let air: Vec<MPolynomial<BFieldElement>> = self
+            .mds
+            .par_iter()
+            .zip(self.mds_inv.par_iter())
+            .zip(first_step_constants.into_par_iter())
+            .map(|((mds, mds_inv), fsc)| {
+                let mut lhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
+                for k in 0..self.m {
+                    lhs += previous_state_pow_alpha[k].scalar_mul(mds[k]);
+                }
+                lhs += fsc;
 
-            let mut rhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
-            for k in 0..self.m {
-                rhs += (next_state[k].clone() - second_step_constants[k].clone())
-                    .scalar_mul(self.mds_inv[i][k]);
-            }
-            // println!("rhs.variable_count = {}, rhs.degree() = {}", rhs.variable_count, rhs.degree());
-            rhs = rhs.mod_pow(self.alpha.into(), one);
-            // println!("done mod_pow'ing {}", i);
+                let mut rhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
+                for k in 0..self.m {
+                    rhs += (next_state[k].clone() - second_step_constants[k].clone())
+                        .scalar_mul(mds_inv[k]);
+                }
+                rhs = rhs.mod_pow(self.alpha.into(), one);
 
-            air.push(lhs - rhs);
-        }
+                lhs - rhs
+            })
+            .collect();
 
         air
     }
