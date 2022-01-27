@@ -2,7 +2,7 @@ use super::traits::{FromVecu8, GetPrimitiveRootOfUnity};
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
-    PrimeFieldElement,
+    PrimeField,
 };
 use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
@@ -285,7 +285,7 @@ impl FromVecu8 for BFieldElement {
     }
 }
 
-impl PrimeFieldElement for BFieldElement {
+impl PrimeField for BFieldElement {
     type Elem = BFieldElement;
 }
 

@@ -1,7 +1,7 @@
 use crate::shared_math::ntt::{slow_intt, slow_ntt};
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::traits::{
-    FieldBatchInversion, GetPrimitiveRootOfUnity, IdentityValues, ModPowU32, PrimeFieldElement,
+    FieldBatchInversion, GetPrimitiveRootOfUnity, IdentityValues, ModPowU32, PrimeField,
 };
 use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
@@ -22,7 +22,7 @@ fn degree_raw<T: Add + Div + Mul + Sub + IdentityValues + Display>(coefficients:
     deg // -1 for the zero polynomial
 }
 
-fn pretty_print_coefficients_generic<PF: PrimeFieldElement>(coefficients: &[PF::Elem]) -> String {
+fn pretty_print_coefficients_generic<PF: PrimeField>(coefficients: &[PF::Elem]) -> String {
     let degree = degree_raw(coefficients);
     if degree == -1 {
         return String::from("0");
@@ -63,11 +63,11 @@ fn pretty_print_coefficients_generic<PF: PrimeFieldElement>(coefficients: &[PF::
     outputs.join("")
 }
 
-pub struct Polynomial<PF: PrimeFieldElement> {
+pub struct Polynomial<PF: PrimeField> {
     pub coefficients: Vec<PF::Elem>,
 }
 
-impl<PF: PrimeFieldElement> Clone for Polynomial<PF> {
+impl<PF: PrimeField> Clone for Polynomial<PF> {
     fn clone(&self) -> Self {
         Self {
             coefficients: self.coefficients.clone(),
@@ -75,7 +75,7 @@ impl<PF: PrimeFieldElement> Clone for Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Debug for Polynomial<PF> {
+impl<PF: PrimeField> Debug for Polynomial<PF> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Polynomial")
             .field("coefficients", &self.coefficients)
@@ -83,13 +83,13 @@ impl<PF: PrimeFieldElement> Debug for Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Hash for Polynomial<PF> {
+impl<PF: PrimeField> Hash for Polynomial<PF> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.coefficients.hash(state);
     }
 }
 
-impl<PF: PrimeFieldElement> Display for Polynomial<PF> {
+impl<PF: PrimeField> Display for Polynomial<PF> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
@@ -99,7 +99,7 @@ impl<PF: PrimeFieldElement> Display for Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> PartialEq for Polynomial<PF> {
+impl<PF: PrimeField> PartialEq for Polynomial<PF> {
     fn eq(&self, other: &Self) -> bool {
         if self.degree() != other.degree() {
             return false;
@@ -116,9 +116,9 @@ impl<PF: PrimeFieldElement> PartialEq for Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Eq for Polynomial<PF> {}
+impl<PF: PrimeField> Eq for Polynomial<PF> {}
 
-impl<PF: PrimeFieldElement> Polynomial<PF> {
+impl<PF: PrimeField> Polynomial<PF> {
     pub fn new(coefficients: Vec<PF::Elem>) -> Self {
         Self { coefficients }
     }
@@ -287,7 +287,7 @@ impl<PF: PrimeFieldElement> Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Polynomial<PF> {
+impl<PF: PrimeField> Polynomial<PF> {
     pub fn are_colinear(points: &[(PF::Elem, PF::Elem)]) -> bool {
         if points.len() < 3 {
             println!("Too few points received. Got: {} points", points.len());
@@ -417,7 +417,7 @@ impl<PF: PrimeFieldElement> Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Polynomial<PF> {
+impl<PF: PrimeField> Polynomial<PF> {
     // It is the caller's responsibility that this function
     // is called with sufficiently large input to be safe
     // and to be faster than `square`.
@@ -523,7 +523,7 @@ impl<PF: PrimeFieldElement> Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Polynomial<PF> {
+impl<PF: PrimeField> Polynomial<PF> {
     // FIXME: lhs -> &self. FIXME: Change root_order: usize into : u32.
     pub fn fast_multiply(
         lhs: &Self,
@@ -803,7 +803,7 @@ impl<PF: PrimeFieldElement> Polynomial<PF> {
 }
 
 #[must_use]
-impl<PF: PrimeFieldElement> Polynomial<PF> {
+impl<PF: PrimeField> Polynomial<PF> {
     pub fn multiply(self, other: Self) -> Self {
         let degree_lhs = self.degree();
         let degree_rhs = other.degree();
@@ -960,7 +960,7 @@ impl<PF: PrimeFieldElement> Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Div for Polynomial<PF> {
+impl<PF: PrimeField> Div for Polynomial<PF> {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
@@ -969,7 +969,7 @@ impl<PF: PrimeFieldElement> Div for Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Rem for Polynomial<PF> {
+impl<PF: PrimeField> Rem for Polynomial<PF> {
     type Output = Self;
 
     fn rem(self, other: Self) -> Self {
@@ -978,7 +978,7 @@ impl<PF: PrimeFieldElement> Rem for Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Add for Polynomial<PF> {
+impl<PF: PrimeField> Add for Polynomial<PF> {
     type Output = Self;
 
     // fn add(self, other: Self) -> Self {
@@ -1014,7 +1014,7 @@ impl<PF: PrimeFieldElement> Add for Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> AddAssign for Polynomial<PF> {
+impl<PF: PrimeField> AddAssign for Polynomial<PF> {
     fn add_assign(&mut self, rhs: Self) {
         let rhs_len = rhs.coefficients.len();
         let self_len = self.coefficients.len();
@@ -1029,7 +1029,7 @@ impl<PF: PrimeFieldElement> AddAssign for Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Sub for Polynomial<PF> {
+impl<PF: PrimeField> Sub for Polynomial<PF> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -1050,13 +1050,13 @@ impl<PF: PrimeFieldElement> Sub for Polynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Polynomial<PF> {
+impl<PF: PrimeField> Polynomial<PF> {
     pub fn degree(&self) -> isize {
         degree_raw(&self.coefficients)
     }
 }
 
-impl<PF: PrimeFieldElement> Mul for Polynomial<PF> {
+impl<PF: PrimeField> Mul for Polynomial<PF> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {

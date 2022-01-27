@@ -14,7 +14,7 @@ use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 use std::rc::Rc;
 use std::{cmp, fmt};
 
-use super::traits::PrimeFieldElement;
+use super::traits::PrimeField;
 
 type MCoefficients<T> = HashMap<Vec<u64>, T>;
 
@@ -31,7 +31,7 @@ pub struct PolynomialEvaluationDataNode {
 }
 
 impl<'a, T: Sized> Node<T> {
-    fn traverse_tree<PF: PrimeFieldElement>(
+    fn traverse_tree<PF: PrimeField>(
         nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>>,
         point: &[Polynomial<PF>],
         one: PF::Elem,
@@ -171,7 +171,7 @@ impl<'a, T: Sized> Node<T> {
     }
 }
 
-pub struct MPolynomial<T: PrimeFieldElement> {
+pub struct MPolynomial<T: PrimeField> {
     // Multivariate polynomials are represented as hash maps with exponent vectors
     // as keys and coefficients as values. E.g.:
     // f(x,y,z) = 17 + 2xy + 42z - 19x^6*y^3*z^12 is represented as:
@@ -185,7 +185,7 @@ pub struct MPolynomial<T: PrimeFieldElement> {
     pub coefficients: HashMap<Vec<u64>, T::Elem>,
 }
 
-impl<T: PrimeFieldElement> Clone for MPolynomial<T> {
+impl<T: PrimeField> Clone for MPolynomial<T> {
     fn clone(&self) -> Self {
         Self {
             variable_count: self.variable_count,
@@ -194,7 +194,7 @@ impl<T: PrimeFieldElement> Clone for MPolynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Debug for MPolynomial<T> {
+impl<T: PrimeField> Debug for MPolynomial<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MPolynomial")
             .field("variable_count", &self.variable_count)
@@ -218,7 +218,7 @@ impl fmt::Display for PrecalculationError {
     }
 }
 
-impl<PF: PrimeFieldElement> Display for MPolynomial<PF> {
+impl<PF: PrimeField> Display for MPolynomial<PF> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let output = if self.is_zero() {
             "0".to_string()
@@ -235,7 +235,7 @@ impl<PF: PrimeFieldElement> Display for MPolynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> PartialEq for MPolynomial<PF> {
+impl<PF: PrimeField> PartialEq for MPolynomial<PF> {
     fn eq(&self, other: &Self) -> bool {
         let (shortest, var_count, longest) = if self.variable_count > other.variable_count {
             (
@@ -275,9 +275,9 @@ impl<PF: PrimeFieldElement> PartialEq for MPolynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Eq for MPolynomial<PF> {}
+impl<PF: PrimeField> Eq for MPolynomial<PF> {}
 
-impl<PF: PrimeFieldElement> MPolynomial<PF> {
+impl<PF: PrimeField> MPolynomial<PF> {
     fn term_print(exponents: &[u64], coefficient: &PF::Elem) -> String {
         if coefficient.is_zero() {
             return "".to_string();
@@ -868,7 +868,7 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Add for MPolynomial<PF> {
+impl<PF: PrimeField> Add for MPolynomial<PF> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -902,7 +902,7 @@ impl<PF: PrimeFieldElement> Add for MPolynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> AddAssign for MPolynomial<PF> {
+impl<PF: PrimeField> AddAssign for MPolynomial<PF> {
     fn add_assign(&mut self, rhs: Self) {
         if self.variable_count != rhs.variable_count {
             let result = self.clone() + rhs;
@@ -922,7 +922,7 @@ impl<PF: PrimeFieldElement> AddAssign for MPolynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Sub for MPolynomial<PF> {
+impl<PF: PrimeField> Sub for MPolynomial<PF> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -956,7 +956,7 @@ impl<PF: PrimeFieldElement> Sub for MPolynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Neg for MPolynomial<PF> {
+impl<PF: PrimeField> Neg for MPolynomial<PF> {
     type Output = Self;
 
     fn neg(self) -> Self {
@@ -972,7 +972,7 @@ impl<PF: PrimeFieldElement> Neg for MPolynomial<PF> {
     }
 }
 
-impl<PF: PrimeFieldElement> Mul for MPolynomial<PF> {
+impl<PF: PrimeField> Mul for MPolynomial<PF> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {

@@ -74,7 +74,7 @@ pub trait FromVecu8 {
     fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
 }
 
-pub trait PrimeFieldElement {
+pub trait PrimeField {
     type Elem: Clone
         + Eq
         + Display

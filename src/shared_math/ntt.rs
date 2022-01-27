@@ -6,7 +6,7 @@ use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Neg;
 
-use super::traits::PrimeFieldElement;
+use super::traits::PrimeField;
 
 fn slow_ntt_base_case<T: Add<Output = T> + Mul<Output = T> + Clone>(x: &[T], omega: &T) -> Vec<T> {
     vec![
@@ -126,7 +126,7 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
     r
 }
 
-pub fn intt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
+pub fn intt<T: PrimeField>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
     let n: T::Elem = omega.new_from_usize(x.len());
     let n_inv: T::Elem = omega.ring_one() / n;
     ntt::<T>(x, omega.ring_one() / omega, log_2_of_n);
@@ -136,7 +136,7 @@ pub fn intt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n:
 }
 
 #[allow(clippy::many_single_char_names)]
-pub fn ntt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
+pub fn ntt<T: PrimeField>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: u32) {
     let n = x.len() as u32;
     assert_eq!(
         n,
