@@ -22,7 +22,7 @@ fn degree_raw<T: Add + Div + Mul + Sub + IdentityValues + Display>(coefficients:
     deg // -1 for the zero polynomial
 }
 
-fn pretty_print_coefficients_generic<T: PrimeFieldElement>(coefficients: &[T::Elem]) -> String {
+fn pretty_print_coefficients_generic<PF: PrimeFieldElement>(coefficients: &[PF::Elem]) -> String {
     let degree = degree_raw(coefficients);
     if degree == -1 {
         return String::from("0");
@@ -46,7 +46,7 @@ fn pretty_print_coefficients_generic<T: PrimeFieldElement>(coefficients: &[T::El
                 coefficients[pow].to_string()
             },
             if pow == 0 && coefficients[pow].is_one() {
-                let one: T::Elem = coefficients[pow].ring_one();
+                let one: PF::Elem = coefficients[pow].ring_one();
                 one.to_string()
             } else if pow == 0 {
                 String::from("")
@@ -63,11 +63,11 @@ fn pretty_print_coefficients_generic<T: PrimeFieldElement>(coefficients: &[T::El
     outputs.join("")
 }
 
-pub struct Polynomial<T: PrimeFieldElement> {
-    pub coefficients: Vec<T::Elem>,
+pub struct Polynomial<PF: PrimeFieldElement> {
+    pub coefficients: Vec<PF::Elem>,
 }
 
-impl<T: PrimeFieldElement> Clone for Polynomial<T> {
+impl<PF: PrimeFieldElement> Clone for Polynomial<PF> {
     fn clone(&self) -> Self {
         Self {
             coefficients: self.coefficients.clone(),
@@ -75,7 +75,7 @@ impl<T: PrimeFieldElement> Clone for Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Debug for Polynomial<T> {
+impl<PF: PrimeFieldElement> Debug for Polynomial<PF> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Polynomial")
             .field("coefficients", &self.coefficients)
@@ -83,23 +83,23 @@ impl<T: PrimeFieldElement> Debug for Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Hash for Polynomial<T> {
+impl<PF: PrimeFieldElement> Hash for Polynomial<PF> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.coefficients.hash(state);
     }
 }
 
-impl<T: PrimeFieldElement> Display for Polynomial<T> {
+impl<PF: PrimeFieldElement> Display for Polynomial<PF> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
             "{}",
-            pretty_print_coefficients_generic::<T>(&self.coefficients)
+            pretty_print_coefficients_generic::<PF>(&self.coefficients)
         )
     }
 }
 
-impl<T: PrimeFieldElement> PartialEq for Polynomial<T> {
+impl<PF: PrimeFieldElement> PartialEq for Polynomial<PF> {
     fn eq(&self, other: &Self) -> bool {
         if self.degree() != other.degree() {
             return false;
@@ -116,14 +116,14 @@ impl<T: PrimeFieldElement> PartialEq for Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Eq for Polynomial<T> {}
+impl<PF: PrimeFieldElement> Eq for Polynomial<PF> {}
 
-impl<T: PrimeFieldElement> Polynomial<T> {
-    pub fn new(coefficients: Vec<T::Elem>) -> Self {
+impl<PF: PrimeFieldElement> Polynomial<PF> {
+    pub fn new(coefficients: Vec<PF::Elem>) -> Self {
         Self { coefficients }
     }
 
-    pub fn new_const(element: T::Elem) -> Self {
+    pub fn new_const(element: PF::Elem) -> Self {
         Self {
             coefficients: vec![element],
         }
@@ -141,7 +141,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         }
     }
 
-    pub fn from_constant(constant: T::Elem) -> Self {
+    pub fn from_constant(constant: PF::Elem) -> Self {
         Self {
             coefficients: vec![constant],
         }
@@ -159,7 +159,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
     }
 
-    pub fn evaluate(&self, &x: &T::Elem) -> T::Elem {
+    pub fn evaluate(&self, &x: &PF::Elem) -> PF::Elem {
         let mut acc = x.ring_zero();
         for &c in self.coefficients.iter().rev() {
             acc = c + x * acc;
@@ -168,7 +168,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         acc
     }
 
-    pub fn leading_coefficient(&self) -> Option<T::Elem> {
+    pub fn leading_coefficient(&self) -> Option<PF::Elem> {
         match self.degree() {
             -1 => None,
             n => Some(self.coefficients[n as usize]),
@@ -179,7 +179,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
     // then corresponds to evaluating P(alpha * x).
     #[must_use]
-    pub fn scale(&self, &alpha: &T::Elem) -> Self {
+    pub fn scale(&self, &alpha: &PF::Elem) -> Self {
         let mut acc = alpha.ring_one();
         let mut return_coefficients = self.coefficients.clone();
         for elem in return_coefficients.iter_mut() {
@@ -193,9 +193,9 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     }
 
     pub fn lagrange_interpolation_2(
-        p0: &(T::Elem, T::Elem),
-        p1: &(T::Elem, T::Elem),
-    ) -> (T::Elem, T::Elem) {
+        p0: &(PF::Elem, PF::Elem),
+        p1: &(PF::Elem, PF::Elem),
+    ) -> (PF::Elem, PF::Elem) {
         let x_diff = p0.0 - p1.0;
         let x_diff_inv = p0.0.ring_one() / x_diff;
         let a = (p0.1 - p1.1) * x_diff_inv;
@@ -205,9 +205,9 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     }
 
     pub fn are_colinear_3(
-        p0: (T::Elem, T::Elem),
-        p1: (T::Elem, T::Elem),
-        p2: (T::Elem, T::Elem),
+        p0: (PF::Elem, PF::Elem),
+        p1: (PF::Elem, PF::Elem),
+        p2: (PF::Elem, PF::Elem),
     ) -> bool {
         if p0.0 == p1.0 || p1.0 == p2.0 || p2.0 == p0.0 {
             return false;
@@ -224,10 +224,10 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
     // Calculates a reversed representation of the coefficients of
     // prod_{i=0}^{N}((x- q_i))
-    fn prod_helper(input: &[T::Elem]) -> Vec<T::Elem> {
+    fn prod_helper(input: &[PF::Elem]) -> Vec<PF::Elem> {
         if let Some((&q_j, elements)) = input.split_first() {
-            let one: T::Elem = q_j.ring_one();
-            let zero: T::Elem = q_j.ring_zero();
+            let one: PF::Elem = q_j.ring_one();
+            let zero: PF::Elem = q_j.ring_zero();
             let minus_q_j = zero - q_j;
             match elements {
                 // base case is `x - q_j` := [1, -q_j]
@@ -250,7 +250,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         }
     }
 
-    pub fn get_polynomial_with_roots(roots: &[T::Elem]) -> Self {
+    pub fn get_polynomial_with_roots(roots: &[PF::Elem]) -> Self {
         let mut coefficients = Self::prod_helper(roots);
         coefficients.reverse();
         Polynomial { coefficients }
@@ -287,8 +287,8 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Polynomial<T> {
-    pub fn are_colinear(points: &[(T::Elem, T::Elem)]) -> bool {
+impl<PF: PrimeFieldElement> Polynomial<PF> {
+    pub fn are_colinear(points: &[(PF::Elem, PF::Elem)]) -> bool {
         if points.len() < 3 {
             println!("Too few points received. Got: {} points", points.len());
             return false;
@@ -300,8 +300,8 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         }
 
         // Find 1st degree polynomial from first two points
-        let one: T::Elem = points[0].0.ring_one();
-        let x_diff: T::Elem = points[0].0 - points[1].0;
+        let one: PF::Elem = points[0].0.ring_one();
+        let x_diff: PF::Elem = points[0].0 - points[1].0;
         let x_diff_inv = one / x_diff;
         let a = (points[0].1 - points[1].1) * x_diff_inv;
         let b = points[0].1 - a * points[0].0;
@@ -328,22 +328,22 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         true
     }
 
-    fn slow_lagrange_interpolation_internal(xs: &[T::Elem], ys: &[T::Elem]) -> Self {
+    fn slow_lagrange_interpolation_internal(xs: &[PF::Elem], ys: &[PF::Elem]) -> Self {
         assert_eq!(
             xs.len(),
             ys.len(),
             "x and y values must have the same length"
         );
-        let roots: Vec<T::Elem> = xs.to_vec();
+        let roots: Vec<PF::Elem> = xs.to_vec();
         let mut big_pol_coeffs = Self::prod_helper(&roots);
         big_pol_coeffs.reverse();
         let big_pol = Self {
             coefficients: big_pol_coeffs,
         };
 
-        let zero: T::Elem = xs[0].ring_zero();
-        let one: T::Elem = xs[0].ring_one();
-        let mut coefficients: Vec<T::Elem> = vec![zero; xs.len()];
+        let zero: PF::Elem = xs[0].ring_zero();
+        let one: PF::Elem = xs[0].ring_one();
+        let mut coefficients: Vec<PF::Elem> = vec![zero; xs.len()];
         for (&x, &y) in xs.iter().zip(ys.iter()) {
             // create a PrimeFieldPolynomial that is zero at all other points than this
             // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
@@ -362,7 +362,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             }
 
             // TODO: Review.
-            let mut my_coeffs: Vec<T::Elem> = my_pol.coefficients.clone();
+            let mut my_coeffs: Vec<PF::Elem> = my_pol.coefficients.clone();
             for coeff in my_coeffs.iter_mut() {
                 *coeff = coeff.to_owned() * y;
                 *coeff = coeff.to_owned() / divisor;
@@ -376,7 +376,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         Self { coefficients }
     }
 
-    pub fn slow_lagrange_interpolation_new(xs: &[T::Elem], ys: &[T::Elem]) -> Self {
+    pub fn slow_lagrange_interpolation_new(xs: &[PF::Elem], ys: &[PF::Elem]) -> Self {
         if !has_unique_elements(xs.iter()) {
             panic!("Repeated x values received. Got: {:?}", xs);
         }
@@ -386,7 +386,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
         if xs.len() == 2 {
             let (a, b) =
-                Polynomial::<T>::lagrange_interpolation_2(&(xs[0], ys[0]), &(xs[1], ys[1]));
+                Polynomial::<PF>::lagrange_interpolation_2(&(xs[0], ys[0]), &(xs[1], ys[1]));
             return Polynomial {
                 coefficients: vec![b, a],
             };
@@ -398,26 +398,26 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
     // purposes. This also means that it is not pivotal that this function has an optimal
     // runtime.
-    pub fn slow_lagrange_interpolation(points: &[(T::Elem, T::Elem)]) -> Self {
+    pub fn slow_lagrange_interpolation(points: &[(PF::Elem, PF::Elem)]) -> Self {
         if !has_unique_elements(points.iter().map(|x| x.0)) {
             panic!("Repeated x values received. Got: {:?}", points);
         }
 
         if points.len() == 2 {
-            let (a, b) = Polynomial::<T>::lagrange_interpolation_2(&points[0], &points[1]);
+            let (a, b) = Polynomial::<PF>::lagrange_interpolation_2(&points[0], &points[1]);
             return Polynomial {
                 coefficients: vec![b, a],
             };
         }
 
-        let xs: Vec<T::Elem> = points.iter().map(|x| x.0.to_owned()).collect();
-        let ys: Vec<T::Elem> = points.iter().map(|x| x.1.to_owned()).collect();
+        let xs: Vec<PF::Elem> = points.iter().map(|x| x.0.to_owned()).collect();
+        let ys: Vec<PF::Elem> = points.iter().map(|x| x.1.to_owned()).collect();
 
         Self::slow_lagrange_interpolation_internal(&xs, &ys)
     }
 }
 
-impl<T: PrimeFieldElement> Polynomial<T> {
+impl<PF: PrimeFieldElement> Polynomial<PF> {
     // It is the caller's responsibility that this function
     // is called with sufficiently large input to be safe
     // and to be faster than `square`.
@@ -441,7 +441,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
         let mut coefficients = self.coefficients.to_vec();
         coefficients.resize(order as usize, root.ring_zero());
-        let mut codeword: Vec<T::Elem> = slow_ntt(&coefficients, &root);
+        let mut codeword: Vec<PF::Elem> = slow_ntt(&coefficients, &root);
         for element in codeword.iter_mut() {
             *element = element.to_owned() * element.to_owned();
         }
@@ -491,7 +491,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     }
 
     #[must_use]
-    pub fn fast_mod_pow(&self, pow: BigInt, one: T::Elem) -> Self {
+    pub fn fast_mod_pow(&self, pow: BigInt, one: PF::Elem) -> Self {
         assert!(one.is_one(), "Provided one must be one");
 
         // Special case to handle 0^0 = 1
@@ -523,12 +523,12 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Polynomial<T> {
+impl<PF: PrimeFieldElement> Polynomial<PF> {
     // FIXME: lhs -> &self. FIXME: Change root_order: usize into : u32.
     pub fn fast_multiply(
         lhs: &Self,
         rhs: &Self,
-        primitive_root: &T::Elem,
+        primitive_root: &PF::Elem,
         root_order: usize,
     ) -> Self {
         assert!(
@@ -544,7 +544,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             return Self::ring_zero();
         }
 
-        let mut root: T::Elem = primitive_root.to_owned();
+        let mut root: PF::Elem = primitive_root.to_owned();
         let mut order = root_order;
         let lhs_degree = lhs.degree() as usize;
         let rhs_degree = rhs.degree() as usize;
@@ -559,8 +559,8 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             order /= 2;
         }
 
-        let mut lhs_coefficients: Vec<T::Elem> = lhs.coefficients[0..lhs_degree + 1].to_vec();
-        let mut rhs_coefficients: Vec<T::Elem> = rhs.coefficients[0..rhs_degree + 1].to_vec();
+        let mut lhs_coefficients: Vec<PF::Elem> = lhs.coefficients[0..lhs_degree + 1].to_vec();
+        let mut rhs_coefficients: Vec<PF::Elem> = rhs.coefficients[0..rhs_degree + 1].to_vec();
         while lhs_coefficients.len() < order {
             lhs_coefficients.push(root.ring_zero());
         }
@@ -568,10 +568,10 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             rhs_coefficients.push(root.ring_zero());
         }
 
-        let lhs_codeword: Vec<T::Elem> = slow_ntt(&lhs_coefficients, &root);
-        let rhs_codeword: Vec<T::Elem> = slow_ntt(&rhs_coefficients, &root);
+        let lhs_codeword: Vec<PF::Elem> = slow_ntt(&lhs_coefficients, &root);
+        let rhs_codeword: Vec<PF::Elem> = slow_ntt(&rhs_coefficients, &root);
 
-        let hadamard_product: Vec<T::Elem> = rhs_codeword
+        let hadamard_product: Vec<PF::Elem> = rhs_codeword
             .into_iter()
             .zip(lhs_codeword.into_iter())
             .map(|(r, l)| r * l)
@@ -586,7 +586,11 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     }
 
     // domain: polynomium roots
-    pub fn fast_zerofier(domain: &[T::Elem], primitive_root: &T::Elem, root_order: usize) -> Self {
+    pub fn fast_zerofier(
+        domain: &[PF::Elem],
+        primitive_root: &PF::Elem,
+        root_order: usize,
+    ) -> Self {
         // assert(primitive_root^root_order == primitive_root.field.one()), "supplied root does not have supplied order"
         // assert(primitive_root^(root_order//2) != primitive_root.field.one()), "supplied root is not primitive root of supplied order"
 
@@ -609,10 +613,10 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
     pub fn fast_evaluate(
         &self,
-        domain: &[T::Elem],
-        primitive_root: &T::Elem,
+        domain: &[PF::Elem],
+        primitive_root: &PF::Elem,
         root_order: usize,
-    ) -> Vec<T::Elem> {
+    ) -> Vec<PF::Elem> {
         if domain.is_empty() {
             return vec![];
         }
@@ -642,9 +646,9 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     }
 
     pub fn fast_interpolate(
-        domain: &[T::Elem],
-        values: &[T::Elem],
-        primitive_root: &T::Elem,
+        domain: &[PF::Elem],
+        values: &[PF::Elem],
+        primitive_root: &PF::Elem,
         root_order: usize,
     ) -> Self {
         assert_eq!(
@@ -674,25 +678,25 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         let right_zerofier =
             Self::fast_zerofier(&domain[half..], &primitive_root_squared, root_order / 2);
 
-        let left_offset: Vec<T::Elem> = Self::fast_evaluate(
+        let left_offset: Vec<PF::Elem> = Self::fast_evaluate(
             &right_zerofier,
             &domain[..half],
             &primitive_root_squared,
             root_order / 2,
         );
-        let right_offset: Vec<T::Elem> = Self::fast_evaluate(
+        let right_offset: Vec<PF::Elem> = Self::fast_evaluate(
             &left_zerofier,
             &domain[half..],
             &primitive_root_squared,
             root_order / 2,
         );
 
-        let left_targets: Vec<T::Elem> = values[..half]
+        let left_targets: Vec<PF::Elem> = values[..half]
             .iter()
             .zip(left_offset)
             .map(|(n, d)| n.to_owned() / d)
             .collect();
-        let right_targets: Vec<T::Elem> = values[half..]
+        let right_targets: Vec<PF::Elem> = values[half..]
             .iter()
             .zip(right_offset)
             .map(|(n, d)| n.to_owned() / d)
@@ -716,10 +720,10 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
     pub fn fast_coset_evaluate(
         &self,
-        offset: &T::Elem,
-        generator: T::Elem,
+        offset: &PF::Elem,
+        generator: PF::Elem,
         order: usize,
-    ) -> Vec<T::Elem> {
+    ) -> Vec<PF::Elem> {
         let mut coefficients = self.scale(offset).coefficients;
         coefficients.append(&mut vec![generator.ring_zero(); order - coefficients.len()]);
         slow_ntt(&coefficients, &generator)
@@ -731,12 +735,12 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     /// domains. The issue of zero in the numerator and divisor arises when we divide a transition
     /// polynomial with a zerofier.
     pub fn fast_coset_divide(
-        lhs: &Polynomial<T>,
-        rhs: &Polynomial<T>,
-        offset: T::Elem,
-        primitive_root: T::Elem,
+        lhs: &Polynomial<PF>,
+        rhs: &Polynomial<PF>,
+        offset: PF::Elem,
+        primitive_root: PF::Elem,
         root_order: usize,
-    ) -> Polynomial<T> {
+    ) -> Polynomial<PF> {
         assert!(
             primitive_root.mod_pow_u32(root_order as u32).is_one(),
             "primitive root raised to given order must yield 1"
@@ -759,7 +763,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         );
 
         let zero = lhs.coefficients[0].ring_zero();
-        let mut root: T::Elem = primitive_root.to_owned();
+        let mut root: PF::Elem = primitive_root.to_owned();
         let mut order = root_order;
         let degree: usize = lhs.degree() as usize;
 
@@ -772,17 +776,17 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             order /= 2;
         }
 
-        let mut scaled_lhs_coefficients: Vec<T::Elem> = lhs.scale(&offset).coefficients;
+        let mut scaled_lhs_coefficients: Vec<PF::Elem> = lhs.scale(&offset).coefficients;
         scaled_lhs_coefficients.append(&mut vec![zero; order - scaled_lhs_coefficients.len()]);
 
-        let mut scaled_rhs_coefficients: Vec<T::Elem> = rhs.scale(&offset).coefficients;
+        let mut scaled_rhs_coefficients: Vec<PF::Elem> = rhs.scale(&offset).coefficients;
         scaled_rhs_coefficients.append(&mut vec![zero; order - scaled_rhs_coefficients.len()]);
 
         let lhs_codeword = slow_ntt(&scaled_lhs_coefficients, &root);
         let rhs_codeword = slow_ntt(&scaled_rhs_coefficients, &root);
 
-        let rhs_inverses = T::Elem::batch_inversion(rhs_codeword);
-        let quotient_codeword: Vec<T::Elem> = lhs_codeword
+        let rhs_inverses = PF::Elem::batch_inversion(rhs_codeword);
+        let quotient_codeword: Vec<PF::Elem> = lhs_codeword
             .iter()
             .zip(rhs_inverses)
             .map(|(l, r)| l.to_owned() * r)
@@ -799,7 +803,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 }
 
 #[must_use]
-impl<T: PrimeFieldElement> Polynomial<T> {
+impl<PF: PrimeFieldElement> Polynomial<PF> {
     pub fn multiply(self, other: Self) -> Self {
         let degree_lhs = self.degree();
         let degree_rhs = other.degree();
@@ -811,7 +815,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
         // allocate right number of coefficients, initialized to zero
         let elem = self.coefficients[0];
-        let mut result_coeff: Vec<T::Elem> =
+        let mut result_coeff: Vec<PF::Elem> =
             //vec![U::zero_from_field(field: U); degree_lhs as usize + degree_rhs as usize + 1];
             vec![elem.ring_zero(); degree_lhs as usize + degree_rhs as usize + 1];
 
@@ -819,7 +823,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         // for all pairs of coefficients, add product to result vector in appropriate coordinate
         for i in 0..=degree_lhs as usize {
             for j in 0..=degree_rhs as usize {
-                let mul: T::Elem = self.coefficients[i] * other.coefficients[j];
+                let mul: PF::Elem = self.coefficients[i] * other.coefficients[j];
                 result_coeff[i + j] += mul;
             }
         }
@@ -832,7 +836,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
     // Multiply a polynomial with itself `pow` times
     #[must_use]
-    pub fn mod_pow(&self, pow: BigInt, one: T::Elem) -> Self {
+    pub fn mod_pow(&self, pow: BigInt, one: PF::Elem) -> Self {
         assert!(one.is_one(), "Provided one must be one");
 
         // Special case to handle 0^0 = 1
@@ -859,32 +863,32 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         acc
     }
 
-    pub fn shift_coefficients_mut(&mut self, power: usize, zero: T::Elem) {
+    pub fn shift_coefficients_mut(&mut self, power: usize, zero: PF::Elem) {
         self.coefficients.splice(0..0, vec![zero; power]);
     }
 
     // Multiply a polynomial with x^power
     #[must_use]
-    pub fn shift_coefficients(&self, power: usize, zero: T::Elem) -> Self {
+    pub fn shift_coefficients(&self, power: usize, zero: PF::Elem) -> Self {
         if !zero.is_zero() {
             panic!("`zero` was not zero. Don't do this.");
         }
 
-        let mut coefficients: Vec<T::Elem> = self.coefficients.clone();
+        let mut coefficients: Vec<PF::Elem> = self.coefficients.clone();
         coefficients.splice(0..0, vec![zero; power]);
         Polynomial { coefficients }
     }
 
     // TODO: Review
-    pub fn scalar_mul_mut(&mut self, scalar: T::Elem) {
+    pub fn scalar_mul_mut(&mut self, scalar: PF::Elem) {
         for coefficient in self.coefficients.iter_mut() {
             *coefficient *= scalar;
         }
     }
 
     #[must_use]
-    pub fn scalar_mul(&self, scalar: T::Elem) -> Self {
-        let mut coefficients: Vec<T::Elem> = vec![];
+    pub fn scalar_mul(&self, scalar: PF::Elem) -> Self {
+        let mut coefficients: Vec<PF::Elem> = vec![];
         for i in 0..self.coefficients.len() {
             coefficients.push(self.coefficients[i] * scalar);
         }
@@ -911,7 +915,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
         // quotient is built from back to front so must be reversed
         // Preallocate space for quotient coefficients
-        let mut quotient: Vec<T::Elem> = if degree_lhs - degree_rhs >= 0 {
+        let mut quotient: Vec<PF::Elem> = if degree_lhs - degree_rhs >= 0 {
             Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize)
         } else {
             vec![]
@@ -920,15 +924,15 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         remainder.normalize();
 
         // a divisor coefficient is guaranteed to exist since the divisor is non-zero
-        let dlc: T::Elem = divisor.leading_coefficient().unwrap();
+        let dlc: PF::Elem = divisor.leading_coefficient().unwrap();
         let inv = dlc.ring_one() / dlc;
 
         let mut i = 0;
         while i + degree_rhs <= degree_lhs {
             // calculate next quotient coefficient, and set leading coefficient
             // of remainder remainder is 0 by removing it
-            let rlc: T::Elem = remainder.coefficients.last().unwrap().to_owned();
-            let q: T::Elem = rlc * inv;
+            let rlc: PF::Elem = remainder.coefficients.last().unwrap().to_owned();
+            let q: PF::Elem = rlc * inv;
             quotient.push(q);
             remainder.coefficients.pop();
             if q.is_zero() {
@@ -956,7 +960,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Div for Polynomial<T> {
+impl<PF: PrimeFieldElement> Div for Polynomial<PF> {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
@@ -965,7 +969,7 @@ impl<T: PrimeFieldElement> Div for Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Rem for Polynomial<T> {
+impl<PF: PrimeFieldElement> Rem for Polynomial<PF> {
     type Output = Self;
 
     fn rem(self, other: Self) -> Self {
@@ -974,7 +978,7 @@ impl<T: PrimeFieldElement> Rem for Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Add for Polynomial<T> {
+impl<PF: PrimeFieldElement> Add for Polynomial<PF> {
     type Output = Self;
 
     // fn add(self, other: Self) -> Self {
@@ -993,11 +997,11 @@ impl<T: PrimeFieldElement> Add for Polynomial<T> {
     // }
 
     fn add(self, other: Self) -> Self {
-        let summed: Vec<T::Elem> = self
+        let summed: Vec<PF::Elem> = self
             .coefficients
             .into_iter()
             .zip_longest(other.coefficients.into_iter())
-            .map(|a: itertools::EitherOrBoth<T::Elem, T::Elem>| match a {
+            .map(|a: itertools::EitherOrBoth<PF::Elem, PF::Elem>| match a {
                 Both(l, r) => l.to_owned() + r.to_owned(),
                 Left(l) => l.to_owned(),
                 Right(r) => r.to_owned(),
@@ -1010,7 +1014,7 @@ impl<T: PrimeFieldElement> Add for Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> AddAssign for Polynomial<T> {
+impl<PF: PrimeFieldElement> AddAssign for Polynomial<PF> {
     fn add_assign(&mut self, rhs: Self) {
         let rhs_len = rhs.coefficients.len();
         let self_len = self.coefficients.len();
@@ -1025,15 +1029,15 @@ impl<T: PrimeFieldElement> AddAssign for Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Sub for Polynomial<T> {
+impl<PF: PrimeFieldElement> Sub for Polynomial<PF> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
-        let summed: Vec<T::Elem> = self
+        let summed: Vec<PF::Elem> = self
             .coefficients
             .into_iter()
             .zip_longest(other.coefficients.into_iter())
-            .map(|a: itertools::EitherOrBoth<T::Elem, T::Elem>| match a {
+            .map(|a: itertools::EitherOrBoth<PF::Elem, PF::Elem>| match a {
                 Both(l, r) => l - r,
                 Left(l) => l,
                 Right(r) => r.ring_zero() - r,
@@ -1046,13 +1050,13 @@ impl<T: PrimeFieldElement> Sub for Polynomial<T> {
     }
 }
 
-impl<T: PrimeFieldElement> Polynomial<T> {
+impl<PF: PrimeFieldElement> Polynomial<PF> {
     pub fn degree(&self) -> isize {
         degree_raw(&self.coefficients)
     }
 }
 
-impl<T: PrimeFieldElement> Mul for Polynomial<T> {
+impl<PF: PrimeFieldElement> Mul for Polynomial<PF> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
