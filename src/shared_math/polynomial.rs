@@ -224,6 +224,7 @@ impl<PF: PrimeField> Polynomial<PF> {
 
     // Calculates a reversed representation of the coefficients of
     // prod_{i=0}^{N}((x- q_i))
+    #[allow(clippy::assign_op_pattern)]
     fn prod_helper(input: &[PF::Elem]) -> Vec<PF::Elem> {
         if let Some((&q_j, elements)) = input.split_first() {
             let one: PF::Elem = q_j.ring_one();
@@ -238,7 +239,7 @@ impl<PF: PrimeField> Polynomial<PF> {
                     rec.push(zero);
                     let mut i = rec.len() - 1;
                     while i > 0 {
-                        // FIXME: The linter thinks we should fix this line, but the borrow-checker objects.
+                        // The linter thinks we should fix this line, but the borrow-checker objects.
                         rec[i] = rec[i] - q_j * rec[i - 1];
                         i -= 1;
                     }
