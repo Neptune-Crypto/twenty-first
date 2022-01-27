@@ -42,7 +42,7 @@ impl<'a, T: Sized> Node<T> {
         // We might be able to avoid the `clone()` of exponents_list elements here, if we are smart
         polynomium_products.insert(
             nodes[0].borrow().data.abs_exponents.clone(),
-            Polynomial::from_constant(one.clone()),
+            Polynomial::from_constant(one),
         );
 
         // Consider if there might be a speedup in sorting `point` values
@@ -66,7 +66,7 @@ impl<'a, T: Sized> Node<T> {
                     // println!("child_abs_exponents: {:?}", child_abs_exponents);
                     // println!("x_powers: {}", x_powers);
                     let mut res = polynomium_products[&node.borrow().data.abs_exponents].clone();
-                    res.shift_coefficients_mut(*x_powers, zero.clone());
+                    res.shift_coefficients_mut(*x_powers, zero);
                     polynomium_products.insert(child_abs_exponents.clone(), res);
                     continue;
                 }
@@ -84,8 +84,7 @@ impl<'a, T: Sized> Node<T> {
                     //     // println!("Missed {:?}", child_diff_exponents);
                     //     count += 1;
                     // }
-                    let mut intermediate_mul: Polynomial<PF> =
-                        Polynomial::from_constant(one.clone());
+                    let mut intermediate_mul: Polynomial<PF> = Polynomial::from_constant(one);
                     let mut intermediate_exponents: Vec<u64> = vec![0; point.len()];
                     let mut remaining_exponents: Vec<u64> = child_diff_exponents.clone();
                     let mut mod_pow_exponents: Vec<u64> = vec![0; point.len()];
@@ -130,7 +129,7 @@ impl<'a, T: Sized> Node<T> {
                                 None => {
                                     // println!("Missed reduced mod_pow result!");
                                     let mod_pow_intermediate =
-                                        point[i].mod_pow((*diff_exponent).into(), one.clone());
+                                        point[i].mod_pow((*diff_exponent).into(), one);
                                     polynomium_products.insert(
                                         mod_pow_exponents.clone(),
                                         mod_pow_intermediate.clone(),
@@ -139,10 +138,9 @@ impl<'a, T: Sized> Node<T> {
                                 }
                                 Some(res) => {
                                     // println!("Found reduced mod_pow result!");
-                                    point[i].mod_pow(
-                                        (*diff_exponent - mod_pow_reduced[i]).into(),
-                                        one.clone(),
-                                    ) * res
+                                    point[i]
+                                        .mod_pow((*diff_exponent - mod_pow_reduced[i]).into(), one)
+                                        * res
                                 }
                             }
                         };
@@ -166,7 +164,7 @@ impl<'a, T: Sized> Node<T> {
 
                 // TODO: Add fast multiplication (with NTT) here
                 let mut res = mul * polynomium_products[&node.borrow().data.abs_exponents].clone();
-                res.shift_coefficients_mut(*x_powers, zero.clone());
+                res.shift_coefficients_mut(*x_powers, zero);
                 polynomium_products.insert(child_abs_exponents.clone(), res);
             }
         }
@@ -190,7 +188,7 @@ pub struct MPolynomial<T: PrimeFieldElement> {
 impl<T: PrimeFieldElement> Clone for MPolynomial<T> {
     fn clone(&self) -> Self {
         Self {
-            variable_count: self.variable_count.clone(),
+            variable_count: self.variable_count,
             coefficients: self.coefficients.clone(),
         }
     }
@@ -257,7 +255,7 @@ impl<PF: PrimeFieldElement> PartialEq for MPolynomial<PF> {
         for (k, v) in shortest.iter() {
             let mut pad = k.clone();
             pad.resize_with(var_count, || 0);
-            padded.insert(pad, v.clone());
+            padded.insert(pad, *v);
         }
 
         for (fst, snd) in [(padded.clone(), longest.clone()), (longest, padded)] {
@@ -345,7 +343,7 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
             let mut exponent = vec![0u64; variable_count];
             exponent[i] = 1;
             let mut coefficients: MCoefficients<PF::Elem> = HashMap::new();
-            coefficients.insert(exponent, one.clone());
+            coefficients.insert(exponent, one);
             res.push(Self {
                 variable_count,
                 coefficients,
@@ -363,13 +361,13 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
         );
         let mut acc = point[0].ring_zero();
         for (k, v) in self.coefficients.iter() {
-            let mut prod = v.clone();
+            let mut prod = *v;
             for i in 0..k.len() {
                 // FIXME: We really don't want to cast to 'u32' here, but
                 // refactoring k: Vec<u32> is a bit of a task, too. See issue ...
-                prod = prod.clone() * point[i].mod_pow_u32(k[i] as u32);
+                prod *= point[i].mod_pow_u32(k[i] as u32);
             }
-            acc = acc + prod;
+            acc += prod;
         }
 
         acc
@@ -555,7 +553,7 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
         let acc = self
             .coefficients
             .par_iter()
-            .map(|(k, v)| exponents_memoization[k].clone().scalar_mul(v.clone()))
+            .map(|(k, v)| exponents_memoization[k].scalar_mul(*v))
             .reduce(Polynomial::ring_zero, |a, b| a + b);
 
         acc
@@ -677,7 +675,7 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
                 prod.shift_coefficients_mut(x_pow_mul as usize, v.ring_zero());
                 exponents_memoization.insert(k.to_vec(), prod.clone());
             }
-            prod.scalar_mul_mut(v.clone());
+            prod.scalar_mul_mut(*v);
             acc += prod;
         }
 
@@ -693,7 +691,7 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
         );
         let mut acc: Polynomial<PF> = Polynomial::ring_zero();
         for (k, v) in self.coefficients.iter() {
-            let mut prod = Polynomial::from_constant(v.clone());
+            let mut prod = Polynomial::from_constant(*v);
             for i in 0..k.len() {
                 // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some small optimizations
                 // prod = prod * point[i].mod_pow(k[i].into(), v.ring_one());
@@ -728,7 +726,7 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
         let mut coefficients: MCoefficients<PF::Elem> = HashMap::new();
         let mut key = vec![0u64; variable_count];
         key[variable_index] = 1;
-        coefficients.insert(key, one.clone());
+        coefficients.insert(key, one);
         let indeterminate: MPolynomial<PF> = Self {
             variable_count,
             coefficients,
@@ -736,10 +734,9 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
 
         let mut acc = MPolynomial::<PF>::zero(variable_count);
         for i in 0..univariate_polynomial.coefficients.len() {
-            acc += MPolynomial::from_constant(
-                univariate_polynomial.coefficients[i].clone(),
-                variable_count,
-            ) * indeterminate.mod_pow(i.into(), one.clone());
+            acc +=
+                MPolynomial::from_constant(univariate_polynomial.coefficients[i], variable_count)
+                    * indeterminate.mod_pow(i.into(), one);
         }
 
         acc
@@ -752,8 +749,8 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
         }
 
         let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
-        for (k, v) in self.coefficients.iter() {
-            output_coefficients.insert(k.to_vec(), v.clone() * factor.clone());
+        for (k, &v) in self.coefficients.iter() {
+            output_coefficients.insert(k.to_vec(), v * factor);
         }
 
         Self {
@@ -768,7 +765,7 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
         }
 
         for (_k, v) in self.coefficients.iter_mut() {
-            *v = v.to_owned() * factor.clone();
+            *v *= factor;
         }
     }
 
@@ -823,7 +820,7 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
 
         for i in 0..exponents.len() {
             let ki = exponents[i];
-            let v0 = self.coefficients[ki].clone();
+            let v0 = self.coefficients[ki];
             let mut new_exponents = Vec::with_capacity(self.variable_count);
             for exponent in ki {
                 new_exponents.push(exponent * 2);
@@ -831,10 +828,10 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
             if output_coefficients.contains_key(&new_exponents) {
                 output_coefficients.insert(
                     new_exponents.to_vec(),
-                    v0.to_owned() * v0.to_owned() + output_coefficients[&new_exponents].clone(),
+                    v0 * v0 + output_coefficients[&new_exponents],
                 );
             } else {
-                output_coefficients.insert(new_exponents.to_vec(), v0.to_owned() * v0.to_owned());
+                output_coefficients.insert(new_exponents.to_vec(), v0 * v0);
             }
 
             for kj in exponents.iter().skip(i + 1) {
@@ -844,18 +841,14 @@ impl<PF: PrimeFieldElement> MPolynomial<PF> {
                     let exponent = ki[k] + kj[k];
                     new_exponents.push(exponent);
                 }
-                let v1 = self.coefficients[*kj].clone();
+                let v1 = self.coefficients[*kj];
                 if output_coefficients.contains_key(&new_exponents) {
                     output_coefficients.insert(
                         new_exponents.to_vec(),
-                        two.clone() * v0.to_owned() * v1.to_owned()
-                            + output_coefficients[&new_exponents].clone(),
+                        two * v0 * v1 + output_coefficients[&new_exponents],
                     );
                 } else {
-                    output_coefficients.insert(
-                        new_exponents.to_vec(),
-                        two.clone() * v0.to_owned() * v1.to_owned(),
-                    );
+                    output_coefficients.insert(new_exponents.to_vec(), two * v0 * v1);
                 }
             }
         }
@@ -885,10 +878,10 @@ impl<PF: PrimeFieldElement> Add for MPolynomial<PF> {
         }
 
         let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
-        for (k, v) in self.coefficients.iter() {
+        for (k, &v) in self.coefficients.iter() {
             let mut pad = k.clone();
             pad.resize_with(variable_count, || 0);
-            output_coefficients.insert(pad, v.clone());
+            output_coefficients.insert(pad, v);
         }
         for (k, v) in other.coefficients.iter() {
             let mut pad = k.clone();
@@ -896,10 +889,7 @@ impl<PF: PrimeFieldElement> Add for MPolynomial<PF> {
 
             // TODO: This can probably be done smarter
             if output_coefficients.contains_key(&pad) {
-                output_coefficients.insert(
-                    pad.clone(),
-                    v.to_owned() + output_coefficients[&pad].clone(),
-                );
+                output_coefficients.insert(pad.clone(), v.to_owned() + output_coefficients[&pad]);
             } else {
                 output_coefficients.insert(pad.to_vec(), v.to_owned());
             }
@@ -923,7 +913,7 @@ impl<PF: PrimeFieldElement> AddAssign for MPolynomial<PF> {
 
         for (k, v1) in rhs.coefficients.iter() {
             if self.coefficients.contains_key(k) {
-                let v0 = self.coefficients[k].clone();
+                let v0 = self.coefficients[k];
                 self.coefficients.insert(k.clone(), v0 + v1.to_owned());
             } else {
                 self.coefficients.insert(k.clone(), v1.to_owned());
@@ -942,23 +932,20 @@ impl<PF: PrimeFieldElement> Sub for MPolynomial<PF> {
         }
 
         let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
-        for (k, v) in self.coefficients.iter() {
+        for (k, &v) in self.coefficients.iter() {
             let mut pad = k.clone();
             pad.resize_with(variable_count, || 0);
-            output_coefficients.insert(pad, v.clone());
+            output_coefficients.insert(pad, v);
         }
-        for (k, v) in other.coefficients.iter() {
+        for (k, &v) in other.coefficients.iter() {
             let mut pad = k.clone();
             pad.resize_with(variable_count, || 0);
 
             // TODO: This can probably be done smarter
             if output_coefficients.contains_key(&pad) {
-                output_coefficients.insert(
-                    pad.to_vec(),
-                    output_coefficients[&pad].clone() - v.to_owned(),
-                );
+                output_coefficients.insert(pad.to_vec(), output_coefficients[&pad] - v);
             } else {
-                output_coefficients.insert(pad.to_vec(), -v.to_owned());
+                output_coefficients.insert(pad.to_vec(), -v);
             }
         }
 
@@ -974,8 +961,8 @@ impl<PF: PrimeFieldElement> Neg for MPolynomial<PF> {
 
     fn neg(self) -> Self {
         let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
-        for (k, v) in self.coefficients.iter() {
-            output_coefficients.insert(k.to_vec(), -v.clone());
+        for (k, &v) in self.coefficients.iter() {
+            output_coefficients.insert(k.to_vec(), -v);
         }
 
         Self {
@@ -995,8 +982,8 @@ impl<PF: PrimeFieldElement> Mul for MPolynomial<PF> {
         }
 
         let mut output_coefficients: MCoefficients<PF::Elem> = HashMap::new();
-        for (k0, v0) in self.coefficients.iter() {
-            for (k1, v1) in other.coefficients.iter() {
+        for (k0, &v0) in self.coefficients.iter() {
+            for (k1, &v1) in other.coefficients.iter() {
                 let mut exponent = vec![0u64; variable_count];
                 for k in 0..self.variable_count {
                     exponent[k] += k0[k];
@@ -1005,12 +992,10 @@ impl<PF: PrimeFieldElement> Mul for MPolynomial<PF> {
                     exponent[k] += k1[k];
                 }
                 if output_coefficients.contains_key(&exponent) {
-                    output_coefficients.insert(
-                        exponent.to_vec(),
-                        v0.to_owned() * v1.to_owned() + output_coefficients[&exponent].clone(),
-                    );
+                    output_coefficients
+                        .insert(exponent.to_vec(), v0 * v1 + output_coefficients[&exponent]);
                 } else {
-                    output_coefficients.insert(exponent.to_vec(), v0.to_owned() * v1.to_owned());
+                    output_coefficients.insert(exponent.to_vec(), v0 * v1);
                 }
             }
         }

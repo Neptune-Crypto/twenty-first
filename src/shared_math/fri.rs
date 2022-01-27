@@ -101,14 +101,14 @@ impl<F: PrimeFieldElement> Fri<F> {
         codeword: &[F::Elem],
         proof_stream: &mut ProofStream,
     ) -> Result<Vec<MerkleTree<F::Elem>>, Box<dyn Error>> {
-        let mut generator = self.omega.clone();
-        let mut offset = self.offset.clone();
+        let mut generator = self.omega;
+        let mut offset = self.offset;
         let mut codeword_local = codeword.to_vec();
 
         let zero: F::Elem = generator.ring_zero();
         let one: F::Elem = generator.ring_one();
-        let two: F::Elem = one.clone() + one.clone();
-        let two_inv = one.clone() / two;
+        let two: F::Elem = one + one;
+        let two_inv = one / two;
 
         // Compute and send Merkle root
         let mut mt = MerkleTree::from_vec(&codeword_local);
@@ -129,18 +129,16 @@ impl<F: PrimeFieldElement> Fri<F> {
             let x_offset: Vec<F::Elem> = generator
                 .get_cyclic_group_elements(None)
                 .into_iter()
-                .map(|x| x * offset.clone())
+                .map(|x| x * offset)
                 .collect();
 
-            let x_offset_inverses = F::Elem::batch_inversion(x_offset.clone());
+            let x_offset_inverses = F::Elem::batch_inversion(x_offset);
             for i in 0..n / 2 {
-                codeword_local[i] = two_inv.clone()
-                    * ((one.clone() + alpha.clone() * x_offset_inverses[i].clone())
-                        * codeword_local[i].clone()
-                        + (one.clone() - alpha.clone() * x_offset_inverses[i].clone())
-                            * codeword_local[n / 2 + i].clone());
+                codeword_local[i] = two_inv
+                    * ((one + alpha * x_offset_inverses[i]) * codeword_local[i]
+                        + (one - alpha * x_offset_inverses[i]) * codeword_local[n / 2 + i]);
             }
-            codeword_local.resize(n / 2, zero.clone());
+            codeword_local.resize(n / 2, zero);
 
             // Compute and send Merkle root
             mt = MerkleTree::from_vec(&codeword_local);
@@ -148,8 +146,8 @@ impl<F: PrimeFieldElement> Fri<F> {
             merkle_trees.push(mt);
 
             // Update subgroup generator and offset
-            generator = generator.clone() * generator.clone();
-            offset = offset.clone() * offset.clone();
+            generator = generator * generator;
+            offset = offset * offset;
         }
 
         // Send the last codeword
@@ -237,8 +235,8 @@ impl<F: PrimeFieldElement> Fri<F> {
         &self,
         proof_stream: &mut ProofStream,
     ) -> Result<Vec<CodewordEvaluation<F::Elem>>, Box<dyn Error>> {
-        let mut omega = self.omega.clone();
-        let mut offset = self.offset.clone();
+        let mut omega = self.omega;
+        let mut offset = self.offset;
         let (num_rounds, degree_of_last_round) = self.num_rounds();
 
         // Extract all roots and calculate alpha, the challenges
@@ -262,11 +260,11 @@ impl<F: PrimeFieldElement> Fri<F> {
         }
 
         // Verify that last codeword is of sufficiently low degree
-        let mut last_omega = omega.clone();
-        let mut last_offset = offset.clone();
+        let mut last_omega = omega;
+        let mut last_offset = offset;
         for _ in 0..num_rounds {
-            last_omega = last_omega.clone() * last_omega;
-            last_offset = last_offset.clone() * last_offset;
+            last_omega = last_omega * last_omega;
+            last_offset = last_offset * last_offset;
         }
 
         // Compute interpolant to get the degree of the last codeword
@@ -321,12 +319,12 @@ impl<F: PrimeFieldElement> Fri<F> {
 
             // Colinearity check
             let axs: Vec<F::Elem> = (0..self.colinearity_checks_count)
-                .map(|i| offset.clone() * omega.clone().mod_pow_u32(a_indices[i] as u32))
+                .map(|i| offset * omega.mod_pow_u32(a_indices[i] as u32))
                 .collect();
             let bxs: Vec<F::Elem> = (0..self.colinearity_checks_count)
-                .map(|i| offset.clone() * omega.clone().mod_pow_u32(b_indices[i] as u32))
+                .map(|i| offset * omega.mod_pow_u32(b_indices[i] as u32))
                 .collect();
-            let cx: F::Elem = alphas[r].clone();
+            let cx: F::Elem = alphas[r];
             let ays: Vec<F::Elem> = (0..self.colinearity_checks_count)
                 .map(|i| ab_values[i].get_value())
                 .collect();
@@ -338,23 +336,19 @@ impl<F: PrimeFieldElement> Fri<F> {
                 .collect();
 
             if (0..self.colinearity_checks_count).any(|i| {
-                !Polynomial::<F>::are_colinear_3(
-                    (axs[i].clone(), ays[i].clone()),
-                    (bxs[i].clone(), bys[i].clone()),
-                    (cx.clone(), cys[i].clone()),
-                )
+                !Polynomial::<F>::are_colinear_3((axs[i], ays[i]), (bxs[i], bys[i]), (cx, cys[i]))
             }) {
                 return Err(Box::new(ValidationError::NotColinear(r)));
             }
             // Update subgroup generator and offset
-            omega = omega.clone() * omega.clone();
-            offset = offset.clone() * offset.clone();
+            omega = omega * omega;
+            offset = offset * offset;
 
             // Return top-level values to caller
             if r == 0 {
                 for s in 0..self.colinearity_checks_count {
-                    codeword_evaluations.push((a_indices[s], ays[s].clone()));
-                    codeword_evaluations.push((b_indices[s], bys[s].clone()));
+                    codeword_evaluations.push((a_indices[s], ays[s]));
+                    codeword_evaluations.push((b_indices[s], bys[s]));
                 }
             }
         }
@@ -364,10 +358,7 @@ impl<F: PrimeFieldElement> Fri<F> {
 
     pub fn get_evaluation_domain(&self) -> Vec<F::Elem> {
         let omega_domain = self.omega.get_cyclic_group_elements(None);
-        omega_domain
-            .into_iter()
-            .map(|x| x * self.offset.clone())
-            .collect()
+        omega_domain.into_iter().map(|x| x * self.offset).collect()
     }
 
     fn num_rounds(&self) -> (u8, u32) {

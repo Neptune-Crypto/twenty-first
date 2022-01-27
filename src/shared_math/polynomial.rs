@@ -159,10 +159,10 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
     }
 
-    pub fn evaluate(&self, x: &T::Elem) -> T::Elem {
+    pub fn evaluate(&self, &x: &T::Elem) -> T::Elem {
         let mut acc = x.ring_zero();
-        for c in self.coefficients.iter().rev() {
-            acc = c.to_owned() + x.to_owned() * acc;
+        for &c in self.coefficients.iter().rev() {
+            acc = c + x * acc;
         }
 
         acc
@@ -171,7 +171,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     pub fn leading_coefficient(&self) -> Option<T::Elem> {
         match self.degree() {
             -1 => None,
-            n => Some(self.coefficients[n as usize].clone()),
+            n => Some(self.coefficients[n as usize]),
         }
     }
 
@@ -179,12 +179,12 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
     // then corresponds to evaluating P(alpha * x).
     #[must_use]
-    pub fn scale(&self, alpha: &T::Elem) -> Self {
+    pub fn scale(&self, &alpha: &T::Elem) -> Self {
         let mut acc = alpha.ring_one();
         let mut return_coefficients = self.coefficients.clone();
         for elem in return_coefficients.iter_mut() {
-            *elem = elem.clone() * acc.clone();
-            acc = acc * alpha.to_owned();
+            *elem *= acc;
+            acc *= alpha;
         }
 
         Self {
@@ -196,10 +196,10 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         p0: &(T::Elem, T::Elem),
         p1: &(T::Elem, T::Elem),
     ) -> (T::Elem, T::Elem) {
-        let x_diff = p0.0.clone() - p1.0.clone();
+        let x_diff = p0.0 - p1.0;
         let x_diff_inv = p0.0.ring_one() / x_diff;
-        let a = (p0.1.clone() - p1.1.clone()) * x_diff_inv;
-        let b = p0.1.clone() - a.clone() * p0.0.clone();
+        let a = (p0.1 - p1.1) * x_diff_inv;
+        let b = p0.1 - a * p0.0;
 
         (a, b)
     }
@@ -213,11 +213,11 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             return false;
         }
 
-        let dy = p0.1.clone() - p1.1.clone();
-        let dx = p0.0.clone() - p1.0;
+        let dy = p0.1 - p1.1;
+        let dx = p0.0 - p1.0;
         let a = dy / dx; // Can we implement this without division?
-        let b = p0.1.clone() - a.clone() * p0.0;
-        let expected_p2_y = a * p2.0.clone() + b;
+        let b = p0.1 - a * p0.0;
+        let expected_p2_y = a * p2.0 + b;
 
         p2.1 == expected_p2_y
     }
@@ -225,10 +225,10 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     // Calculates a reversed representation of the coefficients of
     // prod_{i=0}^{N}((x- q_i))
     fn prod_helper(input: &[T::Elem]) -> Vec<T::Elem> {
-        if let Some((q_j, elements)) = input.split_first() {
+        if let Some((&q_j, elements)) = input.split_first() {
             let one: T::Elem = q_j.ring_one();
             let zero: T::Elem = q_j.ring_zero();
-            let minus_q_j = zero.clone() - q_j.to_owned();
+            let minus_q_j = zero - q_j;
             match elements {
                 // base case is `x - q_j` := [1, -q_j]
                 [] => vec![one, minus_q_j],
@@ -238,7 +238,8 @@ impl<T: PrimeFieldElement> Polynomial<T> {
                     rec.push(zero);
                     let mut i = rec.len() - 1;
                     while i > 0 {
-                        rec[i] = rec[i].clone() - q_j.to_owned() * rec[i - 1].clone();
+                        // FIXME: The linter thinks we should fix this line, but the borrow-checker objects.
+                        rec[i] = rec[i] - q_j * rec[i - 1];
                         i -= 1;
                     }
                     rec
@@ -266,18 +267,17 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         let squared_coefficient_len = self.degree() as usize * 2 + 1;
         let zero = self.coefficients[0].ring_zero();
         let one = zero.ring_one();
-        let two = one.clone() + one;
+        let two = one + one;
         let mut squared_coefficients = vec![zero; squared_coefficient_len];
 
         for i in 0..self.coefficients.len() {
-            let ci = self.coefficients[i].clone();
-            squared_coefficients[2 * i] =
-                squared_coefficients[2 * i].clone() + ci.clone() * ci.clone();
+            let ci = self.coefficients[i];
+            squared_coefficients[2 * i] += ci * ci;
 
+            // TODO: Review.
             for j in i + 1..self.coefficients.len() {
-                let cj = self.coefficients[j].clone();
-                squared_coefficients[i + j] =
-                    squared_coefficients[i + j].clone() + two.clone() * ci.clone() * cj;
+                let cj = self.coefficients[j];
+                squared_coefficients[i + j] += two * ci * cj;
             }
         }
 
@@ -294,19 +294,19 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             return false;
         }
 
-        if !has_unique_elements(points.iter().map(|p| p.0.clone())) {
+        if !has_unique_elements(points.iter().map(|p| p.0)) {
             println!("Non-unique element spotted Got: {:?}", points);
             return false;
         }
 
         // Find 1st degree polynomial from first two points
         let one: T::Elem = points[0].0.ring_one();
-        let x_diff: T::Elem = points[0].0.clone() - points[1].0.clone();
+        let x_diff: T::Elem = points[0].0 - points[1].0;
         let x_diff_inv = one / x_diff;
-        let a = (points[0].1.clone() - points[1].1.clone()) * x_diff_inv;
-        let b = points[0].1.clone() - a.clone() * points[0].0.clone();
+        let a = (points[0].1 - points[1].1) * x_diff_inv;
+        let b = points[0].1 - a * points[0].0;
         for point in points.iter().skip(2) {
-            let expected = a.clone() * point.0.clone() + b.clone();
+            let expected = a * point.0 + b;
             if point.1 != expected {
                 println!(
                     "L({}) = {}, expected L({}) = {}, Found: L(x) = {}x + {} from {{({},{}),({},{})}}",
@@ -343,33 +343,33 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
         let zero: T::Elem = xs[0].ring_zero();
         let one: T::Elem = xs[0].ring_one();
-        let mut coefficients: Vec<T::Elem> = vec![zero.clone(); xs.len()];
-        for (x, y) in xs.iter().zip(ys.iter()) {
+        let mut coefficients: Vec<T::Elem> = vec![zero; xs.len()];
+        for (&x, &y) in xs.iter().zip(ys.iter()) {
             // create a PrimeFieldPolynomial that is zero at all other points than this
             // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
-            let my_div_coefficients = vec![zero.clone() - x.clone(), one.clone()];
+            let my_div_coefficients = vec![zero - x, one];
             let mut my_pol = Self {
                 coefficients: my_div_coefficients,
             };
-            my_pol = big_pol.clone() / my_pol.clone();
+            my_pol = big_pol.clone() / my_pol;
 
-            let mut divisor = one.clone();
-            for root in roots.iter() {
-                if *root == *x {
+            let mut divisor = one;
+            for &root in roots.iter() {
+                if root == x {
                     continue;
                 }
-                divisor = divisor * (x.clone() - root.to_owned());
+                divisor *= x - root;
             }
 
-            let mut my_coeffs: Vec<T::Elem> =
-                my_pol.coefficients.iter().map(|x| x.to_owned()).collect();
+            // TODO: Review.
+            let mut my_coeffs: Vec<T::Elem> = my_pol.coefficients.clone();
             for coeff in my_coeffs.iter_mut() {
-                *coeff = coeff.to_owned() * y.clone();
-                *coeff = coeff.to_owned() / divisor.clone();
+                *coeff = coeff.to_owned() * y;
+                *coeff = coeff.to_owned() / divisor;
             }
 
             for i in 0..my_coeffs.len() {
-                coefficients[i] = coefficients[i].clone() + my_coeffs[i].clone();
+                coefficients[i] += my_coeffs[i];
             }
         }
 
@@ -385,10 +385,8 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         }
 
         if xs.len() == 2 {
-            let (a, b) = Polynomial::<T>::lagrange_interpolation_2(
-                &(xs[0].clone(), ys[0].clone()),
-                &(xs[1].clone(), ys[1].clone()),
-            );
+            let (a, b) =
+                Polynomial::<T>::lagrange_interpolation_2(&(xs[0], ys[0]), &(xs[1], ys[1]));
             return Polynomial {
                 coefficients: vec![b, a],
             };
@@ -401,7 +399,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     // purposes. This also means that it is not pivotal that this function has an optimal
     // runtime.
     pub fn slow_lagrange_interpolation(points: &[(T::Elem, T::Elem)]) -> Self {
-        if !has_unique_elements(points.iter().map(|x| x.0.clone())) {
+        if !has_unique_elements(points.iter().map(|x| x.0)) {
             panic!("Repeated x values received. Got: {:?}", points);
         }
 
@@ -430,9 +428,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             return Self::ring_zero();
         }
         if degree == 0 {
-            return Self::from_constant(
-                self.coefficients[0].clone() * self.coefficients[0].clone(),
-            );
+            return Self::from_constant(self.coefficients[0] * self.coefficients[0]);
         }
 
         let result_degree: u64 = 2 * self.degree() as u64;
@@ -475,18 +471,17 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
         let zero = self.coefficients[0].ring_zero();
         let one = zero.ring_one();
-        let two = one.clone() + one;
+        let two = one + one;
         let mut squared_coefficients = vec![zero; squared_coefficient_len];
 
+        // TODO: Review.
         for i in 0..self.coefficients.len() {
-            let ci = self.coefficients[i].clone();
-            squared_coefficients[2 * i] =
-                squared_coefficients[2 * i].clone() + ci.clone() * ci.clone();
+            let ci = self.coefficients[i];
+            squared_coefficients[2 * i] += ci * ci;
 
             for j in i + 1..self.coefficients.len() {
-                let cj = self.coefficients[j].clone();
-                squared_coefficients[i + j] =
-                    squared_coefficients[i + j].clone() + two.clone() * ci.clone() * cj;
+                let cj = self.coefficients[j];
+                squared_coefficients[i + j] += two * ci * cj;
             }
         }
 
@@ -560,7 +555,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         }
 
         while degree < order / 2 {
-            root = root.clone() * root.clone();
+            root *= root;
             order /= 2;
         }
 
@@ -601,7 +596,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
         if domain.len() == 1 {
             return Self {
-                coefficients: vec![-domain[0].clone(), primitive_root.ring_one()],
+                coefficients: vec![-domain[0], primitive_root.ring_one()],
             };
         }
 
@@ -665,7 +660,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
 
         if domain.len() == 1 {
             return Polynomial {
-                coefficients: vec![values[0].clone()],
+                coefficients: vec![values[0]],
             };
         }
 
@@ -773,20 +768,15 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         }
 
         while degree < order / 2 {
-            root = root.clone() * root;
+            root *= root;
             order /= 2;
         }
 
         let mut scaled_lhs_coefficients: Vec<T::Elem> = lhs.scale(&offset).coefficients;
-        scaled_lhs_coefficients.append(&mut vec![
-            zero.clone();
-            order - scaled_lhs_coefficients.len()
-        ]);
+        scaled_lhs_coefficients.append(&mut vec![zero; order - scaled_lhs_coefficients.len()]);
+
         let mut scaled_rhs_coefficients: Vec<T::Elem> = rhs.scale(&offset).coefficients;
-        scaled_rhs_coefficients.append(&mut vec![
-            zero.clone();
-            order - scaled_rhs_coefficients.len()
-        ]);
+        scaled_rhs_coefficients.append(&mut vec![zero; order - scaled_rhs_coefficients.len()]);
 
         let lhs_codeword = slow_ntt(&scaled_lhs_coefficients, &root);
         let rhs_codeword = slow_ntt(&scaled_rhs_coefficients, &root);
@@ -820,16 +810,17 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         }
 
         // allocate right number of coefficients, initialized to zero
-        let elem = self.coefficients[0].clone();
+        let elem = self.coefficients[0];
         let mut result_coeff: Vec<T::Elem> =
             //vec![U::zero_from_field(field: U); degree_lhs as usize + degree_rhs as usize + 1];
             vec![elem.ring_zero(); degree_lhs as usize + degree_rhs as usize + 1];
 
+        // TODO: Review this.
         // for all pairs of coefficients, add product to result vector in appropriate coordinate
         for i in 0..=degree_lhs as usize {
             for j in 0..=degree_rhs as usize {
-                let mul: T::Elem = self.coefficients[i].clone() * other.coefficients[j].clone();
-                result_coeff[i + j] = result_coeff[i + j].clone() + mul;
+                let mul: T::Elem = self.coefficients[i] * other.coefficients[j];
+                result_coeff[i + j] += mul;
             }
         }
 
@@ -884,9 +875,10 @@ impl<T: PrimeFieldElement> Polynomial<T> {
         Polynomial { coefficients }
     }
 
+    // TODO: Review
     pub fn scalar_mul_mut(&mut self, scalar: T::Elem) {
         for coefficient in self.coefficients.iter_mut() {
-            *coefficient = coefficient.to_owned() * scalar.clone();
+            *coefficient *= scalar;
         }
     }
 
@@ -894,7 +886,7 @@ impl<T: PrimeFieldElement> Polynomial<T> {
     pub fn scalar_mul(&self, scalar: T::Elem) -> Self {
         let mut coefficients: Vec<T::Elem> = vec![];
         for i in 0..self.coefficients.len() {
-            coefficients.push(self.coefficients[i].clone() * scalar.clone());
+            coefficients.push(self.coefficients[i] * scalar);
         }
 
         Self { coefficients }
@@ -936,21 +928,20 @@ impl<T: PrimeFieldElement> Polynomial<T> {
             // calculate next quotient coefficient, and set leading coefficient
             // of remainder remainder is 0 by removing it
             let rlc: T::Elem = remainder.coefficients.last().unwrap().to_owned();
-            let q: T::Elem = rlc * inv.clone();
-            quotient.push(q.clone());
+            let q: T::Elem = rlc * inv;
+            quotient.push(q);
             remainder.coefficients.pop();
             if q.is_zero() {
                 i += 1;
                 continue;
             }
 
+            // TODO: Review that this loop body was correctly modified.
             // Calculate the new remainder
             for j in 0..degree_rhs as usize {
                 let rem_length = remainder.coefficients.len();
-                remainder.coefficients[rem_length - j - 1] = remainder.coefficients
-                    [rem_length - j - 1]
-                    .clone()
-                    - q.clone() * divisor.coefficients[(degree_rhs + 1) as usize - j - 2].clone();
+                remainder.coefficients[rem_length - j - 1] -=
+                    q * divisor.coefficients[(degree_rhs + 1) as usize - j - 2];
             }
 
             i += 1;
@@ -1024,7 +1015,7 @@ impl<T: PrimeFieldElement> AddAssign for Polynomial<T> {
         let rhs_len = rhs.coefficients.len();
         let self_len = self.coefficients.len();
         for i in 0..std::cmp::min(self_len, rhs_len) {
-            self.coefficients[i] = self.coefficients[i].clone() + rhs.coefficients[i].clone();
+            self.coefficients[i] = self.coefficients[i] + rhs.coefficients[i];
         }
 
         if rhs_len > self_len {

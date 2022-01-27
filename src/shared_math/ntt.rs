@@ -131,7 +131,7 @@ pub fn intt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n:
     let n_inv: T::Elem = omega.ring_one() / n;
     ntt::<T>(x, omega.ring_one() / omega, log_2_of_n);
     for elem in x.iter_mut() {
-        *elem = elem.to_owned() * n_inv.clone();
+        *elem *= n_inv;
     }
 }
 
@@ -162,13 +162,13 @@ pub fn ntt<T: PrimeFieldElement>(x: &mut [T::Elem], omega: T::Elem, log_2_of_n: 
         while k < n {
             let mut w = omega.ring_one();
             for j in 0..m {
-                let mut t = x[(k + j + m) as usize].clone();
-                t *= w.clone();
-                let mut tmp = x[(k + j) as usize].clone();
-                tmp -= t.clone();
+                let mut t = x[(k + j + m) as usize];
+                t *= w;
+                let mut tmp = x[(k + j) as usize];
+                tmp -= t;
                 x[(k + j + m) as usize] = tmp;
                 x[(k + j) as usize] += t;
-                w *= w_m.clone();
+                w *= w_m;
             }
 
             k += 2 * m;
