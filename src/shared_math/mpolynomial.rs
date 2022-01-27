@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Debug, Display};
+use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 use std::rc::Rc;
 use std::{cmp, fmt};
@@ -924,6 +925,12 @@ impl<PF: PrimeField> AddAssign for MPolynomial<PF> {
                 self.coefficients.insert(k.clone(), v1.to_owned());
             }
         }
+    }
+}
+
+impl<PF: PrimeField> Sum for MPolynomial<PF> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(MPolynomial::zero(0), |a, b| a + b)
     }
 }
 
