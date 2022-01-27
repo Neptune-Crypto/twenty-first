@@ -23,11 +23,11 @@ where
     fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self>;
 }
 
-pub trait FieldBatchInversion
+pub trait Inverse
 where
     Self: Sized,
 {
-    fn batch_inversion(elements: Vec<Self>) -> Vec<Self>;
+    fn inverse(&self) -> Self;
 }
 
 pub trait GetPrimitiveRootOfUnity
@@ -94,11 +94,42 @@ pub trait PrimeField {
         + FromVecu8
         + New
         + CyclicGroupGenerator
-        + FieldBatchInversion
         + ModPowU32
         + GetPrimitiveRootOfUnity
         + Send
         + Sync
         + Copy
-        + Hash;
+        + Hash
+        + Inverse;
+
+    // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
+    fn batch_inversion(input: Vec<Self::Elem>) -> Vec<Self::Elem> {
+        let input_length = input.len();
+        if input_length == 0 {
+            return Vec::<Self::Elem>::new();
+        }
+
+        let zero = input[0].ring_zero();
+        let one = input[0].ring_one();
+        let mut scratch: Vec<Self::Elem> = vec![zero; input_length];
+        let mut acc = one;
+        scratch[0] = input[0];
+
+        for i in 0..input_length {
+            assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
+            scratch[i] = acc;
+            acc *= input[i];
+        }
+
+        acc = acc.inverse();
+
+        let mut res = input;
+        for i in (0..input_length).rev() {
+            let tmp = acc * res[i];
+            res[i] = acc * scratch[i];
+            acc = tmp;
+        }
+
+        res
+    }
 }

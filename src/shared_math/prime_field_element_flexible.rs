@@ -1,6 +1,6 @@
 use crate::shared_math::traits::{
-    CyclicGroupGenerator, FieldBatchInversion, FromVecu8, GetPrimitiveRootOfUnity, IdentityValues,
-    ModPowU32, ModPowU64, New, PrimeField,
+    CyclicGroupGenerator, FromVecu8, GetPrimitiveRootOfUnity, IdentityValues, ModPowU32, ModPowU64,
+    New, PrimeField,
 };
 use crate::utils::FIRST_TEN_THOUSAND_PRIMES;
 use num_bigint::{BigInt, Sign};
@@ -9,6 +9,8 @@ use primitive_types::{U256, U512};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
+
+use super::traits::Inverse;
 
 pub fn get_prime_with_primitive_root_of_unity(
     n: u128,
@@ -68,37 +70,6 @@ impl CyclicGroupGenerator for PrimeFieldElementFlexible {
     }
 }
 
-impl FieldBatchInversion for PrimeFieldElementFlexible {
-    fn batch_inversion(elements: Vec<Self>) -> Vec<Self> {
-        // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
-        let input_length = elements.len();
-        if input_length == 0 {
-            return Vec::<Self>::new();
-        }
-
-        let mut scratch: Vec<Self> = vec![elements[0].ring_zero(); input_length];
-        let mut acc = elements[0].ring_one();
-        scratch[0] = elements[0];
-
-        for i in 0..input_length {
-            assert!(!elements[i].is_zero(), "Cannot do batch inversion on zero");
-            scratch[i] = acc;
-            acc *= elements[i];
-        }
-
-        acc = acc.inv();
-
-        let mut res = elements;
-        for i in (0..input_length).rev() {
-            let tmp = acc * res[i];
-            res[i] = acc * scratch[i];
-            acc = tmp;
-        }
-
-        res
-    }
-}
-
 impl ModPowU32 for PrimeFieldElementFlexible {
     fn mod_pow_u32(&self, exp: u32) -> Self {
         // TODO: This can be sped up by a factor 2 by implementing
@@ -140,28 +111,6 @@ impl PrimeFieldElementFlexible {
 
     pub fn new_from_u512(value: U512, q: U512) -> Self {
         Self { q, value }
-    }
-
-    #[must_use]
-    pub fn inv(&self) -> Self {
-        let mut q_bytes: Vec<u8> = vec![0; 64];
-        self.q.to_little_endian(&mut q_bytes);
-        let mut val_bytes: Vec<u8> = vec![0; 64];
-        self.value.to_little_endian(&mut val_bytes);
-        let q_bigint: BigInt = BigInt::from_bytes_le(Sign::Plus, &q_bytes);
-        let value_bigint: BigInt = BigInt::from_bytes_le(Sign::Plus, &val_bytes);
-
-        let (_, _, a) = Self::xgcd(q_bigint, value_bigint);
-        let (sign, bytes) = a.to_bytes_be();
-        let a_u512 = match sign {
-            Sign::Minus => self.q - U512::from_big_endian(&bytes),
-            Sign::Plus => U512::from_big_endian(&bytes),
-            Sign::NoSign => U512::from_big_endian(&bytes),
-        };
-        Self {
-            value: (a_u512 % self.q + self.q) % self.q,
-            q: self.q,
-        }
     }
 
     #[must_use]
@@ -276,6 +225,30 @@ impl PrimeFieldElementFlexible {
     }
 }
 
+impl Inverse for PrimeFieldElementFlexible {
+    #[must_use]
+    fn inverse(&self) -> Self {
+        let mut q_bytes: Vec<u8> = vec![0; 64];
+        self.q.to_little_endian(&mut q_bytes);
+        let mut val_bytes: Vec<u8> = vec![0; 64];
+        self.value.to_little_endian(&mut val_bytes);
+        let q_bigint: BigInt = BigInt::from_bytes_le(Sign::Plus, &q_bytes);
+        let value_bigint: BigInt = BigInt::from_bytes_le(Sign::Plus, &val_bytes);
+
+        let (_, _, a) = Self::xgcd(q_bigint, value_bigint);
+        let (sign, bytes) = a.to_bytes_be();
+        let a_u512 = match sign {
+            Sign::Minus => self.q - U512::from_big_endian(&bytes),
+            Sign::Plus => U512::from_big_endian(&bytes),
+            Sign::NoSign => U512::from_big_endian(&bytes),
+        };
+        Self {
+            value: (a_u512 % self.q + self.q) % self.q,
+            q: self.q,
+        }
+    }
+}
+
 impl Add for PrimeFieldElementFlexible {
     type Output = Self;
 
@@ -347,7 +320,7 @@ impl<'a> Div for PrimeFieldElementFlexible {
 
     fn div(self, other: Self) -> Self {
         Self {
-            value: other.inv().value * self.value % self.q,
+            value: other.inverse().value * self.value % self.q,
             q: self.q,
         }
     }

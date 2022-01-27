@@ -2,8 +2,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
-    CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
-    PrimeField,
+    CyclicGroupGenerator, IdentityValues, ModPowU32, ModPowU64, New, PrimeField,
 };
 use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
@@ -13,7 +12,7 @@ use std::{
     ops::{Add, Mul, Neg, Sub},
 };
 
-use super::traits::{FromVecu8, GetPrimitiveRootOfUnity};
+use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -121,19 +120,12 @@ impl XFieldElement {
         // to ensure that x has a leading coefficient of 1.
         // TODO: What happens if x is zero here, can it be?
         let lc = x.leading_coefficient().unwrap();
-        let scale = lc.inv();
+        let scale = lc.inverse();
         (
             x.scalar_mul(scale),
             a_factor.scalar_mul(scale),
             b_factor.scalar_mul(scale),
         )
-    }
-
-    #[must_use]
-    pub fn inv(&self) -> Self {
-        let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
-        let (_, a, _) = Self::xgcd(self_as_poly, Self::shah_polynomial());
-        a.into()
     }
 
     // `incr` and `decr` are mainly used for testing purposes
@@ -148,43 +140,21 @@ impl XFieldElement {
     // TODO: legendre_symbol
 }
 
+impl Inverse for XFieldElement {
+    #[must_use]
+    fn inverse(&self) -> Self {
+        let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
+        let (_, a, _) = Self::xgcd(self_as_poly, Self::shah_polynomial());
+        a.into()
+    }
+}
+
 impl GetPrimitiveRootOfUnity for XFieldElement {
     fn get_primitive_root_of_unity(&self, n: u128) -> (Option<XFieldElement>, Vec<u128>) {
         let (b_root, primes) = self.coefficients[0].get_primitive_root_of_unity(n);
         let x_root = b_root.map(XFieldElement::new_const);
 
         (x_root, primes)
-    }
-}
-
-impl FieldBatchInversion for XFieldElement {
-    fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
-        // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
-        let input_length = input.len();
-        if input_length == 0 {
-            return Vec::<Self>::new();
-        }
-
-        let mut scratch: Vec<Self> = vec![Self::ring_zero(); input_length];
-        let mut acc = Self::ring_one();
-        scratch[0] = input[0];
-
-        for i in 0..input_length {
-            assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
-            scratch[i] = acc;
-            acc *= input[i];
-        }
-
-        acc = acc.inv();
-
-        let mut res = input;
-        for i in (0..input_length).rev() {
-            let tmp = acc * res[i];
-            res[i] = acc * scratch[i];
-            acc = tmp;
-        }
-
-        res
     }
 }
 
@@ -437,7 +407,7 @@ impl Div for XFieldElement {
 
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, other: Self) -> Self {
-        self * other.inv()
+        self * other.inverse()
     }
 }
 
@@ -783,27 +753,27 @@ mod x_field_element_test {
     #[test]
     fn x_field_inv_test() {
         let one = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
-        let one_inv = one.inv();
+        let one_inv = one.inverse();
         assert!((one_inv * one).is_one());
         assert!((one * one_inv).is_one());
 
         let two = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
-        let two_inv = two.inv();
+        let two_inv = two.inverse();
         assert!((two_inv * two).is_one());
         assert!((two * two_inv).is_one());
 
         let three = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
-        let three_inv = three.inv();
+        let three_inv = three.inverse();
         assert!((three_inv * three).is_one());
         assert!((three * three_inv).is_one());
 
         let hundred = XFieldElement::new([100, 0, 0].map(BFieldElement::new));
-        let hundred_inv = hundred.inv();
+        let hundred_inv = hundred.inverse();
         assert!((hundred_inv * hundred).is_one());
         assert!((hundred * hundred_inv).is_one());
 
         let x = XFieldElement::new([0, 1, 0].map(BFieldElement::new));
-        let x_inv = x.inv();
+        let x_inv = x.inverse();
         assert!((x_inv * x).is_one());
         assert!((x * x_inv).is_one());
 
@@ -840,29 +810,29 @@ mod x_field_element_test {
         let mut rng = rand::thread_rng();
         let rands = XFieldElement::random_elements(test_iterations, &mut rng);
         for mut rand in rands.clone() {
-            let rand_inv_original = rand.inv();
+            let rand_inv_original = rand.inverse();
             assert!((rand * rand_inv_original).is_one());
             assert!((rand_inv_original * rand).is_one());
 
             // Negative test, verify that when decrementing and incrementing
             // by one in the different indices, we get something
             rand.incr(0);
-            assert!((rand * rand.inv()).is_one());
-            assert!((rand.inv() * rand).is_one());
+            assert!((rand * rand.inverse()).is_one());
+            assert!((rand.inverse() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());
             assert!(!(rand_inv_original * rand).is_one());
             rand.decr(0);
 
             rand.incr(1);
-            assert!((rand * rand.inv()).is_one());
-            assert!((rand.inv() * rand).is_one());
+            assert!((rand * rand.inverse()).is_one());
+            assert!((rand.inverse() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());
             assert!(!(rand_inv_original * rand).is_one());
             rand.decr(1);
 
             rand.incr(2);
-            assert!((rand * rand.inv()).is_one());
-            assert!((rand.inv() * rand).is_one());
+            assert!((rand * rand.inverse()).is_one());
+            assert!((rand.inverse() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());
             assert!(!(rand_inv_original * rand).is_one());
         }
