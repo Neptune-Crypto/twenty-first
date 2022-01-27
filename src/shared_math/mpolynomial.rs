@@ -1456,6 +1456,7 @@ mod test_mpolynomials {
             (usize, u64),
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
+        #[allow(clippy::type_complexity)]
         let mut empty_mul_memoization: HashMap<
             (Polynomial<PrimeFieldElementFlexible>, (usize, u64)),
             Polynomial<PrimeFieldElementFlexible>,
@@ -1603,6 +1604,7 @@ mod test_mpolynomials {
             (usize, u64),
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
+        #[allow(clippy::type_complexity)]
         let mut empty_mul_memoization: HashMap<
             (Polynomial<PrimeFieldElementFlexible>, (usize, u64)),
             Polynomial<PrimeFieldElementFlexible>,
@@ -1821,6 +1823,7 @@ mod test_mpolynomials {
                 HashMap::new();
             let mut empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<BFieldElement>> =
                 HashMap::new();
+            #[allow(clippy::type_complexity)]
             let mut empty_mul_memoization: HashMap<
                 (Polynomial<BFieldElement>, (usize, u64)),
                 Polynomial<BFieldElement>,
