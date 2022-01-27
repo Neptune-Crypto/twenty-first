@@ -91,7 +91,7 @@ pub trait PrimeField {
         + Mul<Output = Self::Elem>
         + Div<Output = Self::Elem>
         + Neg<Output = Self::Elem>
-        + FromVecu8 // TODO: Replace with From<Blake3Hash>
+        + FromVecu8
         + New
         + CyclicGroupGenerator
         + FieldBatchInversion
