@@ -693,6 +693,18 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
         ret
     }
 
+    pub fn verify_leafless_multi_proof_with_salts_and_values(
+        root_hash: Blake3Digest,
+        indices: &[usize],
+        proof: &[(LeaflessPartialAuthenticationPath, Vec<T>, T)],
+    ) -> bool {
+        let values: Vec<T> = proof.iter().map(|x| x.2.clone()).collect();
+        let auth_paths_and_salts: Vec<(LeaflessPartialAuthenticationPath, Vec<T>)> =
+            proof.iter().map(|x| (x.0.clone(), x.1.clone())).collect();
+
+        Self::verify_leafless_multi_proof(root_hash, indices, &values, &auth_paths_and_salts)
+    }
+
     pub fn verify_leafless_multi_proof(
         root_hash: Blake3Digest,
         indices: &[usize],
@@ -1414,6 +1426,24 @@ mod merkle_tree_test {
         assert_eq!(auth_path_b_multi_0[1].1, auth_paths_salts_values[1].1);
         assert_eq!(BFieldElement::new(3), auth_paths_salts_values[0].2);
         assert_eq!(BFieldElement::new(1), auth_paths_salts_values[1].2);
+
+        // Verify that the composite verification works
+        assert!(
+            SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                root_hash_b,
+                &[0, 1],
+                &auth_paths_salts_values
+            )
+        );
+        let mut bad_root_hash_b = root_hash_b;
+        bad_root_hash_b[5] ^= 0x1;
+        assert!(
+            !SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                bad_root_hash_b,
+                &[0, 1],
+                &auth_paths_salts_values
+            )
+        );
 
         let auth_path_b_multi_1 = tree_b.get_leafless_multi_proof(&[1]);
         let multi_values_1 = vec![BFieldElement::new(1)];
