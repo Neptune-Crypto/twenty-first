@@ -1,8 +1,8 @@
-use super::traits::{FromVecu8, GetPrimitiveRootOfUnity};
+use super::other;
+use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
-    CyclicGroupGenerator, FieldBatchInversion, IdentityValues, ModPowU32, ModPowU64, New,
-    PrimeField,
+    CyclicGroupGenerator, IdentityValues, ModPowU32, ModPowU64, New, PrimeField,
 };
 use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
-    fmt::{self, Display},
+    fmt::{self},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
@@ -64,51 +64,12 @@ impl BFieldElement {
         Self(value % Self::QUOTIENT)
     }
 
-    #[must_use]
-    pub fn inv(&self) -> Self {
-        let (_, _, a) = Self::xgcd(Self::QUOTIENT as i128, self.0 as i128);
-
-        Self(
-            ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
-                as u128,
-        )
-    }
-
     pub fn increment(&mut self) {
         self.0 = (self.0 + 1) % Self::QUOTIENT;
     }
 
     pub fn decrement(&mut self) {
         self.0 = (Self::MAX + self.0) % Self::QUOTIENT
-    }
-
-    // TODO: Name this collection of traits as something like... FieldElementInternalNumRepresentation
-    pub fn xgcd<
-        T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,
-    >(
-        mut x: T,
-        mut y: T,
-    ) -> (T, T, T) {
-        let (mut a_factor, mut a1, mut b_factor, mut b1) =
-            (T::one(), T::zero(), T::zero(), T::one());
-
-        while !y.is_zero() {
-            let (quotient, remainder) = (x.clone() / y.clone(), x.clone() % y.clone());
-            let (c, d) = (
-                a_factor - quotient.clone() * a1.clone(),
-                b_factor.clone() - quotient * b1.clone(),
-            );
-
-            x = y;
-            y = remainder;
-            a_factor = a1;
-            a1 = c;
-            b_factor = b1;
-            b1 = d;
-        }
-
-        // x is the gcd
-        (x, a_factor, b_factor)
     }
 
     // TODO: Use Rust Pow. TODO: Maybe move this out into a library along with xgcd().
@@ -190,42 +151,23 @@ impl fmt::Display for BFieldElement {
     }
 }
 
+impl Inverse for BFieldElement {
+    #[must_use]
+    fn inverse(&self) -> Self {
+        let (_, _, a) = other::xgcd(Self::QUOTIENT as i128, self.0 as i128);
+
+        Self(
+            ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
+                as u128,
+        )
+    }
+}
+
 impl ModPowU32 for BFieldElement {
     fn mod_pow_u32(&self, exp: u32) -> Self {
         // TODO: This can be sped up by a factor 2 by implementing
         // it for u32 and not using the 64-bit version
         self.mod_pow(exp as u64)
-    }
-}
-
-impl FieldBatchInversion for BFieldElement {
-    fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
-        // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
-        let input_length = input.len();
-        if input_length == 0 {
-            return Vec::<Self>::new();
-        }
-
-        let mut scratch: Vec<Self> = vec![Self::ring_zero(); input_length];
-        let mut acc = Self::ring_one();
-        scratch[0] = input[0];
-
-        for i in 0..input_length {
-            assert!(!input[i].is_zero(), "Cannot do batch inversion on zero");
-            scratch[i] = acc;
-            acc *= input[i];
-        }
-
-        acc = acc.inv();
-
-        let mut res = input;
-        for i in (0..input_length).rev() {
-            let tmp = acc * res[i];
-            res[i] = acc * scratch[i];
-            acc = tmp;
-        }
-
-        res
     }
 }
 
@@ -397,7 +339,7 @@ impl Div for BFieldElement {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
-        Self((other.inv().0 * self.0) % Self::QUOTIENT)
+        Self((other.inverse().0 * self.0) % Self::QUOTIENT)
     }
 }
 
@@ -562,18 +504,18 @@ mod b_prime_field_element_test {
         let ten_inv = bfield_elem!(16602069662473125889);
         let eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv =
             bfield_elem!(13115294102219178839);
-        assert_eq!(two_inv, bfield_elem!(2).inv());
-        assert_eq!(three_inv, bfield_elem!(3).inv());
-        assert_eq!(four_inv, bfield_elem!(4).inv());
-        assert_eq!(five_inv, bfield_elem!(5).inv());
-        assert_eq!(six_inv, bfield_elem!(6).inv());
-        assert_eq!(seven_inv, bfield_elem!(7).inv());
-        assert_eq!(eight_inv, bfield_elem!(8).inv());
-        assert_eq!(nine_inv, bfield_elem!(9).inv());
-        assert_eq!(ten_inv, bfield_elem!(10).inv());
+        assert_eq!(two_inv, bfield_elem!(2).inverse());
+        assert_eq!(three_inv, bfield_elem!(3).inverse());
+        assert_eq!(four_inv, bfield_elem!(4).inverse());
+        assert_eq!(five_inv, bfield_elem!(5).inverse());
+        assert_eq!(six_inv, bfield_elem!(6).inverse());
+        assert_eq!(seven_inv, bfield_elem!(7).inverse());
+        assert_eq!(eight_inv, bfield_elem!(8).inverse());
+        assert_eq!(nine_inv, bfield_elem!(9).inverse());
+        assert_eq!(ten_inv, bfield_elem!(10).inverse());
         assert_eq!(
             eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv,
-            bfield_elem!(85671106).inv()
+            bfield_elem!(85671106).inverse()
         );
 
         let inverses = [
@@ -629,7 +571,7 @@ mod b_prime_field_element_test {
     fn inversion_property_based_test() {
         let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::MAX as i128);
         for rand in rands {
-            assert!((bfield_elem!(rand as u128).inv() * bfield_elem!(rand as u128)).is_one());
+            assert!((bfield_elem!(rand as u128).inverse() * bfield_elem!(rand as u128)).is_one());
         }
     }
 
@@ -644,7 +586,7 @@ mod b_prime_field_element_test {
             for (mut rand, rand_inv) in izip!(rands, rands_inv) {
                 assert!((rand * rand_inv).is_one());
                 assert!((rand_inv * rand).is_one());
-                assert_eq!(rand.inv(), rand_inv);
+                assert_eq!(rand.inverse(), rand_inv);
                 rand.increment();
                 assert!(!(rand * rand_inv).is_one());
             }
@@ -707,7 +649,7 @@ mod b_prime_field_element_test {
         let a = 15;
         let b = 25;
         let expected_gcd_ab = 5;
-        let (actual_gcd_ab, a_factor, b_factor) = BFieldElement::xgcd(a, b);
+        let (actual_gcd_ab, a_factor, b_factor) = other::xgcd(a, b);
 
         assert_eq!(expected_gcd_ab, actual_gcd_ab);
         assert_eq!(2, a_factor);

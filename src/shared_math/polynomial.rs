@@ -1,8 +1,6 @@
 use crate::shared_math::ntt::{slow_intt, slow_ntt};
 use crate::shared_math::other::roundup_npo2;
-use crate::shared_math::traits::{
-    FieldBatchInversion, GetPrimitiveRootOfUnity, IdentityValues, ModPowU32, PrimeField,
-};
+use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues, ModPowU32, PrimeField};
 use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
@@ -786,7 +784,7 @@ impl<PF: PrimeField> Polynomial<PF> {
         let lhs_codeword = slow_ntt(&scaled_lhs_coefficients, &root);
         let rhs_codeword = slow_ntt(&scaled_rhs_coefficients, &root);
 
-        let rhs_inverses = PF::Elem::batch_inversion(rhs_codeword);
+        let rhs_inverses = PF::batch_inversion(rhs_codeword);
         let quotient_codeword: Vec<PF::Elem> = lhs_codeword
             .iter()
             .zip(rhs_inverses)

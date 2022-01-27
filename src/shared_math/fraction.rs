@@ -1,15 +1,8 @@
-use num_traits::Num;
-use num_traits::One;
-use num_traits::Zero;
+use crate::shared_math::other;
+use num_traits::{Num, One, Zero};
 use std::convert::From;
 use std::fmt::{Debug, Display};
-use std::ops::Add;
-use std::ops::Div;
-use std::ops::Mul;
-use std::ops::Rem;
-use std::ops::Sub;
-
-use super::b_field_element::BFieldElement;
+use std::ops::{Add, Div, Mul, Rem, Sub};
 
 // A simple implementation of fractions, with integers, not with finite fields
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -52,7 +45,7 @@ impl<U: num_traits::Num + Clone + Copy + Debug + Display> Num for Fraction<U> {
 
 impl<T: num_traits::Num + Clone + Copy + Debug + Display> Fraction<T> {
     pub fn reduce(mut dividend: T, mut divisor: T) -> Self {
-        let (reducer, ..) = BFieldElement::xgcd(dividend, divisor);
+        let (reducer, ..) = other::xgcd(dividend, divisor);
         if reducer != num_traits::one() {
             dividend = dividend / reducer;
             divisor = divisor / reducer;
