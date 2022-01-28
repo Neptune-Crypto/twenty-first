@@ -332,9 +332,6 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         proof: &[LeaflessPartialAuthenticationPath],
     ) -> bool {
         if indices.len() != proof.len() || indices.len() != leaf_hashes.len() {
-            debug_assert!(indices.len() == proof.len());
-            debug_assert!(indices.len() == leaf_hashes.len());
-
             return false;
         }
 
@@ -444,8 +441,6 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         proof: &[(LeaflessPartialAuthenticationPath, T)],
     ) -> bool {
         if indices.len() != proof.len() {
-            debug_assert!(indices.len() == proof.len());
-
             return false;
         }
 
