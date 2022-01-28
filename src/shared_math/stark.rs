@@ -911,8 +911,9 @@ pub mod test_stark {
         let rp: RescuePrime = params::rescue_prime_small_test_params();
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-        let one = BFieldElement::ring_one();
-        let (output, trace) = rp.eval_and_trace(&one);
+        let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+        input[0] = BFieldElement::ring_one();
+        let (output, trace) = rp.eval_and_trace(&input);
         assert_eq!(4, trace.len());
 
         let omicron = BFieldElement::ring_zero()
@@ -920,7 +921,7 @@ pub mod test_stark {
             .0
             .unwrap();
         let air_constraints = rp.get_air_constraints(omicron);
-        let boundary_constraints = rp.get_boundary_constraints(output);
+        let boundary_constraints = rp.get_boundary_constraints(&output);
         let mut proof_stream = ProofStream::default();
 
         let prove_result = stark.prove(
@@ -953,9 +954,9 @@ pub mod test_stark {
         let rp: RescuePrime = params::rescue_prime_medium_test_params();
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-        let one = BFieldElement::ring_one();
-        let (output, trace) = rp.eval_and_trace(&one);
-        // assert_eq!(stark.steps_count + 1, trace.len());
+        let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+        input[0] = BFieldElement::ring_one();
+        let (output, trace) = rp.eval_and_trace(&input);
 
         // FIXME: Don't hardcode omicron domain length
         let omicron = BFieldElement::ring_zero()
@@ -966,7 +967,7 @@ pub mod test_stark {
         let mut timer = TimingReporter::start();
         let air_constraints = rp.get_air_constraints(omicron);
         timer.elapsed("rp.get_air_constraints(omicron)");
-        let boundary_constraints = rp.get_boundary_constraints(output);
+        let boundary_constraints = rp.get_boundary_constraints(&output);
         timer.elapsed("rp.get_boundary_constraints(output)");
         let report = timer.finish();
         println!("{}", report);
