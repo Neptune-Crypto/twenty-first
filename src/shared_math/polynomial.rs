@@ -2859,6 +2859,20 @@ mod test_polynomials {
         }
     }
 
+    #[test]
+    fn lift_b_x_test() {
+        for _ in 0..5 {
+            let pol = gen_polynomial();
+            let lifted_pol: Polynomial<XFieldElement> = Polynomial::<BFieldElement>::lift_b_x(&pol);
+            for (coefficient, lifted_coefficient) in
+                pol.coefficients.iter().zip(lifted_pol.coefficients.iter())
+            {
+                println!("pol = {}", pol);
+                assert_eq!(Some(*coefficient), lifted_coefficient.unlift());
+            }
+        }
+    }
+
     fn gen_polynomial() -> Polynomial<BFieldElement> {
         let mut rng = rand::thread_rng();
         let coefficient_count = rng.next_u64() as usize % 40;
