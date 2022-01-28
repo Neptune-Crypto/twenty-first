@@ -9,6 +9,8 @@ use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomElements};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
+use crate::util_types::merkle_tree::LeaflessPartialAuthenticationPath;
+use crate::util_types::merkle_tree::SaltedMerkleTree;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils;
@@ -20,6 +22,7 @@ use std::fmt;
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
+pub const B_FIELD_ELEMENT_SALTS_PER_VALUE: usize = 3usize;
 
 // TODO: Consider <B: PrimeFieldElement, X: PrimeFieldElement>
 // This requires a trait a la Lift<X> to generalise XFE::new_const().
@@ -167,14 +170,14 @@ impl Stark {
             "Calculated omicron must match input omicron"
         );
 
-        // ...
+        // add randomizers to trace for zero-knowledge
         let mut rng = rand::thread_rng();
         let mut randomized_trace = trace.to_owned();
         self.randomize_trace(&mut rng, &mut randomized_trace, num_randomizers);
 
         timer.elapsed("calculate and add randomizers");
 
-        // ...
+        // Use interpolation to find the trace interpolants from the trace codewords
         let mut trace_interpolants = vec![];
         for r in 0..self.num_registers as usize {
             let mut trace_interpolant: Vec<BFieldElement> = randomized_trace
@@ -225,6 +228,7 @@ impl Stark {
         // In the case where there are no boundary conditions this formula reduces to:
         // bq(x) = (ti(x) - 0) / 1 = ti(x)
 
+        // Generate boundary quotients
         // Subtract boundary interpolants and divide out boundary zerofiers
         let bcs_formatted = self.format_boundary_constraints(omicron, boundary_constraints);
         let boundary_interpolants: Vec<Polynomial<BFieldElement>> =
@@ -236,7 +240,7 @@ impl Stark {
 
         timer.elapsed("calculate intt for each column in trace");
 
-        // FIXME: Consider coset_divide
+        // TODO: Use coset_divide here
         for r in 0..self.num_registers as usize {
             let div_res = (trace_interpolants[r].clone() - boundary_interpolants[r].clone())
                 .divide(boundary_zerofiers[r].clone());
@@ -252,11 +256,15 @@ impl Stark {
 
         // Commit to boundary quotients
         // TODO: Consider salted Merkle trees here.
-        let mut boundary_quotient_merkle_trees: Vec<MerkleTree<BFieldElement>> = vec![];
+        let mut boundary_quotient_merkle_trees: Vec<SaltedMerkleTree<BFieldElement>> = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<BFieldElement> =
                 bq.fast_coset_evaluate(&self.field_generator, omega, fri_domain_length as usize);
-            let bq_merkle_tree = MerkleTree::from_vec(&boundary_quotient_codeword);
+            let bq_merkle_tree = SaltedMerkleTree::from_vec(
+                &boundary_quotient_codeword,
+                B_FIELD_ELEMENT_SALTS_PER_VALUE,
+                &mut rng,
+            );
             proof_stream.enqueue(&bq_merkle_tree.get_root())?;
             boundary_quotient_merkle_trees.push(bq_merkle_tree);
         }
@@ -342,15 +350,6 @@ impl Stark {
         );
 
         timer.elapsed("get transition zerofiers");
-
-        // FIXME: Use this in combination with LeaflessPartialAuthenticationPaths.
-        let _transition_zerofier_mt: MerkleTree<BFieldElement> = self.get_transition_zerofier_mt(
-            &transition_zerofier,
-            omega,
-            fri_domain_length as usize,
-        );
-
-        timer.elapsed("get transition zerofier merkle trees");
 
         // divide out transition zerofier
         let transition_quotients: Vec<Polynomial<BFieldElement>> = transition_polynomials
@@ -454,7 +453,8 @@ impl Stark {
 
         timer.elapsed("calculate prover_fiat_shamir");
 
-        let combination = weights
+        // TODO: Should the combination codeword be `Polynomial<XfieldElement>` instead?
+        let combination: Polynomial<BFieldElement> = weights
             .iter()
             .zip(terms.iter())
             .fold(Polynomial::ring_zero(), |sum, (weight, pol)| {
@@ -463,7 +463,7 @@ impl Stark {
 
         timer.elapsed("calculate sum of combination polynomial");
 
-        let combined_codeword = combination.fast_coset_evaluate(
+        let combined_codeword: Vec<BFieldElement> = combination.fast_coset_evaluate(
             &self.field_generator,
             omega,
             fri_domain_length as usize,
@@ -516,9 +516,12 @@ impl Stark {
 
         // Open indicated positions in the boundary quotient codewords
         for bq_mt in boundary_quotient_merkle_trees {
-            let authentication_paths: Vec<PartialAuthenticationPath<BFieldElement>> =
-                bq_mt.get_multi_proof(&quadrupled_indices);
-            proof_stream.enqueue_length_prepended(&authentication_paths)?;
+            let proofs: Vec<(
+                LeaflessPartialAuthenticationPath,
+                Vec<BFieldElement>,
+                BFieldElement,
+            )> = bq_mt.get_leafless_multi_proof_with_salts_and_values(&quadrupled_indices);
+            proof_stream.enqueue_length_prepended(&proofs)?;
         }
 
         timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for all boundary quotient merkle trees");
@@ -607,22 +610,27 @@ impl Stark {
         let mut boundary_quotients: Vec<HashMap<usize, BFieldElement>> = vec![];
         for (i, bq_root) in boundary_quotient_mt_roots.into_iter().enumerate() {
             boundary_quotients.push(HashMap::new());
-            let authentication_paths: Vec<PartialAuthenticationPath<BFieldElement>> =
-                proof_stream.dequeue_length_prepended()?;
-            let valid =
-                MerkleTree::verify_multi_proof(bq_root, &duplicated_indices, &authentication_paths);
+            let proofs: Vec<(
+                LeaflessPartialAuthenticationPath,
+                Vec<BFieldElement>,
+                BFieldElement,
+            )> = proof_stream.dequeue_length_prepended()?;
+            let valid = SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                bq_root,
+                &duplicated_indices,
+                &proofs,
+            );
             if !valid {
                 return Err(Box::new(StarkVerifyError::BadMerkleProof(
                     MerkleProofError::BoundaryQuotientError(i),
                 )));
             }
 
-            duplicated_indices
-                .iter()
-                .zip(authentication_paths.iter())
-                .for_each(|(index, authentication_path)| {
-                    boundary_quotients[i].insert(*index, authentication_path.get_value());
-                });
+            duplicated_indices.iter().zip(proofs.iter()).for_each(
+                |(index, (_authentication_path, _salts, value))| {
+                    boundary_quotients[i].insert(*index, *value);
+                },
+            );
         }
 
         // Read and verify randomizer leafs
@@ -877,19 +885,6 @@ impl Stark {
         Polynomial::fast_zerofier(&omicron_trace_elements, &omicron, omicron_domain_length)
     }
 
-    // TODO: Consider naming this something with "evaluate"
-    fn get_transition_zerofier_mt(
-        &self,
-        transition_zerofier: &Polynomial<BFieldElement>,
-        omega: BFieldElement,
-        fri_domain_length: usize,
-    ) -> MerkleTree<BFieldElement> {
-        let transition_zerofier_codeword: Vec<BFieldElement> = transition_zerofier
-            .fast_coset_evaluate(&self.field_generator, omega, fri_domain_length);
-
-        MerkleTree::from_vec(&transition_zerofier_codeword)
-    }
-
     fn sample_weights(&self, randomness: &[u8], number: usize) -> Vec<BFieldElement> {
         let k_seeds = utils::get_n_hash_rounds(randomness, number as u32);
 
@@ -936,7 +931,10 @@ pub mod test_stark {
             omicron,
         );
 
-        assert!(prove_result.is_ok());
+        match prove_result {
+            Ok(_) => (),
+            Err(e) => panic!("{}", e),
+        };
 
         let (fri_domain_length, omega): (u32, BFieldElement) = prove_result.unwrap();
 
@@ -949,7 +947,10 @@ pub mod test_stark {
             trace.len() as u32,
         );
 
-        assert!(verify_result.is_ok());
+        match verify_result {
+            Ok(_) => (),
+            Err(e) => panic!("{}", e),
+        };
     }
 
     #[test]
