@@ -1674,6 +1674,8 @@ mod merkle_tree_test {
     fn salted_merkle_tree_bug_catching_test() {
         // This test was used to catch a bug in the implementation of
         // `SaltedMerkleTree::get_leafless_multi_proof_with_salts_and_values`
+        // The bug that this test caught was *fixed* in 5ad285bd867bf8c6c4be380d8539ba37f4a7409a
+        // and introduced in 89cfb194f02903534b1621b03a047c128af7d6c2.
         let tree = SaltedMerkleTree {
             salts_per_value: 3,
             salts: vec![
