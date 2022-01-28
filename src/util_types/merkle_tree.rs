@@ -685,32 +685,6 @@ mod merkle_tree_test {
         proof.iter().map(|y| y.0 .0.iter().flatten().count()).sum()
     }
 
-    // `verify_authentication_path_dummy' has same interface as `verify_authentication_path_dummy',
-    // but uses `verify_proof' internally. This helps to verify equivalence between the two.
-    fn verify_authentication_path_dummy<T: Serialize + Clone + Debug + PartialEq>(
-        root_hash: Blake3Digest,
-        index: u32,
-        value: T,
-        auth_path: Vec<Blake3Digest>,
-    ) -> bool {
-        let value_hash = blake3_digest_serialize(&value);
-        let leaf_node = Node {
-            value: Some(value),
-            hash: value_hash,
-        };
-        let auth_path_nodes: Vec<Node<T>> = auth_path
-            .iter()
-            .map(|hash| Node {
-                value: None,
-                hash: *hash,
-            })
-            .collect();
-        let mut proof = vec![leaf_node];
-        proof.extend(auth_path_nodes);
-
-        MerkleTree::verify_proof(root_hash, index as u64, proof)
-    }
-
     #[test]
     fn merkle_tree_test_32() {
         let prime: U256 = 1009.into();
@@ -1102,37 +1076,6 @@ mod merkle_tree_test {
         assert_eq!(tree_b.nodes[12].hash, auth_path_b[0], "sibling 5");
         assert_eq!(tree_b.nodes[7].hash, auth_path_b[1], "sibling d");
         assert_eq!(tree_b.nodes[2].hash, auth_path_b[2], "sibling e");
-    }
-
-    #[test]
-    fn merkle_tree_verify_authentication_path_test() {
-        let merkle_values = &[3, 1, 4, 1, 5, 9, 8, 6];
-        let tree = MerkleTree::from_vec(merkle_values);
-
-        for (index, value) in merkle_values.iter().enumerate() {
-            let auth_path = tree.get_authentication_path(index);
-
-            let verified_1 = MerkleTree::verify_authentication_path(
-                tree.root_hash,
-                index as u32,
-                value,
-                auth_path.clone(),
-            );
-
-            let verified_2 = verify_authentication_path_dummy(
-                tree.root_hash,
-                index as u32,
-                value,
-                auth_path.clone(),
-            );
-
-            let proof = tree.get_proof(index);
-            let verified_3 = MerkleTree::verify_proof(tree.root_hash, index as u64, proof);
-
-            assert_eq!(verified_1, verified_2);
-            assert_eq!(verified_1, verified_3);
-            assert!(verified_1, "(index:{},value:{}) verifies", index, value);
-        }
     }
 
     // Test of salted Merkle trees
