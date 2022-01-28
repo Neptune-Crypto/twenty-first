@@ -1,5 +1,6 @@
 use super::other;
 use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
+use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, IdentityValues, ModPowU32, ModPowU64, New, PrimeField,
@@ -62,6 +63,10 @@ impl BFieldElement {
 
     pub fn new(value: u128) -> Self {
         Self(value % Self::QUOTIENT)
+    }
+
+    pub fn lift(&self) -> XFieldElement {
+        XFieldElement::new_const(*self)
     }
 
     pub fn increment(&mut self) {

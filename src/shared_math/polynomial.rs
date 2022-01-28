@@ -11,6 +11,9 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, Rem, Sub};
 
+use super::b_field_element::BFieldElement;
+use super::x_field_element::XFieldElement;
+
 fn degree_raw<T: Add + Div + Mul + Sub + IdentityValues + Display>(coefficients: &[T]) -> isize {
     let mut deg = coefficients.len() as isize - 1;
     while deg >= 0 && coefficients[deg as usize].is_zero() {
@@ -125,6 +128,13 @@ impl<PF: PrimeField> Polynomial<PF> {
         Self {
             coefficients: vec![element],
         }
+    }
+
+    // FIXME: Can be done with traits instead of explicitly mentioning B and X.
+    // Thor does not agree that this is a good path to venture down
+    pub fn lift_b_x(b_poly: &Polynomial<BFieldElement>) -> Polynomial<XFieldElement> {
+        let x_field_coefficients = b_poly.coefficients.iter().map(|b| b.lift()).collect();
+        Polynomial::new(x_field_coefficients)
     }
 
     pub fn normalize(&mut self) {
