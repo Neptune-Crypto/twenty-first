@@ -454,6 +454,30 @@ mod b_prime_field_element_test {
     }
 
     #[test]
+    fn simple_lift_test() {
+        let zero: BFieldElement = bfield_elem!(0);
+        assert!(zero.lift().is_zero());
+        assert!(!zero.lift().is_one());
+
+        let one: BFieldElement = bfield_elem!(1);
+        assert!(!one.lift().is_zero());
+        assert!(one.lift().is_one());
+
+        let five: BFieldElement = bfield_elem!(5);
+        let five_lifted: XFieldElement = five.lift();
+        assert_eq!(Some(five), five_lifted.unlift());
+    }
+
+    #[test]
+    fn lift_property_test() {
+        let mut rng = rand::thread_rng();
+        let elements: Vec<BFieldElement> = BFieldElement::random_elements(100, &mut rng);
+        for element in elements {
+            assert_eq!(Some(element), element.lift().unlift());
+        }
+    }
+
+    #[test]
     fn increment_and_decrement_test() {
         let mut val_a = bfield_elem!(0);
         let mut val_b = bfield_elem!(1);
