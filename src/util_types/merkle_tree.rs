@@ -1676,6 +1676,10 @@ mod merkle_tree_test {
         // `SaltedMerkleTree::get_leafless_multi_proof_with_salts_and_values`
         // The bug that this test caught was *fixed* in 5ad285bd867bf8c6c4be380d8539ba37f4a7409a
         // and introduced in 89cfb194f02903534b1621b03a047c128af7d6c2.
+
+        // Build a representation of the SMT made from values
+        // `451282252958277131` and `3796554602848593414` as this is where the error was
+        // first caught.
         let tree = SaltedMerkleTree {
             salts_per_value: 3,
             salts: vec![
@@ -1726,20 +1730,33 @@ mod merkle_tree_test {
                 ],
             },
         };
-        let proof_0 = tree.get_leafless_multi_proof_with_salts_and_values(&[0]);
-        assert!(
-            SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
-                tree.get_root(),
-                &[0],
-                &proof_0,
-            )
-        );
         let proof_1 = tree.get_leafless_multi_proof_with_salts_and_values(&[1]);
+
+        // Let's first verify the value returned in the proof as this was where the bug was
+        assert_eq!(
+            BFieldElement::new(3796554602848593414),
+            proof_1[0].2,
+            "Value returned in proof must match what we put into the SMT"
+        );
         assert!(
             SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
                 tree.get_root(),
                 &[1],
                 &proof_1,
+            )
+        );
+
+        let proof_0 = tree.get_leafless_multi_proof_with_salts_and_values(&[0]);
+        assert_eq!(
+            BFieldElement::new(451282252958277131),
+            proof_0[0].2,
+            "Value returned in proof must match what we put into the SMT"
+        );
+        assert!(
+            SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                tree.get_root(),
+                &[0],
+                &proof_0,
             )
         );
     }
