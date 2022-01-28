@@ -10,8 +10,7 @@ use crate::shared_math::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomEl
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::LeaflessPartialAuthenticationPath;
-use crate::util_types::merkle_tree::SaltedMerkleTree;
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::util_types::merkle_tree::{MerkleTree, SaltedMerkleTree};
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils;
 use rand::prelude::ThreadRng;
@@ -520,10 +519,9 @@ impl Stark {
         timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for all boundary quotient merkle trees");
 
         // Open indicated positions in the randomizer
-        // TODO: Switch to leafless multiproofs.
-        let randomizer_auth_path: Vec<PartialAuthenticationPath<XFieldElement>> =
-            randomizer_mt.get_multi_proof(&quadrupled_indices);
-        proof_stream.enqueue_length_prepended(&randomizer_auth_path)?;
+        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath, XFieldElement)> =
+            randomizer_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
+        proof_stream.enqueue_length_prepended(&randomizer_auth_paths)?;
 
         timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for randomizer");
         let report = timer.finish();
@@ -575,10 +573,10 @@ impl Stark {
             self.colinearity_check_count as usize,
         );
 
-        let polynomial_values: Vec<(usize, XFieldElement)> = fri.verify(proof_stream)?;
+        let combination_values: Vec<(usize, XFieldElement)> = fri.verify(proof_stream)?;
 
         let (indices, values): (Vec<usize>, Vec<XFieldElement>) =
-            polynomial_values.into_iter().unzip();
+            combination_values.into_iter().unzip();
 
         // Because fri_domain_length = (max_degree + 1) * expansion_factor...
         let max_degree = (fri_domain_length / self.expansion_factor) - 1;
@@ -624,14 +622,15 @@ impl Stark {
             );
         }
 
+        // ZZZ
         // Read and verify randomizer leafs
-        let randomizer_authentication_paths: Vec<PartialAuthenticationPath<XFieldElement>> =
+        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath, XFieldElement)> =
             proof_stream.dequeue_length_prepended()?;
         // TODO: Replace with leafless multiproof.
-        let valid = MerkleTree::verify_multi_proof(
+        let valid = MerkleTree::verify_leafless_multi_proof(
             randomizer_mt_root,
             &duplicated_indices,
-            &randomizer_authentication_paths,
+            &randomizer_auth_paths,
         );
         if !valid {
             return Err(Box::new(StarkVerifyError::BadMerkleProof(
@@ -639,12 +638,13 @@ impl Stark {
             )));
         }
 
+        // Insert randomizer values in HashMap
         let mut randomizer_values: HashMap<usize, XFieldElement> = HashMap::new();
         duplicated_indices
             .iter()
-            .zip(randomizer_authentication_paths.iter())
-            .for_each(|(index, authentication_path)| {
-                randomizer_values.insert(*index, authentication_path.get_value());
+            .zip(randomizer_auth_paths.iter())
+            .for_each(|(index, (_auth_path, value))| {
+                randomizer_values.insert(*index, *value);
             });
 
         let omicron = BFieldElement::ring_zero()
