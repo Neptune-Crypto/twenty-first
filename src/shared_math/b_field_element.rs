@@ -607,8 +607,8 @@ mod b_prime_field_element_test {
     #[test]
     fn batch_inversion_pbt() {
         let test_iterations = 100;
+        let mut rng = rand::thread_rng();
         for i in 0..test_iterations {
-            let mut rng = rand::thread_rng();
             let rands: Vec<BFieldElement> = BFieldElement::random_elements(i, &mut rng);
             let rands_inv: Vec<BFieldElement> = BFieldElement::batch_inversion(rands.clone());
             assert_eq!(i as usize, rands_inv.len());
