@@ -663,7 +663,7 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
             ret.push((
                 leafless_proof.0,
                 leafless_proof.1,
-                self.internal_merkle_tree.get_value_by_index(i),
+                self.internal_merkle_tree.get_value_by_index(indices[i]),
             ));
         }
 
@@ -1668,5 +1668,167 @@ mod merkle_tree_test {
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
+    }
+
+    #[test]
+    fn salted_merkle_tree_bug_catching_test() {
+        // This test was used to catch a bug in the implementation of
+        // `SaltedMerkleTree::get_leafless_multi_proof_with_salts_and_values`
+        let tree = SaltedMerkleTree {
+            salts_per_value: 3,
+            salts: vec![
+                BFieldElement::new(16852022745602243699),
+                BFieldElement::new(18192741254792895208),
+                BFieldElement::new(6108973982441768052),
+                BFieldElement::new(968230590020974542),
+                BFieldElement::new(17104237224288853866),
+                BFieldElement::new(9841916779293573099),
+            ],
+            internal_merkle_tree: MerkleTree {
+                height: 2,
+                root_hash: [
+                    159, 150, 101, 39, 134, 168, 140, 214, 58, 157, 141, 212, 151, 254, 245, 58,
+                    117, 98, 14, 112, 190, 175, 119, 118, 28, 217, 54, 40, 243, 81, 114, 253,
+                ],
+                nodes: vec![
+                    Node {
+                        hash: [
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0,
+                        ],
+                        value: None,
+                    },
+                    Node {
+                        hash: [
+                            159, 150, 101, 39, 134, 168, 140, 214, 58, 157, 141, 212, 151, 254,
+                            245, 58, 117, 98, 14, 112, 190, 175, 119, 118, 28, 217, 54, 40, 243,
+                            81, 114, 253,
+                        ],
+                        value: None,
+                    },
+                    Node {
+                        hash: [
+                            176, 133, 158, 205, 44, 56, 95, 238, 155, 222, 76, 72, 133, 248, 13,
+                            238, 243, 139, 246, 241, 122, 118, 233, 76, 245, 184, 197, 8, 240, 243,
+                            192, 36,
+                        ],
+                        value: Some(BFieldElement::new(451282252958277131)),
+                    },
+                    Node {
+                        hash: [
+                            176, 122, 54, 202, 237, 4, 73, 88, 103, 26, 64, 17, 246, 1, 70, 45, 20,
+                            216, 20, 231, 61, 51, 227, 221, 6, 234, 253, 217, 153, 89, 10, 171,
+                        ],
+                        value: Some(BFieldElement::new(3796554602848593414)),
+                    },
+                ],
+            },
+        };
+        let proof_0 = tree.get_leafless_multi_proof_with_salts_and_values(&[0]);
+        assert!(
+            SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                tree.get_root(),
+                &[0],
+                &proof_0,
+            )
+        );
+        let proof_1 = tree.get_leafless_multi_proof_with_salts_and_values(&[1]);
+        assert!(
+            SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                tree.get_root(),
+                &[1],
+                &proof_1,
+            )
+        );
+    }
+
+    #[test]
+    fn salted_merkle_tree_verify_leafless_multi_proof_test() {
+        let mut prng = rand::thread_rng();
+
+        // Number of Merkle tree leaves
+        let n_valuess = &[2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
+        let expected_path_lengths = &[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
+        let mut rng = rand::thread_rng();
+        for (n_values, expected_path_length) in izip!(n_valuess, expected_path_lengths) {
+            let elements: Vec<BFieldElement> =
+                generate_random_numbers_u128(*n_values, Some(1u128 << 63))
+                    .iter()
+                    .map(|x| BFieldElement::new(*x))
+                    .collect();
+            let tree = SaltedMerkleTree::from_vec(&elements, 3, &mut rng);
+
+            for _ in 0..3 {
+                // Ask for an arbitrary amount of indices less than the total
+                let max_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
+
+                // Generate that amount of indices in the valid index range [0,128)
+                let indices: Vec<usize> =
+                    generate_random_numbers_u128(max_indices, Some(*n_values as u128))
+                        .iter()
+                        .map(|x| *x as usize)
+                        .unique()
+                        .collect();
+                let actual_number_of_indices = indices.len();
+
+                let values: Vec<BFieldElement> = indices.iter().map(|i| elements[*i]).collect();
+                let mut proof: Vec<(
+                    LeaflessPartialAuthenticationPath,
+                    Vec<BFieldElement>,
+                    BFieldElement,
+                )> = tree.get_leafless_multi_proof_with_salts_and_values(&indices);
+
+                for (i, path) in proof.iter().enumerate() {
+                    assert_eq!(*expected_path_length, path.0 .0.len());
+                    assert_eq!(values[i], path.2);
+                }
+
+                assert!(
+                    SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        tree.get_root(),
+                        &indices,
+                        &proof,
+                    )
+                );
+                let mut bad_root_hash = tree.get_root();
+                bad_root_hash[5] ^= 0x1;
+                assert!(
+                    !SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        bad_root_hash,
+                        &indices,
+                        &proof,
+                    )
+                );
+
+                // Verify that an invalid value fails verification
+                let pick = (prng.next_u64() % actual_number_of_indices as u64) as usize;
+                proof[pick].2.increment();
+                assert!(
+                    !SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        tree.get_root(),
+                        &indices,
+                        &proof,
+                    )
+                );
+                proof[pick].2.decrement();
+                assert!(
+                    SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        tree.get_root(),
+                        &indices,
+                        &proof,
+                    )
+                );
+
+                // Verify that an invalid salt fails verification
+                proof[(pick + 1) % actual_number_of_indices].1[1].decrement();
+                assert!(
+                    !SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        tree.get_root(),
+                        &indices,
+                        &proof,
+                    )
+                );
+            }
+        }
     }
 }
