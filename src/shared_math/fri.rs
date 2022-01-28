@@ -1,5 +1,5 @@
 use crate::shared_math::traits::{CyclicGroupGenerator, IdentityValues, ModPowU32, PrimeField};
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::util_types::merkle_tree::{LeaflessPartialAuthenticationPath, MerkleTree};
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils::{blake3_digest, get_index_from_bytes};
 use std::error::Error;
@@ -223,8 +223,14 @@ impl<PF: PrimeField> Fri<PF> {
         ab_indices.append(&mut b_indices);
 
         // Reveal authentication paths
-        proof_stream.enqueue_length_prepended(&current_mt.get_multi_proof(&ab_indices))?;
-        proof_stream.enqueue_length_prepended(&next_mt.get_multi_proof(c_indices))?;
+        let current_proof: Vec<(LeaflessPartialAuthenticationPath, PF::Elem)> =
+            current_mt.get_leafless_multi_proof_with_values(&ab_indices);
+
+        let next_proof: Vec<(LeaflessPartialAuthenticationPath, PF::Elem)> =
+            next_mt.get_leafless_multi_proof_with_values(c_indices);
+
+        proof_stream.enqueue_length_prepended(&current_proof)?;
+        proof_stream.enqueue_length_prepended(&next_proof)?;
 
         Ok(())
     }
@@ -296,21 +302,21 @@ impl<PF: PrimeField> Fri<PF> {
             ab_indices.append(&mut b_indices.clone());
 
             // Read values and check colinearity
-            let ab_values: Vec<PartialAuthenticationPath<PF::Elem>> =
+            let ab_proof: Vec<(LeaflessPartialAuthenticationPath, PF::Elem)> =
                 proof_stream.dequeue_length_prepended()?;
-            let c_values: Vec<PartialAuthenticationPath<PF::Elem>> =
+            let c_proof: Vec<(LeaflessPartialAuthenticationPath, PF::Elem)> =
                 proof_stream.dequeue_length_prepended()?;
 
             // verify Merkle authentication paths
-            if !MerkleTree::verify_multi_proof(roots[r], &ab_indices, &ab_values)
-                || !MerkleTree::verify_multi_proof(roots[r + 1], &c_indices, &c_values)
+            if !MerkleTree::verify_leafless_multi_proof(roots[r], &ab_indices, &ab_proof)
+                || !MerkleTree::verify_leafless_multi_proof(roots[r + 1], &c_indices, &c_proof)
             {
                 return Err(Box::new(ValidationError::BadMerkleProof));
             }
 
             // Verify that the expected number of samples are present
-            if ab_values.len() != 2 * self.colinearity_checks_count
-                || c_values.len() != self.colinearity_checks_count
+            if ab_proof.len() != 2 * self.colinearity_checks_count
+                || c_proof.len() != self.colinearity_checks_count
             {
                 return Err(Box::new(ValidationError::BadSizedProof));
             }
@@ -324,13 +330,13 @@ impl<PF: PrimeField> Fri<PF> {
                 .collect();
             let cx: PF::Elem = alphas[r];
             let ays: Vec<PF::Elem> = (0..self.colinearity_checks_count)
-                .map(|i| ab_values[i].get_value())
+                .map(|i| ab_proof[i].1)
                 .collect();
             let bys: Vec<PF::Elem> = (0..self.colinearity_checks_count)
-                .map(|i| ab_values[i + self.colinearity_checks_count].get_value())
+                .map(|i| ab_proof[i + self.colinearity_checks_count].1)
                 .collect();
             let cys: Vec<PF::Elem> = (0..self.colinearity_checks_count)
-                .map(|i| c_values[i].get_value())
+                .map(|i| c_proof[i].1)
                 .collect();
 
             if (0..self.colinearity_checks_count).any(|i| {

@@ -622,11 +622,9 @@ impl Stark {
             );
         }
 
-        // ZZZ
         // Read and verify randomizer leafs
         let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath, XFieldElement)> =
             proof_stream.dequeue_length_prepended()?;
-        // TODO: Replace with leafless multiproof.
         let valid = MerkleTree::verify_leafless_multi_proof(
             randomizer_mt_root,
             &duplicated_indices,
