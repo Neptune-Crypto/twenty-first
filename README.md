@@ -10,7 +10,7 @@ A collection of cryptography functions written in Rust.
  - source the rust environment `source $HOME/.cargo/env`
  - gnuplot -- `sudo apt install gnuplot`
  - build-essential (for `make`) -- `sudo apt install build-essential`
- - clone this repository -- `git clone git@github.com:Sword-Smith/twenty-first.git` and make sure to Google/DDG the Github SSH fingerprint before accepting it, if prompted
+ - clone this repository -- `git clone ssh://git@neptune.builders:2222/core-team/twenty-first.git`. Last time I checked, the RSA key fingerprint was `SHA256:wQ9euDKumP5H8MY1J8F07IEIb6Qz9isGkaFY8uL6U/Y`
  - install `vscode`
  - in `vscode` install the plugin `rust-analyzer`
  - in `vscode` activate format-on-save via `File` > `Preferences` > `Settings` then check the box for "Format on Save"
