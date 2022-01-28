@@ -2867,7 +2867,6 @@ mod test_polynomials {
             for (coefficient, lifted_coefficient) in
                 pol.coefficients.iter().zip(lifted_pol.coefficients.iter())
             {
-                println!("pol = {}", pol);
                 assert_eq!(Some(*coefficient), lifted_coefficient.unlift());
             }
         }
