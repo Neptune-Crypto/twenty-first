@@ -221,6 +221,9 @@ impl Stark {
         //   bq: boundary quotients
         //   ti: boundary interpolants
         //   bz: boundary zerofiers
+        //
+        // In the case where there are no boundary conditions this formula reduces to:
+        // bq(x) = (ti(x) - 0) / 1 = ti(x)
 
         // Subtract boundary interpolants and divide out boundary zerofiers
         let bcs_formatted = self.format_boundary_constraints(omicron, boundary_constraints);
@@ -773,7 +776,8 @@ impl Stark {
 
     // Return the interpolants for the provided points. This is the `L(x)` in the equation
     // to derive the boundary quotient: `Q_B(x) = (ECT(x) - L(x)) / Z_B(x)`.
-    // input is indexed with bcs[register][cycle]
+    // input is indexed with bcs[register][cycle]. Returns the zero-polynomial in case `points`
+    // is the empty list.
     fn get_boundary_interpolants(
         &self,
         bcs: Vec<Vec<(BFieldElement, BFieldElement)>>,
@@ -793,7 +797,7 @@ impl Stark {
             .collect();
         roots
             .iter()
-            .map(|points| Polynomial::get_polynomial_with_roots(points))
+            .map(|points| Polynomial::get_polynomial_with_roots(points, BFieldElement::ring_one()))
             .collect()
     }
 
@@ -911,8 +915,9 @@ pub mod test_stark {
         let rp: RescuePrime = params::rescue_prime_small_test_params();
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-        let one = BFieldElement::ring_one();
-        let (output, trace) = rp.eval_and_trace(&one);
+        let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+        input[0] = BFieldElement::ring_one();
+        let (output, trace) = rp.eval_and_trace(&input);
         assert_eq!(4, trace.len());
 
         let omicron = BFieldElement::ring_zero()
@@ -920,7 +925,7 @@ pub mod test_stark {
             .0
             .unwrap();
         let air_constraints = rp.get_air_constraints(omicron);
-        let boundary_constraints = rp.get_boundary_constraints(output);
+        let boundary_constraints = rp.get_boundary_constraints(&output);
         let mut proof_stream = ProofStream::default();
 
         let prove_result = stark.prove(
@@ -953,9 +958,9 @@ pub mod test_stark {
         let rp: RescuePrime = params::rescue_prime_medium_test_params();
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-        let one = BFieldElement::ring_one();
-        let (output, trace) = rp.eval_and_trace(&one);
-        // assert_eq!(stark.steps_count + 1, trace.len());
+        let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+        input[0] = BFieldElement::ring_one();
+        let (output, trace) = rp.eval_and_trace(&input);
 
         // FIXME: Don't hardcode omicron domain length
         let omicron = BFieldElement::ring_zero()
@@ -966,7 +971,7 @@ pub mod test_stark {
         let mut timer = TimingReporter::start();
         let air_constraints = rp.get_air_constraints(omicron);
         timer.elapsed("rp.get_air_constraints(omicron)");
-        let boundary_constraints = rp.get_boundary_constraints(output);
+        let boundary_constraints = rp.get_boundary_constraints(&output);
         timer.elapsed("rp.get_boundary_constraints(output)");
         let report = timer.finish();
         println!("{}", report);
@@ -999,5 +1004,37 @@ pub mod test_stark {
         println!("proof_stream: {} bytes", proof_stream.len());
 
         assert!(verify_result.is_ok());
+    }
+
+    #[test]
+    fn stark_with_registers_without_boundary_conditions_test() {
+        // Use the small test parameter set but with an input length of 2
+        // and an output length of 1. This leaves register 1 (execution trace
+        // has two registers: 0 and 1) without any boundary condition.
+        let mut rp: RescuePrime = params::rescue_prime_small_test_params();
+        rp.input_length = 2;
+        let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
+        let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+        input[0] = BFieldElement::ring_one();
+        let (output, trace) = rp.eval_and_trace(&input);
+        assert_eq!(4, trace.len());
+
+        let omicron = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(16)
+            .0
+            .unwrap();
+        let air_constraints = rp.get_air_constraints(omicron);
+        let boundary_constraints = rp.get_boundary_constraints(&output);
+        let mut proof_stream = ProofStream::default();
+
+        let prove_result = stark.prove(
+            &trace,
+            &air_constraints,
+            &boundary_constraints,
+            &mut proof_stream,
+            omicron,
+        );
+
+        assert!(prove_result.is_ok());
     }
 }

@@ -19,6 +19,8 @@ pub struct RescuePrime {
     pub steps_count: usize,
     pub alpha: u64,
     pub alpha_inv: u64,
+    pub input_length: usize,
+    pub output_length: usize,
     pub mds: Vec<Vec<BFieldElement>>,
     pub mds_inv: Vec<Vec<BFieldElement>>,
     pub round_constants: Vec<BFieldElement>,
@@ -75,23 +77,22 @@ impl RescuePrime {
         state
     }
 
-    /// Return the Rescue-Prime hash value
-    pub fn hash(&self, input: &BFieldElement) -> BFieldElement {
-        let mut state = vec![input.ring_zero(); self.m];
-        state[0] = input.to_owned();
+    pub fn hash(&self, input: &[BFieldElement]) -> Vec<BFieldElement> {
+        assert_eq!(self.input_length as usize, input.len(), "Input length must match expected length for these rescue prime parameters. Expected {}, got {}", self.input_length, input.len());
+        let mut state = input.to_vec();
+        state.resize(self.m, BFieldElement::ring_zero());
 
         state = (0..self.steps_count).fold(state, |state, i| self.hash_round(state, i));
 
-        state[0]
+        state[0..self.output_length as usize].to_vec()
     }
 
-    pub fn trace(&self, input: &BFieldElement) -> Vec<Vec<BFieldElement>> {
-        let mut trace: Vec<Vec<BFieldElement>> = vec![];
-        let mut state = vec![input.ring_zero(); self.m];
-        state[0] = input.to_owned();
+    pub fn trace(&self, input: &[BFieldElement]) -> Vec<Vec<BFieldElement>> {
+        assert_eq!(self.input_length as usize, input.len(), "Input length must match expected length for these rescue prime parameters. Expected {}, got {}", self.input_length, input.len());
+        let mut trace: Vec<Vec<BFieldElement>> = Vec::with_capacity(self.steps_count + 1);
+        let mut state = input.to_vec();
+        state.resize(self.m, BFieldElement::ring_zero());
         trace.push(state.clone());
-
-        // It could be cool to write this with `scan` instead of a for-loop, but I couldn't get that to work
         for i in 0..self.steps_count {
             let next_state = self.hash_round(state, i);
             trace.push(next_state.clone());
@@ -103,10 +104,11 @@ impl RescuePrime {
 
     pub fn eval_and_trace(
         &self,
-        input: &BFieldElement,
-    ) -> (BFieldElement, Vec<Vec<BFieldElement>>) {
+        input: &[BFieldElement],
+    ) -> (Vec<BFieldElement>, Vec<Vec<BFieldElement>>) {
         let trace = self.trace(input);
-        let output = trace.last().unwrap()[0];
+        let output: Vec<BFieldElement> =
+            trace.last().unwrap()[0..self.output_length as usize].to_vec();
 
         (output, trace)
     }
@@ -225,12 +227,12 @@ impl RescuePrime {
 
     pub fn get_boundary_constraints(
         &self,
-        output_element: BFieldElement,
+        output_elements: &[BFieldElement],
     ) -> Vec<BoundaryConstraint> {
         let mut bcs = vec![];
 
-        // All but the first registers should be 0 in the first cycle.
-        for i in 1..self.m {
+        // All registers not set by the input must be zero
+        for i in self.input_length..self.m {
             let bc = BoundaryConstraint {
                 cycle: 0,
                 register: i,
@@ -239,13 +241,17 @@ impl RescuePrime {
             bcs.push(bc);
         }
 
-        // Register 0 should have output_element as value in last cycle.
-        let end_constraint = BoundaryConstraint {
-            cycle: self.steps_count,
-            register: 0,
-            value: output_element.to_owned(),
-        };
-        bcs.push(end_constraint);
+        // The output of the hash function puts a constraint on the trace
+        // in the form of boundary conditions
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..self.output_length {
+            let end_constraint = BoundaryConstraint {
+                cycle: self.steps_count,
+                register: i,
+                value: output_elements[i].to_owned(),
+            };
+            bcs.push(end_constraint);
+        }
 
         bcs
     }
@@ -263,34 +269,59 @@ impl Display for RescuePrime {
 
 #[cfg(test)]
 mod rescue_prime_test {
+    use itertools::izip;
+
     use super::*;
     use crate::shared_math::{rescue_prime_params as params, traits::GetPrimitiveRootOfUnity};
 
     #[test]
-    fn hash_test() {
-        let rp = params::rescue_prime_params_bfield_0();
-
-        // Calculated with stark-anatomy tutorial implementation, starting with hash(1)
-        let one = BFieldElement::new(1);
-        let expected_sequence: Vec<BFieldElement> = vec![
+    fn hash_test_new() {
+        let input0: Vec<u128> = vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let input1: Vec<u128> = vec![
             16408223883448864076,
-            14851226605068667585,
-            2638999062907144857,
-            11729682885064735215,
-            18241842748565968364,
-            12761136320817622587,
-            6569784252060404379,
-            7456670293305349839,
-            12092401435052133560,
-        ]
-        .iter()
-        .map(|elem| BFieldElement::new(*elem))
-        .collect();
+            17937404513354951095,
+            17784658070603252681,
+            4690418723130302842,
+            3079713491308723285,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ];
+        let input2: Vec<u128> = vec![3, 1, 4, 1, 5, 9, 2, 6, 5, 3];
+        let output0: Vec<u128> = vec![
+            16408223883448864076,
+            17937404513354951095,
+            17784658070603252681,
+            4690418723130302842,
+            3079713491308723285,
+        ];
+        let output1: Vec<u128> = vec![
+            15817975225520290566,
+            15291972182281732842,
+            8434682293988037518,
+            16088630906125642382,
+            2049996104833593705,
+        ];
+        let output2: Vec<u128> = vec![
+            8224332136734371881,
+            8736343702647113032,
+            9660176071866133892,
+            575034608412522142,
+            13216022346578371396,
+        ];
 
-        let mut actual = rp.hash(&one);
-        for expected in expected_sequence {
-            assert_eq!(expected, actual);
-            actual = rp.hash(&expected);
+        let rp = params::rescue_prime_params_bfield_0();
+        for (input_ints, output_ints) in izip!(
+            vec![input0, input1, input2],
+            vec![output0, output1, output2]
+        ) {
+            let input: Vec<BFieldElement> =
+                input_ints.into_iter().map(BFieldElement::new).collect();
+            let output: Vec<BFieldElement> =
+                output_ints.into_iter().map(BFieldElement::new).collect();
+            assert_eq!(output, rp.hash(&input));
         }
     }
 
@@ -324,7 +355,7 @@ mod rescue_prime_test {
         }
 
         // Verify that the AIR constraints evaluation over the trace is zero along the trace
-        let input_2 = BFieldElement::new(42);
+        let input_2 = [BFieldElement::new(42)];
         let trace = rp.trace(&input_2);
         println!("Computing get_air_constraints(omicron)...");
         let now = std::time::Instant::now();

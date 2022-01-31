@@ -16,8 +16,9 @@ fn stark_medium(criterion: &mut Criterion) {
 
     let mut timer = TimingReporter::start();
 
-    let one = BFieldElement::ring_one();
-    let (output, trace) = rp.eval_and_trace(&one);
+    let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+    input[0] = BFieldElement::ring_one();
+    let (output, trace) = rp.eval_and_trace(&input);
     timer.elapsed("rp.eval_and_trace(...)");
     let omicron = BFieldElement::ring_zero()
         .get_primitive_root_of_unity(16)
@@ -26,7 +27,7 @@ fn stark_medium(criterion: &mut Criterion) {
     timer.elapsed("BFieldElement::get_primitive_root_of_unity(16)");
     let air_constraints = rp.get_air_constraints(omicron);
     timer.elapsed("rp.get_air_constraints(omicron)");
-    let boundary_constraints = rp.get_boundary_constraints(output);
+    let boundary_constraints = rp.get_boundary_constraints(&output);
     timer.elapsed("rp.get_boundary_constraints(...)");
 
     let report = timer.finish();

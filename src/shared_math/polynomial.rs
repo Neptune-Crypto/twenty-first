@@ -245,14 +245,25 @@ impl<PF: PrimeField> Polynomial<PF> {
                 }
             }
         } else {
+            // TODO: Shouldn't we just return one here?
+            // That would require a `one` element as input
+            // but maybe more correct/elegant than current
+            // implementaation
             panic!("Empty array received");
         }
     }
 
-    pub fn get_polynomial_with_roots(roots: &[PF::Elem]) -> Self {
-        let mut coefficients = Self::prod_helper(roots);
-        coefficients.reverse();
-        Polynomial { coefficients }
+    pub fn get_polynomial_with_roots(roots: &[PF::Elem], one: PF::Elem) -> Self {
+        assert!(one.is_one(), "Provided one must be one");
+        if roots.is_empty() {
+            Polynomial {
+                coefficients: vec![one],
+            }
+        } else {
+            let mut coefficients = Self::prod_helper(roots);
+            coefficients.reverse();
+            Polynomial { coefficients }
+        }
     }
 
     // Slow square implementation that does not use NTT
@@ -382,6 +393,9 @@ impl<PF: PrimeField> Polynomial<PF> {
         if xs.len() != ys.len() {
             panic!("Attempted to interpolate with x and y values of different length");
         }
+        if xs.is_empty() {
+            return Polynomial::ring_zero();
+        }
 
         if xs.len() == 2 {
             let (a, b) =
@@ -398,6 +412,9 @@ impl<PF: PrimeField> Polynomial<PF> {
     // purposes. This also means that it is not pivotal that this function has an optimal
     // runtime.
     pub fn slow_lagrange_interpolation(points: &[(PF::Elem, PF::Elem)]) -> Self {
+        if points.is_empty() {
+            return Polynomial::ring_zero();
+        }
         if !has_unique_elements(points.iter().map(|x| x.0)) {
             panic!("Repeated x values received. Got: {:?}", points);
         }
@@ -1342,15 +1359,29 @@ mod test_polynomials {
         let q = 31;
         assert_eq!(
             poly_flex(vec![pfb(30, q), pfb(0, q), pfb(1, q)]),
-            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(30, q)])
+            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(30, q)], pfb(1, q))
         );
         assert_eq!(
             poly_flex(vec![pfb(0, q), pfb(30, q), pfb(0, q), pfb(1, q)]),
-            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(30, q), pfb(0, q)])
+            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(30, q), pfb(0, q)], pfb(1, q))
         );
         assert_eq!(
             poly_flex(vec![pfb(25, q), pfb(11, q), pfb(25, q), pfb(1, q)]),
-            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(2, q), pfb(3, q)])
+            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(2, q), pfb(3, q)], pfb(1, q))
+        );
+        assert_eq!(
+            poly_flex(vec![pfb(1, q)]),
+            Polynomial::get_polynomial_with_roots(&[], pfb(1, q))
+        );
+    }
+
+    #[should_panic]
+    #[test]
+    fn panic_when_one_is_not_one() {
+        let q = 31;
+        assert_eq!(
+            poly_flex(vec![pfb(30, q), pfb(0, q), pfb(1, q)]),
+            Polynomial::get_polynomial_with_roots(&[pfb(1, q), pfb(30, q)], pfb(14, q))
         );
     }
 
@@ -1358,10 +1389,17 @@ mod test_polynomials {
     fn slow_lagrange_interpolation_test() {
         let q = 7;
 
+        // Verify expected result with zero points
+        let zero_points = &[];
+        let mut interpolation_result: Polynomial<PrimeFieldElementFlexible> =
+            Polynomial::slow_lagrange_interpolation(zero_points);
+        assert!(interpolation_result.is_zero());
+        interpolation_result = Polynomial::slow_lagrange_interpolation_new(&[], &[]);
+        assert!(interpolation_result.is_zero());
+
         // Verify that interpolation works with just one point
         let one_point = &[(pfb(2, q), pfb(5, q))];
-        let mut interpolation_result: Polynomial<PrimeFieldElementFlexible> =
-            Polynomial::slow_lagrange_interpolation(one_point);
+        interpolation_result = Polynomial::slow_lagrange_interpolation(one_point);
         println!("interpolation_result = {}", interpolation_result);
         let mut expected_result = Polynomial {
             coefficients: vec![pfb(5, q)],
