@@ -234,6 +234,7 @@ fn get_boundary_interpolants(
 
 fn get_boundary_zerofiers(
     bcs: Vec<Vec<(PrimeFieldElementFlexible, PrimeFieldElementFlexible)>>,
+    one: PrimeFieldElementFlexible,
 ) -> Vec<Polynomial<PrimeFieldElementFlexible>> {
     let roots: Vec<Vec<PrimeFieldElementFlexible>> = bcs
         .iter()
@@ -241,7 +242,7 @@ fn get_boundary_zerofiers(
         .collect();
     roots
         .iter()
-        .map(|points| Polynomial::get_polynomial_with_roots(points))
+        .map(|points| Polynomial::get_polynomial_with_roots(points, one))
         .collect()
 }
 
@@ -413,7 +414,7 @@ impl StarkPrimeFieldElementFlexible {
         let boundary_interpolants: Vec<Polynomial<PrimeFieldElementFlexible>> =
             get_boundary_interpolants(bcs_formatted.clone());
         let boundary_zerofiers: Vec<Polynomial<PrimeFieldElementFlexible>> =
-            get_boundary_zerofiers(bcs_formatted);
+            get_boundary_zerofiers(bcs_formatted, self.omega.ring_one());
         let mut boundary_quotients: Vec<Polynomial<PrimeFieldElementFlexible>> =
             vec![Polynomial::ring_zero(); self.register_count];
         for r in 0..self.register_count {
@@ -707,7 +708,8 @@ impl StarkPrimeFieldElementFlexible {
 
         // Verify leafs of combination polynomial
         let formatted_bcs = self.format_boundary_constraints(boundary_constraints);
-        let boundary_zerofiers = get_boundary_zerofiers(formatted_bcs.clone());
+        let boundary_zerofiers =
+            get_boundary_zerofiers(formatted_bcs.clone(), self.omega.ring_one());
         let boundary_interpolants = get_boundary_interpolants(formatted_bcs);
         let max_degree = self.max_degree(&transition_constraints);
         let boundary_degrees = self.boundary_quotient_degree_bounds(&boundary_zerofiers);
@@ -858,7 +860,7 @@ pub mod test_stark_pfef {
         let boundary_constraints = rescue_prime.get_boundary_constraints(output_element);
         let bcs_formatted = stark.format_boundary_constraints(boundary_constraints);
         let boundary_zerofiers: Vec<Polynomial<PrimeFieldElementFlexible>> =
-            get_boundary_zerofiers(bcs_formatted);
+            get_boundary_zerofiers(bcs_formatted, stark.omega.ring_one());
         let degrees = stark.boundary_quotient_degree_bounds(&boundary_zerofiers);
         assert_eq!(vec![34, 34], degrees);
     }
