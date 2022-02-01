@@ -1005,7 +1005,7 @@ pub mod test_stark {
     fn stark_with_registers_without_boundary_conditions_test() {
         // Use the small test parameter set but with an input length of 2
         // and an output length of 1. This leaves register 1 (execution trace
-        // has two registers: 0 and 1) without any boundary condition.
+        // has two registers: `0` and `1`) without any boundary condition.
         let mut rp: RescuePrime = params::rescue_prime_small_test_params();
         rp.input_length = 2;
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
@@ -1030,6 +1030,20 @@ pub mod test_stark {
             omicron,
         );
 
-        assert!(prove_result.is_ok());
+        let (fri_domain_length, omega) = match prove_result {
+            Ok(res) => res,
+            Err(e) => panic!("Error while generating proof: {}", e),
+        };
+
+        let verify_result = stark.verify(
+            &mut proof_stream,
+            &air_constraints,
+            &boundary_constraints,
+            fri_domain_length,
+            omega,
+            trace.len() as u32,
+        );
+
+        assert!(verify_result.is_ok());
     }
 }
