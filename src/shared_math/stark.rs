@@ -176,22 +176,25 @@ impl Stark {
 
         timer.elapsed("calculate and add randomizers");
 
-        // Use interpolation to find the trace interpolants from the trace codewords
+        // Use `intt' (interpolation) to convert trace codewords into trace polynomials
         let mut trace_interpolants = vec![];
         for r in 0..self.num_registers as usize {
+            // `trace_interpolant' starts as a codeword, meaning a column in the trace...
             let mut trace_interpolant: Vec<BFieldElement> = randomized_trace
                 .iter()
                 .map(|t| t[r])
                 .collect::<Vec<BFieldElement>>();
 
+            // ...and is subsequently transformed into polynomial coefficients via intt:
             intt::<BFieldElement>(
                 &mut trace_interpolant,
                 omicron,
                 log_2_ceil(omicron_domain_length) as u32,
             );
-            let trace_interpolant = Polynomial {
+
+            trace_interpolants.push(Polynomial {
                 coefficients: trace_interpolant,
-            };
+            });
 
             // Sanity checks; consider moving into unit tests.
             // for (i, item) in trace.iter().enumerate() {
@@ -206,8 +209,6 @@ impl Stark {
             //     trace_interpolant.degree(),
             //     "Trace interpolant has one degree lower than the points"
             // );
-
-            trace_interpolants.push(trace_interpolant);
         }
 
         timer.elapsed("calculate intt for each column in trace");
@@ -341,6 +342,7 @@ impl Stark {
         //     }
         // }
 
+        // TODO: Calculate the transition_zerofier faster than this using group theory.
         let transition_zerofier: Polynomial<BFieldElement> = self.get_transition_zerofier(
             omicron,
             omicron_domain_length as usize,
@@ -665,7 +667,7 @@ impl Stark {
             rounded_trace_length as usize,
         );
 
-        // TODO: Find a way to calculate the transition_zerofier faster than this.
+        // TODO: Calculate the transition_zerofier faster than this using group theory.
         let transition_zerofier: Polynomial<BFieldElement> = self.get_transition_zerofier(
             omicron,
             omicron_domain_length as usize,
@@ -750,11 +752,11 @@ impl Stark {
         trace: &mut Vec<Vec<BFieldElement>>,
         num_randomizers: u64,
     ) {
-        let mut randomizer_coset: Vec<Vec<BFieldElement>> = (0..num_randomizers)
+        let mut randomizers: Vec<Vec<BFieldElement>> = (0..num_randomizers)
             .map(|_| BFieldElement::random_elements(self.num_registers as usize, rng))
             .collect();
 
-        trace.append(&mut randomizer_coset);
+        trace.append(&mut randomizers);
     }
 
     // Convert boundary constraints into a vector of boundary constraints indexed by register.
