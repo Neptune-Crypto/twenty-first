@@ -9,7 +9,8 @@ use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomElements};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::util_types::merkle_tree::LeaflessPartialAuthenticationPath;
+use crate::util_types::merkle_tree::{MerkleTree, SaltedMerkleTree};
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils;
 use rand::prelude::ThreadRng;
@@ -20,6 +21,7 @@ use std::fmt;
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
+pub const B_FIELD_ELEMENT_SALTS_PER_VALUE: usize = 3usize;
 
 // TODO: Consider <B: PrimeFieldElement, X: PrimeFieldElement>
 // This requires a trait a la Lift<X> to generalise XFE::new_const().
@@ -167,29 +169,32 @@ impl Stark {
             "Calculated omicron must match input omicron"
         );
 
-        // ...
+        // add randomizers to trace for zero-knowledge
         let mut rng = rand::thread_rng();
         let mut randomized_trace = trace.to_owned();
         self.randomize_trace(&mut rng, &mut randomized_trace, num_randomizers);
 
         timer.elapsed("calculate and add randomizers");
 
-        // ...
+        // Use `intt' (interpolation) to convert trace codewords into trace polynomials
         let mut trace_interpolants = vec![];
         for r in 0..self.num_registers as usize {
+            // `trace_interpolant' starts as a codeword, meaning a column in the trace...
             let mut trace_interpolant: Vec<BFieldElement> = randomized_trace
                 .iter()
                 .map(|t| t[r])
                 .collect::<Vec<BFieldElement>>();
 
+            // ...and is subsequently transformed into polynomial coefficients via intt:
             intt::<BFieldElement>(
                 &mut trace_interpolant,
                 omicron,
                 log_2_ceil(omicron_domain_length) as u32,
             );
-            let trace_interpolant = Polynomial {
+
+            trace_interpolants.push(Polynomial {
                 coefficients: trace_interpolant,
-            };
+            });
 
             // Sanity checks; consider moving into unit tests.
             // for (i, item) in trace.iter().enumerate() {
@@ -204,8 +209,6 @@ impl Stark {
             //     trace_interpolant.degree(),
             //     "Trace interpolant has one degree lower than the points"
             // );
-
-            trace_interpolants.push(trace_interpolant);
         }
 
         timer.elapsed("calculate intt for each column in trace");
@@ -225,6 +228,7 @@ impl Stark {
         // In the case where there are no boundary conditions this formula reduces to:
         // bq(x) = (ti(x) - 0) / 1 = ti(x)
 
+        // Generate boundary quotients
         // Subtract boundary interpolants and divide out boundary zerofiers
         let bcs_formatted = self.format_boundary_constraints(omicron, boundary_constraints);
         let boundary_interpolants: Vec<Polynomial<BFieldElement>> =
@@ -236,7 +240,7 @@ impl Stark {
 
         timer.elapsed("calculate intt for each column in trace");
 
-        // FIXME: Consider coset_divide
+        // TODO: Use coset_divide here
         for r in 0..self.num_registers as usize {
             let div_res = (trace_interpolants[r].clone() - boundary_interpolants[r].clone())
                 .divide(boundary_zerofiers[r].clone());
@@ -251,12 +255,15 @@ impl Stark {
         timer.elapsed("calculate boundary quotients");
 
         // Commit to boundary quotients
-        // TODO: Consider salted Merkle trees here.
-        let mut boundary_quotient_merkle_trees: Vec<MerkleTree<BFieldElement>> = vec![];
+        let mut boundary_quotient_merkle_trees: Vec<SaltedMerkleTree<BFieldElement>> = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<BFieldElement> =
                 bq.fast_coset_evaluate(&self.field_generator, omega, fri_domain_length as usize);
-            let bq_merkle_tree = MerkleTree::from_vec(&boundary_quotient_codeword);
+            let bq_merkle_tree = SaltedMerkleTree::from_vec(
+                &boundary_quotient_codeword,
+                B_FIELD_ELEMENT_SALTS_PER_VALUE,
+                &mut rng,
+            );
             proof_stream.enqueue(&bq_merkle_tree.get_root())?;
             boundary_quotient_merkle_trees.push(bq_merkle_tree);
         }
@@ -335,6 +342,7 @@ impl Stark {
         //     }
         // }
 
+        // TODO: Calculate the transition_zerofier faster than this using group theory.
         let transition_zerofier: Polynomial<BFieldElement> = self.get_transition_zerofier(
             omicron,
             omicron_domain_length as usize,
@@ -342,15 +350,6 @@ impl Stark {
         );
 
         timer.elapsed("get transition zerofiers");
-
-        // FIXME: Use this in combination with LeaflessPartialAuthenticationPaths.
-        let _transition_zerofier_mt: MerkleTree<BFieldElement> = self.get_transition_zerofier_mt(
-            &transition_zerofier,
-            omega,
-            fri_domain_length as usize,
-        );
-
-        timer.elapsed("get transition zerofier merkle trees");
 
         // divide out transition zerofier
         let transition_quotients: Vec<Polynomial<BFieldElement>> = transition_polynomials
@@ -377,16 +376,18 @@ impl Stark {
         timer.elapsed("fast_coset_divide each transition polynomial");
 
         // Commit to randomizer polynomial
-        let randomizer_polynomial = Polynomial {
-            coefficients: BFieldElement::random_elements(max_degree as usize + 1, &mut rng),
+        let randomizer_polynomial: Polynomial<XFieldElement> = Polynomial {
+            coefficients: XFieldElement::random_elements(max_degree as usize + 1, &mut rng),
         };
 
-        let randomizer_codeword: Vec<BFieldElement> = randomizer_polynomial.fast_coset_evaluate(
-            &self.field_generator,
-            omega,
+        let lifted_field_generator: XFieldElement = self.field_generator.lift();
+        let lifted_omega: XFieldElement = omega.lift();
+        let randomizer_codeword: Vec<XFieldElement> = randomizer_polynomial.fast_coset_evaluate(
+            &lifted_field_generator,
+            lifted_omega,
             fri_domain_length as usize,
         );
-        let randomizer_mt = MerkleTree::from_vec(&randomizer_codeword);
+        let randomizer_mt: MerkleTree<XFieldElement> = MerkleTree::from_vec(&randomizer_codeword);
         proof_stream.enqueue(&randomizer_mt.get_root())?;
 
         timer.elapsed("fast_coset_evaluate and commit randomizer codeword to proof stream");
@@ -414,22 +415,24 @@ impl Stark {
 
         timer.elapsed("calculate boundary_quotient_degree_bounds");
 
-        let mut terms: Vec<Polynomial<BFieldElement>> = vec![randomizer_polynomial];
+        let mut terms: Vec<Polynomial<XFieldElement>> = vec![randomizer_polynomial];
         for (tq, tq_degree) in transition_quotients.iter().zip(expected_tq_degrees.iter()) {
-            terms.push(tq.to_owned());
+            let tq_x: Polynomial<XFieldElement> = Polynomial::<XFieldElement>::lift_b_x(tq);
+            terms.push(tq_x.clone());
             let shift = max_degree - tq_degree;
 
             // Make new polynomial with max_degree degree by shifting all terms up
-            let shifted = tq.shift_coefficients(shift as usize, BFieldElement::ring_zero());
+            let shifted = tq_x.shift_coefficients(shift as usize, XFieldElement::ring_zero());
             assert_eq!(max_degree as isize, shifted.degree());
             terms.push(shifted);
         }
         for (bq, bq_degree) in boundary_quotients.iter().zip(boundary_degrees.iter()) {
-            terms.push(bq.to_owned());
+            let bq_x: Polynomial<XFieldElement> = Polynomial::<XFieldElement>::lift_b_x(bq);
+            terms.push(bq_x.clone());
             let shift = max_degree as usize - bq_degree;
 
             // Make new polynomial with max_degree degree by shifting all terms up
-            let shifted = bq.shift_coefficients(shift, BFieldElement::ring_zero());
+            let shifted = bq_x.shift_coefficients(shift, XFieldElement::ring_zero());
             assert_eq!(max_degree as isize, shifted.degree());
             terms.push(shifted);
         }
@@ -442,7 +445,7 @@ impl Stark {
         // #  - 2 for every transition quotient
         // #  - 2 for every boundary quotient
         let fiat_shamir_hash: Vec<u8> = proof_stream.prover_fiat_shamir();
-        let weights = self.sample_weights(
+        let weights: Vec<XFieldElement> = self.sample_weights(
             &fiat_shamir_hash,
             1 + 2 * transition_quotients.len() + 2 * boundary_quotients.len(),
         );
@@ -454,18 +457,18 @@ impl Stark {
 
         timer.elapsed("calculate prover_fiat_shamir");
 
-        let combination = weights
+        let combination: Polynomial<XFieldElement> = weights
             .iter()
             .zip(terms.iter())
-            .fold(Polynomial::ring_zero(), |sum, (weight, pol)| {
-                sum + pol.scalar_mul(weight.to_owned())
+            .fold(Polynomial::ring_zero(), |sum, (&weight, pol)| {
+                sum + pol.scalar_mul(weight)
             });
 
         timer.elapsed("calculate sum of combination polynomial");
 
-        let combined_codeword = combination.fast_coset_evaluate(
-            &self.field_generator,
-            omega,
+        let combined_codeword: Vec<XFieldElement> = combination.fast_coset_evaluate(
+            &lifted_field_generator,
+            lifted_omega,
             fri_domain_length as usize,
         );
 
@@ -473,20 +476,14 @@ impl Stark {
 
         // Prove low degree of combination polynomial, and collect indices
         let fri = Fri::<XFieldElement>::new(
-            XFieldElement::new_const(self.field_generator),
-            XFieldElement::new_const(omega),
+            lifted_field_generator,
+            lifted_omega,
             fri_domain_length as usize,
             self.expansion_factor as usize,
             self.colinearity_check_count as usize,
         );
 
-        // Since we're working in the extension field...
-        let lifted_combined_codeword: Vec<XFieldElement> = combined_codeword
-            .iter()
-            .map(|x| XFieldElement::new_const(*x))
-            .collect();
-
-        let indices: Vec<usize> = fri.prove(&lifted_combined_codeword, proof_stream)?;
+        let indices: Vec<usize> = fri.prove(&combined_codeword, proof_stream)?;
 
         timer.elapsed("calculate fri.prove()");
 
@@ -511,21 +508,22 @@ impl Stark {
 
         timer.elapsed("sort quadrupled indices");
 
-        // FIXME: Use newer leafless_* MT functions below. They don't currently export the subset of values.
-        // Vec<LeaflessPartialAuthenticationPath> -> Vec<(LeaflessPartialAuthenticationPath, U)>
-
         // Open indicated positions in the boundary quotient codewords
         for bq_mt in boundary_quotient_merkle_trees {
-            let authentication_paths: Vec<PartialAuthenticationPath<BFieldElement>> =
-                bq_mt.get_multi_proof(&quadrupled_indices);
-            proof_stream.enqueue_length_prepended(&authentication_paths)?;
+            let proofs: Vec<(
+                LeaflessPartialAuthenticationPath,
+                Vec<BFieldElement>,
+                BFieldElement,
+            )> = bq_mt.get_leafless_multi_proof_with_salts_and_values(&quadrupled_indices);
+            proof_stream.enqueue_length_prepended(&proofs)?;
         }
 
         timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for all boundary quotient merkle trees");
 
         // Open indicated positions in the randomizer
-        let randomizer_auth_path = randomizer_mt.get_multi_proof(&quadrupled_indices);
-        proof_stream.enqueue_length_prepended(&randomizer_auth_path)?;
+        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath, XFieldElement)> =
+            randomizer_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
+        proof_stream.enqueue_length_prepended(&randomizer_auth_paths)?;
 
         timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for randomizer");
         let report = timer.finish();
@@ -559,7 +557,7 @@ impl Stark {
         // 2 for every transition quotient
         // 2 for every boundary quotient
         let fiat_shamir_hash: Vec<u8> = proof_stream.verifier_fiat_shamir();
-        let weights = self.sample_weights(
+        let weights: Vec<XFieldElement> = self.sample_weights(
             &fiat_shamir_hash,
             1 + 2 * boundary_quotient_mt_roots.len() + 2 * transition_constraints.len(),
         );
@@ -567,24 +565,20 @@ impl Stark {
         // Verify low degree of combination polynomial, and collect indices
         // Note that FRI verifier verifies number of samples, so we don't have
         // to check that number here
+        let lifted_field_generator: XFieldElement = self.field_generator.lift();
+        let lifted_omega: XFieldElement = omega.lift();
         let fri = Fri::<XFieldElement>::new(
-            XFieldElement::new_const(self.field_generator),
-            XFieldElement::new_const(omega),
+            lifted_field_generator,
+            lifted_omega,
             fri_domain_length as usize,
             self.expansion_factor as usize,
             self.colinearity_check_count as usize,
         );
 
-        let polynomial_values = fri.verify(proof_stream)?;
+        let combination_values: Vec<(usize, XFieldElement)> = fri.verify(proof_stream)?;
 
-        let (indices, x_field_values): (Vec<usize>, Vec<XFieldElement>) =
-            polynomial_values.into_iter().unzip();
-
-        let unlifted_values: Option<Vec<BFieldElement>> =
-            x_field_values.iter().map(|xv| xv.unlift()).collect();
-
-        let values: Vec<BFieldElement> =
-            unlifted_values.ok_or(StarkVerifyError::UnexpectedFriValue)?;
+        let (indices, values): (Vec<usize>, Vec<XFieldElement>) =
+            combination_values.into_iter().unzip();
 
         // Because fri_domain_length = (max_degree + 1) * expansion_factor...
         let max_degree = (fri_domain_length / self.expansion_factor) - 1;
@@ -607,31 +601,36 @@ impl Stark {
         let mut boundary_quotients: Vec<HashMap<usize, BFieldElement>> = vec![];
         for (i, bq_root) in boundary_quotient_mt_roots.into_iter().enumerate() {
             boundary_quotients.push(HashMap::new());
-            let authentication_paths: Vec<PartialAuthenticationPath<BFieldElement>> =
-                proof_stream.dequeue_length_prepended()?;
-            let valid =
-                MerkleTree::verify_multi_proof(bq_root, &duplicated_indices, &authentication_paths);
+            let proofs: Vec<(
+                LeaflessPartialAuthenticationPath,
+                Vec<BFieldElement>,
+                BFieldElement,
+            )> = proof_stream.dequeue_length_prepended()?;
+            let valid = SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                bq_root,
+                &duplicated_indices,
+                &proofs,
+            );
             if !valid {
                 return Err(Box::new(StarkVerifyError::BadMerkleProof(
                     MerkleProofError::BoundaryQuotientError(i),
                 )));
             }
 
-            duplicated_indices
-                .iter()
-                .zip(authentication_paths.iter())
-                .for_each(|(index, authentication_path)| {
-                    boundary_quotients[i].insert(*index, authentication_path.get_value());
-                });
+            duplicated_indices.iter().zip(proofs.iter()).for_each(
+                |(index, (_authentication_path, _salts, value))| {
+                    boundary_quotients[i].insert(*index, *value);
+                },
+            );
         }
 
         // Read and verify randomizer leafs
-        let randomizer_authentication_paths: Vec<PartialAuthenticationPath<BFieldElement>> =
+        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath, XFieldElement)> =
             proof_stream.dequeue_length_prepended()?;
-        let valid = MerkleTree::verify_multi_proof(
+        let valid = MerkleTree::verify_leafless_multi_proof(
             randomizer_mt_root,
             &duplicated_indices,
-            &randomizer_authentication_paths,
+            &randomizer_auth_paths,
         );
         if !valid {
             return Err(Box::new(StarkVerifyError::BadMerkleProof(
@@ -639,33 +638,36 @@ impl Stark {
             )));
         }
 
-        let mut randomizer_values: HashMap<usize, BFieldElement> = HashMap::new();
+        // Insert randomizer values in HashMap
+        let mut randomizer_values: HashMap<usize, XFieldElement> = HashMap::new();
         duplicated_indices
             .iter()
-            .zip(randomizer_authentication_paths.iter())
-            .for_each(|(index, authentication_path)| {
-                randomizer_values.insert(*index, authentication_path.get_value());
+            .zip(randomizer_auth_paths.iter())
+            .for_each(|(index, (_auth_path, value))| {
+                randomizer_values.insert(*index, *value);
             });
 
-        // FIXME: Can we calculate this faster using omega?
         let omicron = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(omicron_domain_length as u128)
             .0
             .unwrap();
 
         // Verify leafs of combination polynomial
-        let formatted_bcs = self.format_boundary_constraints(omicron, boundary_constraints);
-        let boundary_zerofiers = self.get_boundary_zerofiers(formatted_bcs.clone());
-        let boundary_interpolants = self.get_boundary_interpolants(formatted_bcs);
-        let boundary_degrees = self
+        let formatted_bcs: Vec<Vec<(BFieldElement, BFieldElement)>> =
+            self.format_boundary_constraints(omicron, boundary_constraints);
+        let boundary_zerofiers: Vec<Polynomial<BFieldElement>> =
+            self.get_boundary_zerofiers(formatted_bcs.clone());
+        let boundary_interpolants: Vec<Polynomial<BFieldElement>> =
+            self.get_boundary_interpolants(formatted_bcs);
+        let boundary_degrees: Vec<usize> = self
             .boundary_quotient_degree_bounds(&boundary_zerofiers, rounded_trace_length as usize);
-        let expected_tq_degrees = self.transition_quotient_degree_bounds(
+        let expected_tq_degrees: Vec<u64> = self.transition_quotient_degree_bounds(
             transition_constraints,
             original_trace_length as usize,
             rounded_trace_length as usize,
         );
 
-        // TODO: Find a way to calculate the transition_zerofier faster than this.
+        // TODO: Calculate the transition_zerofier faster than this using group theory.
         let transition_zerofier: Polynomial<BFieldElement> = self.get_transition_zerofier(
             omicron,
             omicron_domain_length as usize,
@@ -706,20 +708,20 @@ impl Stark {
 
             // Get combination polynomial evaluation value
             // Loop over all registers for transition quotient values, and for boundary quotient values
-            let mut terms: Vec<BFieldElement> = vec![randomizer_values[&current_index]];
+            let mut terms: Vec<XFieldElement> = vec![randomizer_values[&current_index]];
             for (tcv, tq_degree) in transition_constraint_values
                 .iter()
                 .zip(expected_tq_degrees.iter())
             {
                 let transition_quotient = *tcv / current_transition_zerofier_value;
-                terms.push(transition_quotient);
+                terms.push(transition_quotient.lift());
                 let shift = max_degree as u64 - tq_degree;
-                terms.push(transition_quotient * current_x.mod_pow(shift));
+                terms.push((transition_quotient * current_x.mod_pow(shift)).lift());
             }
             for (bqvs, bq_degree) in boundary_quotients.iter().zip(boundary_degrees.iter()) {
-                terms.push(bqvs[&current_index]);
+                terms.push(bqvs[&current_index].lift());
                 let shift = max_degree as u64 - *bq_degree as u64;
-                terms.push(bqvs[&current_index] * current_x.mod_pow(shift));
+                terms.push((bqvs[&current_index] * current_x.mod_pow(shift)).lift());
             }
 
             assert_eq!(
@@ -727,11 +729,11 @@ impl Stark {
                 terms.len(),
                 "weights and terms length must match in verifier"
             );
-            let combination = weights
+            let combination: XFieldElement = weights
                 .iter()
                 .zip(terms.iter())
-                .fold(BFieldElement::ring_zero(), |sum, (weight, term)| {
-                    sum + term.to_owned() * weight.to_owned()
+                .fold(XFieldElement::ring_zero(), |sum, (&weight, &term)| {
+                    sum + term * weight
                 });
 
             if values[i] != combination {
@@ -750,11 +752,11 @@ impl Stark {
         trace: &mut Vec<Vec<BFieldElement>>,
         num_randomizers: u64,
     ) {
-        let mut randomizer_coset: Vec<Vec<BFieldElement>> = (0..num_randomizers)
+        let mut randomizers: Vec<Vec<BFieldElement>> = (0..num_randomizers)
             .map(|_| BFieldElement::random_elements(self.num_registers as usize, rng))
             .collect();
 
-        trace.append(&mut randomizer_coset);
+        trace.append(&mut randomizers);
     }
 
     // Convert boundary constraints into a vector of boundary constraints indexed by register.
@@ -877,28 +879,15 @@ impl Stark {
         Polynomial::fast_zerofier(&omicron_trace_elements, &omicron, omicron_domain_length)
     }
 
-    // TODO: Consider naming this something with "evaluate"
-    fn get_transition_zerofier_mt(
-        &self,
-        transition_zerofier: &Polynomial<BFieldElement>,
-        omega: BFieldElement,
-        fri_domain_length: usize,
-    ) -> MerkleTree<BFieldElement> {
-        let transition_zerofier_codeword: Vec<BFieldElement> = transition_zerofier
-            .fast_coset_evaluate(&self.field_generator, omega, fri_domain_length);
+    fn sample_weights(&self, randomness: &[u8], number: usize) -> Vec<XFieldElement> {
+        let k_seeds: Vec<[u8; 32]> = utils::get_n_hash_rounds(randomness, number as u32);
 
-        MerkleTree::from_vec(&transition_zerofier_codeword)
-    }
-
-    fn sample_weights(&self, randomness: &[u8], number: usize) -> Vec<BFieldElement> {
-        let k_seeds = utils::get_n_hash_rounds(randomness, number as u32);
-
-        // TODO: BFieldElement::from assumes something about the hash size.
+        // TODO: XFieldElement::from assumes something about the hash size.
         // Make sure we change this when changing the hash function.
         k_seeds
             .iter()
-            .map(|seed| BFieldElement::ring_zero().from_vecu8(seed.to_vec()))
-            .collect::<Vec<BFieldElement>>()
+            .map(|seed| XFieldElement::ring_zero().from_vecu8(seed.to_vec()))
+            .collect::<Vec<XFieldElement>>()
     }
 }
 
@@ -936,7 +925,10 @@ pub mod test_stark {
             omicron,
         );
 
-        assert!(prove_result.is_ok());
+        match prove_result {
+            Ok(_) => (),
+            Err(e) => panic!("{}", e),
+        };
 
         let (fri_domain_length, omega): (u32, BFieldElement) = prove_result.unwrap();
 
@@ -949,7 +941,10 @@ pub mod test_stark {
             trace.len() as u32,
         );
 
-        assert!(verify_result.is_ok());
+        match verify_result {
+            Ok(_) => (),
+            Err(e) => panic!("{}", e),
+        };
     }
 
     #[test]

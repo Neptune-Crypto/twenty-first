@@ -4,7 +4,7 @@ use crate::shared_math::other::log_2_ceil;
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 use crate::shared_math::traits::FromVecu8;
 use crate::shared_math::traits::{CyclicGroupGenerator, GetPrimitiveRootOfUnity, IdentityValues};
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::util_types::merkle_tree::{LeaflessPartialAuthenticationPath, MerkleTree};
 use crate::{shared_math::polynomial::Polynomial, util_types::proof_stream::ProofStream, utils};
 use rand::{RngCore, SeedableRng};
 use rand_pcg::Pcg64;
@@ -569,17 +569,22 @@ impl StarkPrimeFieldElementFlexible {
 
         // Open indicated positions in the boundary quotient codewords
         for bq_mt in boundary_quotient_merkle_trees {
-            proof_stream.enqueue_length_prepended(&bq_mt.get_multi_proof(&quadrupled_indices))?;
+            let bq_proof: Vec<(LeaflessPartialAuthenticationPath, PrimeFieldElementFlexible)> =
+                bq_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
+            proof_stream.enqueue_length_prepended(&bq_proof)?;
         }
 
         // Open indicated positions in the randomizer
-        proof_stream
-            .enqueue_length_prepended(&randomizer_mt.get_multi_proof(&quadrupled_indices))?;
+        let randomizer_proof: Vec<(LeaflessPartialAuthenticationPath, PrimeFieldElementFlexible)> =
+            randomizer_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
+        proof_stream.enqueue_length_prepended(&randomizer_proof)?;
 
         // Open indicated positions in the zerofier
-        proof_stream.enqueue_length_prepended(
-            &transition_zerofier_mt.get_multi_proof(&quadrupled_indices),
-        )?;
+        let transition_zerofier_proof: Vec<(
+            LeaflessPartialAuthenticationPath,
+            PrimeFieldElementFlexible,
+        )> = transition_zerofier_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
+        proof_stream.enqueue_length_prepended(&transition_zerofier_proof)?;
 
         Ok(())
     }
@@ -621,11 +626,12 @@ impl StarkPrimeFieldElementFlexible {
         // Verify low degree of combination polynomial, and collect indices
         // Note that FRI verifier verifies number of samples, so we don't have
         // to check that number here
-        let polynomial_values = self.fri.verify(proof_stream)?;
+        let combination_values: Vec<(usize, PrimeFieldElementFlexible)> =
+            self.fri.verify(proof_stream)?;
 
-        let indices: Vec<usize> = polynomial_values.iter().map(|(i, _y)| *i).collect();
+        let indices: Vec<usize> = combination_values.iter().map(|(i, _y)| *i).collect();
         let values: Vec<PrimeFieldElementFlexible> =
-            polynomial_values.iter().map(|(_i, y)| *y).collect();
+            combination_values.iter().map(|(_i, y)| *y).collect();
 
         let mut duplicated_indices = indices.clone();
         duplicated_indices.append(
@@ -641,32 +647,30 @@ impl StarkPrimeFieldElementFlexible {
         let mut boundary_quotients: Vec<HashMap<usize, PrimeFieldElementFlexible>> = vec![];
         for (i, bq_root) in boundary_quotient_mt_roots.into_iter().enumerate() {
             boundary_quotients.push(HashMap::new());
-            let authentication_paths: Vec<PartialAuthenticationPath<PrimeFieldElementFlexible>> =
+            let bq_proof: Vec<(LeaflessPartialAuthenticationPath, PrimeFieldElementFlexible)> =
                 proof_stream.dequeue_length_prepended()?;
             let valid =
-                MerkleTree::verify_multi_proof(bq_root, &duplicated_indices, &authentication_paths);
+                MerkleTree::verify_leafless_multi_proof(bq_root, &duplicated_indices, &bq_proof);
             if !valid {
                 return Err(Box::new(StarkVerifyError::BadMerkleProof(
                     MerkleProofError::BoundaryQuotientError(i),
                 )));
             }
 
-            duplicated_indices
-                .iter()
-                .zip(authentication_paths.iter())
-                .for_each(|(index, authentication_path)| {
-                    boundary_quotients[i].insert(*index, authentication_path.get_value());
-                });
+            duplicated_indices.iter().zip(bq_proof.iter()).for_each(
+                |(index, (_auth_path, value))| {
+                    boundary_quotients[i].insert(*index, *value);
+                },
+            );
         }
 
         // Read and verify randomizer leafs
-        let randomizer_authentication_paths: Vec<
-            PartialAuthenticationPath<PrimeFieldElementFlexible>,
-        > = proof_stream.dequeue_length_prepended()?;
-        let valid = MerkleTree::verify_multi_proof(
+        let randomizer_proof: Vec<(LeaflessPartialAuthenticationPath, PrimeFieldElementFlexible)> =
+            proof_stream.dequeue_length_prepended()?;
+        let valid = MerkleTree::verify_leafless_multi_proof(
             randomizer_mt_root,
             &duplicated_indices,
-            &randomizer_authentication_paths,
+            &randomizer_proof,
         );
         if !valid {
             return Err(Box::new(StarkVerifyError::BadMerkleProof(
@@ -677,19 +681,20 @@ impl StarkPrimeFieldElementFlexible {
         let mut randomizer_values: HashMap<usize, PrimeFieldElementFlexible> = HashMap::new();
         duplicated_indices
             .iter()
-            .zip(randomizer_authentication_paths.iter())
-            .for_each(|(index, authentication_path)| {
-                randomizer_values.insert(*index, authentication_path.get_value());
+            .zip(randomizer_proof.iter())
+            .for_each(|(index, (_auth_path, value))| {
+                randomizer_values.insert(*index, *value);
             });
 
         // Read and verify transition zerofier leafs
-        let transition_zerofier_authentication_paths: Vec<
-            PartialAuthenticationPath<PrimeFieldElementFlexible>,
-        > = proof_stream.dequeue_length_prepended()?;
-        let valid = MerkleTree::verify_multi_proof(
+        let transition_zerofier_proof: Vec<(
+            LeaflessPartialAuthenticationPath,
+            PrimeFieldElementFlexible,
+        )> = proof_stream.dequeue_length_prepended()?;
+        let valid = MerkleTree::verify_leafless_multi_proof(
             transition_zerofier_mt_root.to_owned(),
             &duplicated_indices,
-            &transition_zerofier_authentication_paths,
+            &transition_zerofier_proof,
         );
         if !valid {
             return Err(Box::new(StarkVerifyError::BadMerkleProof(
@@ -701,9 +706,9 @@ impl StarkPrimeFieldElementFlexible {
             HashMap::new();
         duplicated_indices
             .iter()
-            .zip(transition_zerofier_authentication_paths.iter())
-            .for_each(|(index, authentication_path)| {
-                transition_zerofier_values.insert(*index, authentication_path.get_value());
+            .zip(transition_zerofier_proof.iter())
+            .for_each(|(index, (_auth_path, value))| {
+                transition_zerofier_values.insert(*index, *value);
             });
 
         // Verify leafs of combination polynomial

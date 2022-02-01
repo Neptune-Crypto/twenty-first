@@ -1,5 +1,6 @@
 use super::other;
 use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
+use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, IdentityValues, ModPowU32, ModPowU64, New, PrimeField,
@@ -62,6 +63,10 @@ impl BFieldElement {
 
     pub fn new(value: u128) -> Self {
         Self(value % Self::QUOTIENT)
+    }
+
+    pub fn lift(&self) -> XFieldElement {
+        XFieldElement::new_const(*self)
     }
 
     pub fn increment(&mut self) {
@@ -449,6 +454,30 @@ mod b_prime_field_element_test {
     }
 
     #[test]
+    fn simple_lift_test() {
+        let zero: BFieldElement = bfield_elem!(0);
+        assert!(zero.lift().is_zero());
+        assert!(!zero.lift().is_one());
+
+        let one: BFieldElement = bfield_elem!(1);
+        assert!(!one.lift().is_zero());
+        assert!(one.lift().is_one());
+
+        let five: BFieldElement = bfield_elem!(5);
+        let five_lifted: XFieldElement = five.lift();
+        assert_eq!(Some(five), five_lifted.unlift());
+    }
+
+    #[test]
+    fn lift_property_test() {
+        let mut rng = rand::thread_rng();
+        let elements: Vec<BFieldElement> = BFieldElement::random_elements(100, &mut rng);
+        for element in elements {
+            assert_eq!(Some(element), element.lift().unlift());
+        }
+    }
+
+    #[test]
     fn increment_and_decrement_test() {
         let mut val_a = bfield_elem!(0);
         let mut val_b = bfield_elem!(1);
@@ -578,8 +607,8 @@ mod b_prime_field_element_test {
     #[test]
     fn batch_inversion_pbt() {
         let test_iterations = 100;
+        let mut rng = rand::thread_rng();
         for i in 0..test_iterations {
-            let mut rng = rand::thread_rng();
             let rands: Vec<BFieldElement> = BFieldElement::random_elements(i, &mut rng);
             let rands_inv: Vec<BFieldElement> = BFieldElement::batch_inversion(rands.clone());
             assert_eq!(i as usize, rands_inv.len());

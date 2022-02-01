@@ -72,6 +72,17 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         v.hash == root_hash && expected_hash == proof[0].hash
     }
 
+    fn get_value_by_index(&self, index: usize) -> T {
+        assert!(
+            index < self.nodes.len() / 2,
+            "Out of bounds index requested"
+        );
+        self.nodes[self.nodes.len() / 2 + index]
+            .value
+            .clone()
+            .unwrap()
+    }
+
     pub fn to_vec(&self) -> Vec<T> {
         self.nodes[self.nodes.len() / 2..self.nodes.len()]
             .iter()
@@ -215,103 +226,8 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         self.nodes.len() / 2
     }
 
-    pub fn verify_multi_proof(
-        root_hash: Blake3Digest,
-        indices: &[usize],
-        proof: &[PartialAuthenticationPath<T>],
-    ) -> bool {
-        // compressed proofs can only be verified for all indices,
-        // meaning that all indices for the proof values must be known.
-        // This restriction is put in since the pruned parts of the
-        // multi proof are currently reassembled using the indices
-        // and some parts of the proof would be missing if all the proof
-        // elements were not represented in the indices argument.
-        if indices.len() != proof.len() {
-            return false;
-        }
-
-        if indices.is_empty() {
-            return true;
-        }
-
-        let mut partial_tree: HashMap<u64, Node<T>> = HashMap::new();
-        let mut proof_clone: Vec<PartialAuthenticationPath<T>> = proof.to_owned();
-        let half_tree_size = 2u64.pow(proof_clone[0].0.len() as u32 - 1);
-
-        for (i, b) in indices.iter().zip(proof_clone.iter()) {
-            let mut index = half_tree_size + *i as u64;
-
-            partial_tree.insert(index, b.0[0].clone().unwrap());
-            for elem in b.0.iter().skip(1) {
-                if let Some(i) = elem.clone() {
-                    partial_tree.insert(index ^ 1, i);
-                }
-                index /= 2;
-            }
-        }
-
-        let mut complete = false;
-        let mut hasher = blake3::Hasher::new();
-        while !complete {
-            complete = true;
-
-            let mut keys: Vec<u64> = partial_tree.keys().copied().map(|x| x / 2).collect();
-            keys.sort_by_key(|w| Reverse(*w));
-            for key in keys {
-                if partial_tree.contains_key(&(key * 2))
-                    && partial_tree.contains_key(&(key * 2 + 1))
-                    && !partial_tree.contains_key(&key)
-                {
-                    hasher.update(&partial_tree[&(key * 2)].hash[..]);
-                    hasher.update(&partial_tree[&(key * 2 + 1)].hash[..]);
-
-                    let hash = *hasher.finalize().as_bytes();
-                    partial_tree.insert(key, Node { value: None, hash });
-                    hasher.reset();
-                    complete = false;
-                }
-            }
-        }
-
-        for (i, b) in indices.iter().zip(proof_clone.iter_mut()) {
-            let mut index = half_tree_size + *i as u64;
-
-            for elem in b.0.iter_mut().skip(1) {
-                let sibling = index ^ 1;
-
-                if *elem == None {
-                    // If the Merkle tree/proof is manipulated, the value partial_tree[&(index ^ 1)]
-                    // is not guaranteed to exist. So have to  check
-                    // whether it exists and return false if it does not
-                    if !partial_tree.contains_key(&sibling) {
-                        return false;
-                    }
-
-                    *elem = Some(partial_tree[&sibling].clone());
-                }
-
-                partial_tree.insert(sibling, elem.clone().unwrap());
-                index /= 2;
-            }
-        }
-
-        for i in 0..indices.len() {
-            let proof_clone_unwrapped: Vec<Node<T>> = proof_clone[i]
-                .0
-                .clone()
-                .into_iter()
-                .map(|x| x.unwrap())
-                .collect();
-
-            if !Self::verify_proof(root_hash, indices[i] as u64, proof_clone_unwrapped) {
-                return false;
-            }
-        }
-        true
-    }
-
     // Compact Merkle Multiproof Generation
-    pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<PartialAuthenticationPath<T>> {
+    fn get_multi_proof(&self, indices: &[usize]) -> Vec<PartialAuthenticationPath<T>> {
         let mut calculable_indices: HashSet<usize> = HashSet::new();
         let mut output: Vec<PartialAuthenticationPath<T>> = Vec::with_capacity(indices.len());
         for i in indices.iter() {
@@ -365,16 +281,34 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         output
     }
 
+    // TODO: Rewrite this so it doesn't throw away the values before it fetches them again.
+    pub fn get_leafless_multi_proof_with_values(
+        &self,
+        indices: &[usize],
+    ) -> Vec<(LeaflessPartialAuthenticationPath, T)> {
+        // auth path and salts
+        let leafless_multi_proof: Vec<LeaflessPartialAuthenticationPath> =
+            self.get_leafless_multi_proof(indices);
+        let mut ret: Vec<(LeaflessPartialAuthenticationPath, T)> = vec![];
+
+        // Insert values in a for-loop
+        for (i, leafless_proof) in leafless_multi_proof.into_iter().enumerate() {
+            ret.push((leafless_proof, self.get_value_by_index(indices[i])));
+        }
+
+        ret
+    }
+
     // Compact Merkle Multiproof Generation
     //
     // Leafless (produce authentication paths, not Vec<Node<T>>s with leaf values in it).
-    pub fn get_leafless_multi_proof(
+    fn get_leafless_multi_proof(
         &self,
         indices: &[usize],
     ) -> Vec<LeaflessPartialAuthenticationPath> {
         self.get_multi_proof(indices)
-            .iter()
-            .map(|pat| Self::convert_pat_leafless(pat.clone()))
+            .into_iter()
+            .map(Self::convert_pat_leafless)
             .collect()
     }
 
@@ -398,9 +332,6 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
         proof: &[LeaflessPartialAuthenticationPath],
     ) -> bool {
         if indices.len() != proof.len() || indices.len() != leaf_hashes.len() {
-            debug_assert!(indices.len() == proof.len());
-            debug_assert!(indices.len() == leaf_hashes.len());
-
             return false;
         }
 
@@ -507,13 +438,9 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     pub fn verify_leafless_multi_proof(
         root_hash: Blake3Digest,
         indices: &[usize],
-        values: &[T],
-        proof: &[LeaflessPartialAuthenticationPath],
+        proof: &[(LeaflessPartialAuthenticationPath, T)],
     ) -> bool {
-        if indices.len() != proof.len() || indices.len() != values.len() {
-            debug_assert!(indices.len() == proof.len());
-            debug_assert!(indices.len() == values.len());
-
+        if indices.len() != proof.len() {
             return false;
         }
 
@@ -521,10 +448,20 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
             return true;
         }
 
-        let leaf_hashes: Vec<Blake3Digest> =
-            values.iter().map(|x| blake3_digest_serialize(x)).collect();
+        let mut auth_paths: Vec<LeaflessPartialAuthenticationPath> =
+            Vec::with_capacity(proof.len());
+        let mut leaf_hashes = Vec::with_capacity(proof.len());
+        for (auth_path, value) in proof.iter() {
+            auth_paths.push(auth_path.clone());
+            leaf_hashes.push(blake3_digest_serialize(value));
+        }
 
-        Self::verify_leafless_multi_proof_from_leaf_hashes(root_hash, indices, &leaf_hashes, proof)
+        Self::verify_leafless_multi_proof_from_leaf_hashes(
+            root_hash,
+            indices,
+            &leaf_hashes,
+            &auth_paths,
+        )
     }
 
     fn unwrap_leafless_partial_authentication_path(
@@ -637,7 +574,29 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
         self.internal_merkle_tree.root_hash
     }
 
-    pub fn get_leafless_multi_proof(
+    // Returns vectors of length `indices.len()` of triplets (auth path, salts, value)
+    pub fn get_leafless_multi_proof_with_salts_and_values(
+        &self,
+        indices: &[usize],
+    ) -> Vec<(LeaflessPartialAuthenticationPath, Vec<T>, T)> {
+        // auth path and salts
+        let leafless_multi_proof: Vec<(LeaflessPartialAuthenticationPath, Vec<T>)> =
+            self.get_leafless_multi_proof_with_salts(indices);
+        let mut ret: Vec<(LeaflessPartialAuthenticationPath, Vec<T>, T)> = vec![];
+
+        // Insert values in a for-loop
+        for (i, leafless_proof) in leafless_multi_proof.into_iter().enumerate() {
+            ret.push((
+                leafless_proof.0,
+                leafless_proof.1,
+                self.internal_merkle_tree.get_value_by_index(indices[i]),
+            ));
+        }
+
+        ret
+    }
+
+    pub fn get_leafless_multi_proof_with_salts(
         &self,
         indices: &[usize],
     ) -> Vec<(LeaflessPartialAuthenticationPath, Vec<T>)> {
@@ -658,6 +617,18 @@ impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleT
         }
 
         ret
+    }
+
+    pub fn verify_leafless_multi_proof_with_salts_and_values(
+        root_hash: Blake3Digest,
+        indices: &[usize],
+        proof: &[(LeaflessPartialAuthenticationPath, Vec<T>, T)],
+    ) -> bool {
+        let values: Vec<T> = proof.iter().map(|x| x.2.clone()).collect();
+        let auth_paths_and_salts: Vec<(LeaflessPartialAuthenticationPath, Vec<T>)> =
+            proof.iter().map(|x| (x.0.clone(), x.1.clone())).collect();
+
+        Self::verify_leafless_multi_proof(root_hash, indices, &values, &auth_paths_and_salts)
     }
 
     pub fn verify_leafless_multi_proof(
@@ -714,32 +685,6 @@ mod merkle_tree_test {
         proof.iter().map(|y| y.0 .0.iter().flatten().count()).sum()
     }
 
-    // `verify_authentication_path_dummy' has same interface as `verify_authentication_path_dummy',
-    // but uses `verify_proof' internally. This helps to verify equivalence between the two.
-    fn verify_authentication_path_dummy<T: Serialize + Clone + Debug + PartialEq>(
-        root_hash: Blake3Digest,
-        index: u32,
-        value: T,
-        auth_path: Vec<Blake3Digest>,
-    ) -> bool {
-        let value_hash = blake3_digest_serialize(&value);
-        let leaf_node = Node {
-            value: Some(value),
-            hash: value_hash,
-        };
-        let auth_path_nodes: Vec<Node<T>> = auth_path
-            .iter()
-            .map(|hash| Node {
-                value: None,
-                hash: *hash,
-            })
-            .collect();
-        let mut proof = vec![leaf_node];
-        proof.extend(auth_path_nodes);
-
-        MerkleTree::verify_proof(root_hash, index as u64, proof)
-    }
-
     #[test]
     fn merkle_tree_test_32() {
         let prime: U256 = 1009.into();
@@ -761,9 +706,9 @@ mod merkle_tree_test {
                     indices_usize.push(*elem as usize);
                 }
 
-                let proof: Vec<PartialAuthenticationPath<PrimeFieldElementFlexible>> =
-                    mt_32.get_multi_proof(&indices_usize);
-                assert!(MerkleTree::verify_multi_proof(
+                let proof: Vec<(LeaflessPartialAuthenticationPath, PrimeFieldElementFlexible)> =
+                    mt_32.get_leafless_multi_proof_with_values(&indices_usize);
+                assert!(MerkleTree::verify_leafless_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -773,12 +718,11 @@ mod merkle_tree_test {
                 assert!(proof
                     .iter()
                     .enumerate()
-                    .all(|(i, proof_element)| proof_element.get_value()
-                        == elements[indices_usize[i]]));
+                    .all(|(i, (_auth_path, value))| *value == elements[indices_usize[i]]));
 
                 // manipulate Merkle root and verify failure
                 mt_32.root_hash[i] ^= 1;
-                assert!(!MerkleTree::verify_multi_proof(
+                assert!(!MerkleTree::verify_leafless_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -786,7 +730,7 @@ mod merkle_tree_test {
 
                 // Restore root and verify success
                 mt_32.root_hash[i] ^= 1;
-                assert!(MerkleTree::verify_multi_proof(
+                assert!(MerkleTree::verify_leafless_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -795,7 +739,7 @@ mod merkle_tree_test {
                 // Request an additional index and verify failure
                 // (indices length does not match proof length)
                 indices_usize.insert(0, indices_i128[0] as usize);
-                assert!(!MerkleTree::verify_multi_proof(
+                assert!(!MerkleTree::verify_leafless_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -805,7 +749,7 @@ mod merkle_tree_test {
                 // (indices length does match proof length)
                 indices_usize.remove(0);
                 indices_usize[0] = indices_i128[0] as usize;
-                assert!(!MerkleTree::verify_multi_proof(
+                assert!(!MerkleTree::verify_leafless_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -815,7 +759,7 @@ mod merkle_tree_test {
                 // and verify failure since the indices and proof
                 // vectors do not match
                 indices_usize.remove(0);
-                assert!(!MerkleTree::verify_multi_proof(
+                assert!(!MerkleTree::verify_leafless_multi_proof(
                     mt_32.get_root(),
                     &indices_usize,
                     &proof
@@ -832,42 +776,31 @@ mod merkle_tree_test {
         let tree = MerkleTree::from_vec(&elements);
 
         // Degenerate example
-        let empty_values: Vec<u128> = vec![];
-        let empty_leafless_proof = tree.get_leafless_multi_proof(&[]);
+        let empty_leafless_proof = tree.get_leafless_multi_proof_with_values(&[]);
         assert!(MerkleTree::verify_leafless_multi_proof(
             tree.root_hash,
             &[],
-            &empty_values,
             &empty_leafless_proof,
-        ));
-
-        let empty_leafy_proof = tree.get_multi_proof(&[]);
-        assert!(MerkleTree::verify_multi_proof(
-            tree.root_hash,
-            &[],
-            &empty_leafy_proof,
         ));
     }
 
     #[test]
     fn merkle_tree_verify_multi_proof_equivalence_test() {
-        // This test asserts that verify_multi_proof and verify_leafless_multi_proof
-        // behave equivalently.
+        let mut rng = rand::thread_rng();
+
+        // This test asserts that regular merkle trees and salted merkle trees with 0 salts work equivalently.
 
         // Number of Merkle tree leaves
         let n_values = 8;
         let expected_path_length = 3; // log2(128), root node not included
-        let elements: Vec<u128> = generate_random_numbers_u128(n_values, Some(100));
-        let tree = MerkleTree::from_vec(&elements);
+        let elements: Vec<BFieldElement> = BFieldElement::random_elements(n_values, &mut rng);
+        let regular_tree = MerkleTree::from_vec(&elements);
 
-        // Single non-
         let some_indices: Vec<usize> = vec![0, 1];
-        let some_values: Vec<u128> = some_indices.iter().map(|i| elements[*i]).collect();
-        let some_leafless_proof: Vec<LeaflessPartialAuthenticationPath> =
-            tree.get_leafless_multi_proof(&some_indices);
+        let some_leafless_proof: Vec<(LeaflessPartialAuthenticationPath, BFieldElement)> =
+            regular_tree.get_leafless_multi_proof_with_values(&some_indices);
 
-        // TODO: Test all paths
-        for partial_auth_path in some_leafless_proof.clone() {
+        for (partial_auth_path, _value) in some_leafless_proof.clone() {
             assert_eq!(
                 expected_path_length,
                 partial_auth_path.0.len(),
@@ -875,20 +808,37 @@ mod merkle_tree_test {
             );
         }
 
-        let leafless = MerkleTree::verify_leafless_multi_proof(
-            tree.root_hash,
+        let regular_verify = MerkleTree::verify_leafless_multi_proof(
+            regular_tree.get_root(),
             &some_indices,
-            &some_values,
             &some_leafless_proof,
         );
 
-        let some_leafy_proof: Vec<PartialAuthenticationPath<u128>> =
-            tree.get_multi_proof(&some_indices);
+        let how_many_salts_again = 0;
+        let unsalted_salted_tree: SaltedMerkleTree<BFieldElement> =
+            SaltedMerkleTree::from_vec(&elements, how_many_salts_again, &mut rng);
 
-        let leafy =
-            MerkleTree::verify_multi_proof(tree.root_hash, &some_indices, &some_leafy_proof);
+        let salted_proof: Vec<(
+            LeaflessPartialAuthenticationPath,
+            Vec<BFieldElement>,
+            BFieldElement,
+        )> = unsalted_salted_tree.get_leafless_multi_proof_with_salts_and_values(&some_indices);
 
-        assert_eq!(leafless, leafy);
+        let salted_leafless_proof: Vec<(LeaflessPartialAuthenticationPath, Vec<BFieldElement>)> =
+            salted_proof
+                .iter()
+                .map(|(auth_path, salts, _)| (auth_path.clone(), salts.clone()))
+                .collect();
+        let values: Vec<BFieldElement> = salted_proof.iter().map(|(_, _, value)| *value).collect();
+
+        let unsalted_salted_verify = SaltedMerkleTree::verify_leafless_multi_proof(
+            unsalted_salted_tree.get_root(),
+            &some_indices,
+            &values,
+            &salted_leafless_proof,
+        );
+
+        assert_eq!(regular_verify, unsalted_salted_verify);
     }
 
     #[test]
@@ -896,40 +846,56 @@ mod merkle_tree_test {
         let mut prng = rand::thread_rng();
 
         // Number of Merkle tree leaves
-        let n_values = 128;
-        let expected_path_length = 7; // log2(128), root node not included
-        let elements: Vec<BFieldElement> = generate_random_numbers_u128(n_values, Some(100))
-            .iter()
-            .map(|x| BFieldElement::new(*x))
-            .collect();
-        let tree = MerkleTree::from_vec(&elements);
-
-        for _ in 0..10 {
-            // Ask for an arbitrary amount of indices less than the total
-            let n_indices = (prng.next_u64() % n_values as u64) as usize;
-
-            // Generate that amount of indices in the valid index range [0,128)
-            let indices: Vec<usize> =
-                generate_random_numbers_u128(n_indices, Some(n_values as u128))
+        let n_valuess = &[2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
+        let expected_path_lengths = &[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
+        for (n_values, expected_path_length) in izip!(n_valuess, expected_path_lengths) {
+            let elements: Vec<BFieldElement> =
+                generate_random_numbers_u128(*n_values, Some(1u128 << 63))
                     .iter()
-                    .map(|x| *x as usize)
-                    .unique()
+                    .map(|x| BFieldElement::new(*x))
                     .collect();
+            let tree: MerkleTree<BFieldElement> = MerkleTree::from_vec(&elements);
 
-            let values: Vec<BFieldElement> = indices.iter().map(|i| elements[*i]).collect();
-            let proof: Vec<LeaflessPartialAuthenticationPath> =
-                tree.get_leafless_multi_proof(&indices);
+            for _ in 0..3 {
+                // Ask for an arbitrary amount of indices less than the total
+                let n_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
 
-            for path in proof.iter() {
-                assert_eq!(expected_path_length, path.0.len());
+                // Generate that amount of indices in the valid index range [0,128)
+                let indices: Vec<usize> =
+                    generate_random_numbers_u128(n_indices, Some(*n_values as u128))
+                        .iter()
+                        .map(|x| *x as usize)
+                        .unique()
+                        .collect();
+
+                let proof = tree.get_leafless_multi_proof_with_values(&indices);
+
+                for (auth_path, _value) in proof.iter() {
+                    assert_eq!(*expected_path_length, auth_path.0.len());
+                }
+
+                assert!(MerkleTree::verify_leafless_multi_proof(
+                    tree.root_hash,
+                    &indices,
+                    &proof,
+                ));
+                let mut bad_root_hash = tree.root_hash;
+                bad_root_hash[0] ^= 0x1;
+                assert!(!MerkleTree::verify_leafless_multi_proof(
+                    bad_root_hash,
+                    &indices,
+                    &proof,
+                ));
+
+                let mut bad_proof = proof.clone();
+                let random_index = (prng.next_u64() % n_indices as u64 / 2) as usize;
+                bad_proof[random_index].1.decrement();
+                assert!(!MerkleTree::verify_leafless_multi_proof(
+                    tree.root_hash,
+                    &indices,
+                    &bad_proof,
+                ));
             }
-
-            assert!(MerkleTree::verify_leafless_multi_proof(
-                tree.root_hash,
-                &indices,
-                &values,
-                &proof,
-            ));
         }
     }
 
@@ -957,7 +923,7 @@ mod merkle_tree_test {
             mt.root_hash
         );
         assert_eq!(2u8, mt.height);
-        let mut proof = mt.get_proof(1);
+        let mut proof: Vec<Node<i128>> = mt.get_proof(1);
         assert!(MerkleTree::verify_proof(mt.root_hash, 1, proof.clone()));
         assert_eq!(Some(2), proof[0].value);
         proof = mt.get_proof(0);
@@ -1023,39 +989,38 @@ mod merkle_tree_test {
         println!("root_hash = {:?}", mt_four.root_hash);
         println!("\n\n\n\n proof(0) = {:?} \n\n\n\n", proof);
         assert!(MerkleTree::verify_proof(mt_four.root_hash, 0, proof));
-        let mut compressed_proof = mt_four.get_multi_proof(&[0]);
-        assert_eq!(1i128, compressed_proof[0].get_value());
-        assert!(MerkleTree::verify_multi_proof(
+        let mut compressed_proof: Vec<(LeaflessPartialAuthenticationPath, i128)> =
+            mt_four.get_leafless_multi_proof_with_values(&[0]);
+        assert_eq!(1i128, compressed_proof[0].1);
+        assert!(MerkleTree::verify_leafless_multi_proof(
             mt_four.root_hash,
             &[0],
             &compressed_proof
         ));
         proof = mt_four.get_proof(0);
-        assert_eq!(proof.len(), compressed_proof[0].0.len());
-        let unwrapped_compressed_proof: Vec<Node<i128>> = compressed_proof[0]
-            .0
-            .clone()
-            .into_iter()
-            .map(|x| x.unwrap())
-            .collect();
-        assert_eq!(proof, unwrapped_compressed_proof);
-        println!("{:?}", compressed_proof);
 
-        compressed_proof = mt_four.get_multi_proof(&[0, 1]);
-        assert_eq!(1i128, compressed_proof[0].get_value());
-        assert_eq!(2i128, compressed_proof[1].get_value());
+        assert_eq!(
+            proof.len() - 1,
+            compressed_proof[0].0 .0.len(),
+            "get_proof() produces one more Node<T> (with the value in) than is contained in a leafless proof"
+        );
+
+        compressed_proof = mt_four.get_leafless_multi_proof_with_values(&[0, 1]);
+        assert_eq!(1i128, compressed_proof[0].1);
+        assert_eq!(2i128, compressed_proof[1].1);
         println!("{:?}", compressed_proof);
-        assert!(MerkleTree::verify_multi_proof(
+        assert!(MerkleTree::verify_leafless_multi_proof(
             mt_four.root_hash,
             &[0, 1],
             &compressed_proof
         ));
-        compressed_proof = mt_four.get_multi_proof(&[0, 1, 2]);
-        assert_eq!(1i128, compressed_proof[0].get_value());
-        assert_eq!(2i128, compressed_proof[1].get_value());
-        assert_eq!(3i128, compressed_proof[2].get_value());
+
+        compressed_proof = mt_four.get_leafless_multi_proof_with_values(&[0, 1, 2]);
+        assert_eq!(1i128, compressed_proof[0].1);
+        assert_eq!(2i128, compressed_proof[1].1);
+        assert_eq!(3i128, compressed_proof[2].1);
         println!("{:?}", compressed_proof);
-        assert!(MerkleTree::verify_multi_proof(
+        assert!(MerkleTree::verify_leafless_multi_proof(
             mt_four.root_hash,
             &[0, 1, 2],
             &compressed_proof
@@ -1064,7 +1029,7 @@ mod merkle_tree_test {
         // Verify that verification of multi-proof where the tree or the proof
         // does not have the indices requested leads to a false return value,
         // and not to a run-time panic.
-        assert!(!MerkleTree::verify_multi_proof(
+        assert!(!MerkleTree::verify_leafless_multi_proof(
             mt_four.root_hash,
             &[2, 3],
             &compressed_proof
@@ -1111,37 +1076,6 @@ mod merkle_tree_test {
         assert_eq!(tree_b.nodes[12].hash, auth_path_b[0], "sibling 5");
         assert_eq!(tree_b.nodes[7].hash, auth_path_b[1], "sibling d");
         assert_eq!(tree_b.nodes[2].hash, auth_path_b[2], "sibling e");
-    }
-
-    #[test]
-    fn merkle_tree_verify_authentication_path_test() {
-        let merkle_values = &[3, 1, 4, 1, 5, 9, 8, 6];
-        let tree = MerkleTree::from_vec(merkle_values);
-
-        for (index, value) in merkle_values.iter().enumerate() {
-            let auth_path = tree.get_authentication_path(index);
-
-            let verified_1 = MerkleTree::verify_authentication_path(
-                tree.root_hash,
-                index as u32,
-                value,
-                auth_path.clone(),
-            );
-
-            let verified_2 = verify_authentication_path_dummy(
-                tree.root_hash,
-                index as u32,
-                value,
-                auth_path.clone(),
-            );
-
-            let proof = tree.get_proof(index);
-            let verified_3 = MerkleTree::verify_proof(tree.root_hash, index as u64, proof);
-
-            assert_eq!(verified_1, verified_2);
-            assert_eq!(verified_1, verified_3);
-            assert!(verified_1, "(index:{},value:{}) verifies", index, value);
-        }
     }
 
     // Test of salted Merkle trees
@@ -1357,7 +1291,7 @@ mod merkle_tree_test {
 
         // 9: Verify that simple multipath authentication paths work
         let auth_path_b_multi_0: Vec<(LeaflessPartialAuthenticationPath, Vec<BFieldElement>)> =
-            tree_b.get_leafless_multi_proof(&[0, 1]);
+            tree_b.get_leafless_multi_proof_with_salts(&[0, 1]);
         let multi_values_0 = vec![BFieldElement::new(3), BFieldElement::new(1)];
         assert!(SaltedMerkleTree::verify_leafless_multi_proof(
             root_hash_b,
@@ -1371,7 +1305,36 @@ mod merkle_tree_test {
             "paths [0,1] need two hashes"
         );
 
-        let auth_path_b_multi_1 = tree_b.get_leafless_multi_proof(&[1]);
+        // Verify that we get values
+        let auth_paths_salts_values =
+            tree_b.get_leafless_multi_proof_with_salts_and_values(&[0, 1]);
+        assert_eq!(2, auth_paths_salts_values.len());
+        assert_eq!(auth_path_b_multi_0[0].0, auth_paths_salts_values[0].0);
+        assert_eq!(auth_path_b_multi_0[0].1, auth_paths_salts_values[0].1);
+        assert_eq!(auth_path_b_multi_0[1].0, auth_paths_salts_values[1].0);
+        assert_eq!(auth_path_b_multi_0[1].1, auth_paths_salts_values[1].1);
+        assert_eq!(BFieldElement::new(3), auth_paths_salts_values[0].2);
+        assert_eq!(BFieldElement::new(1), auth_paths_salts_values[1].2);
+
+        // Verify that the composite verification works
+        assert!(
+            SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                root_hash_b,
+                &[0, 1],
+                &auth_paths_salts_values
+            )
+        );
+        let mut bad_root_hash_b = root_hash_b;
+        bad_root_hash_b[5] ^= 0x1;
+        assert!(
+            !SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                bad_root_hash_b,
+                &[0, 1],
+                &auth_paths_salts_values
+            )
+        );
+
+        let auth_path_b_multi_1 = tree_b.get_leafless_multi_proof_with_salts(&[1]);
         let multi_values_1 = vec![BFieldElement::new(1)];
         assert!(SaltedMerkleTree::verify_leafless_multi_proof(
             root_hash_b,
@@ -1385,7 +1348,7 @@ mod merkle_tree_test {
             "paths [1] need two hashes"
         );
 
-        let auth_path_b_multi_2 = tree_b.get_leafless_multi_proof(&[1, 0]);
+        let auth_path_b_multi_2 = tree_b.get_leafless_multi_proof_with_salts(&[1, 0]);
         let multi_values_2 = vec![BFieldElement::new(1), BFieldElement::new(3)];
         assert!(SaltedMerkleTree::verify_leafless_multi_proof(
             root_hash_b,
@@ -1394,7 +1357,7 @@ mod merkle_tree_test {
             &auth_path_b_multi_2
         ));
 
-        let mut auth_path_b_multi_3 = tree_b.get_leafless_multi_proof(&[0, 1, 2, 4, 7]);
+        let mut auth_path_b_multi_3 = tree_b.get_leafless_multi_proof_with_salts(&[0, 1, 2, 4, 7]);
         let mut multi_values_3 = vec![
             BFieldElement::new(3),
             BFieldElement::new(1),
@@ -1409,7 +1372,7 @@ mod merkle_tree_test {
             &auth_path_b_multi_3
         ));
 
-        let temp = tree_b.get_leafless_multi_proof(&[0, 1, 2, 4, 7]);
+        let temp = tree_b.get_leafless_multi_proof_with_salts(&[0, 1, 2, 4, 7]);
         assert_eq!(
             3,
             count_hashes(&temp),
@@ -1572,5 +1535,186 @@ mod merkle_tree_test {
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
+    }
+
+    #[test]
+    fn salted_merkle_tree_bug_catching_test() {
+        // This test was used to catch a bug in the implementation of
+        // `SaltedMerkleTree::get_leafless_multi_proof_with_salts_and_values`
+        // The bug that this test caught was *fixed* in 5ad285bd867bf8c6c4be380d8539ba37f4a7409a
+        // and introduced in 89cfb194f02903534b1621b03a047c128af7d6c2.
+
+        // Build a representation of the SMT made from values
+        // `451282252958277131` and `3796554602848593414` as this is where the error was
+        // first caught.
+        let tree = SaltedMerkleTree {
+            salts_per_value: 3,
+            salts: vec![
+                BFieldElement::new(16852022745602243699),
+                BFieldElement::new(18192741254792895208),
+                BFieldElement::new(6108973982441768052),
+                BFieldElement::new(968230590020974542),
+                BFieldElement::new(17104237224288853866),
+                BFieldElement::new(9841916779293573099),
+            ],
+            internal_merkle_tree: MerkleTree {
+                height: 2,
+                root_hash: [
+                    159, 150, 101, 39, 134, 168, 140, 214, 58, 157, 141, 212, 151, 254, 245, 58,
+                    117, 98, 14, 112, 190, 175, 119, 118, 28, 217, 54, 40, 243, 81, 114, 253,
+                ],
+                nodes: vec![
+                    Node {
+                        hash: [
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0,
+                        ],
+                        value: None,
+                    },
+                    Node {
+                        hash: [
+                            159, 150, 101, 39, 134, 168, 140, 214, 58, 157, 141, 212, 151, 254,
+                            245, 58, 117, 98, 14, 112, 190, 175, 119, 118, 28, 217, 54, 40, 243,
+                            81, 114, 253,
+                        ],
+                        value: None,
+                    },
+                    Node {
+                        hash: [
+                            176, 133, 158, 205, 44, 56, 95, 238, 155, 222, 76, 72, 133, 248, 13,
+                            238, 243, 139, 246, 241, 122, 118, 233, 76, 245, 184, 197, 8, 240, 243,
+                            192, 36,
+                        ],
+                        value: Some(BFieldElement::new(451282252958277131)),
+                    },
+                    Node {
+                        hash: [
+                            176, 122, 54, 202, 237, 4, 73, 88, 103, 26, 64, 17, 246, 1, 70, 45, 20,
+                            216, 20, 231, 61, 51, 227, 221, 6, 234, 253, 217, 153, 89, 10, 171,
+                        ],
+                        value: Some(BFieldElement::new(3796554602848593414)),
+                    },
+                ],
+            },
+        };
+        let proof_1 = tree.get_leafless_multi_proof_with_salts_and_values(&[1]);
+
+        // Let's first verify the value returned in the proof as this was where the bug was
+        assert_eq!(
+            BFieldElement::new(3796554602848593414),
+            proof_1[0].2,
+            "Value returned in proof must match what we put into the SMT"
+        );
+        assert!(
+            SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                tree.get_root(),
+                &[1],
+                &proof_1,
+            )
+        );
+
+        let proof_0 = tree.get_leafless_multi_proof_with_salts_and_values(&[0]);
+        assert_eq!(
+            BFieldElement::new(451282252958277131),
+            proof_0[0].2,
+            "Value returned in proof must match what we put into the SMT"
+        );
+        assert!(
+            SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                tree.get_root(),
+                &[0],
+                &proof_0,
+            )
+        );
+    }
+
+    #[test]
+    fn salted_merkle_tree_verify_leafless_multi_proof_test() {
+        let mut prng = rand::thread_rng();
+
+        // Number of Merkle tree leaves
+        let n_valuess = &[2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
+        let expected_path_lengths = &[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
+        let mut rng = rand::thread_rng();
+        for (n_values, expected_path_length) in izip!(n_valuess, expected_path_lengths) {
+            let elements: Vec<BFieldElement> =
+                generate_random_numbers_u128(*n_values, Some(1u128 << 63))
+                    .iter()
+                    .map(|x| BFieldElement::new(*x))
+                    .collect();
+            let tree = SaltedMerkleTree::from_vec(&elements, 3, &mut rng);
+
+            for _ in 0..3 {
+                // Ask for an arbitrary amount of indices less than the total
+                let max_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
+
+                // Generate that amount of indices in the valid index range [0,128)
+                let indices: Vec<usize> =
+                    generate_random_numbers_u128(max_indices, Some(*n_values as u128))
+                        .iter()
+                        .map(|x| *x as usize)
+                        .unique()
+                        .collect();
+                let actual_number_of_indices = indices.len();
+
+                let values: Vec<BFieldElement> = indices.iter().map(|i| elements[*i]).collect();
+                let mut proof: Vec<(
+                    LeaflessPartialAuthenticationPath,
+                    Vec<BFieldElement>,
+                    BFieldElement,
+                )> = tree.get_leafless_multi_proof_with_salts_and_values(&indices);
+
+                for (i, path) in proof.iter().enumerate() {
+                    assert_eq!(*expected_path_length, path.0 .0.len());
+                    assert_eq!(values[i], path.2);
+                }
+
+                assert!(
+                    SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        tree.get_root(),
+                        &indices,
+                        &proof,
+                    )
+                );
+                let mut bad_root_hash = tree.get_root();
+                bad_root_hash[5] ^= 0x1;
+                assert!(
+                    !SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        bad_root_hash,
+                        &indices,
+                        &proof,
+                    )
+                );
+
+                // Verify that an invalid value fails verification
+                let pick = (prng.next_u64() % actual_number_of_indices as u64) as usize;
+                proof[pick].2.increment();
+                assert!(
+                    !SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        tree.get_root(),
+                        &indices,
+                        &proof,
+                    )
+                );
+                proof[pick].2.decrement();
+                assert!(
+                    SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        tree.get_root(),
+                        &indices,
+                        &proof,
+                    )
+                );
+
+                // Verify that an invalid salt fails verification
+                proof[(pick + 1) % actual_number_of_indices].1[1].decrement();
+                assert!(
+                    !SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+                        tree.get_root(),
+                        &indices,
+                        &proof,
+                    )
+                );
+            }
+        }
     }
 }
