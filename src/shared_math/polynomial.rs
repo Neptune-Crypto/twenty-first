@@ -1,5 +1,5 @@
-use crate::shared_math::ntt::{slow_intt, slow_ntt};
-use crate::shared_math::other::roundup_npo2;
+use crate::shared_math::ntt::{intt, ntt};
+use crate::shared_math::other::{log_2_floor, roundup_npo2};
 use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues, ModPowU32, PrimeField};
 use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
@@ -467,17 +467,17 @@ impl<PF: PrimeField> Polynomial<PF> {
 
         let mut coefficients = self.coefficients.to_vec();
         coefficients.resize(order as usize, root.ring_zero());
-        let mut codeword: Vec<PF::Elem> = slow_ntt(&coefficients, &root);
-        for element in codeword.iter_mut() {
+        let log_2_of_n = log_2_floor(coefficients.len() as u64) as u32;
+        ntt::<PF>(&mut coefficients, root, log_2_of_n);
+
+        for element in coefficients.iter_mut() {
             *element = element.to_owned() * element.to_owned();
         }
 
-        let mut res_coefficients = slow_intt(&codeword, &root);
-        res_coefficients.truncate(result_degree as usize + 1);
+        intt::<PF>(&mut coefficients, root, log_2_of_n);
+        coefficients.truncate(result_degree as usize + 1);
 
-        Polynomial {
-            coefficients: res_coefficients,
-        }
+        Polynomial { coefficients }
     }
 
     #[must_use]
@@ -594,20 +594,23 @@ impl<PF: PrimeField> Polynomial<PF> {
             rhs_coefficients.push(root.ring_zero());
         }
 
-        let lhs_codeword: Vec<PF::Elem> = slow_ntt(&lhs_coefficients, &root);
-        let rhs_codeword: Vec<PF::Elem> = slow_ntt(&rhs_coefficients, &root);
+        let lhs_log_2_of_n = log_2_floor(lhs_coefficients.len() as u64) as u32;
+        let rhs_log_2_of_n = log_2_floor(rhs_coefficients.len() as u64) as u32;
+        ntt::<PF>(&mut lhs_coefficients, root, lhs_log_2_of_n);
+        ntt::<PF>(&mut rhs_coefficients, root, rhs_log_2_of_n);
 
-        let hadamard_product: Vec<PF::Elem> = rhs_codeword
+        let mut hadamard_product: Vec<PF::Elem> = rhs_coefficients
             .into_iter()
-            .zip(lhs_codeword.into_iter())
+            .zip(lhs_coefficients.into_iter())
             .map(|(r, l)| r * l)
             .collect();
 
-        let mut res_coefficients = slow_intt(&hadamard_product, &root);
-        res_coefficients.truncate(degree + 1);
+        let log_2_of_n = log_2_floor(hadamard_product.len() as u64) as u32;
+        intt::<PF>(&mut hadamard_product, root, log_2_of_n);
+        hadamard_product.truncate(degree + 1);
 
         Polynomial {
-            coefficients: res_coefficients,
+            coefficients: hadamard_product,
         }
     }
 
@@ -752,7 +755,9 @@ impl<PF: PrimeField> Polynomial<PF> {
     ) -> Vec<PF::Elem> {
         let mut coefficients = self.scale(offset).coefficients;
         coefficients.append(&mut vec![generator.ring_zero(); order - coefficients.len()]);
-        slow_ntt(&coefficients, &generator)
+        let log_2_of_n = log_2_floor(coefficients.len() as u64) as u32;
+        ntt::<PF>(&mut coefficients, generator, log_2_of_n);
+        coefficients
     }
 
     /// Divide two polynomials under the homomorphism of evaluation for a N^2 -> N*log(N) speedup
@@ -808,20 +813,24 @@ impl<PF: PrimeField> Polynomial<PF> {
         let mut scaled_rhs_coefficients: Vec<PF::Elem> = rhs.scale(&offset).coefficients;
         scaled_rhs_coefficients.append(&mut vec![zero; order - scaled_rhs_coefficients.len()]);
 
-        let lhs_codeword = slow_ntt(&scaled_lhs_coefficients, &root);
-        let rhs_codeword = slow_ntt(&scaled_rhs_coefficients, &root);
+        let lhs_log_2_of_n = log_2_floor(scaled_lhs_coefficients.len() as u64) as u32;
+        let rhs_log_2_of_n = log_2_floor(scaled_rhs_coefficients.len() as u64) as u32;
 
-        let rhs_inverses = PF::batch_inversion(rhs_codeword);
-        let quotient_codeword: Vec<PF::Elem> = lhs_codeword
+        ntt::<PF>(&mut scaled_lhs_coefficients, root, lhs_log_2_of_n);
+        ntt::<PF>(&mut scaled_rhs_coefficients, root, rhs_log_2_of_n);
+
+        let rhs_inverses = PF::batch_inversion(scaled_rhs_coefficients);
+        let mut quotient_codeword: Vec<PF::Elem> = scaled_lhs_coefficients
             .iter()
             .zip(rhs_inverses)
             .map(|(l, r)| l.to_owned() * r)
             .collect();
 
-        let scaled_quotient_coefficients = slow_intt(&quotient_codeword, &root);
+        let log_2_of_n = log_2_floor(quotient_codeword.len() as u64) as u32;
+        intt::<PF>(&mut quotient_codeword, root, log_2_of_n);
 
         let scaled_quotient = Polynomial {
-            coefficients: scaled_quotient_coefficients,
+            coefficients: quotient_codeword,
         };
 
         scaled_quotient.scale(&(zero.ring_one() / offset.to_owned()))
