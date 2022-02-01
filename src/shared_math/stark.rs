@@ -541,6 +541,7 @@ impl Stark {
         omega: BFieldElement,
         original_trace_length: u32,
     ) -> Result<(), Box<dyn Error>> {
+        let mut timer = TimingReporter::start();
         // assert!(omega.mod_pow(fri_domain_length as u64).is_one());
         // assert!(!omega.mod_pow((fri_domain_length / 2) as u64).is_one());
 
@@ -549,8 +550,10 @@ impl Stark {
         for _ in 0..self.num_registers {
             boundary_quotient_mt_roots.push(proof_stream.dequeue(32)?);
         }
+        timer.elapsed("get BQ merkle roots from proof stream");
 
         let randomizer_mt_root: [u8; 32] = proof_stream.dequeue(32)?;
+        timer.elapsed("get randomizer_mt_root from proof stream");
 
         // Get weights for nonlinear combination
         // 1 weight element for randomizer
@@ -561,6 +564,7 @@ impl Stark {
             &fiat_shamir_hash,
             1 + 2 * boundary_quotient_mt_roots.len() + 2 * transition_constraints.len(),
         );
+        timer.elapsed("Calculate weights challenge");
 
         // Verify low degree of combination polynomial, and collect indices
         // Note that FRI verifier verifies number of samples, so we don't have
@@ -576,6 +580,7 @@ impl Stark {
         );
 
         let combination_values: Vec<(usize, XFieldElement)> = fri.verify(proof_stream)?;
+        timer.elapsed("Run FRI verifier");
 
         let (indices, values): (Vec<usize>, Vec<XFieldElement>) =
             combination_values.into_iter().unzip();
@@ -595,6 +600,7 @@ impl Stark {
                 .collect(),
         );
         duplicated_indices.sort_unstable();
+        timer.elapsed("Calculate indices");
 
         // Read and verify boundary quotient leafs
         // revealed boundary quotient codeword values, indexed by (register, codeword index)
@@ -623,6 +629,7 @@ impl Stark {
                 },
             );
         }
+        timer.elapsed("Verify boundary quotient Merkle paths");
 
         // Read and verify randomizer leafs
         let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath, XFieldElement)> =
@@ -637,6 +644,7 @@ impl Stark {
                 MerkleProofError::RandomizerError,
             )));
         }
+        timer.elapsed("Verify randomizer Merkle paths");
 
         // Insert randomizer values in HashMap
         let mut randomizer_values: HashMap<usize, XFieldElement> = HashMap::new();
@@ -651,6 +659,7 @@ impl Stark {
             .get_primitive_root_of_unity(omicron_domain_length as u128)
             .0
             .unwrap();
+        timer.elapsed("Insert randomizer values in HashMap");
 
         // Verify leafs of combination polynomial
         let formatted_bcs: Vec<Vec<(BFieldElement, BFieldElement)>> =
@@ -661,11 +670,14 @@ impl Stark {
             self.get_boundary_interpolants(formatted_bcs);
         let boundary_degrees: Vec<usize> = self
             .boundary_quotient_degree_bounds(&boundary_zerofiers, rounded_trace_length as usize);
+        timer.elapsed("Calculate boundary zerofiers and interpolants");
+
         let expected_tq_degrees: Vec<u64> = self.transition_quotient_degree_bounds(
             transition_constraints,
             original_trace_length as usize,
             rounded_trace_length as usize,
         );
+        timer.elapsed("Calculate expected TQ degrees");
 
         // TODO: Calculate the transition_zerofier faster than this using group theory.
         let transition_zerofier: Polynomial<BFieldElement> = self.get_transition_zerofier(
@@ -673,6 +685,7 @@ impl Stark {
             omicron_domain_length as usize,
             original_trace_length as usize,
         );
+        timer.elapsed("Calculate transition zerofier");
 
         for (i, current_index) in indices.into_iter().enumerate() {
             let current_x: BFieldElement =
@@ -742,7 +755,9 @@ impl Stark {
                 )));
             }
         }
-
+        timer.elapsed("Verify revealed values from combination polynomial");
+        let report = timer.finish();
+        println!("{}", report);
         Ok(())
     }
 
