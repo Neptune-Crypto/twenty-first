@@ -297,7 +297,7 @@ impl Stark {
         let mut exponents_memoization: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
             HashMap::new();
 
-        MPolynomial::precalculate_exponents_memoization(
+        MPolynomial::precalculate_symbolic_exponents(
             // A slight speedup can be achieved here by only sending the 1st
             // transition_constraints element to the precalculation function. I didn't
             // do it though, as it feels like cheating which is an optimization I don't
@@ -716,9 +716,34 @@ impl Stark {
             point.append(&mut next_trace);
             timer.elapsed(&format!("generate \"point\" {}", i));
 
+            println!("point length: {}", point.len());
+            println!(
+                "transition_constraints length: {}",
+                transition_constraints.len()
+            );
+            let tc_coefficient_counts: Vec<usize> = transition_constraints
+                .iter()
+                .map(|x| x.coefficients.len())
+                .collect();
+            println!(
+                "transition_constraints coefficient count: {:?}",
+                tc_coefficient_counts
+            );
+            let tc_degrees: Vec<u64> = transition_constraints.iter().map(|x| x.degree()).collect();
+            println!("transition_constraints degrees: {:?}", tc_degrees);
+            let mut intermediate_results: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+            MPolynomial::precalculate_scalar_exponents(
+                transition_constraints,
+                &point,
+                &mut intermediate_results,
+            )?;
+            timer.elapsed(&format!(
+                "precalculate transition_constraint_values intermediate results {}",
+                i
+            ));
             let transition_constraint_values: Vec<BFieldElement> = transition_constraints
                 .iter()
-                .map(|tc| tc.evaluate(&point))
+                .map(|tc| tc.evaluate_with_precalculation(&point, &intermediate_results))
                 .collect();
             timer.elapsed(&format!("transition_constraint_values {}", i));
 

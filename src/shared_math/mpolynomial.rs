@@ -359,27 +359,7 @@ impl<PF: PrimeField> MPolynomial<PF> {
         res
     }
 
-    pub fn evaluate(&self, point: &[PF::Elem]) -> PF::Elem {
-        assert_eq!(
-            self.variable_count,
-            point.len(),
-            "Dimensionality of multivariate polynomial and point must agree in evaluate"
-        );
-        let mut acc = point[0].ring_zero();
-        for (k, v) in self.coefficients.iter() {
-            let mut prod = *v;
-            for i in 0..k.len() {
-                // FIXME: We really don't want to cast to 'u32' here, but
-                // refactoring k: Vec<u32> is a bit of a task, too. See issue ...
-                prod *= point[i].mod_pow_u32(k[i] as u32);
-            }
-            acc += prod;
-        }
-
-        acc
-    }
-
-    pub fn precalculate_exponents_memoization(
+    pub fn precalculate_symbolic_exponents(
         mpols: &[Self],
         point: &[Polynomial<PF>],
         exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<PF>>,
@@ -541,6 +521,100 @@ impl<PF: PrimeField> MPolynomial<PF> {
         println!("{}", report);
 
         Ok(())
+    }
+
+    pub fn evaluate(&self, point: &[PF::Elem]) -> PF::Elem {
+        assert_eq!(
+            self.variable_count,
+            point.len(),
+            "Dimensionality of multivariate polynomial and point must agree in evaluate"
+        );
+        let mut acc = point[0].ring_zero();
+        for (k, v) in self.coefficients.iter() {
+            let mut prod = point[0].ring_one();
+            for i in 0..k.len() {
+                // FIXME: We really don't want to cast to 'u32' here, but
+                // refactoring k: Vec<u32> is a bit of a task, too. See issue ...
+                prod *= point[i].mod_pow_u32(k[i] as u32);
+            }
+            prod *= *v;
+            acc += prod;
+        }
+
+        acc
+    }
+
+    pub fn precalculate_scalar_exponents(
+        mpols: &[Self],
+        point: &[PF::Elem],
+        intermediate_results: &mut HashMap<Vec<u64>, PF::Elem>,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut timer = TimingReporter::start();
+        if mpols.is_empty() || point.is_empty() {
+            return Err(Box::new(PrecalculationError::EmptyInput));
+        }
+
+        let variable_count = mpols[0].variable_count;
+
+        if point.len() != variable_count {
+            return Err(Box::new(PrecalculationError::LengthMismatch));
+        }
+
+        timer.elapsed("init stuff");
+        let one: PF::Elem = point[0].ring_one(); // guaranteed to exist because of above checks
+
+        // TODO: Use a faster HashSet here.
+        // TODO: Also: This is the same set accross all calls to this function, even
+        // for different values of `point`.
+        let exponents_set: HashSet<Vec<u64>> = mpols
+            .iter()
+            .flat_map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
+            .collect();
+
+        timer.elapsed("calculated exponents_set");
+        let mut exponents_list: Vec<Vec<u64>> = if exponents_set.contains(&vec![0; variable_count])
+        {
+            vec![]
+        } else {
+            vec![vec![0; variable_count]]
+        };
+        exponents_list.append(&mut exponents_set.into_iter().collect());
+        timer.elapsed("calculated exponents_list");
+
+        let mod_pow_memoization: HashMap<(usize, u64), PF::Elem> = HashMap::new();
+        for exponents in exponents_list {
+            // TODO: Use memoization here, maybe just for `mod_pow` results?
+            let mut intermediate_result = point[0].ring_one();
+            for (i, exponent) in exponents.iter().enumerate() {
+                intermediate_result *= point[i].mod_pow_u32(*exponent as u32);
+            }
+            intermediate_results.insert(exponents, intermediate_result);
+        }
+        timer.elapsed("calculated all intermediate results");
+        let report = timer.finish();
+        println!("{}", report);
+
+        Ok(())
+    }
+
+    pub fn evaluate_with_precalculation(
+        &self,
+        point: &[PF::Elem],
+        intermediate_results: &HashMap<Vec<u64>, PF::Elem>,
+    ) -> PF::Elem {
+        assert_eq!(
+            self.variable_count,
+            point.len(),
+            "Dimensionality of multivariate polynomial and point must agree in evaluate"
+        );
+        let zero: PF::Elem = point[0].ring_zero();
+        let one: PF::Elem = point[0].ring_one();
+        let acc = self
+            .coefficients
+            .par_iter()
+            .map(|(k, v)| intermediate_results[k] * *v)
+            .reduce(|| zero, |a, b| a + b);
+        acc
     }
 
     // Substitute the variables in a multivariate polynomial with univariate polynomials in parallel.
@@ -1335,7 +1409,7 @@ mod test_mpolynomials {
             Vec<u64>,
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
-        let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+        let precalculation_result = MPolynomial::precalculate_symbolic_exponents(
             &[xyz_m.clone()],
             &[x.clone(), x.clone(), x.clone()],
             &mut precalculated_intermediate_results,
@@ -1420,7 +1494,7 @@ mod test_mpolynomials {
             Vec<u64>,
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
-        let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+        let precalculation_result = MPolynomial::precalculate_symbolic_exponents(
             &[pol_m.clone()],
             &[
                 univariate_pol_1.clone(),
@@ -1656,7 +1730,7 @@ mod test_mpolynomials {
                 Vec<u64>,
                 Polynomial<BFieldElement>,
             > = HashMap::new();
-            let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+            let precalculation_result = MPolynomial::precalculate_symbolic_exponents(
                 &mpolynomials,
                 &point,
                 &mut precalculated_intermediate_results,
