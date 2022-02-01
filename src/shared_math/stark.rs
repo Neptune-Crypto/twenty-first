@@ -690,9 +690,11 @@ impl Stark {
         for (i, current_index) in indices.into_iter().enumerate() {
             let current_x: BFieldElement =
                 self.field_generator * omega.mod_pow(current_index as u64);
+            timer.elapsed(&format!("current_x {}", i));
             let next_index: usize =
                 (current_index + blowup_factor_new as usize) % fri_domain_length as usize;
             let next_x: BFieldElement = self.field_generator * omega.mod_pow(next_index as u64);
+            timer.elapsed(&format!("next_x {}", i));
             let mut current_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
                 .map(|r| {
                     boundary_quotients[r][&current_index]
@@ -700,24 +702,29 @@ impl Stark {
                         + boundary_interpolants[r].evaluate(&current_x)
                 })
                 .collect();
+            timer.elapsed(&format!("current_trace {}", i));
             let mut next_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
                 .map(|r| {
                     boundary_quotients[r][&next_index] * boundary_zerofiers[r].evaluate(&next_x)
                         + boundary_interpolants[r].evaluate(&next_x)
                 })
                 .collect();
+            timer.elapsed(&format!("next_trace {}", i));
 
             let mut point: Vec<BFieldElement> = vec![current_x];
             point.append(&mut current_trace);
             point.append(&mut next_trace);
+            timer.elapsed(&format!("generate \"point\" {}", i));
 
             let transition_constraint_values: Vec<BFieldElement> = transition_constraints
                 .iter()
                 .map(|tc| tc.evaluate(&point))
                 .collect();
+            timer.elapsed(&format!("transition_constraint_values {}", i));
 
             let current_transition_zerofier_value: BFieldElement =
                 transition_zerofier.evaluate(&current_x);
+            timer.elapsed(&format!("current_transition_zerofier_value {}", i));
 
             // Get combination polynomial evaluation value
             // Loop over all registers for transition quotient values, and for boundary quotient values
@@ -748,6 +755,7 @@ impl Stark {
                 .fold(XFieldElement::ring_zero(), |sum, (&weight, &term)| {
                     sum + term * weight
                 });
+            timer.elapsed(&format!("combination {}", i));
 
             if values[i] != combination {
                 return Err(Box::new(StarkVerifyError::LinearCombinationMismatch(
