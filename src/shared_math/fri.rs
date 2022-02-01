@@ -1,14 +1,13 @@
+use super::other::{log_2_ceil, log_2_floor};
+use super::polynomial::Polynomial;
+use super::traits::FromVecu8;
+use crate::shared_math::ntt::intt;
 use crate::shared_math::traits::{CyclicGroupGenerator, IdentityValues, ModPowU32, PrimeField};
 use crate::util_types::merkle_tree::{LeaflessPartialAuthenticationPath, MerkleTree};
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils::{blake3_digest, get_index_from_bytes};
 use std::error::Error;
 use std::fmt;
-
-use super::other::log_2_ceil;
-use super::polynomial::Polynomial;
-use super::traits::FromVecu8;
-use crate::shared_math::ntt::slow_intt;
 
 impl Error for ValidationError {}
 
@@ -255,7 +254,7 @@ impl<PF: PrimeField> Fri<PF> {
         }
 
         // Extract last codeword
-        let last_codeword: Vec<PF::Elem> =
+        let mut last_codeword: Vec<PF::Elem> =
             proof_stream.dequeue_length_prepended::<Vec<PF::Elem>>()?;
 
         // Check if last codeword matches the given root
@@ -275,8 +274,12 @@ impl<PF: PrimeField> Fri<PF> {
         // Note that we don't have to scale the polynomial back to the
         // trace subgroup since we only check its degree and don't use
         // it further.
-        let coefficients = slow_intt(&last_codeword, &last_omega);
-        let last_poly_degree: isize = (Polynomial::<PF> { coefficients }).degree();
+        let log_2_of_n = log_2_floor(last_codeword.len() as u64) as u32;
+        intt::<PF>(&mut last_codeword, last_omega, log_2_of_n);
+        let last_poly_degree: isize = (Polynomial::<PF> {
+            coefficients: last_codeword,
+        })
+        .degree();
         if last_poly_degree > degree_of_last_round as isize {
             return Err(Box::new(ValidationError::LastIterationTooHighDegree));
         }
