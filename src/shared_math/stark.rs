@@ -687,6 +687,9 @@ impl Stark {
         );
         timer.elapsed("Calculate transition zerofier");
 
+        let exponents_list: Vec<Vec<u64>> =
+            MPolynomial::extract_exponents_list(transition_constraints)?;
+        timer.elapsed("Calculate exponents list");
         for (i, current_index) in indices.into_iter().enumerate() {
             let current_x: BFieldElement =
                 self.field_generator * omega.mod_pow(current_index as u64);
@@ -736,6 +739,7 @@ impl Stark {
                 transition_constraints,
                 &point,
                 &mut intermediate_results,
+                &exponents_list,
             )?;
             timer.elapsed(&format!(
                 "precalculate transition_constraint_values intermediate results {}",
