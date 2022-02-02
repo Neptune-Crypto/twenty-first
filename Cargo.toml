@@ -39,7 +39,7 @@ name = "polynomial_square"
 harness = false
 
 [[bench]]
-name = "ntt_bfield"
+name = "ntt_forward"
 harness = false
 
 [[bench]]
