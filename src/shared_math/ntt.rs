@@ -6,24 +6,6 @@ use crate::shared_math::traits::{IdentityValues, New};
 // and from dusk network/Plon[1]
 // [0]: https://eprint.iacr.org/2016/504.pdf
 // [1]: https://github.com/dusk-network/plonk/blob/d3412cec5fa5c2e720f848a6fd8db96d663e92a9/src/fft/domain.rs#L310
-#[inline]
-fn bitreverse(mut n: u32, l: u32) -> u32 {
-    let mut r = 0;
-    for _ in 0..l {
-        r = (r << 1) | (n & 1);
-        n >>= 1;
-    }
-    r
-}
-
-pub fn intt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
-    let n: PF::Elem = omega.new_from_usize(x.len());
-    let n_inv: PF::Elem = omega.ring_one() / n;
-    ntt::<PF>(x, omega.ring_one() / omega, log_2_of_n);
-    for elem in x.iter_mut() {
-        *elem *= n_inv;
-    }
-}
 
 #[allow(clippy::many_single_char_names)]
 pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
@@ -66,6 +48,25 @@ pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32)
 
         m *= 2;
     }
+}
+
+pub fn intt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
+    let n: PF::Elem = omega.new_from_usize(x.len());
+    let n_inv: PF::Elem = omega.ring_one() / n;
+    ntt::<PF>(x, omega.ring_one() / omega, log_2_of_n);
+    for elem in x.iter_mut() {
+        *elem *= n_inv;
+    }
+}
+
+#[inline]
+fn bitreverse(mut n: u32, l: u32) -> u32 {
+    let mut r = 0;
+    for _ in 0..l {
+        r = (r << 1) | (n & 1);
+        n >>= 1;
+    }
+    r
 }
 
 #[cfg(test)]
