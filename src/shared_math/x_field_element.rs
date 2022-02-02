@@ -1,3 +1,4 @@
+use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetRandomElements;
@@ -11,8 +12,6 @@ use std::{
     fmt::Display,
     ops::{Add, Mul, Neg, Sub},
 };
-
-use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -448,7 +447,9 @@ impl ModPowU32 for XFieldElement {
 mod x_field_element_test {
     use itertools::{izip, Itertools};
 
-    use crate::shared_math::{b_field_element::*, ntt, x_field_element::*};
+    use crate::shared_math::ntt::{intt, ntt};
+    use crate::shared_math::other::log_2_floor;
+    use crate::shared_math::{b_field_element::*, x_field_element::*};
     // use proptest::prelude::*;
 
     #[test]
@@ -917,23 +918,27 @@ mod x_field_element_test {
                 .get_primitive_root_of_unity(i)
                 .0
                 .unwrap();
-            let outputs = ntt::slow_ntt(&inputs, &root);
-            let inverted_outputs = ntt::slow_intt(&outputs, &root);
-            assert_eq!(inputs, inverted_outputs);
+            let log_2_of_n = log_2_floor(inputs.len() as u64) as u32;
+            let mut rv = inputs.clone();
+            ntt::<XFieldElement>(&mut rv, root, log_2_of_n);
 
             // The output should be equivalent to evaluating root^i, i = [0..4]
-            // over the polynomium with coefficients 1, 2, 3, 4
+            // over the polynomial with coefficients 1, 2, 3, 4
             let pol_degree_i_minus_1: Polynomial<XFieldElement> = Polynomial::new(inputs.to_vec());
             let x_domain = root.get_cyclic_group_elements(None);
-            for i in 0..outputs.len() {
-                assert_eq!(pol_degree_i_minus_1.evaluate(&x_domain[i]), outputs[i]);
+            for i in 0..inputs.len() {
+                assert_eq!(pol_degree_i_minus_1.evaluate(&x_domain[i]), rv[i]);
             }
 
             // Verify that polynomial interpolation produces the same polynomial
             // Slow Lagrange interpolation is very slow for big inputs. Do not increase
             // this above 32 elements!
-            let interpolated = Polynomial::slow_lagrange_interpolation_new(&x_domain, &outputs);
+            let interpolated =
+                Polynomial::<XFieldElement>::slow_lagrange_interpolation_new(&x_domain, &rv);
             assert_eq!(pol_degree_i_minus_1, interpolated);
+
+            intt::<XFieldElement>(&mut rv, root, log_2_of_n);
+            assert_eq!(inputs, rv);
         }
     }
 }

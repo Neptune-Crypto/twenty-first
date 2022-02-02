@@ -1,143 +1,49 @@
 use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::PrimeField;
 use crate::shared_math::traits::{IdentityValues, New};
-use std::ops::{Add, Div, Mul, Neg};
 
-fn slow_ntt_base_case<T: Add<Output = T> + Mul<Output = T> + Clone>(x: &[T], omega: &T) -> Vec<T> {
-    vec![
-        x[0].clone() + x[1].clone(),
-        x[0].clone() + omega.to_owned() * x[1].clone(),
-    ]
-}
-
-fn slow_ntt_recursive<
-    T: Add<Output = T> + Mul<Output = T> + Neg<Output = T> + IdentityValues + Clone,
->(
-    x: &[T],
-    omega: &T,
-) -> Vec<T> {
-    let n: usize = x.len();
-    if n == 2 {
-        return slow_ntt_base_case(x, omega);
-    }
-    // else,
-    // split by parity
-    let mut evens: Vec<T> = Vec::with_capacity(n / 2);
-    let mut odds: Vec<T> = Vec::with_capacity(n / 2);
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..n {
-        if i % 2 == 1 {
-            odds.push(x[i].clone());
-        } else {
-            evens.push(x[i].clone());
-        }
-    }
-
-    // recursion step
-    let omega_squared = omega.to_owned() * omega.to_owned();
-    let (even, odd) = (
-        slow_ntt_recursive(&evens, &omega_squared),
-        slow_ntt_recursive(&odds, &omega_squared),
-    );
-
-    // hadamard product
-    let mut omegai: T = omega.ring_one();
-    let mut result: Vec<T> = Vec::with_capacity(n);
-    for i in 0..(n / 2) {
-        result.push(even[i].clone() + odd[i].clone() * omegai.clone());
-        omegai = omegai.clone() * omega.to_owned();
-    }
-    //omegai = -omegai.clone();
-    omegai = -omegai.ring_one();
-    for i in 0..(n / 2) {
-        result.push(even[i].clone() + odd[i].clone() * omegai.clone());
-        omegai = omegai.clone() * omega.to_owned();
-    }
-    result
-}
-
-pub fn slow_ntt<T: Add<Output = T> + Mul<Output = T> + Neg<Output = T> + IdentityValues + Clone>(
-    x: &[T],
-    omega: &T,
-) -> Vec<T> {
-    // test if n (=length of x) is a power of 2
-    let n = x.len();
-    if n & (n - 1) != 0 {
-        panic!("ntt must operate on vector of length power of two");
-    }
-
-    // test if omega is an nth primitive root of unity
-    let mut acc = 1usize;
-    let mut omega2i = omega.clone();
-    while acc != n {
-        // omega2i = omega^(acc)
-        if omega2i.is_one() {
-            panic!("ntt needs primitive nth root of unity but omega has lower order");
-        }
-        omega2i = omega2i.clone() * omega2i.clone();
-        acc <<= 1;
-    }
-    if !omega2i.is_one() {
-        panic!("ntt needs primitive nth root of unity but order of omega does not match n");
-    }
-
-    slow_ntt_recursive(x, omega)
-}
-
-pub fn slow_intt<
-    T: Add<Output = T>
-        + Mul<Output = T>
-        + Neg<Output = T>
-        + Div<Output = T>
-        + IdentityValues
-        + Clone
-        + New,
->(
-    x: &[T],
-    omega: &T,
-) -> Vec<T> {
-    // const fn num_bits<T>() -> u64 {
-    //     std::mem::size_of::<T>() as u64 * 8
-    // }
-    let n: T = omega.new_from_usize(x.len());
-    // let n: T = omega.new(x.len().to_bytes());
-    slow_ntt(x, &(omega.ring_one() / omega.to_owned()))
-        .into_iter()
-        .map(|x: T| x / n.clone())
-        .collect()
-}
-
-// This NTT implementation is adapted from inspired by Longa and Naehrig[0]
-// and from dusk network/Plon[1]
-// [0]: https://eprint.iacr.org/2016/504.pdf
-// [1]: https://github.com/dusk-network/plonk/blob/d3412cec5fa5c2e720f848a6fd8db96d663e92a9/src/fft/domain.rs#L310
-#[inline]
-fn bitreverse(mut n: u32, l: u32) -> u32 {
-    let mut r = 0;
-    for _ in 0..l {
-        r = (r << 1) | (n & 1);
-        n >>= 1;
-    }
-    r
-}
-
-pub fn intt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
-    let n: PF::Elem = omega.new_from_usize(x.len());
-    let n_inv: PF::Elem = omega.ring_one() / n;
-    ntt::<PF>(x, omega.ring_one() / omega, log_2_of_n);
-    for elem in x.iter_mut() {
-        *elem *= n_inv;
-    }
-}
-
+/// ## Perform NTT on slices of prime-field elements
+///
+/// NTTs are Number Theoretic Transforms, which are Discrete Fourier Transforms
+/// (DFTs) over finite fields. This implementation specifically aims at being
+/// used to compute polynomial multiplication over finite fields. NTT reduces
+/// the complexity of such multiplication.
+///
+/// For a brief introduction to the math, see:
+///
+/// * <https://cgyurgyik.github.io/posts/2021/04/brief-introduction-to-ntt/>
+/// * <https://www.nayuki.io/page/number-theoretic-transform-integer-dft>
+///
+/// The implementation is adapted from:
+///
+/// <pre>
+/// Speeding up the Number Theoretic Transform
+/// for Faster Ideal Lattice-Based Cryptography
+/// Longa and Naehrig
+/// <https://eprint.iacr.org/2016/504.pdf>
+/// </pre>
+///
+/// as well as inspired by <https://github.com/dusk-network/plonk>
+///
+/// * `x` - a mutable slice of prime-field elements of length `n`
+/// * `omega` - a primitive `n`th root of unity
+/// * `log_2_of_n` - a precomputation of *log2(`n`)* to avoid repeating its
+///   computation
+///
+/// A primitive `n`th root of unity means:
+///
+/// * `omega`^`n` = 1 (making it an `n`th root of unity), and
+/// * `omega`^`k` ≠ 1 for all integers 1 ≤ k < n (making it a primitive `n`th root of unity)
+///
+/// This transform is performed in-place.
 #[allow(clippy::many_single_char_names)]
 pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
     let n = x.len() as u32;
-    assert_eq!(
-        n,
-        1 << log_2_of_n,
-        "Order must match length of input vector"
-    );
+
+    // `n` must be a power of 2
+    assert_eq!(n, 1 << log_2_of_n, "2^log2(n) == n");
+
+    // `omega` must be a primitive root of unity of order `n`
     debug_assert!(omega.mod_pow_u32(n).is_one());
     debug_assert!(!omega.mod_pow_u32(n / 2).is_one());
 
@@ -150,9 +56,7 @@ pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32)
 
     let mut m = 1;
     for _ in 0..log_2_of_n {
-        // let w_m = omega.mod_pow_u32(&[(n / (2 * m)) as u64, 0, 0, 0]);
         let w_m = omega.mod_pow_u32(n / (2 * m));
-
         let mut k = 0;
         while k < n {
             let mut w = omega.ring_one();
@@ -171,6 +75,39 @@ pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32)
 
         m *= 2;
     }
+}
+
+/// ## Perform INTT on slices of prime-field elements
+///
+/// INTT is the inverse NTT, so abstractly,
+/// *intt(values, omega, log2(n)) = ntt(values, 1/omega, log2(n)) / n*.
+///
+/// <pre>
+/// let original_values: Vec<PF::Elem> = ...;
+/// let mut transformed_values = original_values.clone();
+/// ntt::<PF::Elem>(&mut values, omega, log_2_n);
+/// intt::<PF::Elem>(&mut values, omega, log_2_n);
+/// assert_eq!(original_values, transformed_values);
+/// </pre>
+///
+/// This transform is performed in-place.
+pub fn intt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
+    let n: PF::Elem = omega.new_from_usize(x.len());
+    let n_inv: PF::Elem = omega.ring_one() / n;
+    ntt::<PF>(x, omega.ring_one() / omega, log_2_of_n);
+    for elem in x.iter_mut() {
+        *elem *= n_inv;
+    }
+}
+
+#[inline]
+fn bitreverse(mut n: u32, l: u32) -> u32 {
+    let mut r = 0;
+    for _ in 0..l {
+        r = (r << 1) | (n & 1);
+        n >>= 1;
+    }
+    r
 }
 
 #[cfg(test)]
