@@ -2,19 +2,48 @@ use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::PrimeField;
 use crate::shared_math::traits::{IdentityValues, New};
 
-// This NTT implementation is adapted from inspired by Longa and Naehrig[0]
-// and from dusk network/Plon[1]
-// [0]: https://eprint.iacr.org/2016/504.pdf
-// [1]: https://github.com/dusk-network/plonk/blob/d3412cec5fa5c2e720f848a6fd8db96d663e92a9/src/fft/domain.rs#L310
-
+/// ## Perform NTT on slices of prime-field elements
+///
+/// NTTs are Number Theoretic Transforms, which are Discrete Fourier Transforms
+/// (DFTs) over finite fields. This implementation specifically aims at being
+/// used to compute polynomial multiplication over finite fields. NTT reduces
+/// the complexity of such multiplication.
+///
+/// For a brief introduction to the math, see:
+///
+/// * <https://cgyurgyik.github.io/posts/2021/04/brief-introduction-to-ntt/>
+/// * <https://www.nayuki.io/page/number-theoretic-transform-integer-dft>
+///
+/// The implementation is adapted from:
+///
+/// <pre>
+/// Speeding up the Number Theoretic Transform
+/// for Faster Ideal Lattice-Based Cryptography
+/// Longa and Naehrig
+/// <https://eprint.iacr.org/2016/504.pdf>
+/// </pre>
+///
+/// as well as inspired by <https://github.com/dusk-network/plonk>
+///
+/// * `x` - a mutable slice of prime-field elements of length `n`
+/// * `omega` - a primitive `n`th root of unity
+/// * `log_2_of_n` - a precomputation of *log2(`n`)* to avoid repeating its
+///   computation
+///
+/// A primitive `n`th root of unity means:
+///
+/// * `omega`^`n` = 1 (making it an `n`th root of unity), and
+/// * `omega`^`k` ≠ 1 for all integers 1 ≤ k < n (making it a primitive `n`th root of unity)
+///
+/// This transform is performed in-place.
 #[allow(clippy::many_single_char_names)]
 pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
     let n = x.len() as u32;
-    assert_eq!(
-        n,
-        1 << log_2_of_n,
-        "Order must match length of input vector"
-    );
+
+    // `n` must be a power of 2
+    assert_eq!(n, 1 << log_2_of_n, "2^log2(n) == n");
+
+    // `omega` must be a primitive root of unity of order `n`
     debug_assert!(omega.mod_pow_u32(n).is_one());
     debug_assert!(!omega.mod_pow_u32(n / 2).is_one());
 
@@ -27,9 +56,7 @@ pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32)
 
     let mut m = 1;
     for _ in 0..log_2_of_n {
-        // let w_m = omega.mod_pow_u32(&[(n / (2 * m)) as u64, 0, 0, 0]);
         let w_m = omega.mod_pow_u32(n / (2 * m));
-
         let mut k = 0;
         while k < n {
             let mut w = omega.ring_one();
@@ -50,6 +77,20 @@ pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32)
     }
 }
 
+/// ## Perform INTT on slices of prime-field elements
+///
+/// INTT is the inverse NTT, so abstractly,
+/// *intt(values, omega, log2(n)) = ntt(values, 1/omega, log2(n)) / n*.
+///
+/// <pre>
+/// let original_values: Vec<PF::Elem> = ...;
+/// let mut transformed_values = original_values.clone();
+/// ntt::<PF::Elem>(&mut values, omega, log_2_n);
+/// intt::<PF::Elem>(&mut values, omega, log_2_n);
+/// assert_eq!(original_values, transformed_values);
+/// </pre>
+///
+/// This transform is performed in-place.
 pub fn intt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
     let n: PF::Elem = omega.new_from_usize(x.len());
     let n_inv: PF::Elem = omega.ring_one() / n;
