@@ -2,7 +2,7 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{IdentityValues, ModPowU32};
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::tree_m_ary::Node;
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use num_bigint::BigInt;
 use num_traits::Zero;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -564,33 +564,75 @@ impl<PF: PrimeField> MPolynomial<PF> {
         Ok(exponents_set.into_iter().collect())
     }
 
-    // Precalculater for scalar evaluation
-    pub fn precalculate_scalar_exponents(
-        mpols: &[Self],
+    // This does relate to multivariate polynomials since it is used as a step to do faster
+    // scalar evaluation. For this reason, this function is placed here.
+    /// Get a hash map with precalculated values for point[i]^j
+    /// Only exponents 2 and above are stored.
+    pub fn precalculate_scalar_mod_pows(
+        limit: u64,
         point: &[PF::Elem],
-        intermediate_results: &mut HashMap<Vec<u64>, PF::Elem>,
+    ) -> HashMap<(usize, u64), PF::Elem> {
+        let mut hash_map: HashMap<(usize, u64), PF::Elem> = HashMap::new();
+
+        println!("limit = {}", limit);
+        // TODO: Would runing this in parallel give a speedup?
+        for (i, coordinate) in point.iter().enumerate() {
+            let mut acc = *coordinate;
+            for k in 2..=limit {
+                acc *= *coordinate;
+                hash_map.insert((i, k), acc);
+            }
+        }
+
+        hash_map
+    }
+
+    // Precalculater for scalar evaluation
+    // Assumes that all point[i]^j that are needed already exist in
+    // `precalculated_mod_pows`
+    pub fn precalculate_scalar_exponents(
+        point: &[PF::Elem],
+        precalculated_mod_pows: &HashMap<(usize, u64), PF::Elem>,
         exponents_list: &[Vec<u64>],
-    ) -> Result<(), Box<dyn Error>> {
-        if mpols.is_empty() || point.is_empty() {
+    ) -> Result<HashMap<Vec<u64>, PF::Elem>, Box<dyn Error>> {
+        if point.is_empty() {
             return Err(Box::new(PrecalculationError::EmptyInput));
         }
 
-        let variable_count = mpols[0].variable_count;
+        // We assume all exponents_list elements have same length
+        let variable_count = exponents_list[0].len();
 
         if point.len() != variable_count {
             return Err(Box::new(PrecalculationError::LengthMismatch));
         }
 
-        for exponents in exponents_list {
-            // TODO: Consider using memoization here, maybe just for `mod_pow` results?
-            let mut intermediate_result = point[0].ring_one();
-            for (i, exponent) in exponents.iter().enumerate() {
-                intermediate_result *= point[i].mod_pow_u32(*exponent as u32);
-            }
-            intermediate_results.insert(exponents.to_vec(), intermediate_result);
+        // Perform parallel computation of all intermediate results
+        // which constitute calculations on the form
+        // `prod_i^N(point[i]^e_i)
+        let mut intermediate_results_hash_map: HashMap<Vec<u64>, PF::Elem> = HashMap::new();
+        let one: PF::Elem = point[0].ring_one();
+        let intermediate_results: Vec<PF::Elem> = exponents_list
+            .par_iter()
+            .map(|exponents| {
+                let mut acc = one;
+                for (i, e) in exponents.iter().enumerate() {
+                    if *e == 0 {
+                        continue;
+                    } else if *e == 1 {
+                        acc *= point[i];
+                    } else {
+                        acc *= precalculated_mod_pows[&(i, *e)];
+                    }
+                }
+                acc
+            })
+            .collect();
+
+        for (exponents, result) in izip!(exponents_list, intermediate_results) {
+            intermediate_results_hash_map.insert(exponents.to_vec(), result);
         }
 
-        Ok(())
+        Ok(intermediate_results_hash_map)
     }
 
     pub fn evaluate_with_precalculation(
@@ -1690,7 +1732,7 @@ mod test_mpolynomials {
     }
 
     #[test]
-    fn precalculate_scalar_exponents_test_simple_test() {
+    fn precalculate_scalar_exponents_simple_test() {
         let a: MPolynomial<BFieldElement> = MPolynomial {
             variable_count: 2,
             coefficients: HashMap::from([
@@ -1711,14 +1753,25 @@ mod test_mpolynomials {
         assert_eq!(4, exponents_list.len());
 
         let point: Vec<BFieldElement> = vec![BFieldElement::new(2), BFieldElement::new(3)];
-        let mut intermediate_results: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
-        assert!(MPolynomial::precalculate_scalar_exponents(
-            &[a.clone(), b.clone()],
-            &point,
-            &mut intermediate_results,
-            &exponents_list,
-        )
-        .is_ok());
+
+        // Verify mod_pow precalculation
+        let mod_pow_precalculations: HashMap<(usize, u64), BFieldElement> =
+            MPolynomial::<BFieldElement>::precalculate_scalar_mod_pows(4, &point);
+        assert_eq!(6, mod_pow_precalculations.len()); // `6` because only powers [2,3,4] are present
+        for ((i, k), v) in mod_pow_precalculations.iter() {
+            assert_eq!(point[*i].mod_pow(*k), *v);
+        }
+
+        let intermediate_results_res: Result<HashMap<Vec<u64>, BFieldElement>, Box<dyn Error>> =
+            MPolynomial::<BFieldElement>::precalculate_scalar_exponents(
+                &point,
+                &mod_pow_precalculations,
+                &exponents_list,
+            );
+        let intermediate_results = match intermediate_results_res {
+            Ok(res) => res,
+            Err(e) => panic!("{}", e),
+        };
         assert_eq!(4, intermediate_results.len());
 
         // point = [2,3]
@@ -1743,19 +1796,19 @@ mod test_mpolynomials {
         // Then compare this to naive evaluation.
         assert_eq!(
             a.evaluate(&point),
-            a.evaluate_with_precalculation(&point, &mut intermediate_results)
+            a.evaluate_with_precalculation(&point, &intermediate_results)
         );
         assert_eq!(
             BFieldElement::new(33),
-            a.evaluate_with_precalculation(&point, &mut intermediate_results)
+            a.evaluate_with_precalculation(&point, &intermediate_results)
         );
         assert_eq!(
             b.evaluate(&point),
-            b.evaluate_with_precalculation(&point, &mut intermediate_results)
+            b.evaluate_with_precalculation(&point, &intermediate_results)
         );
         assert_eq!(
             BFieldElement::new(3282),
-            b.evaluate_with_precalculation(&point, &mut intermediate_results)
+            b.evaluate_with_precalculation(&point, &intermediate_results)
         );
     }
 

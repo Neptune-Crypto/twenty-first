@@ -677,6 +677,11 @@ impl Stark {
             original_trace_length as usize,
             rounded_trace_length as usize,
         );
+        let max_air_degree: u64 = transition_constraints
+            .iter()
+            .map(|mpol| mpol.degree())
+            .max()
+            .unwrap();
         timer.elapsed("Calculate expected TQ degrees");
 
         // TODO: Calculate the transition_zerofier faster than this using group theory.
@@ -734,13 +739,17 @@ impl Stark {
             );
             let tc_degrees: Vec<u64> = transition_constraints.iter().map(|x| x.degree()).collect();
             println!("transition_constraints degrees: {:?}", tc_degrees);
-            let mut intermediate_results: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
-            MPolynomial::precalculate_scalar_exponents(
-                transition_constraints,
-                &point,
-                &mut intermediate_results,
-                &exponents_list,
-            )?;
+
+            // TODO: For some reason this mod pow precalculation is super slow
+            let precalculated_mod_pows: HashMap<(usize, u64), BFieldElement> =
+                MPolynomial::<BFieldElement>::precalculate_scalar_mod_pows(max_air_degree, &point);
+            timer.elapsed(&format!("precalculate mod_pows {}", i));
+            let intermediate_results: HashMap<Vec<u64>, BFieldElement> =
+                MPolynomial::<BFieldElement>::precalculate_scalar_exponents(
+                    &point,
+                    &precalculated_mod_pows,
+                    &exponents_list,
+                )?;
             timer.elapsed(&format!(
                 "precalculate transition_constraint_values intermediate results {}",
                 i
