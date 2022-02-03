@@ -677,9 +677,9 @@ impl Stark {
             original_trace_length as usize,
             rounded_trace_length as usize,
         );
-        let max_air_degree: u64 = transition_constraints
+        let max_exponent: u64 = transition_constraints
             .iter()
-            .map(|mpol| mpol.degree())
+            .map(|mpol| mpol.max_exponent())
             .max()
             .unwrap();
         timer.elapsed("Calculate expected TQ degrees");

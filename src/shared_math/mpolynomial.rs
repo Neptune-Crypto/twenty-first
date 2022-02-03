@@ -976,6 +976,15 @@ impl<PF: PrimeField> MPolynomial<PF> {
         }
     }
 
+    pub fn max_exponent(&self) -> u64 {
+        *self
+            .coefficients
+            .keys()
+            .map(|coefficients| coefficients.iter().max().unwrap_or(&0))
+            .max()
+            .unwrap_or(&0)
+    }
+
     pub fn degree(&self) -> u64 {
         self.coefficients
             .keys()
@@ -1810,6 +1819,10 @@ mod test_mpolynomials {
             BFieldElement::new(3282),
             b.evaluate_with_precalculation(&point, &intermediate_results)
         );
+
+        // Test max_exponent
+        assert_eq!(2, a.max_exponent());
+        assert_eq!(4, b.max_exponent());
     }
 
     #[test]
