@@ -724,25 +724,25 @@ impl Stark {
             point.append(&mut next_trace);
             timer.elapsed(&format!("generate \"point\" {}", i));
 
-            println!("point length: {}", point.len());
-            println!(
-                "transition_constraints length: {}",
-                transition_constraints.len()
-            );
-            let tc_coefficient_counts: Vec<usize> = transition_constraints
-                .iter()
-                .map(|x| x.coefficients.len())
-                .collect();
-            println!(
-                "transition_constraints coefficient count: {:?}",
-                tc_coefficient_counts
-            );
-            let tc_degrees: Vec<u64> = transition_constraints.iter().map(|x| x.degree()).collect();
-            println!("transition_constraints degrees: {:?}", tc_degrees);
+            // println!("point length: {}", point.len());
+            // println!(
+            //     "transition_constraints length: {}",
+            //     transition_constraints.len()
+            // );
+            // let tc_coefficient_counts: Vec<usize> = transition_constraints
+            //     .iter()
+            //     .map(|x| x.coefficients.len())
+            //     .collect();
+            // println!(
+            //     "transition_constraints coefficient count: {:?}",
+            //     tc_coefficient_counts
+            // );
+            // let tc_degrees: Vec<u64> = transition_constraints.iter().map(|x| x.degree()).collect();
+            // println!("transition_constraints degrees: {:?}", tc_degrees);
 
             // TODO: For some reason this mod pow precalculation is super slow
             let precalculated_mod_pows: HashMap<(usize, u64), BFieldElement> =
-                MPolynomial::<BFieldElement>::precalculate_scalar_mod_pows(max_air_degree, &point);
+                MPolynomial::<BFieldElement>::precalculate_scalar_mod_pows(max_exponent, &point);
             timer.elapsed(&format!("precalculate mod_pows {}", i));
             let intermediate_results: HashMap<Vec<u64>, BFieldElement> =
                 MPolynomial::<BFieldElement>::precalculate_scalar_exponents(

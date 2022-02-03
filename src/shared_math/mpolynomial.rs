@@ -408,8 +408,6 @@ impl<PF: PrimeField> MPolynomial<PF> {
             .map(|(i, _)| i)
             .collect();
 
-        println!("choosing edges");
-
         // Calculate the relevant weight for making a calculation from one list of exponents another
         // Use these weights to pick the minimal edges.
         // This algorithm i a variation of Edmond's algorithm for finding the minimal spanning tree
@@ -457,7 +455,6 @@ impl<PF: PrimeField> MPolynomial<PF> {
             }
         }
 
-        println!("chose edges");
         timer.elapsed("chose edges");
 
         // data: (diff, abs)
@@ -574,7 +571,6 @@ impl<PF: PrimeField> MPolynomial<PF> {
     ) -> HashMap<(usize, u64), PF::Elem> {
         let mut hash_map: HashMap<(usize, u64), PF::Elem> = HashMap::new();
 
-        println!("limit = {}", limit);
         // TODO: Would runing this in parallel give a speedup?
         for (i, coordinate) in point.iter().enumerate() {
             let mut acc = *coordinate;
