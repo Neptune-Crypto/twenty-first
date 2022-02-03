@@ -7,7 +7,7 @@ use num_bigint::BigInt;
 use num_traits::Zero;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::iter::Sum;
@@ -381,18 +381,8 @@ impl<PF: PrimeField> MPolynomial<PF> {
 
         timer.elapsed("init stuff");
         let one: PF::Elem = point[0].coefficients[0].ring_one(); // guaranteed to exist because of above checks
-        let exponents_set: HashSet<Vec<u64>> = mpols
-            .iter()
-            .flat_map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
-            .collect();
-        timer.elapsed("calculated exponents_set");
-        let mut exponents_list: Vec<Vec<u64>> = if exponents_set.contains(&vec![0; variable_count])
-        {
-            vec![]
-        } else {
-            vec![vec![0; variable_count]]
-        };
-        exponents_list.append(&mut exponents_set.into_iter().collect());
+
+        let mut exponents_list: Vec<Vec<u64>> = Self::extract_exponents_list(mpols)?;
         timer.elapsed("calculated exponents_list");
 
         for i in 0..variable_count {
@@ -542,6 +532,8 @@ impl<PF: PrimeField> MPolynomial<PF> {
         acc
     }
 
+    // Warning: may not be used for any un-verified user input as it's easy to force to
+    // run slow for anyone who gets to decide the input
     // Get the exponents list of a list of multivariate polynomials. This is just a list of
     // all the exponent vectors present in a list of multivariate polynomials.
     // We precalculate this to make the verifier faster, as the exponents list is the
@@ -553,10 +545,24 @@ impl<PF: PrimeField> MPolynomial<PF> {
 
         // We assume that the input is well-formed, meaning that the `variable_count`
         // in all input `mpols` are the same.
-        let exponents_set: HashSet<Vec<u64>> = mpols
+        // We include the 0-exponent list as this is needed when doing symbolic evaluation
+        // in the STARK prover.
+        // It's easy to find collissions for the `hashbrown` hasher, so this function
+        // is not secure to
+        // Warning: it's easy to find collissions for the `hashbrown` hasher, so
+        // this function and this hasher and hash set may not be used to handle any user-
+        // generated input.
+        // Pre-allocating the hash set with the right capacity *seemed* to give a speedup,
+        // but I might be wrong about that. That speedup is the reason I included the
+        // below "unused" assignment.
+        #[allow(unused_assignments)]
+        let mut exponents_set: hashbrown::hash_set::HashSet<Vec<u64>> =
+            hashbrown::hash_set::HashSet::with_capacity(mpols[0].coefficients.len());
+        exponents_set = mpols
             .iter()
             .flat_map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
             .collect();
+        exponents_set.insert(vec![0; mpols[0].variable_count]);
 
         Ok(exponents_set.into_iter().collect())
     }
@@ -1757,7 +1763,9 @@ mod test_mpolynomials {
         };
         let exponents_list: Vec<Vec<u64>> =
             MPolynomial::extract_exponents_list(&[a.clone(), b.clone()]).unwrap();
-        assert_eq!(4, exponents_list.len());
+
+        // The `exponents_list` returns the present exponents *plus* [0, 0] in this case
+        assert_eq!(5, exponents_list.len());
 
         let point: Vec<BFieldElement> = vec![BFieldElement::new(2), BFieldElement::new(3)];
 
@@ -1779,20 +1787,22 @@ mod test_mpolynomials {
             Ok(res) => res,
             Err(e) => panic!("{}", e),
         };
-        assert_eq!(4, intermediate_results.len());
+        assert_eq!(5, intermediate_results.len());
 
         // point = [2,3]
+        // [0, 0] = 0
         // [0, 1] = 3
         // [0, 2] = 9
         // [1, 1] = 6
         // [3, 4] = 8 * 81 = 648
         let expected_intermediate_results: Vec<BFieldElement> = vec![
+            BFieldElement::new(1),
             BFieldElement::new(3),
             BFieldElement::new(9),
             BFieldElement::new(6),
             BFieldElement::new(648),
         ];
-        for (i, k) in vec![vec![0, 1], vec![0, 2], vec![1, 1], vec![3, 4]]
+        for (i, k) in vec![vec![0, 0], vec![0, 1], vec![0, 2], vec![1, 1], vec![3, 4]]
             .iter()
             .enumerate()
         {
@@ -1844,11 +1854,13 @@ mod test_mpolynomials {
             .into_iter()
             .map(|x| x.to_owned())
             .collect();
-        let exponents_set: HashSet<Vec<u64>> = [exponents_a, exponents_b]
+        let mut expected_exponents_set: HashSet<Vec<u64>> = [exponents_a, exponents_b]
             .iter()
             .flat_map(|mpol| mpol.iter().map(|x| x.to_owned()))
             .collect();
-        let mut expected_exponents_list: Vec<Vec<u64>> = exponents_set.into_iter().collect();
+        expected_exponents_set.insert(vec![0; a.variable_count]);
+        let mut expected_exponents_list: Vec<Vec<u64>> =
+            expected_exponents_set.into_iter().collect();
         expected_exponents_list.sort();
         assert_eq!(expected_exponents_list, exponents);
     }
