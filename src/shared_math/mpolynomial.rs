@@ -972,6 +972,8 @@ impl<PF: PrimeField> MPolynomial<PF> {
         }
     }
 
+    /// Return the highest number present in the list of list of exponents
+    /// For `P(x,y) = x^4*y^3`, `4` would be returned.
     pub fn max_exponent(&self) -> u64 {
         *self
             .coefficients
