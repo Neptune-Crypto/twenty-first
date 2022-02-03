@@ -2,7 +2,7 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{IdentityValues, ModPowU32};
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::tree_m_ary::Node;
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use num_bigint::BigInt;
 use num_traits::Zero;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -359,27 +359,7 @@ impl<PF: PrimeField> MPolynomial<PF> {
         res
     }
 
-    pub fn evaluate(&self, point: &[PF::Elem]) -> PF::Elem {
-        assert_eq!(
-            self.variable_count,
-            point.len(),
-            "Dimensionality of multivariate polynomial and point must agree in evaluate"
-        );
-        let mut acc = point[0].ring_zero();
-        for (k, v) in self.coefficients.iter() {
-            let mut prod = *v;
-            for i in 0..k.len() {
-                // FIXME: We really don't want to cast to 'u32' here, but
-                // refactoring k: Vec<u32> is a bit of a task, too. See issue ...
-                prod *= point[i].mod_pow_u32(k[i] as u32);
-            }
-            acc += prod;
-        }
-
-        acc
-    }
-
-    pub fn precalculate_exponents_memoization(
+    pub fn precalculate_symbolic_exponents(
         mpols: &[Self],
         point: &[Polynomial<PF>],
         exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<PF>>,
@@ -428,8 +408,6 @@ impl<PF: PrimeField> MPolynomial<PF> {
             .map(|(i, _)| i)
             .collect();
 
-        println!("choosing edges");
-
         // Calculate the relevant weight for making a calculation from one list of exponents another
         // Use these weights to pick the minimal edges.
         // This algorithm i a variation of Edmond's algorithm for finding the minimal spanning tree
@@ -477,7 +455,6 @@ impl<PF: PrimeField> MPolynomial<PF> {
             }
         }
 
-        println!("chose edges");
         timer.elapsed("chose edges");
 
         // data: (diff, abs)
@@ -541,6 +518,136 @@ impl<PF: PrimeField> MPolynomial<PF> {
         println!("{}", report);
 
         Ok(())
+    }
+
+    // Simple evaluation, without precalculated results
+    pub fn evaluate(&self, point: &[PF::Elem]) -> PF::Elem {
+        assert_eq!(
+            self.variable_count,
+            point.len(),
+            "Dimensionality of multivariate polynomial and point must agree in evaluate"
+        );
+        let mut acc = point[0].ring_zero();
+        for (k, v) in self.coefficients.iter() {
+            let mut prod = point[0].ring_one();
+            for i in 0..k.len() {
+                // FIXME: We really don't want to cast to 'u32' here, but
+                // refactoring k: Vec<u32> is a bit of a task, too. See issue ...
+                prod *= point[i].mod_pow_u32(k[i] as u32);
+            }
+            prod *= *v;
+            acc += prod;
+        }
+
+        acc
+    }
+
+    // Get the exponents list of a list of multivariate polynomials. This is just a list of
+    // all the exponent vectors present in a list of multivariate polynomials.
+    // We precalculate this to make the verifier faster, as the exponents list is the
+    // same across all calls to the evaluater
+    pub fn extract_exponents_list(mpols: &[Self]) -> Result<Vec<Vec<u64>>, Box<dyn Error>> {
+        if mpols.is_empty() {
+            return Err(Box::new(PrecalculationError::EmptyInput));
+        }
+
+        // We assume that the input is well-formed, meaning that the `variable_count`
+        // in all input `mpols` are the same.
+        let exponents_set: HashSet<Vec<u64>> = mpols
+            .iter()
+            .flat_map(|mpol| mpol.coefficients.keys().map(|x| x.to_owned()))
+            .collect();
+
+        Ok(exponents_set.into_iter().collect())
+    }
+
+    // This does relate to multivariate polynomials since it is used as a step to do faster
+    // scalar evaluation. For this reason, this function is placed here.
+    /// Get a hash map with precalculated values for point[i]^j
+    /// Only exponents 2 and above are stored.
+    pub fn precalculate_scalar_mod_pows(
+        limit: u64,
+        point: &[PF::Elem],
+    ) -> HashMap<(usize, u64), PF::Elem> {
+        let mut hash_map: HashMap<(usize, u64), PF::Elem> = HashMap::new();
+
+        // TODO: Would runing this in parallel give a speedup?
+        for (i, coordinate) in point.iter().enumerate() {
+            let mut acc = *coordinate;
+            for k in 2..=limit {
+                acc *= *coordinate;
+                hash_map.insert((i, k), acc);
+            }
+        }
+
+        hash_map
+    }
+
+    // Precalculater for scalar evaluation
+    // Assumes that all point[i]^j that are needed already exist in
+    // `precalculated_mod_pows`
+    pub fn precalculate_scalar_exponents(
+        point: &[PF::Elem],
+        precalculated_mod_pows: &HashMap<(usize, u64), PF::Elem>,
+        exponents_list: &[Vec<u64>],
+    ) -> Result<HashMap<Vec<u64>, PF::Elem>, Box<dyn Error>> {
+        if point.is_empty() {
+            return Err(Box::new(PrecalculationError::EmptyInput));
+        }
+
+        // We assume all exponents_list elements have same length
+        let variable_count = exponents_list[0].len();
+
+        if point.len() != variable_count {
+            return Err(Box::new(PrecalculationError::LengthMismatch));
+        }
+
+        // Perform parallel computation of all intermediate results
+        // which constitute calculations on the form
+        // `prod_i^N(point[i]^e_i)
+        let mut intermediate_results_hash_map: HashMap<Vec<u64>, PF::Elem> = HashMap::new();
+        let one: PF::Elem = point[0].ring_one();
+        let intermediate_results: Vec<PF::Elem> = exponents_list
+            .par_iter()
+            .map(|exponents| {
+                let mut acc = one;
+                for (i, e) in exponents.iter().enumerate() {
+                    if *e == 0 {
+                        continue;
+                    } else if *e == 1 {
+                        acc *= point[i];
+                    } else {
+                        acc *= precalculated_mod_pows[&(i, *e)];
+                    }
+                }
+                acc
+            })
+            .collect();
+
+        for (exponents, result) in izip!(exponents_list, intermediate_results) {
+            intermediate_results_hash_map.insert(exponents.to_vec(), result);
+        }
+
+        Ok(intermediate_results_hash_map)
+    }
+
+    pub fn evaluate_with_precalculation(
+        &self,
+        point: &[PF::Elem],
+        intermediate_results: &HashMap<Vec<u64>, PF::Elem>,
+    ) -> PF::Elem {
+        assert_eq!(
+            self.variable_count,
+            point.len(),
+            "Dimensionality of multivariate polynomial and point must agree in evaluate"
+        );
+        let zero: PF::Elem = point[0].ring_zero();
+        let acc = self
+            .coefficients
+            .par_iter()
+            .map(|(k, v)| intermediate_results[k] * *v)
+            .reduce(|| zero, |a, b| a + b);
+        acc
     }
 
     // Substitute the variables in a multivariate polynomial with univariate polynomials in parallel.
@@ -863,6 +970,17 @@ impl<PF: PrimeField> MPolynomial<PF> {
             coefficients: output_coefficients,
             variable_count: self.variable_count,
         }
+    }
+
+    /// Return the highest number present in the list of list of exponents
+    /// For `P(x,y) = x^4*y^3`, `4` would be returned.
+    pub fn max_exponent(&self) -> u64 {
+        *self
+            .coefficients
+            .keys()
+            .map(|coefficients| coefficients.iter().max().unwrap_or(&0))
+            .max()
+            .unwrap_or(&0)
     }
 
     pub fn degree(&self) -> u64 {
@@ -1335,7 +1453,7 @@ mod test_mpolynomials {
             Vec<u64>,
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
-        let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+        let precalculation_result = MPolynomial::precalculate_symbolic_exponents(
             &[xyz_m.clone()],
             &[x.clone(), x.clone(), x.clone()],
             &mut precalculated_intermediate_results,
@@ -1420,7 +1538,7 @@ mod test_mpolynomials {
             Vec<u64>,
             Polynomial<PrimeFieldElementFlexible>,
         > = HashMap::new();
-        let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+        let precalculation_result = MPolynomial::precalculate_symbolic_exponents(
             &[pol_m.clone()],
             &[
                 univariate_pol_1.clone(),
@@ -1621,6 +1739,121 @@ mod test_mpolynomials {
     }
 
     #[test]
+    fn precalculate_scalar_exponents_simple_test() {
+        let a: MPolynomial<BFieldElement> = MPolynomial {
+            variable_count: 2,
+            coefficients: HashMap::from([
+                (vec![0, 1], BFieldElement::new(2)),
+                (vec![0, 2], BFieldElement::new(3)),
+            ]),
+        };
+        let b: MPolynomial<BFieldElement> = MPolynomial {
+            variable_count: 2,
+            coefficients: HashMap::from([
+                (vec![1, 1], BFieldElement::new(2)),
+                (vec![3, 4], BFieldElement::new(5)),
+                (vec![0, 1], BFieldElement::new(10)),
+            ]),
+        };
+        let exponents_list: Vec<Vec<u64>> =
+            MPolynomial::extract_exponents_list(&[a.clone(), b.clone()]).unwrap();
+        assert_eq!(4, exponents_list.len());
+
+        let point: Vec<BFieldElement> = vec![BFieldElement::new(2), BFieldElement::new(3)];
+
+        // Verify mod_pow precalculation
+        let mod_pow_precalculations: HashMap<(usize, u64), BFieldElement> =
+            MPolynomial::<BFieldElement>::precalculate_scalar_mod_pows(4, &point);
+        assert_eq!(6, mod_pow_precalculations.len()); // `6` because only powers [2,3,4] are present
+        for ((i, k), v) in mod_pow_precalculations.iter() {
+            assert_eq!(point[*i].mod_pow(*k), *v);
+        }
+
+        let intermediate_results_res: Result<HashMap<Vec<u64>, BFieldElement>, Box<dyn Error>> =
+            MPolynomial::<BFieldElement>::precalculate_scalar_exponents(
+                &point,
+                &mod_pow_precalculations,
+                &exponents_list,
+            );
+        let intermediate_results = match intermediate_results_res {
+            Ok(res) => res,
+            Err(e) => panic!("{}", e),
+        };
+        assert_eq!(4, intermediate_results.len());
+
+        // point = [2,3]
+        // [0, 1] = 3
+        // [0, 2] = 9
+        // [1, 1] = 6
+        // [3, 4] = 8 * 81 = 648
+        let expected_intermediate_results: Vec<BFieldElement> = vec![
+            BFieldElement::new(3),
+            BFieldElement::new(9),
+            BFieldElement::new(6),
+            BFieldElement::new(648),
+        ];
+        for (i, k) in vec![vec![0, 1], vec![0, 2], vec![1, 1], vec![3, 4]]
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(expected_intermediate_results[i], intermediate_results[k]);
+        }
+
+        // Use the intermediate precalculated result to get the evaluation.
+        // Then compare this to naive evaluation.
+        assert_eq!(
+            a.evaluate(&point),
+            a.evaluate_with_precalculation(&point, &intermediate_results)
+        );
+        assert_eq!(
+            BFieldElement::new(33),
+            a.evaluate_with_precalculation(&point, &intermediate_results)
+        );
+        assert_eq!(
+            b.evaluate(&point),
+            b.evaluate_with_precalculation(&point, &intermediate_results)
+        );
+        assert_eq!(
+            BFieldElement::new(3282),
+            b.evaluate_with_precalculation(&point, &intermediate_results)
+        );
+
+        // Test max_exponent
+        assert_eq!(2, a.max_exponent());
+        assert_eq!(4, b.max_exponent());
+    }
+
+    #[test]
+    fn extract_exponents_list_test() {
+        // Funky property-based test to verify that the `extract_exponents_list`
+        // behaves as expected
+        let a = gen_mpolynomial(40, 40, 100, u64::MAX);
+        let b = gen_mpolynomial(20, 20, 1000, u64::MAX);
+        let mut exponents: Vec<Vec<u64>> =
+            MPolynomial::extract_exponents_list(&[a.clone(), b.clone()]).unwrap();
+        exponents.sort();
+        let exponents_a: Vec<Vec<u64>> = a
+            .coefficients
+            .keys()
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect();
+        let exponents_b: Vec<Vec<u64>> = b
+            .coefficients
+            .keys()
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect();
+        let exponents_set: HashSet<Vec<u64>> = [exponents_a, exponents_b]
+            .iter()
+            .flat_map(|mpol| mpol.iter().map(|x| x.to_owned()))
+            .collect();
+        let mut expected_exponents_list: Vec<Vec<u64>> = exponents_set.into_iter().collect();
+        expected_exponents_list.sort();
+        assert_eq!(expected_exponents_list, exponents);
+    }
+
+    #[test]
     fn mod_pow_test() {
         let a = gen_mpolynomial(4, 6, 2, 20);
         let mut acc = MPolynomial::from_constant(BFieldElement::ring_one(), 4);
@@ -1656,7 +1889,7 @@ mod test_mpolynomials {
                 Vec<u64>,
                 Polynomial<BFieldElement>,
             > = HashMap::new();
-            let precalculation_result = MPolynomial::precalculate_exponents_memoization(
+            let precalculation_result = MPolynomial::precalculate_symbolic_exponents(
                 &mpolynomials,
                 &point,
                 &mut precalculated_intermediate_results,

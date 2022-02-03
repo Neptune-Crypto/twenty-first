@@ -297,7 +297,7 @@ impl Stark {
         let mut exponents_memoization: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
             HashMap::new();
 
-        MPolynomial::precalculate_exponents_memoization(
+        MPolynomial::precalculate_symbolic_exponents(
             // A slight speedup can be achieved here by only sending the 1st
             // transition_constraints element to the precalculation function. I didn't
             // do it though, as it feels like cheating which is an optimization I don't
@@ -677,6 +677,11 @@ impl Stark {
             original_trace_length as usize,
             rounded_trace_length as usize,
         );
+        let max_exponent: u64 = transition_constraints
+            .iter()
+            .map(|mpol| mpol.max_exponent())
+            .max()
+            .unwrap();
         timer.elapsed("Calculate expected TQ degrees");
 
         // TODO: Calculate the transition_zerofier faster than this using group theory.
@@ -687,12 +692,17 @@ impl Stark {
         );
         timer.elapsed("Calculate transition zerofier");
 
+        let exponents_list: Vec<Vec<u64>> =
+            MPolynomial::extract_exponents_list(transition_constraints)?;
+        timer.elapsed("Calculate exponents list");
         for (i, current_index) in indices.into_iter().enumerate() {
             let current_x: BFieldElement =
                 self.field_generator * omega.mod_pow(current_index as u64);
+            timer.elapsed(&format!("current_x {}", i));
             let next_index: usize =
                 (current_index + blowup_factor_new as usize) % fri_domain_length as usize;
             let next_x: BFieldElement = self.field_generator * omega.mod_pow(next_index as u64);
+            timer.elapsed(&format!("next_x {}", i));
             let mut current_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
                 .map(|r| {
                     boundary_quotients[r][&current_index]
@@ -700,24 +710,59 @@ impl Stark {
                         + boundary_interpolants[r].evaluate(&current_x)
                 })
                 .collect();
+            timer.elapsed(&format!("current_trace {}", i));
             let mut next_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
                 .map(|r| {
                     boundary_quotients[r][&next_index] * boundary_zerofiers[r].evaluate(&next_x)
                         + boundary_interpolants[r].evaluate(&next_x)
                 })
                 .collect();
+            timer.elapsed(&format!("next_trace {}", i));
 
             let mut point: Vec<BFieldElement> = vec![current_x];
             point.append(&mut current_trace);
             point.append(&mut next_trace);
+            timer.elapsed(&format!("generate \"point\" {}", i));
 
+            // println!("point length: {}", point.len());
+            // println!(
+            //     "transition_constraints length: {}",
+            //     transition_constraints.len()
+            // );
+            // let tc_coefficient_counts: Vec<usize> = transition_constraints
+            //     .iter()
+            //     .map(|x| x.coefficients.len())
+            //     .collect();
+            // println!(
+            //     "transition_constraints coefficient count: {:?}",
+            //     tc_coefficient_counts
+            // );
+            // let tc_degrees: Vec<u64> = transition_constraints.iter().map(|x| x.degree()).collect();
+            // println!("transition_constraints degrees: {:?}", tc_degrees);
+
+            // TODO: For some reason this mod pow precalculation is super slow
+            let precalculated_mod_pows: HashMap<(usize, u64), BFieldElement> =
+                MPolynomial::<BFieldElement>::precalculate_scalar_mod_pows(max_exponent, &point);
+            timer.elapsed(&format!("precalculate mod_pows {}", i));
+            let intermediate_results: HashMap<Vec<u64>, BFieldElement> =
+                MPolynomial::<BFieldElement>::precalculate_scalar_exponents(
+                    &point,
+                    &precalculated_mod_pows,
+                    &exponents_list,
+                )?;
+            timer.elapsed(&format!(
+                "precalculate transition_constraint_values intermediate results {}",
+                i
+            ));
             let transition_constraint_values: Vec<BFieldElement> = transition_constraints
                 .iter()
-                .map(|tc| tc.evaluate(&point))
+                .map(|tc| tc.evaluate_with_precalculation(&point, &intermediate_results))
                 .collect();
+            timer.elapsed(&format!("transition_constraint_values {}", i));
 
             let current_transition_zerofier_value: BFieldElement =
                 transition_zerofier.evaluate(&current_x);
+            timer.elapsed(&format!("current_transition_zerofier_value {}", i));
 
             // Get combination polynomial evaluation value
             // Loop over all registers for transition quotient values, and for boundary quotient values
@@ -748,6 +793,7 @@ impl Stark {
                 .fold(XFieldElement::ring_zero(), |sum, (&weight, &term)| {
                     sum + term * weight
                 });
+            timer.elapsed(&format!("combination {}", i));
 
             if values[i] != combination {
                 return Err(Box::new(StarkVerifyError::LinearCombinationMismatch(
