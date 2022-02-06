@@ -1,7 +1,7 @@
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use std::fmt::Display;
-use std::ops::{BitAnd, Div, Rem, Sub};
+use std::ops::{BitAnd, Div, Rem, Shl, Sub};
 
 // Function for creating a bigint from an i128
 pub fn bigint(input: i128) -> BigInt {
@@ -28,6 +28,15 @@ pub fn log_2_ceil(x: u64) -> u64 {
 
 pub fn is_power_of_two<T: Zero + One + Sub<Output = T> + BitAnd<Output = T> + Copy>(n: T) -> bool {
     !n.is_zero() && (n & (n - T::one())).is_zero()
+}
+
+pub fn powers_of_two_below<T>(max: T, bits: u32) -> impl Iterator<Item = T>
+where
+    T: One + PartialOrd + Shl<u32, Output = T> + Copy,
+{
+    (0..bits)
+        .map(|i: u32| T::one() << i)
+        .take_while(move |&x| x < max)
 }
 
 // Round up to the nearest power of 2
@@ -103,5 +112,16 @@ mod test_other {
                 assert!(!is_power_of_two(i));
             }
         }
+    }
+
+    #[test]
+    fn powers_of_two_below_test() {
+        let powers_of_two: Vec<u32> = powers_of_two_below::<u32>(u32::MAX, u32::BITS).collect();
+        for i in powers_of_two.into_iter() {
+            assert!(is_power_of_two(i));
+        }
+
+        // TODO: Test that it can be empty.
+        // TODO: Test that no powers of below max are missing.
     }
 }
