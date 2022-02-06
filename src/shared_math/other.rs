@@ -1,8 +1,7 @@
-use std::fmt::Display;
-use std::ops::{Div, Rem, Sub};
-
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
+use std::fmt::Display;
+use std::ops::{BitAnd, Div, Rem, Sub};
 
 // Function for creating a bigint from an i128
 pub fn bigint(input: i128) -> BigInt {
@@ -20,11 +19,15 @@ pub fn log_2_floor(x: u64) -> u64 {
 
 pub fn log_2_ceil(x: u64) -> u64 {
     // if x is a power of 2, return log_2_floor. Otherwise return log_2_floor + 1.
-    if x & (x - 1) == 0 {
+    if is_power_of_two(x) {
         log_2_floor(x)
     } else {
         log_2_floor(x) + 1
     }
+}
+
+pub fn is_power_of_two<T: Zero + One + Sub<Output = T> + BitAnd<Output = T> + Copy>(n: T) -> bool {
+    !n.is_zero() && (n & (n - T::one())).is_zero()
 }
 
 // Round up to the nearest power of 2
@@ -88,5 +91,17 @@ mod test_other {
         assert_eq!(40, log_2_ceil(2u64.pow(40)));
         assert_eq!(41, log_2_ceil(2u64.pow(40) + 1));
         assert_eq!(41, log_2_ceil(2u64.pow(40) + 456456));
+    }
+
+    #[test]
+    fn is_power_of_two_test() {
+        let powers_of_two: Vec<u8> = vec![1, 2, 4, 8, 16, 32, 64, 128];
+        for i in 0..u8::MAX {
+            if powers_of_two.contains(&i) {
+                assert!(is_power_of_two(i));
+            } else {
+                assert!(!is_power_of_two(i));
+            }
+        }
     }
 }

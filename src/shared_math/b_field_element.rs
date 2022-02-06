@@ -373,7 +373,7 @@ impl GetPrimitiveRootOfUnity for BFieldElement {
 
         // Calculate prime factorization of n
         // Check if n = 2^k
-        if n & (n - 1) == 0 {
+        if other::is_power_of_two(n) {
             primes = vec![2];
         } else {
             let mut m = n;

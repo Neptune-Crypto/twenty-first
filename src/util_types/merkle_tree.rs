@@ -1,4 +1,4 @@
-use crate::shared_math::other::log_2_floor;
+use crate::shared_math::other::{self, log_2_floor};
 use crate::shared_math::traits::GetRandomElements;
 use crate::utils::blake3_digest_serialize;
 use itertools::izip;
@@ -91,10 +91,10 @@ impl<T: Clone + Serialize + Debug + PartialEq> MerkleTree<T> {
     }
 
     pub fn from_vec(values: &[T]) -> Self {
-        // verify that length of input is power of 2
-        if values.len() & (values.len() - 1) != 0 {
-            panic!("Size of input for Merkle tree must be a power of 2");
-        }
+        assert!(
+            other::is_power_of_two(values.len()),
+            "Size of input for Merkle tree must be a power of 2"
+        );
 
         let mut nodes: Vec<Node<T>> = vec![
             Node {
@@ -486,10 +486,10 @@ pub struct SaltedMerkleTree<T> {
 impl<T: Clone + Serialize + Debug + PartialEq + GetRandomElements> SaltedMerkleTree<T> {
     // Build a salted Merkle tree from a slice of serializable values
     pub fn from_vec(values: &[T], salts_per_element: usize, rng: &mut ThreadRng) -> Self {
-        // verify that length of input is power of 2
-        if values.len() & (values.len() - 1) != 0 {
-            panic!("Size of input for Merkle tree must be a power of 2");
-        }
+        assert!(
+            other::is_power_of_two(values.len()),
+            "Size of input for Merkle tree must be a power of 2"
+        );
 
         let mut nodes: Vec<Node<T>> = vec![
             Node {
