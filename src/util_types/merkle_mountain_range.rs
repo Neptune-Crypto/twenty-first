@@ -1,15 +1,30 @@
-// TODO: Parameterise this.
-type Hash = [u8; 32];
+use super::simple_hasher::{AsBytes, Hasher};
+use std::marker::PhantomData;
 
-pub struct MerkleMountainRange {
-    pub hashes: Vec<Hash>,
+/// Type parameters:
+///
+/// - `D`: a hash digest
+/// - `H`: a `Hasher<D>`
+pub struct MerkleMountainRange<D, H>
+where
+    D: AsBytes + PartialEq + Copy,
+    H: Hasher<D, Digest = D>,
+{
+    pub digests: Vec<D>,
+    _hasher: PhantomData<H>,
 }
 
-impl MerkleMountainRange {
-    pub fn from_leaf_hashes(leaf_hashes: &[Hash]) -> Self {
+impl<D, H> MerkleMountainRange<D, H>
+where
+    D: AsBytes + PartialEq + Copy,
+    H: Hasher<D, Digest = D>,
+{
+    /// Create MMR from `leaf_hashes` by appending each progressively.
+    pub fn from_leaf_hashes(leaf_hashes: &[D]) -> Self {
         // FIXME: Assess if this initial capacity is exact.
-        let hashes = Vec::with_capacity(2 * leaf_hashes.len());
-        let mut mmr = Self { hashes };
+        let digests = Vec::with_capacity(2 * leaf_hashes.len());
+        let _hasher = PhantomData;
+        let mut mmr = Self { digests, _hasher };
 
         for leaf_hash in leaf_hashes {
             mmr.append_leaf(*leaf_hash);
@@ -20,35 +35,30 @@ impl MerkleMountainRange {
 
     /// Push a leaf hash into the MMR. Compute hashes for new MMR peaks.
     /// Return the total number of hashes (leaves + non-leaves) after.
-    pub fn append_leaf(&mut self, leaf_hash: Hash) -> usize {
-        if self.hashes.is_empty() {
-            self.hashes.push(leaf_hash);
+    pub fn append_leaf(&mut self, leaf_hash: D) -> usize {
+        if self.digests.is_empty() {
+            self.digests.push(leaf_hash);
             return 1;
         }
 
-        let mut pos = self.hashes.len();
+        let mut pos = self.digests.len();
         let (peak_map, height) = peak_map_height(pos);
 
         // TODO: Convert assertion to something safer.
         assert_eq!(0, height, "Can only append leaves at bottom");
 
-        self.hashes.push(leaf_hash);
+        self.digests.push(leaf_hash);
         let mut prev_hash = leaf_hash;
 
-        // TODO: Parameterise this.
-        let mut hasher = blake3::Hasher::new();
-
+        let mut hasher = H::new();
         let mut peak = 1;
+
+        // While we've not exceeded the top peak
         while (peak_map & peak) != 0 {
             let left_sibling = left_sibling(pos, peak);
-            assert!(left_sibling < pos);
-            let left_hash = self.hashes[left_sibling];
-
-            hasher.reset();
-            hasher.update(&left_hash);
-            hasher.update(&prev_hash);
-            prev_hash = *hasher.finalize().as_bytes();
-            self.hashes.push(prev_hash);
+            let left_hash = self.digests[left_sibling];
+            prev_hash = hasher.hash_two(&left_hash, &prev_hash);
+            self.digests.push(prev_hash);
 
             peak <<= 1;
             pos += 1;
@@ -58,22 +68,18 @@ impl MerkleMountainRange {
     }
 
     pub fn verify(&self) -> bool {
-        // TODO: Parameterise this.
-        let mut hasher = blake3::Hasher::new();
-
-        for i in 0..self.hashes.len() {
+        let mut hasher = H::new();
+        for i in 0..self.digests.len() {
             let height = bintree_height(i);
             if height == 0 {
                 continue;
             }
-            let hash = self.hashes[i];
-            let left_child_hash = self.hashes[left_child(i, height)];
-            let right_child_hash = self.hashes[right_child(i)];
 
-            hasher.reset();
-            hasher.update(&left_child_hash);
-            hasher.update(&right_child_hash);
-            let hash_check = *hasher.finalize().as_bytes();
+            let left_child_hash = self.digests[left_child(i, height)];
+            let right_child_hash = self.digests[right_child(i)];
+            let hash_check = hasher.hash_two(&left_child_hash, &right_child_hash);
+            let hash = self.digests[i];
+
             if hash != hash_check {
                 return false;
             }
@@ -87,8 +93,8 @@ const ALL_ONES: usize = std::usize::MAX;
 
 /// Compute (peak_map, height) where
 ///
-/// - `peak_map`: bitmask of highest peak
-/// - `height`: height of element at pos
+/// - `peak_map`: bitmask that includes highest peak
+/// - `height`: height of element at pos (0 for leaves)
 ///
 /// Note that when `height != 0`, an element cannot be appended.
 pub fn peak_map_height(mut pos: usize) -> (usize, usize) {
@@ -108,7 +114,8 @@ pub fn peak_map_height(mut pos: usize) -> (usize, usize) {
     (bitmap, pos)
 }
 
-/// Given a `pos`, determine the smallest full binary tree that contains it, and return its height in that tree.
+/// Given a `pos`, determine the smallest full binary tree (mountain) that
+/// contains it, and return its height in that tree.
 #[inline(always)]
 pub fn bintree_height(pos: usize) -> usize {
     if pos == 0 {
@@ -120,7 +127,7 @@ pub fn bintree_height(pos: usize) -> usize {
     height
 }
 
-/// Given a `pos`, compute the corresponding position of a left sibling under a `peak`
+/// Given a `pos`, compute the position of a left sibling under a `peak`
 fn left_sibling(pos: usize, peak: usize) -> usize {
     pos + 1 - 2 * peak
 }
@@ -141,7 +148,7 @@ mod merkle_mountain_range_test {
     use rand::RngCore;
 
     // For testing only!
-    impl GetRandomElements for Hash {
+    impl GetRandomElements for blake3::Hash {
         fn random_elements(n: usize, rng: &mut ThreadRng) -> Vec<Self> {
             let mut hasher = blake3::Hasher::new();
             let seed = rng.next_u64().to_ne_bytes();
@@ -151,7 +158,7 @@ mod merkle_mountain_range_test {
             let mut result = Vec::with_capacity(n);
             for _ in 0..n {
                 let hash = *hasher.finalize().as_bytes();
-                result.push(hash);
+                result.push(hash.into());
                 hasher.update(&hash);
             }
 
@@ -164,9 +171,10 @@ mod merkle_mountain_range_test {
         for n in [0, 1, 2, 3, 4, 7, 8, 9, 15, 16, 17, 127, 128, 129] {
             // 1. Create a bunch of hashes
             let mut rng = rand::thread_rng();
-            let hashes = Hash::random_elements(n, &mut rng);
+            let hashes = blake3::Hash::random_elements(n, &mut rng);
 
             // 2. Insert them into MMR
+            // mmr: MerkleMountainRange<blake3::Hash, blake3::Hasher as Hasher<blake3::Hash>>
             let mmr = MerkleMountainRange::from_leaf_hashes(&hashes);
 
             // 3. Validate MMR
