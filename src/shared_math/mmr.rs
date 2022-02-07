@@ -8,7 +8,7 @@ const BLAKE3ZERO: [u8; 32] = [0u8; 32];
 
 #[derive(Debug, Clone)]
 pub struct Mmr {
-    digests: Vec<[u8; 32]>,
+    digests: Vec<HashDigest>,
 }
 
 impl Mmr {
@@ -83,8 +83,19 @@ impl Mmr {
         Some(data_index)
     }
 
-    pub fn get_digest_count(&self) -> usize {
-        self.digests.len()
+    pub fn count_nodes(&self) -> usize {
+        self.digests.len() - 1
+    }
+
+    /// Return the number of leaves in the tree
+    pub fn count_leaves(&self) -> usize {
+        let peaks_and_heights: Vec<(_, usize)> = self.get_peaks_with_heights();
+        let mut acc = 0;
+        for (_, height) in peaks_and_heights {
+            acc += 1 << height
+        }
+
+        acc
     }
 
     pub fn verify<V: Clone + Hash + Serialize>(
@@ -155,7 +166,9 @@ impl Mmr {
             index_height = next_index_info.1;
         }
 
-        (authentication_path, self.get_peaks())
+        let peaks: Vec<HashDigest> = self.get_peaks_with_heights().iter().map(|x| x.0).collect();
+
+        (authentication_path, peaks)
     }
 
     fn get_root_from_peaks(peaks: &[HashDigest], node_count: usize) -> HashDigest {
@@ -179,24 +192,25 @@ impl Mmr {
     pub fn get_root(&self) -> HashDigest {
         // Follows the description for "bagging" on
         // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
-        let peaks: Vec<[u8; 32]> = self.get_peaks();
+        let peaks: Vec<HashDigest> = self.get_peaks_with_heights().iter().map(|x| x.0).collect();
 
-        Self::get_root_from_peaks(&peaks, self.get_digest_count())
+        Self::get_root_from_peaks(&peaks, self.count_nodes())
     }
 
-    pub fn get_peaks(&self) -> Vec<HashDigest> {
+    /// Return a list of tuples (peaks, height)
+    pub fn get_peaks_with_heights(&self) -> Vec<(HashDigest, usize)> {
         // 1. Find top peak
         // 2. Jump to right sibling (will not be included)
         // 3. Take left child of sibling, continue until a node in tree is found
         // 4. Once new node is found, jump to right sibling (will not be included)
         // 5. Take left child of sibling, continue until a node in tree is found
-        let mut peaks: Vec<HashDigest> = vec![];
+        let mut peaks_and_heights: Vec<(HashDigest, usize)> = vec![];
         let (mut top_peak, mut top_height) = Self::leftmost_ancestor(self.digests.len() - 1);
         if top_peak > self.digests.len() - 1 {
             top_peak = Self::left_child(top_peak, top_height);
             top_height -= 1;
         }
-        peaks.push(self.digests[top_peak]); // No clone needed bc array
+        peaks_and_heights.push((self.digests[top_peak], top_height)); // No clone needed bc array
         let mut height = top_height;
         let mut candidate = Self::right_sibling(top_peak, height);
         'outer: while height > 0 {
@@ -204,14 +218,14 @@ impl Mmr {
                 candidate = Self::left_child(candidate, height);
                 height -= 1;
                 if candidate < self.digests.len() {
-                    peaks.push(self.digests[candidate]);
+                    peaks_and_heights.push((self.digests[candidate], height));
                     candidate = Self::right_sibling(candidate, height);
                     continue 'outer;
                 }
             }
         }
 
-        peaks
+        peaks_and_heights
     }
 
     #[inline]
@@ -481,14 +495,15 @@ mod mmr_test {
         let element = BFieldElement::new(14);
         let input: Vec<BFieldElement> = vec![element];
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(2, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
-        assert_eq!(1, peaks.len());
+        assert_eq!(1, mmr.count_leaves());
+        assert_eq!(1, mmr.count_nodes());
+        let peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(1, peaks_and_heights.len());
+        assert_eq!(0, peaks_and_heights[0].1);
         let (authentication_path, peaks) = mmr.get_proof(1);
         let root = mmr.get_root();
-        let size = mmr.get_digest_count();
 
-        let valid = Mmr::verify(root, &authentication_path, &peaks, size, element, 1);
+        let valid = Mmr::verify(root, &authentication_path, &peaks, 1, element, 1);
         assert!(valid);
     }
 
@@ -496,12 +511,13 @@ mod mmr_test {
     fn two_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..2).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(4, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(2, mmr.count_leaves());
+        assert_eq!(3, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(1, peaks.len());
         let (authentication_path, peaks) = mmr.get_proof(1);
         let root = mmr.get_root();
-        let size = mmr.get_digest_count();
+        let size = mmr.count_nodes();
 
         let valid = Mmr::verify(
             root,
@@ -518,8 +534,9 @@ mod mmr_test {
     fn three_input_mmr_test() {
         let input: Vec<BFieldElement> = (4..=6).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(5, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(3, mmr.count_leaves());
+        assert_eq!(4, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(2, peaks.len());
 
         for index in vec![1, 2, 3] {
@@ -528,7 +545,7 @@ mod mmr_test {
                 mmr.get_root(),
                 &authentication_path,
                 &peaks,
-                mmr.get_digest_count(),
+                mmr.count_nodes(),
                 BFieldElement::new(index as u128 + 3),
                 index,
             );
@@ -540,8 +557,9 @@ mod mmr_test {
     fn four_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..4).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(8, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(4, mmr.count_leaves());
+        assert_eq!(7, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(1, peaks.len());
 
         let index = 1;
@@ -550,7 +568,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -561,8 +579,9 @@ mod mmr_test {
     fn fiveinput_mmr_test() {
         let input: Vec<BFieldElement> = (0..5).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(9, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(5, mmr.count_leaves());
+        assert_eq!(8, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(2, peaks.len());
 
         for (i, index) in vec![1, 2, 4, 5, 8].iter().enumerate() {
@@ -571,7 +590,7 @@ mod mmr_test {
                 mmr.get_root(),
                 &authentication_path,
                 &peaks,
-                mmr.get_digest_count(),
+                mmr.count_nodes(),
                 input[i],
                 *index,
             );
@@ -583,8 +602,9 @@ mod mmr_test {
     fn sixinput_mmr_test() {
         let input: Vec<BFieldElement> = (0..6).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(11, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(6, mmr.count_leaves());
+        assert_eq!(10, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(2, peaks.len());
 
         let index = 1;
@@ -593,7 +613,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -604,8 +624,9 @@ mod mmr_test {
     fn seven_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..7).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(12, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(7, mmr.count_leaves());
+        assert_eq!(11, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(3, peaks.len());
 
         let index = 1;
@@ -614,7 +635,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -625,8 +646,9 @@ mod mmr_test {
     fn eight_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..8).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(16, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(8, mmr.count_leaves());
+        assert_eq!(15, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(1, peaks.len());
 
         let index = 1;
@@ -635,7 +657,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -646,8 +668,8 @@ mod mmr_test {
     fn nine_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..9).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(17, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(16, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(2, peaks.len());
 
         let index = 1;
@@ -656,7 +678,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -667,8 +689,8 @@ mod mmr_test {
     fn ten_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..10).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(19, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(18, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(2, peaks.len());
 
         let index = 1;
@@ -677,7 +699,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -688,8 +710,8 @@ mod mmr_test {
     fn eleven_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..11).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(20, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(19, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(3, peaks.len());
 
         let index = 1;
@@ -698,7 +720,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -709,8 +731,8 @@ mod mmr_test {
     fn twelve_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..12).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(23, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(22, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(2, peaks.len());
 
         let index = 1;
@@ -719,7 +741,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -730,8 +752,8 @@ mod mmr_test {
     fn thirteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..13).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(24, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(23, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(3, peaks.len());
 
         let index = 1;
@@ -740,7 +762,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -751,8 +773,8 @@ mod mmr_test {
     fn fourteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..14).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(26, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(25, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(3, peaks.len());
 
         let index = 1;
@@ -761,7 +783,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -772,8 +794,8 @@ mod mmr_test {
     fn fifteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..15).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(27, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(26, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(4, peaks.len());
 
         let index = 1;
@@ -782,7 +804,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -793,8 +815,8 @@ mod mmr_test {
     fn sixteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..16).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(32, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(31, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(1, peaks.len());
 
         let index = 1;
@@ -803,7 +825,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -814,8 +836,8 @@ mod mmr_test {
     fn seventeen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..17).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(33, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(32, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(2, peaks.len());
 
         let index = 1;
@@ -824,7 +846,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::ring_zero(),
             index,
         );
@@ -835,8 +857,8 @@ mod mmr_test {
     fn eighteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (10..28).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(35, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(34, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(2, peaks.len());
 
         let index = 16;
@@ -845,7 +867,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::new(18),
             index,
         );
@@ -856,8 +878,8 @@ mod mmr_test {
     fn nineteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..19).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
-        assert_eq!(36, mmr.get_digest_count());
-        let peaks = mmr.get_peaks();
+        assert_eq!(35, mmr.count_nodes());
+        let peaks = mmr.get_peaks_with_heights();
         assert_eq!(3, peaks.len());
 
         let (authentication_path, peaks) = mmr.get_proof(32);
@@ -867,7 +889,7 @@ mod mmr_test {
             mmr.get_root(),
             &authentication_path,
             &peaks,
-            mmr.get_digest_count(),
+            mmr.count_nodes(),
             BFieldElement::new(16),
             32,
         );
@@ -882,7 +904,7 @@ mod mmr_test {
                 mmr.get_root(),
                 &authentication_path,
                 &peaks,
-                mmr.get_digest_count(),
+                mmr.count_nodes(),
                 input[i],
                 *index as usize,
             );
