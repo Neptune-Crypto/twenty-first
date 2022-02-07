@@ -34,7 +34,7 @@ impl Mmr {
         peaks: &[HashDigest],
         size: usize,
         value: V,
-        index: usize,
+        node_index: usize,
     ) -> bool {
         // Verify that peaks match root
         let matching_root = root == Self::get_root_from_peaks(peaks, size);
@@ -45,10 +45,10 @@ impl Mmr {
         let value_hash = *hasher.finalize().as_bytes();
         hasher.reset();
         let mut acc_hash = value_hash;
-        let mut acc_index = index;
+        let mut acc_index = node_index;
         let mut hasher = blake3::Hasher::new();
         for hash in authentication_path {
-            let (acc_right, _acc_height) = Self::is_right_child(acc_index);
+            let (acc_right, _acc_height) = Self::right_child_and_height(acc_index);
             // hasher.update(&acc_index.to_be_bytes());
             if acc_right {
                 hasher.update(hash);
@@ -66,13 +66,13 @@ impl Mmr {
     }
 
     /// Return (authentication_path, peaks)
-    pub fn get_proof(&self, n: usize) -> (Vec<HashDigest>, Vec<HashDigest>) {
+    pub fn get_proof(&self, node_index: usize) -> (Vec<HashDigest>, Vec<HashDigest>) {
         // A proof consists of an authentication path
         // and a list of peaks that must hash to the root
 
         // Find out how long the authentication path is
         let mut top_height: i32 = -1;
-        let mut parent_index = n;
+        let mut parent_index = node_index;
         while parent_index < self.digests.len() {
             parent_index = Self::parent(parent_index);
             top_height += 1;
@@ -80,8 +80,8 @@ impl Mmr {
 
         // Build the authentication path
         let mut authentication_path: Vec<HashDigest> = vec![];
-        let mut index = n;
-        let (mut index_is_right_child, mut index_height) = Self::is_right_child(index);
+        let mut index = node_index;
+        let (mut index_is_right_child, mut index_height) = Self::right_child_and_height(index);
         while index_height < top_height as usize {
             if index_is_right_child {
                 let left_sibling_index = Self::left_sibling(index, index_height);
@@ -91,7 +91,7 @@ impl Mmr {
                 authentication_path.push(self.digests[right_sibling_index]);
             }
             index = Self::parent(index);
-            let next_index_info = Self::is_right_child(index);
+            let next_index_info = Self::right_child_and_height(index);
             index_is_right_child = next_index_info.0;
             index_height = next_index_info.1;
         }
@@ -99,17 +99,17 @@ impl Mmr {
         (authentication_path, self.get_peaks())
     }
 
-    fn get_root_from_peaks(peaks: &[HashDigest], size: usize) -> HashDigest {
+    fn get_root_from_peaks(peaks: &[HashDigest], node_count: usize) -> HashDigest {
         let peaks_count: usize = peaks.len();
         let mut hasher = blake3::Hasher::new();
-        hasher.update(&size.to_be_bytes());
+        hasher.update(&node_count.to_be_bytes());
         hasher.update(&peaks[peaks_count - 1]);
         let mut acc: HashDigest = *hasher.finalize().as_bytes();
         for i in 1..peaks_count {
             hasher.update(&peaks[peaks_count - 1 - i]);
             acc = *hasher.finalize().as_bytes();
             hasher.reset();
-            hasher.update(&size.to_be_bytes());
+            hasher.update(&node_count.to_be_bytes());
             hasher.update(&acc);
         }
 
@@ -132,7 +132,7 @@ impl Mmr {
         // 4. Once new node is found, jump to right sibling (will not be included)
         // 5. Take left child of sibling, continue until a node in tree is found
         let mut peaks: Vec<HashDigest> = vec![];
-        let (mut top_peak, mut top_height) = Self::own_leftmost_peak(self.digests.len() - 1);
+        let (mut top_peak, mut top_height) = Self::leftmost_ancestor(self.digests.len() - 1);
         if top_peak > self.digests.len() - 1 {
             top_peak = Self::left_child(top_peak, top_height);
             top_height -= 1;
@@ -156,20 +156,21 @@ impl Mmr {
     }
 
     #[inline]
-    fn left_child(own_index: usize, own_height: usize) -> usize {
-        own_index - (1 << own_height)
+    fn left_child(node_index: usize, height: usize) -> usize {
+        node_index - (1 << height)
     }
 
     #[inline]
-    fn right_child(own_index: usize) -> usize {
-        own_index - 1
+    fn right_child(node_index: usize) -> usize {
+        node_index - 1
     }
 
-    // Get index and height of own leftmost peak
-    fn own_leftmost_peak(own_index: usize) -> (usize, usize) {
+    // Get index and height of leftmost ancestor
+    // This ancestor does *not* have to be in the MMR
+    fn leftmost_ancestor(node_index: usize) -> (usize, usize) {
         let mut h = 0;
         let mut ret = 1;
-        while ret < own_index {
+        while ret < node_index {
             h += 1;
             ret = (1 << (h + 1)) - 1;
         }
@@ -177,9 +178,10 @@ impl Mmr {
         (ret, h)
     }
 
-    fn is_right_child(n: usize) -> (bool, usize) {
-        // 1. Find own_leftmost_peak(n), if own_leftmost_peak(n) == n => left_child (false)
-        // 2. Let node = own_leftmost_peak(n)
+    /// Return the tuple: (is_right_child, height)
+    fn right_child_and_height(node_index: usize) -> (bool, usize) {
+        // 1. Find leftmost_ancestor(n), if leftmost_ancestor(n) == n => left_child (false)
+        // 2. Let node = leftmost_ancestor(n)
         // 3. while(true):
         //    if n == left_child(node):
         //        return false
@@ -191,24 +193,24 @@ impl Mmr {
         //        node = right_child(node);
 
         // 1.
-        let (own_leftmost_peak, peak_height) = Self::own_leftmost_peak(n);
-        if own_leftmost_peak == n {
-            return (false, peak_height);
+        let (leftmost_ancestor, ancestor_height) = Self::leftmost_ancestor(node_index);
+        if leftmost_ancestor == node_index {
+            return (false, ancestor_height);
         }
 
-        let mut node = own_leftmost_peak;
-        let mut height = peak_height;
+        let mut node = leftmost_ancestor;
+        let mut height = ancestor_height;
         loop {
             let left_child = Self::left_child(node, height);
             height -= 1;
-            if n == left_child {
+            if node_index == left_child {
                 return (false, height);
             }
-            if n < left_child {
+            if node_index < left_child {
                 node = left_child;
             } else {
                 let right_child = Self::right_child(node);
-                if n == right_child {
+                if node_index == right_child {
                     return (true, height);
                 }
                 node = right_child;
@@ -216,37 +218,37 @@ impl Mmr {
         }
     }
 
-    fn parent(n: usize) -> usize {
-        let (right, height) = Self::is_right_child(n);
+    fn parent(node_index: usize) -> usize {
+        let (right, height) = Self::right_child_and_height(node_index);
 
         if right {
-            n + 1
+            node_index + 1
         } else {
-            n + (1 << (height + 1))
+            node_index + (1 << (height + 1))
         }
     }
 
     #[inline]
-    fn left_sibling(own_index: usize, own_height: usize) -> usize {
-        own_index - (1 << (own_height + 1)) + 1
+    fn left_sibling(node_index: usize, height: usize) -> usize {
+        node_index - (1 << (height + 1)) + 1
     }
 
     #[inline]
-    fn right_sibling(own_index: usize, own_height: usize) -> usize {
-        own_index + (1 << (own_height + 1)) - 1
+    fn right_sibling(node_index: usize, height: usize) -> usize {
+        node_index + (1 << (height + 1)) - 1
     }
 
     fn append_parents(&mut self, left_child: &HashDigest, right_child: &HashDigest) {
-        let own_index = self.digests.len();
+        let node_index = self.digests.len();
         let mut hasher = blake3::Hasher::new();
         // hasher.update(&own_index.to_be_bytes());
         hasher.update(left_child);
         hasher.update(right_child);
         let own_hash = *hasher.finalize().as_bytes();
         self.digests.push(own_hash);
-        let (parent_needed, own_height) = Self::is_right_child(own_index);
+        let (parent_needed, own_height) = Self::right_child_and_height(node_index);
         if parent_needed {
-            let left_sibling_hash = self.digests[Self::left_sibling(own_index, own_height)];
+            let left_sibling_hash = self.digests[Self::left_sibling(node_index, own_height)];
             self.append_parents(&left_sibling_hash, &own_hash);
         }
     }
@@ -255,15 +257,15 @@ impl Mmr {
     where
         V: Clone + Hash + Serialize,
     {
-        let own_index = self.digests.len();
+        let node_index = self.digests.len();
         let mut hasher = blake3::Hasher::new();
         // hasher.update(&own_index.to_be_bytes());
         hasher.update(&bincode::serialize(value).expect("Encoding failed"));
         let own_hash = *hasher.finalize().as_bytes();
         self.digests.push(own_hash);
-        let (parent_needed, own_height) = Self::is_right_child(own_index);
+        let (parent_needed, own_height) = Self::right_child_and_height(node_index);
         if parent_needed {
-            let left_sibling_hash = self.digests[Self::left_sibling(own_index, own_height)];
+            let left_sibling_hash = self.digests[Self::left_sibling(node_index, own_height)];
             self.append_parents(&left_sibling_hash, &own_hash);
         }
     }
@@ -290,8 +292,28 @@ mod mmr_test {
         ];
 
         for (i, anticipation) in anticipations.iter().enumerate() {
-            assert!(Mmr::is_right_child(i + 1).0 == *anticipation);
+            assert!(Mmr::right_child_and_height(i + 1).0 == *anticipation);
         }
+    }
+
+    #[test]
+    fn leftmost_ancestor_test() {
+        assert_eq!((1, 0), Mmr::leftmost_ancestor(1));
+        assert_eq!((3, 1), Mmr::leftmost_ancestor(2));
+        assert_eq!((3, 1), Mmr::leftmost_ancestor(3));
+        assert_eq!((7, 2), Mmr::leftmost_ancestor(4));
+        assert_eq!((7, 2), Mmr::leftmost_ancestor(5));
+        assert_eq!((7, 2), Mmr::leftmost_ancestor(6));
+        assert_eq!((7, 2), Mmr::leftmost_ancestor(7));
+        assert_eq!((15, 3), Mmr::leftmost_ancestor(8));
+        assert_eq!((15, 3), Mmr::leftmost_ancestor(9));
+        assert_eq!((15, 3), Mmr::leftmost_ancestor(10));
+        assert_eq!((15, 3), Mmr::leftmost_ancestor(11));
+        assert_eq!((15, 3), Mmr::leftmost_ancestor(12));
+        assert_eq!((15, 3), Mmr::leftmost_ancestor(13));
+        assert_eq!((15, 3), Mmr::leftmost_ancestor(14));
+        assert_eq!((15, 3), Mmr::leftmost_ancestor(15));
+        assert_eq!((31, 4), Mmr::leftmost_ancestor(16));
     }
 
     #[test]
