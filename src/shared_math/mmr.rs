@@ -24,6 +24,30 @@ impl Mmr {
         new_mmr
     }
 
+    /// Convert from node index to data index in log(size) time
+    pub fn node_index_to_data_index(node_index: usize) -> Option<usize> {
+        let (_right, height) = Self::right_child_and_height(node_index);
+        if height != 0 {
+            return None;
+        }
+
+        let (mut node, mut height) = Self::leftmost_ancestor(node_index);
+        let mut data_index = 0;
+        while height > 0 {
+            let left_child = Self::left_child(node, height);
+            if node_index <= left_child {
+                node = left_child;
+                height -= 1;
+            } else {
+                node = Self::right_child(node);
+                height -= 1;
+                data_index += 1 << height;
+            }
+        }
+
+        Some(data_index)
+    }
+
     pub fn get_digest_count(&self) -> usize {
         self.digests.len()
     }
@@ -165,7 +189,7 @@ impl Mmr {
         node_index - 1
     }
 
-    // Get index and height of leftmost ancestor
+    /// Get (index, height) of leftmost ancestor
     // This ancestor does *not* have to be in the MMR
     fn leftmost_ancestor(node_index: usize) -> (usize, usize) {
         let mut h = 0;
@@ -324,6 +348,32 @@ mod mmr_test {
         assert_eq!(15, Mmr::left_sibling(30, 3));
         assert_eq!(22, Mmr::left_sibling(29, 2));
         assert_eq!(7, Mmr::left_sibling(14, 2));
+    }
+
+    #[test]
+    fn node_index_to_data_index_test() {
+        assert_eq!(Some(0), Mmr::node_index_to_data_index(1));
+        assert_eq!(Some(1), Mmr::node_index_to_data_index(2));
+        assert_eq!(None, Mmr::node_index_to_data_index(3));
+        assert_eq!(Some(2), Mmr::node_index_to_data_index(4));
+        assert_eq!(Some(3), Mmr::node_index_to_data_index(5));
+        assert_eq!(None, Mmr::node_index_to_data_index(6));
+        assert_eq!(None, Mmr::node_index_to_data_index(7));
+        assert_eq!(Some(4), Mmr::node_index_to_data_index(8));
+        assert_eq!(Some(5), Mmr::node_index_to_data_index(9));
+        assert_eq!(None, Mmr::node_index_to_data_index(10));
+        assert_eq!(Some(6), Mmr::node_index_to_data_index(11));
+        assert_eq!(Some(7), Mmr::node_index_to_data_index(12));
+        assert_eq!(None, Mmr::node_index_to_data_index(13));
+        assert_eq!(None, Mmr::node_index_to_data_index(14));
+        assert_eq!(None, Mmr::node_index_to_data_index(15));
+        assert_eq!(Some(8), Mmr::node_index_to_data_index(16));
+        assert_eq!(Some(9), Mmr::node_index_to_data_index(17));
+        assert_eq!(None, Mmr::node_index_to_data_index(18));
+        assert_eq!(Some(10), Mmr::node_index_to_data_index(19));
+        assert_eq!(Some(11), Mmr::node_index_to_data_index(20));
+        assert_eq!(None, Mmr::node_index_to_data_index(21));
+        assert_eq!(None, Mmr::node_index_to_data_index(22));
     }
 
     #[test]
