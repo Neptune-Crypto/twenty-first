@@ -1,6 +1,8 @@
 use serde::Serialize;
 use std::hash::Hash;
 
+use super::other::log_2_floor;
+
 type HashDigest = [u8; 32];
 const BLAKE3ZERO: [u8; 32] = [0u8; 32];
 
@@ -22,6 +24,39 @@ impl Mmr {
         }
 
         new_mmr
+    }
+
+    fn get_height_from_data_index(data_index: usize) -> usize {
+        log_2_floor(data_index as u64 + 1) as usize
+    }
+
+    fn non_leaf_nodes_left(data_index: usize) -> usize {
+        if data_index == 0 {
+            return 0;
+        }
+
+        let mut acc = 0;
+        let mut data_index_acc = data_index;
+        while data_index_acc > 0 {
+            // Accumulate how many nodes in the tree of the nearest left neighbor that are not leafs.
+            // We count this number for the nearest left neighbor since only the non-leafs in that
+            // tree were inserted prior to the leaf this function is called for.
+            // For a tree of height 2, there are 2^2 - 1 non-leaf nodes, note that height starts at
+            // 0.
+            // Since more than one subtree left of the requested index can contain non-leafs, we have
+            // to run this accumulater untill data_index_acc is zero.
+            let left_data_height = Self::get_height_from_data_index(data_index_acc - 1);
+            acc += (1 << left_data_height) - 1;
+            data_index_acc -= 1 << left_data_height;
+        }
+
+        acc
+    }
+
+    pub fn data_index_to_node_index(data_index: usize) -> usize {
+        let diff = Self::non_leaf_nodes_left(data_index);
+
+        data_index + diff + 1
     }
 
     /// Convert from node index to data index in log(size) time
@@ -297,8 +332,73 @@ impl Mmr {
 
 #[cfg(test)]
 mod mmr_test {
+    use rand::RngCore;
+
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
+
+    #[test]
+    fn data_index_to_node_index_test() {
+        assert_eq!(1, Mmr::data_index_to_node_index(0));
+        assert_eq!(2, Mmr::data_index_to_node_index(1));
+        assert_eq!(4, Mmr::data_index_to_node_index(2));
+        assert_eq!(5, Mmr::data_index_to_node_index(3));
+        assert_eq!(8, Mmr::data_index_to_node_index(4));
+        assert_eq!(9, Mmr::data_index_to_node_index(5));
+        assert_eq!(11, Mmr::data_index_to_node_index(6));
+        assert_eq!(12, Mmr::data_index_to_node_index(7));
+        assert_eq!(16, Mmr::data_index_to_node_index(8));
+        assert_eq!(17, Mmr::data_index_to_node_index(9));
+        assert_eq!(19, Mmr::data_index_to_node_index(10));
+        assert_eq!(20, Mmr::data_index_to_node_index(11));
+        assert_eq!(23, Mmr::data_index_to_node_index(12));
+        assert_eq!(24, Mmr::data_index_to_node_index(13));
+    }
+
+    #[test]
+    fn non_leaf_nodes_left_test() {
+        assert_eq!(0, Mmr::non_leaf_nodes_left(0));
+        assert_eq!(0, Mmr::non_leaf_nodes_left(1));
+        assert_eq!(1, Mmr::non_leaf_nodes_left(2));
+        assert_eq!(1, Mmr::non_leaf_nodes_left(3));
+        assert_eq!(3, Mmr::non_leaf_nodes_left(4));
+        assert_eq!(3, Mmr::non_leaf_nodes_left(5));
+        assert_eq!(4, Mmr::non_leaf_nodes_left(6));
+        assert_eq!(4, Mmr::non_leaf_nodes_left(7));
+        assert_eq!(7, Mmr::non_leaf_nodes_left(8));
+        assert_eq!(7, Mmr::non_leaf_nodes_left(9));
+        assert_eq!(8, Mmr::non_leaf_nodes_left(10));
+        assert_eq!(8, Mmr::non_leaf_nodes_left(11));
+        assert_eq!(10, Mmr::non_leaf_nodes_left(12));
+        assert_eq!(10, Mmr::non_leaf_nodes_left(13));
+    }
+
+    #[test]
+    fn get_height_from_data_index_test() {
+        assert_eq!(0, Mmr::get_height_from_data_index(0));
+        assert_eq!(1, Mmr::get_height_from_data_index(1));
+        assert_eq!(1, Mmr::get_height_from_data_index(2));
+        assert_eq!(2, Mmr::get_height_from_data_index(3));
+        assert_eq!(2, Mmr::get_height_from_data_index(4));
+        assert_eq!(2, Mmr::get_height_from_data_index(5));
+        assert_eq!(2, Mmr::get_height_from_data_index(6));
+        assert_eq!(3, Mmr::get_height_from_data_index(7));
+        assert_eq!(3, Mmr::get_height_from_data_index(8));
+    }
+
+    #[test]
+    fn data_index_node_index_pbt() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..100 {
+            let rand = rng.next_u32();
+            let inversion_result =
+                Mmr::node_index_to_data_index(Mmr::data_index_to_node_index(rand as usize));
+            match inversion_result {
+                None => panic!(),
+                Some(inversion) => assert_eq!(rand, inversion as u32),
+            }
+        }
+    }
 
     #[test]
     fn is_right_child_test() {
