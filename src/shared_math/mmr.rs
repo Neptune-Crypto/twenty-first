@@ -305,6 +305,22 @@ mod mmr_test {
     }
 
     #[test]
+    fn one_input_mmr_test() {
+        let element = BFieldElement::new(14);
+        let input: Vec<BFieldElement> = vec![element];
+        let mmr: Mmr = Mmr::init(&input);
+        assert_eq!(2, mmr.get_digest_count());
+        let peaks = mmr.get_peaks();
+        assert_eq!(1, peaks.len());
+        let (authentication_path, peaks) = mmr.get_proof(1);
+        let root = mmr.get_root();
+        let size = mmr.get_digest_count();
+
+        let valid = Mmr::verify(root, &authentication_path, &peaks, size, element, 1);
+        assert!(valid);
+    }
+
+    #[test]
     fn two_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..2).map(BFieldElement::new).collect();
         let mmr: Mmr = Mmr::init(&input);
