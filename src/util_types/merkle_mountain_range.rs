@@ -5,11 +5,7 @@ use std::marker::PhantomData;
 ///
 /// - `D`: a hash digest
 /// - `H`: a `Hasher<D>`
-pub struct MerkleMountainRange<D, H>
-where
-    D: ToDigest<D> + PartialEq + Copy,
-    H: Hasher<Digest = D> + Sized,
-{
+pub struct MerkleMountainRange<D, H> {
     pub digests: Vec<D>,
     _hasher: PhantomData<H>,
 }
@@ -189,10 +185,14 @@ mod merkle_mountain_range_test {
     pub fn gotta_go_bfield_test() {
         // 1. Create a bunch of hashes
         let mut rng = rand::thread_rng();
-        let hashes = BFieldElement::random_elements(130, &mut rng);
+        let hashes = vec![
+            BFieldElement::random_elements(5, &mut rng),
+            BFieldElement::random_elements(5, &mut rng),
+            BFieldElement::random_elements(5, &mut rng),
+        ];
 
         // 2. Insert them into MMR
-        type BFHash = BFieldElement;
+        type BFHash = Vec<BFieldElement>;
         type BFHasher = RescuePrimeProduction;
         let mmr = MerkleMountainRange::<BFHash, BFHasher>::from_leaf_hashes(&hashes);
 
