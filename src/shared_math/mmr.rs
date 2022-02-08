@@ -1,3 +1,4 @@
+use num_traits::Zero;
 use serde::Serialize;
 use std::hash::Hash;
 
@@ -330,7 +331,7 @@ impl Mmr {
         }
     }
 
-    pub fn append_with_value<V>(&mut self, value: &V)
+    pub fn append_with_value<V>(&mut self, value: &V) -> HashDigest
     where
         V: Clone + Hash + Serialize,
     {
@@ -345,6 +346,39 @@ impl Mmr {
             let left_sibling_hash = self.digests[Self::left_sibling(node_index, own_height)];
             self.append_parents(&left_sibling_hash, &own_hash);
         }
+
+        own_hash
+    }
+
+    /// With knowledge of old peaks, old size (leaf count), new leaf hash, and new peaks, verify that
+    /// append is correct.
+    pub fn verify_append(
+        old_peaks: &[HashDigest],
+        old_leaf_count: usize,
+        new_leaf_hash: HashDigest,
+        new_peaks: &[HashDigest],
+    ) -> bool {
+        let mut new_node_index = Self::data_index_to_node_index(old_leaf_count);
+        let (mut new_node_is_right_child, height) = Self::right_child_and_height(new_node_index);
+        assert!(height.is_zero()); // TODO: Remove this superfluous assert
+
+        // If new node is not a right child, the new peak list is just the old one
+        // with the new leaf hash appended
+        let mut calculated_peaks: Vec<HashDigest> = old_peaks.to_vec();
+        calculated_peaks.push(new_leaf_hash);
+        while new_node_is_right_child {
+            let new_hash = calculated_peaks.pop().unwrap();
+            let previous_peak = calculated_peaks.pop().unwrap();
+
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(&previous_peak);
+            hasher.update(&new_hash);
+            calculated_peaks.push(*hasher.finalize().as_bytes());
+            new_node_index += 1;
+            new_node_is_right_child = Self::right_child_and_height(new_node_index).0;
+        }
+
+        calculated_peaks == new_peaks
     }
 }
 
@@ -498,27 +532,44 @@ mod mmr_test {
     fn one_input_mmr_test() {
         let element = BFieldElement::new(14);
         let input: Vec<BFieldElement> = vec![element];
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(1, mmr.count_leaves());
         assert_eq!(1, mmr.count_nodes());
-        let peaks_and_heights = mmr.get_peaks_with_heights();
-        assert_eq!(1, peaks_and_heights.len());
-        assert_eq!(0, peaks_and_heights[0].1);
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(1, original_peaks_and_heights.len());
+        assert_eq!(0, original_peaks_and_heights[0].1);
         let (authentication_path, peaks) = mmr.prove_membership(1);
         let root = mmr.bag_peaks();
 
         let valid = Mmr::verify_membership(root, &authentication_path, &peaks, 1, element, 1);
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(1, new_peaks_and_heights.len());
+        assert_eq!(1, new_peaks_and_heights[0].1);
+
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn two_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..2).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(2, mmr.count_leaves());
         assert_eq!(3, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(1, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(1, original_peaks_and_heights.len());
         let (authentication_path, peaks) = mmr.prove_membership(1);
         let root = mmr.bag_peaks();
         let size = mmr.count_nodes();
@@ -532,16 +583,30 @@ mod mmr_test {
             1,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            2,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn three_input_mmr_test() {
         let input: Vec<BFieldElement> = (4..=6).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(3, mmr.count_leaves());
         assert_eq!(4, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(2, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(2, original_peaks_and_heights.len());
 
         for index in vec![1, 2, 3] {
             let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -555,16 +620,30 @@ mod mmr_test {
             );
             assert!(valid);
         }
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            3,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn four_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..4).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(4, mmr.count_leaves());
         assert_eq!(7, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(1, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(1, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -577,16 +656,30 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            4,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn fiveinput_mmr_test() {
         let input: Vec<BFieldElement> = (0..5).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(5, mmr.count_leaves());
         assert_eq!(8, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(2, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(2, original_peaks_and_heights.len());
 
         for (i, index) in vec![1, 2, 4, 5, 8].iter().enumerate() {
             let (authentication_path, peaks) = mmr.prove_membership(*index);
@@ -600,16 +693,30 @@ mod mmr_test {
             );
             assert!(valid);
         }
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn sixinput_mmr_test() {
         let input: Vec<BFieldElement> = (0..6).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(6, mmr.count_leaves());
         assert_eq!(10, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(2, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(2, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -622,16 +729,30 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn seven_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..7).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(7, mmr.count_leaves());
         assert_eq!(11, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(3, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(3, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -644,16 +765,30 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn eight_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..8).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(8, mmr.count_leaves());
         assert_eq!(15, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(1, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(1, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -666,15 +801,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn nine_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..9).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(16, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(2, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(2, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -687,15 +836,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn ten_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..10).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(18, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(2, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(2, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -708,15 +871,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn eleven_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..11).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(19, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(3, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(3, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -729,15 +906,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn twelve_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..12).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(22, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(2, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(2, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -750,15 +941,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn thirteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..13).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(23, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(3, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(3, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -771,15 +976,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn fourteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..14).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(25, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(3, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(3, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -792,15 +1011,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn fifteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..15).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(26, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(4, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(4, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -813,15 +1046,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn sixteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..16).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(31, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(1, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(1, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -834,15 +1081,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn seventeen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..17).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(32, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(2, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(2, original_peaks_and_heights.len());
 
         let index = 1;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -855,15 +1116,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn eighteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (10..28).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(34, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(2, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(2, original_peaks_and_heights.len());
 
         let index = 16;
         let (authentication_path, peaks) = mmr.prove_membership(index);
@@ -876,15 +1151,29 @@ mod mmr_test {
             index,
         );
         assert!(valid);
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 
     #[test]
     fn nineteen_input_mmr_test() {
         let input: Vec<BFieldElement> = (0..19).map(BFieldElement::new).collect();
-        let mmr: Mmr = Mmr::init(&input);
+        let mut mmr: Mmr = Mmr::init(&input);
         assert_eq!(35, mmr.count_nodes());
-        let peaks = mmr.get_peaks_with_heights();
-        assert_eq!(3, peaks.len());
+        let original_peaks_and_heights = mmr.get_peaks_with_heights();
+        assert_eq!(3, original_peaks_and_heights.len());
 
         let (authentication_path, peaks) = mmr.prove_membership(32);
         assert_eq!(1, authentication_path.len());
@@ -914,5 +1203,19 @@ mod mmr_test {
             );
             assert!(valid);
         }
+
+        let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
+        let new_peaks_and_heights = mmr.get_peaks_with_heights();
+        let original_peaks: Vec<HashDigest> = original_peaks_and_heights
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+        let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        assert!(Mmr::verify_append(
+            &original_peaks,
+            mmr.count_leaves() - 1,
+            new_leaf_hash,
+            &new_peaks
+        ));
     }
 }
