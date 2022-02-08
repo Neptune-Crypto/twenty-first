@@ -30,6 +30,8 @@ impl Mmr {
         log_2_floor(data_index as u64 + 1) as usize
     }
 
+    /// Count the number of non-leaf nodes that were inserted *prior* to
+    /// the insertion of this leaf.
     fn non_leaf_nodes_left(data_index: usize) -> usize {
         if data_index == 0 {
             return 0;
@@ -98,7 +100,7 @@ impl Mmr {
         acc
     }
 
-    pub fn verify<V: Clone + Hash + Serialize>(
+    pub fn verify_membership<V: Clone + Hash + Serialize>(
         root: HashDigest,
         authentication_path: &[HashDigest],
         peaks: &[HashDigest],
@@ -136,7 +138,7 @@ impl Mmr {
     }
 
     /// Return (authentication_path, peaks)
-    pub fn get_proof(&self, node_index: usize) -> (Vec<HashDigest>, Vec<HashDigest>) {
+    pub fn prove_membership(&self, node_index: usize) -> (Vec<HashDigest>, Vec<HashDigest>) {
         // A proof consists of an authentication path
         // and a list of peaks that must hash to the root
 
@@ -171,6 +173,7 @@ impl Mmr {
         (authentication_path, peaks)
     }
 
+    /// Calculate root from a list of peaks and from the node count
     fn get_root_from_peaks(peaks: &[HashDigest], node_count: usize) -> HashDigest {
         let peaks_count: usize = peaks.len();
         let mut hasher = blake3::Hasher::new();
@@ -188,8 +191,8 @@ impl Mmr {
         acc
     }
 
-    // Calculate the root for the entire MMR
-    pub fn get_root(&self) -> HashDigest {
+    /// Calculate the root for the entire MMR
+    pub fn bag_peaks(&self) -> HashDigest {
         // Follows the description for "bagging" on
         // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
         let peaks: Vec<HashDigest> = self.get_peaks_with_heights().iter().map(|x| x.0).collect();
@@ -291,6 +294,7 @@ impl Mmr {
         }
     }
 
+    /// Get the node_index of the parent
     fn parent(node_index: usize) -> usize {
         let (right, height) = Self::right_child_and_height(node_index);
 
@@ -500,10 +504,10 @@ mod mmr_test {
         let peaks_and_heights = mmr.get_peaks_with_heights();
         assert_eq!(1, peaks_and_heights.len());
         assert_eq!(0, peaks_and_heights[0].1);
-        let (authentication_path, peaks) = mmr.get_proof(1);
-        let root = mmr.get_root();
+        let (authentication_path, peaks) = mmr.prove_membership(1);
+        let root = mmr.bag_peaks();
 
-        let valid = Mmr::verify(root, &authentication_path, &peaks, 1, element, 1);
+        let valid = Mmr::verify_membership(root, &authentication_path, &peaks, 1, element, 1);
         assert!(valid);
     }
 
@@ -515,11 +519,11 @@ mod mmr_test {
         assert_eq!(3, mmr.count_nodes());
         let peaks = mmr.get_peaks_with_heights();
         assert_eq!(1, peaks.len());
-        let (authentication_path, peaks) = mmr.get_proof(1);
-        let root = mmr.get_root();
+        let (authentication_path, peaks) = mmr.prove_membership(1);
+        let root = mmr.bag_peaks();
         let size = mmr.count_nodes();
 
-        let valid = Mmr::verify(
+        let valid = Mmr::verify_membership(
             root,
             &authentication_path,
             &peaks,
@@ -540,9 +544,9 @@ mod mmr_test {
         assert_eq!(2, peaks.len());
 
         for index in vec![1, 2, 3] {
-            let (authentication_path, peaks) = mmr.get_proof(index);
-            let valid = Mmr::verify(
-                mmr.get_root(),
+            let (authentication_path, peaks) = mmr.prove_membership(index);
+            let valid = Mmr::verify_membership(
+                mmr.bag_peaks(),
                 &authentication_path,
                 &peaks,
                 mmr.count_nodes(),
@@ -563,9 +567,9 @@ mod mmr_test {
         assert_eq!(1, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -585,9 +589,9 @@ mod mmr_test {
         assert_eq!(2, peaks.len());
 
         for (i, index) in vec![1, 2, 4, 5, 8].iter().enumerate() {
-            let (authentication_path, peaks) = mmr.get_proof(*index);
-            let valid = Mmr::verify(
-                mmr.get_root(),
+            let (authentication_path, peaks) = mmr.prove_membership(*index);
+            let valid = Mmr::verify_membership(
+                mmr.bag_peaks(),
                 &authentication_path,
                 &peaks,
                 mmr.count_nodes(),
@@ -608,9 +612,9 @@ mod mmr_test {
         assert_eq!(2, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -630,9 +634,9 @@ mod mmr_test {
         assert_eq!(3, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -652,9 +656,9 @@ mod mmr_test {
         assert_eq!(1, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -673,9 +677,9 @@ mod mmr_test {
         assert_eq!(2, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -694,9 +698,9 @@ mod mmr_test {
         assert_eq!(2, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -715,9 +719,9 @@ mod mmr_test {
         assert_eq!(3, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -736,9 +740,9 @@ mod mmr_test {
         assert_eq!(2, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -757,9 +761,9 @@ mod mmr_test {
         assert_eq!(3, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -778,9 +782,9 @@ mod mmr_test {
         assert_eq!(3, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -799,9 +803,9 @@ mod mmr_test {
         assert_eq!(4, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -820,9 +824,9 @@ mod mmr_test {
         assert_eq!(1, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -841,9 +845,9 @@ mod mmr_test {
         assert_eq!(2, peaks.len());
 
         let index = 1;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -862,9 +866,9 @@ mod mmr_test {
         assert_eq!(2, peaks.len());
 
         let index = 16;
-        let (authentication_path, peaks) = mmr.get_proof(index);
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let (authentication_path, peaks) = mmr.prove_membership(index);
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -882,11 +886,11 @@ mod mmr_test {
         let peaks = mmr.get_peaks_with_heights();
         assert_eq!(3, peaks.len());
 
-        let (authentication_path, peaks) = mmr.get_proof(32);
+        let (authentication_path, peaks) = mmr.prove_membership(32);
         assert_eq!(1, authentication_path.len());
         assert_eq!(3, peaks.len());
-        let valid = Mmr::verify(
-            mmr.get_root(),
+        let valid = Mmr::verify_membership(
+            mmr.bag_peaks(),
             &authentication_path,
             &peaks,
             mmr.count_nodes(),
@@ -899,9 +903,9 @@ mod mmr_test {
             .iter()
             .enumerate()
         {
-            let (authentication_path, peaks) = mmr.get_proof(*index as usize);
-            let valid = Mmr::verify(
-                mmr.get_root(),
+            let (authentication_path, peaks) = mmr.prove_membership(*index as usize);
+            let valid = Mmr::verify_membership(
+                mmr.bag_peaks(),
                 &authentication_path,
                 &peaks,
                 mmr.count_nodes(),
