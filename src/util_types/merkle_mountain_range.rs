@@ -1,4 +1,4 @@
-use super::simple_hasher::{AsBytes, Hasher};
+use super::simple_hasher::{Hasher, ToDigest};
 use std::marker::PhantomData;
 
 /// Type parameters:
@@ -7,8 +7,8 @@ use std::marker::PhantomData;
 /// - `H`: a `Hasher<D>`
 pub struct MerkleMountainRange<D, H>
 where
-    D: AsBytes + PartialEq + Copy,
-    H: Hasher<D, Digest = D>,
+    D: ToDigest<D> + PartialEq + Copy,
+    H: Hasher<Digest = D> + Sized,
 {
     pub digests: Vec<D>,
     _hasher: PhantomData<H>,
@@ -16,8 +16,8 @@ where
 
 impl<D, H> MerkleMountainRange<D, H>
 where
-    D: AsBytes + PartialEq + Copy,
-    H: Hasher<D, Digest = D>,
+    D: ToDigest<D> + PartialEq + Copy,
+    H: Hasher<Digest = D>,
 {
     /// Create MMR from `leaf_hashes` by appending each progressively.
     pub fn from_leaf_hashes(leaf_hashes: &[D]) -> Self {
@@ -143,7 +143,9 @@ fn right_child(n: usize) -> usize {
 #[cfg(test)]
 mod merkle_mountain_range_test {
     use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::traits::GetRandomElements;
+    use crate::util_types::simple_hasher::RescuePrimeProduction;
     use rand::prelude::ThreadRng;
     use rand::RngCore;
 
@@ -174,11 +176,27 @@ mod merkle_mountain_range_test {
             let hashes = blake3::Hash::random_elements(n, &mut rng);
 
             // 2. Insert them into MMR
-            // mmr: MerkleMountainRange<blake3::Hash, blake3::Hasher as Hasher<blake3::Hash>>
-            let mmr = MerkleMountainRange::from_leaf_hashes(&hashes);
+            type B3Hash = blake3::Hash;
+            type B3Hasher = blake3::Hasher;
+            let mmr = MerkleMountainRange::<B3Hash, B3Hasher>::from_leaf_hashes(&hashes);
 
             // 3. Validate MMR
             assert!(mmr.verify());
         }
+    }
+
+    #[test]
+    pub fn gotta_go_bfield_test() {
+        // 1. Create a bunch of hashes
+        let mut rng = rand::thread_rng();
+        let hashes = BFieldElement::random_elements(130, &mut rng);
+
+        // 2. Insert them into MMR
+        type BFHash = BFieldElement;
+        type BFHasher = RescuePrimeProduction;
+        let mmr = MerkleMountainRange::<BFHash, BFHasher>::from_leaf_hashes(&hashes);
+
+        // 3. Validate MMR
+        assert!(mmr.verify());
     }
 }
