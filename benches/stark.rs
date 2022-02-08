@@ -16,7 +16,7 @@ fn stark_medium(criterion: &mut Criterion) {
 
     let mut timer = TimingReporter::start();
 
-    let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+    let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
     input[0] = BFieldElement::ring_one();
     let (output, trace) = rp.eval_and_trace(&input);
     timer.elapsed("rp.eval_and_trace(...)");

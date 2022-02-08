@@ -965,7 +965,7 @@ pub mod test_stark {
         let rp: RescuePrime = params::rescue_prime_small_test_params();
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-        let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+        let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
         input[0] = BFieldElement::ring_one();
         let (output, trace) = rp.eval_and_trace(&input);
         assert_eq!(4, trace.len());
@@ -1014,7 +1014,7 @@ pub mod test_stark {
         let rp: RescuePrime = params::rescue_prime_medium_test_params();
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-        let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+        let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
         input[0] = BFieldElement::ring_one();
         let (output, trace) = rp.eval_and_trace(&input);
 
@@ -1068,9 +1068,9 @@ pub mod test_stark {
         // and an output length of 1. This leaves register 1 (execution trace
         // has two registers: `0` and `1`) without any boundary condition.
         let mut rp: RescuePrime = params::rescue_prime_small_test_params();
-        rp.input_length = 2;
+        rp.max_input_length = 2;
         let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
-        let mut input = vec![BFieldElement::ring_zero(); rp.input_length];
+        let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
         input[0] = BFieldElement::ring_one();
         let (output, trace) = rp.eval_and_trace(&input);
         assert_eq!(4, trace.len());

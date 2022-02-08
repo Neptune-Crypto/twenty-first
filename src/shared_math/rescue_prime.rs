@@ -20,7 +20,7 @@ pub struct RescuePrime {
     pub steps_count: usize,
     pub alpha: u64,
     pub alpha_inv: u64,
-    pub input_length: usize,
+    pub max_input_length: usize,
     pub output_length: usize,
     pub mds: Vec<Vec<BFieldElement>>,
     pub mds_inv: Vec<Vec<BFieldElement>>,
@@ -79,7 +79,12 @@ impl RescuePrime {
     }
 
     pub fn hash(&self, input: &[BFieldElement]) -> Vec<BFieldElement> {
-        assert_eq!(self.input_length as usize, input.len(), "Input length must match expected length for these rescue prime parameters. Expected {}, got {}", self.input_length, input.len());
+        assert!(
+            input.len() <= self.max_input_length,
+            "Input length may not exceed expected length. Got length {}, max length is {}",
+            input.len(),
+            self.max_input_length
+        );
         let mut state = input.to_vec();
         state.resize(self.m, BFieldElement::ring_zero());
 
@@ -89,7 +94,12 @@ impl RescuePrime {
     }
 
     pub fn trace(&self, input: &[BFieldElement]) -> Vec<Vec<BFieldElement>> {
-        assert_eq!(self.input_length as usize, input.len(), "Input length must match expected length for these rescue prime parameters. Expected {}, got {}", self.input_length, input.len());
+        assert!(
+            input.len() <= self.max_input_length,
+            "Input length may not exceed expected length. Got length {}, max length is {}",
+            input.len(),
+            self.max_input_length
+        );
         let mut trace: Vec<Vec<BFieldElement>> = Vec::with_capacity(self.steps_count + 1);
         let mut state = input.to_vec();
         state.resize(self.m, BFieldElement::ring_zero());
@@ -234,8 +244,15 @@ impl RescuePrime {
     ) -> Vec<BoundaryConstraint> {
         let mut bcs = vec![];
 
-        // All registers not set by the input must be zero
-        for i in self.input_length..self.m {
+        // All registers not set by the (padded) input must be zero.
+        // If the input is padded, i.e. an input shorter than
+        // `max_input_length` is given, this padding does *not*
+        // give rise to boundary conditions. If it did, information
+        // about the input to the hash would be revealed. In other
+        // words: the STARK must not reveal anything about the input,
+        // including whether it is shorter than max input length
+        // or not.
+        for i in self.max_input_length..self.m {
             let bc = BoundaryConstraint {
                 cycle: 0,
                 register: i,
@@ -278,6 +295,46 @@ mod rescue_prime_test {
     use crate::shared_math::{rescue_prime_params as params, traits::GetPrimitiveRootOfUnity};
 
     #[test]
+    #[should_panic]
+    fn disallow_too_long_input_hash_test() {
+        // Give a RP hasher with max input length 10 an input of length 11
+        let rp = params::rescue_prime_params_bfield_0();
+        rp.hash(&vec![
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+        ]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn disallow_too_long_input_trace_test() {
+        // Give a RP hasher with max input length 10 an input of length 11
+        let rp = params::rescue_prime_params_bfield_0();
+        rp.trace(&vec![
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+        ]);
+    }
+
+    #[test]
     fn hash_test_new() {
         let input0: Vec<u128> = vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         let input1: Vec<u128> = vec![
@@ -291,6 +348,14 @@ mod rescue_prime_test {
             0,
             0,
             0,
+        ];
+        // Verify that input length does not have to be 10
+        let input1_alt: Vec<u128> = vec![
+            16408223883448864076,
+            17937404513354951095,
+            17784658070603252681,
+            4690418723130302842,
+            3079713491308723285,
         ];
         let input2: Vec<u128> = vec![3, 1, 4, 1, 5, 9, 2, 6, 5, 3];
         let output0: Vec<u128> = vec![
@@ -317,14 +382,18 @@ mod rescue_prime_test {
 
         let rp = params::rescue_prime_params_bfield_0();
         for (input_ints, output_ints) in izip!(
-            vec![input0, input1, input2],
-            vec![output0, output1, output2]
+            vec![input0, input1, input1_alt, input2],
+            vec![output0, output1.clone(), output1, output2]
         ) {
             let input: Vec<BFieldElement> =
                 input_ints.into_iter().map(BFieldElement::new).collect();
             let output: Vec<BFieldElement> =
                 output_ints.into_iter().map(BFieldElement::new).collect();
             assert_eq!(output, rp.hash(&input));
+            assert_eq!(
+                &output,
+                &rp.trace(&input).last().unwrap().clone()[0..rp.output_length]
+            );
         }
     }
 
