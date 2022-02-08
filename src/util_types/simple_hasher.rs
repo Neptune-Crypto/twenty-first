@@ -27,14 +27,14 @@ pub trait ToDigest<Digest> {
 /// Trivial implementation when hashing `blake3::Hash` into `blake3::Hash`es.
 impl ToDigest<blake3::Hash> for blake3::Hash {
     fn to_digest(&self) -> &blake3::Hash {
-        &self
+        self
     }
 }
 
 /// Trivial implementation when hashing `BFieldElement` into `BFieldElement`s.
 impl ToDigest<BFieldElement> for BFieldElement {
     fn to_digest(&self) -> &BFieldElement {
-        &self
+        self
     }
 }
 
