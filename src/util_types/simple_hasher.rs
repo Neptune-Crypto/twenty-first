@@ -11,10 +11,13 @@ pub trait Hasher {
     type Digest;
 
     fn new() -> Self;
-    fn hash_one<Value: ToDigest<Self::Digest>>(&mut self, one: &Value) -> Self::Digest;
-    fn hash_two<Value: ToDigest<Self::Digest>>(&mut self, one: &Value, two: &Value)
-        -> Self::Digest;
-    fn hash_many<Value: ToDigest<Self::Digest>>(&mut self, input: &[Value]) -> Self::Digest;
+    fn hash_one<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
+    fn hash_two<Value: ToDigest<Self::Digest>>(
+        &mut self,
+        left_input: &Value,
+        right_input: &Value,
+    ) -> Self::Digest;
+    fn hash_many<Value: ToDigest<Self::Digest>>(&mut self, inputs: &[Value]) -> Self::Digest;
 }
 
 /// In order to hash arbitrary things using a `Hasher`, it must `impl ToDigest<Digest>`
@@ -106,5 +109,63 @@ impl Hasher for RescuePrimeProduction {
             input_.append(&mut digest);
         }
         self.0.hash(&input_)
+    }
+}
+
+#[cfg(test)]
+pub mod test_simple_hasher {
+
+    use super::*;
+
+    #[test]
+    fn rescue_prime_equivalence_test() {
+        let mut rpp: RescuePrimeProduction = RescuePrimeProduction::new();
+        let input0: Vec<BFieldElement> = vec![1u128, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect();
+        let expected_output0: Vec<BFieldElement> = vec![
+            BFieldElement::new(16408223883448864076),
+            BFieldElement::new(17937404513354951095),
+            BFieldElement::new(17784658070603252681),
+            BFieldElement::new(4690418723130302842),
+            BFieldElement::new(3079713491308723285),
+        ];
+        assert_eq!(expected_output0, rpp.hash_one(&input0));
+
+        let input2_left: Vec<BFieldElement> = vec![3, 1, 4, 1, 5]
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect();
+        let input2_right: Vec<BFieldElement> = vec![9, 2, 6, 5, 3]
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect();
+        let expected_output2: Vec<BFieldElement> = vec![
+            8224332136734371881,
+            8736343702647113032,
+            9660176071866133892,
+            575034608412522142,
+            13216022346578371396,
+        ]
+        .into_iter()
+        .map(BFieldElement::new)
+        .collect();
+
+        assert_eq!(expected_output2, rpp.hash_two(&input2_left, &input2_right));
+
+        let inputs_2: Vec<Vec<BFieldElement>> = vec![
+            vec![BFieldElement::new(3)],
+            vec![BFieldElement::new(1)],
+            vec![BFieldElement::new(4)],
+            vec![BFieldElement::new(1)],
+            vec![BFieldElement::new(5)],
+            vec![BFieldElement::new(9)],
+            vec![BFieldElement::new(2)],
+            vec![BFieldElement::new(6)],
+            vec![BFieldElement::new(5)],
+            vec![BFieldElement::new(3)],
+        ];
+        assert_eq!(expected_output2, rpp.hash_many(&inputs_2));
     }
 }
