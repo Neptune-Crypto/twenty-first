@@ -1,4 +1,3 @@
-use num_traits::Zero;
 use serde::Serialize;
 use std::hash::Hash;
 
@@ -176,6 +175,8 @@ impl Mmr {
 
     /// Calculate root from a list of peaks and from the node count
     fn get_root_from_peaks(peaks: &[HashDigest], node_count: usize) -> HashDigest {
+        // Follows the description for "bagging" on
+        // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
         let peaks_count: usize = peaks.len();
         let mut hasher = blake3::Hasher::new();
         hasher.update(&node_count.to_be_bytes());
@@ -194,8 +195,6 @@ impl Mmr {
 
     /// Calculate the root for the entire MMR
     pub fn bag_peaks(&self) -> HashDigest {
-        // Follows the description for "bagging" on
-        // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
         let peaks: Vec<HashDigest> = self.get_peaks_with_heights().iter().map(|x| x.0).collect();
 
         Self::get_root_from_peaks(&peaks, self.count_nodes())
@@ -353,19 +352,22 @@ impl Mmr {
     /// With knowledge of old peaks, old size (leaf count), new leaf hash, and new peaks, verify that
     /// append is correct.
     pub fn verify_append(
+        old_root: HashDigest,
         old_peaks: &[HashDigest],
         old_leaf_count: usize,
+        new_root: HashDigest,
         new_leaf_hash: HashDigest,
         new_peaks: &[HashDigest],
     ) -> bool {
-        let mut new_node_index = Self::data_index_to_node_index(old_leaf_count);
-        let (mut new_node_is_right_child, height) = Self::right_child_and_height(new_node_index);
-        assert!(height.is_zero()); // TODO: Remove this superfluous assert
+        let first_new_node_index = Self::data_index_to_node_index(old_leaf_count);
+        let (mut new_node_is_right_child, _height) =
+            Self::right_child_and_height(first_new_node_index);
 
         // If new node is not a right child, the new peak list is just the old one
         // with the new leaf hash appended
         let mut calculated_peaks: Vec<HashDigest> = old_peaks.to_vec();
         calculated_peaks.push(new_leaf_hash);
+        let mut new_node_index = first_new_node_index;
         while new_node_is_right_child {
             let new_hash = calculated_peaks.pop().unwrap();
             let previous_peak = calculated_peaks.pop().unwrap();
@@ -378,7 +380,16 @@ impl Mmr {
             new_node_is_right_child = Self::right_child_and_height(new_node_index).0;
         }
 
+        let calculated_new_root = Self::get_root_from_peaks(&calculated_peaks, new_node_index);
+        let calculated_old_root = Self::get_root_from_peaks(old_peaks, first_new_node_index - 1);
+        println!("calculated_new_root = {:?}", calculated_new_root);
+        println!("calculated_old_root = {:?}", calculated_old_root);
+        println!("old_root = {:?}", old_root);
+        println!("new_root = {:?}", new_root);
+
         calculated_peaks == new_peaks
+            && calculated_new_root == new_root
+            && calculated_old_root == old_root
     }
 }
 
@@ -539,9 +550,10 @@ mod mmr_test {
         assert_eq!(1, original_peaks_and_heights.len());
         assert_eq!(0, original_peaks_and_heights[0].1);
         let (authentication_path, peaks) = mmr.prove_membership(1);
-        let root = mmr.bag_peaks();
+        let original_root = mmr.bag_peaks();
 
-        let valid = Mmr::verify_membership(root, &authentication_path, &peaks, 1, element, 1);
+        let valid =
+            Mmr::verify_membership(original_root, &authentication_path, &peaks, 1, element, 1);
         assert!(valid);
 
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
@@ -554,9 +566,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
-            1,
+            mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -571,11 +586,11 @@ mod mmr_test {
         let original_peaks_and_heights = mmr.get_peaks_with_heights();
         assert_eq!(1, original_peaks_and_heights.len());
         let (authentication_path, peaks) = mmr.prove_membership(1);
-        let root = mmr.bag_peaks();
+        let original_root = mmr.bag_peaks();
         let size = mmr.count_nodes();
 
         let valid = Mmr::verify_membership(
-            root,
+            original_root,
             &authentication_path,
             &peaks,
             size,
@@ -591,9 +606,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
-            2,
+            mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -606,6 +624,7 @@ mod mmr_test {
         assert_eq!(3, mmr.count_leaves());
         assert_eq!(4, mmr.count_nodes());
         let original_peaks_and_heights = mmr.get_peaks_with_heights();
+
         assert_eq!(2, original_peaks_and_heights.len());
 
         for index in vec![1, 2, 3] {
@@ -621,6 +640,7 @@ mod mmr_test {
             assert!(valid);
         }
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -628,9 +648,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
-            3,
+            mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -657,6 +680,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -664,9 +688,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
-            4,
+            mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -694,6 +721,7 @@ mod mmr_test {
             assert!(valid);
         }
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -701,9 +729,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -730,6 +761,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -737,9 +769,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -766,6 +801,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -773,9 +809,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -802,6 +841,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -809,9 +849,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -837,6 +880,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -844,9 +888,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -872,6 +919,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -879,9 +927,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -907,6 +958,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -914,9 +966,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -942,6 +997,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -949,9 +1005,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -977,6 +1036,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -984,9 +1044,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -1012,6 +1075,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -1019,9 +1083,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -1047,6 +1114,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -1054,9 +1122,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -1082,6 +1153,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -1089,9 +1161,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -1117,6 +1192,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -1124,9 +1200,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -1152,6 +1231,7 @@ mod mmr_test {
         );
         assert!(valid);
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -1159,9 +1239,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
@@ -1204,6 +1287,7 @@ mod mmr_test {
             assert!(valid);
         }
 
+        let original_root = mmr.bag_peaks();
         let new_leaf_hash = mmr.append_with_value(&BFieldElement::new(201));
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<HashDigest> = original_peaks_and_heights
@@ -1211,9 +1295,12 @@ mod mmr_test {
             .map(|x| x.0)
             .collect();
         let new_peaks: Vec<HashDigest> = new_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_root = mmr.bag_peaks();
         assert!(Mmr::verify_append(
+            original_root,
             &original_peaks,
             mmr.count_leaves() - 1,
+            new_root,
             new_leaf_hash,
             &new_peaks
         ));
