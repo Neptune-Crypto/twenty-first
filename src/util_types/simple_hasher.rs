@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
 pub trait Hasher {
-    type Digest;
+    type Digest: Eq;
 
     fn new() -> Self;
     fn hash_one<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
