@@ -24,7 +24,7 @@ pub trait Hasher {
 /// where the concrete `Digest` is what's chosen for the `impl Hasher`. For example, in
 /// order to
 pub trait ToDigest<Digest> {
-    fn to_digest(&self) -> &Digest;
+    fn to_digest(&self) -> Digest;
 }
 
 /// Trivial implementation when hashing `blake3::Hash` into `blake3::Hash`es.
@@ -56,8 +56,8 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
 
 /// Trivial implementation when hashing `Vec<BFieldElement>` into `Vec<BFieldElement>`s.
 impl ToDigest<Vec<BFieldElement>> for Vec<BFieldElement> {
-    fn to_digest(&self) -> &Vec<BFieldElement> {
-        self
+    fn to_digest(&self) -> Vec<BFieldElement> {
+        self.to_owned()
     }
 }
 
@@ -108,7 +108,7 @@ impl Hasher for RescuePrimeProduction {
     }
 
     fn hash_one<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
-        self.0.hash(input.to_digest())
+        self.0.hash(&input.to_digest())
     }
 
     // TODO: Avoid list copying.
