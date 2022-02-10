@@ -1538,7 +1538,7 @@ mod merkle_tree_test {
     }
 
     #[test]
-    fn salted_merkle_tree_bug_catching_test() {
+    fn salted_merkle_tree_regression_test_0() {
         // This test was used to catch a bug in the implementation of
         // `SaltedMerkleTree::get_leafless_multi_proof_with_salts_and_values`
         // The bug that this test caught was *fixed* in 5ad285bd867bf8c6c4be380d8539ba37f4a7409a
@@ -1547,56 +1547,15 @@ mod merkle_tree_test {
         // Build a representation of the SMT made from values
         // `451282252958277131` and `3796554602848593414` as this is where the error was
         // first caught.
-        let tree = SaltedMerkleTree {
-            salts_per_value: 3,
-            salts: vec![
-                BFieldElement::new(16852022745602243699),
-                BFieldElement::new(18192741254792895208),
-                BFieldElement::new(6108973982441768052),
-                BFieldElement::new(968230590020974542),
-                BFieldElement::new(17104237224288853866),
-                BFieldElement::new(9841916779293573099),
+        let mut rng = rand::thread_rng();
+        let tree = SaltedMerkleTree::from_vec(
+            &vec![
+                BFieldElement::new(451282252958277131),
+                BFieldElement::new(3796554602848593414),
             ],
-            internal_merkle_tree: MerkleTree {
-                height: 2,
-                root_hash: [
-                    159, 150, 101, 39, 134, 168, 140, 214, 58, 157, 141, 212, 151, 254, 245, 58,
-                    117, 98, 14, 112, 190, 175, 119, 118, 28, 217, 54, 40, 243, 81, 114, 253,
-                ],
-                nodes: vec![
-                    Node {
-                        hash: [
-                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                            0, 0, 0, 0, 0, 0, 0, 0,
-                        ],
-                        value: None,
-                    },
-                    Node {
-                        hash: [
-                            159, 150, 101, 39, 134, 168, 140, 214, 58, 157, 141, 212, 151, 254,
-                            245, 58, 117, 98, 14, 112, 190, 175, 119, 118, 28, 217, 54, 40, 243,
-                            81, 114, 253,
-                        ],
-                        value: None,
-                    },
-                    Node {
-                        hash: [
-                            176, 133, 158, 205, 44, 56, 95, 238, 155, 222, 76, 72, 133, 248, 13,
-                            238, 243, 139, 246, 241, 122, 118, 233, 76, 245, 184, 197, 8, 240, 243,
-                            192, 36,
-                        ],
-                        value: Some(BFieldElement::new(451282252958277131)),
-                    },
-                    Node {
-                        hash: [
-                            176, 122, 54, 202, 237, 4, 73, 88, 103, 26, 64, 17, 246, 1, 70, 45, 20,
-                            216, 20, 231, 61, 51, 227, 221, 6, 234, 253, 217, 153, 89, 10, 171,
-                        ],
-                        value: Some(BFieldElement::new(3796554602848593414)),
-                    },
-                ],
-            },
-        };
+            3,
+            &mut rng,
+        );
         let proof_1 = tree.get_leafless_multi_proof_with_salts_and_values(&[1]);
 
         // Let's first verify the value returned in the proof as this was where the bug was
