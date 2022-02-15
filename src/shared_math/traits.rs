@@ -75,44 +75,44 @@ pub trait FromVecu8 {
     fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
 }
 
-pub trait PrimeField {
-    type Elem: Clone
-        + Eq
-        + Display
-        + Serialize
-        + DeserializeOwned
-        + PartialEq
-        + Debug
-        + IdentityValues
-        + Add<Output = Self::Elem>
-        + AddAssign
-        + SubAssign
-        + MulAssign
-        + Sub<Output = Self::Elem>
-        + Mul<Output = Self::Elem>
-        + Div<Output = Self::Elem>
-        + Neg<Output = Self::Elem>
-        + FromVecu8
-        + New
-        + CyclicGroupGenerator
-        + ModPowU32
-        + GetPrimitiveRootOfUnity
-        + Send
-        + Sync
-        + Copy
-        + Hash
-        + Inverse;
-
+pub trait PrimeField:
+    Clone
+    + Eq
+    + Display
+    + Serialize
+    + DeserializeOwned
+    + PartialEq
+    + Debug
+    + IdentityValues
+    + Add<Output = Self>
+    + AddAssign
+    + SubAssign
+    + MulAssign
+    + Sub<Output = Self>
+    + Mul<Output = Self>
+    + Div<Output = Self>
+    + Neg<Output = Self>
+    + FromVecu8
+    + New
+    + CyclicGroupGenerator
+    + ModPowU32
+    + GetPrimitiveRootOfUnity
+    + Send
+    + Sync
+    + Copy
+    + Hash
+    + Inverse
+{
     // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
-    fn batch_inversion(input: Vec<Self::Elem>) -> Vec<Self::Elem> {
+    fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
         let input_length = input.len();
         if input_length == 0 {
-            return Vec::<Self::Elem>::new();
+            return Vec::<Self>::new();
         }
 
         let zero = input[0].ring_zero();
         let one = input[0].ring_one();
-        let mut scratch: Vec<Self::Elem> = vec![zero; input_length];
+        let mut scratch: Vec<Self> = vec![zero; input_length];
         let mut acc = one;
         scratch[0] = input[0];
 

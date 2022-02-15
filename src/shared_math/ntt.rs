@@ -1,6 +1,4 @@
-use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::PrimeField;
-use crate::shared_math::traits::{IdentityValues, New};
 
 /// ## Perform NTT on slices of prime-field elements
 ///
@@ -37,7 +35,7 @@ use crate::shared_math::traits::{IdentityValues, New};
 ///
 /// This transform is performed in-place.
 #[allow(clippy::many_single_char_names)]
-pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
+pub fn ntt<PFElem: PrimeField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32) {
     let n = x.len() as u32;
 
     // `n` must be a power of 2
@@ -83,18 +81,18 @@ pub fn ntt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32)
 /// *intt(values, omega, log2(n)) = ntt(values, 1/omega, log2(n)) / n*.
 ///
 /// <pre>
-/// let original_values: Vec<PF::Elem> = ...;
+/// let original_values: Vec<PF> = ...;
 /// let mut transformed_values = original_values.clone();
-/// ntt::<PF::Elem>(&mut values, omega, log_2_n);
-/// intt::<PF::Elem>(&mut values, omega, log_2_n);
+/// ntt::<PF>(&mut values, omega, log_2_n);
+/// intt::<PF>(&mut values, omega, log_2_n);
 /// assert_eq!(original_values, transformed_values);
 /// </pre>
 ///
 /// This transform is performed in-place.
-pub fn intt<PF: PrimeField>(x: &mut [PF::Elem], omega: PF::Elem, log_2_of_n: u32) {
-    let n: PF::Elem = omega.new_from_usize(x.len());
-    let n_inv: PF::Elem = omega.ring_one() / n;
-    ntt::<PF>(x, omega.ring_one() / omega, log_2_of_n);
+pub fn intt<PFElem: PrimeField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32) {
+    let n: PFElem = omega.new_from_usize(x.len());
+    let n_inv: PFElem = omega.ring_one() / n;
+    ntt::<PFElem>(x, omega.ring_one() / omega, log_2_of_n);
     for elem in x.iter_mut() {
         *elem *= n_inv;
     }
@@ -112,6 +110,7 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
 
 #[cfg(test)]
 mod fast_ntt_attempt_tests {
+    use crate::shared_math::traits::IdentityValues;
     use crate::shared_math::{
         b_field_element::BFieldElement,
         traits::{GetPrimitiveRootOfUnity, GetRandomElements},

@@ -216,9 +216,7 @@ impl FromVecu8 for XFieldElement {
     }
 }
 
-impl PrimeField for XFieldElement {
-    type Elem = XFieldElement;
-}
+impl PrimeField for XFieldElement {}
 
 impl IdentityValues for XFieldElement {
     fn is_zero(&self) -> bool {

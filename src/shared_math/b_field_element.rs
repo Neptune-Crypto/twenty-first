@@ -232,9 +232,7 @@ impl FromVecu8 for BFieldElement {
     }
 }
 
-impl PrimeField for BFieldElement {
-    type Elem = BFieldElement;
-}
+impl PrimeField for BFieldElement {}
 
 // TODO: We implement IdentityValues so this module works in existing code, but we want to replace IdentityValues with Zero and One eventually.
 // impl Zero for BFieldElement {

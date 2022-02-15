@@ -326,9 +326,7 @@ impl<'a> Div for PrimeFieldElementFlexible {
     }
 }
 
-impl PrimeField for PrimeFieldElementFlexible {
-    type Elem = PrimeFieldElementFlexible;
-}
+impl PrimeField for PrimeFieldElementFlexible {}
 
 impl FromVecu8 for PrimeFieldElementFlexible {
     fn from_vecu8(&self, bytes: Vec<u8>) -> Self {
