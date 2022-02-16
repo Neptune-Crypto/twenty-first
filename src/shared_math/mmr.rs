@@ -1,5 +1,7 @@
-use serde::Serialize;
-use std::hash::Hash;
+use std::fmt::Debug;
+use std::{hash::Hash, marker::PhantomData};
+
+use crate::util_types::simple_hasher::{Hasher, ToDigest};
 
 use super::other::log_2_floor;
 
