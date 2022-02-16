@@ -97,8 +97,7 @@ impl Hasher for RescuePrimeProduction {
         left: &Value,
         right: &Value,
     ) -> Self::Digest {
-        let input: Vec<BFieldElement> =
-            vec![left.to_digest().to_owned(), right.to_digest().to_owned()].concat();
+        let input: Vec<BFieldElement> = vec![left.to_digest(), right.to_digest()].concat();
         self.0.hash(&input)
     }
 

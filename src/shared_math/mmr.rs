@@ -109,18 +109,15 @@ impl Mmr {
         node_index: usize,
     ) -> bool {
         // Verify that peaks match root
-        let matching_root = root == Self::get_root_from_peaks(peaks, size);
+        let matching_root = *root == Self::get_root_from_peaks(peaks, node_count);
+        let node_index = data_index_to_node_index(data_index);
 
-        let mut hasher = blake3::Hasher::new();
-        // hasher.update(&index.to_be_bytes());
-        hasher.update(&bincode::serialize(&value).expect("Encoding failed"));
-        let value_hash = *hasher.finalize().as_bytes();
-        hasher.reset();
-        let mut acc_hash = value_hash;
-        let mut acc_index = node_index;
-        let mut hasher = blake3::Hasher::new();
-        for hash in authentication_path {
-            let (acc_right, _acc_height) = Self::right_child_and_height(acc_index);
+        let mut hasher = H::new();
+        let value_hash = hasher.hash_one(value);
+        let mut acc_hash: HashDigest = value_hash;
+        let mut acc_index: usize = node_index;
+        for hash in authentication_path.iter() {
+            let (acc_right, _acc_height) = right_child_and_height(acc_index);
             // hasher.update(&acc_index.to_be_bytes());
             if acc_right {
                 hasher.update(hash);
