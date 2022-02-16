@@ -700,6 +700,49 @@ mod b_prime_field_element_test {
     }
 
     #[test]
+    fn get_primitive_root_of_unity_non_powers_of_two_test() {
+        // The below list follows from the fact that `prime = 2^32*prod_{i=0}^4(1 + 2^(2^i)) + 1`
+        let prime_minus_one_factors = vec![2, 3, 5, 17, 257, 65537];
+        for number in prime_minus_one_factors {
+            assert!(BFieldElement::ring_one()
+                .get_primitive_root_of_unity(number)
+                .0
+                .is_some());
+        }
+        assert!(BFieldElement::ring_one()
+            .get_primitive_root_of_unity(2u128.pow(32) * 65537u128)
+            .0
+            .is_some());
+        assert!(BFieldElement::ring_one()
+            .get_primitive_root_of_unity(2u128.pow(32) * 65537u128 * 257)
+            .0
+            .is_some());
+        assert!(BFieldElement::ring_one()
+            .get_primitive_root_of_unity(2u128.pow(32) * 65537u128 * 257 * 17)
+            .0
+            .is_some());
+        assert!(BFieldElement::ring_one()
+            .get_primitive_root_of_unity(2u128.pow(32) * 65537u128 * 257 * 17 * 5)
+            .0
+            .is_some());
+
+        // Largest subgroup of the multiplicative group of the B field
+        assert!(BFieldElement::ring_one()
+            .get_primitive_root_of_unity(2u128.pow(31) * 65537u128 * 257 * 17 * 5 * 3)
+            .0
+            .is_some());
+
+        // Negative test for small group sizes
+        let non_factors = vec![7, 9, 11, 18];
+        for number in non_factors {
+            assert!(BFieldElement::ring_one()
+                .get_primitive_root_of_unity(number)
+                .0
+                .is_none());
+        }
+    }
+
+    #[test]
     fn get_primitive_root_of_unity_test() {
         for i in 1..33 {
             let power = 1 << i;
