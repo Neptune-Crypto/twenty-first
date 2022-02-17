@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::{hash::Hash, marker::PhantomData};
+use std::marker::PhantomData;
 
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 
@@ -162,27 +162,24 @@ where
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     u128: ToDigest<HashDigest>,
 {
-    pub fn init<V>(data: &[V], zero: V) -> Self
-    where
-        V: Clone + Hash + ToDigest<HashDigest>,
-    {
+    pub fn init(hashes: Vec<HashDigest>, zero: HashDigest) -> Self {
         let mut new_mmr: Self = Self {
             digests: vec![zero.to_digest()],
             _hasher: PhantomData,
         };
-        for datum in data {
-            new_mmr.append_with_value(datum);
+        for hash in hashes {
+            new_mmr.archive_append(hash);
         }
 
         new_mmr
     }
 
-    pub fn verify_membership<V: Clone + Hash + ToDigest<HashDigest>>(
+    pub fn verify_membership(
         root: &HashDigest,
         authentication_path: &[HashDigest],
         peaks: &[HashDigest],
         node_count: u128,
-        value: &V,
+        value_hash: HashDigest,
         data_index: usize,
     ) -> bool {
         // Verify that peaks match root
@@ -190,7 +187,6 @@ where
         let node_index = data_index_to_node_index(data_index);
 
         let mut hasher = H::new();
-        let value_hash = hasher.hash_one(value);
         let mut acc_hash: HashDigest = value_hash;
         let mut acc_index: usize = node_index;
         for hash in authentication_path.iter() {
@@ -320,33 +316,16 @@ where
         acc
     }
 
-    fn append_parents(&mut self, left_child: &HashDigest, right_child: &HashDigest) {
+    fn archive_append(&mut self, hash: HashDigest) {
         let node_index = self.digests.len();
-        let mut hasher = H::new();
-        let own_hash: HashDigest = hasher.hash_two(left_child, right_child);
-        self.digests.push(own_hash.clone());
+        self.digests.push(hash.clone());
         let (parent_needed, own_height) = right_child_and_height(node_index);
         if parent_needed {
             let left_sibling_hash = self.digests[left_sibling(node_index, own_height)].clone();
-            self.append_parents(&left_sibling_hash, &own_hash);
+            let mut hasher = H::new();
+            let parent_hash: HashDigest = hasher.hash_two(&left_sibling_hash, &hash);
+            self.archive_append(parent_hash);
         }
-    }
-
-    pub fn append_with_value<V>(&mut self, value: &V) -> HashDigest
-    where
-        V: Clone + Hash + ToDigest<HashDigest>,
-    {
-        let node_index = self.digests.len();
-        let mut hasher = H::new();
-        let own_hash: HashDigest = hasher.hash_one(value);
-        self.digests.push(own_hash.clone());
-        let (parent_needed, own_height) = right_child_and_height(node_index);
-        if parent_needed {
-            let left_sibling_hash = self.digests[left_sibling(node_index, own_height)].clone();
-            self.append_parents(&left_sibling_hash, &own_hash);
-        }
-
-        own_hash
     }
 
     /// With knowledge of old peaks, old size (leaf count), new leaf hash, and new peaks, verify that
@@ -542,9 +521,10 @@ mod mmr_test {
     #[test]
     fn one_input_mmr_test() {
         let element = vec![BFieldElement::new(14)];
-        let input: Vec<Vec<BFieldElement>> = vec![element.clone()];
+        let mut rp = RescuePrimeProduction::new();
+        let input_hash = rp.hash_one(&element);
         let mut mmr = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
-            &input,
+            vec![input_hash.clone()],
             vec![BFieldElement::ring_zero()],
         );
         assert_eq!(1, mmr.count_leaves());
@@ -562,12 +542,13 @@ mod mmr_test {
             &authentication_path,
             &peaks,
             1,
-            &element,
+            input_hash,
             data_index,
         );
         assert!(valid);
 
-        let new_leaf_hash = mmr.append_with_value(&vec![BFieldElement::new(201)]);
+        let new_input_hash = rp.hash_one(&vec![BFieldElement::new(201)]);
+        mmr.archive_append(new_input_hash.clone());
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         assert_eq!(1, new_peaks_and_heights.len());
         assert_eq!(1, new_peaks_and_heights[0].1);
@@ -585,7 +566,7 @@ mod mmr_test {
                 &original_peaks,
                 mmr.count_leaves() - 1,
                 new_root,
-                new_leaf_hash,
+                new_input_hash,
                 &new_peaks
             )
         );
@@ -593,9 +574,11 @@ mod mmr_test {
 
     #[test]
     fn two_input_mmr_test() {
-        let input: Vec<Vec<BFieldElement>> = (0..2).map(|x| vec![BFieldElement::new(x)]).collect();
+        let values: Vec<Vec<BFieldElement>> = (0..2).map(|x| vec![BFieldElement::new(x)]).collect();
+        let mut rp = RescuePrimeProduction::new();
+        let input_hashes: Vec<Vec<BFieldElement>> = values.iter().map(|x| rp.hash_one(x)).collect();
         let mut mmr = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
-            &input,
+            input_hashes.clone(),
             vec![BFieldElement::ring_zero()],
         );
         assert_eq!(2, mmr.count_leaves());
@@ -613,109 +596,13 @@ mod mmr_test {
             &authentication_path,
             &peaks,
             size,
-            &input[data_index],
+            input_hashes[data_index].clone(),
             data_index,
         );
         assert!(valid);
 
-        let new_leaf_hash = mmr.append_with_value(&vec![BFieldElement::new(201)]);
-        let new_peaks_and_heights = mmr.get_peaks_with_heights();
-        let original_peaks: Vec<Vec<BFieldElement>> = original_peaks_and_heights
-            .iter()
-            .map(|x| x.0.to_vec())
-            .collect();
-        let new_peaks: Vec<Vec<BFieldElement>> =
-            new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
-        let new_root = mmr.bag_peaks();
-        assert!(
-            Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
-                original_root,
-                &original_peaks,
-                mmr.count_leaves() - 1,
-                new_root,
-                new_leaf_hash,
-                &new_peaks
-            )
-        );
-    }
-
-    #[test]
-    fn three_input_mmr_test() {
-        let input: Vec<Vec<BFieldElement>> = (4..=6).map(|x| vec![BFieldElement::new(x)]).collect();
-        let mut mmr = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
-            &input,
-            vec![BFieldElement::ring_zero()],
-        );
-        assert_eq!(3, mmr.count_leaves());
-        assert_eq!(4, mmr.count_nodes());
-        let original_peaks_and_heights: Vec<(Vec<BFieldElement>, usize)> =
-            mmr.get_peaks_with_heights();
-        assert_eq!(2, original_peaks_and_heights.len());
-        let original_root = mmr.bag_peaks();
-        let size = mmr.count_nodes();
-
-        for index in 0..=2 {
-            let (authentication_path, peaks) = mmr.prove_membership(index);
-            let valid = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-                &original_root,
-                &authentication_path,
-                &peaks,
-                size,
-                &input[index],
-                index,
-            );
-            assert!(valid);
-        }
-
-        let new_leaf_hash = mmr.append_with_value(&vec![BFieldElement::new(201)]);
-        let new_peaks_and_heights = mmr.get_peaks_with_heights();
-        let original_peaks: Vec<Vec<BFieldElement>> = original_peaks_and_heights
-            .iter()
-            .map(|x| x.0.to_vec())
-            .collect();
-        let new_peaks: Vec<Vec<BFieldElement>> =
-            new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
-        let new_root = mmr.bag_peaks();
-        assert!(
-            Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
-                original_root,
-                &original_peaks,
-                mmr.count_leaves() - 1,
-                new_root,
-                new_leaf_hash,
-                &new_peaks
-            )
-        );
-    }
-
-    #[test]
-    fn four_input_mmr_test() {
-        let input: Vec<Vec<BFieldElement>> = (0..4).map(|x| vec![BFieldElement::new(x)]).collect();
-        let mut mmr = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
-            &input,
-            vec![BFieldElement::ring_zero()],
-        );
-        assert_eq!(4, mmr.count_leaves());
-        assert_eq!(7, mmr.count_nodes());
-        let original_peaks_and_heights = mmr.get_peaks_with_heights();
-        assert_eq!(1, original_peaks_and_heights.len());
-        let original_root = mmr.bag_peaks();
-        let size = mmr.count_nodes();
-
-        for index in 0..=3 {
-            let (authentication_path, peaks) = mmr.prove_membership(index);
-            let valid = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-                &original_root,
-                &authentication_path,
-                &peaks,
-                size,
-                &input[index],
-                index,
-            );
-            assert!(valid);
-        }
-
-        let new_leaf_hash = mmr.append_with_value(&vec![BFieldElement::new(201)]);
+        let new_leaf_hash: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(201)]);
+        mmr.archive_append(new_leaf_hash.clone());
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
         let original_peaks: Vec<Vec<BFieldElement>> = original_peaks_and_heights
             .iter()
@@ -758,7 +645,7 @@ mod mmr_test {
             let input_hashes: Vec<Vec<BFieldElement>> =
                 input_prehashes.iter().map(|x| rp.hash(x)).collect();
             let mut mmr = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
-                &input_hashes,
+                input_hashes.clone(),
                 vec![BFieldElement::ring_zero()],
             );
             assert_eq!(data_size, mmr.count_leaves());
@@ -777,14 +664,15 @@ mod mmr_test {
                     &authentication_path,
                     &peaks,
                     node_count,
-                    &input_hashes[index],
+                    input_hashes[index].clone(),
                     index,
                 );
                 assert!(valid);
             }
 
             // Make a new MMR where we append with a value and run the verify_append
-            let new_leaf_hash = mmr.append_with_value(&vec![BFieldElement::new(201)]);
+            let new_leaf_hash = rp.hash(&vec![BFieldElement::new(201)]);
+            mmr.archive_append(new_leaf_hash.clone());
             let new_peaks_and_heights = mmr.get_peaks_with_heights();
             let original_peaks: Vec<Vec<BFieldElement>> = original_peaks_and_heights
                 .iter()
@@ -832,7 +720,7 @@ mod mmr_test {
                 .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
                 .collect();
             let mut mmr = Mmr::<blake3::Hash, blake3::Hasher>::init(
-                &input_hashes,
+                input_hashes.clone(),
                 blake3::Hash::from_hex(format!("{:064x}", 0u128)).unwrap(),
             );
             assert_eq!(data_size, mmr.count_leaves());
@@ -852,15 +740,19 @@ mod mmr_test {
                     &authentication_path,
                     &peaks,
                     node_count,
-                    &input_hashes[index],
+                    input_hashes[index].clone(),
                     index,
                 );
                 assert!(valid);
             }
 
             // Make a new MMR where we append with a value and run the verify_append
-            let new_leaf_hash = mmr
-                .append_with_value(&blake3::Hash::from_hex(format!("{:064x}", 519u128)).unwrap());
+            let new_leaf_hash = blake3::hash(
+                blake3::Hash::from_hex(format!("{:064x}", 519u128))
+                    .unwrap()
+                    .as_bytes(),
+            );
+            mmr.archive_append(new_leaf_hash);
             let new_peaks_and_heights = mmr.get_peaks_with_heights();
             let original_peaks: Vec<blake3::Hash> =
                 original_peaks_and_heights.iter().map(|x| x.0).collect();
