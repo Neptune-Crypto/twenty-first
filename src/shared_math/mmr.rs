@@ -148,15 +148,62 @@ pub fn node_index_to_data_index(node_index: usize) -> Option<usize> {
     Some(data_index)
 }
 
-// Think of `D` as the output of the hash function
-// and `H` as the hash function.
 #[derive(Debug, Clone)]
-pub struct Mmr<HashDigest, H> {
+pub struct LightMmr<HashDigest, H> {
+    leaf_count: u128,
+    peaks: Vec<HashDigest>,
+    _hasher: PhantomData<H>,
+}
+
+impl<HashDigest, H> LightMmr<HashDigest, H>
+where
+    H: Hasher<Digest = HashDigest>,
+    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+{
+    /// Initialize a shallow MMR (only storing peaks) from a list of hash digests
+    pub fn from_leafs(hashes: Vec<HashDigest>) -> Self {
+        // If all the hash digests already exist in memory, we might as well
+        // build the shallow MMR from an archival MMR, since it doesn't give
+        // asymptotically higher RAM consumption.
+        let archival = ArchivalMmr::init(hashes, zero);
+    }
+
+    pub fn prove_append() {
+        todo!()
+    }
+
+    pub fn verify_append() {
+        todo!()
+    }
+
+    pub fn prove_modify() {
+        todo!()
+    }
+
+    pub fn verify_modify() {
+        todo!()
+    }
+
+    pub fn prove_membership() {
+        todo!()
+    }
+
+    pub fn verify_membership() {
+        todo!()
+    }
+}
+
+/// A Merkle Mountain Range is a datastructure for storing a list of hashes.
+///
+/// Merkle Mountain Ranges only know about hashes. When values are to be associated with
+/// MMRs, these values must be stored by the caller, or in a wrapper to this data structure.
+#[derive(Debug, Clone)]
+pub struct ArchivalMmr<HashDigest, H> {
     digests: Vec<HashDigest>,
     _hasher: PhantomData<H>,
 }
 
-impl<HashDigest, H> Mmr<HashDigest, H>
+impl<HashDigest, H> ArchivalMmr<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest>,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
@@ -523,7 +570,7 @@ mod mmr_test {
         let element = vec![BFieldElement::new(14)];
         let mut rp = RescuePrimeProduction::new();
         let input_hash = rp.hash_one(&element);
-        let mut mmr = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
+        let mut mmr = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
             vec![input_hash.clone()],
             vec![BFieldElement::ring_zero()],
         );
@@ -537,7 +584,7 @@ mod mmr_test {
 
         let data_index = 0;
         let (authentication_path, peaks) = mmr.prove_membership(data_index);
-        let valid = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
+        let valid = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
             &original_root,
             &authentication_path,
             &peaks,
@@ -561,7 +608,7 @@ mod mmr_test {
             new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
         let new_root = mmr.bag_peaks();
         assert!(
-            Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
+            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
                 original_root,
                 &original_peaks,
                 mmr.count_leaves() - 1,
@@ -577,7 +624,7 @@ mod mmr_test {
         let values: Vec<Vec<BFieldElement>> = (0..2).map(|x| vec![BFieldElement::new(x)]).collect();
         let mut rp = RescuePrimeProduction::new();
         let input_hashes: Vec<Vec<BFieldElement>> = values.iter().map(|x| rp.hash_one(x)).collect();
-        let mut mmr = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
+        let mut mmr = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
             input_hashes.clone(),
             vec![BFieldElement::ring_zero()],
         );
@@ -591,7 +638,7 @@ mod mmr_test {
 
         let data_index = 0;
         let (authentication_path, peaks) = mmr.prove_membership(data_index);
-        let valid = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
+        let valid = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
             &original_root,
             &authentication_path,
             &peaks,
@@ -612,7 +659,7 @@ mod mmr_test {
             new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
         let new_root = mmr.bag_peaks();
         assert!(
-            Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
+            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
                 original_root,
                 &original_peaks,
                 mmr.count_leaves() - 1,
@@ -644,7 +691,7 @@ mod mmr_test {
             let rp: RescuePrime = rescue_prime_params::rescue_prime_params_bfield_0();
             let input_hashes: Vec<Vec<BFieldElement>> =
                 input_prehashes.iter().map(|x| rp.hash(x)).collect();
-            let mut mmr = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
+            let mut mmr = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
                 input_hashes.clone(),
                 vec![BFieldElement::ring_zero()],
             );
@@ -659,14 +706,15 @@ mod mmr_test {
             // verify that it is valid
             for index in 0..data_size {
                 let (authentication_path, peaks) = mmr.prove_membership(index);
-                let valid = Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-                    &original_root,
-                    &authentication_path,
-                    &peaks,
-                    node_count,
-                    input_hashes[index].clone(),
-                    index,
-                );
+                let valid =
+                    ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
+                        &original_root,
+                        &authentication_path,
+                        &peaks,
+                        node_count,
+                        input_hashes[index].clone(),
+                        index,
+                    );
                 assert!(valid);
             }
 
@@ -682,7 +730,7 @@ mod mmr_test {
                 new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
             let new_root = mmr.bag_peaks();
             assert!(
-                Mmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
+                ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
                     original_root,
                     &original_peaks,
                     mmr.count_leaves() - 1,
@@ -719,7 +767,7 @@ mod mmr_test {
                 .iter()
                 .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
                 .collect();
-            let mut mmr = Mmr::<blake3::Hash, blake3::Hasher>::init(
+            let mut mmr = ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(
                 input_hashes.clone(),
                 blake3::Hash::from_hex(format!("{:064x}", 0u128)).unwrap(),
             );
@@ -735,7 +783,7 @@ mod mmr_test {
             // verify that it is valid
             for index in 0..data_size {
                 let (authentication_path, peaks) = mmr.prove_membership(index);
-                let valid = Mmr::<blake3::Hash, blake3::Hasher>::verify_membership(
+                let valid = ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
                     &original_root,
                     &authentication_path,
                     &peaks,
@@ -758,7 +806,7 @@ mod mmr_test {
                 original_peaks_and_heights.iter().map(|x| x.0).collect();
             let new_peaks: Vec<blake3::Hash> = new_peaks_and_heights.iter().map(|x| x.0).collect();
             let new_root = mmr.bag_peaks();
-            assert!(Mmr::<blake3::Hash, blake3::Hasher>::verify_append(
+            assert!(ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_append(
                 original_root,
                 &original_peaks,
                 mmr.count_leaves() - 1,

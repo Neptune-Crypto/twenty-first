@@ -17,6 +17,7 @@ pub trait Hasher {
         left_input: &Value,
         right_input: &Value,
     ) -> Self::Digest;
+    fn dummy_output(&self) -> Self::Digest;
     fn hash_many<Value: ToDigest<Self::Digest>>(&mut self, inputs: &[Value]) -> Self::Digest;
 }
 
@@ -92,6 +93,11 @@ impl Hasher for blake3::Hasher {
         }
         self.finalize()
     }
+
+    fn dummy_output(&self) -> Self::Digest {
+        // Return the dummy value of "0x00..0"
+        blake3::Hash::from_hex(format!("{:064x}", 0u128)).unwrap()
+    }
 }
 
 /// Since each struct can only have one `impl Hasher`, and we have many sets
@@ -128,6 +134,11 @@ impl Hasher for RescuePrimeProduction {
             input_.append(&mut digest);
         }
         self.0.hash(&input_)
+    }
+
+    fn dummy_output(&self) -> Self::Digest {
+        // Return the dummy hash output of [0, 0, 0] as B field elements
+        vec![BFieldElement::ring_zero(); self.0.output_length]
     }
 }
 
