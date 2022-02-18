@@ -6,18 +6,18 @@ use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use super::other::log_2_floor;
 
 #[inline]
-fn left_child(node_index: usize, height: usize) -> usize {
+fn left_child(node_index: u128, height: u128) -> u128 {
     node_index - (1 << height)
 }
 
 #[inline]
-fn right_child(node_index: usize) -> usize {
+fn right_child(node_index: u128) -> u128 {
     node_index - 1
 }
 
 /// Get (index, height) of leftmost ancestor
 // This ancestor does *not* have to be in the MMR
-fn leftmost_ancestor(node_index: usize) -> (usize, usize) {
+fn leftmost_ancestor(node_index: u128) -> (u128, u128) {
     let mut h = 0;
     let mut ret = 1;
     while ret < node_index {
@@ -29,7 +29,7 @@ fn leftmost_ancestor(node_index: usize) -> (usize, usize) {
 }
 
 /// Return the tuple: (is_right_child, height)
-fn right_child_and_height(node_index: usize) -> (bool, usize) {
+fn right_child_and_height(node_index: u128) -> (bool, u128) {
     // 1. Find leftmost_ancestor(n), if leftmost_ancestor(n) == n => left_child (false)
     // 2. Let node = leftmost_ancestor(n)
     // 3. while(true):
@@ -69,7 +69,7 @@ fn right_child_and_height(node_index: usize) -> (bool, usize) {
 }
 
 /// Get the node_index of the parent
-fn parent(node_index: usize) -> usize {
+fn parent(node_index: u128) -> u128 {
     let (right, height) = right_child_and_height(node_index);
 
     if right {
@@ -80,22 +80,22 @@ fn parent(node_index: usize) -> usize {
 }
 
 #[inline]
-fn left_sibling(node_index: usize, height: usize) -> usize {
+fn left_sibling(node_index: u128, height: u128) -> u128 {
     node_index - (1 << (height + 1)) + 1
 }
 
 #[inline]
-fn right_sibling(node_index: usize, height: usize) -> usize {
+fn right_sibling(node_index: u128, height: u128) -> u128 {
     node_index + (1 << (height + 1)) - 1
 }
 
-fn get_height_from_data_index(data_index: usize) -> usize {
-    log_2_floor(data_index as u64 + 1) as usize
+fn get_height_from_data_index(data_index: u128) -> u128 {
+    log_2_floor(data_index as u64 + 1) as u128
 }
 
 /// Count the number of non-leaf nodes that were inserted *prior* to
 /// the insertion of this leaf.
-fn non_leaf_nodes_left(data_index: usize) -> usize {
+fn non_leaf_nodes_left(data_index: u128) -> u128 {
     if data_index == 0 {
         return 0;
     }
@@ -118,14 +118,14 @@ fn non_leaf_nodes_left(data_index: usize) -> usize {
     acc
 }
 
-pub fn data_index_to_node_index(data_index: usize) -> usize {
+pub fn data_index_to_node_index(data_index: u128) -> u128 {
     let diff = non_leaf_nodes_left(data_index);
 
     data_index + diff + 1
 }
 
 /// Convert from node index to data index in log(size) time
-pub fn node_index_to_data_index(node_index: usize) -> Option<usize> {
+pub fn node_index_to_data_index(node_index: u128) -> Option<u128> {
     let (_right, height) = right_child_and_height(node_index);
     if height != 0 {
         return None;
@@ -159,17 +159,43 @@ impl<HashDigest, H> LightMmr<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest>,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+    u128: ToDigest<HashDigest>,
 {
     /// Initialize a shallow MMR (only storing peaks) from a list of hash digests
     pub fn from_leafs(hashes: Vec<HashDigest>) -> Self {
         // If all the hash digests already exist in memory, we might as well
         // build the shallow MMR from an archival MMR, since it doesn't give
-        // asymptotically higher RAM consumption.
-        let archival = ArchivalMmr::init(hashes, zero);
+        // asymptotically higher RAM consumption than building it without storing
+        // all digests. At least, I think that's the case.
+        // Clearly, this function could use less RAM if we don't build the entire
+        // archival MMR.
+        let leaf_count = hashes.len() as u128;
+        let archival = ArchivalMmr::init(hashes);
+        let peaks_and_heights = archival.get_peaks_with_heights();
+        Self {
+            _hasher: archival._hasher,
+            leaf_count,
+            peaks: peaks_and_heights.iter().map(|x| x.0.clone()).collect(),
+        }
     }
 
-    pub fn prove_append() {
-        todo!()
+    pub fn prove_append(&mut self, new_leaf: HashDigest) {
+        let first_new_node_index = data_index_to_node_index(self.leaf_count);
+        let (mut new_node_is_right_child, _height) = right_child_and_height(first_new_node_index);
+
+        // // If new node is not a right child, the new peak list is just the old one
+        // // with the new leaf hash appended
+        // let mut calculated_peaks: Vec<HashDigest> = old_peaks.to_vec();
+        // calculated_peaks.push(new_leaf_hash);
+        // let mut new_node_index = first_new_node_index;
+        // let mut hasher = H::new();
+        // while new_node_is_right_child {
+        //     let new_hash = calculated_peaks.pop().unwrap();
+        //     let previous_peak = calculated_peaks.pop().unwrap();
+        //     calculated_peaks.push(hasher.hash_two(&previous_peak, &new_hash));
+        //     new_node_index += 1;
+        //     new_node_is_right_child = right_child_and_height(new_node_index).0;
+        // }
     }
 
     pub fn verify_append() {
@@ -209,9 +235,10 @@ where
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     u128: ToDigest<HashDigest>,
 {
-    pub fn init(hashes: Vec<HashDigest>, zero: HashDigest) -> Self {
+    pub fn init(hashes: Vec<HashDigest>) -> Self {
+        let dummy = H::new().dummy_output();
         let mut new_mmr: Self = Self {
-            digests: vec![zero.to_digest()],
+            digests: vec![dummy],
             _hasher: PhantomData,
         };
         for hash in hashes {
@@ -227,7 +254,7 @@ where
         peaks: &[HashDigest],
         node_count: u128,
         value_hash: HashDigest,
-        data_index: usize,
+        data_index: u128,
     ) -> bool {
         // Verify that peaks match root
         let matching_root = *root == Self::get_root_from_peaks(peaks, node_count);
@@ -235,7 +262,7 @@ where
 
         let mut hasher = H::new();
         let mut acc_hash: HashDigest = value_hash;
-        let mut acc_index: usize = node_index;
+        let mut acc_index: u128 = node_index;
         for hash in authentication_path.iter() {
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
             acc_hash = if acc_right {
@@ -250,7 +277,7 @@ where
     }
 
     /// Return (authentication_path, peaks)
-    pub fn prove_membership(&self, data_index: usize) -> (Vec<HashDigest>, Vec<HashDigest>) {
+    pub fn prove_membership(&self, data_index: u128) -> (Vec<HashDigest>, Vec<HashDigest>) {
         // A proof consists of an authentication path
         // and a list of peaks that must hash to the root
 
@@ -258,7 +285,7 @@ where
         let node_index = data_index_to_node_index(data_index);
         let mut top_height: i32 = -1;
         let mut parent_index = node_index;
-        while parent_index < self.digests.len() {
+        while (parent_index as usize) < self.digests.len() {
             parent_index = parent(parent_index);
             top_height += 1;
         }
@@ -266,14 +293,15 @@ where
         // Build the authentication path
         let mut authentication_path: Vec<HashDigest> = vec![];
         let mut index = node_index;
-        let (mut index_is_right_child, mut index_height) = right_child_and_height(index);
-        while index_height < top_height as usize {
+        let (mut index_is_right_child, mut index_height): (bool, u128) =
+            right_child_and_height(index);
+        while index_height < top_height as u128 {
             if index_is_right_child {
                 let left_sibling_index = left_sibling(index, index_height);
-                authentication_path.push(self.digests[left_sibling_index].clone());
+                authentication_path.push(self.digests[left_sibling_index as usize].clone());
             } else {
                 let right_sibling_index = right_sibling(index, index_height);
-                authentication_path.push(self.digests[right_sibling_index].clone());
+                authentication_path.push(self.digests[right_sibling_index as usize].clone());
             }
             index = parent(index);
             let next_index_info = right_child_and_height(index);
@@ -318,27 +346,27 @@ where
     }
 
     /// Return a list of tuples (peaks, height)
-    pub fn get_peaks_with_heights(&self) -> Vec<(HashDigest, usize)> {
+    pub fn get_peaks_with_heights(&self) -> Vec<(HashDigest, u128)> {
         // 1. Find top peak
         // 2. Jump to right sibling (will not be included)
         // 3. Take left child of sibling, continue until a node in tree is found
         // 4. Once new node is found, jump to right sibling (will not be included)
         // 5. Take left child of sibling, continue until a node in tree is found
-        let mut peaks_and_heights: Vec<(HashDigest, usize)> = vec![];
-        let (mut top_peak, mut top_height) = leftmost_ancestor(self.digests.len() - 1);
-        if top_peak > self.digests.len() - 1 {
+        let mut peaks_and_heights: Vec<(HashDigest, u128)> = vec![];
+        let (mut top_peak, mut top_height) = leftmost_ancestor(self.digests.len() as u128 - 1);
+        if top_peak > self.digests.len() as u128 - 1 {
             top_peak = left_child(top_peak, top_height);
             top_height -= 1;
         }
-        peaks_and_heights.push((self.digests[top_peak].clone(), top_height)); // No clone needed bc array
+        peaks_and_heights.push((self.digests[top_peak as usize].clone(), top_height)); // No clone needed bc array
         let mut height = top_height;
         let mut candidate = right_sibling(top_peak, height);
         'outer: while height > 0 {
-            '_inner: while candidate > self.digests.len() && height > 0 {
+            '_inner: while candidate > (self.digests.len() as u128) && height > 0 {
                 candidate = left_child(candidate, height);
                 height -= 1;
-                if candidate < self.digests.len() {
-                    peaks_and_heights.push((self.digests[candidate].clone(), height));
+                if candidate < (self.digests.len() as u128) {
+                    peaks_and_heights.push((self.digests[candidate as usize].clone(), height));
                     candidate = right_sibling(candidate, height);
                     continue 'outer;
                 }
@@ -353,8 +381,8 @@ where
     }
 
     /// Return the number of leaves in the tree
-    pub fn count_leaves(&self) -> usize {
-        let peaks_and_heights: Vec<(_, usize)> = self.get_peaks_with_heights();
+    pub fn count_leaves(&self) -> u128 {
+        let peaks_and_heights: Vec<(_, u128)> = self.get_peaks_with_heights();
         let mut acc = 0;
         for (_, height) in peaks_and_heights {
             acc += 1 << height
@@ -364,11 +392,12 @@ where
     }
 
     fn archive_append(&mut self, hash: HashDigest) {
-        let node_index = self.digests.len();
+        let node_index = self.digests.len() as u128;
         self.digests.push(hash.clone());
         let (parent_needed, own_height) = right_child_and_height(node_index);
         if parent_needed {
-            let left_sibling_hash = self.digests[left_sibling(node_index, own_height)].clone();
+            let left_sibling_hash =
+                self.digests[left_sibling(node_index, own_height) as usize].clone();
             let mut hasher = H::new();
             let parent_hash: HashDigest = hasher.hash_two(&left_sibling_hash, &hash);
             self.archive_append(parent_hash);
@@ -380,7 +409,7 @@ where
     pub fn verify_append(
         old_root: HashDigest,
         old_peaks: &[HashDigest],
-        old_leaf_count: usize,
+        old_leaf_count: u128,
         new_root: HashDigest,
         new_leaf_hash: HashDigest,
         new_peaks: &[HashDigest],
@@ -480,8 +509,7 @@ mod mmr_test {
         let mut rng = rand::thread_rng();
         for _ in 0..100 {
             let rand = rng.next_u32();
-            let inversion_result =
-                node_index_to_data_index(data_index_to_node_index(rand as usize));
+            let inversion_result = node_index_to_data_index(data_index_to_node_index(rand as u128));
             match inversion_result {
                 None => panic!(),
                 Some(inversion) => assert_eq!(rand, inversion as u32),
@@ -505,7 +533,7 @@ mod mmr_test {
         ];
 
         for (i, anticipation) in anticipations.iter().enumerate() {
-            assert!(right_child_and_height(i + 1).0 == *anticipation);
+            assert!(right_child_and_height(i as u128 + 1).0 == *anticipation);
         }
     }
 
@@ -570,13 +598,13 @@ mod mmr_test {
         let element = vec![BFieldElement::new(14)];
         let mut rp = RescuePrimeProduction::new();
         let input_hash = rp.hash_one(&element);
-        let mut mmr = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
-            vec![input_hash.clone()],
-            vec![BFieldElement::ring_zero()],
-        );
+        let mut mmr =
+            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
+                vec![input_hash.clone()],
+            );
         assert_eq!(1, mmr.count_leaves());
         assert_eq!(1, mmr.count_nodes());
-        let original_peaks_and_heights: Vec<(Vec<BFieldElement>, usize)> =
+        let original_peaks_and_heights: Vec<(Vec<BFieldElement>, u128)> =
             mmr.get_peaks_with_heights();
         assert_eq!(1, original_peaks_and_heights.len());
         assert_eq!(0, original_peaks_and_heights[0].1);
@@ -624,27 +652,25 @@ mod mmr_test {
         let values: Vec<Vec<BFieldElement>> = (0..2).map(|x| vec![BFieldElement::new(x)]).collect();
         let mut rp = RescuePrimeProduction::new();
         let input_hashes: Vec<Vec<BFieldElement>> = values.iter().map(|x| rp.hash_one(x)).collect();
-        let mut mmr = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
-            input_hashes.clone(),
-            vec![BFieldElement::ring_zero()],
-        );
+        let mut mmr =
+            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(input_hashes.clone());
         assert_eq!(2, mmr.count_leaves());
         assert_eq!(3, mmr.count_nodes());
-        let original_peaks_and_heights: Vec<(Vec<BFieldElement>, usize)> =
+        let original_peaks_and_heights: Vec<(Vec<BFieldElement>, u128)> =
             mmr.get_peaks_with_heights();
         assert_eq!(1, original_peaks_and_heights.len());
         let original_root = mmr.bag_peaks();
         let size = mmr.count_nodes() as u128;
 
-        let data_index = 0;
-        let (authentication_path, peaks) = mmr.prove_membership(data_index);
+        let data_index: usize = 0;
+        let (authentication_path, peaks) = mmr.prove_membership(data_index as u128);
         let valid = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
             &original_root,
             &authentication_path,
             &peaks,
             size,
             input_hashes[data_index].clone(),
-            data_index,
+            data_index as u128,
         );
         assert!(valid);
 
@@ -676,15 +702,13 @@ mod mmr_test {
             1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41, 42,
             46, 47, 49, 50, 53, 54, 56, 57, 63, 64,
         ];
-        let peak_counts: Vec<usize> = vec![
+        let peak_counts: Vec<u128> = vec![
             1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4,
             4, 5, 1, 2,
         ];
-        for (data_size, node_count, peak_count) in izip!(
-            (1usize..34).collect::<Vec<usize>>(),
-            node_counts,
-            peak_counts
-        ) {
+        for (data_size, node_count, peak_count) in
+            izip!((1u128..34).collect::<Vec<u128>>(), node_counts, peak_counts)
+        {
             let input_prehashes: Vec<Vec<BFieldElement>> = (0..data_size)
                 .map(|x| vec![BFieldElement::new(x as u128 + 14)])
                 .collect();
@@ -693,26 +717,25 @@ mod mmr_test {
                 input_prehashes.iter().map(|x| rp.hash(x)).collect();
             let mut mmr = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
                 input_hashes.clone(),
-                vec![BFieldElement::ring_zero()],
             );
             assert_eq!(data_size, mmr.count_leaves());
             assert_eq!(node_count, mmr.count_nodes());
             let original_peaks_and_heights = mmr.get_peaks_with_heights();
-            assert_eq!(peak_count, original_peaks_and_heights.len());
+            assert_eq!(peak_count, original_peaks_and_heights.len() as u128);
             let original_root = mmr.bag_peaks();
             let node_count = mmr.count_nodes();
 
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid
             for index in 0..data_size {
-                let (authentication_path, peaks) = mmr.prove_membership(index);
+                let (authentication_path, peaks) = mmr.prove_membership(index as u128);
                 let valid =
                     ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
                         &original_root,
                         &authentication_path,
                         &peaks,
                         node_count,
-                        input_hashes[index].clone(),
+                        input_hashes[index as usize].clone(),
                         index,
                     );
                 assert!(valid);
@@ -748,15 +771,13 @@ mod mmr_test {
             1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41, 42,
             46, 47, 49, 50, 53, 54, 56, 57, 63, 64,
         ];
-        let peak_counts: Vec<usize> = vec![
+        let peak_counts: Vec<u128> = vec![
             1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4,
             4, 5, 1, 2,
         ];
-        for (data_size, node_count, peak_count) in izip!(
-            (1usize..34).collect::<Vec<usize>>(),
-            node_counts,
-            peak_counts
-        ) {
+        for (data_size, node_count, peak_count) in
+            izip!((1u128..34).collect::<Vec<u128>>(), node_counts, peak_counts)
+        {
             let input_prehashes: Vec<Vec<BFieldElement>> = (0..data_size)
                 .map(|x| vec![BFieldElement::new(x as u128 + 14)])
                 .collect();
@@ -767,15 +788,12 @@ mod mmr_test {
                 .iter()
                 .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
                 .collect();
-            let mut mmr = ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(
-                input_hashes.clone(),
-                blake3::Hash::from_hex(format!("{:064x}", 0u128)).unwrap(),
-            );
+            let mut mmr = ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(input_hashes.clone());
             assert_eq!(data_size, mmr.count_leaves());
             assert_eq!(node_count, mmr.count_nodes());
-            let original_peaks_and_heights: Vec<(blake3::Hash, usize)> =
+            let original_peaks_and_heights: Vec<(blake3::Hash, u128)> =
                 mmr.get_peaks_with_heights();
-            assert_eq!(peak_count, original_peaks_and_heights.len());
+            assert_eq!(peak_count, original_peaks_and_heights.len() as u128);
             let original_root = mmr.bag_peaks();
             let node_count = mmr.count_nodes();
 
@@ -788,7 +806,7 @@ mod mmr_test {
                     &authentication_path,
                     &peaks,
                     node_count,
-                    input_hashes[index].clone(),
+                    input_hashes[index as usize].clone(),
                     index,
                 );
                 assert!(valid);
