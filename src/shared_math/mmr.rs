@@ -148,6 +148,31 @@ pub fn node_index_to_data_index(node_index: u128) -> Option<u128> {
     Some(data_index)
 }
 
+/// Return the new peaks of the MMR after adding `new_leaf`
+pub fn calculate_new_peaks<
+    H: Hasher<Digest = HashDigest>,
+    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+>(
+    old_leaf_count: u128,
+    old_peaks: Vec<HashDigest>,
+    new_leaf: HashDigest,
+) -> Vec<HashDigest> {
+    let mut peaks = old_peaks;
+    let mut new_node_index = data_index_to_node_index(old_leaf_count);
+    let (mut new_node_is_right_child, _height) = right_child_and_height(new_node_index);
+    peaks.push(new_leaf);
+    let mut hasher = H::new();
+    while new_node_is_right_child {
+        let new_hash = peaks.pop().unwrap();
+        let previous_peak = peaks.pop().unwrap();
+        peaks.push(hasher.hash_two(&previous_peak, &new_hash));
+        new_node_index += 1;
+        new_node_is_right_child = right_child_and_height(new_node_index).0;
+    }
+
+    peaks
+}
+
 #[derive(Debug, Clone)]
 pub struct LightMmr<HashDigest, H> {
     leaf_count: u128,
@@ -179,27 +204,30 @@ where
         }
     }
 
-    pub fn prove_append(&mut self, new_leaf: HashDigest) {
-        let first_new_node_index = data_index_to_node_index(self.leaf_count);
-        let (mut new_node_is_right_child, _height) = right_child_and_height(first_new_node_index);
-
-        // // If new node is not a right child, the new peak list is just the old one
-        // // with the new leaf hash appended
-        // let mut calculated_peaks: Vec<HashDigest> = old_peaks.to_vec();
-        // calculated_peaks.push(new_leaf_hash);
-        // let mut new_node_index = first_new_node_index;
-        // let mut hasher = H::new();
-        // while new_node_is_right_child {
-        //     let new_hash = calculated_peaks.pop().unwrap();
-        //     let previous_peak = calculated_peaks.pop().unwrap();
-        //     calculated_peaks.push(hasher.hash_two(&previous_peak, &new_hash));
-        //     new_node_index += 1;
-        //     new_node_is_right_child = right_child_and_height(new_node_index).0;
-        // }
+    pub fn append(&mut self, new_leaf: HashDigest) {
+        self.peaks =
+            calculate_new_peaks::<H, HashDigest>(self.leaf_count, self.peaks.clone(), new_leaf);
+        self.leaf_count += 1;
     }
 
-    pub fn verify_append() {
-        todo!()
+    pub fn prove_append(
+        _old_peaks: Vec<HashDigest>,
+        _old_size: u128,
+        _new_leaf: HashDigest,
+        _new_peaks: Vec<HashDigest>,
+    ) {
+    }
+
+    pub fn verify_append(
+        old_peaks: Vec<HashDigest>,
+        old_leaf_count: u128,
+        new_leaf: HashDigest,
+        new_peaks_expected: Vec<HashDigest>,
+    ) -> bool {
+        let new_peaks_calculated =
+            calculate_new_peaks::<H, HashDigest>(old_leaf_count, old_peaks, new_leaf);
+
+        new_peaks_calculated == new_peaks_expected
     }
 
     pub fn prove_modify() {
@@ -214,9 +242,42 @@ where
         todo!()
     }
 
-    pub fn verify_membership() {
+    pub fn verify_membership(
+        &self,
+        authentication_path: &[HashDigest],
+        data_index: u128,
+        leaf_hash: HashDigest,
+    ) -> bool {
         todo!()
     }
+
+    // pub fn verify_membership(
+    //     root: &HashDigest,
+    //     authentication_path: &[HashDigest],
+    //     peaks: &[HashDigest],
+    //     node_count: u128,
+    //     value_hash: HashDigest,
+    //     data_index: u128,
+    // ) -> bool {
+    //     // Verify that peaks match root
+    //     let matching_root = *root == Self::get_root_from_peaks(peaks, node_count);
+    //     let node_index = data_index_to_node_index(data_index);
+
+    //     let mut hasher = H::new();
+    //     let mut acc_hash: HashDigest = value_hash;
+    //     let mut acc_index: u128 = node_index;
+    //     for hash in authentication_path.iter() {
+    //         let (acc_right, _acc_height) = right_child_and_height(acc_index);
+    //         acc_hash = if acc_right {
+    //             hasher.hash_two(hash, &acc_hash)
+    //         } else {
+    //             hasher.hash_two(&acc_hash, hash)
+    //         };
+    //         acc_index = parent(acc_index);
+    //     }
+
+    //     peaks.iter().any(|peak| *peak == acc_hash) && matching_root
+    // }
 }
 
 /// A Merkle Mountain Range is a datastructure for storing a list of hashes.
