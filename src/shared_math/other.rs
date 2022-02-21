@@ -62,6 +62,28 @@ pub fn mod_pow_raw(x: u128, exp: u64, quotient: u128) -> u128 {
     acc
 }
 
+// TODO: Abstract for multiple unsigned output types.
+pub fn primes_lt(bound: u128) -> Vec<u128> {
+    let mut primes: Vec<bool> = (0..bound + 1).map(|num| num == 2 || num & 1 != 0).collect();
+
+    let mut num = 3u128;
+    while num * num <= bound {
+        let mut j = num * num;
+        while j <= bound {
+            primes[j as usize] = false;
+            j += num;
+        }
+        num += 2;
+    }
+
+    primes
+        .into_iter()
+        .enumerate()
+        .skip(2)
+        .filter_map(|(i, p)| if p { Some(i as u128) } else { None })
+        .collect::<Vec<u128>>()
+}
+
 pub fn xgcd<
     T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,
 >(

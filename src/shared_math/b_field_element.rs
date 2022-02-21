@@ -93,26 +93,6 @@ impl BFieldElement {
         Self(other::mod_pow_raw(self.0, exp, Self::QUOTIENT))
     }
 
-    // TODO: Abstract for both i128 and u128 so we don't keep multiple copies of the same algorithm.
-    fn primes_lt(bound: u128) -> Vec<u128> {
-        let mut primes: Vec<bool> = (0..bound + 1).map(|num| num == 2 || num & 1 != 0).collect();
-        let mut num = 3u128;
-        while num * num <= bound {
-            let mut j = num * num;
-            while j <= bound {
-                primes[j as usize] = false;
-                j += num;
-            }
-            num += 2;
-        }
-        primes
-            .into_iter()
-            .enumerate()
-            .skip(2)
-            .filter_map(|(i, p)| if p { Some(i as u128) } else { None })
-            .collect::<Vec<u128>>()
-    }
-
     pub fn legendre_symbol(&self) -> i8 {
         let elem = self.mod_pow((Self::QUOTIENT - 1) as u64 / 2).0;
 
@@ -365,7 +345,7 @@ impl GetPrimitiveRootOfUnity for BFieldElement {
             }
             // This might be prohibitively expensive
             if m > 1 {
-                let mut other_primes = BFieldElement::primes_lt(m)
+                let mut other_primes = other::primes_lt(m)
                     .into_iter()
                     .filter(|&x| n % x == 0)
                     .collect();
