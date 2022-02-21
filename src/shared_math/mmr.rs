@@ -304,32 +304,51 @@ where
     pub fn prove_modify(
         &self,
         data_index: u128,
-        new_leaf: HashDigest,
+        new_leaf: &HashDigest,
     ) -> (
         (Vec<HashDigest>, Vec<HashDigest>),
         (Vec<HashDigest>, Vec<HashDigest>),
-        HashDigest,
     ) {
+        // TODO: MAKE SURE THIS FUNCTION IS TESTED FOR LOW AND HIGH PEAKS!
+        // For low peaks: Make sure it is tested where the peak is just a leaf,
+        // i.e. when there is a peak of height 0.
         let (old_authentication_path, old_peaks): (Vec<HashDigest>, Vec<HashDigest>) =
             self.prove_membership(data_index);
         let mut new_archival_mmr: ArchivalMmr<HashDigest, H> = self.to_owned();
+        println!("data index = {}", data_index);
+        println!(
+            "before: [{}] {:?}",
+            data_index_to_node_index(data_index),
+            new_archival_mmr.digests[data_index_to_node_index(data_index) as usize]
+        );
+        println!("peaks before: {:?}", self.get_peaks_with_heights());
+
+        // TODO: WRONG! You can't just change a leaf digest. All its parent's hashes must be recalculated
         new_archival_mmr.digests[data_index_to_node_index(data_index) as usize] = new_leaf.clone();
+        println!(
+            "after: [{}] {:?}",
+            data_index_to_node_index(data_index),
+            new_archival_mmr.digests[data_index_to_node_index(data_index) as usize]
+        );
+        println!(
+            "peaks after: {:?}",
+            new_archival_mmr.get_peaks_with_heights()
+        );
         let (new_authentication_path, new_peaks): (Vec<HashDigest>, Vec<HashDigest>) =
             new_archival_mmr.prove_membership(data_index);
 
         (
             (old_peaks, old_authentication_path),
             (new_peaks, new_authentication_path),
-            new_leaf,
         )
     }
 
     pub fn verify_modify(
         old_peaks: &[HashDigest],
-        old_authentication_path: Vec<HashDigest>,
-        new_peaks: Vec<HashDigest>,
-        new_authentication_path: Vec<HashDigest>,
-        new_leaf: HashDigest,
+        old_authentication_path: &[HashDigest],
+        new_peaks: &[HashDigest],
+        new_authentication_path: &[HashDigest],
+        new_leaf: &HashDigest,
         data_index: u128,
     ) -> bool {
         // We need to verify that
@@ -338,18 +357,28 @@ where
         // 3: Only the targeted peak is changed, all other must remain unchanged
 
         // 1: authentication path is unchanged
+        println!("0");
+        println!("old_peaks = {:?}", old_peaks);
+        println!("new_peaks = {:?}", new_peaks);
+        println!("old_authentication_path = {:?}", old_authentication_path);
+        println!("new_authentication_path = {:?}", new_authentication_path);
+        println!("new_leaf = {:?}", new_leaf);
+        println!("data_index = {}", data_index);
         if old_authentication_path != new_authentication_path {
             return false;
         }
 
         // 2: New authentication path is valid
+        println!("1");
         let (new_valid, sub_tree_root_res) =
             Self::verify_membership(&new_authentication_path, &new_peaks, new_leaf, data_index);
         if !new_valid {
+            println!("1a");
             return false;
         }
 
         // 3: Only the targeted peak is changed, all other must remain unchanged
+        println!("2");
         let sub_tree_root = sub_tree_root_res.unwrap();
         let modified_peak_index_res = new_peaks.iter().position(|peak| *peak == sub_tree_root);
         let modified_peak_index = match modified_peak_index_res {
@@ -359,33 +388,40 @@ where
         let mut calculated_new_peaks: Vec<HashDigest> = old_peaks.to_owned();
         calculated_new_peaks[modified_peak_index] = sub_tree_root;
 
+        println!("3");
         if calculated_new_peaks != new_peaks {
             return false;
         }
 
+        println!("4");
         return true;
     }
 
     pub fn verify_membership(
-        // root: &HashDigest,
         authentication_path: &[HashDigest],
         peaks: &[HashDigest],
-        // node_count: u128,
-        value_hash: HashDigest,
+        value_hash: &HashDigest,
         data_index: u128,
     ) -> (bool, Option<HashDigest>) {
+        println!(
+            "running verify_membership with length {}",
+            authentication_path.len()
+        );
         // Verify that peaks match root
         // let matching_root = *root == Self::get_root_from_peaks(peaks, node_count);
         let node_index = data_index_to_node_index(data_index);
 
         let mut hasher = H::new();
-        let mut acc_hash: HashDigest = value_hash;
+        let mut acc_hash: HashDigest = value_hash.to_owned();
         let mut acc_index: u128 = node_index;
         for hash in authentication_path.iter() {
+            println!("hi");
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
             acc_hash = if acc_right {
+                println!("right");
                 hasher.hash_two(hash, &acc_hash)
             } else {
+                println!("left");
                 hasher.hash_two(&acc_hash, hash)
             };
             acc_index = parent(acc_index);
@@ -393,6 +429,9 @@ where
 
         // peaks.iter().any(|peak| *peak == acc_hash) && matching_root
         if !peaks.iter().any(|peak| *peak == acc_hash) {
+            println!("no peak match");
+            println!("found peak acc_hash {:?}", acc_hash);
+            println!("peaks {:?}", peaks);
             return (false, None);
         }
 
@@ -738,7 +777,7 @@ mod mmr_test {
         let valid_res = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
             &authentication_path,
             &peaks,
-            input_hash,
+            &input_hash,
             data_index,
         );
         assert!(valid_res.0);
@@ -782,18 +821,28 @@ mod mmr_test {
             mmr.get_peaks_with_heights();
         assert_eq!(1, original_peaks_and_heights.len());
         let original_root = mmr.bag_peaks();
-        let size = mmr.count_nodes() as u128;
 
         let data_index: usize = 0;
         let (authentication_path, peaks) = mmr.prove_membership(data_index as u128);
         let valid_res = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
             &authentication_path,
             &peaks,
-            input_hashes[data_index].clone(),
+            &input_hashes[data_index],
             data_index as u128,
         );
         assert!(valid_res.0);
         assert!(valid_res.1.is_some());
+
+        // Negative test for verify membership
+        assert!(
+            !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
+                &authentication_path,
+                &peaks,
+                &input_hashes[data_index],
+                data_index as u128 + 1,
+            )
+            .0
+        );
 
         let new_leaf_hash: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(201)]);
         mmr.archive_append(new_leaf_hash.clone());
@@ -813,6 +862,35 @@ mod mmr_test {
                 new_root,
                 new_leaf_hash,
                 &new_peaks
+            )
+        );
+
+        let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
+        let ((old_peaks, old_authentication_path), (new_peaks, new_authentication_path)) =
+            mmr.prove_modify(1, &new_leaf);
+        println!("\n\n\n******************************** In test function START ********************************");
+        println!("old_peaks = {:?}", old_peaks);
+        println!("old_authentication_path = {:?}", old_authentication_path);
+        println!("new_peaks = {:?}", new_peaks);
+        println!("new_authentication_path = {:?}", new_authentication_path);
+        assert!(
+            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_modify(
+                &old_peaks,
+                &old_authentication_path,
+                &new_peaks,
+                &new_authentication_path,
+                &new_leaf,
+                1
+            )
+        );
+        assert!(
+            !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_modify(
+                &old_peaks,
+                &old_authentication_path,
+                &new_peaks,
+                &new_authentication_path,
+                &new_leaf,
+                0
             )
         );
     }
@@ -854,7 +932,7 @@ mod mmr_test {
                     ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
                         &authentication_path,
                         &peaks,
-                        input_hashes[index as usize].clone(),
+                        &input_hashes[index as usize],
                         index,
                     );
                 assert!(valid_res.0);
@@ -924,7 +1002,7 @@ mod mmr_test {
                 let valid_res = ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
                     &authentication_path,
                     &peaks,
-                    input_hashes[index as usize].clone(),
+                    &input_hashes[index as usize],
                     index,
                 );
                 assert!(valid_res.0);
