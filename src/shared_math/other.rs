@@ -44,6 +44,24 @@ pub fn roundup_npo2(x: u64) -> u64 {
     1 << log_2_ceil(x)
 }
 
+pub fn mod_pow_raw(x: u128, exp: u64, quotient: u128) -> u128 {
+    // Special case for handling 0^0 = 1
+    if exp == 0 {
+        return 1;
+    }
+
+    let mut acc = 1;
+
+    for i in 0..64 {
+        acc = (acc * acc) % quotient;
+        if exp & (1 << (64 - 1 - i)) != 0 {
+            acc = (acc * x) % quotient;
+        }
+    }
+
+    acc
+}
+
 pub fn xgcd<
     T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,
 >(

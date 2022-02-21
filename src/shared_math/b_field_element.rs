@@ -77,29 +77,6 @@ impl BFieldElement {
         self.0 = (Self::MAX + self.0) % Self::QUOTIENT
     }
 
-    // TODO: Use Rust Pow. TODO: Maybe move this out into a library along with xgcd().
-    // TODO: Name this collection of traits as something like... FieldElementInternalNumRepresentation
-    fn mod_pow_raw(&self, pow: u64) -> u128 {
-        // Special case for handling 0^0 = 1
-        if pow == 0 {
-            return 1u128;
-        }
-
-        let mut acc: u128 = 1;
-        let mod_value: u128 = Self::QUOTIENT;
-        let res = self.0;
-
-        for i in 0..64 {
-            acc = acc * acc % mod_value;
-            let set: bool = pow & (1 << (64 - 1 - i)) != 0;
-            if set {
-                acc = acc * res % mod_value;
-            }
-        }
-
-        acc
-    }
-
     // TODO: Currently, IdentityValues has &self as part of its signature, so we hotfix
     // being able to refer to a zero/one element without having an element at hand. This
     // will go away when moving to Zero/One traits.
@@ -112,8 +89,8 @@ impl BFieldElement {
     }
 
     #[must_use]
-    pub fn mod_pow(&self, pow: u64) -> Self {
-        Self(self.mod_pow_raw(pow))
+    pub fn mod_pow(&self, exp: u64) -> Self {
+        Self(other::mod_pow_raw(self.0, exp, Self::QUOTIENT))
     }
 
     // TODO: Abstract for both i128 and u128 so we don't keep multiple copies of the same algorithm.
@@ -403,13 +380,17 @@ impl GetPrimitiveRootOfUnity for BFieldElement {
 
         let mut primitive_root: Option<BFieldElement> = None;
         let mut candidate: BFieldElement = BFieldElement::ring_one();
+
         #[allow(clippy::suspicious_operation_groupings)]
         while primitive_root == None && candidate.0 < Self::QUOTIENT {
             if (-candidate.legendre_symbol()).is_one()
                 && primes.iter().filter(|&x| n % x == 0).all(|x| {
-                    !candidate
-                        .mod_pow_raw(((Self::QUOTIENT - 1) / x) as u64)
-                        .is_one()
+                    !other::mod_pow_raw(
+                        candidate.0,
+                        ((Self::QUOTIENT - 1) / x) as u64,
+                        Self::QUOTIENT,
+                    )
+                    .is_one()
                 })
             {
                 primitive_root = Some(candidate.mod_pow(((Self::QUOTIENT - 1) / n) as u64));
