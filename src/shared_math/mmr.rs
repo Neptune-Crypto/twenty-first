@@ -244,6 +244,17 @@ pub struct LightMmr<HashDigest, H> {
 }
 
 // TODO: Write tests for the light MMR functions
+// 0. Create an (empty?) light MMR
+// 1. append a value to this
+// 2. verify that the before state, after state,
+//    and leaf hash constitute an append-proof
+//    that can be verified with `verify_append`.
+// 3. Repeat 2 n times.
+// 4. Run prove/verify_membership with some values
+//    But how do we get the authentication paths?
+// 5. update hashes though `modify`
+// 6. verify that this results in proofs that can
+//    be verified with the verify_modify function.
 impl<HashDigest, H> LightMmr<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest> + Clone,
