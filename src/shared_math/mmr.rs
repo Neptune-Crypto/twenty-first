@@ -93,6 +93,24 @@ fn get_height_from_data_index(data_index: u128) -> u128 {
     log_2_floor(data_index as u64 + 1) as u128
 }
 
+fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
+    let rightmost_leaf_data_index = leaf_count - 1;
+    let non_leaf_nodes_left = non_leaf_nodes_left(rightmost_leaf_data_index);
+    let node_index_of_rightmost_leaf = data_index_to_node_index(rightmost_leaf_data_index);
+
+    let mut non_leaf_nodes_after = 0u128;
+    let mut node_index = node_index_of_rightmost_leaf;
+    let (mut is_right, mut _height) = right_child_and_height(node_index);
+    while is_right {
+        non_leaf_nodes_after += 1;
+        node_index = parent(node_index);
+        is_right = right_child_and_height(node_index).0;
+    }
+
+    // Number of nodes is: non-leafs after, non-leafs before, and leaf count
+    non_leaf_nodes_after + non_leaf_nodes_left + leaf_count
+}
+
 /// Count the number of non-leaf nodes that were inserted *prior* to
 /// the insertion of this leaf.
 fn non_leaf_nodes_left(data_index: u128) -> u128 {
@@ -753,6 +771,17 @@ mod mmr_test {
         assert_eq!(Some(11), node_index_to_data_index(20));
         assert_eq!(None, node_index_to_data_index(21));
         assert_eq!(None, node_index_to_data_index(22));
+    }
+
+    #[test]
+    fn leaf_count_to_node_count_test() {
+        let node_counts: Vec<u128> = vec![
+            1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41, 42,
+            46, 47, 49, 50, 53, 54, 56, 57, 63, 64,
+        ];
+        for (i, node_count) in node_counts.iter().enumerate() {
+            assert_eq!(*node_count, leaf_count_to_node_count(i as u128 + 1));
+        }
     }
 
     #[test]
