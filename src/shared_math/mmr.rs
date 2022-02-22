@@ -377,6 +377,7 @@ where
         new_mmr
     }
 
+    #[allow(clippy::type_complexity)]
     /// Create a proof for the integral modification of a leaf, without mutating the
     /// archival MMR.
     /// Output: (Old peaks, old authentication path), (new peaks, new authentication path)
@@ -450,8 +451,8 @@ where
 
         // 2: New authentication path is valid
         let (new_valid, sub_tree_root_res) = Self::verify_membership(
-            &new_authentication_path,
-            &new_peaks,
+            new_authentication_path,
+            new_peaks,
             new_leaf,
             data_index,
             leaf_count,
@@ -474,7 +475,7 @@ where
             return false;
         }
 
-        return true;
+        true
     }
 
     pub fn verify_membership(
