@@ -243,6 +243,7 @@ pub struct LightMmr<HashDigest, H> {
     _hasher: PhantomData<H>,
 }
 
+// TODO: Write tests for the light MMR functions
 impl<HashDigest, H> LightMmr<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest> + Clone,
@@ -295,14 +296,17 @@ where
 
     // Do we need a function to update an authentication path?
 
+    /// Update a hash in the existing light MMR
     pub fn modify() {
         todo!()
     }
 
+    /// Construct a proof of the integral update of a hash in an existing light MMR
     pub fn prove_modify() {
         todo!()
     }
 
+    /// Verify the integral update of a leaf hash
     // TODO: Consider make this into a class method instead
     pub fn verify_modify(
         old_peaks: &[HashDigest],
@@ -324,6 +328,7 @@ where
         )
     }
 
+    /// Prove that a specific leaf hash belongs in an MMR
     pub fn prove_membership(
         _authentication_path: &[HashDigest],
         _data_index: u128,
@@ -331,6 +336,7 @@ where
     ) {
     }
 
+    /// Verify an authentication path showing that a specific leaf hash is stored in index `data_index`
     pub fn verify_membership(
         &self,
         authentication_path: &[HashDigest],
