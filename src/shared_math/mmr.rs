@@ -293,12 +293,35 @@ where
         new_peaks_calculated == new_peaks_expected
     }
 
+    // Do we need a function to update an authentication path?
+
+    pub fn modify() {
+        todo!()
+    }
+
     pub fn prove_modify() {
         todo!()
     }
 
-    pub fn verify_modify() {
-        todo!()
+    // TODO: Consider make this into a class method instead
+    pub fn verify_modify(
+        old_peaks: &[HashDigest],
+        old_authentication_path: &[HashDigest],
+        new_peaks: &[HashDigest],
+        new_authentication_path: &[HashDigest],
+        new_leaf: &HashDigest,
+        data_index: u128,
+        leaf_count: u128,
+    ) -> bool {
+        ArchivalMmr::<HashDigest, H>::verify_modify(
+            old_peaks,
+            old_authentication_path,
+            new_peaks,
+            new_authentication_path,
+            new_leaf,
+            data_index,
+            leaf_count,
+        )
     }
 
     pub fn prove_membership(
