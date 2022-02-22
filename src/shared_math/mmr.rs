@@ -111,6 +111,22 @@ fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
     non_leaf_nodes_after + non_leaf_nodes_left + leaf_count
 }
 
+pub fn get_peak_height(leaf_count: u128, data_index: u128) -> Option<u128> {
+    if data_index >= leaf_count {
+        return None;
+    }
+
+    let mut node_index = data_index_to_node_index(data_index);
+    let node_count = leaf_count_to_node_count(leaf_count);
+    let mut height = 0;
+    while node_index < node_count + 1 {
+        height += 1;
+        node_index = parent(node_index);
+    }
+
+    Some(height - 1)
+}
+
 /// Given node count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
 pub fn get_peak_heights(leaf_count: u128) -> Vec<u128> {
@@ -811,6 +827,36 @@ mod mmr_test {
         for (i, node_count) in node_counts.iter().enumerate() {
             assert_eq!(*node_count, leaf_count_to_node_count(i as u128 + 1));
         }
+    }
+
+    #[test]
+    fn get_peak_height_test() {
+        assert_eq!(Some(1), get_peak_height(2, 0));
+        assert_eq!(Some(1), get_peak_height(2, 1));
+        assert_eq!(Some(0), get_peak_height(1, 0));
+        assert_eq!(Some(1), get_peak_height(3, 0));
+        assert_eq!(Some(1), get_peak_height(3, 1));
+        assert_eq!(Some(0), get_peak_height(3, 2));
+        assert_eq!(None, get_peak_height(3, 3));
+        assert_eq!(None, get_peak_height(3, 4));
+        assert_eq!(Some(2), get_peak_height(4, 0));
+        assert_eq!(Some(2), get_peak_height(4, 1));
+        assert_eq!(Some(2), get_peak_height(4, 2));
+        assert_eq!(Some(2), get_peak_height(4, 3));
+        assert_eq!(None, get_peak_height(4, 4));
+        assert_eq!(Some(2), get_peak_height(5, 0));
+        assert_eq!(Some(2), get_peak_height(5, 1));
+        assert_eq!(Some(2), get_peak_height(5, 2));
+        assert_eq!(Some(2), get_peak_height(5, 3));
+        assert_eq!(Some(0), get_peak_height(5, 4));
+        assert_eq!(None, get_peak_height(5, 5));
+        assert_eq!(Some(5), get_peak_height(33, 0));
+        assert_eq!(Some(5), get_peak_height(33, 1));
+        assert_eq!(Some(5), get_peak_height(33, 2));
+        assert_eq!(Some(5), get_peak_height(33, 17));
+        assert_eq!(Some(5), get_peak_height(33, 31));
+        assert_eq!(Some(0), get_peak_height(33, 32));
+        assert_eq!(None, get_peak_height(33, 33));
     }
 
     #[test]
