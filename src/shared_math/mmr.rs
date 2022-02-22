@@ -111,6 +111,35 @@ fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
     non_leaf_nodes_after + non_leaf_nodes_left + leaf_count
 }
 
+/// Given node count, return a vector representing the height of
+/// the peaks. Input is the number of leafs in the MMR
+pub fn get_peak_heights(leaf_count: u128) -> Vec<u128> {
+    let node_index_of_rightmost_leaf = data_index_to_node_index(leaf_count - 1);
+    let node_count = leaf_count_to_node_count(leaf_count);
+    let (mut top_peak, mut top_height) = leftmost_ancestor(node_index_of_rightmost_leaf);
+    if top_peak > node_count {
+        top_peak = left_child(top_peak, top_height);
+        top_height -= 1;
+    }
+
+    let mut heights: Vec<u128> = vec![top_height];
+    let mut height = top_height;
+    let mut candidate = right_sibling(top_peak, height);
+    'outer: while height > 0 {
+        '_inner: while candidate > node_count && height > 0 {
+            candidate = left_child(candidate, height);
+            height -= 1;
+            if candidate <= node_count {
+                heights.push(height);
+                candidate = right_sibling(candidate, height);
+                continue 'outer;
+            }
+        }
+    }
+
+    heights
+}
+
 /// Count the number of non-leaf nodes that were inserted *prior* to
 /// the insertion of this leaf.
 fn non_leaf_nodes_left(data_index: u128) -> u128 {
@@ -949,6 +978,10 @@ mod mmr_test {
             assert_eq!(data_size, mmr.count_leaves());
             assert_eq!(node_count, mmr.count_nodes());
             let original_peaks_and_heights = mmr.get_peaks_with_heights();
+            let peak_heights_1: Vec<u128> =
+                original_peaks_and_heights.iter().map(|x| x.1).collect();
+            let peak_heights_2: Vec<u128> = get_peak_heights(data_size);
+            assert_eq!(peak_heights_1, peak_heights_2);
             assert_eq!(peak_count, original_peaks_and_heights.len() as u128);
             let original_root = mmr.bag_peaks();
             let node_count = mmr.count_nodes();
@@ -1020,6 +1053,10 @@ mod mmr_test {
             assert_eq!(node_count, mmr.count_nodes());
             let original_peaks_and_heights: Vec<(blake3::Hash, u128)> =
                 mmr.get_peaks_with_heights();
+            let peak_heights_1: Vec<u128> =
+                original_peaks_and_heights.iter().map(|x| x.1).collect();
+            let peak_heights_2: Vec<u128> = get_peak_heights(data_size);
+            assert_eq!(peak_heights_1, peak_heights_2);
             assert_eq!(peak_count, original_peaks_and_heights.len() as u128);
             let original_root = mmr.bag_peaks();
             let node_count = mmr.count_nodes();
