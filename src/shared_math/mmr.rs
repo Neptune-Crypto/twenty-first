@@ -352,11 +352,11 @@ where
         &self,
         authentication_path: &[HashDigest],
         data_index: u128,
-        leaf_hash: HashDigest,
+        leaf_hash: &HashDigest,
     ) -> bool {
         let node_index = data_index_to_node_index(data_index);
         let mut hasher = H::new();
-        let mut acc_hash: HashDigest = leaf_hash;
+        let mut acc_hash: HashDigest = leaf_hash.to_owned();
         let mut acc_index: u128 = node_index;
         for hash in authentication_path.iter() {
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
@@ -922,6 +922,45 @@ mod mmr_test {
         assert_eq!(Some(5), get_peak_height(33, 31));
         assert_eq!(Some(0), get_peak_height(33, 32));
         assert_eq!(None, get_peak_height(33, 33));
+    }
+
+    #[test]
+    fn verify_against_correct_peak_test() {
+        let leaf_hashes: Vec<blake3::Hash> = vec![14u128, 15u128, 16u128]
+            .iter()
+            .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
+            .collect();
+        let archival_mmr = ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes.clone());
+        let (auth_path, peaks): (Vec<blake3::Hash>, Vec<blake3::Hash>) =
+            archival_mmr.prove_membership(0);
+
+        // Verify that the accumulated hash in the verifier is compared against the **correct** hash,
+        // not just **any** hash in the peaks list.
+        assert!(
+            ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
+                &auth_path,
+                &peaks,
+                &leaf_hashes[0],
+                0,
+                3,
+            )
+            .0
+        );
+        assert!(
+            !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
+                &auth_path,
+                &peaks,
+                &leaf_hashes[0],
+                2,
+                3,
+            )
+            .0
+        );
+
+        // verify the same behavior in the light MMR
+        let light_mmr = LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes.clone());
+        assert!(light_mmr.verify_membership(&auth_path, 0, &leaf_hashes[0]));
+        assert!(!light_mmr.verify_membership(&auth_path, 2, &leaf_hashes[0]));
     }
 
     #[test]
