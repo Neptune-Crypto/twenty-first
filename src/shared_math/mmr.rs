@@ -212,6 +212,7 @@ pub fn node_index_to_data_index(node_index: u128) -> Option<u128> {
 }
 
 /// Return the new peaks of the MMR after adding `new_leaf`
+/// Returns None if configuration is impossible (too small `old_peaks` input vector)
 pub fn calculate_new_peaks<
     H: Hasher<Digest = HashDigest>,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
@@ -219,7 +220,7 @@ pub fn calculate_new_peaks<
     old_leaf_count: u128,
     old_peaks: Vec<HashDigest>,
     new_leaf: HashDigest,
-) -> Vec<HashDigest> {
+) -> Option<Vec<HashDigest>> {
     let mut peaks = old_peaks;
     let mut new_node_index = data_index_to_node_index(old_leaf_count);
     let (mut new_node_is_right_child, _height) = right_child_and_height(new_node_index);
@@ -227,13 +228,17 @@ pub fn calculate_new_peaks<
     let mut hasher = H::new();
     while new_node_is_right_child {
         let new_hash = peaks.pop().unwrap();
-        let previous_peak = peaks.pop().unwrap();
+        let previous_peak_res = peaks.pop();
+        let previous_peak = match previous_peak_res {
+            None => return None,
+            Some(peak) => peak,
+        };
         peaks.push(hasher.hash_two(&previous_peak, &new_hash));
         new_node_index += 1;
         new_node_is_right_child = right_child_and_height(new_node_index).0;
     }
 
-    peaks
+    Some(peaks)
 }
 
 pub fn bag_peaks<HashDigest, H>(peaks: &[HashDigest], node_count: u128) -> HashDigest
@@ -302,28 +307,37 @@ where
 
     pub fn append(&mut self, new_leaf: HashDigest) {
         self.peaks =
-            calculate_new_peaks::<H, HashDigest>(self.leaf_count, self.peaks.clone(), new_leaf);
+            calculate_new_peaks::<H, HashDigest>(self.leaf_count, self.peaks.clone(), new_leaf)
+                .unwrap();
         self.leaf_count += 1;
     }
 
-    pub fn prove_append(
-        _old_peaks: Vec<HashDigest>,
-        _old_size: u128,
-        _new_leaf: HashDigest,
-        _new_peaks: Vec<HashDigest>,
-    ) {
+    /// Create a proof for honest appending. Verifiable by `LightMmr` implementation.
+    /// Returns (old_peaks, old_leaf_count, new_peaks)
+    pub fn prove_append(&self, new_leaf: HashDigest) -> (Vec<HashDigest>, u128, Vec<HashDigest>) {
+        let old_peaks = self.peaks.clone();
+        let old_leaf_count = self.leaf_count;
+        let new_peaks =
+            calculate_new_peaks::<H, HashDigest>(old_leaf_count, old_peaks.clone(), new_leaf)
+                .unwrap();
+
+        (old_peaks, old_leaf_count, new_peaks)
     }
 
+    /// Verify a proof for integral append
     pub fn verify_append(
         old_peaks: Vec<HashDigest>,
         old_leaf_count: u128,
         new_leaf: HashDigest,
         new_peaks_expected: Vec<HashDigest>,
     ) -> bool {
-        let new_peaks_calculated =
+        let new_peaks_calculated: Option<Vec<HashDigest>> =
             calculate_new_peaks::<H, HashDigest>(old_leaf_count, old_peaks, new_leaf);
 
-        new_peaks_calculated == new_peaks_expected
+        match new_peaks_calculated {
+            None => false,
+            Some(peaks) => new_peaks_expected == peaks,
+        }
     }
 
     // Do we need a function to update an authentication path?
@@ -656,6 +670,11 @@ where
         bag_peaks::<HashDigest, H>(&peaks, self.count_nodes() as u128)
     }
 
+    pub fn get_peaks(&self) -> Vec<HashDigest> {
+        let peaks_and_heights = self.get_peaks_with_heights();
+        peaks_and_heights.into_iter().map(|x| x.0).collect()
+    }
+
     /// Return a list of tuples (peaks, height)
     pub fn get_peaks_with_heights(&self) -> Vec<(HashDigest, u128)> {
         // 1. Find top peak
@@ -713,6 +732,18 @@ where
             let parent_hash: HashDigest = hasher.hash_two(&left_sibling_hash, &hash);
             self.archive_append(parent_hash);
         }
+    }
+
+    /// Create a proof for honest appending. Verifiable by `LightMmr` implementation.
+    /// Returns (old_peaks, old_leaf_count, new_peaks)
+    pub fn prove_append(&self, new_leaf: HashDigest) -> (Vec<HashDigest>, u128, Vec<HashDigest>) {
+        let old_leaf_count: u128 = self.count_leaves();
+        let old_peaks_and_heights: Vec<(HashDigest, u128)> = self.get_peaks_with_heights();
+        let old_peaks: Vec<HashDigest> = old_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_peaks: Vec<HashDigest> =
+            calculate_new_peaks::<H, HashDigest>(old_leaf_count, old_peaks.clone(), new_leaf)
+                .unwrap();
+        (old_peaks, old_leaf_count, new_peaks)
     }
 
     /// With knowledge of old peaks, old size (leaf count), new leaf hash, and new peaks, verify that
@@ -982,6 +1013,97 @@ mod mmr_test {
         let light_mmr = LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes.clone());
         assert!(light_mmr.verify_membership(&auth_path, 0, &leaf_hashes[0]));
         assert!(!light_mmr.verify_membership(&auth_path, 2, &leaf_hashes[0]));
+    }
+
+    #[test]
+    fn prove_append_test() {
+        let leaf_hashes_blake3: Vec<blake3::Hash> = vec![14u128, 15u128, 16u128]
+            .iter()
+            .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
+            .collect();
+        let leaf_hashes_blake3_alt: Vec<blake3::Hash> = vec![14u128, 15u128, 17u128]
+            .iter()
+            .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
+            .collect();
+        let new_leaf: blake3::Hash = blake3::hash(
+            bincode::serialize(&1337u128)
+                .expect("Encoding failed")
+                .as_slice(),
+        );
+        let bad_leaf: blake3::Hash = blake3::hash(
+            bincode::serialize(&13333337u128)
+                .expect("Encoding failed")
+                .as_slice(),
+        );
+        let mut archival_mmr_small =
+            ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes_blake3.clone());
+        let archival_mmr_small_alt =
+            ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes_blake3_alt.clone());
+        let mut light_mmr_small =
+            LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes_blake3.clone());
+
+        // Create an append proof with the archival MMR and verify it with a light MMR
+        let (old_peaks_archival, old_leaf_count_archival, new_peaks_archival): (
+            Vec<blake3::Hash>,
+            u128,
+            Vec<blake3::Hash>,
+        ) = archival_mmr_small.prove_append(new_leaf);
+        assert!(LightMmr::<blake3::Hash, blake3::Hasher>::verify_append(
+            old_peaks_archival.clone(),
+            old_leaf_count_archival,
+            new_leaf,
+            new_peaks_archival.clone()
+        ));
+
+        // Verify that Light and Archival creates the same proofs
+        let (old_peaks_light, old_leaf_count_light, new_peaks_light): (
+            Vec<blake3::Hash>,
+            u128,
+            Vec<blake3::Hash>,
+        ) = light_mmr_small.prove_append(new_leaf);
+        assert_eq!(old_peaks_archival, old_peaks_light);
+        assert_eq!(old_leaf_count_archival, old_leaf_count_light);
+        assert_eq!(new_peaks_archival, new_peaks_light);
+
+        // Negative tests: verify failure if parameters are wrong
+        assert!(!LightMmr::<blake3::Hash, blake3::Hasher>::verify_append(
+            old_peaks_archival.clone(),
+            old_leaf_count_archival + 1,
+            new_leaf,
+            new_peaks_archival.clone()
+        ));
+        assert!(!LightMmr::<blake3::Hash, blake3::Hasher>::verify_append(
+            old_peaks_archival.clone(),
+            old_leaf_count_archival,
+            bad_leaf,
+            new_peaks_archival.clone()
+        ));
+        assert!(!LightMmr::<blake3::Hash, blake3::Hasher>::verify_append(
+            new_peaks_archival.clone(),
+            old_leaf_count_archival,
+            new_leaf,
+            old_peaks_archival.clone(),
+        ));
+        assert!(!LightMmr::<blake3::Hash, blake3::Hasher>::verify_append(
+            archival_mmr_small_alt.get_peaks(),
+            old_leaf_count_archival,
+            new_leaf,
+            new_peaks_archival.clone(),
+        ));
+        assert!(LightMmr::<blake3::Hash, blake3::Hasher>::verify_append(
+            archival_mmr_small.get_peaks(),
+            old_leaf_count_archival,
+            new_leaf,
+            new_peaks_archival.clone(),
+        ));
+
+        // Actually append the new leaf and verify that it matches the values from the proof
+        archival_mmr_small.archive_append(new_leaf);
+        let new_peaks_from_archival: Vec<blake3::Hash> = archival_mmr_small.get_peaks();
+        assert_eq!(new_peaks_archival, new_peaks_from_archival);
+        light_mmr_small.append(new_leaf);
+        let new_peaks_from_light: Vec<blake3::Hash> = light_mmr_small.peaks;
+        assert_eq!(new_peaks_archival, new_peaks_from_light);
     }
 
     #[test]
