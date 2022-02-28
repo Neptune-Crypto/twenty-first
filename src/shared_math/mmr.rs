@@ -236,6 +236,23 @@ pub fn calculate_new_peaks<
     peaks
 }
 
+pub fn bag_peaks<HashDigest, H>(peaks: &[HashDigest], node_count: u128) -> HashDigest
+where
+    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+    H: Hasher<Digest = HashDigest> + Clone,
+    u128: ToDigest<HashDigest>,
+{
+    let peaks_count: usize = peaks.len();
+    let mut hasher: H = H::new();
+
+    let mut acc: HashDigest = hasher.hash_two(&node_count.to_digest(), &peaks[peaks_count - 1]);
+    for i in 1..peaks_count {
+        acc = hasher.hash_two(&peaks[peaks_count - 1 - i], &acc);
+    }
+
+    acc
+}
+
 #[derive(Debug, Clone)]
 pub struct LightMmr<HashDigest, H> {
     leaf_count: u128,
@@ -262,8 +279,7 @@ where
     u128: ToDigest<HashDigest>,
 {
     pub fn bag_peaks(&self) -> HashDigest {
-        let node_count = leaf_count_to_node_count(self.leaf_count);
-        ArchivalMmr::<HashDigest, H>::get_root_from_peaks(&self.peaks, node_count)
+        bag_peaks::<HashDigest, H>(&self.peaks, leaf_count_to_node_count(self.leaf_count))
     }
 
     /// Initialize a shallow MMR (only storing peaks) from a list of hash digests
@@ -637,7 +653,7 @@ where
             .map(|x| x.0.clone())
             .collect();
 
-        Self::get_root_from_peaks(&peaks, self.count_nodes() as u128)
+        bag_peaks::<HashDigest, H>(&peaks, self.count_nodes() as u128)
     }
 
     /// Return a list of tuples (peaks, height)
@@ -981,6 +997,10 @@ mod mmr_test {
         let light_mmr_small =
             LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes_blake3);
         assert_eq!(archival_mmr_small.bag_peaks(), light_mmr_small.bag_peaks());
+        assert_eq!(
+            archival_mmr_small.bag_peaks(),
+            bag_peaks::<blake3::Hash, blake3::Hasher>(&light_mmr_small.peaks, 4)
+        );
         assert!(!light_mmr_small
             .peaks
             .iter()
