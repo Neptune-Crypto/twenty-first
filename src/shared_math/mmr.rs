@@ -261,6 +261,11 @@ where
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     u128: ToDigest<HashDigest>,
 {
+    pub fn bag_peaks(&self) -> HashDigest {
+        let node_count = leaf_count_to_node_count(self.leaf_count);
+        ArchivalMmr::<HashDigest, H>::get_root_from_peaks(&self.peaks, node_count)
+    }
+
     /// Initialize a shallow MMR (only storing peaks) from a list of hash digests
     pub fn from_leafs(hashes: Vec<HashDigest>) -> Self {
         // If all the hash digests already exist in memory, we might as well
@@ -961,6 +966,62 @@ mod mmr_test {
         let light_mmr = LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes.clone());
         assert!(light_mmr.verify_membership(&auth_path, 0, &leaf_hashes[0]));
         assert!(!light_mmr.verify_membership(&auth_path, 2, &leaf_hashes[0]));
+    }
+
+    #[test]
+    fn bag_peaks_test() {
+        // Verify that archival and light MMR produce the same root
+        // First with blake3
+        let leaf_hashes_blake3: Vec<blake3::Hash> = vec![14u128, 15u128, 16u128]
+            .iter()
+            .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
+            .collect();
+        let archival_mmr_small =
+            ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes_blake3.clone());
+        let light_mmr_small =
+            LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes_blake3);
+        assert_eq!(archival_mmr_small.bag_peaks(), light_mmr_small.bag_peaks());
+        assert!(!light_mmr_small
+            .peaks
+            .iter()
+            .any(|peak| *peak == light_mmr_small.bag_peaks()));
+
+        // Then with Rescue Prime
+        let leaf_hashes_rescue_prime: Vec<Vec<BFieldElement>> =
+            (14..17).map(|x| vec![BFieldElement::new(x)]).collect();
+        let archival_mmr_small_rp = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(
+            leaf_hashes_rescue_prime.clone(),
+        );
+        let light_mmr_small_rp = LightMmr::<Vec<BFieldElement>, RescuePrimeProduction>::from_leafs(
+            leaf_hashes_rescue_prime,
+        );
+        assert_eq!(
+            archival_mmr_small_rp.bag_peaks(),
+            light_mmr_small_rp.bag_peaks()
+        );
+        assert!(!light_mmr_small_rp
+            .peaks
+            .iter()
+            .any(|peak| *peak == light_mmr_small_rp.bag_peaks()));
+
+        // Then with a bigger dataset
+        let leaf_hashes_bigger_blake3: Vec<blake3::Hash> =
+            vec![14u128, 15u128, 16u128, 206, 1232, 123, 9989]
+                .iter()
+                .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
+                .collect();
+        let archival_mmr_bigger =
+            ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes_bigger_blake3.clone());
+        let light_mmr_bigger =
+            LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes_bigger_blake3);
+        assert_eq!(
+            archival_mmr_bigger.bag_peaks(),
+            light_mmr_bigger.bag_peaks()
+        );
+        assert!(!light_mmr_bigger
+            .peaks
+            .iter()
+            .any(|peak| *peak == light_mmr_bigger.bag_peaks()));
     }
 
     #[test]
