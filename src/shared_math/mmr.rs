@@ -416,7 +416,7 @@ where
         let peak_height_index_res = peak_heights.iter().position(|x| *x == expected_peak_height);
         let peak_height_index = match peak_height_index_res {
             None => return false,
-            Some(phi) => phi,
+            Some(index) => index,
         };
 
         self.peaks[peak_height_index] == acc_hash
@@ -546,11 +546,7 @@ where
         let mut calculated_new_peaks: Vec<HashDigest> = old_peaks.to_owned();
         calculated_new_peaks[modified_peak_index] = sub_tree_root;
 
-        if calculated_new_peaks != new_peaks {
-            return false;
-        }
-
-        true
+        calculated_new_peaks == new_peaks
     }
 
     pub fn verify_membership(
