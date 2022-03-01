@@ -258,6 +258,47 @@ where
     acc
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct MembershipProof<HashDigest> {
+    // leaf_count: u128,
+    data_index: u128,
+    authentication_path: Vec<HashDigest>,
+}
+
+impl<HashDigest> MembershipProof<HashDigest>
+where
+    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+{
+    /// Return the node indices for the authentication path in this membership proof
+    pub fn get_node_indices(&self) -> Vec<u128> {
+        let mut node_index = data_index_to_node_index(self.data_index);
+        let mut node_indices = vec![];
+        for _ in 0..self.authentication_path.len() {
+            let (right, height) = right_child_and_height(node_index);
+            if right {
+                node_indices.push(left_sibling(node_index, height));
+            } else {
+                node_indices.push(right_sibling(node_index, height));
+            }
+            node_index = parent(node_index);
+        }
+
+        node_indices
+    }
+
+    /// Return the node indices for the hash values that can be derived from this proof
+    pub fn get_derivable_node_indices(&self) -> Vec<u128> {
+        let mut node_index = data_index_to_node_index(self.data_index);
+        let mut node_indices = vec![node_index];
+        for _ in 0..self.authentication_path.len() {
+            node_index = parent(node_index);
+            node_indices.push(node_index);
+        }
+
+        node_indices
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LightMmr<HashDigest, H> {
     leaf_count: u128,
@@ -343,15 +384,14 @@ where
     /// Update a leaf hash and modify the peaks with this new hash
     pub fn update_leaf(
         &mut self,
-        data_index: u128,
-        old_authentication_path: &[HashDigest],
+        old_membership_proof: &MembershipProof<HashDigest>,
         new_leaf: &HashDigest,
     ) {
-        let node_index = data_index_to_node_index(data_index);
+        let node_index = data_index_to_node_index(old_membership_proof.data_index);
         let mut hasher = H::new();
         let mut acc_hash: HashDigest = new_leaf.to_owned();
         let mut acc_index: u128 = node_index;
-        for hash in old_authentication_path.iter() {
+        for hash in old_membership_proof.authentication_path.iter() {
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
             acc_hash = if acc_right {
                 hasher.hash_two(hash, &acc_hash)
@@ -365,9 +405,10 @@ where
         // It **must** be compared against the correct peak.
         // Otherwise you could lie leaf_hash, data_index, authentication path
         let peak_heights = get_peak_heights(self.leaf_count);
-        let expected_peak_height_res = get_peak_height(self.leaf_count, data_index);
+        let expected_peak_height_res =
+            get_peak_height(self.leaf_count, old_membership_proof.data_index);
         let expected_peak_height = match expected_peak_height_res {
-            None => panic!("Did not find any peak height for (leaf_count, data_index) combination. Got: leaf_count = {}, data_index = {}", self.leaf_count, data_index),
+            None => panic!("Did not find any peak height for (leaf_count, data_index) combination. Got: leaf_count = {}, data_index = {}", self.leaf_count, old_membership_proof.data_index),
             Some(eph) => eph,
         };
 
@@ -381,16 +422,15 @@ where
     }
 
     /// Construct a proof of the integral update of a hash in an existing light MMR
-    /// New authentication path is unchanged by this operation, so
+    /// New authentication path (membership proof) is unchanged by this operation, so
     /// it is not output. Outputs new_peaks.
     pub fn prove_update_leaf(
         &self,
-        data_index: u128,
-        old_authentication_path: &[HashDigest],
+        old_membership_proof: &MembershipProof<HashDigest>,
         new_leaf: &HashDigest,
     ) -> Vec<HashDigest> {
         let mut updated_self = self.clone();
-        updated_self.update_leaf(data_index, old_authentication_path, new_leaf);
+        updated_self.update_leaf(old_membership_proof, new_leaf);
 
         updated_self.peaks
     }
@@ -399,28 +439,25 @@ where
     // TODO: Consider make this into a class method instead
     pub fn verify_update_leaf(
         old_peaks: &[HashDigest],
-        old_authentication_path: &[HashDigest],
+        old_membership_proof: &MembershipProof<HashDigest>,
         new_peaks: &[HashDigest],
-        new_authentication_path: &[HashDigest],
+        new_membership_proof: &MembershipProof<HashDigest>,
         new_leaf: &HashDigest,
-        data_index: u128,
         leaf_count: u128,
     ) -> bool {
         ArchivalMmr::<HashDigest, H>::verify_update_leaf(
             old_peaks,
-            old_authentication_path,
+            old_membership_proof,
             new_peaks,
-            new_authentication_path,
+            new_membership_proof,
             new_leaf,
-            data_index,
             leaf_count,
         )
     }
 
     /// Prove that a specific leaf hash belongs in an MMR
     pub fn prove_membership(
-        _authentication_path: &[HashDigest],
-        _data_index: u128,
+        _membership_proof: &MembershipProof<HashDigest>,
         _leaf_hash: HashDigest,
     ) {
     }
@@ -428,15 +465,14 @@ where
     /// Verify an authentication path showing that a specific leaf hash is stored in index `data_index`
     pub fn verify_membership(
         &self,
-        authentication_path: &[HashDigest],
-        data_index: u128,
+        membership_proof: &MembershipProof<HashDigest>,
         leaf_hash: &HashDigest,
     ) -> bool {
-        let node_index = data_index_to_node_index(data_index);
+        let node_index = data_index_to_node_index(membership_proof.data_index);
         let mut hasher = H::new();
         let mut acc_hash: HashDigest = leaf_hash.to_owned();
         let mut acc_index: u128 = node_index;
-        for hash in authentication_path.iter() {
+        for hash in membership_proof.authentication_path.iter() {
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
             acc_hash = if acc_right {
                 hasher.hash_two(hash, &acc_hash)
@@ -450,7 +486,8 @@ where
         // It **must** be compared against the correct peak.
         // Otherwise you could lie leaf_hash, data_index, authentication path
         let peak_heights = get_peak_heights(self.leaf_count);
-        let expected_peak_height_res = get_peak_height(self.leaf_count, data_index);
+        let expected_peak_height_res =
+            get_peak_height(self.leaf_count, membership_proof.data_index);
         let expected_peak_height = match expected_peak_height_res {
             None => return false,
             Some(eph) => eph,
@@ -533,19 +570,19 @@ where
     #[allow(clippy::type_complexity)]
     /// Create a proof for the integral modification of a leaf, without mutating the
     /// archival MMR.
-    /// Output: (Old peaks, old authentication path), (new peaks, new authentication path)
+    /// Output: (Old peaks, old membership proof), (new peaks, new membership proof)
     pub fn prove_update_leaf(
         &self,
         data_index: u128,
         new_leaf: &HashDigest,
     ) -> (
-        (Vec<HashDigest>, Vec<HashDigest>),
-        (Vec<HashDigest>, Vec<HashDigest>),
+        (Vec<HashDigest>, MembershipProof<HashDigest>),
+        (Vec<HashDigest>, MembershipProof<HashDigest>),
     ) {
         // TODO: MAKE SURE THIS FUNCTION IS TESTED FOR LOW AND HIGH PEAKS!
         // For low peaks: Make sure it is tested where the peak is just a leaf,
         // i.e. when there is a peak of height 0.
-        let (old_authentication_path, old_peaks): (Vec<HashDigest>, Vec<HashDigest>) =
+        let (old_membership_proof, old_peaks): (MembershipProof<HashDigest>, Vec<HashDigest>) =
             self.prove_membership(data_index);
         let mut new_archival_mmr: ArchivalMmr<HashDigest, H> = self.to_owned();
         let node_index_of_updated_leaf = data_index_to_node_index(data_index);
@@ -574,22 +611,21 @@ where
             node_index = parent_index;
             parent_index = parent(parent_index);
         }
-        let (new_authentication_path, new_peaks): (Vec<HashDigest>, Vec<HashDigest>) =
+        let (new_authentication_path, new_peaks): (MembershipProof<HashDigest>, Vec<HashDigest>) =
             new_archival_mmr.prove_membership(data_index);
 
         (
-            (old_peaks, old_authentication_path),
+            (old_peaks, old_membership_proof),
             (new_peaks, new_authentication_path),
         )
     }
 
     pub fn verify_update_leaf(
         old_peaks: &[HashDigest],
-        old_authentication_path: &[HashDigest],
+        old_membership_proof: &MembershipProof<HashDigest>,
         new_peaks: &[HashDigest],
-        new_authentication_path: &[HashDigest],
+        new_membership_proof: &MembershipProof<HashDigest>,
         new_leaf: &HashDigest,
-        data_index: u128,
         leaf_count: u128,
     ) -> bool {
         // We need to verify that
@@ -597,19 +633,14 @@ where
         // 2: New authentication path is valid
         // 3: Only the targeted peak is changed, all other must remain unchanged
 
-        // 1: authentication path is unchanged
-        if old_authentication_path != new_authentication_path {
+        // 1: authentication path and data index are unchanged
+        if old_membership_proof != new_membership_proof {
             return false;
         }
 
         // 2: New authentication path is valid
-        let (new_valid, sub_tree_root_res) = Self::verify_membership(
-            new_authentication_path,
-            new_peaks,
-            new_leaf,
-            data_index,
-            leaf_count,
-        );
+        let (new_valid, sub_tree_root_res) =
+            Self::verify_membership(new_membership_proof, new_peaks, new_leaf, leaf_count);
         if !new_valid {
             return false;
         }
@@ -628,20 +659,19 @@ where
     }
 
     pub fn verify_membership(
-        authentication_path: &[HashDigest],
+        membership_proof: &MembershipProof<HashDigest>,
         peaks: &[HashDigest],
         value_hash: &HashDigest,
-        data_index: u128,
         leaf_count: u128,
     ) -> (bool, Option<HashDigest>) {
         // Verify that peaks match root
         // let matching_root = *root == Self::get_root_from_peaks(peaks, node_count);
-        let node_index = data_index_to_node_index(data_index);
+        let node_index = data_index_to_node_index(membership_proof.data_index);
 
         let mut hasher = H::new();
         let mut acc_hash: HashDigest = value_hash.to_owned();
         let mut acc_index: u128 = node_index;
-        for hash in authentication_path.iter() {
+        for hash in membership_proof.authentication_path.iter() {
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
             acc_hash = if acc_right {
                 hasher.hash_two(hash, &acc_hash)
@@ -656,7 +686,7 @@ where
         if heights.len() != peaks.len() {
             return (false, None);
         }
-        let expected_peak_height_res = get_peak_height(leaf_count, data_index);
+        let expected_peak_height_res = get_peak_height(leaf_count, membership_proof.data_index);
         let expected_peak_height = match expected_peak_height_res {
             None => return (false, None),
             Some(eph) => eph,
@@ -675,8 +705,11 @@ where
         (true, Some(acc_hash))
     }
 
-    /// Return (authentication_path, peaks)
-    pub fn prove_membership(&self, data_index: u128) -> (Vec<HashDigest>, Vec<HashDigest>) {
+    /// Return (membership_proof, peaks)
+    pub fn prove_membership(
+        &self,
+        data_index: u128,
+    ) -> (MembershipProof<HashDigest>, Vec<HashDigest>) {
         // A proof consists of an authentication path
         // and a list of peaks that must hash to the root
 
@@ -714,7 +747,12 @@ where
             .map(|x| x.0.clone())
             .collect();
 
-        (authentication_path, peaks)
+        let membership_proof = MembershipProof {
+            authentication_path,
+            data_index,
+        };
+
+        (membership_proof, peaks)
     }
 
     /// Calculate root from a list of peaks and from the node count
@@ -859,6 +897,56 @@ where
         calculated_peaks == new_peaks
             && calculated_new_root == new_root
             && calculated_old_root == old_root
+    }
+}
+
+#[cfg(test)]
+mod mmr_membership_proof_test {
+    use super::*;
+    use crate::{
+        shared_math::{
+            b_field_element::BFieldElement, rescue_prime::RescuePrime, rescue_prime_params,
+        },
+        util_types::simple_hasher::RescuePrimeProduction,
+    };
+
+    #[test]
+    fn equality_test() {
+        let mp0: MembershipProof<blake3::Hash> = MembershipProof {
+            authentication_path: vec![],
+            data_index: 4,
+        };
+        let mp1: MembershipProof<blake3::Hash> = MembershipProof {
+            authentication_path: vec![],
+            data_index: 4,
+        };
+        let mp2: MembershipProof<blake3::Hash> = MembershipProof {
+            authentication_path: vec![],
+            data_index: 3,
+        };
+        let mp3: MembershipProof<blake3::Hash> = MembershipProof {
+            authentication_path: vec![blake3::hash(b"foobarbaz")],
+            data_index: 4,
+        };
+        assert_eq!(mp0, mp1);
+        assert_ne!(mp1, mp2);
+        assert_ne!(mp2, mp3);
+        assert_ne!(mp3, mp0);
+    }
+
+    #[test]
+    fn get_node_indices_simple_test() {
+        let leaf_hashes: Vec<blake3::Hash> = (14u128..14 + 8)
+            .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
+            .collect();
+        let archival_mmr = ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes.clone());
+        let (membership_proof, _peaks): (MembershipProof<blake3::Hash>, Vec<blake3::Hash>) =
+            archival_mmr.prove_membership(4);
+        assert_eq!(vec![9, 13, 7], membership_proof.get_node_indices());
+        assert_eq!(
+            vec![8, 10, 14, 15],
+            membership_proof.get_derivable_node_indices()
+        );
     }
 }
 
@@ -1061,36 +1149,37 @@ mod mmr_test {
             .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
             .collect();
         let archival_mmr = ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes.clone());
-        let (auth_path, peaks): (Vec<blake3::Hash>, Vec<blake3::Hash>) =
+        let (mut membership_proof, peaks): (MembershipProof<blake3::Hash>, Vec<blake3::Hash>) =
             archival_mmr.prove_membership(0);
 
         // Verify that the accumulated hash in the verifier is compared against the **correct** hash,
         // not just **any** hash in the peaks list.
         assert!(
             ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
-                &auth_path,
+                &membership_proof,
                 &peaks,
                 &leaf_hashes[0],
-                0,
                 3,
             )
             .0
         );
+        membership_proof.data_index = 2;
         assert!(
             !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
-                &auth_path,
+                &membership_proof,
                 &peaks,
                 &leaf_hashes[0],
-                2,
                 3,
             )
             .0
         );
+        membership_proof.data_index = 0;
 
         // verify the same behavior in the light MMR
         let light_mmr = LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes.clone());
-        assert!(light_mmr.verify_membership(&auth_path, 0, &leaf_hashes[0]));
-        assert!(!light_mmr.verify_membership(&auth_path, 2, &leaf_hashes[0]));
+        assert!(light_mmr.verify_membership(&membership_proof, &leaf_hashes[0]));
+        membership_proof.data_index = 2;
+        assert!(!light_mmr.verify_membership(&membership_proof, &leaf_hashes[0]));
     }
 
     #[test]
@@ -1101,13 +1190,13 @@ mod mmr_test {
             .collect();
         let mut archival_mmr =
             ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(leaf_hashes.clone());
-        let (ap, old_peaks) = archival_mmr.prove_membership(2);
+        let (mp, old_peaks): (MembershipProof<Vec<BFieldElement>>, Vec<Vec<BFieldElement>>) =
+            archival_mmr.prove_membership(2);
         assert!(
             ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-                &ap,
+                &mp,
                 &old_peaks,
                 &leaf_hashes[2],
-                2,
                 3
             )
             .0
@@ -1124,17 +1213,16 @@ mod mmr_test {
         assert_eq!(2, old_peaks.len());
         assert!(
             !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-                &ap,
+                &mp,
                 &new_peaks,
                 &leaf_hashes[2],
-                2,
                 3
             )
             .0
         );
         assert!(
             ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-                &ap, &new_peaks, &new_leaf, 2, 3
+                &mp, &new_peaks, &new_leaf, 3
             )
             .0
         );
@@ -1322,8 +1410,9 @@ mod mmr_test {
             let archival_end_state =
                 ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(vec![new_leaf; size as usize]);
             for i in 0..size {
-                let (ap, _archival_peaks) = archival.prove_membership(i);
-                light.update_leaf(i, &ap, &new_leaf);
+                let (mp, _archival_peaks) = archival.prove_membership(i);
+                assert_eq!(i, mp.data_index);
+                light.update_leaf(&mp, &new_leaf);
                 archival.update_leaf(i, new_leaf);
                 let new_archival_peaks = archival.get_peaks();
                 assert_eq!(new_archival_peaks, light.peaks);
@@ -1356,34 +1445,30 @@ mod mmr_test {
             let archival_end_state =
                 ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(vec![new_leaf; size as usize]);
             for i in 0..size {
-                let (authentication_path, _archival_peaks) = archival.prove_membership(i);
-                // light.update_leaf(i, &ap, &new_leaf);
-                let new_peaks_from_proof =
-                    light.prove_update_leaf(i, &authentication_path, &new_leaf);
+                let (mp, _archival_peaks) = archival.prove_membership(i);
+                let new_peaks_from_proof = light.prove_update_leaf(&mp, &new_leaf);
                 assert!(
                     LightMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
                         &light.peaks,
-                        &authentication_path,
+                        &mp,
                         &new_peaks_from_proof,
-                        &authentication_path,
+                        &mp,
                         &new_leaf,
-                        i,
                         size
                     )
                 );
                 assert!(
                     !LightMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
                         &light.peaks,
-                        &authentication_path,
+                        &mp,
                         &new_peaks_from_proof,
-                        &authentication_path,
+                        &mp,
                         &bad_leaf,
-                        i,
                         size
                     )
                 );
                 archival.update_leaf(i, new_leaf);
-                light.update_leaf(i, &authentication_path, &new_leaf);
+                light.update_leaf(&mp, &new_leaf);
                 let new_archival_peaks = archival.get_peaks();
                 assert_eq!(new_archival_peaks, light.peaks);
             }
@@ -1435,12 +1520,11 @@ mod mmr_test {
         let original_root: Vec<BFieldElement> = mmr.bag_peaks();
 
         let data_index = 0;
-        let (authentication_path, peaks) = mmr.prove_membership(data_index);
+        let (membership_proof, peaks) = mmr.prove_membership(data_index);
         let valid_res = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-            &authentication_path,
+            &membership_proof,
             &peaks,
             &input_hash,
-            data_index,
             leaf_count,
         );
         assert!(valid_res.0);
@@ -1473,29 +1557,18 @@ mod mmr_test {
 
         for &data_index in &[0u128, 1] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
-            let ((old_peaks, old_authentication_path), (new_peaks, new_authentication_path)) =
+            let ((old_peaks, mut old_mp), (new_peaks, new_mp)) =
                 mmr.prove_update_leaf(data_index, &new_leaf);
             assert!(
                 ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
-                    &old_peaks,
-                    &old_authentication_path,
-                    &new_peaks,
-                    &new_authentication_path,
-                    &new_leaf,
-                    data_index,
-                    leaf_count
+                    &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, leaf_count
                 )
             );
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
+            old_mp.data_index = wrong_data_index;
             assert!(
                 !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
-                    &old_peaks,
-                    &old_authentication_path,
-                    &new_peaks,
-                    &new_authentication_path,
-                    &new_leaf,
-                    wrong_data_index,
-                    leaf_count
+                    &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, leaf_count
                 )
             );
         }
@@ -1517,24 +1590,23 @@ mod mmr_test {
         let original_root = mmr.bag_peaks();
 
         let data_index: usize = 0;
-        let (authentication_path, peaks) = mmr.prove_membership(data_index as u128);
+        let (mut membership_proof, peaks) = mmr.prove_membership(data_index as u128);
         let valid_res = ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-            &authentication_path,
+            &membership_proof,
             &peaks,
             &input_hashes[data_index],
-            data_index as u128,
             leaf_count,
         );
         assert!(valid_res.0);
         assert!(valid_res.1.is_some());
 
         // Negative test for verify membership
+        membership_proof.data_index += 1;
         assert!(
             !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-                &authentication_path,
+                &membership_proof,
                 &peaks,
                 &input_hashes[data_index],
-                data_index as u128 + 1,
                 leaf_count
             )
             .0
@@ -1564,29 +1636,37 @@ mod mmr_test {
 
         for &data_index in &[0u128, 1, 2] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
-            let ((old_peaks, old_authentication_path), (new_peaks, new_authentication_path)) =
+            let ((old_peaks, mut old_mp), (new_peaks, mut new_mp)) =
                 mmr.prove_update_leaf(data_index, &new_leaf);
             assert!(
                 ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
-                    &old_peaks,
-                    &old_authentication_path,
-                    &new_peaks,
-                    &new_authentication_path,
-                    &new_leaf,
-                    data_index,
-                    leaf_count
+                    &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, leaf_count
                 )
             );
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
+            old_mp.data_index = wrong_data_index;
             assert!(
                 !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
-                    &old_peaks,
-                    &old_authentication_path,
-                    &new_peaks,
-                    &new_authentication_path,
-                    &new_leaf,
-                    wrong_data_index,
-                    leaf_count
+                    &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, leaf_count
+                )
+            );
+            old_mp.data_index = data_index;
+            assert!(
+                ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
+                    &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, leaf_count
+                )
+            );
+            new_mp.data_index = wrong_data_index;
+            assert!(
+                !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
+                    &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, leaf_count
+                )
+            );
+            old_mp.data_index = wrong_data_index;
+            assert_eq!(old_mp.data_index, new_mp.data_index);
+            assert!(
+                !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
+                    &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, leaf_count
                 )
             );
         }
@@ -1627,13 +1707,12 @@ mod mmr_test {
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid
             for index in 0..data_size {
-                let (authentication_path, peaks) = mmr.prove_membership(index as u128);
+                let (membership_proof, peaks) = mmr.prove_membership(index as u128);
                 let valid_res =
                     ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
-                        &authentication_path,
+                        &membership_proof,
                         &peaks,
                         &input_hashes[index as usize],
-                        index,
                         data_size,
                     );
                 assert!(valid_res.0);
@@ -1702,12 +1781,11 @@ mod mmr_test {
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid
             for data_index in 0..data_size {
-                let (authentication_path, peaks) = mmr.prove_membership(data_index);
+                let (membership_proof, peaks) = mmr.prove_membership(data_index);
                 let valid_res = ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
-                    &authentication_path,
+                    &membership_proof,
                     &peaks,
                     &input_hashes[data_index as usize],
-                    data_index,
                     data_size,
                 );
                 assert!(valid_res.0);
@@ -1718,65 +1796,69 @@ mod mmr_test {
                         .expect("Encoding failed")
                         .as_slice(),
                 );
-                let ((old_peaks, old_authentication_path), (new_peaks, new_authentication_path)) =
+                let ((old_peaks, mut old_mp), (new_peaks, mut new_mp)) =
                     mmr.prove_update_leaf(data_index, &new_leaf);
                 assert!(
                     ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
-                        &old_peaks,
-                        &old_authentication_path,
-                        &new_peaks,
-                        &new_authentication_path,
-                        &new_leaf,
-                        data_index,
-                        data_size
+                        &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, data_size
                     )
                 );
                 let wrong_data_index = (data_index + 1) % mmr.count_leaves();
 
-                // The below verify_modify test should only fail if `wrong_data_index` is
+                // The below verify_modify tests should only fail if `wrong_data_index` is
                 // different than `data_index`.
+                old_mp.data_index = wrong_data_index;
                 assert!(
                     wrong_data_index == data_index
                         || !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
-                            &old_peaks,
-                            &old_authentication_path,
-                            &new_peaks,
-                            &new_authentication_path,
-                            &new_leaf,
-                            wrong_data_index,
-                            data_size
+                            &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, data_size
+                        )
+                );
+                old_mp.data_index = data_index;
+                new_mp.data_index = wrong_data_index;
+                assert!(
+                    wrong_data_index == data_index
+                        || !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
+                            &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, data_size
+                        )
+                );
+                old_mp.data_index = wrong_data_index;
+                assert!(
+                    wrong_data_index == data_index
+                        || !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
+                            &old_peaks, &old_mp, &new_peaks, &new_mp, &new_leaf, data_size
                         )
                 );
 
                 // Modify an element in the MMR and run prove/verify for membership
                 let old_leaf = input_hashes[data_index as usize];
                 mmr.update_leaf(data_index, new_leaf.clone());
-                let (new_ap, new_peaks) = mmr.prove_membership(data_index);
+                let (new_mp, new_peaks) = mmr.prove_membership(data_index);
                 assert!(
                     ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
-                        &new_ap, &new_peaks, &new_leaf, data_index, data_size
+                        &new_mp, &new_peaks, &new_leaf, data_size
                     )
                     .0
                 );
                 assert!(
                     !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
-                        &new_ap, &new_peaks, &old_leaf, data_index, data_size
+                        &new_mp, &new_peaks, &old_leaf, data_size
                     )
                     .0
                 );
 
                 // Return the element to its former value and run prove/verify for membership
                 mmr.update_leaf(data_index, old_leaf.clone());
-                let (old_ap, old_peaks) = mmr.prove_membership(data_index);
+                let (old_mp, old_peaks) = mmr.prove_membership(data_index);
                 assert!(
                     !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
-                        &old_ap, &old_peaks, &new_leaf, data_index, data_size
+                        &old_mp, &old_peaks, &new_leaf, data_size
                     )
                     .0
                 );
                 assert!(
                     ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
-                        &old_ap, &old_peaks, &old_leaf, data_index, data_size
+                        &old_mp, &old_peaks, &old_leaf, data_size
                     )
                     .0
                 );
