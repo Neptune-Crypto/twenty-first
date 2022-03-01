@@ -381,15 +381,18 @@ where
     }
 
     /// Construct a proof of the integral update of a hash in an existing light MMR
-    /// Outputs new_peaks. New authentication path is unchanged by this operation, so
-    /// it is not output.
+    /// New authentication path is unchanged by this operation, so
+    /// it is not output. Outputs new_peaks.
     pub fn prove_update_leaf(
         &self,
         data_index: u128,
         old_authentication_path: &[HashDigest],
         new_leaf: &HashDigest,
     ) -> Vec<HashDigest> {
-        todo!()
+        let mut updated_self = self.clone();
+        updated_self.update_leaf(data_index, old_authentication_path, new_leaf);
+
+        updated_self.peaks
     }
 
     /// Verify the integral update of a leaf hash
@@ -1300,7 +1303,7 @@ mod mmr_test {
     }
 
     #[test]
-    fn mmr_update_leaf_test() {
+    fn light_mmr_update_leaf_test() {
         // Verify that upating leafs in archival and in light MMR results in the same peaks
         // and verify that updating all leafs in an MMR results in the expected MMR
         for size in 1..150 {
@@ -1326,6 +1329,64 @@ mod mmr_test {
                 assert_eq!(new_archival_peaks, light.peaks);
             }
 
+            assert_eq!(archival_end_state.get_peaks(), light.peaks);
+        }
+    }
+
+    #[test]
+    fn light_mmr_prove_verify_update_leaf_test() {
+        for size in 1..150 {
+            let new_leaf = blake3::hash(
+                bincode::serialize(&314159265358979u128)
+                    .expect("Encoding failed")
+                    .as_slice(),
+            );
+            let bad_leaf = blake3::hash(
+                bincode::serialize(&27182818284590452353u128)
+                    .expect("Encoding failed")
+                    .as_slice(),
+            );
+            let leaf_hashes_blake3: Vec<blake3::Hash> = (500u128..500 + size)
+                .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
+                .collect();
+            let mut light =
+                LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes_blake3.clone());
+            let mut archival =
+                ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes_blake3.clone());
+            let archival_end_state =
+                ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(vec![new_leaf; size as usize]);
+            for i in 0..size {
+                let (authentication_path, _archival_peaks) = archival.prove_membership(i);
+                // light.update_leaf(i, &ap, &new_leaf);
+                let new_peaks_from_proof =
+                    light.prove_update_leaf(i, &authentication_path, &new_leaf);
+                assert!(
+                    LightMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
+                        &light.peaks,
+                        &authentication_path,
+                        &new_peaks_from_proof,
+                        &authentication_path,
+                        &new_leaf,
+                        i,
+                        size
+                    )
+                );
+                assert!(
+                    !LightMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
+                        &light.peaks,
+                        &authentication_path,
+                        &new_peaks_from_proof,
+                        &authentication_path,
+                        &bad_leaf,
+                        i,
+                        size
+                    )
+                );
+                archival.update_leaf(i, new_leaf);
+                light.update_leaf(i, &authentication_path, &new_leaf);
+                let new_archival_peaks = archival.get_peaks();
+                assert_eq!(new_archival_peaks, light.peaks);
+            }
             assert_eq!(archival_end_state.get_peaks(), light.peaks);
         }
     }
