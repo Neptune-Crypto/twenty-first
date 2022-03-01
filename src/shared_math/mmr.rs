@@ -452,6 +452,37 @@ where
         new_mmr
     }
 
+    /// Update a hash in the existing archival MMR
+    pub fn update_leaf(&mut self, data_index: u128, new_leaf: HashDigest) {
+        // 1. change the leaf value
+        let mut node_index = data_index_to_node_index(data_index);
+        self.digests[node_index as usize] = new_leaf.clone();
+
+        // 2. Calculate hash changes for all parents
+        let mut parent_index = parent(node_index);
+        let mut acc_hash = new_leaf;
+        let mut hasher = H::new();
+
+        // While parent exists in MMR, update parent
+        while parent_index < self.digests.len() as u128 {
+            let (is_right, height) = right_child_and_height(node_index);
+            acc_hash = if is_right {
+                hasher.hash_two(
+                    &self.digests[left_sibling(node_index, height) as usize],
+                    &acc_hash,
+                )
+            } else {
+                hasher.hash_two(
+                    &acc_hash,
+                    &self.digests[right_sibling(node_index, height) as usize],
+                )
+            };
+            self.digests[parent_index as usize] = acc_hash.clone();
+            node_index = parent_index;
+            parent_index = parent(parent_index);
+        }
+    }
+
     #[allow(clippy::type_complexity)]
     /// Create a proof for the integral modification of a leaf, without mutating the
     /// archival MMR.
@@ -1012,6 +1043,64 @@ mod mmr_test {
     }
 
     #[test]
+    fn update_leaf_archival_test() {
+        let mut rp = RescuePrimeProduction::new();
+        let leaf_hashes: Vec<Vec<BFieldElement>> = (14..17)
+            .map(|x| rp.hash_one(&vec![BFieldElement::new(x)]))
+            .collect();
+        let mut archival_mmr =
+            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(leaf_hashes.clone());
+        let (ap, old_peaks) = archival_mmr.prove_membership(2);
+        assert!(
+            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
+                &ap,
+                &old_peaks,
+                &leaf_hashes[2],
+                2,
+                3
+            )
+            .0
+        );
+        let new_leaf = rp.hash_one(&vec![BFieldElement::new(10000)]);
+
+        archival_mmr.update_leaf(2, new_leaf.clone());
+        let new_peaks = archival_mmr.get_peaks();
+
+        // Verify that peaks have changed as expected
+        assert_ne!(old_peaks[1], new_peaks[1]);
+        assert_eq!(old_peaks[0], new_peaks[0]);
+        assert_eq!(2, new_peaks.len());
+        assert_eq!(2, old_peaks.len());
+        assert!(
+            !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
+                &ap,
+                &new_peaks,
+                &leaf_hashes[2],
+                2,
+                3
+            )
+            .0
+        );
+        assert!(
+            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
+                &ap, &new_peaks, &new_leaf, 2, 3
+            )
+            .0
+        );
+
+        // Create a new archival MMR with the same leaf hashes as in the
+        // modified MMR, and verify that the two MMRs are equivalent
+        let leaf_hashes_new = vec![
+            rp.hash_one(&vec![BFieldElement::new(14)]),
+            rp.hash_one(&vec![BFieldElement::new(15)]),
+            rp.hash_one(&vec![BFieldElement::new(10000)]),
+        ];
+        let archival_mmr_new =
+            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::init(leaf_hashes_new);
+        assert_eq!(archival_mmr.digests, archival_mmr_new.digests);
+    }
+
+    #[test]
     fn prove_append_test() {
         let leaf_hashes_blake3: Vec<blake3::Hash> = vec![14u128, 15u128, 16u128]
             .iter()
@@ -1490,6 +1579,39 @@ mod mmr_test {
                             wrong_data_index,
                             data_size
                         )
+                );
+
+                // Modify an element in the MMR and run prove/verify for membership
+                let old_leaf = input_hashes[data_index as usize];
+                mmr.update_leaf(data_index, new_leaf.clone());
+                let (new_ap, new_peaks) = mmr.prove_membership(data_index);
+                assert!(
+                    ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
+                        &new_ap, &new_peaks, &new_leaf, data_index, data_size
+                    )
+                    .0
+                );
+                assert!(
+                    !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
+                        &new_ap, &new_peaks, &old_leaf, data_index, data_size
+                    )
+                    .0
+                );
+
+                // Return the element to its former value and run prove/verify for membership
+                mmr.update_leaf(data_index, old_leaf.clone());
+                let (old_ap, old_peaks) = mmr.prove_membership(data_index);
+                assert!(
+                    !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
+                        &old_ap, &old_peaks, &new_leaf, data_index, data_size
+                    )
+                    .0
+                );
+                assert!(
+                    ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_membership(
+                        &old_ap, &old_peaks, &old_leaf, data_index, data_size
+                    )
+                    .0
                 );
             }
 
