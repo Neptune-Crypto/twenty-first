@@ -340,11 +340,44 @@ where
         }
     }
 
-    // Do we need a function to update an authentication path?
+    /// Update a leaf hash and modify the peaks with this new hash
+    pub fn update_leaf(
+        &mut self,
+        data_index: u128,
+        old_authentication_path: &[HashDigest],
+        new_leaf: &HashDigest,
+    ) {
+        let node_index = data_index_to_node_index(data_index);
+        let mut hasher = H::new();
+        let mut acc_hash: HashDigest = new_leaf.to_owned();
+        let mut acc_index: u128 = node_index;
+        for hash in old_authentication_path.iter() {
+            let (acc_right, _acc_height) = right_child_and_height(acc_index);
+            acc_hash = if acc_right {
+                hasher.hash_two(hash, &acc_hash)
+            } else {
+                hasher.hash_two(&acc_hash, hash)
+            };
+            acc_index = parent(acc_index);
+        }
 
-    /// Update a hash in the existing light MMR
-    pub fn update_leaf(&mut self) {
-        todo!()
+        // This function is *not* secure when verified against *any* peak.
+        // It **must** be compared against the correct peak.
+        // Otherwise you could lie leaf_hash, data_index, authentication path
+        let peak_heights = get_peak_heights(self.leaf_count);
+        let expected_peak_height_res = get_peak_height(self.leaf_count, data_index);
+        let expected_peak_height = match expected_peak_height_res {
+            None => panic!("Did not find any peak height for (leaf_count, data_index) combination. Got: leaf_count = {}, data_index = {}", self.leaf_count, data_index),
+            Some(eph) => eph,
+        };
+
+        let peak_height_index_res = peak_heights.iter().position(|x| *x == expected_peak_height);
+        let peak_height_index = match peak_height_index_res {
+            None => panic!("Did not find a matching peak"),
+            Some(index) => index,
+        };
+
+        self.peaks[peak_height_index] = acc_hash;
     }
 
     /// Construct a proof of the integral update of a hash in an existing light MMR
@@ -457,6 +490,10 @@ where
         }
 
         new_mmr
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.digests.len() == 1
     }
 
     /// Update a hash in the existing archival MMR
@@ -711,6 +748,10 @@ where
 
     /// Return a list of tuples (peaks, height)
     pub fn get_peaks_with_heights(&self) -> Vec<(HashDigest, u128)> {
+        if self.is_empty() {
+            return vec![];
+        }
+
         // 1. Find top peak
         // 2. Jump to right sibling (will not be included)
         // 3. Take left child of sibling, continue until a node in tree is found
@@ -1256,6 +1297,62 @@ mod mmr_test {
             .peaks
             .iter()
             .any(|peak| *peak == light_mmr_bigger.bag_peaks()));
+    }
+
+    #[test]
+    fn mmr_update_leaf_test() {
+        // Verify that upating leafs in archival and in light MMR results in the same peaks
+        // and verify that updating all leafs in an MMR results in the expected MMR
+        for size in 1..150 {
+            let new_leaf = blake3::hash(
+                bincode::serialize(&314159265358979u128)
+                    .expect("Encoding failed")
+                    .as_slice(),
+            );
+            let leaf_hashes_blake3: Vec<blake3::Hash> = (500u128..500 + size)
+                .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
+                .collect();
+            let mut light =
+                LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes_blake3.clone());
+            let mut archival =
+                ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes_blake3.clone());
+            let archival_end_state =
+                ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(vec![new_leaf; size as usize]);
+            for i in 0..size {
+                let (ap, _archival_peaks) = archival.prove_membership(i);
+                light.update_leaf(i, &ap, &new_leaf);
+                archival.update_leaf(i, new_leaf);
+                let new_archival_peaks = archival.get_peaks();
+                assert_eq!(new_archival_peaks, light.peaks);
+            }
+
+            assert_eq!(archival_end_state.get_peaks(), light.peaks);
+        }
+    }
+
+    #[test]
+    fn mmr_append_test() {
+        // Verify that building an MMR iteratively or in *one* function call results in the same MMR
+        for size in 1..100 {
+            let leaf_hashes_blake3: Vec<blake3::Hash> = (500u128..500 + size)
+                .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
+                .collect();
+            let mut archival_iterative = ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(vec![]);
+            let archival_batch =
+                ArchivalMmr::<blake3::Hash, blake3::Hasher>::init(leaf_hashes_blake3.clone());
+            let mut light_iterative = LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(vec![]);
+            let light_batch =
+                LightMmr::<blake3::Hash, blake3::Hasher>::from_leafs(leaf_hashes_blake3.clone());
+            for leaf_hash in leaf_hashes_blake3 {
+                archival_iterative.archive_append(leaf_hash);
+                light_iterative.append(leaf_hash);
+            }
+            assert_eq!(archival_iterative.digests, archival_batch.digests);
+            assert_eq!(light_batch.peaks, light_iterative.peaks);
+            assert_eq!(light_batch.leaf_count, light_iterative.leaf_count);
+            assert_eq!(size, light_iterative.leaf_count);
+            assert_eq!(archival_iterative.get_peaks(), light_iterative.peaks);
+        }
     }
 
     #[test]
