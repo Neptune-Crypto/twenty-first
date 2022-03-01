@@ -343,18 +343,25 @@ where
     // Do we need a function to update an authentication path?
 
     /// Update a hash in the existing light MMR
-    pub fn modify() {
+    pub fn update_leaf(&mut self) {
         todo!()
     }
 
     /// Construct a proof of the integral update of a hash in an existing light MMR
-    pub fn prove_modify() {
+    /// Outputs new_peaks. New authentication path is unchanged by this operation, so
+    /// it is not output.
+    pub fn prove_update_leaf(
+        &self,
+        data_index: u128,
+        old_authentication_path: &[HashDigest],
+        new_leaf: &HashDigest,
+    ) -> Vec<HashDigest> {
         todo!()
     }
 
     /// Verify the integral update of a leaf hash
     // TODO: Consider make this into a class method instead
-    pub fn verify_modify(
+    pub fn verify_update_leaf(
         old_peaks: &[HashDigest],
         old_authentication_path: &[HashDigest],
         new_peaks: &[HashDigest],
@@ -363,7 +370,7 @@ where
         data_index: u128,
         leaf_count: u128,
     ) -> bool {
-        ArchivalMmr::<HashDigest, H>::verify_modify(
+        ArchivalMmr::<HashDigest, H>::verify_update_leaf(
             old_peaks,
             old_authentication_path,
             new_peaks,
@@ -487,7 +494,7 @@ where
     /// Create a proof for the integral modification of a leaf, without mutating the
     /// archival MMR.
     /// Output: (Old peaks, old authentication path), (new peaks, new authentication path)
-    pub fn prove_modify(
+    pub fn prove_update_leaf(
         &self,
         data_index: u128,
         new_leaf: &HashDigest,
@@ -536,7 +543,7 @@ where
         )
     }
 
-    pub fn verify_modify(
+    pub fn verify_update_leaf(
         old_peaks: &[HashDigest],
         old_authentication_path: &[HashDigest],
         new_peaks: &[HashDigest],
@@ -1309,9 +1316,9 @@ mod mmr_test {
         for &data_index in &[0u128, 1] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
             let ((old_peaks, old_authentication_path), (new_peaks, new_authentication_path)) =
-                mmr.prove_modify(data_index, &new_leaf);
+                mmr.prove_update_leaf(data_index, &new_leaf);
             assert!(
-                ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_modify(
+                ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
                     &old_peaks,
                     &old_authentication_path,
                     &new_peaks,
@@ -1323,7 +1330,7 @@ mod mmr_test {
             );
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
             assert!(
-                !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_modify(
+                !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
                     &old_peaks,
                     &old_authentication_path,
                     &new_peaks,
@@ -1400,9 +1407,9 @@ mod mmr_test {
         for &data_index in &[0u128, 1, 2] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
             let ((old_peaks, old_authentication_path), (new_peaks, new_authentication_path)) =
-                mmr.prove_modify(data_index, &new_leaf);
+                mmr.prove_update_leaf(data_index, &new_leaf);
             assert!(
-                ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_modify(
+                ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
                     &old_peaks,
                     &old_authentication_path,
                     &new_peaks,
@@ -1414,7 +1421,7 @@ mod mmr_test {
             );
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
             assert!(
-                !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_modify(
+                !ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::verify_update_leaf(
                     &old_peaks,
                     &old_authentication_path,
                     &new_peaks,
@@ -1554,23 +1561,25 @@ mod mmr_test {
                         .as_slice(),
                 );
                 let ((old_peaks, old_authentication_path), (new_peaks, new_authentication_path)) =
-                    mmr.prove_modify(data_index, &new_leaf);
-                assert!(ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_modify(
-                    &old_peaks,
-                    &old_authentication_path,
-                    &new_peaks,
-                    &new_authentication_path,
-                    &new_leaf,
-                    data_index,
-                    data_size
-                ));
+                    mmr.prove_update_leaf(data_index, &new_leaf);
+                assert!(
+                    ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
+                        &old_peaks,
+                        &old_authentication_path,
+                        &new_peaks,
+                        &new_authentication_path,
+                        &new_leaf,
+                        data_index,
+                        data_size
+                    )
+                );
                 let wrong_data_index = (data_index + 1) % mmr.count_leaves();
 
                 // The below verify_modify test should only fail if `wrong_data_index` is
                 // different than `data_index`.
                 assert!(
                     wrong_data_index == data_index
-                        || !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_modify(
+                        || !ArchivalMmr::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
                             &old_peaks,
                             &old_authentication_path,
                             &new_peaks,
