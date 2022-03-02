@@ -245,12 +245,16 @@ pub fn calculate_new_peaks<
     Some(peaks)
 }
 
+/// Get a root commitment to the entire MMR
 pub fn bag_peaks<HashDigest, H>(peaks: &[HashDigest], node_count: u128) -> HashDigest
 where
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     H: Hasher<Digest = HashDigest> + Clone,
     u128: ToDigest<HashDigest>,
 {
+    // Follows the description on
+    // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
+    // to calculate a root from a list of peaks and the size of the MMR.
     let peaks_count: usize = peaks.len();
     let mut hasher: H = H::new();
 
@@ -311,45 +315,6 @@ where
 
         node_indices
     }
-
-    // pub fn update_leaf(
-    //     &mut self,
-    //     old_membership_proof: &MembershipProof<HashDigest>,
-    //     new_leaf: &HashDigest,
-    // ) {
-    //     let node_index = data_index_to_node_index(old_membership_proof.data_index);
-    //     let mut hasher = H::new();
-    //     let mut acc_hash: HashDigest = new_leaf.to_owned();
-    //     let mut acc_index: u128 = node_index;
-    //     for hash in old_membership_proof.authentication_path.iter() {
-    //         let (acc_right, _acc_height) = right_child_and_height(acc_index);
-    //         acc_hash = if acc_right {
-    //             hasher.hash_two(hash, &acc_hash)
-    //         } else {
-    //             hasher.hash_two(&acc_hash, hash)
-    //         };
-    //         acc_index = parent(acc_index);
-    //     }
-
-    //     // This function is *not* secure when verified against *any* peak.
-    //     // It **must** be compared against the correct peak.
-    //     // Otherwise you could lie leaf_hash, data_index, authentication path
-    //     let peak_heights = get_peak_heights(self.leaf_count);
-    //     let expected_peak_height_res =
-    //         get_peak_height(self.leaf_count, old_membership_proof.data_index);
-    //     let expected_peak_height = match expected_peak_height_res {
-    //         None => panic!("Did not find any peak height for (leaf_count, data_index) combination. Got: leaf_count = {}, data_index = {}", self.leaf_count, old_membership_proof.data_index),
-    //         Some(eph) => eph,
-    //     };
-
-    //     let peak_height_index_res = peak_heights.iter().position(|x| *x == expected_peak_height);
-    //     let peak_height_index = match peak_height_index_res {
-    //         None => panic!("Did not find a matching peak"),
-    //         Some(index) => index,
-    //     };
-
-    //     self.peaks[peak_height_index] = acc_hash;
-    // }
 
     /// Update a membership proof with a `leaf_update` proof. For the `membership_proof`
     /// parameter, it doesn't matter if you use the old or new membership proof associated
@@ -797,8 +762,6 @@ where
         value_hash: &HashDigest,
         leaf_count: u128,
     ) -> (bool, Option<HashDigest>) {
-        // Verify that peaks match root
-        // let matching_root = *root == Self::get_root_from_peaks(peaks, node_count);
         let node_index = data_index_to_node_index(membership_proof.data_index);
 
         let mut hasher = H::new();
@@ -844,7 +807,7 @@ where
         data_index: u128,
     ) -> (MembershipProof<HashDigest, H>, Vec<HashDigest>) {
         // A proof consists of an authentication path
-        // and a list of peaks that must hash to the root
+        // and a list of peaks
 
         // Find out how long the authentication path is
         let node_index = data_index_to_node_index(data_index);
@@ -887,22 +850,6 @@ where
         };
 
         (membership_proof, peaks)
-    }
-
-    /// Calculate root from a list of peaks and from the node count
-    fn get_root_from_peaks(peaks: &[HashDigest], node_count: u128) -> HashDigest {
-        // Follows the description for "bagging" on
-        // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
-        // Note that their "size" is the node count
-        let peaks_count: usize = peaks.len();
-        let mut hasher: H = H::new();
-
-        let mut acc: HashDigest = hasher.hash_two(&node_count.to_digest(), &peaks[peaks_count - 1]);
-        for i in 1..peaks_count {
-            acc = hasher.hash_two(&peaks[peaks_count - 1 - i], &acc);
-        }
-
-        acc
     }
 
     /// Calculate the root for the entire MMR
