@@ -131,6 +131,21 @@ pub fn get_peak_height(leaf_count: u128, data_index: u128) -> Option<u128> {
     Some(height - 1)
 }
 
+/// Return the indices of the nodes added by an append
+fn node_indices_added_by_append(old_leaf_count: u128) -> Vec<u128> {
+    let mut node_index = data_index_to_node_index(old_leaf_count);
+    let mut added_node_indices = vec![node_index];
+    let mut is_right_child: bool = right_child_and_height(node_index).0;
+    while is_right_child {
+        // a right child's parent is found by adding 1 to the node index
+        node_index += 1;
+        added_node_indices.push(node_index);
+        is_right_child = right_child_and_height(node_index).0;
+    }
+
+    added_node_indices
+}
+
 /// Given node count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
 pub fn get_peak_heights(leaf_count: u128) -> Vec<u128> {
@@ -1170,6 +1185,30 @@ mod mmr_test {
         assert_eq!(2, get_height_from_data_index(6));
         assert_eq!(3, get_height_from_data_index(7));
         assert_eq!(3, get_height_from_data_index(8));
+    }
+
+    #[test]
+    fn node_indices_added_by_append_test() {
+        assert_eq!(vec![1], node_indices_added_by_append(0));
+        assert_eq!(vec![2, 3], node_indices_added_by_append(1));
+        assert_eq!(vec![4], node_indices_added_by_append(2));
+        assert_eq!(vec![5, 6, 7], node_indices_added_by_append(3));
+        assert_eq!(vec![8], node_indices_added_by_append(4));
+        assert_eq!(vec![9, 10], node_indices_added_by_append(5));
+        assert_eq!(vec![11], node_indices_added_by_append(6));
+        assert_eq!(vec![12, 13, 14, 15], node_indices_added_by_append(7));
+        assert_eq!(vec![16], node_indices_added_by_append(8));
+        assert_eq!(vec![17, 18], node_indices_added_by_append(9));
+        assert_eq!(vec![19], node_indices_added_by_append(10));
+        assert_eq!(vec![20, 21, 22], node_indices_added_by_append(11));
+        assert_eq!(vec![23], node_indices_added_by_append(12));
+        assert_eq!(vec![24, 25], node_indices_added_by_append(13));
+        assert_eq!(vec![26], node_indices_added_by_append(14));
+        assert_eq!(vec![27, 28, 29, 30, 31], node_indices_added_by_append(15));
+        assert_eq!(vec![32], node_indices_added_by_append(16));
+        assert_eq!(vec![33, 34], node_indices_added_by_append(17));
+        assert_eq!(vec![35], node_indices_added_by_append(18));
+        assert_eq!(vec![36, 37, 38], node_indices_added_by_append(19));
     }
 
     #[test]
