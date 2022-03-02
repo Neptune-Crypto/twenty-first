@@ -946,10 +946,8 @@ where
     /// With knowledge of old peaks, old size (leaf count), new leaf hash, and new peaks, verify that
     /// append is correct.
     pub fn verify_append(
-        old_root: HashDigest,
         old_peaks: &[HashDigest],
         old_leaf_count: u128,
-        new_root: HashDigest,
         new_leaf_hash: HashDigest,
         new_peaks: &[HashDigest],
     ) -> bool {
@@ -970,14 +968,7 @@ where
             new_node_is_right_child = right_child_and_height(new_node_index).0;
         }
 
-        let calculated_new_root =
-            Self::get_root_from_peaks(&calculated_peaks, new_node_index as u128);
-        let calculated_old_root =
-            Self::get_root_from_peaks(old_peaks, first_new_node_index as u128 - 1);
-
         calculated_peaks == new_peaks
-            && calculated_new_root == new_root
-            && calculated_old_root == old_root
     }
 }
 
@@ -1709,7 +1700,6 @@ mod mmr_test {
             mmr.get_peaks_with_heights();
         assert_eq!(1, original_peaks_and_heights.len());
         assert_eq!(0, original_peaks_and_heights[0].1);
-        let original_root: Vec<BFieldElement> = mmr.bag_peaks();
 
         let data_index = 0;
         let (membership_proof, peaks) = mmr.prove_membership(data_index);
@@ -1735,12 +1725,10 @@ mod mmr_test {
             .collect();
         let new_peaks: Vec<Vec<BFieldElement>> =
             new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
-        let new_root = mmr.bag_peaks();
         assert!(
             MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
                 &original_peaks,
                 mmr.count_leaves() - 1,
-                new_root,
                 new_input_hash,
                 &new_peaks
             )
@@ -1778,7 +1766,6 @@ mod mmr_test {
         let original_peaks_and_heights: Vec<(Vec<BFieldElement>, u128)> =
             mmr.get_peaks_with_heights();
         assert_eq!(1, original_peaks_and_heights.len());
-        let original_root = mmr.bag_peaks();
 
         let data_index: usize = 0;
         let (mut membership_proof, peaks) = mmr.prove_membership(data_index as u128);
@@ -1813,12 +1800,10 @@ mod mmr_test {
         leaf_count += 1;
         let new_peaks: Vec<Vec<BFieldElement>> =
             new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
-        let new_root = mmr.bag_peaks();
         assert!(
             MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
                 &original_peaks,
                 mmr.count_leaves() - 1,
-                new_root,
                 new_leaf_hash,
                 &new_peaks
             )
@@ -1917,12 +1902,10 @@ mod mmr_test {
                 .collect();
             let new_peaks: Vec<Vec<BFieldElement>> =
                 new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
-            let new_root = mmr.bag_peaks();
             assert!(
                 MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
                     &original_peaks,
                     mmr.count_leaves() - 1,
-                    new_root,
                     new_leaf_hash,
                     &new_peaks
                 )
@@ -2064,7 +2047,6 @@ mod mmr_test {
             assert!(MmrArchive::<blake3::Hash, blake3::Hasher>::verify_append(
                 &original_peaks,
                 mmr.count_leaves() - 1,
-                new_root,
                 new_leaf_hash,
                 &new_peaks
             ));
