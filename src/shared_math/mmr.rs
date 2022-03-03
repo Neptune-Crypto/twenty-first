@@ -1115,6 +1115,11 @@ where
 
 #[cfg(test)]
 mod mmr_membership_proof_test {
+    use crate::{
+        shared_math::b_field_element::BFieldElement,
+        util_types::simple_hasher::RescuePrimeProduction,
+    };
+
     use super::*;
 
     #[test]
@@ -1379,7 +1384,7 @@ mod mmr_membership_proof_test {
     }
 
     #[test]
-    fn update_membership_proof_from_append_pbt() {
+    fn update_membership_proof_from_append_pbt_blake3() {
         // Build MMR from leaf count 0 to 514, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an
         // append update.
@@ -1422,6 +1427,65 @@ mod mmr_membership_proof_test {
                 assert_eq!(
                     appended_archival_mmr.prove_membership(i),
                     (membership_proof, new_peaks)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn update_membership_proof_from_append_pbt_rescue_prime() {
+        // Build MMR from leaf count 0 to 9, and loop through *each*
+        // leaf index for MMR, modifying its membership proof with an
+        // append update.
+        let mut rp = RescuePrimeProduction::new();
+        for leaf_count in 0..9 {
+            let leaf_hashes: Vec<Vec<BFieldElement>> = (1001..1001 + leaf_count)
+                .map(|x| rp.hash_one(&vec![BFieldElement::new(x)]))
+                .collect();
+            let archival_mmr =
+                MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::init(leaf_hashes.clone());
+            let new_leaf = rp.hash_one(&vec![BFieldElement::new(13333337)]);
+            for i in 0..leaf_count {
+                let (original_membership_proof, old_peaks): (
+                    MembershipProof<Vec<BFieldElement>, RescuePrimeProduction>,
+                    Vec<Vec<BFieldElement>>,
+                ) = archival_mmr.prove_membership(i);
+                let mut appended_archival_mmr = archival_mmr.clone();
+                appended_archival_mmr.archive_append(new_leaf.clone());
+                let new_peaks = appended_archival_mmr.get_peaks();
+
+                // Update membership proof and verify that it succeeds
+                let mut membership_proof_mutated = original_membership_proof.clone();
+                let mutated = membership_proof_mutated
+                    .update_membership_proof_from_append(leaf_count, &new_leaf, &old_peaks);
+                assert!(
+                    MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
+                        &membership_proof_mutated,
+                        &new_peaks,
+                        &leaf_hashes[i as usize],
+                        leaf_count + 1,
+                    )
+                    .0
+                );
+
+                // If membership proof mutated, then the old proof must be invalid
+                if mutated {
+                    assert!(
+                        !MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
+                            &original_membership_proof,
+                            &new_peaks,
+                            &leaf_hashes[i as usize],
+                            leaf_count + 1,
+                        )
+                        .0
+                    );
+                }
+
+                // Verify that the appended Arhival MMR produces the same membership proof
+                // as the one we got by updating the old membership proof
+                assert_eq!(
+                    appended_archival_mmr.prove_membership(i),
+                    (membership_proof_mutated, new_peaks)
                 );
             }
         }
