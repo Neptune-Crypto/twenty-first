@@ -146,6 +146,33 @@ fn node_indices_added_by_append(old_leaf_count: u128) -> Vec<u128> {
     added_node_indices
 }
 
+/// Get the node indices of the authentication path hash digest needed
+/// to calculate the digest of `peak_node_index` from `start_node_index`
+fn get_authentication_path_node_indices(
+    start_node_index: u128,
+    peak_node_index: u128,
+    node_count: u128,
+) -> Option<Vec<u128>> {
+    let mut authentication_path_node_indices = vec![];
+    let mut node_index = start_node_index;
+    while node_index <= node_count && node_index != peak_node_index {
+        let (is_right, height) = right_child_and_height(node_index);
+        let sibling_node_index = if is_right {
+            left_sibling(node_index, height)
+        } else {
+            right_sibling(node_index, height)
+        };
+        authentication_path_node_indices.push(sibling_node_index);
+        node_index = parent(node_index);
+    }
+
+    if node_index == peak_node_index {
+        Some(authentication_path_node_indices)
+    } else {
+        None
+    }
+}
+
 /// Given node count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
 pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, Vec<u128>) {
@@ -346,37 +373,88 @@ where
         )
     }
 
-    // pub fn verify_append(
-    //     old_peaks: Vec<HashDigest>,
-    //     old_leaf_count: u128,
-    //     new_leaf: HashDigest,
-    //     new_peaks_expected: Vec<HashDigest>,
-    // ) -> bool {
-    /// Update a membership proof with a `verify_append` proof.
+    /// Update a membership proof with a `verify_append` proof. Returns `true` if an
+    /// authentication path has been mutated, false otherwise.
     pub fn update_membership_proof_from_append(
         &mut self,
         old_leaf_count: u128,
         new_leaf: &HashDigest,
         old_peaks: &[HashDigest],
-    ) {
-        let own_node_ap_indices = self.get_node_indices();
+    ) -> bool {
+        // 1. Get index of authentication paths's peak
+        // 2. Get node indices for nodes added by the append
+        // 3. Check if authentication path's peak's parent is present in the added nodes (peak can only be left child)
+        //   a If not, then we are done, return from method
+        // 4. Get the indices that auth path must be extended with
+        // 5. Get all derivable node digests
+        //   a. Get the node digests from the previous peaks
+        //   b. Get the node digests that can be calculated by hashing from the new leaf
+        // 6. Push these digests to the authentication path
 
+        // 1
+        let (old_peak_index, old_peak_height) = self.get_peak_index_and_height();
+
+        // 2
         let added_node_indices = node_indices_added_by_append(old_leaf_count);
 
-        let mut node_index: u128 = if self.authentication_path.is_empty() {
-            data_index_to_node_index(self.data_index)
-        } else {
-            data_index_to_node_index(*own_node_ap_indices.last().unwrap())
-        };
+        // 3
+        // Any peak is a left child, so we don't have to check if it's a right or left child.
+        // This means we can use a faster method to find the parent index than the generic method.
+        let peak_parent_index = old_peak_index + (1 << (old_peak_height + 1));
 
-        let mut parent_index = parent(node_index);
-        // Set `acc_hash` to one of the peaks, but which one?
-        while added_node_indices.contains(&parent_index) {
-            // 1. Add hash for sibling of `node_index` to authentication path
-            // 2. Update parent index
-            // Maybe we can find some inspiration in the `calculate_new_peaks`
-            // function?
+        // 3a
+        if !added_node_indices.contains(&peak_parent_index) {
+            return false;
         }
+
+        // 4 Get node indices of missing digests
+        let new_peak_index: u128 = *added_node_indices.last().unwrap();
+        let new_node_count: u128 = leaf_count_to_node_count(old_leaf_count + 1);
+        let node_indices_for_missing_digests: Vec<u128> =
+            get_authentication_path_node_indices(old_peak_index, new_peak_index, new_node_count)
+                .unwrap();
+
+        // 5 collect all derivable peaks in a hashmap indexed by node index
+        // 5.a, collect all node hash digests that are present in the old peaks
+        // The keys in the hash map are node indices
+        let mut known_digests: HashMap<u128, HashDigest> = HashMap::new();
+        let (_old_peak_heights, old_peak_indices) =
+            get_peak_heights_and_peak_node_indices(old_leaf_count);
+        for (old_peak_index, old_peak_digest) in old_peak_indices.iter().zip(old_peaks.iter()) {
+            known_digests.insert(*old_peak_index, old_peak_digest.to_owned());
+        }
+
+        // 5.b collect all node hash digests that are derivable from `new_leaf` and
+        // `old_peaks`. These are the digests of `new_leaf`'s path to the root.
+        // break out of loop once *one* digest is found this way since that will
+        // always suffice.
+        let mut acc_hash = new_leaf.to_owned();
+        let mut hasher = H::new();
+        for (node_index, old_peak_digest) in added_node_indices.iter().zip(old_peaks.iter().rev()) {
+            known_digests.insert(*node_index, acc_hash.to_owned());
+
+            // peaks are always left children, so we don't have to check for that
+            acc_hash = hasher.hash_two(old_peak_digest, &acc_hash);
+
+            // once we encouter the first of the needed accumulator indices,
+            // we can break. Just like we could in the update for the leaf update
+            // membership proof update.
+            // The reason for this break is that the authentication path consists of
+            // commits to disjoint sets, so anything that can be derived from a
+            // hash that is part of the missing digests cannot possible be an
+            // element in an authentication path
+            if node_indices_for_missing_digests.contains(node_index) {
+                break;
+            }
+        }
+
+        // 6
+        for missing_digest_node_index in node_indices_for_missing_digests {
+            self.authentication_path
+                .push(known_digests[&missing_digest_node_index].clone());
+        }
+
+        true
     }
 
     /// Update a membership proof with a `leaf_update` proof. For the `membership_proof`
@@ -1246,6 +1324,108 @@ mod mmr_membership_proof_test {
             .0
         );
     }
+
+    #[test]
+    fn update_membership_proof_from_append_test_simple() {
+        let leaf_count = 7;
+        let leaf_hashes: Vec<blake3::Hash> = (14u128..14 + leaf_count)
+            .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
+            .collect();
+        let new_leaf = blake3::hash(
+            bincode::serialize(&133337u128)
+                .expect("Encoding failed")
+                .as_slice(),
+        );
+        let archival_mmr = MmrArchive::<blake3::Hash, blake3::Hasher>::init(leaf_hashes.clone());
+        for i in 0..leaf_count {
+            let (mut membership_proof, old_peaks): (
+                MembershipProof<blake3::Hash, blake3::Hasher>,
+                Vec<blake3::Hash>,
+            ) = archival_mmr.prove_membership(i);
+            let mut appended_archival_mmr = archival_mmr.clone();
+            appended_archival_mmr.archive_append(new_leaf.clone());
+            let new_peaks = appended_archival_mmr.get_peaks();
+
+            // Verify that membership proof fails before update and succeeds after
+            // for the case of leaf_count 7, **all** membership proofs have to be
+            // updated to be valid, so they should all fail prior to the update.
+            assert!(
+                !MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
+                    &membership_proof,
+                    &new_peaks,
+                    &leaf_hashes[i as usize],
+                    leaf_count + 1,
+                )
+                .0
+            );
+            membership_proof.update_membership_proof_from_append(leaf_count, &new_leaf, &old_peaks);
+            assert!(
+                MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
+                    &membership_proof,
+                    &new_peaks,
+                    &leaf_hashes[i as usize],
+                    leaf_count + 1,
+                )
+                .0
+            );
+
+            // Verify that the appended Arhival MMR produces the same membership proof
+            // as the one we got by updating the old membership proof
+            assert_eq!(
+                appended_archival_mmr.prove_membership(i),
+                (membership_proof, new_peaks)
+            );
+        }
+    }
+
+    #[test]
+    fn update_membership_proof_from_append_pbt() {
+        // Build MMR from leaf count 0 to 514, and loop through *each*
+        // leaf index for MMR, modifying its membership proof with an
+        // append update.
+        for leaf_count in 0..514 {
+            let leaf_hashes: Vec<blake3::Hash> = (543217893265643843678u128
+                ..543217893265643843678 + leaf_count)
+                .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
+                .collect();
+            let new_leaf = blake3::hash(
+                bincode::serialize(&133333333333333333333337u128)
+                    .expect("Encoding failed")
+                    .as_slice(),
+            );
+            let archival_mmr =
+                MmrArchive::<blake3::Hash, blake3::Hasher>::init(leaf_hashes.clone());
+            for i in 0..leaf_count {
+                let (mut membership_proof, old_peaks): (
+                    MembershipProof<blake3::Hash, blake3::Hasher>,
+                    Vec<blake3::Hash>,
+                ) = archival_mmr.prove_membership(i);
+                let mut appended_archival_mmr = archival_mmr.clone();
+                appended_archival_mmr.archive_append(new_leaf.clone());
+                let new_peaks = appended_archival_mmr.get_peaks();
+
+                // Update membership proof and verify that it succeeds
+                membership_proof
+                    .update_membership_proof_from_append(leaf_count, &new_leaf, &old_peaks);
+                assert!(
+                    MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
+                        &membership_proof,
+                        &new_peaks,
+                        &leaf_hashes[i as usize],
+                        leaf_count + 1,
+                    )
+                    .0
+                );
+
+                // Verify that the appended Arhival MMR produces the same membership proof
+                // as the one we got by updating the old membership proof
+                assert_eq!(
+                    appended_archival_mmr.prove_membership(i),
+                    (membership_proof, new_peaks)
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1492,6 +1672,26 @@ mod mmr_test {
             assert_eq!(
                 (expected_heights, expected_indices),
                 get_peak_heights_and_peak_node_indices(leaf_count)
+            );
+        }
+    }
+
+    #[test]
+    fn get_authentication_path_node_indices_test() {
+        let start_end_node_count_expected: Vec<((u128, u128, u128), Option<Vec<u128>>)> = vec![
+            ((1, 31, 31), Some(vec![2, 6, 14, 30])),
+            ((2, 31, 31), Some(vec![1, 6, 14, 30])),
+            ((3, 31, 31), Some(vec![6, 14, 30])),
+            ((4, 31, 31), Some(vec![5, 3, 14, 30])),
+            ((21, 31, 31), Some(vec![18, 29, 15])),
+            ((21, 31, 32), Some(vec![18, 29, 15])),
+            ((32, 32, 32), Some(vec![])),
+            ((1, 32, 32), None),
+        ];
+        for ((start, end, node_count), expected) in start_end_node_count_expected {
+            assert_eq!(
+                expected,
+                get_authentication_path_node_indices(start, end, node_count)
             );
         }
     }
