@@ -1384,7 +1384,7 @@ mod mmr_membership_proof_test {
     }
 
     #[test]
-    fn update_membership_proof_from_append_pbt_blake3() {
+    fn update_membership_proof_from_append_big_blake3() {
         // Build MMR from leaf count 0 to 514, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an
         // append update.
@@ -1433,7 +1433,7 @@ mod mmr_membership_proof_test {
     }
 
     #[test]
-    fn update_membership_proof_from_append_pbt_rescue_prime() {
+    fn update_membership_proof_from_append_big_rescue_prime() {
         // Build MMR from leaf count 0 to 9, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an
         // append update.
