@@ -462,14 +462,14 @@ where
     /// with the leaf update, as they are the same before and after the leaf update.
     pub fn update_membership_proof_from_leaf_update(
         &mut self,
-        membership_proof: &MembershipProof<HashDigest, H>,
+        leaf_update_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
-    ) {
+    ) -> bool {
         // TODO: This function could also return the new peak and perhaps the peaks index.
         // this way, this function could also be used to update a `MmrAccumulator` struct
         // and not just a membership proof.
         let own_node_ap_indices = self.get_node_indices();
-        let affected_node_indices = membership_proof.get_direct_path_indices();
+        let affected_node_indices = leaf_update_membership_proof.get_direct_path_indices();
         let own_node_indices_hash_set: HashSet<u128> =
             HashSet::from_iter(own_node_ap_indices.clone());
         let affected_node_indices_hash_set: HashSet<u128> =
@@ -480,7 +480,7 @@ where
         // If intersection is empty no change is needed
         let intersection_index_res: Option<&u128> = intersection.next();
         let intersection_index: u128 = match intersection_index_res {
-            None => return,
+            None => return false,
             Some(&index) => index,
         };
 
@@ -491,14 +491,14 @@ where
         // If intersection is **not** empty, we need to calculate all deducible node hashes from the
         // `membership_proof` until we meet the intersecting node.
         let mut deducible_hashes: HashMap<u128, HashDigest> = HashMap::new();
-        let mut node_index = data_index_to_node_index(membership_proof.data_index);
+        let mut node_index = data_index_to_node_index(leaf_update_membership_proof.data_index);
         deducible_hashes.insert(node_index, new_leaf.clone());
         let mut hasher = H::new();
         let mut acc_hash: HashDigest = new_leaf.to_owned();
 
         // Calculate hashes from the bottom towards the peak. Break when
         // the intersecting node is reached.
-        for hash in membership_proof.authentication_path.iter() {
+        for hash in leaf_update_membership_proof.authentication_path.iter() {
             // It's not necessary to calculate all the way to the root since,
             // the intersection set has a size of at most one (I think).
             // So we can break the loop when we find a `node_index` that
@@ -532,6 +532,8 @@ where
             }
             *digest = deducible_hashes[&own_node_index].clone();
         }
+
+        true
     }
 }
 
@@ -1328,6 +1330,83 @@ mod mmr_membership_proof_test {
             )
             .0
         );
+    }
+
+    #[test]
+    fn update_membership_proof_from_leaf_update_blake3_big_test() {
+        // Build MMR from leaf count 0 to 17, and loop through *each*
+        // leaf index for MMR, modifying its membership proof with a
+        // leaf update.
+        for leaf_count in 0..65 {
+            let leaf_hashes: Vec<blake3::Hash> = (543217893265643843678u128
+                ..543217893265643843678 + leaf_count)
+                .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
+                .collect();
+            let new_leaf = blake3::hash(
+                bincode::serialize(&133333333333333333333337u128)
+                    .expect("Encoding failed")
+                    .as_slice(),
+            );
+            let archival_mmr =
+                MmrArchive::<blake3::Hash, blake3::Hasher>::init(leaf_hashes.clone());
+
+            // Loop over all leaf indices that we want to modify in the MMR
+            for i in 0..leaf_count {
+                let (leaf_update_membership_proof, _old_peaks): (
+                    MembershipProof<blake3::Hash, blake3::Hasher>,
+                    Vec<blake3::Hash>,
+                ) = archival_mmr.prove_membership(i);
+                let mut modified_archival_mmr = archival_mmr.clone();
+                modified_archival_mmr.update_leaf(i, new_leaf);
+                let new_peaks = modified_archival_mmr.get_peaks();
+
+                // Loop over all leaf indices want a membership proof of, for modification
+                for j in 0..leaf_count {
+                    let mut membership_proof: MembershipProof<blake3::Hash, blake3::Hasher> =
+                        archival_mmr.prove_membership(j).0;
+                    let original_membership_roof = membership_proof.clone();
+                    let membership_proof_was_mutated = membership_proof
+                        .update_membership_proof_from_leaf_update(
+                            &leaf_update_membership_proof,
+                            &new_leaf,
+                        );
+                    let our_leaf = if i == j {
+                        &new_leaf
+                    } else {
+                        &leaf_hashes[j as usize]
+                    };
+                    assert!(
+                        MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
+                            &membership_proof,
+                            &new_peaks,
+                            our_leaf,
+                            leaf_count,
+                        )
+                        .0
+                    );
+
+                    // If membership proof was mutated, the original proof must fail
+                    if membership_proof_was_mutated {
+                        assert!(
+                            !MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
+                                &original_membership_roof,
+                                &new_peaks,
+                                our_leaf,
+                                leaf_count,
+                            )
+                            .0
+                        );
+                    }
+
+                    // Verify that modified membership proof matches that which can be
+                    // fetched from the modified archival MMR
+                    assert_eq!(
+                        modified_archival_mmr.prove_membership(j).0,
+                        membership_proof
+                    );
+                }
+            }
+        }
     }
 
     #[test]
