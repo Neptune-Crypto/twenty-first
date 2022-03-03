@@ -148,7 +148,11 @@ fn node_indices_added_by_append(old_leaf_count: u128) -> Vec<u128> {
 
 /// Given node count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
-pub fn get_peak_heights(leaf_count: u128) -> Vec<u128> {
+pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, Vec<u128>) {
+    if leaf_count == 0 {
+        return (vec![], vec![]);
+    }
+
     let node_index_of_rightmost_leaf = data_index_to_node_index(leaf_count - 1);
     let node_count = leaf_count_to_node_count(leaf_count);
     let (mut top_peak, mut top_height) = leftmost_ancestor(node_index_of_rightmost_leaf);
@@ -158,6 +162,7 @@ pub fn get_peak_heights(leaf_count: u128) -> Vec<u128> {
     }
 
     let mut heights: Vec<u128> = vec![top_height];
+    let mut node_indices: Vec<u128> = vec![top_peak];
     let mut height = top_height;
     let mut candidate = right_sibling(top_peak, height);
     'outer: while height > 0 {
@@ -166,13 +171,14 @@ pub fn get_peak_heights(leaf_count: u128) -> Vec<u128> {
             height -= 1;
             if candidate <= node_count {
                 heights.push(height);
+                node_indices.push(candidate);
                 candidate = right_sibling(candidate, height);
                 continue 'outer;
             }
         }
     }
 
-    heights
+    (heights, node_indices)
 }
 
 /// Count the number of non-leaf nodes that were inserted *prior* to
@@ -556,7 +562,7 @@ where
         // This function is *not* secure when verified against *any* peak.
         // It **must** be compared against the correct peak.
         // Otherwise you could lie leaf_hash, data_index, authentication path
-        let peak_heights = get_peak_heights(self.leaf_count);
+        let (peak_heights, _) = get_peak_heights_and_peak_node_indices(self.leaf_count);
         let expected_peak_height_res =
             get_peak_height(self.leaf_count, old_membership_proof.data_index);
         let expected_peak_height = match expected_peak_height_res {
@@ -637,7 +643,7 @@ where
         // This function is *not* secure when verified against *any* peak.
         // It **must** be compared against the correct peak.
         // Otherwise you could lie leaf_hash, data_index, authentication path
-        let peak_heights = get_peak_heights(self.leaf_count);
+        let (peak_heights, _) = get_peak_heights_and_peak_node_indices(self.leaf_count);
         let expected_peak_height_res =
             get_peak_height(self.leaf_count, membership_proof.data_index);
         let expected_peak_height = match expected_peak_height_res {
@@ -835,7 +841,7 @@ where
         }
 
         // Find the correct peak index
-        let heights = get_peak_heights(leaf_count);
+        let (heights, _) = get_peak_heights_and_peak_node_indices(leaf_count);
         if heights.len() != peaks.len() {
             return (false, None);
         }
@@ -1459,6 +1465,38 @@ mod mmr_test {
     }
 
     #[test]
+    fn get_peak_heights_and_peak_node_indices_test() {
+        let leaf_count_and_expected: Vec<(u128, (Vec<u128>, Vec<u128>))> = vec![
+            (0, (vec![], vec![])),
+            (1, (vec![0], vec![1])),
+            (2, (vec![1], vec![3])),
+            (3, (vec![1, 0], vec![3, 4])),
+            (4, (vec![2], vec![7])),
+            (5, (vec![2, 0], vec![7, 8])),
+            (6, (vec![2, 1], vec![7, 10])),
+            (7, (vec![2, 1, 0], vec![7, 10, 11])),
+            (8, (vec![3], vec![15])),
+            (9, (vec![3, 0], vec![15, 16])),
+            (10, (vec![3, 1], vec![15, 18])),
+            (11, (vec![3, 1, 0], vec![15, 18, 19])),
+            (12, (vec![3, 2], vec![15, 22])),
+            (13, (vec![3, 2, 0], vec![15, 22, 23])),
+            (14, (vec![3, 2, 1], vec![15, 22, 25])),
+            (15, (vec![3, 2, 1, 0], vec![15, 22, 25, 26])),
+            (16, (vec![4], vec![31])),
+            (17, (vec![4, 0], vec![31, 32])),
+            (18, (vec![4, 1], vec![31, 34])),
+            (19, (vec![4, 1, 0], vec![31, 34, 35])),
+        ];
+        for (leaf_count, (expected_heights, expected_indices)) in leaf_count_and_expected {
+            assert_eq!(
+                (expected_heights, expected_indices),
+                get_peak_heights_and_peak_node_indices(leaf_count)
+            );
+        }
+    }
+
+    #[test]
     fn verify_against_correct_peak_test() {
         let leaf_hashes: Vec<blake3::Hash> = vec![14u128, 15u128, 16u128]
             .iter()
@@ -2029,7 +2067,7 @@ mod mmr_test {
             let original_peaks_and_heights = mmr.get_peaks_with_heights();
             let peak_heights_1: Vec<u128> =
                 original_peaks_and_heights.iter().map(|x| x.1).collect();
-            let peak_heights_2: Vec<u128> = get_peak_heights(data_size);
+            let (peak_heights_2, _) = get_peak_heights_and_peak_node_indices(data_size);
             assert_eq!(peak_heights_1, peak_heights_2);
             assert_eq!(peak_count, original_peaks_and_heights.len() as u128);
 
@@ -2099,7 +2137,7 @@ mod mmr_test {
                 mmr.get_peaks_with_heights();
             let peak_heights_1: Vec<u128> =
                 original_peaks_and_heights.iter().map(|x| x.1).collect();
-            let peak_heights_2: Vec<u128> = get_peak_heights(data_size);
+            let (peak_heights_2, _) = get_peak_heights_and_peak_node_indices(data_size);
             assert_eq!(peak_heights_1, peak_heights_2);
             assert_eq!(peak_count, original_peaks_and_heights.len() as u128);
 
