@@ -331,6 +331,48 @@ where
         node_indices
     }
 
+    /// Return the node index of the peak that the membership proof is pointing
+    /// to, as well as this peak's height.
+    fn get_peak_index_and_height(&self) -> (u128, u32) {
+        (
+            *self.get_direct_path_indices().last().unwrap(),
+            self.authentication_path.len() as u32,
+        )
+    }
+
+    // pub fn verify_append(
+    //     old_peaks: Vec<HashDigest>,
+    //     old_leaf_count: u128,
+    //     new_leaf: HashDigest,
+    //     new_peaks_expected: Vec<HashDigest>,
+    // ) -> bool {
+    /// Update a membership proof with a `verify_append` proof.
+    pub fn update_membership_proof_from_append(
+        &mut self,
+        old_leaf_count: u128,
+        new_leaf: &HashDigest,
+        old_peaks: &[HashDigest],
+    ) {
+        let own_node_ap_indices = self.get_node_indices();
+
+        let added_node_indices = node_indices_added_by_append(old_leaf_count);
+
+        let mut node_index: u128 = if self.authentication_path.is_empty() {
+            data_index_to_node_index(self.data_index)
+        } else {
+            data_index_to_node_index(*own_node_ap_indices.last().unwrap())
+        };
+
+        let mut parent_index = parent(node_index);
+        // Set `acc_hash` to one of the peaks, but which one?
+        while added_node_indices.contains(&parent_index) {
+            // 1. Add hash for sibling of `node_index` to authentication path
+            // 2. Update parent index
+            // Maybe we can find some inspiration in the `calculate_new_peaks`
+            // function?
+        }
+    }
+
     /// Update a membership proof with a `leaf_update` proof. For the `membership_proof`
     /// parameter, it doesn't matter if you use the old or new membership proof associated
     /// with the leaf update, as they are the same before and after the leaf update.
@@ -1034,6 +1076,81 @@ mod mmr_membership_proof_test {
             vec![8, 10, 14, 15],
             membership_proof.get_direct_path_indices()
         );
+    }
+
+    #[test]
+    fn get_peak_index_simple_test() {
+        let mut mmr_size = 7;
+        let leaf_hashes: Vec<blake3::Hash> = (14u128..14 + mmr_size)
+            .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
+            .collect();
+        let mut archival_mmr = MmrArchive::<blake3::Hash, blake3::Hasher>::init(leaf_hashes);
+        let mut expected_peak_indices_and_heights: Vec<(u128, u32)> =
+            vec![(7, 2), (7, 2), (7, 2), (7, 2), (10, 1), (10, 1), (11, 0)];
+        for (i, expected_peak_index) in
+            (0..mmr_size).zip(expected_peak_indices_and_heights.into_iter())
+        {
+            let (membership_proof, _peaks): (
+                MembershipProof<blake3::Hash, blake3::Hasher>,
+                Vec<blake3::Hash>,
+            ) = archival_mmr.prove_membership(i);
+            assert_eq!(
+                expected_peak_index,
+                membership_proof.get_peak_index_and_height()
+            );
+        }
+
+        // Increase size to 8 and verify that the peaks are now different
+        mmr_size = 8;
+        archival_mmr.archive_append(blake3::hash(
+            bincode::serialize(&1337u128)
+                .expect("Encoding failed")
+                .as_slice(),
+        ));
+        expected_peak_indices_and_heights = vec![(15, 3); mmr_size as usize];
+        for (i, expected_peak_index) in
+            (0..mmr_size).zip(expected_peak_indices_and_heights.into_iter())
+        {
+            let (membership_proof, _peaks): (
+                MembershipProof<blake3::Hash, blake3::Hasher>,
+                Vec<blake3::Hash>,
+            ) = archival_mmr.prove_membership(i);
+            assert_eq!(
+                expected_peak_index,
+                membership_proof.get_peak_index_and_height()
+            );
+        }
+
+        // Increase size to 9 and verify that the peaks are now different
+        mmr_size = 9;
+        archival_mmr.archive_append(blake3::hash(
+            bincode::serialize(&13337u128)
+                .expect("Encoding failed")
+                .as_slice(),
+        ));
+        expected_peak_indices_and_heights = vec![
+            (15, 3),
+            (15, 3),
+            (15, 3),
+            (15, 3),
+            (15, 3),
+            (15, 3),
+            (15, 3),
+            (15, 3),
+            (16, 0),
+        ];
+        for (i, expected_peak_index) in
+            (0..mmr_size).zip(expected_peak_indices_and_heights.into_iter())
+        {
+            let (membership_proof, _peaks): (
+                MembershipProof<blake3::Hash, blake3::Hasher>,
+                Vec<blake3::Hash>,
+            ) = archival_mmr.prove_membership(i);
+            assert_eq!(
+                expected_peak_index,
+                membership_proof.get_peak_index_and_height()
+            );
+        }
     }
 
     #[test]
