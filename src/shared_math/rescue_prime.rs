@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::stark::BoundaryConstraint;
+use crate::shared_math::stark_constraints::BoundaryConstraint;
 use crate::shared_math::traits::IdentityValues;
 
 use super::mpolynomial::MPolynomial;

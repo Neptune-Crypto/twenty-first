@@ -54,16 +54,6 @@ impl Stark {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct BoundaryConstraint {
-    pub cycle: usize,
-    pub register: usize,
-    pub value: BFieldElement,
-}
-
-// A hashmap from register value to (x, y) value of boundary constraint
-pub type BoundaryConstraintsMap = HashMap<usize, (BFieldElement, BFieldElement)>;
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum StarkProofError {
     InputOutputMismatch,
