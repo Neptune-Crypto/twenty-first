@@ -495,6 +495,7 @@ where
             known_digests.insert(*node_index, acc_hash.to_owned());
 
             // Avoid calculating the last digest since it is a peak
+            // TODO: Is this `-1` or `-2`????
             if count == added_node_indices.len() - 2 {
                 break;
             }
@@ -604,7 +605,7 @@ where
         }
 
         // Some of the hashes in `self` need to be updated. We can loop over
-        // `own_node_indices` and check if the element is contained `sorted_intersection`.
+        // `own_node_indices` and check if the element is contained `deducible_hashes`.
         // If it is, then the appropriate element in `self.authentication_path` needs to
         // be replaced with an element from `deducible_hashes`.
         for (digest, own_node_index) in self
@@ -619,6 +620,77 @@ where
         }
 
         true
+    }
+
+    /// Update multiple membership proofs with a `leaf_update` proof. For the `membership_proof`
+    /// parameter, it doesn't matter if you use the old or new membership proof associated
+    /// with the leaf update, as they are the same before and after the leaf update.
+    /// Returns the indices of the membership proofs that were modified.
+    pub fn batch_update_from_leaf_update(
+        membership_proofs: &mut [Self],
+        leaf_update_membership_proof: &MembershipProof<HashDigest, H>,
+        new_leaf: &HashDigest,
+    ) -> Vec<u128> {
+        // 1. Calculate all hashes that are deducible from the leaf update
+        // 2. Iterate through all membership proofs and update digests that
+        //    are deducible from the leaf update proof.
+
+        let mut deducible_hashes: HashMap<u128, HashDigest> = HashMap::new();
+        let mut node_index = data_index_to_node_index(leaf_update_membership_proof.data_index);
+        deducible_hashes.insert(node_index, new_leaf.clone());
+        let mut hasher = H::new();
+        let mut acc_hash: HashDigest = new_leaf.to_owned();
+
+        // Calculate hashes from the bottom towards the peak. Break before we
+        // calculate the hash of the peak, since peaks are never included in
+        // authentication paths
+        for (count, hash) in leaf_update_membership_proof
+            .authentication_path
+            .iter()
+            .enumerate()
+        {
+            // Do not calculate the last hash as it will always be a peak which
+            // are never included in the authentication path
+            if count == leaf_update_membership_proof.authentication_path.len() - 1 {
+                break;
+            }
+            let (acc_right, _acc_height) = right_child_and_height(node_index);
+            acc_hash = if acc_right {
+                hasher.hash_two(hash, &acc_hash)
+            } else {
+                hasher.hash_two(&acc_hash, hash)
+            };
+            node_index = parent(node_index);
+            deducible_hashes.insert(node_index, acc_hash.clone());
+        }
+
+        println!("deducible_hashes.keys() = {:?}", deducible_hashes.keys());
+
+        let mut modified_membership_proofs: Vec<u128> = vec![];
+        for (i, membership_proof) in membership_proofs.iter_mut().enumerate() {
+            let ap_indices = membership_proof.get_node_indices();
+
+            // Some of the hashes in may `membership_proof` need to be updated. We can loop over
+            // `authentication_path_indices` and check if the element is contained `deducible_hashes`.
+            // If it is, then the appropriate element in `membership_proof.authentication_path` needs to
+            // be replaced with an element from `deducible_hashes`.
+            for (digest, authentication_path_indices) in membership_proof
+                .authentication_path
+                .iter_mut()
+                .zip(ap_indices.into_iter())
+            {
+                // Maximum 1 digest can be updated in each authentication path
+                // so if that is encountered, we might as well break and go to
+                // the next membership proof
+                if deducible_hashes.contains_key(&authentication_path_indices) {
+                    *digest = deducible_hashes[&authentication_path_indices].clone();
+                    modified_membership_proofs.push(i as u128);
+                    break;
+                }
+            }
+        }
+
+        modified_membership_proofs
     }
 }
 
@@ -1344,6 +1416,7 @@ mod mmr_membership_proof_test {
         assert_eq!(8, accumulator_mmr.leaf_count);
         let mut archival_mmr =
             MmrArchive::<blake3::Hash, blake3::Hasher>::init(leaf_hashes.clone());
+        let original_archival_mmr = archival_mmr.clone();
         let (mut membership_proof, _peaks): (
             MembershipProof<blake3::Hash, blake3::Hasher>,
             Vec<blake3::Hash>,
@@ -1415,6 +1488,40 @@ mod mmr_membership_proof_test {
             )
             .0
         );
+
+        // 5. test batch update from leaf update
+        for i in 0..8 {
+            let mut archival_mmr = original_archival_mmr.clone();
+            let mut mps: Vec<MembershipProof<blake3::Hash, blake3::Hasher>> = vec![];
+            for j in 0..8 {
+                mps.push(original_archival_mmr.prove_membership(j).0);
+            }
+            let leaf_update_membership_proof = archival_mmr.prove_membership(i).0;
+            archival_mmr.update_leaf(i, new_leaf);
+            let new_peaks = archival_mmr.get_peaks();
+            let modified =
+                MembershipProof::<blake3::Hash, blake3::Hasher>::batch_update_from_leaf_update(
+                    &mut mps,
+                    &leaf_update_membership_proof,
+                    &new_leaf,
+                );
+            for j in 0..8 {
+                let our_leaf = if i == j {
+                    &new_leaf
+                } else {
+                    &leaf_hashes[j as usize]
+                };
+                assert!(
+                    MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
+                        &mps[j as usize],
+                        &new_peaks,
+                        &our_leaf,
+                        8,
+                    )
+                    .0
+                )
+            }
+        }
     }
 
     #[test]
