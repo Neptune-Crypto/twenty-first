@@ -458,8 +458,9 @@ where
         true
     }
 
-    // Batch update multiple membership proofs. Returns a vector of indices indicating which membership
-    // proofs were updated.
+    /// Batch update multiple membership proofs.
+    /// Returns the indices of the membership proofs that were modified where index refers
+    /// to the order in which the membership proofs were given to this function.
     pub fn batch_update_from_append(
         membership_proofs: &mut [Self],
         old_leaf_count: u128,
@@ -627,7 +628,8 @@ where
     /// Update multiple membership proofs with a `leaf_update` proof. For the `membership_proof`
     /// parameter, it doesn't matter if you use the old or new membership proof associated
     /// with the leaf update, as they are the same before and after the leaf update.
-    /// Returns the indices of the membership proofs that were modified.
+    /// Returns the indices of the membership proofs that were modified where index refers
+    /// to the order in which the membership proofs were given to this function.
     pub fn batch_update_from_leaf_update(
         membership_proofs: &mut [Self],
         leaf_update_membership_proof: &MembershipProof<HashDigest, H>,
@@ -665,8 +667,6 @@ where
             node_index = parent(node_index);
             deducible_hashes.insert(node_index, acc_hash.clone());
         }
-
-        println!("deducible_hashes.keys() = {:?}", deducible_hashes.keys());
 
         let mut modified_membership_proofs: Vec<u128> = vec![];
         for (i, membership_proof) in membership_proofs.iter_mut().enumerate() {
@@ -1498,6 +1498,7 @@ mod mmr_membership_proof_test {
             for j in 0..8 {
                 mps.push(original_archival_mmr.prove_membership(j).0);
             }
+            let original_mps = mps.clone();
             let leaf_update_membership_proof = archival_mmr.prove_membership(i).0;
             archival_mmr.update_leaf(i, new_leaf);
             let new_peaks = archival_mmr.get_peaks();
@@ -1507,6 +1508,13 @@ mod mmr_membership_proof_test {
                     &leaf_update_membership_proof,
                     &new_leaf,
                 );
+
+            // when updating data index i, all authentication paths are updated
+            // *except* for element i.
+            let mut expected_modified = Vec::from_iter(0..8);
+            expected_modified.remove(i as usize);
+            assert_eq!(expected_modified, modified);
+
             for j in 0..8 {
                 let our_leaf = if i == j {
                     &new_leaf
@@ -1521,7 +1529,34 @@ mod mmr_membership_proof_test {
                         8,
                     )
                     .0
-                )
+                );
+
+                // For size = 8, all membership proofs except the one for element 0
+                // will be updated since this MMR only contains a single peak.
+                // An updated leaf (0 in this case) retains its authentication path after
+                // the update. But all other leafs pointing to the same MMR will have updated
+                // authentication paths.
+                if j == i {
+                    assert!(
+                        MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
+                            &original_mps[j as usize],
+                            &new_peaks,
+                            &our_leaf,
+                            8,
+                        )
+                        .0
+                    );
+                } else {
+                    assert!(
+                        !MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
+                            &original_mps[j as usize],
+                            &new_peaks,
+                            &our_leaf,
+                            8,
+                        )
+                        .0
+                    );
+                }
             }
         }
     }
