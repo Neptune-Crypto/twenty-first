@@ -866,6 +866,7 @@ pub fn blake3_digest(input: &[u8]) -> [u8; 32] {
     *blake3::hash(input).as_bytes()
 }
 
+#[deprecated(note = "Deprecated in favor of simple_hasher")]
 pub fn blake3_digest_serialize<T: ?Sized + Serialize>(value: &T) -> [u8; 32] {
     let bytes: Vec<u8> = bincode::serialize(&value).expect("Encoding failed");
 

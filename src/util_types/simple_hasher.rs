@@ -1,6 +1,7 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime::RescuePrime;
 use crate::shared_math::rescue_prime_params;
+use crate::shared_math::x_field_element::XFieldElement;
 use serde::{Deserialize, Serialize};
 /// A simple `Hasher` trait that allows for hashing one, two or many values into one digest.
 ///
@@ -14,6 +15,19 @@ pub trait Hasher {
     fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
     fn hash_pair(&mut self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest;
     fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest;
+
+    // TODO: Consider moving the 'Self::Digest: ToDigest<Self::Digest>' constraint up.
+    fn hash_with_salts<Value>(&mut self, mut digest: Self::Digest, salts: &[Value]) -> Self::Digest
+    where
+        Value: ToDigest<Self::Digest>,
+        Self::Digest: ToDigest<Self::Digest>,
+    {
+        for salt in salts {
+            digest = self.hash_two(&digest, &salt.to_digest());
+        }
+
+        digest
+    }
 }
 
 /// In order to hash arbitrary things using a `Hasher`, it must `impl ToDigest<Digest>`
@@ -47,6 +61,24 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
             BFieldElement::new((self >> 63) % u64::MAX as u128),
             BFieldElement::new(self % BFieldElement::MAX),
         ]
+    }
+}
+
+impl ToDigest<blake3::Hash> for BFieldElement {
+    fn to_digest(&self) -> blake3::Hash {
+        let bytes = bincode::serialize(&self).unwrap();
+        let digest = blake3::hash(bytes.as_slice());
+
+        digest
+    }
+}
+
+impl ToDigest<blake3::Hash> for XFieldElement {
+    fn to_digest(&self) -> blake3::Hash {
+        let bytes = bincode::serialize(&self).unwrap();
+        let digest = blake3::hash(bytes.as_slice());
+
+        digest
     }
 }
 

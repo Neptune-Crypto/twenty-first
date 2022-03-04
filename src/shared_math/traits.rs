@@ -23,6 +23,7 @@ where
     fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self>;
 }
 
+// TODO: Assert if we're risking inverting 0 at any point.
 pub trait Inverse
 where
     Self: Sized,
