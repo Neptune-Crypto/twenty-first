@@ -131,7 +131,8 @@ pub fn get_peak_height(leaf_count: u128, data_index: u128) -> Option<u128> {
     Some(height - 1)
 }
 
-/// Return the indices of the nodes added by an append
+/// Return the indices of the nodes added by an append, including the
+/// peak that this append gave rise to
 fn node_indices_added_by_append(old_leaf_count: u128) -> Vec<u128> {
     let mut node_index = data_index_to_node_index(old_leaf_count);
     let mut added_node_indices = vec![node_index];
@@ -494,8 +495,9 @@ where
         {
             known_digests.insert(*node_index, acc_hash.to_owned());
 
-            // Avoid calculating the last digest since it is a peak
-            // TODO: Is this `-1` or `-2`????
+            // The last index in `added_node_indices` is the new peak
+            // and the 2nd last will hash to the digest of the new peak,
+            // so we can skip the last two values from this list
             if count == added_node_indices.len() - 2 {
                 break;
             }
@@ -1902,6 +1904,11 @@ mod mmr_test {
         assert_eq!(vec![33, 34], node_indices_added_by_append(17));
         assert_eq!(vec![35], node_indices_added_by_append(18));
         assert_eq!(vec![36, 37, 38], node_indices_added_by_append(19));
+        assert_eq!(
+            vec![58, 59, 60, 61, 62, 63],
+            node_indices_added_by_append(31)
+        );
+        assert_eq!(vec![64], node_indices_added_by_append(32));
     }
 
     #[test]
