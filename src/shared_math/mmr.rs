@@ -375,7 +375,7 @@ where
 
     /// Update a membership proof with a `verify_append` proof. Returns `true` if an
     /// authentication path has been mutated, false otherwise.
-    pub fn update_membership_proof_from_append(
+    pub fn update_from_append(
         &mut self,
         old_leaf_count: u128,
         new_leaf: &HashDigest,
@@ -384,12 +384,12 @@ where
         // 1. Get index of authentication paths's peak
         // 2. Get node indices for nodes added by the append
         // 3. Check if authentication path's peak's parent is present in the added nodes (peak can only be left child)
-        //   a If not, then we are done, return from method
+        //   a. If not, then we are done, return from method
         // 4. Get the indices that auth path must be extended with
-        // 5. Get all derivable node digests
+        // 5. Get all derivable node digests, store in hash map
         //   a. Get the node digests from the previous peaks
         //   b. Get the node digests that can be calculated by hashing from the new leaf
-        // 6. Push these digests to the authentication path
+        // 6. Push required digests to the authentication path
 
         // 1
         let (old_peak_index, old_peak_height) = self.get_peak_index_and_height();
@@ -460,7 +460,7 @@ where
     /// Update a membership proof with a `leaf_update` proof. For the `membership_proof`
     /// parameter, it doesn't matter if you use the old or new membership proof associated
     /// with the leaf update, as they are the same before and after the leaf update.
-    pub fn update_membership_proof_from_leaf_update(
+    pub fn update_from_leaf_update(
         &mut self,
         leaf_update_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
@@ -1318,7 +1318,7 @@ mod mmr_membership_proof_test {
         );
 
         // 3. Update the membership proof with the membership method
-        membership_proof.update_membership_proof_from_leaf_update(&old_mp, &new_leaf);
+        membership_proof.update_from_leaf_update(&old_mp, &new_leaf);
 
         // 4. Verify that the proof succeeds
         assert!(
@@ -1366,10 +1366,7 @@ mod mmr_membership_proof_test {
                         archival_mmr.prove_membership(j).0;
                     let original_membership_roof = membership_proof.clone();
                     let membership_proof_was_mutated = membership_proof
-                        .update_membership_proof_from_leaf_update(
-                            &leaf_update_membership_proof,
-                            &new_leaf,
-                        );
+                        .update_from_leaf_update(&leaf_update_membership_proof, &new_leaf);
                     let our_leaf = if i == j {
                         &new_leaf
                     } else {
@@ -1442,7 +1439,7 @@ mod mmr_membership_proof_test {
                 )
                 .0
             );
-            membership_proof.update_membership_proof_from_append(leaf_count, &new_leaf, &old_peaks);
+            membership_proof.update_from_append(leaf_count, &new_leaf, &old_peaks);
             assert!(
                 MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
                     &membership_proof,
@@ -1489,8 +1486,7 @@ mod mmr_membership_proof_test {
                 let new_peaks = appended_archival_mmr.get_peaks();
 
                 // Update membership proof and verify that it succeeds
-                membership_proof
-                    .update_membership_proof_from_append(leaf_count, &new_leaf, &old_peaks);
+                membership_proof.update_from_append(leaf_count, &new_leaf, &old_peaks);
                 assert!(
                     MmrArchive::<blake3::Hash, blake3::Hasher>::verify_membership(
                         &membership_proof,
@@ -1535,8 +1531,8 @@ mod mmr_membership_proof_test {
 
                 // Update membership proof and verify that it succeeds
                 let mut membership_proof_mutated = original_membership_proof.clone();
-                let mutated = membership_proof_mutated
-                    .update_membership_proof_from_append(leaf_count, &new_leaf, &old_peaks);
+                let mutated =
+                    membership_proof_mutated.update_from_append(leaf_count, &new_leaf, &old_peaks);
                 assert!(
                     MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_membership(
                         &membership_proof_mutated,
