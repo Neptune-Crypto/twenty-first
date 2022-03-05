@@ -913,22 +913,10 @@ impl Stark {
         // This could also be achieved with symbolic evaluation of the
         // input `transition_constraints` and then taking the degree of
         // the resulting polynomials.
-        let mut res: Vec<u64> = vec![];
-        for a in transition_constraints {
-            let mut max_degree = 0;
-            for (k, _) in a.coefficients.iter() {
-                let mut acc = 0;
-                for (r, l) in point_degrees.iter().zip(k.iter()) {
-                    acc += *r * (*l);
-                }
-                if acc > max_degree {
-                    max_degree = acc;
-                }
-            }
-            res.push(max_degree);
-        }
-
-        res
+        transition_constraints
+            .iter()
+            .map(|tc| tc.symbolic_degree_bound(&point_degrees))
+            .collect()
     }
 
     fn get_transition_zerofier(

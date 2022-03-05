@@ -106,10 +106,6 @@ impl<PFElem: PrimeField> PartialEq for Polynomial<PFElem> {
             return false;
         }
 
-        if self.degree() == -1 {
-            return true;
-        }
-
         self.coefficients
             .iter()
             .zip(other.coefficients.iter())

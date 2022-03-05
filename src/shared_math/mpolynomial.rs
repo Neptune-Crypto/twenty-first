@@ -983,17 +983,56 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         *self
             .coefficients
             .keys()
-            .map(|coefficients| coefficients.iter().max().unwrap_or(&0))
+            .map(|exponents| exponents.iter().max().unwrap_or(&0))
             .max()
             .unwrap_or(&0)
     }
 
-    pub fn degree(&self) -> u64 {
-        self.coefficients
+    /// This is sometimes called `total degree`.
+    pub fn degree(&self) -> Degree {
+        if self.is_zero() {
+            // The zero polynomial has degree -1.
+            return -1;
+        };
+
+        let total_degree: u64 = self
+            .coefficients
             .keys()
-            .map(|coefficients| coefficients.iter().sum::<u64>())
+            .map(|exponents| exponents.iter().sum::<u64>())
             .max()
-            .unwrap_or(0) as u64
+            .unwrap_or(0);
+
+        let res = i64::try_from(total_degree);
+        assert!(res.is_ok());
+        res.unwrap()
+    }
+
+    ///  During symbolic evaluation, i.e., when substituting a univariate polynomial for one of the
+    ///  variables, the total degree of the resulting polynomial can be upper bounded.  This bound
+    ///  is the `total_degree_bound`, and can be calculated across all terms.  Only the constant
+    ///  zero polynomial `P(x,..) = 0` has a negative degree and it is always -1.  All other
+    ///  constant polynomials have degree 0.
+    ///
+    /// - `max_degrees`:  the max degrees for each of the univariate polynomials.
+    /// - `total_degree_bound`:  the max resulting degree from the substitution.
+    pub fn symbolic_degree_bound(&self, max_degrees: &[i64]) -> Degree {
+        assert_eq!(max_degrees.len(), self.variable_count);
+        let mut total_degree_bound: i64 = -1;
+        for (exponents, _coefficients) in self.coefficients.iter() {
+            let signed_exponents = exponents.iter().map(|e| {
+                let res = i64::try_from(*e);
+                assert!(res.is_ok());
+                res.unwrap()
+            });
+
+            let term_degree_bound = max_degrees
+                .iter()
+                .zip(signed_exponents)
+                .map(|(md, exp)| md * exp)
+                .sum();
+            total_degree_bound = cmp::max(total_degree_bound, term_degree_bound);
+        }
+        total_degree_bound
     }
 }
 
