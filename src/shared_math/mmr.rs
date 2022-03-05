@@ -122,6 +122,8 @@ fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
     non_leaf_nodes_after + non_leaf_nodes_left + leaf_count
 }
 
+/// Given a leaf count and a data index, return the height of the peak
+/// that this leaf points to.
 fn get_peak_height(leaf_count: u128, data_index: u128) -> Option<u128> {
     if data_index >= leaf_count {
         return None;
