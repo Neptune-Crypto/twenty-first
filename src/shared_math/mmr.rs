@@ -917,9 +917,9 @@ where
     u128: ToDigest<HashDigest>,
 {
     pub fn init(hashes: Vec<HashDigest>) -> Self {
-        let dummy = H::new().dummy_output();
+        let dummy_digest = 0u128.to_digest();
         let mut new_mmr: Self = Self {
-            digests: vec![dummy],
+            digests: vec![dummy_digest],
             _hasher: PhantomData,
         };
         for hash in hashes {
