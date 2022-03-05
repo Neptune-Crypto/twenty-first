@@ -746,10 +746,6 @@ where
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     u128: ToDigest<HashDigest>,
 {
-    pub fn bag_peaks(&self) -> HashDigest {
-        bag_peaks::<HashDigest, H>(&self.peaks, leaf_count_to_node_count(self.leaf_count))
-    }
-
     /// Initialize a shallow MMR (only storing peaks) from a list of hash digests
     pub fn new(hashes: Vec<HashDigest>) -> Self {
         // If all the hash digests already exist in memory, we might as well
@@ -766,6 +762,22 @@ where
             leaf_count,
             peaks: peaks_and_heights.iter().map(|x| x.0.clone()).collect(),
         }
+    }
+
+    pub fn bag_peaks(&self) -> HashDigest {
+        bag_peaks::<HashDigest, H>(&self.peaks, leaf_count_to_node_count(self.leaf_count))
+    }
+
+    pub fn get_peaks(&self) -> Vec<HashDigest> {
+        self.peaks.clone()
+    }
+
+    pub fn count_leaves(&self) -> u128 {
+        self.leaf_count
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.leaf_count == 0
     }
 
     pub fn append(&mut self, new_leaf: HashDigest) {
@@ -959,6 +971,12 @@ where
 
     pub fn is_empty(&self) -> bool {
         self.digests.len() == 1
+    }
+
+    /// Get a leaf from the MMR, will panic if index is out of range
+    pub fn get_leaf(&self, data_index: u128) -> HashDigest {
+        let node_index = data_index_to_node_index(data_index);
+        self.digests[node_index as usize].clone()
     }
 
     /// Update a hash in the existing archival MMR
@@ -1184,15 +1202,11 @@ where
 
     /// Calculate the root for the entire MMR
     pub fn bag_peaks(&self) -> HashDigest {
-        let peaks: Vec<HashDigest> = self
-            .get_peaks_with_heights()
-            .iter()
-            .map(|x| x.0.clone())
-            .collect();
-
+        let peaks: Vec<HashDigest> = self.get_peaks();
         bag_peaks::<HashDigest, H>(&peaks, self.count_nodes() as u128)
     }
 
+    /// Return the digests of the peaks of the MMR
     pub fn get_peaks(&self) -> Vec<HashDigest> {
         let peaks_and_heights = self.get_peaks_with_heights();
         peaks_and_heights.into_iter().map(|x| x.0).collect()
