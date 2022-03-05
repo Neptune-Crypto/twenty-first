@@ -2170,6 +2170,59 @@ mod mmr_test {
     }
 
     #[test]
+    fn empty_mmr_behavior_test() {
+        let mut archival_mmr: MmrArchive<blake3::Hash, blake3::Hasher> =
+            MmrArchive::<blake3::Hash, blake3::Hasher>::new(vec![]);
+        let mut accumulator_mmr: MmrAccumulator<blake3::Hash, blake3::Hasher> =
+            MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(vec![]);
+        assert_eq!(0, archival_mmr.count_leaves());
+        assert_eq!(0, accumulator_mmr.leaf_count);
+        assert_eq!(archival_mmr.get_peaks(), accumulator_mmr.get_peaks());
+        assert_eq!(Vec::<blake3::Hash>::new(), accumulator_mmr.get_peaks());
+        assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
+        assert_eq!(0, archival_mmr.count_nodes());
+        assert!(accumulator_mmr.is_empty());
+        assert!(archival_mmr.is_empty());
+
+        // Test behavior of appending to an empty MMR
+        let new_leaf = blake3::hash(
+            bincode::serialize(&0xbeefu128)
+                .expect("Encoding failed")
+                .as_slice(),
+        );
+        let archival_append_proof = archival_mmr.prove_append(new_leaf);
+        let accumulator_append_proof = accumulator_mmr.prove_append(new_leaf);
+
+        // Verify that the append proofs look as expected
+        assert_eq!(archival_append_proof, accumulator_append_proof);
+        assert_eq!(0, archival_append_proof.old_leaf_count);
+        assert_eq!(archival_mmr.get_peaks(), archival_append_proof.old_peaks);
+        assert_eq!(0, archival_append_proof.old_peaks.len());
+        assert_eq!(1, archival_append_proof.new_peaks.len());
+
+        // Verify that the proofs validate
+        assert!(MmrArchive::<blake3::Hash, blake3::Hasher>::verify_append(
+            archival_append_proof.clone(),
+            new_leaf,
+        ));
+        assert!(
+            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append(
+                accumulator_append_proof,
+                new_leaf,
+            )
+        );
+
+        // Make the append and verify that the new peaks match the one from the proofs
+        archival_mmr.append(new_leaf);
+        accumulator_mmr.append(new_leaf);
+        assert_eq!(archival_mmr.get_peaks(), archival_append_proof.new_peaks);
+        assert_eq!(accumulator_mmr.get_peaks(), archival_append_proof.new_peaks);
+
+        // Verify that the appended value matches the one stored in the archival MMR
+        assert_eq!(new_leaf, archival_mmr.get_leaf(0));
+    }
+
+    #[test]
     fn verify_against_correct_peak_test() {
         // This test addresses a bug that was discovered late in the development process
         // where it was possible to fake a verification proof by providing a valid leaf
