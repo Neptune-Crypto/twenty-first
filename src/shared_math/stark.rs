@@ -19,8 +19,11 @@ use crate::utils;
 use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
+
+type Degree = i64;
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
@@ -133,17 +136,17 @@ impl Stark {
         let mut timer = TimingReporter::start();
 
         // infer details about computation
-        let original_trace_length = trace.len() as u64;
+        let original_trace_length = trace.len() as i64;
         let rounded_trace_length =
-            roundup_npo2(original_trace_length + self.min_num_randomizers as u64);
-        let num_randomizers = rounded_trace_length - original_trace_length;
+            roundup_npo2((original_trace_length + self.min_num_randomizers as i64) as u64);
+        let num_randomizers = rounded_trace_length - original_trace_length as u64;
         let tp_bounds =
             self.transition_degree_bounds(transition_constraints, rounded_trace_length as usize);
-        let tp_degree = tp_bounds.iter().max().unwrap();
-        let tq_degree = tp_degree - (original_trace_length - 1);
-        let max_degree = roundup_npo2(tq_degree + 1) - 1; // The max degree bound provable by FRI
-        let fri_domain_length = (max_degree + 1) * self.expansion_factor as u64;
-        let blowup_factor_new = fri_domain_length / rounded_trace_length;
+        let tp_degree: &Degree = tp_bounds.iter().max().unwrap();
+        let tq_degree: Degree = tp_degree - (original_trace_length - 1);
+        let max_degree: Degree = roundup_npo2((tq_degree + 1) as u64) as i64 - 1; // The max degree bound provable by FRI
+        let fri_domain_length = (max_degree + 1) * self.expansion_factor as i64;
+        let blowup_factor_new = fri_domain_length / (rounded_trace_length as i64);
 
         timer.elapsed("calculate initial details");
 
@@ -421,7 +424,7 @@ impl Stark {
         for (tq, tq_degree) in transition_quotients.iter().zip(expected_tq_degrees.iter()) {
             let tq_x: Polynomial<XFieldElement> = Polynomial::<XFieldElement>::lift_b_x(tq);
             terms.push(tq_x.clone());
-            let shift = max_degree - tq_degree;
+            let shift = max_degree - (*tq_degree) as i64;
 
             // Make new polynomial with max_degree degree by shifting all terms up
             let shifted = tq_x.shift_coefficients(shift as usize, XFieldElement::ring_zero());
@@ -675,7 +678,7 @@ impl Stark {
             .boundary_quotient_degree_bounds(&boundary_zerofiers, rounded_trace_length as usize);
         timer.elapsed("Calculate boundary zerofiers and interpolants");
 
-        let expected_tq_degrees: Vec<u64> = self.transition_quotient_degree_bounds(
+        let expected_tq_degrees: Vec<i64> = self.transition_quotient_degree_bounds(
             transition_constraints,
             original_trace_length as usize,
             rounded_trace_length as usize,
@@ -776,8 +779,10 @@ impl Stark {
             {
                 let transition_quotient = *tcv / current_transition_zerofier_value;
                 terms.push(transition_quotient.lift());
-                let shift = max_degree as u64 - tq_degree;
-                terms.push((transition_quotient * current_x.mod_pow(shift)).lift());
+                let shift = max_degree as i64 - (*tq_degree) as i64;
+                terms.push(
+                    (transition_quotient * current_x.mod_pow(shift.try_into().unwrap())).lift(),
+                );
             }
             for (bqvs, bq_degree) in boundary_quotients.iter().zip(boundary_degrees.iter()) {
                 terms.push(bqvs[&current_index].lift());
@@ -888,12 +893,12 @@ impl Stark {
         transition_constraints: &[MPolynomial<BFieldElement>],
         original_trace_length: usize,
         rounded_trace_length: usize,
-    ) -> Vec<u64> {
+    ) -> Vec<i64> {
         // The degree is the degree of the trace plus the randomizers
         // minus the original trace length minus 1.
         self.transition_degree_bounds(transition_constraints, rounded_trace_length)
             .iter()
-            .map(|d| d - (original_trace_length as u64 - 1))
+            .map(|d| d - (original_trace_length as i64 - 1))
             .collect()
     }
 
@@ -902,12 +907,12 @@ impl Stark {
         &self,
         transition_constraints: &[MPolynomial<BFieldElement>],
         randomized_trace_length: usize,
-    ) -> Vec<u64> {
-        let mut point_degrees: Vec<u64> = vec![0; 1 + 2 * self.num_registers as usize];
+    ) -> Vec<i64> {
+        let mut point_degrees: Vec<i64> = vec![0; 1 + 2 * self.num_registers as usize];
         point_degrees[0] = 1;
         for r in 0..self.num_registers as usize {
-            point_degrees[1 + r] = randomized_trace_length as u64 - 1;
-            point_degrees[1 + r + self.num_registers as usize] = randomized_trace_length as u64 - 1;
+            point_degrees[1 + r] = randomized_trace_length as i64 - 1;
+            point_degrees[1 + r + self.num_registers as usize] = randomized_trace_length as i64 - 1;
         }
 
         // This could also be achieved with symbolic evaluation of the

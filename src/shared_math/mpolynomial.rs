@@ -7,6 +7,7 @@ use num_traits::Zero;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::iter::Sum;
@@ -17,6 +18,7 @@ use std::{cmp, fmt};
 use super::traits::PrimeField;
 
 type MCoefficients<T> = HashMap<Vec<u64>, T>;
+type Degree = i64;
 
 const EDMONDS_WEIGHT_CUTOFF_FACTOR: u64 = 2;
 
