@@ -2127,6 +2127,12 @@ mod mmr_test {
 
     #[test]
     fn verify_against_correct_peak_test() {
+        // This test addresses a bug that was discovered late in the development process
+        // where it was possible to fake a verification proof by providing a valid leaf
+        // and authentication path but lying about the data index. This error occurred
+        // because the derived hash was compared against all of the peaks to find a match
+        // and it wasn't verified that the accumulated hash matched the *correct* peak.
+        // This error was fixed and this test fails without that fix.
         let leaf_hashes: Vec<blake3::Hash> = vec![14u128, 15u128, 16u128]
             .iter()
             .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
