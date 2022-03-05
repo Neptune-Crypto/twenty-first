@@ -20,7 +20,8 @@ fn right_child(node_index: u128) -> u128 {
 }
 
 /// Get (index, height) of leftmost ancestor
-// This ancestor does *not* have to be in the MMR
+/// This ancestor does *not* have to be in the MMR
+#[inline]
 fn leftmost_ancestor(node_index: u128) -> (u128, u128) {
     let mut h = 0;
     let mut ret = 1;
@@ -33,6 +34,7 @@ fn leftmost_ancestor(node_index: u128) -> (u128, u128) {
 }
 
 /// Return the tuple: (is_right_child, height)
+#[inline]
 fn right_child_and_height(node_index: u128) -> (bool, u128) {
     // 1. Find leftmost_ancestor(n), if leftmost_ancestor(n) == n => left_child (false)
     // 2. Let node = leftmost_ancestor(n)
@@ -73,6 +75,7 @@ fn right_child_and_height(node_index: u128) -> (bool, u128) {
 }
 
 /// Get the node_index of the parent
+#[inline]
 fn parent(node_index: u128) -> u128 {
     let (right, height) = right_child_and_height(node_index);
 
@@ -119,7 +122,7 @@ fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
     non_leaf_nodes_after + non_leaf_nodes_left + leaf_count
 }
 
-pub fn get_peak_height(leaf_count: u128, data_index: u128) -> Option<u128> {
+fn get_peak_height(leaf_count: u128, data_index: u128) -> Option<u128> {
     if data_index >= leaf_count {
         return None;
     }
@@ -180,7 +183,7 @@ fn get_authentication_path_node_indices(
 
 /// Given node count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
-pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, Vec<u128>) {
+fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, Vec<u128>) {
     if leaf_count == 0 {
         return (vec![], vec![]);
     }
@@ -238,39 +241,16 @@ fn non_leaf_nodes_left(data_index: u128) -> u128 {
     acc
 }
 
-pub fn data_index_to_node_index(data_index: u128) -> u128 {
+/// Convert from data index to node index
+fn data_index_to_node_index(data_index: u128) -> u128 {
     let diff = non_leaf_nodes_left(data_index);
 
     data_index + diff + 1
 }
 
-/// Convert from node index to data index in log(size) time
-pub fn node_index_to_data_index(node_index: u128) -> Option<u128> {
-    let (_right, height) = right_child_and_height(node_index);
-    if height != 0 {
-        return None;
-    }
-
-    let (mut node, mut height) = leftmost_ancestor(node_index);
-    let mut data_index = 0;
-    while height > 0 {
-        let left_child = left_child(node, height);
-        if node_index <= left_child {
-            node = left_child;
-            height -= 1;
-        } else {
-            node = right_child(node);
-            height -= 1;
-            data_index += 1 << height;
-        }
-    }
-
-    Some(data_index)
-}
-
 /// Return the new peaks of the MMR after adding `new_leaf`
 /// Returns None if configuration is impossible (too small `old_peaks` input vector)
-pub fn calculate_new_peaks<
+fn calculate_new_peaks<
     H: Hasher<Digest = HashDigest>,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
 >(
@@ -299,7 +279,7 @@ pub fn calculate_new_peaks<
 }
 
 /// Get a root commitment to the entire MMR
-pub fn bag_peaks<HashDigest, H>(peaks: &[HashDigest], node_count: u128) -> HashDigest
+fn bag_peaks<HashDigest, H>(peaks: &[HashDigest], node_count: u128) -> HashDigest
 where
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     H: Hasher<Digest = HashDigest> + Clone,
@@ -1908,6 +1888,31 @@ mod mmr_test {
         },
         util_types::simple_hasher::RescuePrimeProduction,
     };
+
+    /// Convert from node index to data index in log(size) time
+    // Used for property-based testing of its inverse function
+    fn node_index_to_data_index(node_index: u128) -> Option<u128> {
+        let (_right, height) = right_child_and_height(node_index);
+        if height != 0 {
+            return None;
+        }
+
+        let (mut node, mut height) = leftmost_ancestor(node_index);
+        let mut data_index = 0;
+        while height > 0 {
+            let left_child = left_child(node, height);
+            if node_index <= left_child {
+                node = left_child;
+                height -= 1;
+            } else {
+                node = right_child(node);
+                height -= 1;
+                data_index += 1 << height;
+            }
+        }
+
+        Some(data_index)
+    }
 
     #[test]
     fn data_index_to_node_index_test() {
