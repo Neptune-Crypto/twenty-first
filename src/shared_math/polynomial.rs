@@ -2874,6 +2874,14 @@ mod test_polynomials {
         }
     }
 
+    #[test]
+    fn constant_zero_eq_constant_zero() {
+        let zero_polynomial1 = Polynomial::<BFieldElement>::ring_zero();
+        let zero_polynomial2 = Polynomial::<BFieldElement>::ring_zero();
+
+        assert!(zero_polynomial1 == zero_polynomial2)
+    }
+
     fn gen_polynomial() -> Polynomial<BFieldElement> {
         let mut rng = rand::thread_rng();
         let coefficient_count = rng.next_u64() as usize % 40;
