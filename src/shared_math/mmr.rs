@@ -98,6 +98,10 @@ fn get_height_from_data_index(data_index: u128) -> u128 {
 }
 
 fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
+    if leaf_count == 0 {
+        return 0;
+    }
+
     let rightmost_leaf_data_index = leaf_count - 1;
     let non_leaf_nodes_left = non_leaf_nodes_left(rightmost_leaf_data_index);
     let node_index_of_rightmost_leaf = data_index_to_node_index(rightmost_leaf_data_index);
@@ -306,6 +310,10 @@ where
     // to calculate a root from a list of peaks and the size of the MMR.
     let peaks_count: usize = peaks.len();
     let mut hasher: H = H::new();
+
+    if peaks_count == 0 {
+        return hasher.hash_one(&0u128.to_digest());
+    }
 
     let mut acc: HashDigest = hasher.hash_two(&node_count.to_digest(), &peaks[peaks_count - 1]);
     for i in 1..peaks_count {
@@ -1205,7 +1213,8 @@ where
         peaks_and_heights
     }
 
-    pub fn count_nodes(&self) -> u128 {
+    /// Return the number of nodes in all the trees in the MMR
+    fn count_nodes(&self) -> u128 {
         self.digests.len() as u128 - 1
     }
 
@@ -2035,11 +2044,11 @@ mod mmr_test {
     #[test]
     fn leaf_count_to_node_count_test() {
         let node_counts: Vec<u128> = vec![
-            1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41, 42,
-            46, 47, 49, 50, 53, 54, 56, 57, 63, 64,
+            0, 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41,
+            42, 46, 47, 49, 50, 53, 54, 56, 57, 63, 64,
         ];
         for (i, node_count) in node_counts.iter().enumerate() {
-            assert_eq!(*node_count, leaf_count_to_node_count(i as u128 + 1));
+            assert_eq!(*node_count, leaf_count_to_node_count(i as u128));
         }
     }
 
