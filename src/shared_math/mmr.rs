@@ -357,8 +357,8 @@ where
 }
 
 /// Verify a proof for the integral update of a leaf in the MMR
-pub fn verify_update_leaf<HashDigest, H>(
-    update_leaf_proof: &UpdateLeafProof<HashDigest, H>,
+pub fn verify_leaf_update_proof<HashDigest, H>(
+    update_leaf_proof: &LeafUpdateProof<HashDigest, H>,
     new_leaf: &HashDigest,
     leaf_count: u128,
 ) -> bool
@@ -412,7 +412,7 @@ where
 /// or after the update, since it does not change up the update, only all other
 /// membership proofs do.
 #[derive(Debug, Clone)]
-pub struct UpdateLeafProof<HashDigest, H>
+pub struct LeafUpdateProof<HashDigest, H>
 where
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     H: Hasher<Digest = HashDigest> + Clone,
@@ -897,7 +897,10 @@ where
     }
 
     /// Verify a proof for integral append
-    pub fn verify_append(append_proof: AppendProof<HashDigest>, new_leaf: HashDigest) -> bool {
+    pub fn verify_append_proof(
+        append_proof: AppendProof<HashDigest>,
+        new_leaf: HashDigest,
+    ) -> bool {
         let expected_new_peaks = append_proof.new_peaks.clone();
         let new_peaks_calculated: Option<Vec<HashDigest>> = calculate_new_peaks::<H, HashDigest>(
             append_proof.old_leaf_count,
@@ -967,12 +970,12 @@ where
 
     /// Verify the integral update of a leaf hash
     // TODO: Consider make this into a class method instead
-    pub fn verify_update_leaf(
-        update_leaf_proof: &UpdateLeafProof<HashDigest, H>,
+    pub fn verify_leaf_update_proof(
+        update_leaf_proof: &LeafUpdateProof<HashDigest, H>,
         new_leaf: &HashDigest,
         leaf_count: u128,
     ) -> bool {
-        verify_update_leaf(update_leaf_proof, new_leaf, leaf_count)
+        verify_leaf_update_proof(update_leaf_proof, new_leaf, leaf_count)
     }
 
     /// Prove that a specific leaf hash belongs in an MMR
@@ -1070,7 +1073,7 @@ where
         &self,
         data_index: u128,
         new_leaf: &HashDigest,
-    ) -> UpdateLeafProof<HashDigest, H> {
+    ) -> LeafUpdateProof<HashDigest, H> {
         // TODO: MAKE SURE THIS FUNCTION IS TESTED FOR LOW AND HIGH PEAKS!
         // For low peaks: Make sure it is tested where the peak is just a leaf,
         // i.e. when there is a peak of height 0.
@@ -1113,19 +1116,19 @@ where
                 && old_membership_proof.data_index == new_membership_proof.data_index
         );
 
-        UpdateLeafProof {
+        LeafUpdateProof {
             membership_proof: old_membership_proof,
             new_peaks,
             old_peaks,
         }
     }
 
-    pub fn verify_update_leaf(
-        update_leaf_proof: &UpdateLeafProof<HashDigest, H>,
+    pub fn verify_leaf_update_proof(
+        update_leaf_proof: &LeafUpdateProof<HashDigest, H>,
         new_leaf: &HashDigest,
         leaf_count: u128,
     ) -> bool {
-        verify_update_leaf(update_leaf_proof, new_leaf, leaf_count)
+        verify_leaf_update_proof(update_leaf_proof, new_leaf, leaf_count)
     }
 
     /// Return (membership_proof, peaks)
@@ -1275,7 +1278,10 @@ where
 
     /// With knowledge of old peaks, old size (leaf count), new leaf hash, and new peaks, verify that
     /// append is correct.
-    pub fn verify_append(append_proof: AppendProof<HashDigest>, new_leaf: HashDigest) -> bool {
+    pub fn verify_append_proof(
+        append_proof: AppendProof<HashDigest>,
+        new_leaf: HashDigest,
+    ) -> bool {
         let first_new_node_index = data_index_to_node_index(append_proof.old_leaf_count);
         let (mut new_node_is_right_child, _height) = right_child_and_height(first_new_node_index);
 
@@ -1447,10 +1453,10 @@ mod mmr_membership_proof_test {
         ) = archival_mmr.prove_membership(4);
 
         // 1. Update a leaf in both the light MMR and in the archival MMR
-        let update_leaf_proof: UpdateLeafProof<blake3::Hash, blake3::Hasher> =
+        let update_leaf_proof: LeafUpdateProof<blake3::Hash, blake3::Hasher> =
             archival_mmr.prove_update_leaf(2, &new_leaf);
         assert!(
-            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_update_leaf(
+            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_leaf_update_proof(
                 &update_leaf_proof,
                 &new_leaf,
                 accumulator_mmr.leaf_count
@@ -2188,12 +2194,14 @@ mod mmr_test {
         assert_eq!(1, archival_append_proof.new_peaks.len());
 
         // Verify that the proofs validate
-        assert!(MmrArchive::<blake3::Hash, blake3::Hasher>::verify_append(
-            archival_append_proof.clone(),
-            new_leaf,
-        ));
         assert!(
-            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append(
+            MmrArchive::<blake3::Hash, blake3::Hasher>::verify_append_proof(
+                archival_append_proof.clone(),
+                new_leaf,
+            )
+        );
+        assert!(
+            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
                 accumulator_append_proof,
                 new_leaf,
             )
@@ -2318,7 +2326,7 @@ mod mmr_test {
         // Create an append proof with the archival MMR and verify it with a light MMR
         let append_proof_archival = archival_mmr_small.prove_append(new_leaf);
         assert!(
-            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append(
+            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
                 append_proof_archival.clone(),
                 new_leaf,
             )
@@ -2330,7 +2338,7 @@ mod mmr_test {
 
         // Negative tests: verify failure if parameters are wrong
         assert!(
-            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append(
+            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
                 AppendProof {
                     new_peaks: append_proof_archival.new_peaks.clone(),
                     old_leaf_count: append_proof_archival.old_leaf_count + 1,
@@ -2340,7 +2348,7 @@ mod mmr_test {
             )
         );
         assert!(
-            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append(
+            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
                 append_proof_archival.clone(),
                 bad_leaf,
             )
@@ -2348,7 +2356,7 @@ mod mmr_test {
 
         // switch old and new peaks in proof, verify failure
         assert!(
-            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append(
+            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
                 AppendProof {
                     new_peaks: append_proof_archival.old_peaks.clone(),
                     old_leaf_count: append_proof_archival.old_leaf_count,
@@ -2360,7 +2368,7 @@ mod mmr_test {
 
         // switch peaks back
         assert!(
-            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append(
+            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
                 AppendProof {
                     new_peaks: archival_mmr_small_alt.get_peaks(),
                     old_leaf_count: append_proof_archival.old_leaf_count,
@@ -2370,7 +2378,7 @@ mod mmr_test {
             )
         );
         assert!(
-            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append(
+            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
                 append_proof_archival.clone(),
                 new_leaf,
             )
@@ -2482,7 +2490,7 @@ mod mmr_test {
     }
 
     #[test]
-    fn accumulator_mmr_prove_verify_update_leaf_test() {
+    fn accumulator_mmr_prove_verify_leaf_update_test() {
         for size in 1..150 {
             let new_leaf = blake3::hash(
                 bincode::serialize(&314159265358979u128)
@@ -2506,13 +2514,21 @@ mod mmr_test {
             for i in 0..size {
                 let (mp, _archival_peaks) = archival.prove_membership(i);
                 let new_peaks_from_proof = light.prove_update_leaf(&mp, &new_leaf);
-                let update_leaf_proof = UpdateLeafProof {
+                let update_leaf_proof = LeafUpdateProof {
                     membership_proof: mp.clone(),
                     new_peaks: new_peaks_from_proof,
                     old_peaks: light.peaks.clone(),
                 };
-                assert!(verify_update_leaf(&update_leaf_proof, &new_leaf, size));
-                assert!(!verify_update_leaf(&update_leaf_proof, &bad_leaf, size));
+                assert!(verify_leaf_update_proof(
+                    &update_leaf_proof,
+                    &new_leaf,
+                    size
+                ));
+                assert!(!verify_leaf_update_proof(
+                    &update_leaf_proof,
+                    &bad_leaf,
+                    size
+                ));
 
                 archival.update_leaf(i, new_leaf);
                 light.update_leaf(&mp, &new_leaf);
@@ -2588,7 +2604,7 @@ mod mmr_test {
             new_peaks,
         };
         assert!(
-            MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
+            MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append_proof(
                 append_proof,
                 new_input_hash,
             )
@@ -2597,14 +2613,14 @@ mod mmr_test {
         for &data_index in &[0u128, 1] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
             let mut update_leaf_proof = mmr.prove_update_leaf(data_index, &new_leaf);
-            assert!(verify_update_leaf(
+            assert!(verify_leaf_update_proof(
                 &update_leaf_proof,
                 &new_leaf,
                 leaf_count
             ));
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
             update_leaf_proof.membership_proof.data_index = wrong_data_index;
-            assert!(!verify_update_leaf(
+            assert!(!verify_leaf_update_proof(
                 &update_leaf_proof,
                 &new_leaf,
                 leaf_count
@@ -2665,7 +2681,7 @@ mod mmr_test {
             old_peaks: original_peaks,
         };
         assert!(
-            MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
+            MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append_proof(
                 append_proof,
                 new_leaf_hash,
             )
@@ -2675,14 +2691,14 @@ mod mmr_test {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
             let mut proof = mmr.prove_update_leaf(data_index, &new_leaf);
 
-            assert!(verify_update_leaf(&proof, &new_leaf, leaf_count));
+            assert!(verify_leaf_update_proof(&proof, &new_leaf, leaf_count));
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
             proof.membership_proof.data_index = wrong_data_index;
 
-            assert!(!verify_update_leaf(&proof, &new_leaf, leaf_count));
+            assert!(!verify_leaf_update_proof(&proof, &new_leaf, leaf_count));
             proof.membership_proof.data_index = data_index;
 
-            assert!(verify_update_leaf(&proof, &new_leaf, leaf_count));
+            assert!(verify_leaf_update_proof(&proof, &new_leaf, leaf_count));
         }
     }
 
@@ -2746,7 +2762,7 @@ mod mmr_test {
                 old_peaks: original_peaks,
             };
             assert!(
-                MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append(
+                MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append_proof(
                     append_proof,
                     new_leaf_hash,
                 )
@@ -2805,7 +2821,11 @@ mod mmr_test {
                         .as_slice(),
                 );
                 let mut update_proof = mmr.prove_update_leaf(data_index, &new_leaf);
-                assert!(verify_update_leaf(&update_proof, &new_leaf, data_size));
+                assert!(verify_leaf_update_proof(
+                    &update_proof,
+                    &new_leaf,
+                    data_size
+                ));
 
                 let wrong_data_index = (data_index + 1) % mmr.count_leaves();
 
@@ -2814,7 +2834,7 @@ mod mmr_test {
                 update_proof.membership_proof.data_index = wrong_data_index;
                 assert!(
                     wrong_data_index == data_index
-                        || !verify_update_leaf(&update_proof, &new_leaf, data_size)
+                        || !verify_leaf_update_proof(&update_proof, &new_leaf, data_size)
                 );
 
                 update_proof.membership_proof.data_index = data_index;
@@ -2849,10 +2869,12 @@ mod mmr_test {
                 old_leaf_count: mmr.count_leaves() - 1,
                 old_peaks: original_peaks,
             };
-            assert!(MmrArchive::<blake3::Hash, blake3::Hasher>::verify_append(
-                append_proof,
-                new_leaf_hash,
-            ));
+            assert!(
+                MmrArchive::<blake3::Hash, blake3::Hasher>::verify_append_proof(
+                    append_proof,
+                    new_leaf_hash,
+                )
+            );
         }
     }
 }
