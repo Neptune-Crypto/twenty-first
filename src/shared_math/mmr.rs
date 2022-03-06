@@ -439,6 +439,7 @@ where
     pub old_leaf_count: u128,
     pub old_peaks: Vec<HashDigest>,
     pub new_peaks: Vec<HashDigest>,
+    // TODO: Add a verify method
 }
 
 /// A proof of integral updating of a leaf. The membership_proof can be either before
@@ -457,6 +458,7 @@ where
     membership_proof: MembershipProof<HashDigest, H>,
     old_peaks: Vec<HashDigest>,
     new_peaks: Vec<HashDigest>,
+    // TODO: Add a verify method
 }
 
 #[derive(Debug, Clone)]
@@ -854,8 +856,8 @@ pub struct MmrAccumulator<HashDigest, H> {
     _hasher: PhantomData<H>,
 }
 
-// TODO: Write tests for the light MMR functions
-// 0. Create an (empty?) light MMR
+// TODO: Write tests for the accumulator MMR functions
+// 0. Create an (empty?) accumulator MMR
 // 1. append a value to this
 // 2. verify that the before state, after state,
 //    and leaf hash constitute an append-proof
@@ -924,7 +926,7 @@ where
         membership_proof
     }
 
-    /// Create a proof for honest appending. Verifiable by `LightMmr` implementation.
+    /// Create a proof for honest appending. Verifiable by `AccumulatorMmr` implementation.
     /// Returns (old_peaks, old_leaf_count, new_peaks)
     pub fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest> {
         let old_peaks = self.peaks.clone();
@@ -1004,7 +1006,7 @@ where
         self.peaks[peak_height_index] = acc_hash;
     }
 
-    /// Construct a proof of the integral update of a hash in an existing light MMR
+    /// Construct a proof of the integral update of a hash in an existing accumulator MMR
     /// New authentication path (membership proof) is unchanged by this operation, so
     /// it is not output. Outputs new_peaks.
     pub fn prove_update_leaf(
@@ -1346,7 +1348,7 @@ where
         }
     }
 
-    /// Create a proof for honest appending. Verifiable by `LightMmr` implementation.
+    /// Create a proof for honest appending. Verifiable by `AccumulatorMmr` implementation.
     /// Returns (old_peaks, old_leaf_count, new_peaks)
     pub fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest> {
         let old_leaf_count: u128 = self.count_leaves();
@@ -1543,7 +1545,7 @@ mod mmr_membership_proof_test {
             Vec<blake3::Hash>,
         ) = archival_mmr.prove_membership(4);
 
-        // 1. Update a leaf in both the light MMR and in the archival MMR
+        // 1. Update a leaf in both the accumulator MMR and in the archival MMR
         let update_leaf_proof: LeafUpdateProof<blake3::Hash, blake3::Hasher> =
             archival_mmr.prove_update_leaf(2, &new_leaf);
         assert!(
@@ -2319,7 +2321,7 @@ mod mmr_test {
         assert!(!verify_membership_proof(&membership_proof, &peaks, &leaf_hashes[0], 3,).0);
         membership_proof.data_index = 0;
 
-        // verify the same behavior in the light MMR
+        // verify the same behavior in the accumulator MMR
         let accumulator_mmr =
             MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(leaf_hashes.clone());
         assert!(
@@ -2400,7 +2402,7 @@ mod mmr_test {
         let mut accumulator_mmr_small =
             MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_blake3.clone());
 
-        // Create an append proof with the archival MMR and verify it with a light MMR
+        // Create an append proof with the archival MMR and verify it with a accumulator MMR
         let append_proof_archival = archival_mmr_small.prove_append(new_leaf);
         assert!(
             MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
@@ -2409,7 +2411,7 @@ mod mmr_test {
             )
         );
 
-        // Verify that Light and Archival creates the same proofs
+        // Verify that accumulator and Archival creates the same proofs
         let append_proof_accumulator = accumulator_mmr_small.prove_append(new_leaf);
         assert_eq!(append_proof_archival, append_proof_accumulator);
 
@@ -2466,13 +2468,13 @@ mod mmr_test {
         let new_peaks_from_archival: Vec<blake3::Hash> = archival_mmr_small.get_peaks();
         assert_eq!(append_proof_archival.new_peaks, new_peaks_from_archival);
         accumulator_mmr_small.append(new_leaf);
-        let new_peaks_from_light: Vec<blake3::Hash> = accumulator_mmr_small.peaks;
-        assert_eq!(append_proof_archival.new_peaks, new_peaks_from_light);
+        let new_peaks_from_accumulator: Vec<blake3::Hash> = accumulator_mmr_small.peaks;
+        assert_eq!(append_proof_archival.new_peaks, new_peaks_from_accumulator);
     }
 
     #[test]
     fn bag_peaks_test() {
-        // Verify that archival and light MMR produce the same root
+        // Verify that archival and accumulator MMR produce the same root
         // First with blake3
         let leaf_hashes_blake3: Vec<blake3::Hash> = vec![14u128, 15u128, 16u128]
             .iter()
@@ -2536,7 +2538,7 @@ mod mmr_test {
 
     #[test]
     fn accumulator_mmr_update_leaf_test() {
-        // Verify that upating leafs in archival and in light MMR results in the same peaks
+        // Verify that upating leafs in archival and in accumulator MMR results in the same peaks
         // and verify that updating all leafs in an MMR results in the expected MMR
         for size in 1..150 {
             let new_leaf = blake3::hash(
@@ -2547,7 +2549,7 @@ mod mmr_test {
             let leaf_hashes_blake3: Vec<blake3::Hash> = (500u128..500 + size)
                 .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
                 .collect();
-            let mut light =
+            let mut acc =
                 MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_blake3.clone());
             let mut archival =
                 MmrArchive::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_blake3.clone());
@@ -2556,13 +2558,13 @@ mod mmr_test {
             for i in 0..size {
                 let (mp, _archival_peaks) = archival.prove_membership(i);
                 assert_eq!(i, mp.data_index);
-                light.update_leaf(&mp, &new_leaf);
+                acc.update_leaf(&mp, &new_leaf);
                 archival.update_leaf(i, new_leaf);
                 let new_archival_peaks = archival.get_peaks();
-                assert_eq!(new_archival_peaks, light.peaks);
+                assert_eq!(new_archival_peaks, acc.peaks);
             }
 
-            assert_eq!(archival_end_state.get_peaks(), light.peaks);
+            assert_eq!(archival_end_state.get_peaks(), acc.peaks);
         }
     }
 
@@ -2582,7 +2584,7 @@ mod mmr_test {
             let leaf_hashes_blake3: Vec<blake3::Hash> = (500u128..500 + size)
                 .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
                 .collect();
-            let mut light =
+            let mut acc =
                 MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_blake3.clone());
             let mut archival =
                 MmrArchive::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_blake3.clone());
@@ -2590,11 +2592,11 @@ mod mmr_test {
                 MmrArchive::<blake3::Hash, blake3::Hasher>::new(vec![new_leaf; size as usize]);
             for i in 0..size {
                 let (mp, _archival_peaks) = archival.prove_membership(i);
-                let new_peaks_from_proof = light.prove_update_leaf(&mp, &new_leaf);
+                let new_peaks_from_proof = acc.prove_update_leaf(&mp, &new_leaf);
                 let update_leaf_proof = LeafUpdateProof {
                     membership_proof: mp.clone(),
                     new_peaks: new_peaks_from_proof,
-                    old_peaks: light.peaks.clone(),
+                    old_peaks: acc.peaks.clone(),
                 };
                 assert!(verify_leaf_update_proof(
                     &update_leaf_proof,
@@ -2608,11 +2610,11 @@ mod mmr_test {
                 ));
 
                 archival.update_leaf(i, new_leaf);
-                light.update_leaf(&mp, &new_leaf);
+                acc.update_leaf(&mp, &new_leaf);
                 let new_archival_peaks = archival.get_peaks();
-                assert_eq!(new_archival_peaks, light.peaks);
+                assert_eq!(new_archival_peaks, acc.peaks);
             }
-            assert_eq!(archival_end_state.get_peaks(), light.peaks);
+            assert_eq!(archival_end_state.get_peaks(), acc.peaks);
         }
     }
 
