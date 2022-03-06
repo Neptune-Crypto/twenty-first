@@ -250,21 +250,51 @@ fn data_index_to_node_index(data_index: u128) -> u128 {
     data_index + diff + 1
 }
 
-/// Return the new peaks of the MMR after adding `new_leaf`
+/// Convert from node index to data index in log(size) time
+fn node_index_to_data_index(node_index: u128) -> Option<u128> {
+    let (_right, height) = right_child_and_height(node_index);
+    if height != 0 {
+        return None;
+    }
+
+    let (mut node, mut height) = leftmost_ancestor(node_index);
+    let mut data_index = 0;
+    while height > 0 {
+        let left_child = left_child(node, height);
+        if node_index <= left_child {
+            node = left_child;
+            height -= 1;
+        } else {
+            node = right_child(node);
+            height -= 1;
+            data_index += 1 << height;
+        }
+    }
+
+    Some(data_index)
+}
+
+/// Return the new peaks of the MMR after adding `new_leaf` as well as the membership
+/// proof for the added leaf.
 /// Returns None if configuration is impossible (too small `old_peaks` input vector)
-fn calculate_new_peaks<
-    H: Hasher<Digest = HashDigest>,
+fn calculate_new_peaks_and_membership_proof<
+    H: Hasher<Digest = HashDigest> + Clone,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
 >(
     old_leaf_count: u128,
     old_peaks: Vec<HashDigest>,
     new_leaf: HashDigest,
-) -> Option<Vec<HashDigest>> {
+) -> Option<(Vec<HashDigest>, MembershipProof<HashDigest, H>)> {
     let mut peaks = old_peaks;
     let mut new_node_index = data_index_to_node_index(old_leaf_count);
     let (mut new_node_is_right_child, _height) = right_child_and_height(new_node_index);
     peaks.push(new_leaf);
     let mut hasher = H::new();
+    let mut membership_proof: MembershipProof<HashDigest, H> = MembershipProof {
+        authentication_path: vec![],
+        data_index: old_leaf_count,
+        _hasher: PhantomData,
+    };
     while new_node_is_right_child {
         let new_hash = peaks.pop().unwrap();
         let previous_peak_res = peaks.pop();
@@ -272,12 +302,15 @@ fn calculate_new_peaks<
             None => return None,
             Some(peak) => peak,
         };
+        membership_proof
+            .authentication_path
+            .push(previous_peak.clone());
         peaks.push(hasher.hash_two(&previous_peak, &new_hash));
         new_node_index += 1;
         new_node_is_right_child = right_child_and_height(new_node_index).0;
     }
 
-    Some(peaks)
+    Some((peaks, membership_proof))
 }
 
 /// Get a root commitment to the entire MMR
@@ -873,11 +906,22 @@ where
         self.leaf_count == 0
     }
 
-    pub fn append(&mut self, new_leaf: HashDigest) {
-        self.peaks =
-            calculate_new_peaks::<H, HashDigest>(self.leaf_count, self.peaks.clone(), new_leaf)
-                .unwrap();
+    /// Calculate the new accumulator MMR after inserting a new leaf and return the membership
+    /// proof of this new leaf.
+    /// The membership proof is returned here since the accumulater MMR has no other way of
+    /// retrieving a membership proof for a leaf.
+    pub fn append(&mut self, new_leaf: HashDigest) -> MembershipProof<HashDigest, H> {
+        let (new_peaks, membership_proof) =
+            calculate_new_peaks_and_membership_proof::<H, HashDigest>(
+                self.leaf_count,
+                self.peaks.clone(),
+                new_leaf,
+            )
+            .unwrap();
+        self.peaks = new_peaks;
         self.leaf_count += 1;
+
+        membership_proof
     }
 
     /// Create a proof for honest appending. Verifiable by `LightMmr` implementation.
@@ -885,9 +929,13 @@ where
     pub fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest> {
         let old_peaks = self.peaks.clone();
         let old_leaf_count = self.leaf_count;
-        let new_peaks =
-            calculate_new_peaks::<H, HashDigest>(old_leaf_count, old_peaks.clone(), new_leaf)
-                .unwrap();
+        let new_peaks = calculate_new_peaks_and_membership_proof::<H, HashDigest>(
+            old_leaf_count,
+            old_peaks.clone(),
+            new_leaf,
+        )
+        .unwrap()
+        .0;
 
         AppendProof {
             old_peaks,
@@ -902,11 +950,13 @@ where
         new_leaf: HashDigest,
     ) -> bool {
         let expected_new_peaks = append_proof.new_peaks.clone();
-        let new_peaks_calculated: Option<Vec<HashDigest>> = calculate_new_peaks::<H, HashDigest>(
-            append_proof.old_leaf_count,
-            append_proof.old_peaks,
-            new_leaf,
-        );
+        let new_peaks_calculated: Option<Vec<HashDigest>> =
+            calculate_new_peaks_and_membership_proof::<H, HashDigest>(
+                append_proof.old_leaf_count,
+                append_proof.old_peaks,
+                new_leaf,
+            )
+            .map(|x| x.0);
 
         match new_peaks_calculated {
             None => false,
@@ -1182,6 +1232,32 @@ where
         (membership_proof, peaks)
     }
 
+    /// Verify a membership proof. Return the peak digest that the leaf points to.
+    pub fn verify_membership_proof(
+        &self,
+        membership_proof: &MembershipProof<HashDigest, H>,
+        leaf_hash: &HashDigest,
+    ) -> (bool, Option<HashDigest>) {
+        let res = verify_membership_proof(
+            membership_proof,
+            &self.get_peaks(),
+            leaf_hash,
+            self.count_leaves(),
+        );
+
+        if res.0
+            && self.digests[data_index_to_node_index(membership_proof.data_index) as usize]
+                != *leaf_hash
+        {
+            // This should *never* happen. It would indicate that the hash function is broken
+            // since the leaf hash hashed to the correct peak, but that the digest could not
+            // be found in the digests field
+            panic!("Verified membership proof but did not find leaf hash at data index.");
+        }
+
+        res
+    }
+
     /// Calculate the root for the entire MMR
     pub fn bag_peaks(&self) -> HashDigest {
         let peaks: Vec<HashDigest> = self.get_peaks();
@@ -1245,8 +1321,19 @@ where
         acc
     }
 
+    /// Append an element to the archival MMR, return the membership proof of the newly added leaf.
+    /// The membership proof is returned here since the accumulater MMR has no other way of
+    /// retrieving a membership proof for a leaf. And the archival and accumulator MMR share
+    /// this interface.
+    pub fn append(&mut self, new_leaf: HashDigest) -> MembershipProof<HashDigest, H> {
+        let node_index = self.digests.len() as u128;
+        let data_index = node_index_to_data_index(node_index).unwrap();
+        self.append_raw(new_leaf);
+        self.prove_membership(data_index).0
+    }
+
     /// Append an element to the archival MMR
-    pub fn append(&mut self, new_leaf: HashDigest) {
+    pub fn append_raw(&mut self, new_leaf: HashDigest) {
         let node_index = self.digests.len() as u128;
         self.digests.push(new_leaf.clone());
         let (parent_needed, own_height) = right_child_and_height(node_index);
@@ -1255,7 +1342,7 @@ where
                 self.digests[left_sibling(node_index, own_height) as usize].clone();
             let mut hasher = H::new();
             let parent_hash: HashDigest = hasher.hash_two(&left_sibling_hash, &new_leaf);
-            self.append(parent_hash);
+            self.append_raw(parent_hash);
         }
     }
 
@@ -1265,9 +1352,13 @@ where
         let old_leaf_count: u128 = self.count_leaves();
         let old_peaks_and_heights: Vec<(HashDigest, u128)> = self.get_peaks_with_heights();
         let old_peaks: Vec<HashDigest> = old_peaks_and_heights.into_iter().map(|x| x.0).collect();
-        let new_peaks: Vec<HashDigest> =
-            calculate_new_peaks::<H, HashDigest>(old_leaf_count, old_peaks.clone(), new_leaf)
-                .unwrap();
+        let new_peaks: Vec<HashDigest> = calculate_new_peaks_and_membership_proof::<H, HashDigest>(
+            old_leaf_count,
+            old_peaks.clone(),
+            new_leaf,
+        )
+        .unwrap()
+        .0;
 
         AppendProof {
             old_peaks,
@@ -1877,31 +1968,6 @@ mod mmr_test {
         util_types::simple_hasher::RescuePrimeProduction,
     };
 
-    /// Convert from node index to data index in log(size) time
-    // Used for property-based testing of its inverse function
-    fn node_index_to_data_index(node_index: u128) -> Option<u128> {
-        let (_right, height) = right_child_and_height(node_index);
-        if height != 0 {
-            return None;
-        }
-
-        let (mut node, mut height) = leftmost_ancestor(node_index);
-        let mut data_index = 0;
-        while height > 0 {
-            let left_child = left_child(node, height);
-            if node_index <= left_child {
-                node = left_child;
-                height -= 1;
-            } else {
-                node = right_child(node);
-                height -= 1;
-                data_index += 1 << height;
-            }
-        }
-
-        Some(data_index)
-    }
-
     #[test]
     fn data_index_to_node_index_test() {
         assert_eq!(1, data_index_to_node_index(0));
@@ -2208,13 +2274,24 @@ mod mmr_test {
         );
 
         // Make the append and verify that the new peaks match the one from the proofs
-        archival_mmr.append(new_leaf);
-        accumulator_mmr.append(new_leaf);
+        let archival_membership_proof = archival_mmr.append(new_leaf);
+        let accumulator_membership_proof = accumulator_mmr.append(new_leaf);
         assert_eq!(archival_mmr.get_peaks(), archival_append_proof.new_peaks);
         assert_eq!(accumulator_mmr.get_peaks(), archival_append_proof.new_peaks);
 
         // Verify that the appended value matches the one stored in the archival MMR
         assert_eq!(new_leaf, archival_mmr.get_leaf(0));
+
+        // Verify that the membership proofs for the inserted leafs are valid and that they agree
+        assert_eq!(
+            archival_membership_proof, accumulator_membership_proof,
+            "accumulator and archival membership proofs must agree"
+        );
+        assert!(
+            archival_mmr
+                .verify_membership_proof(&archival_membership_proof, &new_leaf)
+                .0
+        );
     }
 
     #[test]
@@ -2542,25 +2619,44 @@ mod mmr_test {
     #[test]
     fn mmr_append_test() {
         // Verify that building an MMR iteratively or in *one* function call results in the same MMR
-        for size in 1..100 {
+        for size in 1..260 {
             let leaf_hashes_blake3: Vec<blake3::Hash> = (500u128..500 + size)
                 .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
                 .collect();
             let mut archival_iterative = MmrArchive::<blake3::Hash, blake3::Hasher>::new(vec![]);
             let archival_batch =
                 MmrArchive::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_blake3.clone());
-            let mut light_iterative = MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(vec![]);
-            let light_batch =
+            let mut accumulator_iterative =
+                MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(vec![]);
+            let accumulator_batch =
                 MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_blake3.clone());
             for leaf_hash in leaf_hashes_blake3 {
-                archival_iterative.append(leaf_hash);
-                light_iterative.append(leaf_hash);
+                let archival_membership_proof = archival_iterative.append(leaf_hash);
+                let accumulator_membership_proof = accumulator_iterative.append(leaf_hash);
+
+                // Verify membership proofs returned from the append operation
+                assert_eq!(
+                    accumulator_membership_proof, archival_membership_proof,
+                    "membership proofs from append operation must agree"
+                );
+                assert!(
+                    archival_iterative
+                        .verify_membership_proof(&archival_membership_proof, &leaf_hash)
+                        .0,
+                    "membership proof from append must verify"
+                );
             }
+
+            // Verify that the MMRs built iteratively from `append` and
+            // in *one* batch are the same
             assert_eq!(archival_iterative.digests, archival_batch.digests);
-            assert_eq!(light_batch.peaks, light_iterative.peaks);
-            assert_eq!(light_batch.leaf_count, light_iterative.leaf_count);
-            assert_eq!(size, light_iterative.leaf_count);
-            assert_eq!(archival_iterative.get_peaks(), light_iterative.peaks);
+            assert_eq!(accumulator_batch.peaks, accumulator_iterative.peaks);
+            assert_eq!(
+                accumulator_batch.leaf_count,
+                accumulator_iterative.leaf_count
+            );
+            assert_eq!(size, accumulator_iterative.leaf_count);
+            assert_eq!(archival_iterative.get_peaks(), accumulator_iterative.peaks);
         }
     }
 
