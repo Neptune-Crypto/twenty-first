@@ -6,7 +6,7 @@ use std::{
     marker::PhantomData,
 };
 
-use super::mmr::{
+use super::shared::{
     data_index_to_node_index, get_authentication_path_node_indices, get_peak_height,
     get_peak_heights_and_peak_node_indices, leaf_count_to_node_count, left_sibling,
     node_indices_added_by_append, parent, right_child_and_height, right_sibling,
@@ -455,10 +455,9 @@ where
 mod mmr_membership_proof_test {
     use crate::{
         shared_math::b_field_element::BFieldElement,
-        util_types::{
-            mmr::mmr::{verify_leaf_update_proof, LeafUpdateProof, MmrAccumulator, MmrArchive},
-            simple_hasher::RescuePrimeProduction,
-        },
+        util_types::mmr::accumulator_mmr::MmrAccumulator,
+        util_types::mmr::{archive_mmr::MmrArchive, leaf_update_proof::LeafUpdateProof},
+        util_types::{mmr::shared::verify_leaf_update_proof, simple_hasher::RescuePrimeProduction},
     };
 
     use super::*;

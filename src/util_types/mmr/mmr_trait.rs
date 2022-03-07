@@ -1,5 +1,6 @@
 use super::membership_proof::MembershipProof;
-use crate::util_types::mmr::mmr::{AppendProof, LeafUpdateProof};
+use crate::util_types::mmr::append_proof::AppendProof;
+use crate::util_types::mmr::leaf_update_proof::LeafUpdateProof;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use std::fmt::Debug;
 
