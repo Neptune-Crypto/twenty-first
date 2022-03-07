@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 
-use super::other::log_2_floor;
+use crate::shared_math::other::log_2_floor;
 
 #[inline]
 fn left_child(node_index: u128, height: u128) -> u128 {
