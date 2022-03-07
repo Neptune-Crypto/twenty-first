@@ -2,6 +2,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime::RescuePrime;
 use crate::shared_math::rescue_prime_params;
 use crate::shared_math::x_field_element::XFieldElement;
+use crate::util_types::blake3_wrapper::Blake3Hash;
 use serde::{Deserialize, Serialize};
 /// A simple `Hasher` trait that allows for hashing one, two or many values into one digest.
 ///
@@ -9,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
 pub trait Hasher {
-    type Digest: Eq;
+    type Digest: PartialEq;
 
     fn new() -> Self;
     fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
@@ -23,7 +24,7 @@ pub trait Hasher {
         Self::Digest: ToDigest<Self::Digest>,
     {
         for salt in salts {
-            digest = self.hash_two(&digest, &salt.to_digest());
+            digest = self.hash_pair(&digest, &salt.to_digest());
         }
 
         digest
@@ -35,13 +36,6 @@ pub trait Hasher {
 /// order to
 pub trait ToDigest<Digest> {
     fn to_digest(&self) -> Digest;
-}
-
-/// Trivial implementation when hashing `blake3::Hash` into `blake3::Hash`es.
-impl ToDigest<blake3::Hash> for blake3::Hash {
-    fn to_digest(&self) -> blake3::Hash {
-        self.to_owned()
-    }
 }
 
 // The specification for MMR from mimblewimble specifies that the
@@ -64,21 +58,27 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
     }
 }
 
-impl ToDigest<blake3::Hash> for BFieldElement {
-    fn to_digest(&self) -> blake3::Hash {
+impl ToDigest<Blake3Hash> for Blake3Hash {
+    fn to_digest(&self) -> Blake3Hash {
+        *self
+    }
+}
+
+impl ToDigest<Blake3Hash> for BFieldElement {
+    fn to_digest(&self) -> Blake3Hash {
         let bytes = bincode::serialize(&self).unwrap();
-        let digest = blake3::hash(bytes.as_slice());
+        let digest = Blake3Hash(blake3::hash(bytes.as_slice()));
 
         digest
     }
 }
 
-impl ToDigest<blake3::Hash> for XFieldElement {
-    fn to_digest(&self) -> blake3::Hash {
+impl ToDigest<Blake3Hash> for XFieldElement {
+    fn to_digest(&self) -> Blake3Hash {
         let bytes = bincode::serialize(&self).unwrap();
         let digest = blake3::hash(bytes.as_slice());
 
-        digest
+        digest.into()
     }
 }
 
@@ -89,33 +89,39 @@ impl ToDigest<Vec<BFieldElement>> for Vec<BFieldElement> {
     }
 }
 
+// TODO: This 'Blake3Hash' wrapper looks messy, but at least it is contained here. Can we move it to 'blake3_wrapper'?
 impl Hasher for blake3::Hasher {
-    type Digest = blake3::Hash;
+    type Digest = Blake3Hash;
 
     fn new() -> Self {
         blake3::Hasher::new()
     }
 
     fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
+        let Blake3Hash(digest) = input.to_digest();
         self.reset();
-        self.update(input.to_digest().as_bytes());
-        self.finalize()
+        self.update(digest.as_bytes());
+        Blake3Hash(self.finalize())
     }
 
     fn hash_pair(&mut self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
+        let Blake3Hash(left_digest) = left;
+        let Blake3Hash(right_digest) = right;
+
         self.reset();
-        self.update(left.to_digest().as_bytes());
-        self.update(right.to_digest().as_bytes());
-        self.finalize()
+        self.update(left_digest.as_bytes());
+        self.update(right_digest.as_bytes());
+        Blake3Hash(self.finalize())
     }
 
     // Uses blake3::Hasher's sponge
-    fn hash_many(&mut self, input: &[Self::Digest]) -> blake3::Hash {
+    fn hash_many(&mut self, input: &[Self::Digest]) -> Self::Digest {
         self.reset();
-        for value in input {
-            self.update(value.to_digest().as_bytes());
+        for digest in input {
+            let Blake3Hash(digest) = digest;
+            self.update(digest.as_bytes());
         }
-        self.finalize()
+        Blake3Hash(self.finalize())
     }
 }
 
@@ -137,7 +143,7 @@ impl Hasher for RescuePrimeProduction {
     }
 
     fn hash_pair(&mut self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
-        let input: Vec<BFieldElement> = vec![left.clone(), right.clone()].concat();
+        let input: Vec<BFieldElement> = vec![left.to_owned(), right.to_owned()].concat();
         self.0.hash(&input)
     }
 

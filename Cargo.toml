@@ -43,7 +43,6 @@ harness = false
 name = "ntt_forward"
 harness = false
 # [[bench]]# name = "rpsss_bench_sign"# harness = false
-
 # [[bench]]
 # name = "rpsss_bench_verify"
 # harness = false

@@ -1,5 +1,5 @@
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use super::other::{log_2_ceil, log_2_floor};
 use super::polynomial::Polynomial;
@@ -428,7 +428,7 @@ mod test_x_field_fri {
 
     #[test]
     fn get_rounds_count_test() {
-        type Digest = blake3::Hash;
+        type Digest = crate::util_types::blake3_wrapper::Blake3Hash;
         type Hasher = blake3::Hasher;
 
         let subgroup_order = 512;
@@ -492,7 +492,10 @@ mod test_x_field_fri {
 
     #[test]
     fn fri_on_b_field_test() {
-        let fri: Fri<BFieldElement> = get_b_field_fri_test_object();
+        type Digest = crate::util_types::blake3_wrapper::Blake3Hash;
+        type Hasher = blake3::Hasher;
+
+        let fri: Fri<BFieldElement, Digest, Hasher> = get_b_field_fri_test_object();
         let mut proof_stream: ProofStream = ProofStream::default();
         let subgroup = fri.omega.get_cyclic_group_elements(None);
 
@@ -505,10 +508,13 @@ mod test_x_field_fri {
 
     #[test]
     fn fri_on_x_field_test() {
+        type Digest = crate::util_types::blake3_wrapper::Blake3Hash;
+        type Hasher = blake3::Hasher;
+
         let subgroup_order = 1024;
         let expansion_factor = 4;
         let colinearity_check_count = 6;
-        let fri: Fri<XFieldElement> =
+        let fri: Fri<XFieldElement, Digest, Hasher> =
             get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
         let mut proof_stream: ProofStream = ProofStream::default();
         let subgroup = fri.omega.get_cyclic_group_elements(None);
@@ -520,10 +526,13 @@ mod test_x_field_fri {
 
     #[test]
     fn fri_x_field_limit_test() {
+        type Digest = crate::util_types::blake3_wrapper::Blake3Hash;
+        type Hasher = blake3::Hasher;
+
         let subgroup_order = 1024;
         let expansion_factor = 4;
         let colinearity_check_count = 6;
-        let fri: Fri<XFieldElement> =
+        let fri: Fri<XFieldElement, Digest, Hasher> =
             get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
         let subgroup = fri.omega.get_cyclic_group_elements(None);
 
@@ -558,7 +567,12 @@ mod test_x_field_fri {
         assert!(verify_result.is_err());
     }
 
-    fn get_b_field_fri_test_object<Digest, Hasher>() -> Fri<BFieldElement, Digest, Hasher> {
+    fn get_b_field_fri_test_object<Digest, H>() -> Fri<BFieldElement, Digest, H>
+    where
+        Digest: ToDigest<Digest> + Clone + PartialEq + Serialize + DeserializeOwned,
+        H: Hasher<Digest = Digest> + Sized,
+        BFieldElement: ToDigest<Digest>,
+    {
         let subgroup_order = 1024;
         let (omega, _primes1) =
             BFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
@@ -567,25 +581,26 @@ mod test_x_field_fri {
 
         let expansion_factor = 4;
         let colinearity_checks = 6;
-        let _digest = PhantomData;
-        let _hasher = PhantomData;
 
-        Fri::new(
+        Fri::<BFieldElement, Digest, H>::new(
             offset.unwrap(),
             omega.unwrap(),
             subgroup_order as usize,
             expansion_factor,
             colinearity_checks,
-            _digest,
-            _hasher,
         )
     }
 
-    fn get_x_field_fri_test_object<Digest, Hasher>(
+    fn get_x_field_fri_test_object<Digest, H>(
         subgroup_order: u128,
         expansion_factor: usize,
         colinearity_checks: usize,
-    ) -> Fri<XFieldElement, Digest, Hasher> {
+    ) -> Fri<XFieldElement, Digest, H>
+    where
+        Digest: ToDigest<Digest> + Clone + PartialEq + Serialize + DeserializeOwned,
+        H: Hasher<Digest = Digest> + Sized,
+        XFieldElement: ToDigest<Digest>,
+    {
         let (omega, _primes1): (Option<XFieldElement>, Vec<u128>) =
             XFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
 
@@ -594,7 +609,7 @@ mod test_x_field_fri {
         // we're not sure it needs to, Alan?
         let offset: Option<XFieldElement> = Some(XFieldElement::new_const(BFieldElement::new(7)));
 
-        let fri: Fri<XFieldElement> = Fri::<XFieldElement>::new(
+        let fri: Fri<XFieldElement, Digest, H> = Fri::new(
             offset.unwrap(),
             omega.unwrap(),
             subgroup_order as usize,

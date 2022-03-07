@@ -902,6 +902,7 @@ pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
         .collect()
 }
+
 // pub fn get_index_from_bytes_exclude_multiples(buf: &[u8], length: usize, multiple: usize) -> usize {
 //     let options = length - length / multiple;
 //     let x = get_index_from_bytes(buf, options);

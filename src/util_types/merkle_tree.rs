@@ -1,5 +1,6 @@
 use crate::shared_math::other::{self, log_2_floor};
 use crate::shared_math::traits::GetRandomElements;
+use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::izip;
 use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
@@ -7,12 +8,6 @@ use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::marker::PhantomData;
-
-use super::simple_hasher::{Hasher, ToDigest};
-
-pub type Blake3Digest = [u8; 32];
-
-pub const BLAKE3ZERO: Blake3Digest = [0u8; 32];
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Node<Value, Digest> {
@@ -89,16 +84,16 @@ where
             // Is `sibling_node` a left or a right child?
             if mut_index % 2 == 0 {
                 // `sibling_node` is a right child
-                current_node.hash = hasher.hash_two(&current_node.hash, &sibling_node.hash);
+                current_node.hash = hasher.hash_pair(&current_node.hash, &sibling_node.hash);
             } else {
                 // `sibling_node` is a left child
-                current_node.hash = hasher.hash_two(&sibling_node.hash, &current_node.hash);
+                current_node.hash = hasher.hash_pair(&sibling_node.hash, &current_node.hash);
             }
             mut_index /= 2;
         }
 
         let leaf_value = proof[0].value.as_ref().unwrap();
-        let expected_hash = hasher.hash_one(&leaf_value.to_digest());
+        let expected_hash = hasher.hash(&leaf_value.to_digest());
         current_node.hash == root_hash && expected_hash == proof[0].hash // FIXME: Remove '&& ...'
     }
 
@@ -127,7 +122,7 @@ where
         );
 
         let mut hasher = H::new();
-        let zero_hash = hasher.hash_one(zero);
+        let zero_hash = hasher.hash(zero);
 
         let mut nodes: Vec<Node<Value, Digest>> = vec![
             Node {
@@ -137,7 +132,7 @@ where
             2 * values.len()
         ];
         for i in 0..values.len() {
-            nodes[values.len() + i].hash = hasher.hash_one(&values[i].to_digest());
+            nodes[values.len() + i].hash = hasher.hash(&values[i].to_digest());
             nodes[values.len() + i].value = Some(values[i].clone());
         }
 
@@ -145,7 +140,7 @@ where
         for i in (1..(nodes.len() / 2)).rev() {
             let left = nodes[i * 2].hash.clone();
             let right = nodes[i * 2 + 1].hash.clone();
-            nodes[i].hash = hasher.hash_two(&left.to_digest(), &right.to_digest());
+            nodes[i].hash = hasher.hash_pair(&left.to_digest(), &right.to_digest());
         }
 
         // nodes[0] is never used for anything.
@@ -222,9 +217,9 @@ where
             // Use Merkle tree index parity (odd/even) to determine which
             // order to concatenate the hashes before hashing them.
             if i % 2 == 0 {
-                acc_hash = hasher.hash_two(&acc_hash, path_hash);
+                acc_hash = hasher.hash_pair(&acc_hash, path_hash);
             } else {
-                acc_hash = hasher.hash_two(path_hash, &acc_hash);
+                acc_hash = hasher.hash_pair(path_hash, &acc_hash);
             }
             i /= 2;
         }
@@ -246,7 +241,7 @@ where
         auth_path: Vec<Digest>,
     ) -> bool {
         let mut hasher = H::new();
-        let value_hash = hasher.hash_one(&value);
+        let value_hash = hasher.hash(&value);
 
         // Set `leaf_hash` to H(value)
         Self::verify_authentication_path_from_leaf_hash(root_hash, index, value_hash, auth_path)
@@ -422,7 +417,7 @@ where
                 {
                     let left_child = &partial_tree[&(parent_key * 2)];
                     let right_child = &partial_tree[&(parent_key * 2 + 1)];
-                    let digest = hasher.hash_two(left_child, right_child);
+                    let digest = hasher.hash_pair(left_child, right_child);
                     partial_tree.insert(parent_key, digest);
                     complete = false;
                 }
@@ -488,7 +483,7 @@ where
         let mut leaf_hashes: Vec<Digest> = Vec::with_capacity(proof.len());
         for (auth_path, value) in proof.iter() {
             auth_paths.push(auth_path.clone());
-            leaf_hashes.push(hasher.hash_one(value));
+            leaf_hashes.push(hasher.hash(value));
         }
 
         Self::verify_leafless_multi_proof_from_leaf_hashes(
@@ -537,7 +532,7 @@ where
         );
 
         let mut hasher = H::new();
-        let zero_hash = hasher.hash_one(zero);
+        let zero_hash = hasher.hash(zero);
         let mut nodes: Vec<Node<Value, Digest>> = vec![
             Node {
                 value: None,
@@ -560,7 +555,7 @@ where
         for i in (1..(nodes.len() / 2)).rev() {
             let left = nodes[i * 2].hash.clone();
             let right = nodes[i * 2 + 1].hash.clone();
-            nodes[i].hash = hasher.hash_two(&left.to_digest(), &right.to_digest());
+            nodes[i].hash = hasher.hash_pair(&left.to_digest(), &right.to_digest());
         }
 
         // nodes[0] is never used for anything.
@@ -714,11 +709,10 @@ where
 mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
     use crate::shared_math::x_field_element::XFieldElement;
-    use crate::utils::{decode_hex, generate_random_numbers, generate_random_numbers_u128};
+    use crate::util_types::blake3_wrapper::Blake3Hash;
+    use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
     use itertools::Itertools;
-    use primitive_types::U256;
     use rand::RngCore;
 
     fn count_hashes<Digest>(
@@ -730,9 +724,16 @@ mod merkle_tree_test {
         proof.iter().map(|y| y.0 .0.iter().flatten().count()).sum()
     }
 
+    fn bad_blake3_hash(orig: Blake3Hash) -> Blake3Hash {
+        let Blake3Hash(orig) = orig;
+        let mut bytes = orig.as_bytes().clone();
+        bytes[5] ^= 1;
+        Blake3Hash(bytes.into())
+    }
+
     #[test]
     fn merkle_tree_test_32() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
         let mut rng = rand::thread_rng();
@@ -771,13 +772,11 @@ mod merkle_tree_test {
                     .all(|(i, (_auth_path, value))| *value == elements[indices_usize[i]]));
 
                 // manipulate Merkle root and verify failure
-                let mut bad_root_hash = mt_32_orig_root_hash.as_bytes().clone();
-                bad_root_hash[i] ^= 1;
-                mt_32.root_hash = bad_root_hash.into();
+                let mut bad_root_hash = bad_blake3_hash(mt_32_orig_root_hash);
 
                 assert!(
                     !MerkleTree::<BFieldElement, Digest, Hasher>::verify_leafless_multi_proof(
-                        mt_32.get_root().clone(),
+                        bad_root_hash,
                         &indices_usize,
                         &proof
                     )
@@ -833,7 +832,7 @@ mod merkle_tree_test {
 
     #[test]
     fn merkle_tree_verify_multi_proof_degenerate_test() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
         let mut rng = rand::thread_rng();
 
@@ -856,7 +855,7 @@ mod merkle_tree_test {
 
     #[test]
     fn merkle_tree_verify_multi_proof_equivalence_test() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
         let mut rng = rand::thread_rng();
 
@@ -920,7 +919,7 @@ mod merkle_tree_test {
 
     #[test]
     fn merkle_tree_verify_leafless_multi_proof_test() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
         let mut prng = rand::thread_rng();
@@ -972,20 +971,18 @@ mod merkle_tree_test {
                 // Begin negative tests
 
                 // Corrupt the root and thereby the tree
-                let tree_orig_root_hash = tree.root_hash.as_bytes().clone();
-
-                let mut bad_root_hash: [u8; 32] = tree_orig_root_hash;
-                bad_root_hash[0] ^= 0x1;
-                tree.root_hash = bad_root_hash.into();
+                let orig_root_hash = tree.root_hash;
+                let mut bad_root_hash = bad_blake3_hash(tree.root_hash);
                 let verified =
                     MerkleTree::<BFieldElement, Digest, Hasher>::verify_leafless_multi_proof(
-                        bad_root_hash.into(),
+                        bad_root_hash,
                         &indices,
                         &proof,
                     );
                 assert!(!verified, "Should not verify against bad root hash.");
+
                 // Restore root
-                tree.root_hash = tree_orig_root_hash.into();
+                tree.root_hash = orig_root_hash;
 
                 // Corrupt the proof and thus fail to verify against the (valid) tree.
                 let mut bad_proof = proof.clone();
@@ -1003,9 +1000,13 @@ mod merkle_tree_test {
         }
     }
 
+    fn b3h(hex: impl AsRef<[u8]>) -> Blake3Hash {
+        Blake3Hash(blake3::Hash::from_hex(hex).unwrap())
+    }
+
     #[test]
     fn merkle_tree_test_simple() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
         let mut prng = rand::thread_rng();
@@ -1018,28 +1019,22 @@ mod merkle_tree_test {
         let single_mt_one: MerkleTree<BFieldElement, Digest, Hasher> =
             MerkleTree::from_vec(&[BFieldElement::new(1)], &zero);
 
-        let expected_root_hash: Digest = blake3::Hash::from_hex(
-            "331712cd28cd648eb4af74e03f89306735d56254393e4d958b4cc126ee256203",
-        )
-        .unwrap();
+        let expected_root_hash: Digest =
+            b3h("331712cd28cd648eb4af74e03f89306735d56254393e4d958b4cc126ee256203");
         assert_eq!(expected_root_hash, single_mt_one.root_hash);
         assert_eq!(1, single_mt_one.height);
         let single_mt_two: MerkleTree<BFieldElement, Digest, Hasher> =
             MerkleTree::from_vec(&[two], &zero);
 
-        let expected_root_hash_2: Digest = blake3::Hash::from_hex(
-            "51f6f488327b9541d3f455aeef239ad633b50d6ce2c92c27500dfa757d6320a1",
-        )
-        .unwrap();
+        let expected_root_hash_2: Digest =
+            b3h("51f6f488327b9541d3f455aeef239ad633b50d6ce2c92c27500dfa757d6320a1");
         assert_eq!(expected_root_hash_2, single_mt_two.root_hash);
         assert_eq!(1, single_mt_two.height);
 
         let mt: MerkleTree<BFieldElement, Digest, Hasher> =
             MerkleTree::from_vec(&[one, two], &zero);
-        let expected_root_hash_3 = blake3::Hash::from_hex(
-            "b53b546e7c34ddff320bccf9f900dcc8abf8f0c073e4f140230d45e7dce6f439",
-        )
-        .unwrap();
+        let expected_root_hash_3 =
+            b3h("b53b546e7c34ddff320bccf9f900dcc8abf8f0c073e4f140230d45e7dce6f439");
         assert_eq!(expected_root_hash_3, mt.root_hash);
         assert_eq!(2, mt.height);
 
@@ -1070,19 +1065,15 @@ mod merkle_tree_test {
 
         let mt_reverse: MerkleTree<BFieldElement, Digest, Hasher> =
             MerkleTree::from_vec(&[two, one], &zero);
-        let expected_root_hash_4 = blake3::Hash::from_hex(
-            "8d10946b4b745dde4b3a7d2530c0c5990e34239dd30eb3d90fbc654d12ade5f8",
-        )
-        .unwrap();
+        let expected_root_hash_4 =
+            b3h("8d10946b4b745dde4b3a7d2530c0c5990e34239dd30eb3d90fbc654d12ade5f8");
         assert_eq!(expected_root_hash_4, mt_reverse.root_hash);
         assert_eq!(2u8, mt_reverse.height);
 
         let mut mt_four: MerkleTree<BFieldElement, Digest, Hasher> =
             MerkleTree::from_vec(&[one, two, three, four], &zero);
-        let expected_root_hash_5 = blake3::Hash::from_hex(
-            "c9a28853123953bd3fbc45bd818a809a4647094b1cae07853e5c1bfe6f650c05",
-        )
-        .unwrap();
+        let expected_root_hash_5 =
+            b3h("c9a28853123953bd3fbc45bd818a809a4647094b1cae07853e5c1bfe6f650c05");
         assert_eq!(expected_root_hash_5, mt_four.root_hash);
         assert_ne!(mt.root_hash, mt_reverse.root_hash);
         assert_eq!(3, mt_four.height);
@@ -1192,7 +1183,7 @@ mod merkle_tree_test {
 
     #[test]
     fn merkle_tree_get_authentication_path_test() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
         // 1: Create Merkle tree
@@ -1247,7 +1238,7 @@ mod merkle_tree_test {
     // Test of salted Merkle trees
     #[test]
     fn salted_merkle_tree_get_authentication_path_test() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
         type SMT = SaltedMerkleTree<BFieldElement, Digest, Hasher>;
 
@@ -1498,8 +1489,7 @@ mod merkle_tree_test {
             &auth_paths_salts_values
         ));
 
-        let mut bad_root_hash_b = root_hash_b.as_bytes().clone();
-        bad_root_hash_b[5] ^= 1;
+        let mut bad_root_hash_b = bad_blake3_hash(*root_hash_b);
         assert!(!SMT::verify_leafless_multi_proof_with_salts_and_values(
             bad_root_hash_b.into(),
             &[0, 1],
@@ -1586,8 +1576,7 @@ mod merkle_tree_test {
         ));
 
         // Change root hash again, verify failue
-        let mut another_bad_root_hash_b = root_hash_b.as_bytes().clone();
-        another_bad_root_hash_b[4] ^= 1;
+        let mut another_bad_root_hash_b = bad_blake3_hash(*root_hash_b);
         assert!(!SMT::verify_leafless_multi_proof(
             another_bad_root_hash_b.into(),
             &[0, 1, 2, 4, 7],
@@ -1598,7 +1587,7 @@ mod merkle_tree_test {
 
     #[test]
     fn salted_merkle_tree_get_authentication_path_xfields_test() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
         type SMT = SaltedMerkleTree<XFieldElement, Digest, Hasher>;
 
@@ -1710,7 +1699,7 @@ mod merkle_tree_test {
 
     #[test]
     fn salted_merkle_tree_regression_test_0() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
         type SMT = SaltedMerkleTree<BFieldElement, Digest, Hasher>;
 
@@ -1762,7 +1751,7 @@ mod merkle_tree_test {
 
     #[test]
     fn salted_merkle_tree_verify_leafless_multi_proof_test() {
-        type Digest = blake3::Hash;
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
         type SMT = SaltedMerkleTree<BFieldElement, Digest, Hasher>;
 
@@ -1809,8 +1798,7 @@ mod merkle_tree_test {
                     &indices,
                     &proof,
                 ));
-                let mut bad_root_hash = tree.get_root().as_bytes().clone();
-                bad_root_hash[5] ^= 1;
+                let mut bad_root_hash = bad_blake3_hash(*tree.get_root());
                 assert!(!SMT::verify_leafless_multi_proof_with_salts_and_values(
                     bad_root_hash.into(),
                     &indices,
@@ -1825,6 +1813,7 @@ mod merkle_tree_test {
                     &indices,
                     &proof,
                 ));
+
                 proof[pick].2.decrement();
                 assert!(SMT::verify_leafless_multi_proof_with_salts_and_values(
                     *tree.get_root(),
