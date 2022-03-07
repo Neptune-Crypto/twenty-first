@@ -3,7 +3,6 @@ pub mod complex_number;
 pub mod fraction;
 pub mod fri;
 pub mod integer_ring_polynomial;
-pub mod mmr;
 pub mod mpolynomial;
 pub mod ntt;
 pub mod other;
