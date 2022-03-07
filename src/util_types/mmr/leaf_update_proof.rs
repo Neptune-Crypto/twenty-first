@@ -1,7 +1,7 @@
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use std::fmt::Debug;
 
-use super::membership_proof::{verify_membership_proof, MembershipProof};
+use super::membership_proof::MembershipProof;
 
 /// A proof of integral updating of a leaf. The membership_proof can be either before
 /// or after the update, since it does not change up the update, only all other
@@ -19,7 +19,6 @@ where
     pub membership_proof: MembershipProof<HashDigest, H>,
     pub old_peaks: Vec<HashDigest>,
     pub new_peaks: Vec<HashDigest>,
-    // TODO: Add a verify method
 }
 
 impl<HashDigest, H> LeafUpdateProof<HashDigest, H>
@@ -37,12 +36,9 @@ where
         // 2: Only the targeted peak is changed, all other must remain unchanged
 
         // 1: New authentication path is valid
-        let (new_valid, sub_tree_root_res) = verify_membership_proof(
-            &self.membership_proof,
-            &self.new_peaks,
-            new_leaf,
-            leaf_count,
-        );
+        let (new_valid, sub_tree_root_res) =
+            self.membership_proof
+                .verify(&self.new_peaks, new_leaf, leaf_count);
         if !new_valid {
             return false;
         }

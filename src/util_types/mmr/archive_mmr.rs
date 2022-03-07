@@ -9,7 +9,6 @@ use crate::util_types::{
 use super::{
     append_proof::AppendProof,
     leaf_update_proof::LeafUpdateProof,
-    membership_proof::verify_membership_proof,
     shared::{
         bag_peaks, calculate_new_peaks_and_membership_proof, data_index_to_node_index, left_child,
         left_sibling, leftmost_ancestor, node_index_to_data_index, parent, right_child_and_height,
@@ -202,12 +201,7 @@ where
         membership_proof: &MembershipProof<HashDigest, H>,
         leaf_hash: &HashDigest,
     ) -> (bool, Option<HashDigest>) {
-        let res = verify_membership_proof(
-            membership_proof,
-            &self.get_peaks(),
-            leaf_hash,
-            self.count_leaves(),
-        );
+        let res = membership_proof.verify(&self.get_peaks(), leaf_hash, self.count_leaves());
 
         if res.0
             && self.digests[data_index_to_node_index(membership_proof.data_index) as usize]
@@ -462,9 +456,9 @@ mod mmr_test {
 
         // Verify that the accumulated hash in the verifier is compared against the **correct** hash,
         // not just **any** hash in the peaks list.
-        assert!(verify_membership_proof(&membership_proof, &peaks, &leaf_hashes[0], 3,).0);
+        assert!(membership_proof.verify(&peaks, &leaf_hashes[0], 3,).0);
         membership_proof.data_index = 2;
-        assert!(!verify_membership_proof(&membership_proof, &peaks, &leaf_hashes[0], 3,).0);
+        assert!(!membership_proof.verify(&peaks, &leaf_hashes[0], 3,).0);
         membership_proof.data_index = 0;
 
         // verify the same behavior in the accumulator MMR
@@ -495,7 +489,7 @@ mod mmr_test {
             MembershipProof<Vec<BFieldElement>, RescuePrimeProduction>,
             Vec<Vec<BFieldElement>>,
         ) = archival_mmr.prove_membership(2);
-        assert!(verify_membership_proof(&mp, &old_peaks, &leaf_hashes[2], 3).0);
+        assert!(mp.verify(&old_peaks, &leaf_hashes[2], 3).0);
         let new_leaf = rp.hash_one(&vec![BFieldElement::new(10000)]);
 
         archival_mmr.update_leaf(2, new_leaf.clone());
@@ -506,8 +500,8 @@ mod mmr_test {
         assert_eq!(old_peaks[0], new_peaks[0]);
         assert_eq!(2, new_peaks.len());
         assert_eq!(2, old_peaks.len());
-        assert!(!verify_membership_proof(&mp, &new_peaks, &leaf_hashes[2], 3).0);
-        assert!(verify_membership_proof(&mp, &new_peaks, &new_leaf, 3).0);
+        assert!(!mp.verify(&new_peaks, &leaf_hashes[2], 3).0);
+        assert!(mp.verify(&new_peaks, &new_leaf, 3).0);
 
         // Create a new archival MMR with the same leaf hashes as in the
         // modified MMR, and verify that the two MMRs are equivalent
@@ -830,7 +824,7 @@ mod mmr_test {
 
         let data_index = 0;
         let (membership_proof, peaks) = mmr.prove_membership(data_index);
-        let valid_res = verify_membership_proof(&membership_proof, &peaks, &input_hash, leaf_count);
+        let valid_res = membership_proof.verify(&peaks, &input_hash, leaf_count);
         assert!(valid_res.0);
         assert!(valid_res.1.is_some());
 
@@ -885,25 +879,16 @@ mod mmr_test {
 
         let data_index: usize = 0;
         let (mut membership_proof, peaks) = mmr.prove_membership(data_index as u128);
-        let valid_res = verify_membership_proof(
-            &membership_proof,
-            &peaks,
-            &input_hashes[data_index],
-            leaf_count,
-        );
+        let valid_res = membership_proof.verify(&peaks, &input_hashes[data_index], leaf_count);
         assert!(valid_res.0);
         assert!(valid_res.1.is_some());
 
         // Negative test for verify membership
         membership_proof.data_index += 1;
         assert!(
-            !verify_membership_proof(
-                &membership_proof,
-                &peaks,
-                &input_hashes[data_index],
-                leaf_count
-            )
-            .0
+            !membership_proof
+                .verify(&peaks, &input_hashes[data_index], leaf_count)
+                .0
         );
 
         let new_leaf_hash: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(201)]);
@@ -977,12 +962,9 @@ mod mmr_test {
             // verify that it is valid
             for index in 0..data_size {
                 let (membership_proof, peaks) = mmr.prove_membership(index as u128);
-                let valid_res = verify_membership_proof(
-                    &membership_proof,
-                    &peaks,
-                    &input_hashes[index as usize],
-                    data_size,
-                );
+                let valid_res =
+                    membership_proof.verify(&peaks, &input_hashes[index as usize], data_size);
+
                 assert!(valid_res.0);
                 assert!(valid_res.1.is_some());
             }
@@ -1047,12 +1029,8 @@ mod mmr_test {
             // verify that it is valid
             for data_index in 0..data_size {
                 let (membership_proof, peaks) = mmr.prove_membership(data_index);
-                let valid_res = verify_membership_proof(
-                    &membership_proof,
-                    &peaks,
-                    &input_hashes[data_index as usize],
-                    data_size,
-                );
+                let valid_res =
+                    membership_proof.verify(&peaks, &input_hashes[data_index as usize], data_size);
                 assert!(valid_res.0);
                 assert!(valid_res.1.is_some());
 
@@ -1080,14 +1058,14 @@ mod mmr_test {
                 let old_leaf = input_hashes[data_index as usize];
                 mmr.update_leaf(data_index, new_leaf.clone());
                 let (new_mp, new_peaks) = mmr.prove_membership(data_index);
-                assert!(verify_membership_proof(&new_mp, &new_peaks, &new_leaf, data_size).0);
-                assert!(!verify_membership_proof(&new_mp, &new_peaks, &old_leaf, data_size).0);
+                assert!(new_mp.verify(&new_peaks, &new_leaf, data_size).0);
+                assert!(!new_mp.verify(&new_peaks, &old_leaf, data_size).0);
 
                 // Return the element to its former value and run prove/verify for membership
                 mmr.update_leaf(data_index, old_leaf.clone());
                 let (old_mp, old_peaks) = mmr.prove_membership(data_index);
-                assert!(!verify_membership_proof(&old_mp, &old_peaks, &new_leaf, data_size).0);
-                assert!(verify_membership_proof(&old_mp, &old_peaks, &old_leaf, data_size).0);
+                assert!(!old_mp.verify(&old_peaks, &new_leaf, data_size).0);
+                assert!(old_mp.verify(&old_peaks, &old_leaf, data_size).0);
             }
 
             // Make a new MMR where we append with a value and run the verify_append

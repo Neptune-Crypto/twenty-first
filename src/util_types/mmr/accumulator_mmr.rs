@@ -6,7 +6,7 @@ use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use super::{
     append_proof::AppendProof,
     archive_mmr::MmrArchive,
-    membership_proof::{verify_membership_proof, MembershipProof},
+    membership_proof::MembershipProof,
     shared::{
         bag_peaks, calculate_new_peaks_and_membership_proof, data_index_to_node_index,
         get_peak_height, get_peak_heights_and_peak_node_indices, leaf_count_to_node_count, parent,
@@ -198,6 +198,6 @@ where
         membership_proof: &MembershipProof<HashDigest, H>,
         leaf_hash: &HashDigest,
     ) -> (bool, Option<HashDigest>) {
-        verify_membership_proof(membership_proof, &self.peaks, leaf_hash, self.leaf_count)
+        membership_proof.verify(&self.peaks, leaf_hash, self.leaf_count)
     }
 }
