@@ -1427,9 +1427,15 @@ mod mmr_membership_proof_test {
             data_index: 4,
             _hasher: PhantomData,
         };
+        let mp4: MembershipProof<blake3::Hash, blake3::Hasher> = MembershipProof {
+            authentication_path: vec![blake3::hash(b"foobarbaz")],
+            data_index: 4,
+            _hasher: PhantomData,
+        };
         assert_eq!(mp0, mp1);
         assert_ne!(mp1, mp2);
         assert_ne!(mp2, mp3);
+        assert_eq!(mp3, mp4);
         assert_ne!(mp3, mp0);
     }
 
@@ -2632,8 +2638,9 @@ mod mmr_test {
                 MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(vec![]);
             let accumulator_batch =
                 MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_blake3.clone());
-            for leaf_hash in leaf_hashes_blake3 {
-                let archival_membership_proof = archival_iterative.append(leaf_hash);
+            for (data_index, leaf_hash) in leaf_hashes_blake3.into_iter().enumerate() {
+                let archival_membership_proof: MembershipProof<blake3::Hash, blake3::Hasher> =
+                    archival_iterative.append(leaf_hash);
                 let accumulator_membership_proof = accumulator_iterative.append(leaf_hash);
 
                 // Verify membership proofs returned from the append operation
@@ -2647,6 +2654,12 @@ mod mmr_test {
                         .0,
                     "membership proof from append must verify"
                 );
+
+                // Verify that membership proofs are the same as generating them from an
+                // archival MMR
+                let archival_membership_proof_direct =
+                    archival_iterative.prove_membership(data_index as u128).0;
+                assert_eq!(archival_membership_proof_direct, archival_membership_proof);
             }
 
             // Verify that the MMRs built iteratively from `append` and
