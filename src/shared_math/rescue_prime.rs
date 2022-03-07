@@ -190,7 +190,9 @@ impl RescuePrime {
 
     // Returns the multivariate polynomial which takes the triplet (domain, trace, next_trace) and
     // returns composition polynomial, which is the evaluation of the air for a specific trace.
+    //
     // AIR: [F_p x F_p^m x F_p^m] --> F_p^m
+    //
     // The composition polynomial values are low-degree polynomial combinations
     // (as opposed to linear combinations) of the values:
     // `domain` (scalar), `trace` (vector), `next_trace` (vector).

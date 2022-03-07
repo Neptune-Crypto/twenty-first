@@ -61,6 +61,7 @@ impl ProofStream {
         self.read_index = new_index;
     }
 
+    #[deprecated(note = "Use 'enqueue_length_prepended' instead.")]
     pub fn enqueue<T>(&mut self, item: &T) -> Result<(), Box<dyn Error>>
     where
         T: Serialize,
@@ -73,7 +74,7 @@ impl ProofStream {
 
     pub fn enqueue_length_prepended<T>(&mut self, item: &T) -> Result<(), Box<dyn Error>>
     where
-        T: Serialize + std::fmt::Debug,
+        T: Serialize,
     {
         let mut serialization_result: Vec<u8> = bincode::serialize(item)?;
         let serialization_result_length: u32 = serialization_result.len() as u32;
@@ -84,6 +85,7 @@ impl ProofStream {
         Ok(())
     }
 
+    #[deprecated(note = "Use 'dequeue_length_prepended' instead.")]
     pub fn dequeue<T>(&mut self, byte_length: usize) -> Result<T, Box<dyn Error>>
     where
         T: DeserializeOwned,

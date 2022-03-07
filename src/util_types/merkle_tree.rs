@@ -20,12 +20,27 @@ pub struct Node<Value, Digest> {
     pub hash: Digest,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MerkleTree<Value, Digest, H> {
     pub root_hash: Digest,
     pub nodes: Vec<Node<Value, Digest>>,
     pub height: u8,
     _hasher: PhantomData<H>,
+}
+
+impl<Value, Digest, H> Clone for MerkleTree<Value, Digest, H>
+where
+    Value: Clone,
+    Digest: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            root_hash: self.root_hash.clone(),
+            nodes: self.nodes.clone(),
+            height: self.height.clone(),
+            _hasher: PhantomData,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
