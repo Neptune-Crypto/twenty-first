@@ -404,7 +404,7 @@ where
     // 1: New authentication path is valid
     // 2: Only the targeted peak is changed, all other must remain unchanged
 
-    // 2: New authentication path is valid
+    // 1: New authentication path is valid
     let (new_valid, sub_tree_root_res) = verify_membership_proof(
         &update_leaf_proof.membership_proof,
         &update_leaf_proof.new_peaks,
@@ -415,7 +415,7 @@ where
         return false;
     }
 
-    // 3: Only the targeted peak is changed, all other must remain unchanged
+    // 2: Only the targeted peak is changed, all other must remain unchanged
     let sub_tree_root = sub_tree_root_res.unwrap();
     let modified_peak_index_res = update_leaf_proof
         .new_peaks
@@ -1020,16 +1020,6 @@ where
         updated_self.peaks
     }
 
-    /// Verify the integral update of a leaf hash
-    // TODO: Consider make this into a class method instead
-    pub fn verify_leaf_update_proof(
-        update_leaf_proof: &LeafUpdateProof<HashDigest, H>,
-        new_leaf: &HashDigest,
-        leaf_count: u128,
-    ) -> bool {
-        verify_leaf_update_proof(update_leaf_proof, new_leaf, leaf_count)
-    }
-
     /// Prove that a specific leaf hash belongs in an MMR
     pub fn prove_membership(
         _membership_proof: &MembershipProof<HashDigest, H>,
@@ -1173,14 +1163,6 @@ where
             new_peaks,
             old_peaks,
         }
-    }
-
-    pub fn verify_leaf_update_proof(
-        update_leaf_proof: &LeafUpdateProof<HashDigest, H>,
-        new_leaf: &HashDigest,
-        leaf_count: u128,
-    ) -> bool {
-        verify_leaf_update_proof(update_leaf_proof, new_leaf, leaf_count)
     }
 
     /// Return (membership_proof, peaks)
@@ -1554,13 +1536,11 @@ mod mmr_membership_proof_test {
         // 1. Update a leaf in both the accumulator MMR and in the archival MMR
         let update_leaf_proof: LeafUpdateProof<blake3::Hash, blake3::Hasher> =
             archival_mmr.prove_update_leaf(2, &new_leaf);
-        assert!(
-            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_leaf_update_proof(
-                &update_leaf_proof,
-                &new_leaf,
-                accumulator_mmr.leaf_count
-            )
-        );
+        assert!(verify_leaf_update_proof(
+            &update_leaf_proof,
+            &new_leaf,
+            accumulator_mmr.leaf_count
+        ));
         assert_ne!(update_leaf_proof.old_peaks, update_leaf_proof.new_peaks);
         archival_mmr.update_leaf(2, new_leaf);
         accumulator_mmr.update_leaf(&update_leaf_proof.membership_proof, &new_leaf);
