@@ -5,8 +5,7 @@ use crate::util_types::simple_hasher::{Hasher, ToDigest};
 
 use crate::shared_math::other::log_2_floor;
 
-use super::leaf_update_proof::LeafUpdateProof;
-use super::membership_proof::{verify_membership_proof, MembershipProof};
+use super::membership_proof::MembershipProof;
 
 #[inline]
 pub fn left_child(node_index: u128, height: u128) -> u128 {
@@ -335,48 +334,6 @@ where
     }
 
     acc
-}
-
-/// Verify a proof for the integral update of a leaf in the MMR
-pub fn verify_leaf_update_proof<HashDigest, H>(
-    update_leaf_proof: &LeafUpdateProof<HashDigest, H>,
-    new_leaf: &HashDigest,
-    leaf_count: u128,
-) -> bool
-where
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-    H: Hasher<Digest = HashDigest> + Clone,
-    u128: ToDigest<HashDigest>,
-{
-    // We need to verify that
-    // 1: New authentication path is valid
-    // 2: Only the targeted peak is changed, all other must remain unchanged
-
-    // 1: New authentication path is valid
-    let (new_valid, sub_tree_root_res) = verify_membership_proof(
-        &update_leaf_proof.membership_proof,
-        &update_leaf_proof.new_peaks,
-        new_leaf,
-        leaf_count,
-    );
-    if !new_valid {
-        return false;
-    }
-
-    // 2: Only the targeted peak is changed, all other must remain unchanged
-    let sub_tree_root = sub_tree_root_res.unwrap();
-    let modified_peak_index_res = update_leaf_proof
-        .new_peaks
-        .iter()
-        .position(|peak| *peak == sub_tree_root);
-    let modified_peak_index = match modified_peak_index_res {
-        None => return false,
-        Some(index) => index,
-    };
-    let mut calculated_new_peaks: Vec<HashDigest> = update_leaf_proof.old_peaks.to_owned();
-    calculated_new_peaks[modified_peak_index] = sub_tree_root;
-
-    calculated_new_peaks == update_leaf_proof.new_peaks
 }
 
 #[cfg(test)]

@@ -457,7 +457,7 @@ mod mmr_membership_proof_test {
         shared_math::b_field_element::BFieldElement,
         util_types::mmr::accumulator_mmr::MmrAccumulator,
         util_types::mmr::{archive_mmr::MmrArchive, leaf_update_proof::LeafUpdateProof},
-        util_types::{mmr::shared::verify_leaf_update_proof, simple_hasher::RescuePrimeProduction},
+        util_types::simple_hasher::RescuePrimeProduction,
     };
 
     use super::*;
@@ -611,11 +611,7 @@ mod mmr_membership_proof_test {
         // 1. Update a leaf in both the accumulator MMR and in the archival MMR
         let update_leaf_proof: LeafUpdateProof<blake3::Hash, blake3::Hasher> =
             archival_mmr.prove_update_leaf(2, &new_leaf);
-        assert!(verify_leaf_update_proof(
-            &update_leaf_proof,
-            &new_leaf,
-            accumulator_mmr.count_leaves()
-        ));
+        assert!(update_leaf_proof.verify(&new_leaf, accumulator_mmr.count_leaves()));
         assert_ne!(update_leaf_proof.old_peaks, update_leaf_proof.new_peaks);
         archival_mmr.update_leaf(2, new_leaf);
         accumulator_mmr.update_leaf(&update_leaf_proof.membership_proof, &new_leaf);

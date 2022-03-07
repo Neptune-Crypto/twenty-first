@@ -369,9 +369,8 @@ mod mmr_test {
         },
         util_types::{
             mmr::{
-                accumulator_mmr::MmrAccumulator,
-                archive_mmr::MmrArchive,
-                shared::{get_peak_heights_and_peak_node_indices, verify_leaf_update_proof},
+                accumulator_mmr::MmrAccumulator, archive_mmr::MmrArchive,
+                shared::get_peak_heights_and_peak_node_indices,
             },
             simple_hasher::RescuePrimeProduction,
         },
@@ -745,16 +744,8 @@ mod mmr_test {
                     new_peaks: new_peaks_from_proof,
                     old_peaks: acc.get_peaks(),
                 };
-                assert!(verify_leaf_update_proof(
-                    &update_leaf_proof,
-                    &new_leaf,
-                    size
-                ));
-                assert!(!verify_leaf_update_proof(
-                    &update_leaf_proof,
-                    &bad_leaf,
-                    size
-                ));
+                assert!(update_leaf_proof.verify(&new_leaf, size));
+                assert!(!update_leaf_proof.verify(&bad_leaf, size));
 
                 archival.update_leaf(i, new_leaf);
                 acc.update_leaf(&mp, &new_leaf);
@@ -871,18 +862,10 @@ mod mmr_test {
         for &data_index in &[0u128, 1] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
             let mut update_leaf_proof = mmr.prove_update_leaf(data_index, &new_leaf);
-            assert!(verify_leaf_update_proof(
-                &update_leaf_proof,
-                &new_leaf,
-                leaf_count
-            ));
+            assert!(update_leaf_proof.verify(&new_leaf, leaf_count));
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
             update_leaf_proof.membership_proof.data_index = wrong_data_index;
-            assert!(!verify_leaf_update_proof(
-                &update_leaf_proof,
-                &new_leaf,
-                leaf_count
-            ));
+            assert!(!update_leaf_proof.verify(&new_leaf, leaf_count));
         }
     }
 
@@ -947,16 +930,16 @@ mod mmr_test {
 
         for &data_index in &[0u128, 1, 2] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
-            let mut proof = mmr.prove_update_leaf(data_index, &new_leaf);
+            let mut leaf_update_proof = mmr.prove_update_leaf(data_index, &new_leaf);
 
-            assert!(verify_leaf_update_proof(&proof, &new_leaf, leaf_count));
+            assert!(leaf_update_proof.verify(&new_leaf, leaf_count));
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
-            proof.membership_proof.data_index = wrong_data_index;
+            leaf_update_proof.membership_proof.data_index = wrong_data_index;
 
-            assert!(!verify_leaf_update_proof(&proof, &new_leaf, leaf_count));
-            proof.membership_proof.data_index = data_index;
+            assert!(!leaf_update_proof.verify(&new_leaf, leaf_count));
+            leaf_update_proof.membership_proof.data_index = data_index;
 
-            assert!(verify_leaf_update_proof(&proof, &new_leaf, leaf_count));
+            assert!(leaf_update_proof.verify(&new_leaf, leaf_count));
         }
     }
 
@@ -1078,24 +1061,20 @@ mod mmr_test {
                         .expect("Encoding failed")
                         .as_slice(),
                 );
-                let mut update_proof = mmr.prove_update_leaf(data_index, &new_leaf);
-                assert!(verify_leaf_update_proof(
-                    &update_proof,
-                    &new_leaf,
-                    data_size
-                ));
+                let mut leaf_update_proof = mmr.prove_update_leaf(data_index, &new_leaf);
+                assert!(leaf_update_proof.verify(&new_leaf, data_size));
 
                 let wrong_data_index = (data_index + 1) % mmr.count_leaves();
 
                 // The below verify_modify tests should only fail if `wrong_data_index` is
                 // different than `data_index`.
-                update_proof.membership_proof.data_index = wrong_data_index;
+                leaf_update_proof.membership_proof.data_index = wrong_data_index;
                 assert!(
                     wrong_data_index == data_index
-                        || !verify_leaf_update_proof(&update_proof, &new_leaf, data_size)
+                        || !leaf_update_proof.verify(&new_leaf, data_size)
                 );
 
-                update_proof.membership_proof.data_index = data_index;
+                leaf_update_proof.membership_proof.data_index = data_index;
 
                 // Modify an element in the MMR and run prove/verify for membership
                 let old_leaf = input_hashes[data_index as usize];
