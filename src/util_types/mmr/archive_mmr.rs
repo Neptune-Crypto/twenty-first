@@ -194,27 +194,6 @@ where
         (membership_proof, peaks)
     }
 
-    /// Verify a membership proof. Return the peak digest that the leaf points to.
-    pub fn verify_membership_proof(
-        &self,
-        membership_proof: &MembershipProof<HashDigest, H>,
-        leaf_hash: &HashDigest,
-    ) -> (bool, Option<HashDigest>) {
-        let res = membership_proof.verify(&self.get_peaks(), leaf_hash, self.count_leaves());
-
-        if res.0
-            && self.digests[data_index_to_node_index(membership_proof.data_index) as usize]
-                != *leaf_hash
-        {
-            // This should *never* happen. It would indicate that the hash function is broken
-            // since the leaf hash hashed to the correct peak, but that the digest could not
-            // be found in the digests field
-            panic!("Verified membership proof but did not find leaf hash at data index.");
-        }
-
-        res
-    }
-
     /// Calculate the root for the entire MMR
     pub fn bag_peaks(&self) -> HashDigest {
         let peaks: Vec<HashDigest> = self.get_peaks();
@@ -394,9 +373,14 @@ mod mmr_test {
             "accumulator and archival membership proofs must agree"
         );
         assert!(
-            archival_mmr
-                .verify_membership_proof(&archival_membership_proof, &new_leaf)
-                .0
+            archival_membership_proof
+                .verify(
+                    &archival_mmr.get_peaks(),
+                    &new_leaf,
+                    archival_mmr.count_leaves()
+                )
+                .0,
+            "membership proof from arhival MMR must validate"
         );
     }
 
@@ -429,14 +413,22 @@ mod mmr_test {
         let accumulator_mmr =
             MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(leaf_hashes.clone());
         assert!(
-            accumulator_mmr
-                .verify_membership_proof(&membership_proof, &leaf_hashes[0])
+            membership_proof
+                .verify(
+                    &accumulator_mmr.get_peaks(),
+                    &leaf_hashes[0],
+                    accumulator_mmr.count_leaves()
+                )
                 .0
         );
         membership_proof.data_index = 2;
         assert!(
-            !accumulator_mmr
-                .verify_membership_proof(&membership_proof, &leaf_hashes[0])
+            !membership_proof
+                .verify(
+                    &accumulator_mmr.get_peaks(),
+                    &leaf_hashes[0],
+                    accumulator_mmr.count_leaves()
+                )
                 .0
         );
     }
@@ -712,10 +704,13 @@ mod mmr_test {
                     "membership proofs from append operation must agree"
                 );
                 assert!(
-                    archival_iterative
-                        .verify_membership_proof(&archival_membership_proof, &leaf_hash)
-                        .0,
-                    "membership proof from append must verify"
+                    archival_membership_proof
+                        .verify(
+                            &archival_iterative.get_peaks(),
+                            &leaf_hash,
+                            archival_iterative.count_leaves()
+                        )
+                        .0
                 );
 
                 // Verify that membership proofs are the same as generating them from an

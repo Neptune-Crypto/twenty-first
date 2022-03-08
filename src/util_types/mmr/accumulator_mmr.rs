@@ -170,13 +170,4 @@ where
             old_peaks: self.get_peaks(),
         }
     }
-
-    /// Verify a membership proof/leaf hash pair
-    pub fn verify_membership_proof(
-        &self,
-        membership_proof: &MembershipProof<HashDigest, H>,
-        leaf_hash: &HashDigest,
-    ) -> (bool, Option<HashDigest>) {
-        membership_proof.verify(&self.peaks, leaf_hash, self.leaf_count)
-    }
 }
