@@ -275,7 +275,7 @@ pub fn node_index_to_data_index(node_index: u128) -> Option<u128> {
 /// Return the new peaks of the MMR after adding `new_leaf` as well as the membership
 /// proof for the added leaf.
 /// Returns None if configuration is impossible (too small `old_peaks` input vector)
-pub fn calculate_new_peaks_and_membership_proof<
+pub fn calculate_new_peaks_from_append<
     H: Hasher<Digest = HashDigest> + Clone,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
 >(
@@ -309,6 +309,55 @@ pub fn calculate_new_peaks_and_membership_proof<
     }
 
     Some((peaks, membership_proof))
+}
+
+/// Calculate a new peak list given the mutation of a leaf
+/// The new peak list will only (max) have *one* element different
+/// than `old_peaks`
+pub fn calculate_new_peaks_from_leaf_mutation<
+    H: Hasher<Digest = HashDigest> + Clone,
+    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+>(
+    old_peaks: &[HashDigest],
+    new_leaf: &HashDigest,
+    leaf_count: u128,
+    membership_proof: &MembershipProof<HashDigest, H>,
+) -> Vec<HashDigest>
+where
+    u128: ToDigest<HashDigest>,
+{
+    let node_index = data_index_to_node_index(membership_proof.data_index);
+    let mut hasher = H::new();
+    let mut acc_hash: HashDigest = new_leaf.to_owned();
+    let mut acc_index: u128 = node_index;
+    for hash in membership_proof.authentication_path.iter() {
+        let (acc_right, _acc_height) = right_child_and_height(acc_index);
+        acc_hash = if acc_right {
+            hasher.hash_two(hash, &acc_hash)
+        } else {
+            hasher.hash_two(&acc_hash, hash)
+        };
+        acc_index = parent(acc_index);
+    }
+
+    // Calculate which peak that needs to be update
+    let (peak_heights, _) = get_peak_heights_and_peak_node_indices(leaf_count);
+    let expected_peak_height_res = get_peak_height(leaf_count, membership_proof.data_index);
+    let expected_peak_height = match expected_peak_height_res {
+            None => panic!("Did not find any peak height for (leaf_count, data_index) combination. Got: leaf_count = {}, data_index = {}", leaf_count, membership_proof.data_index),
+            Some(eph) => eph,
+        };
+
+    let peak_height_index_res = peak_heights.iter().position(|x| *x == expected_peak_height);
+    let peak_height_index = match peak_height_index_res {
+        None => panic!("Did not find a matching peak"),
+        Some(index) => index,
+    };
+
+    let mut calculated_peaks: Vec<HashDigest> = old_peaks.to_vec();
+    calculated_peaks[peak_height_index] = acc_hash;
+
+    calculated_peaks
 }
 
 /// Get a root commitment to the entire MMR

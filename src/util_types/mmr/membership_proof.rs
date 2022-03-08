@@ -385,7 +385,7 @@ where
     /// with the leaf update, as they are the same before and after the leaf update.
     /// Returns the indices of the membership proofs that were modified where index refers
     /// to the order in which the membership proofs were given to this function.
-    pub fn batch_update_from_leaf_update(
+    pub fn batch_update_from_leaf_mutation(
         membership_proofs: &mut [Self],
         leaf_update_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
@@ -687,7 +687,7 @@ mod mmr_membership_proof_test {
             archival_mmr.update_leaf_raw(i, new_leaf);
             let new_peaks = archival_mmr.get_peaks();
             let modified =
-                MembershipProof::<blake3::Hash, blake3::Hasher>::batch_update_from_leaf_update(
+                MembershipProof::<blake3::Hash, blake3::Hasher>::batch_update_from_leaf_mutation(
                     &mut mps,
                     &leaf_update_membership_proof,
                     &new_leaf,

@@ -12,7 +12,7 @@ use super::{
     leaf_update_proof::LeafUpdateProof,
     mmr_trait::Mmr,
     shared::{
-        bag_peaks, calculate_new_peaks_and_membership_proof, data_index_to_node_index, left_child,
+        bag_peaks, calculate_new_peaks_from_append, data_index_to_node_index, left_child,
         left_sibling, leftmost_ancestor, node_index_to_data_index, parent, right_child_and_height,
         right_sibling,
     },
@@ -91,7 +91,7 @@ where
         let old_leaf_count: u128 = self.count_leaves();
         let old_peaks_and_heights: Vec<(HashDigest, u128)> = self.get_peaks_with_heights();
         let old_peaks: Vec<HashDigest> = old_peaks_and_heights.into_iter().map(|x| x.0).collect();
-        let new_peaks: Vec<HashDigest> = calculate_new_peaks_and_membership_proof::<H, HashDigest>(
+        let new_peaks: Vec<HashDigest> = calculate_new_peaks_from_append::<H, HashDigest>(
             old_leaf_count,
             old_peaks.clone(),
             new_leaf,
@@ -134,6 +134,16 @@ where
     ) -> LeafUpdateProof<HashDigest, H> {
         let accumulator_mmr: MmrAccumulator<HashDigest, H> = self.into();
         accumulator_mmr.prove_update_leaf(old_membership_proof, new_leaf)
+    }
+
+    fn verify_batch_update(
+        &self,
+        new_peaks: &[HashDigest],
+        appended_leafs: &[HashDigest],
+        leaf_mutations: &[(HashDigest, MembershipProof<HashDigest, H>)],
+    ) -> bool {
+        let accumulator: MmrAccumulator<HashDigest, H> = self.into();
+        accumulator.verify_batch_update(new_peaks, appended_leafs, leaf_mutations)
     }
 }
 

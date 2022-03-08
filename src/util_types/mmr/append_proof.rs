@@ -1,7 +1,7 @@
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use std::{fmt::Debug, marker::PhantomData};
 
-use super::shared::calculate_new_peaks_and_membership_proof;
+use super::shared::calculate_new_peaks_from_append;
 
 #[derive(Debug, Clone)]
 pub struct AppendProof<HashDigest, H>
@@ -37,7 +37,7 @@ where
     pub fn verify(&self, new_leaf: HashDigest) -> bool {
         let expected_new_peaks = self.new_peaks.clone();
         let new_peaks_calculated: Option<Vec<HashDigest>> =
-            calculate_new_peaks_and_membership_proof::<H, HashDigest>(
+            calculate_new_peaks_from_append::<H, HashDigest>(
                 self.old_leaf_count,
                 self.old_peaks.clone(),
                 new_leaf,

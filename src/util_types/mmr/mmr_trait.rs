@@ -26,4 +26,10 @@ where
         old_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
     ) -> LeafUpdateProof<HashDigest, H>;
+    fn verify_batch_update(
+        &self,
+        new_peaks: &[HashDigest],
+        appended_leafs: &[HashDigest],
+        leaf_mutations: &[(HashDigest, MembershipProof<HashDigest, H>)],
+    ) -> bool;
 }
