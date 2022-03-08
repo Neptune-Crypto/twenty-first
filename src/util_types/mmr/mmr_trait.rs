@@ -16,6 +16,11 @@ where
     fn count_leaves(&self) -> u128;
     fn append(&mut self) -> MembershipProof<HashDigest, H>;
     fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H>;
+    fn update_leaf(
+        &mut self,
+        old_membership_proof: &MembershipProof<HashDigest, H>,
+        new_leaf: &HashDigest,
+    );
     fn prove_update_leaf(
         &self,
         old_membership_proof: MembershipProof<HashDigest, H>,
