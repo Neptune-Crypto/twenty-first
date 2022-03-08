@@ -160,6 +160,8 @@ where
         old_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
     ) -> Vec<HashDigest> {
+        // TODO: Should probably return a `LeafUpdateProof` instead, to match return type for
+        // archive MMR
         let mut updated_self = self.clone();
         updated_self.update_leaf(old_membership_proof, new_leaf);
 
