@@ -306,7 +306,7 @@ where
 
     /// Create a proof for honest appending. Verifiable by `AccumulatorMmr` implementation.
     /// Returns (old_peaks, old_leaf_count, new_peaks)
-    pub fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest> {
+    pub fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H> {
         let old_leaf_count: u128 = self.count_leaves();
         let old_peaks_and_heights: Vec<(HashDigest, u128)> = self.get_peaks_with_heights();
         let old_peaks: Vec<HashDigest> = old_peaks_and_heights.into_iter().map(|x| x.0).collect();
@@ -322,33 +322,8 @@ where
             old_peaks,
             old_leaf_count,
             new_peaks,
+            _hasher: PhantomData,
         }
-    }
-
-    /// With knowledge of old peaks, old size (leaf count), new leaf hash, and new peaks, verify that
-    /// append is correct.
-    pub fn verify_append_proof(
-        append_proof: AppendProof<HashDigest>,
-        new_leaf: HashDigest,
-    ) -> bool {
-        let first_new_node_index = data_index_to_node_index(append_proof.old_leaf_count);
-        let (mut new_node_is_right_child, _height) = right_child_and_height(first_new_node_index);
-
-        // If new node is not a right child, the new peak list is just the old one
-        // with the new leaf hash appended
-        let mut calculated_peaks: Vec<HashDigest> = append_proof.old_peaks.to_vec();
-        calculated_peaks.push(new_leaf);
-        let mut new_node_index = first_new_node_index;
-        let mut hasher = H::new();
-        while new_node_is_right_child {
-            let new_hash = calculated_peaks.pop().unwrap();
-            let previous_peak = calculated_peaks.pop().unwrap();
-            calculated_peaks.push(hasher.hash_two(&previous_peak, &new_hash));
-            new_node_index += 1;
-            new_node_is_right_child = right_child_and_height(new_node_index).0;
-        }
-
-        calculated_peaks == append_proof.new_peaks
     }
 }
 
@@ -402,18 +377,8 @@ mod mmr_test {
         assert_eq!(1, archival_append_proof.new_peaks.len());
 
         // Verify that the proofs validate
-        assert!(
-            MmrArchive::<blake3::Hash, blake3::Hasher>::verify_append_proof(
-                archival_append_proof.clone(),
-                new_leaf,
-            )
-        );
-        assert!(
-            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
-                accumulator_append_proof,
-                new_leaf,
-            )
-        );
+        assert!(archival_append_proof.verify(new_leaf,));
+        assert!(accumulator_append_proof.verify(new_leaf,));
 
         // Make the append and verify that the new peaks match the one from the proofs
         let archival_membership_proof = archival_mmr.append(new_leaf);
@@ -544,64 +509,42 @@ mod mmr_test {
 
         // Create an append proof with the archival MMR and verify it with a accumulator MMR
         let append_proof_archival = archival_mmr_small.prove_append(new_leaf);
-        assert!(
-            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
-                append_proof_archival.clone(),
-                new_leaf,
-            )
-        );
+        assert!(append_proof_archival.verify(new_leaf));
 
         // Verify that accumulator and Archival creates the same proofs
         let append_proof_accumulator = accumulator_mmr_small.prove_append(new_leaf);
         assert_eq!(append_proof_archival, append_proof_accumulator);
 
         // Negative tests: verify failure if parameters are wrong
-        assert!(
-            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
-                AppendProof {
-                    new_peaks: append_proof_archival.new_peaks.clone(),
-                    old_leaf_count: append_proof_archival.old_leaf_count + 1,
-                    old_peaks: append_proof_archival.old_peaks.clone(),
-                },
-                new_leaf,
-            )
-        );
-        assert!(
-            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
-                append_proof_archival.clone(),
-                bad_leaf,
-            )
-        );
+        let append_proof_archival_bad_count: AppendProof<blake3::Hash, blake3::Hasher> =
+            AppendProof {
+                new_peaks: append_proof_archival.new_peaks.clone(),
+                old_leaf_count: append_proof_archival.old_leaf_count + 1,
+                old_peaks: append_proof_archival.old_peaks.clone(),
+                _hasher: PhantomData,
+            };
+        assert!(!append_proof_archival_bad_count.verify(new_leaf));
+        assert!(!append_proof_archival.verify(bad_leaf));
 
         // switch old and new peaks in proof, verify failure
-        assert!(
-            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
-                AppendProof {
-                    new_peaks: append_proof_archival.old_peaks.clone(),
-                    old_leaf_count: append_proof_archival.old_leaf_count,
-                    old_peaks: append_proof_archival.new_peaks.clone(),
-                },
-                new_leaf,
-            )
-        );
+        let append_proof_archival_bad_switched: AppendProof<blake3::Hash, blake3::Hasher> =
+            AppendProof {
+                new_peaks: append_proof_archival.old_peaks.clone(),
+                old_leaf_count: append_proof_archival.old_leaf_count,
+                old_peaks: append_proof_archival.new_peaks.clone(),
+                _hasher: PhantomData,
+            };
+        assert!(!append_proof_archival_bad_switched.verify(new_leaf));
 
         // switch peaks back
-        assert!(
-            !MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
-                AppendProof {
-                    new_peaks: archival_mmr_small_alt.get_peaks(),
-                    old_leaf_count: append_proof_archival.old_leaf_count,
-                    old_peaks: append_proof_archival.old_peaks.clone(),
-                },
-                new_leaf,
-            )
-        );
-        assert!(
-            MmrAccumulator::<blake3::Hash, blake3::Hasher>::verify_append_proof(
-                append_proof_archival.clone(),
-                new_leaf,
-            )
-        );
+        let alt_append_proof: AppendProof<blake3::Hash, blake3::Hasher> = AppendProof {
+            new_peaks: archival_mmr_small_alt.get_peaks(),
+            old_leaf_count: append_proof_archival.old_leaf_count,
+            old_peaks: append_proof_archival.old_peaks.clone(),
+            _hasher: PhantomData,
+        };
+        assert!(!alt_append_proof.verify(new_leaf));
+        assert!(append_proof_archival.verify(new_leaf));
 
         // Actually append the new leaf and verify that it matches the values from the proof
         archival_mmr_small.append(new_leaf);
@@ -841,17 +784,13 @@ mod mmr_test {
             .collect();
         let new_peaks: Vec<Vec<BFieldElement>> =
             new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
-        let append_proof = AppendProof {
+        let append_proof: AppendProof<Vec<BFieldElement>, RescuePrimeProduction> = AppendProof {
             old_peaks: original_peaks,
             old_leaf_count: mmr.count_leaves() - 1,
             new_peaks,
+            _hasher: PhantomData,
         };
-        assert!(
-            MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append_proof(
-                append_proof,
-                new_input_hash,
-            )
-        );
+        assert!(append_proof.verify(new_input_hash));
 
         for &data_index in &[0u128, 1] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
@@ -901,17 +840,13 @@ mod mmr_test {
         leaf_count += 1;
         let new_peaks: Vec<Vec<BFieldElement>> =
             new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
-        let append_proof = AppendProof {
+        let append_proof: AppendProof<Vec<BFieldElement>, RescuePrimeProduction> = AppendProof {
             new_peaks,
             old_leaf_count: mmr.count_leaves() - 1,
             old_peaks: original_peaks,
+            _hasher: PhantomData,
         };
-        assert!(
-            MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append_proof(
-                append_proof,
-                new_leaf_hash,
-            )
-        );
+        assert!(append_proof.verify(new_leaf_hash));
 
         for &data_index in &[0u128, 1, 2] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
@@ -979,17 +914,14 @@ mod mmr_test {
                 .collect();
             let new_peaks: Vec<Vec<BFieldElement>> =
                 new_peaks_and_heights.iter().map(|x| x.0.to_vec()).collect();
-            let append_proof = AppendProof {
-                new_peaks,
-                old_leaf_count: mmr.count_leaves() - 1,
-                old_peaks: original_peaks,
-            };
-            assert!(
-                MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::verify_append_proof(
-                    append_proof,
-                    new_leaf_hash,
-                )
-            );
+            let append_proof: AppendProof<Vec<BFieldElement>, RescuePrimeProduction> =
+                AppendProof {
+                    new_peaks,
+                    old_leaf_count: mmr.count_leaves() - 1,
+                    old_peaks: original_peaks,
+                    _hasher: PhantomData,
+                };
+            assert!(append_proof.verify(new_leaf_hash));
         }
     }
 
@@ -1079,17 +1011,13 @@ mod mmr_test {
             let original_peaks: Vec<blake3::Hash> =
                 original_peaks_and_heights.iter().map(|x| x.0).collect();
             let new_peaks: Vec<blake3::Hash> = new_peaks_and_heights.iter().map(|x| x.0).collect();
-            let append_proof = AppendProof {
+            let append_proof: AppendProof<blake3::Hash, blake3::Hasher> = AppendProof {
                 new_peaks,
                 old_leaf_count: mmr.count_leaves() - 1,
                 old_peaks: original_peaks,
+                _hasher: PhantomData,
             };
-            assert!(
-                MmrArchive::<blake3::Hash, blake3::Hasher>::verify_append_proof(
-                    append_proof,
-                    new_leaf_hash,
-                )
-            );
+            assert!(append_proof.verify(new_leaf_hash));
         }
     }
 }

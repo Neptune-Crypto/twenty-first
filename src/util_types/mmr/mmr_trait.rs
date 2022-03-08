@@ -15,8 +15,8 @@ where
     fn is_empty(&self) -> bool;
     fn count_leaves(&self) -> u128;
     fn append(&mut self) -> MembershipProof<HashDigest, H>;
-    fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest>;
-    fn verify_append_proof(append_proof: AppendProof<HashDigest>, new_leaf: HashDigest) -> bool;
+    fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H>;
+    fn verify_append_proof(append_proof: AppendProof<HashDigest, H>, new_leaf: HashDigest) -> bool;
     fn verify_membership_proof(
         &self,
         membership_proof: MembershipProof<HashDigest, H>,

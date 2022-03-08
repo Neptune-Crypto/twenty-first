@@ -93,7 +93,7 @@ where
 
     /// Create a proof for honest appending. Verifiable by `AccumulatorMmr` implementation.
     /// Returns (old_peaks, old_leaf_count, new_peaks)
-    pub fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest> {
+    pub fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H> {
         let old_peaks = self.peaks.clone();
         let old_leaf_count = self.leaf_count;
         let new_peaks = calculate_new_peaks_and_membership_proof::<H, HashDigest>(
@@ -108,26 +108,7 @@ where
             old_peaks,
             old_leaf_count,
             new_peaks,
-        }
-    }
-
-    /// Verify a proof for integral append
-    pub fn verify_append_proof(
-        append_proof: AppendProof<HashDigest>,
-        new_leaf: HashDigest,
-    ) -> bool {
-        let expected_new_peaks = append_proof.new_peaks.clone();
-        let new_peaks_calculated: Option<Vec<HashDigest>> =
-            calculate_new_peaks_and_membership_proof::<H, HashDigest>(
-                append_proof.old_leaf_count,
-                append_proof.old_peaks,
-                new_leaf,
-            )
-            .map(|x| x.0);
-
-        match new_peaks_calculated {
-            None => false,
-            Some(peaks) => expected_new_peaks == peaks,
+            _hasher: PhantomData,
         }
     }
 
