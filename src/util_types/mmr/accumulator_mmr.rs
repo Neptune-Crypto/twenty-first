@@ -38,6 +38,21 @@ where
     }
 }
 
+impl<HashDigest, H> MmrAccumulator<HashDigest, H>
+where
+    H: Hasher<Digest = HashDigest> + Clone,
+    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+    u128: ToDigest<HashDigest>,
+{
+    pub fn init(peaks: Vec<HashDigest>, leaf_count: u128) -> Self {
+        Self {
+            leaf_count,
+            peaks,
+            _hasher: PhantomData,
+        }
+    }
+}
+
 impl<HashDigest, H> Mmr<HashDigest, H> for MmrAccumulator<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest> + Clone,
