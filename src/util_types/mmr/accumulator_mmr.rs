@@ -22,6 +22,21 @@ pub struct MmrAccumulator<HashDigest, H> {
     _hasher: PhantomData<H>,
 }
 
+impl<HashDigest, H> From<&MmrArchive<HashDigest, H>> for MmrAccumulator<HashDigest, H>
+where
+    H: Hasher<Digest = HashDigest> + Clone,
+    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+    u128: ToDigest<HashDigest>,
+{
+    fn from(archive: &MmrArchive<HashDigest, H>) -> Self {
+        Self {
+            leaf_count: archive.count_leaves(),
+            peaks: archive.get_peaks(),
+            _hasher: PhantomData,
+        }
+    }
+}
+
 // TODO: Write tests for the accumulator MMR functions
 // 0. Create an (empty?) accumulator MMR
 // 1. append a value to this
@@ -169,5 +184,27 @@ where
             new_peaks: updated_self.peaks,
             old_peaks: self.get_peaks(),
         }
+    }
+}
+
+#[cfg(test)]
+mod accumulator_mmr_tests {
+    use super::*;
+
+    #[test]
+    fn conversion_test() {
+        let leaf_hashes: Vec<blake3::Hash> = vec![14u128, 15u128, 16u128]
+            .iter()
+            .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
+            .collect();
+        let archival_mmr: MmrArchive<blake3::Hash, blake3::Hasher> =
+            MmrArchive::new(leaf_hashes.clone());
+        let accumulator_mmr: MmrAccumulator<blake3::Hash, blake3::Hasher> = (&archival_mmr).into();
+        assert_eq!(archival_mmr.get_peaks(), accumulator_mmr.get_peaks());
+        assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
+        assert_eq!(archival_mmr.is_empty(), accumulator_mmr.is_empty());
+        assert!(!archival_mmr.is_empty());
+        assert_eq!(archival_mmr.count_leaves(), accumulator_mmr.count_leaves());
+        assert_eq!(3, accumulator_mmr.count_leaves());
     }
 }
