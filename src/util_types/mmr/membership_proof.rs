@@ -620,7 +620,7 @@ mod mmr_membership_proof_test {
             update_leaf_proof_raw.old_peaks,
             update_leaf_proof_raw.new_peaks
         );
-        archival_mmr.update_leaf(2, new_leaf);
+        archival_mmr.update_leaf_raw(2, new_leaf);
         accumulator_mmr.update_leaf(&update_leaf_proof_raw.membership_proof, &new_leaf);
         assert_eq!(update_leaf_proof_raw.new_peaks, accumulator_mmr.get_peaks());
         assert_eq!(update_leaf_proof_raw.new_peaks, archival_mmr.get_peaks());
@@ -682,7 +682,7 @@ mod mmr_membership_proof_test {
             }
             let original_mps = mps.clone();
             let leaf_update_membership_proof = archival_mmr.prove_membership(i).0;
-            archival_mmr.update_leaf(i, new_leaf);
+            archival_mmr.update_leaf_raw(i, new_leaf);
             let new_peaks = archival_mmr.get_peaks();
             let modified =
                 MembershipProof::<blake3::Hash, blake3::Hasher>::batch_update_from_leaf_update(
@@ -743,7 +743,7 @@ mod mmr_membership_proof_test {
                     Vec<blake3::Hash>,
                 ) = archival_mmr.prove_membership(i);
                 let mut modified_archival_mmr = archival_mmr.clone();
-                modified_archival_mmr.update_leaf(i, new_leaf);
+                modified_archival_mmr.update_leaf_raw(i, new_leaf);
                 let new_peaks = modified_archival_mmr.get_peaks();
 
                 // Loop over all leaf indices want a membership proof of, for modification

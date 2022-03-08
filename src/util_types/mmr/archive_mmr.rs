@@ -57,7 +57,24 @@ where
     }
 
     /// Update a hash in the existing archival MMR
-    pub fn update_leaf(&mut self, data_index: u128, new_leaf: HashDigest) {
+    pub fn update_leaf(
+        &mut self,
+        old_membership_proof: &MembershipProof<HashDigest, H>,
+        new_leaf: &HashDigest,
+    ) {
+        // Sanity check
+        let real_membership_proof: MembershipProof<HashDigest, H> =
+            self.prove_membership(old_membership_proof.data_index).0;
+        assert_eq!(
+            real_membership_proof.authentication_path, old_membership_proof.authentication_path,
+            "membership proof argument list must match internally calculated"
+        );
+
+        self.update_leaf_raw(real_membership_proof.data_index, new_leaf.to_owned())
+    }
+
+    /// Update a hash in the existing archival MMR
+    pub fn update_leaf_raw(&mut self, data_index: u128, new_leaf: HashDigest) {
         // 1. change the leaf value
         let mut node_index = data_index_to_node_index(data_index);
         self.digests[node_index as usize] = new_leaf.clone();
@@ -420,8 +437,15 @@ mod mmr_test {
         assert!(mp.verify(&old_peaks, &leaf_hashes[2], 3).0);
         let new_leaf = rp.hash_one(&vec![BFieldElement::new(10000)]);
 
-        archival_mmr.update_leaf(2, new_leaf.clone());
+        let mut archival_mmr_clone = archival_mmr.clone();
+        archival_mmr_clone.update_leaf(&archival_mmr_clone.prove_membership(2).0, &new_leaf);
+        let new_peaks_clone = archival_mmr_clone.get_peaks();
+        archival_mmr.update_leaf_raw(2, new_leaf.clone());
         let new_peaks = archival_mmr.get_peaks();
+        assert_eq!(
+            new_peaks, new_peaks_clone,
+            "peaks for two update leaf method calls must agree"
+        );
 
         // Verify that peaks have changed as expected
         assert_ne!(old_peaks[1], new_peaks[1]);
@@ -605,7 +629,7 @@ mod mmr_test {
                 let (mp, _archival_peaks) = archival.prove_membership(i);
                 assert_eq!(i, mp.data_index);
                 acc.update_leaf(&mp, &new_leaf);
-                archival.update_leaf(i, new_leaf);
+                archival.update_leaf_raw(i, new_leaf);
                 let new_archival_peaks = archival.get_peaks();
                 assert_eq!(new_archival_peaks, acc.get_peaks());
             }
@@ -661,7 +685,7 @@ mod mmr_test {
                     "Archival and accumulator MMR must produce same leaf update proofs"
                 );
 
-                archival.update_leaf(i, new_leaf);
+                archival.update_leaf_raw(i, new_leaf);
                 acc.update_leaf(&mp, &new_leaf);
                 let new_archival_peaks = archival.get_peaks();
                 assert_eq!(new_archival_peaks, acc.get_peaks());
@@ -968,13 +992,13 @@ mod mmr_test {
 
                 // Modify an element in the MMR and run prove/verify for membership
                 let old_leaf = input_hashes[data_index as usize];
-                mmr.update_leaf(data_index, new_leaf.clone());
+                mmr.update_leaf_raw(data_index, new_leaf.clone());
                 let (new_mp, new_peaks) = mmr.prove_membership(data_index);
                 assert!(new_mp.verify(&new_peaks, &new_leaf, data_size).0);
                 assert!(!new_mp.verify(&new_peaks, &old_leaf, data_size).0);
 
                 // Return the element to its former value and run prove/verify for membership
-                mmr.update_leaf(data_index, old_leaf.clone());
+                mmr.update_leaf_raw(data_index, old_leaf.clone());
                 let (old_mp, old_peaks) = mmr.prove_membership(data_index);
                 assert!(!old_mp.verify(&old_peaks, &new_leaf, data_size).0);
                 assert!(old_mp.verify(&old_peaks, &old_leaf, data_size).0);
