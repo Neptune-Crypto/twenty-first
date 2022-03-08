@@ -89,7 +89,6 @@ where
     #[allow(clippy::type_complexity)]
     /// Create a proof for the integral modification of a leaf, without mutating the
     /// archival MMR.
-    /// Output: (Old peaks, old membership proof), (new peaks, new membership proof)
     pub fn prove_update_leaf(
         &self,
         data_index: u128,
@@ -675,12 +674,7 @@ mod mmr_test {
                 MmrArchive::<blake3::Hash, blake3::Hasher>::new(vec![new_leaf; size as usize]);
             for i in 0..size {
                 let (mp, _archival_peaks) = archival.prove_membership(i);
-                let new_peaks_from_proof = acc.prove_update_leaf(&mp, &new_leaf);
-                let update_leaf_proof = LeafUpdateProof {
-                    membership_proof: mp.clone(),
-                    new_peaks: new_peaks_from_proof,
-                    old_peaks: acc.get_peaks(),
-                };
+                let update_leaf_proof = acc.prove_update_leaf(&mp, &new_leaf);
                 assert!(update_leaf_proof.verify(&new_leaf, size));
                 assert!(!update_leaf_proof.verify(&bad_leaf, size));
 

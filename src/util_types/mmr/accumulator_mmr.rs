@@ -6,6 +6,7 @@ use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use super::{
     append_proof::AppendProof,
     archive_mmr::MmrArchive,
+    leaf_update_proof::LeafUpdateProof,
     membership_proof::MembershipProof,
     shared::{
         bag_peaks, calculate_new_peaks_and_membership_proof, data_index_to_node_index,
@@ -159,13 +160,15 @@ where
         &self,
         old_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
-    ) -> Vec<HashDigest> {
-        // TODO: Should probably return a `LeafUpdateProof` instead, to match return type for
-        // archive MMR
+    ) -> LeafUpdateProof<HashDigest, H> {
         let mut updated_self = self.clone();
         updated_self.update_leaf(old_membership_proof, new_leaf);
 
-        updated_self.peaks
+        LeafUpdateProof {
+            membership_proof: old_membership_proof.to_owned(),
+            new_peaks: updated_self.peaks,
+            old_peaks: self.get_peaks(),
+        }
     }
 
     /// Verify a membership proof/leaf hash pair
