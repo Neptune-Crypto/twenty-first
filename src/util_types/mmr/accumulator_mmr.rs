@@ -168,13 +168,6 @@ where
         updated_self.peaks
     }
 
-    /// Prove that a specific leaf hash belongs in an MMR
-    pub fn prove_membership(
-        _membership_proof: &MembershipProof<HashDigest, H>,
-        _leaf_hash: HashDigest,
-    ) {
-    }
-
     /// Verify a membership proof/leaf hash pair
     pub fn verify_membership_proof(
         &self,
