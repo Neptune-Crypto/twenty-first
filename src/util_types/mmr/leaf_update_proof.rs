@@ -76,7 +76,7 @@ where
 
 #[cfg(test)]
 mod mmr_leaf_update_tests {
-    use crate::util_types::mmr::archive_mmr::MmrArchive;
+    use crate::util_types::mmr::{archive_mmr::MmrArchive, mmr_trait::Mmr};
 
     use super::*;
 

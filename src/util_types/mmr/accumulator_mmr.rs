@@ -8,6 +8,7 @@ use super::{
     archive_mmr::MmrArchive,
     leaf_update_proof::LeafUpdateProof,
     membership_proof::MembershipProof,
+    mmr_trait::Mmr,
     shared::{
         bag_peaks, calculate_new_peaks_and_membership_proof, data_index_to_node_index,
         get_peak_height, get_peak_heights_and_peak_node_indices, leaf_count_to_node_count, parent,
@@ -37,34 +38,21 @@ where
     }
 }
 
-// TODO: Write tests for the accumulator MMR functions
-// 0. Create an (empty?) accumulator MMR
-// 1. append a value to this
-// 2. verify that the before state, after state,
-//    and leaf hash constitute an append-proof
-//    that can be verified with `verify_append`.
-// 3. Repeat (2) n times.
-// 4. Run prove/verify_membership with some values
-//    But how do we get the authentication paths?
-// 5. update hashes though `modify`
-// 6. verify that this results in proofs that can
-//    be verified with the verify_modify function.
-impl<HashDigest, H> MmrAccumulator<HashDigest, H>
+impl<HashDigest, H> Mmr<HashDigest, H> for MmrAccumulator<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest> + Clone,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     u128: ToDigest<HashDigest>,
 {
-    /// Initialize a shallow MMR (only storing peaks) from a list of hash digests
-    pub fn new(hashes: Vec<HashDigest>) -> Self {
+    fn new(digests: Vec<HashDigest>) -> Self {
         // If all the hash digests already exist in memory, we might as well
         // build the shallow MMR from an archival MMR, since it doesn't give
         // asymptotically higher RAM consumption than building it without storing
         // all digests. At least, I think that's the case.
         // Clearly, this function could use less RAM if we don't build the entire
         // archival MMR.
-        let leaf_count = hashes.len() as u128;
-        let archival = MmrArchive::new(hashes);
+        let leaf_count = digests.len() as u128;
+        let archival = MmrArchive::new(digests);
         let peaks_and_heights = archival.get_peaks_with_heights();
         Self {
             _hasher: archival._hasher,
@@ -73,27 +61,23 @@ where
         }
     }
 
-    pub fn bag_peaks(&self) -> HashDigest {
+    fn bag_peaks(&self) -> HashDigest {
         bag_peaks::<HashDigest, H>(&self.peaks, leaf_count_to_node_count(self.leaf_count))
     }
 
-    pub fn get_peaks(&self) -> Vec<HashDigest> {
+    fn get_peaks(&self) -> Vec<HashDigest> {
         self.peaks.clone()
     }
 
-    pub fn count_leaves(&self) -> u128 {
-        self.leaf_count
-    }
-
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.leaf_count == 0
     }
 
-    /// Calculate the new accumulator MMR after inserting a new leaf and return the membership
-    /// proof of this new leaf.
-    /// The membership proof is returned here since the accumulater MMR has no other way of
-    /// retrieving a membership proof for a leaf.
-    pub fn append(&mut self, new_leaf: HashDigest) -> MembershipProof<HashDigest, H> {
+    fn count_leaves(&self) -> u128 {
+        self.leaf_count
+    }
+
+    fn append(&mut self, new_leaf: HashDigest) -> MembershipProof<HashDigest, H> {
         let (new_peaks, membership_proof) =
             calculate_new_peaks_and_membership_proof::<H, HashDigest>(
                 self.leaf_count,
@@ -107,9 +91,7 @@ where
         membership_proof
     }
 
-    /// Create a proof for honest appending. Verifiable by `AccumulatorMmr` implementation.
-    /// Returns (old_peaks, old_leaf_count, new_peaks)
-    pub fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H> {
+    fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H> {
         let old_peaks = self.peaks.clone();
         let old_leaf_count = self.leaf_count;
         let new_peaks = calculate_new_peaks_and_membership_proof::<H, HashDigest>(
@@ -128,8 +110,7 @@ where
         }
     }
 
-    /// Update a leaf hash and modify the peaks with this new hash
-    pub fn update_leaf(
+    fn update_leaf(
         &mut self,
         old_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
@@ -168,10 +149,7 @@ where
         self.peaks[peak_height_index] = acc_hash;
     }
 
-    /// Construct a proof of the integral update of a hash in an existing accumulator MMR
-    /// New authentication path (membership proof) is unchanged by this operation, so
-    /// it is not output. Outputs new_peaks.
-    pub fn prove_update_leaf(
+    fn prove_update_leaf(
         &self,
         old_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,

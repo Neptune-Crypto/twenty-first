@@ -10,6 +10,7 @@ use super::{
     accumulator_mmr::MmrAccumulator,
     append_proof::AppendProof,
     leaf_update_proof::LeafUpdateProof,
+    mmr_trait::Mmr,
     shared::{
         bag_peaks, calculate_new_peaks_and_membership_proof, data_index_to_node_index, left_child,
         left_sibling, leftmost_ancestor, node_index_to_data_index, parent, right_child_and_height,
@@ -27,37 +28,87 @@ pub struct MmrArchive<HashDigest, H: Clone> {
     pub _hasher: PhantomData<H>,
 }
 
-impl<HashDigest, H> MmrArchive<HashDigest, H>
+impl<HashDigest, H> Mmr<HashDigest, H> for MmrArchive<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest> + Clone,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     u128: ToDigest<HashDigest>,
 {
-    pub fn new(hashes: Vec<HashDigest>) -> Self {
+    fn new(digests: Vec<HashDigest>) -> Self {
         let dummy_digest = 0u128.to_digest();
         let mut new_mmr: Self = Self {
             digests: vec![dummy_digest],
             _hasher: PhantomData,
         };
-        for hash in hashes {
-            new_mmr.append(hash);
+        for digest in digests {
+            new_mmr.append(digest);
         }
 
         new_mmr
     }
 
-    pub fn is_empty(&self) -> bool {
+    /// Calculate the root for the entire MMR
+    fn bag_peaks(&self) -> HashDigest {
+        let peaks: Vec<HashDigest> = self.get_peaks();
+        bag_peaks::<HashDigest, H>(&peaks, self.count_nodes() as u128)
+    }
+
+    /// Return the digests of the peaks of the MMR
+    fn get_peaks(&self) -> Vec<HashDigest> {
+        let peaks_and_heights = self.get_peaks_with_heights();
+        peaks_and_heights.into_iter().map(|x| x.0).collect()
+    }
+
+    fn is_empty(&self) -> bool {
         self.digests.len() == 1
     }
 
-    /// Get a leaf from the MMR, will panic if index is out of range
-    pub fn get_leaf(&self, data_index: u128) -> HashDigest {
-        let node_index = data_index_to_node_index(data_index);
-        self.digests[node_index as usize].clone()
+    /// Return the number of leaves in the tree
+    fn count_leaves(&self) -> u128 {
+        let peaks_and_heights: Vec<(_, u128)> = self.get_peaks_with_heights();
+        let mut acc = 0;
+        for (_, height) in peaks_and_heights {
+            acc += 1 << height
+        }
+
+        acc
+    }
+
+    /// Append an element to the archival MMR, return the membership proof of the newly added leaf.
+    /// The membership proof is returned here since the accumulater MMR has no other way of
+    /// retrieving a membership proof for a leaf. And the archival and accumulator MMR share
+    /// this interface.
+    fn append(&mut self, new_leaf: HashDigest) -> MembershipProof<HashDigest, H> {
+        let node_index = self.digests.len() as u128;
+        let data_index = node_index_to_data_index(node_index).unwrap();
+        self.append_raw(new_leaf);
+        self.prove_membership(data_index).0
+    }
+
+    /// Create a proof for honest appending. Verifiable by `AccumulatorMmr` implementation.
+    /// Returns (old_peaks, old_leaf_count, new_peaks)
+    fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H> {
+        let old_leaf_count: u128 = self.count_leaves();
+        let old_peaks_and_heights: Vec<(HashDigest, u128)> = self.get_peaks_with_heights();
+        let old_peaks: Vec<HashDigest> = old_peaks_and_heights.into_iter().map(|x| x.0).collect();
+        let new_peaks: Vec<HashDigest> = calculate_new_peaks_and_membership_proof::<H, HashDigest>(
+            old_leaf_count,
+            old_peaks.clone(),
+            new_leaf,
+        )
+        .unwrap()
+        .0;
+
+        AppendProof {
+            old_peaks,
+            old_leaf_count,
+            new_peaks,
+            _hasher: PhantomData,
+        }
     }
 
     /// Update a hash in the existing archival MMR
-    pub fn update_leaf(
+    fn update_leaf(
         &mut self,
         old_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
@@ -71,6 +122,31 @@ where
         );
 
         self.update_leaf_raw(real_membership_proof.data_index, new_leaf.to_owned())
+    }
+
+    /// Create a proof for the integral modification of a leaf, without mutating the
+    /// archival MMR. This takes the membership proof as input to match the function
+    /// signature of the same fundtion for the accumulator MMR.
+    fn prove_update_leaf(
+        &self,
+        old_membership_proof: &MembershipProof<HashDigest, H>,
+        new_leaf: &HashDigest,
+    ) -> LeafUpdateProof<HashDigest, H> {
+        let accumulator_mmr: MmrAccumulator<HashDigest, H> = self.into();
+        accumulator_mmr.prove_update_leaf(old_membership_proof, new_leaf)
+    }
+}
+
+impl<HashDigest, H> MmrArchive<HashDigest, H>
+where
+    H: Hasher<Digest = HashDigest> + Clone,
+    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+    u128: ToDigest<HashDigest>,
+{
+    /// Get a leaf from the MMR, will panic if index is out of range
+    pub fn get_leaf(&self, data_index: u128) -> HashDigest {
+        let node_index = data_index_to_node_index(data_index);
+        self.digests[node_index as usize].clone()
     }
 
     /// Update a hash in the existing archival MMR
@@ -102,18 +178,6 @@ where
             node_index = parent_index;
             parent_index = parent(parent_index);
         }
-    }
-
-    /// Create a proof for the integral modification of a leaf, without mutating the
-    /// archival MMR. This takes the membership proof as input to match the function
-    /// signature of the same fundtion for the accumulator MMR.
-    pub fn prove_update_leaf(
-        &self,
-        old_membership_proof: &MembershipProof<HashDigest, H>,
-        new_leaf: &HashDigest,
-    ) -> LeafUpdateProof<HashDigest, H> {
-        let accumulator_mmr: MmrAccumulator<HashDigest, H> = self.into();
-        accumulator_mmr.prove_update_leaf(old_membership_proof, new_leaf)
     }
 
     #[allow(clippy::type_complexity)]
@@ -183,18 +247,6 @@ where
         (membership_proof, peaks)
     }
 
-    /// Calculate the root for the entire MMR
-    pub fn bag_peaks(&self) -> HashDigest {
-        let peaks: Vec<HashDigest> = self.get_peaks();
-        bag_peaks::<HashDigest, H>(&peaks, self.count_nodes() as u128)
-    }
-
-    /// Return the digests of the peaks of the MMR
-    pub fn get_peaks(&self) -> Vec<HashDigest> {
-        let peaks_and_heights = self.get_peaks_with_heights();
-        peaks_and_heights.into_iter().map(|x| x.0).collect()
-    }
-
     /// Return a list of tuples (peaks, height)
     pub fn get_peaks_with_heights(&self) -> Vec<(HashDigest, u128)> {
         if self.is_empty() {
@@ -235,28 +287,6 @@ where
         self.digests.len() as u128 - 1
     }
 
-    /// Return the number of leaves in the tree
-    pub fn count_leaves(&self) -> u128 {
-        let peaks_and_heights: Vec<(_, u128)> = self.get_peaks_with_heights();
-        let mut acc = 0;
-        for (_, height) in peaks_and_heights {
-            acc += 1 << height
-        }
-
-        acc
-    }
-
-    /// Append an element to the archival MMR, return the membership proof of the newly added leaf.
-    /// The membership proof is returned here since the accumulater MMR has no other way of
-    /// retrieving a membership proof for a leaf. And the archival and accumulator MMR share
-    /// this interface.
-    pub fn append(&mut self, new_leaf: HashDigest) -> MembershipProof<HashDigest, H> {
-        let node_index = self.digests.len() as u128;
-        let data_index = node_index_to_data_index(node_index).unwrap();
-        self.append_raw(new_leaf);
-        self.prove_membership(data_index).0
-    }
-
     /// Append an element to the archival MMR
     pub fn append_raw(&mut self, new_leaf: HashDigest) {
         let node_index = self.digests.len() as u128;
@@ -268,28 +298,6 @@ where
             let mut hasher = H::new();
             let parent_hash: HashDigest = hasher.hash_two(&left_sibling_hash, &new_leaf);
             self.append_raw(parent_hash);
-        }
-    }
-
-    /// Create a proof for honest appending. Verifiable by `AccumulatorMmr` implementation.
-    /// Returns (old_peaks, old_leaf_count, new_peaks)
-    pub fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H> {
-        let old_leaf_count: u128 = self.count_leaves();
-        let old_peaks_and_heights: Vec<(HashDigest, u128)> = self.get_peaks_with_heights();
-        let old_peaks: Vec<HashDigest> = old_peaks_and_heights.into_iter().map(|x| x.0).collect();
-        let new_peaks: Vec<HashDigest> = calculate_new_peaks_and_membership_proof::<H, HashDigest>(
-            old_leaf_count,
-            old_peaks.clone(),
-            new_leaf,
-        )
-        .unwrap()
-        .0;
-
-        AppendProof {
-            old_peaks,
-            old_leaf_count,
-            new_peaks,
-            _hasher: PhantomData,
         }
     }
 }

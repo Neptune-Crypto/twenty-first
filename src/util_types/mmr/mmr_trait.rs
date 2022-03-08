@@ -14,7 +14,7 @@ where
     fn get_peaks(&self) -> Vec<HashDigest>;
     fn is_empty(&self) -> bool;
     fn count_leaves(&self) -> u128;
-    fn append(&mut self) -> MembershipProof<HashDigest, H>;
+    fn append(&mut self, new_leaf: HashDigest) -> MembershipProof<HashDigest, H>;
     fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H>;
     fn update_leaf(
         &mut self,
@@ -23,7 +23,7 @@ where
     );
     fn prove_update_leaf(
         &self,
-        old_membership_proof: MembershipProof<HashDigest, H>,
-        new_leaf: HashDigest,
+        old_membership_proof: &MembershipProof<HashDigest, H>,
+        new_leaf: &HashDigest,
     ) -> LeafUpdateProof<HashDigest, H>;
 }

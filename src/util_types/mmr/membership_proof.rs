@@ -456,7 +456,9 @@ mod mmr_membership_proof_test {
     use crate::{
         shared_math::b_field_element::BFieldElement,
         util_types::mmr::accumulator_mmr::MmrAccumulator,
-        util_types::mmr::{archive_mmr::MmrArchive, leaf_update_proof::LeafUpdateProof},
+        util_types::mmr::{
+            archive_mmr::MmrArchive, leaf_update_proof::LeafUpdateProof, mmr_trait::Mmr,
+        },
         util_types::simple_hasher::RescuePrimeProduction,
     };
 
