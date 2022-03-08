@@ -7,6 +7,7 @@ use crate::util_types::{
 };
 
 use super::{
+    accumulator_mmr::MmrAccumulator,
     append_proof::AppendProof,
     leaf_update_proof::LeafUpdateProof,
     shared::{
@@ -86,10 +87,22 @@ where
         }
     }
 
+    /// Create a proof for the integral modification of a leaf, without mutating the
+    /// archival MMR. This takes the membership proof as input to match the function
+    /// signature of the same fundtion for the accumulator MMR.
+    pub fn prove_update_leaf(
+        &self,
+        old_membership_proof: &MembershipProof<HashDigest, H>,
+        new_leaf: &HashDigest,
+    ) -> LeafUpdateProof<HashDigest, H> {
+        let accumulator_mmr: MmrAccumulator<HashDigest, H> = self.into();
+        accumulator_mmr.prove_update_leaf(old_membership_proof, new_leaf)
+    }
+
     #[allow(clippy::type_complexity)]
     /// Create a proof for the integral modification of a leaf, without mutating the
     /// archival MMR.
-    pub fn prove_update_leaf(
+    pub fn prove_update_leaf_raw(
         &self,
         data_index: u128,
         new_leaf: &HashDigest,
@@ -97,50 +110,9 @@ where
         // TODO: MAKE SURE THIS FUNCTION IS TESTED FOR LOW AND HIGH PEAKS!
         // For low peaks: Make sure it is tested where the peak is just a leaf,
         // i.e. when there is a peak of height 0.
-        let (old_membership_proof, old_peaks): (MembershipProof<HashDigest, H>, Vec<HashDigest>) =
+        let (old_membership_proof, _old_peaks): (MembershipProof<HashDigest, H>, Vec<HashDigest>) =
             self.prove_membership(data_index);
-        let mut new_archival_mmr: MmrArchive<HashDigest, H> = self.to_owned();
-        let node_index_of_updated_leaf = data_index_to_node_index(data_index);
-
-        new_archival_mmr.digests[node_index_of_updated_leaf as usize] = new_leaf.clone();
-
-        // All parent's hashes must be recalculated when a leaf hash changes
-        // TODO: Rewrite this to use the `update_leaf` method
-        let mut parent_index = parent(node_index_of_updated_leaf);
-        let mut node_index = node_index_of_updated_leaf;
-        let mut acc_hash = new_leaf.clone();
-        let mut hasher = H::new();
-        while parent_index < self.digests.len() as u128 {
-            let (is_right, height) = right_child_and_height(node_index);
-            acc_hash = if is_right {
-                hasher.hash_two(
-                    &self.digests[left_sibling(node_index, height) as usize],
-                    &acc_hash,
-                )
-            } else {
-                hasher.hash_two(
-                    &acc_hash,
-                    &self.digests[right_sibling(node_index, height) as usize],
-                )
-            };
-            new_archival_mmr.digests[parent_index as usize] = acc_hash.clone();
-            node_index = parent_index;
-            parent_index = parent(parent_index);
-        }
-        let (new_membership_proof, new_peaks): (MembershipProof<HashDigest, H>, Vec<HashDigest>) =
-            new_archival_mmr.prove_membership(data_index);
-
-        // Sanity check. Should always succeed.
-        assert!(
-            old_membership_proof.authentication_path == new_membership_proof.authentication_path
-                && old_membership_proof.data_index == new_membership_proof.data_index
-        );
-
-        LeafUpdateProof {
-            membership_proof: old_membership_proof,
-            new_peaks,
-            old_peaks,
-        }
+        self.prove_update_leaf(&old_membership_proof, new_leaf)
     }
 
     /// Return (membership_proof, peaks)
@@ -643,7 +615,7 @@ mod mmr_test {
     }
 
     #[test]
-    fn accumulator_mmr_prove_verify_leaf_update_test() {
+    fn mmr_prove_verify_leaf_update_test() {
         for size in 1..150 {
             let new_leaf = blake3::hash(
                 bincode::serialize(&314159265358979u128)
@@ -666,9 +638,28 @@ mod mmr_test {
                 MmrArchive::<blake3::Hash, blake3::Hasher>::new(vec![new_leaf; size as usize]);
             for i in 0..size {
                 let (mp, _archival_peaks) = archival.prove_membership(i);
-                let update_leaf_proof = acc.prove_update_leaf(&mp, &new_leaf);
-                assert!(update_leaf_proof.verify(&new_leaf, size));
-                assert!(!update_leaf_proof.verify(&bad_leaf, size));
+                let update_leaf_proof_acc = acc.prove_update_leaf(&mp, &new_leaf);
+                let update_leaf_proof_arch = archival.prove_update_leaf(&mp, &new_leaf);
+                assert!(
+                    update_leaf_proof_acc.verify(&new_leaf, size),
+                    "accumulator leaf update proof must verify"
+                );
+                assert!(
+                    !update_leaf_proof_acc.verify(&bad_leaf, size),
+                    "accumulator leaf update proof must fail with bad leaf"
+                );
+                assert!(
+                    update_leaf_proof_arch.verify(&new_leaf, size),
+                    "archival leaf update proof must verify"
+                );
+                assert!(
+                    !update_leaf_proof_arch.verify(&bad_leaf, size),
+                    "archival leaf update proof fail with bad leaf"
+                );
+                assert_eq!(
+                    update_leaf_proof_arch, update_leaf_proof_acc,
+                    "Archival and accumulator MMR must produce same leaf update proofs"
+                );
 
                 archival.update_leaf(i, new_leaf);
                 acc.update_leaf(&mp, &new_leaf);
@@ -783,7 +774,7 @@ mod mmr_test {
 
         for &data_index in &[0u128, 1] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
-            let mut update_leaf_proof = mmr.prove_update_leaf(data_index, &new_leaf);
+            let mut update_leaf_proof = mmr.prove_update_leaf_raw(data_index, &new_leaf);
             assert!(update_leaf_proof.verify(&new_leaf, leaf_count));
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
             update_leaf_proof.membership_proof.data_index = wrong_data_index;
@@ -839,7 +830,7 @@ mod mmr_test {
 
         for &data_index in &[0u128, 1, 2] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
-            let mut leaf_update_proof = mmr.prove_update_leaf(data_index, &new_leaf);
+            let mut leaf_update_proof = mmr.prove_update_leaf_raw(data_index, &new_leaf);
 
             assert!(leaf_update_proof.verify(&new_leaf, leaf_count));
             let wrong_data_index = (data_index + 1) % mmr.count_leaves();
@@ -960,7 +951,7 @@ mod mmr_test {
                         .expect("Encoding failed")
                         .as_slice(),
                 );
-                let mut leaf_update_proof = mmr.prove_update_leaf(data_index, &new_leaf);
+                let mut leaf_update_proof = mmr.prove_update_leaf_raw(data_index, &new_leaf);
                 assert!(leaf_update_proof.verify(&new_leaf, data_size));
 
                 let wrong_data_index = (data_index + 1) % mmr.count_leaves();

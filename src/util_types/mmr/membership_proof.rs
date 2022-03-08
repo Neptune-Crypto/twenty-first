@@ -609,23 +609,30 @@ mod mmr_membership_proof_test {
         ) = archival_mmr.prove_membership(4);
 
         // 1. Update a leaf in both the accumulator MMR and in the archival MMR
+        let update_leaf_proof_raw: LeafUpdateProof<blake3::Hash, blake3::Hasher> =
+            archival_mmr.prove_update_leaf_raw(2, &new_leaf);
         let update_leaf_proof: LeafUpdateProof<blake3::Hash, blake3::Hasher> =
-            archival_mmr.prove_update_leaf(2, &new_leaf);
-        assert!(update_leaf_proof.verify(&new_leaf, accumulator_mmr.count_leaves()));
-        assert_ne!(update_leaf_proof.old_peaks, update_leaf_proof.new_peaks);
+            archival_mmr.prove_update_leaf(&archival_mmr.prove_membership(2).0, &new_leaf);
+        assert_eq!(update_leaf_proof_raw, update_leaf_proof);
+
+        assert!(update_leaf_proof_raw.verify(&new_leaf, accumulator_mmr.count_leaves()));
+        assert_ne!(
+            update_leaf_proof_raw.old_peaks,
+            update_leaf_proof_raw.new_peaks
+        );
         archival_mmr.update_leaf(2, new_leaf);
-        accumulator_mmr.update_leaf(&update_leaf_proof.membership_proof, &new_leaf);
-        assert_eq!(update_leaf_proof.new_peaks, accumulator_mmr.get_peaks());
-        assert_eq!(update_leaf_proof.new_peaks, archival_mmr.get_peaks());
+        accumulator_mmr.update_leaf(&update_leaf_proof_raw.membership_proof, &new_leaf);
+        assert_eq!(update_leaf_proof_raw.new_peaks, accumulator_mmr.get_peaks());
+        assert_eq!(update_leaf_proof_raw.new_peaks, archival_mmr.get_peaks());
         let (real_membership_proof_from_archival, archival_peaks) =
             archival_mmr.prove_membership(4);
-        assert_eq!(update_leaf_proof.new_peaks, archival_peaks);
+        assert_eq!(update_leaf_proof_raw.new_peaks, archival_peaks);
 
         // 2. Verify that the proof fails but that the one from archival works
         assert!(
             !membership_proof
                 .verify(
-                    &update_leaf_proof.new_peaks,
+                    &update_leaf_proof_raw.new_peaks,
                     &new_leaf,
                     accumulator_mmr.count_leaves()
                 )
@@ -634,7 +641,7 @@ mod mmr_membership_proof_test {
         assert!(
             membership_proof
                 .verify(
-                    &update_leaf_proof.old_peaks,
+                    &update_leaf_proof_raw.old_peaks,
                     &leaf_hashes[4],
                     accumulator_mmr.count_leaves()
                 )
@@ -644,7 +651,7 @@ mod mmr_membership_proof_test {
         assert!(
             real_membership_proof_from_archival
                 .verify(
-                    &update_leaf_proof.new_peaks,
+                    &update_leaf_proof_raw.new_peaks,
                     &leaf_hashes[4],
                     accumulator_mmr.count_leaves()
                 )
@@ -652,13 +659,14 @@ mod mmr_membership_proof_test {
         );
 
         // 3. Update the membership proof with the membership method
-        membership_proof.update_from_leaf_update(&update_leaf_proof.membership_proof, &new_leaf);
+        membership_proof
+            .update_from_leaf_update(&update_leaf_proof_raw.membership_proof, &new_leaf);
 
         // 4. Verify that the proof succeeds
         assert!(
             membership_proof
                 .verify(
-                    &update_leaf_proof.new_peaks,
+                    &update_leaf_proof_raw.new_peaks,
                     &leaf_hashes[4],
                     accumulator_mmr.count_leaves()
                 )
