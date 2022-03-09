@@ -13,7 +13,7 @@ where
     fn is_empty(&self) -> bool;
     fn count_leaves(&self) -> u128;
     fn append(&mut self, new_leaf: HashDigest) -> MembershipProof<HashDigest, H>;
-    fn update_leaf(
+    fn mutate_leaf(
         &mut self,
         old_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,

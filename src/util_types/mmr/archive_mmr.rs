@@ -83,7 +83,7 @@ where
     }
 
     /// Update a hash in the existing archival MMR
-    fn update_leaf(
+    fn mutate_leaf(
         &mut self,
         old_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
@@ -410,7 +410,7 @@ mod mmr_test {
         let new_leaf = rp.hash_one(&vec![BFieldElement::new(10000)]);
 
         let mut archival_mmr_clone = archival_mmr.clone();
-        archival_mmr_clone.update_leaf(&archival_mmr_clone.prove_membership(2).0, &new_leaf);
+        archival_mmr_clone.mutate_leaf(&archival_mmr_clone.prove_membership(2).0, &new_leaf);
         let new_peaks_clone = archival_mmr_clone.get_peaks();
         archival_mmr.update_leaf_raw(2, new_leaf.clone());
         let new_peaks = archival_mmr.get_peaks();
@@ -525,7 +525,7 @@ mod mmr_test {
             for i in 0..size {
                 let (mp, _archival_peaks) = archival.prove_membership(i);
                 assert_eq!(i, mp.data_index);
-                acc.update_leaf(&mp, &new_leaf);
+                acc.mutate_leaf(&mp, &new_leaf);
                 archival.update_leaf_raw(i, new_leaf);
                 let new_archival_peaks = archival.get_peaks();
                 assert_eq!(new_archival_peaks, acc.get_peaks());
@@ -572,7 +572,7 @@ mod mmr_test {
                     "Inalid batch update parameters must fail"
                 );
 
-                acc.update_leaf(&mp, &new_leaf);
+                acc.mutate_leaf(&mp, &new_leaf);
                 let new_archival_peaks = archival.get_peaks();
                 assert_eq!(new_archival_peaks, acc.get_peaks());
                 assert_eq!(size, archival.count_leaves());
@@ -700,7 +700,7 @@ mod mmr_test {
             .collect();
         for &data_index in &[0u128, 1] {
             let mp = mmr.prove_membership(data_index).0;
-            mmr.update_leaf(&mp, &new_leaf);
+            mmr.mutate_leaf(&mp, &new_leaf);
             assert_eq!(
                 new_leaf,
                 mmr.get_leaf(data_index),
@@ -749,7 +749,7 @@ mod mmr_test {
         for &data_index in &[0u128, 1, 2] {
             let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
             let mp = mmr.prove_membership(data_index).0;
-            mmr.update_leaf(&mp, &new_leaf);
+            mmr.mutate_leaf(&mp, &new_leaf);
             assert_eq!(new_leaf, mmr.get_leaf(data_index));
         }
     }

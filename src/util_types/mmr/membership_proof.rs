@@ -612,7 +612,7 @@ mod mmr_membership_proof_test {
         let old_peaks = archival_mmr.get_peaks();
         let membership_proof_for_manipulated_leaf = archival_mmr.prove_membership(2).0;
         archival_mmr.update_leaf_raw(2, new_leaf);
-        accumulator_mmr.update_leaf(&membership_proof_for_manipulated_leaf, &new_leaf);
+        accumulator_mmr.mutate_leaf(&membership_proof_for_manipulated_leaf, &new_leaf);
         assert_eq!(archival_mmr.get_peaks(), accumulator_mmr.get_peaks());
         let new_peaks = archival_mmr.get_peaks();
         assert_ne!(

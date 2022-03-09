@@ -111,7 +111,7 @@ where
         membership_proof
     }
 
-    fn update_leaf(
+    fn mutate_leaf(
         &mut self,
         old_membership_proof: &MembershipProof<HashDigest, H>,
         new_leaf: &HashDigest,
