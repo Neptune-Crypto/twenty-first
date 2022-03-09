@@ -397,7 +397,7 @@ mod mmr_test {
         shared_math::b_field_element::BFieldElement,
         util_types::{
             mmr::{
-                archive_mmr::MmrArchive, mmr_trait::Mmr,
+                archive_mmr::ArchiveMmr, mmr_trait::Mmr,
                 shared::calculate_new_peaks_from_leaf_mutation,
             },
             simple_hasher::{Hasher, RescuePrimeProduction},
@@ -673,7 +673,7 @@ mod mmr_test {
         let mut rp = RescuePrimeProduction::new();
         let new_leaf = rp.hash_one(&vec![BFieldElement::new(10000)]);
         let acc =
-            MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::new(vec![new_leaf.clone()]);
+            ArchiveMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(vec![new_leaf.clone()]);
         let mp = acc.prove_membership(0).0;
         assert!(
             calculate_new_peaks_from_leaf_mutation::<RescuePrimeProduction, Vec<BFieldElement>>(
