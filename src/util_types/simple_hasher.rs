@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
 pub trait Hasher {
-    type Digest;
+    type Digest: Eq;
 
     fn new() -> Self;
     fn hash_one<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
@@ -24,20 +24,40 @@ pub trait Hasher {
 /// where the concrete `Digest` is what's chosen for the `impl Hasher`. For example, in
 /// order to
 pub trait ToDigest<Digest> {
-    fn to_digest(&self) -> &Digest;
+    fn to_digest(&self) -> Digest;
 }
 
 /// Trivial implementation when hashing `blake3::Hash` into `blake3::Hash`es.
 impl ToDigest<blake3::Hash> for blake3::Hash {
-    fn to_digest(&self) -> &blake3::Hash {
-        self
+    fn to_digest(&self) -> blake3::Hash {
+        self.to_owned()
+    }
+}
+
+// The specification for MMR from mimblewimble specifies that the
+// node count is included in the hash preimage. Representing the
+// node count as a u128 makes this possible
+impl ToDigest<blake3::Hash> for u128 {
+    fn to_digest(&self) -> blake3::Hash {
+        blake3::Hash::from_hex(format!("{:064x}", self)).unwrap()
+    }
+}
+
+impl ToDigest<Vec<BFieldElement>> for u128 {
+    fn to_digest(&self) -> Vec<BFieldElement> {
+        // Only shifting with 63 *should* prevent collissions for all
+        // numbers below u64::MAX
+        vec![
+            BFieldElement::new((self >> 63) % u64::MAX as u128),
+            BFieldElement::new(self % BFieldElement::MAX),
+        ]
     }
 }
 
 /// Trivial implementation when hashing `Vec<BFieldElement>` into `Vec<BFieldElement>`s.
 impl ToDigest<Vec<BFieldElement>> for Vec<BFieldElement> {
-    fn to_digest(&self) -> &Vec<BFieldElement> {
-        self
+    fn to_digest(&self) -> Vec<BFieldElement> {
+        self.to_owned()
     }
 }
 
@@ -88,7 +108,7 @@ impl Hasher for RescuePrimeProduction {
     }
 
     fn hash_one<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
-        self.0.hash(input.to_digest())
+        self.0.hash(&input.to_digest())
     }
 
     // TODO: Avoid list copying.
@@ -97,8 +117,7 @@ impl Hasher for RescuePrimeProduction {
         left: &Value,
         right: &Value,
     ) -> Self::Digest {
-        let input: Vec<BFieldElement> =
-            vec![left.to_digest().to_owned(), right.to_digest().to_owned()].concat();
+        let input: Vec<BFieldElement> = vec![left.to_digest(), right.to_digest()].concat();
         self.0.hash(&input)
     }
 
@@ -116,6 +135,40 @@ impl Hasher for RescuePrimeProduction {
 pub mod test_simple_hasher {
 
     use super::*;
+
+    #[test]
+    fn u128_to_digest_test() {
+        let one = 1u128;
+        let bfields_one: Vec<BFieldElement> = one.to_digest();
+        assert_eq!(2, bfields_one.len());
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[0]);
+        assert_eq!(BFieldElement::ring_one(), bfields_one[1]);
+
+        let beyond_bfield0 = u64::MAX as u128;
+        let bfields: Vec<BFieldElement> = beyond_bfield0.to_digest();
+        assert_eq!(2, bfields.len());
+        assert_eq!(BFieldElement::ring_one(), bfields[0]);
+        assert_eq!(BFieldElement::new(4294967295u128), bfields[1]);
+
+        let beyond_bfield1 = BFieldElement::MAX + 1;
+        let bfields: Vec<BFieldElement> = beyond_bfield1.to_digest();
+        assert_eq!(2, bfields.len());
+        assert_eq!(BFieldElement::ring_one(), bfields[0]);
+        assert_eq!(BFieldElement::new(1u128), bfields[1]);
+    }
+
+    #[test]
+    fn blake3_digest_from_u128_test() {
+        // Verify that u128 values can be converted into Blake3 hash input digests
+        let _128_val: blake3::Hash = 100u128.to_digest();
+        assert_eq!(
+            vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 100
+            ],
+            _128_val.as_bytes()
+        );
+    }
 
     #[test]
     fn rescue_prime_equivalence_test() {
