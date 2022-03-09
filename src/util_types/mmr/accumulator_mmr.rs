@@ -10,9 +10,9 @@ use crate::{
 };
 
 use super::{
-    append_proof::AppendProof,
+    // append_proof::AppendProof,
     archive_mmr::MmrArchive,
-    leaf_update_proof::LeafUpdateProof,
+    // leaf_update_proof::LeafUpdateProof,
     membership_proof::MembershipProof,
     mmr_trait::Mmr,
     shared::{
@@ -111,25 +111,6 @@ where
         membership_proof
     }
 
-    fn prove_append(&self, new_leaf: HashDigest) -> AppendProof<HashDigest, H> {
-        let old_peaks = self.peaks.clone();
-        let old_leaf_count = self.leaf_count;
-        let new_peaks = calculate_new_peaks_from_append::<H, HashDigest>(
-            old_leaf_count,
-            old_peaks.clone(),
-            new_leaf,
-        )
-        .unwrap()
-        .0;
-
-        AppendProof {
-            old_peaks,
-            old_leaf_count,
-            new_peaks,
-            _hasher: PhantomData,
-        }
-    }
-
     fn update_leaf(
         &mut self,
         old_membership_proof: &MembershipProof<HashDigest, H>,
@@ -169,21 +150,6 @@ where
         self.peaks[peak_height_index] = acc_hash;
     }
 
-    fn prove_update_leaf(
-        &self,
-        old_membership_proof: &MembershipProof<HashDigest, H>,
-        new_leaf: &HashDigest,
-    ) -> LeafUpdateProof<HashDigest, H> {
-        let mut updated_self = self.clone();
-        updated_self.update_leaf(old_membership_proof, new_leaf);
-
-        LeafUpdateProof {
-            membership_proof: old_membership_proof.to_owned(),
-            new_peaks: updated_self.peaks,
-            old_peaks: self.get_peaks(),
-        }
-    }
-
     fn verify_batch_update(
         &self,
         new_peaks: &[HashDigest],
@@ -199,7 +165,10 @@ where
         }
 
         // Disallow updating of out-of-bounds leafs
-        if manipulated_leaf_indices.into_iter().max().unwrap_or(0) > self.leaf_count - 1 {
+        if self.is_empty() && !manipulated_leaf_indices.is_empty()
+            || !manipulated_leaf_indices.is_empty()
+                && manipulated_leaf_indices.into_iter().max().unwrap() >= self.leaf_count
+        {
             return false;
         }
 

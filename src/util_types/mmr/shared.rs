@@ -340,6 +340,10 @@ where
         acc_index = parent(acc_index);
     }
 
+    // TODO: We could add an assert that `node_index` is larger than
+    // TODO: Make sure this function doesn't panic but returns `None`
+    // if something is wrong
+
     // Calculate which peak that needs to be update
     let (peak_heights, _) = get_peak_heights_and_peak_node_indices(leaf_count);
     let expected_peak_height_res = get_peak_height(leaf_count, membership_proof.data_index);
@@ -347,6 +351,10 @@ where
             None => panic!("Did not find any peak height for (leaf_count, data_index) combination. Got: leaf_count = {}, data_index = {}", leaf_count, membership_proof.data_index),
             Some(eph) => eph,
         };
+
+    if membership_proof.authentication_path.len() as u128 != expected_peak_height {
+        panic!("wrong authentication path encountered for this data index");
+    }
 
     let peak_height_index_res = peak_heights.iter().position(|x| *x == expected_peak_height);
     let peak_height_index = match peak_height_index_res {

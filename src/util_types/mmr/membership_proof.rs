@@ -456,9 +456,7 @@ mod mmr_membership_proof_test {
     use crate::{
         shared_math::b_field_element::BFieldElement,
         util_types::mmr::accumulator_mmr::MmrAccumulator,
-        util_types::mmr::{
-            archive_mmr::MmrArchive, leaf_update_proof::LeafUpdateProof, mmr_trait::Mmr,
-        },
+        util_types::mmr::{archive_mmr::MmrArchive, mmr_trait::Mmr},
         util_types::simple_hasher::RescuePrimeProduction,
     };
 
@@ -611,67 +609,48 @@ mod mmr_membership_proof_test {
         ) = archival_mmr.prove_membership(4);
 
         // 1. Update a leaf in both the accumulator MMR and in the archival MMR
-        let update_leaf_proof_raw: LeafUpdateProof<blake3::Hash, blake3::Hasher> =
-            archival_mmr.prove_update_leaf_raw(2, &new_leaf);
-        let update_leaf_proof: LeafUpdateProof<blake3::Hash, blake3::Hasher> =
-            archival_mmr.prove_update_leaf(&archival_mmr.prove_membership(2).0, &new_leaf);
-        assert_eq!(update_leaf_proof_raw, update_leaf_proof);
-
-        assert!(update_leaf_proof_raw.verify(&new_leaf, accumulator_mmr.count_leaves()));
-        assert_ne!(
-            update_leaf_proof_raw.old_peaks,
-            update_leaf_proof_raw.new_peaks
-        );
+        let old_peaks = archival_mmr.get_peaks();
+        let membership_proof_for_manipulated_leaf = archival_mmr.prove_membership(2).0;
         archival_mmr.update_leaf_raw(2, new_leaf);
-        accumulator_mmr.update_leaf(&update_leaf_proof_raw.membership_proof, &new_leaf);
-        assert_eq!(update_leaf_proof_raw.new_peaks, accumulator_mmr.get_peaks());
-        assert_eq!(update_leaf_proof_raw.new_peaks, archival_mmr.get_peaks());
+        accumulator_mmr.update_leaf(&membership_proof_for_manipulated_leaf, &new_leaf);
+        assert_eq!(archival_mmr.get_peaks(), accumulator_mmr.get_peaks());
+        let new_peaks = archival_mmr.get_peaks();
+        assert_ne!(
+            new_peaks, old_peaks,
+            "Peaks must change when leaf is mutated"
+        );
         let (real_membership_proof_from_archival, archival_peaks) =
             archival_mmr.prove_membership(4);
-        assert_eq!(update_leaf_proof_raw.new_peaks, archival_peaks);
+        assert_eq!(
+            new_peaks, archival_peaks,
+            "peaks returned from `get_peaks` must match that returned with membership proof"
+        );
 
         // 2. Verify that the proof fails but that the one from archival works
         assert!(
             !membership_proof
-                .verify(
-                    &update_leaf_proof_raw.new_peaks,
-                    &new_leaf,
-                    accumulator_mmr.count_leaves()
-                )
+                .verify(&new_peaks, &new_leaf, accumulator_mmr.count_leaves())
                 .0
         );
         assert!(
             membership_proof
-                .verify(
-                    &update_leaf_proof_raw.old_peaks,
-                    &leaf_hashes[4],
-                    accumulator_mmr.count_leaves()
-                )
+                .verify(&old_peaks, &leaf_hashes[4], accumulator_mmr.count_leaves())
                 .0
         );
 
         assert!(
             real_membership_proof_from_archival
-                .verify(
-                    &update_leaf_proof_raw.new_peaks,
-                    &leaf_hashes[4],
-                    accumulator_mmr.count_leaves()
-                )
+                .verify(&new_peaks, &leaf_hashes[4], accumulator_mmr.count_leaves())
                 .0
         );
 
         // 3. Update the membership proof with the membership method
-        membership_proof
-            .update_from_leaf_update(&update_leaf_proof_raw.membership_proof, &new_leaf);
+        membership_proof.update_from_leaf_update(&membership_proof_for_manipulated_leaf, &new_leaf);
 
-        // 4. Verify that the proof succeeds
+        // 4. Verify that the proof now succeeds
         assert!(
             membership_proof
-                .verify(
-                    &update_leaf_proof_raw.new_peaks,
-                    &leaf_hashes[4],
-                    accumulator_mmr.count_leaves()
-                )
+                .verify(&new_peaks, &leaf_hashes[4], accumulator_mmr.count_leaves())
                 .0
         );
 
@@ -707,15 +686,22 @@ mod mmr_membership_proof_test {
                 };
                 assert!(mps[j as usize].verify(&new_peaks, &our_leaf, 8,).0);
 
+                // Verify that original membership proofs are no longer valid
                 // For size = 8, all membership proofs except the one for element 0
                 // will be updated since this MMR only contains a single peak.
                 // An updated leaf (0 in this case) retains its authentication path after
                 // the update. But all other leafs pointing to the same MMR will have updated
                 // authentication paths.
                 if j == i {
-                    assert!(original_mps[j as usize].verify(&new_peaks, &our_leaf, 8,).0);
+                    assert!(
+                        original_mps[j as usize].verify(&new_peaks, &our_leaf, 8,).0,
+                        "original membership proof must be valid when j = i"
+                    );
                 } else {
-                    assert!(!original_mps[j as usize].verify(&new_peaks, &our_leaf, 8,).0);
+                    assert!(
+                        !original_mps[j as usize].verify(&new_peaks, &our_leaf, 8,).0,
+                        "original membership proof must be invalid when j != i"
+                    );
                 }
             }
         }
