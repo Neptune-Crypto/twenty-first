@@ -322,7 +322,7 @@ pub fn calculate_new_peaks_from_leaf_mutation<
     new_leaf: &HashDigest,
     leaf_count: u128,
     membership_proof: &MembershipProof<HashDigest, H>,
-) -> Vec<HashDigest>
+) -> Option<Vec<HashDigest>>
 where
     u128: ToDigest<HashDigest>,
 {
@@ -340,32 +340,28 @@ where
         acc_index = parent(acc_index);
     }
 
-    // TODO: We could add an assert that `node_index` is larger than
-    // TODO: Make sure this function doesn't panic but returns `None`
-    // if something is wrong
-
     // Calculate which peak that needs to be update
     let (peak_heights, _) = get_peak_heights_and_peak_node_indices(leaf_count);
     let expected_peak_height_res = get_peak_height(leaf_count, membership_proof.data_index);
     let expected_peak_height = match expected_peak_height_res {
-            None => panic!("Did not find any peak height for (leaf_count, data_index) combination. Got: leaf_count = {}, data_index = {}", leaf_count, membership_proof.data_index),
-            Some(eph) => eph,
-        };
+        None => return None,
+        Some(eph) => eph,
+    };
 
     if membership_proof.authentication_path.len() as u128 != expected_peak_height {
-        panic!("wrong authentication path encountered for this data index");
+        return None;
     }
 
     let peak_height_index_res = peak_heights.iter().position(|x| *x == expected_peak_height);
     let peak_height_index = match peak_height_index_res {
-        None => panic!("Did not find a matching peak"),
+        None => return None,
         Some(index) => index,
     };
 
     let mut calculated_peaks: Vec<HashDigest> = old_peaks.to_vec();
     calculated_peaks[peak_height_index] = acc_hash;
 
-    calculated_peaks
+    Some(calculated_peaks)
 }
 
 /// Get a root commitment to the entire MMR
@@ -396,6 +392,17 @@ where
 #[cfg(test)]
 mod mmr_test {
     use rand::RngCore;
+
+    use crate::{
+        shared_math::b_field_element::BFieldElement,
+        util_types::{
+            mmr::{
+                archive_mmr::MmrArchive, mmr_trait::Mmr,
+                shared::calculate_new_peaks_from_leaf_mutation,
+            },
+            simple_hasher::{Hasher, RescuePrimeProduction},
+        },
+    };
 
     use super::*;
 
@@ -657,5 +664,25 @@ mod mmr_test {
                 get_authentication_path_node_indices(start, end, node_count)
             );
         }
+    }
+
+    #[test]
+    fn calculate_new_peaks_from_leaf_mutation_empty_mmr_test() {
+        // Verify that the helper function `calculate_new_peaks_from_leaf_mutation` does
+        // not crash if called on an empty list of peaks
+        let mut rp = RescuePrimeProduction::new();
+        let new_leaf = rp.hash_one(&vec![BFieldElement::new(10000)]);
+        let acc =
+            MmrArchive::<Vec<BFieldElement>, RescuePrimeProduction>::new(vec![new_leaf.clone()]);
+        let mp = acc.prove_membership(0).0;
+        assert!(
+            calculate_new_peaks_from_leaf_mutation::<RescuePrimeProduction, Vec<BFieldElement>>(
+                &vec![],
+                &new_leaf,
+                0,
+                &mp,
+            )
+            .is_none()
+        );
     }
 }

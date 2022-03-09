@@ -192,12 +192,16 @@ where
             // TODO: Should we verify the membership proof here?
 
             // Calculate the new peaks after mutating a leaf
-            running_peaks = calculate_new_peaks_from_leaf_mutation(
+            let running_peaks_res = calculate_new_peaks_from_leaf_mutation(
                 &running_peaks,
                 &new_leaf_value,
                 self.leaf_count,
                 &membership_proof,
             );
+            running_peaks = match running_peaks_res {
+                None => return false,
+                Some(peaks) => peaks,
+            };
 
             // Update all remaining membership proofs with this leaf mutation
             MembershipProof::<HashDigest, H>::batch_update_from_leaf_mutation(
