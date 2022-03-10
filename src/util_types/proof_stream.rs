@@ -132,12 +132,114 @@ impl ProofStream {
 #[cfg(test)]
 pub mod test_proof_stream {
 
+    use crate::{
+        shared_math::b_field_element::BFieldElement, util_types::blake3_wrapper::Blake3Hash,
+    };
+
     use super::*;
 
     #[test]
-    fn test_default_empty_initiation() {
+    fn ps_test_default_empty_initiation() {
         let proof_stream = ProofStream::default();
         assert!(proof_stream.is_empty());
         assert_eq!(0, proof_stream.get_read_index());
+    }
+
+    #[test]
+    fn ps_blake3_wrapper_bincode_test() {
+        let zero: Blake3Hash = [0; 32].into();
+
+        let res_bytes = bincode::serialize(&zero);
+        let bytes = res_bytes.unwrap();
+
+        assert_eq!(std::mem::size_of::<Blake3Hash>(), 32);
+        assert_eq!(bytes.len(), 40);
+    }
+
+    // make random Blake3Hash'es
+    // push to stream
+    // pop
+    //
+    // To test: can we push single BFieldElement?
+    // To can: we push a merkle tree?
+
+    #[test]
+    fn ps_empty_ts() {
+        let ps = ProofStream::default();
+        assert_eq!(ps.len(), 0, "The empty ProofStream must have length zero.");
+        let ts = ps.serialize();
+        assert_eq!(
+            ts.len(),
+            0,
+            "The serialization of the empty ProofStream must have length zero."
+        );
+    }
+
+    #[test]
+    fn ps_enqueue_then_dequeue() {
+        let mut ps = ProofStream::default();
+
+        let bfe_before = BFieldElement::new(213 as u128);
+        ps.enqueue_length_prepended(&bfe_before);
+        let bfe_after = ps.dequeue_length_prepended().unwrap();
+
+        assert_eq!(
+            bfe_before, bfe_after,
+            "`enqueue` element followed by `dequeue` should return the same element."
+        );
+    }
+
+    #[test]
+    fn ps_thrice_enqueue_then_dequeue() {
+        ps_enqueue_then_dequeue();
+        ps_enqueue_then_dequeue();
+        ps_enqueue_then_dequeue();
+    }
+
+    #[test]
+    fn ps_enq_deq_enq_deq() {
+        let bfe1_before = BFieldElement::new(213 as u128);
+        let bfe2_before = BFieldElement::new(783 as u128);
+
+        let mut ps = ProofStream::default();
+        ps.enqueue_length_prepended(&bfe1_before);
+        ps.enqueue_length_prepended(&bfe2_before);
+
+        let bfe1_after = ps.dequeue_length_prepended().unwrap();
+        let bfe2_after = ps.dequeue_length_prepended().unwrap();
+
+        assert_eq!(
+            bfe1_before, bfe1_after,
+            "Element 1 has changed on the stream!"
+        );
+
+        assert_eq!(
+            bfe2_before, bfe2_after,
+            "Element 2 has changed on the stream!"
+        );
+    }
+
+    #[test]
+    fn ps_is_FIFO_no_LIFO() {
+        let bfe1_before = BFieldElement::new(213 as u128);
+        let bfe2_before = BFieldElement::new(783 as u128);
+
+        let mut ps = ProofStream::default();
+        ps.enqueue_length_prepended(&bfe1_before);
+        ps.enqueue_length_prepended(&bfe2_before);
+
+        // Intentionally wrong order
+        let bfe2_after_phoney = ps.dequeue_length_prepended().unwrap();
+        let bfe1_after_phoney = ps.dequeue_length_prepended().unwrap();
+
+        assert_ne!(
+            bfe1_before, bfe1_after_phoney,
+            "ProofStream erroneously has LIFO behavior when it should have FIFO behavior."
+        );
+
+        assert_ne!(
+            bfe2_before, bfe2_after_phoney,
+            "ProofStream erroneously has LIFO behavior when it should have FIFO behavior."
+        );
     }
 }
