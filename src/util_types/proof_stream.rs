@@ -99,21 +99,37 @@ impl ProofStream {
         Ok(item)
     }
 
+    /// A package on a `ProofStream` consist of a `u32` containing the `item_length` of the payload (`item`)
+    /// followed by the payload.  This is similar to _pascal style strings_.
+    /// Corresponds to `pull` in [AoaS](https://aszepieniec.github.io/stark-anatomy/basic-tools#the-fiat-shamir-transform).
+
+    /// # Arguments
+    ///
+    /// * `item` - The payload we want to dequeue and deserialize.
+    /// * `item_length` - The length of the payload in bytes.
+    /// * `sizeof_item_length` - The size of the prepended field.
     pub fn dequeue_length_prepended<T>(&mut self) -> Result<T, Box<dyn Error>>
     where
         T: DeserializeOwned,
     {
+        let sizeof_item_length = std::mem::size_of::<u32>();
+        assert_eq!(sizeof_item_length, 4, "32 bits should equal 4 bytes.");
+
+        let item_length_start = self.read_index;
+        let item_length_end = self.read_index + sizeof_item_length;
         let item_length: u32 =
-            bincode::deserialize(&self.transcript[self.read_index..self.read_index + 4])?;
-        self.read_index += 4;
-        if item_length as usize + self.read_index > self.transcript.len() {
+            bincode::deserialize(&self.transcript[item_length_start..item_length_end])?;
+
+        let item_start = self.read_index + sizeof_item_length;
+        let item_end = item_start + item_length as usize; // Is this cast necessary?
+
+        if self.len() < item_end {
             return Err(Box::new(ProofStreamError::TranscriptLengthExceeded));
         }
 
-        let item: T = bincode::deserialize(
-            &self.transcript[self.read_index..self.read_index + item_length as usize],
-        )?;
-        self.read_index += item_length as usize;
+        let item: T = bincode::deserialize(&self.transcript[item_start..item_end])?;
+
+        self.read_index = item_end;
 
         Ok(item)
     }
