@@ -82,7 +82,9 @@ where
         self.prove_membership(data_index).0
     }
 
-    /// Update a hash in the existing archival MMR
+    /// Mutate an existing leaf. It is the caller's responsibility that the
+    /// membership proof is valid. If the membership proof is wrong, the MMR
+    /// will end up in a broken state.
     fn mutate_leaf(
         &mut self,
         old_membership_proof: &MembershipProof<HashDigest, H>,

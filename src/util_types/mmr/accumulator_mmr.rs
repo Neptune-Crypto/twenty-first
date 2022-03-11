@@ -109,6 +109,9 @@ where
         membership_proof
     }
 
+    /// Mutate an existing leaf. It is the caller's responsibility that the
+    /// membership proof is valid. If the membership proof is wrong, the MMR
+    /// will end up in a broken state.
     fn mutate_leaf(
         &mut self,
         old_membership_proof: &MembershipProof<HashDigest, H>,
