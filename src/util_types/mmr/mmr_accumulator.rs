@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    archive_mmr::ArchiveMmr,
+    archival_mmr::ArchivalMmr,
     membership_proof::MembershipProof,
     mmr_trait::Mmr,
     shared::{
@@ -21,19 +21,19 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-pub struct AccumulatorMmr<HashDigest, H> {
+pub struct MmrAccumulator<HashDigest, H> {
     leaf_count: u128,
     peaks: Vec<HashDigest>,
     _hasher: PhantomData<H>,
 }
 
-impl<HashDigest, H> From<&ArchiveMmr<HashDigest, H>> for AccumulatorMmr<HashDigest, H>
+impl<HashDigest, H> From<&ArchivalMmr<HashDigest, H>> for MmrAccumulator<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest> + Clone,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
     u128: ToDigest<HashDigest>,
 {
-    fn from(archive: &ArchiveMmr<HashDigest, H>) -> Self {
+    fn from(archive: &ArchivalMmr<HashDigest, H>) -> Self {
         Self {
             leaf_count: archive.count_leaves(),
             peaks: archive.get_peaks(),
@@ -42,7 +42,7 @@ where
     }
 }
 
-impl<HashDigest, H> AccumulatorMmr<HashDigest, H>
+impl<HashDigest, H> MmrAccumulator<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest> + Clone,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
@@ -57,7 +57,7 @@ where
     }
 }
 
-impl<HashDigest, H> Mmr<HashDigest, H> for AccumulatorMmr<HashDigest, H>
+impl<HashDigest, H> Mmr<HashDigest, H> for MmrAccumulator<HashDigest, H>
 where
     H: Hasher<Digest = HashDigest> + Clone,
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
@@ -71,7 +71,7 @@ where
         // Clearly, this function could use less RAM if we don't build the entire
         // archival MMR.
         let leaf_count = digests.len() as u128;
-        let archival = ArchiveMmr::new(digests);
+        let archival = ArchivalMmr::new(digests);
         let peaks_and_heights = archival.get_peaks_with_heights();
         Self {
             _hasher: archival._hasher,
@@ -255,9 +255,9 @@ mod accumulator_mmr_tests {
             .iter()
             .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
             .collect();
-        let archival_mmr: ArchiveMmr<blake3::Hash, blake3::Hasher> =
-            ArchiveMmr::new(leaf_hashes.clone());
-        let accumulator_mmr: AccumulatorMmr<blake3::Hash, blake3::Hasher> = (&archival_mmr).into();
+        let archival_mmr: ArchivalMmr<blake3::Hash, blake3::Hasher> =
+            ArchivalMmr::new(leaf_hashes.clone());
+        let accumulator_mmr: MmrAccumulator<blake3::Hash, blake3::Hasher> = (&archival_mmr).into();
         assert_eq!(archival_mmr.get_peaks(), accumulator_mmr.get_peaks());
         assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
         assert_eq!(archival_mmr.is_empty(), accumulator_mmr.is_empty());
@@ -281,10 +281,10 @@ mod accumulator_mmr_tests {
             .iter()
             .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
             .collect();
-        let accumulator_mmr_start: AccumulatorMmr<blake3::Hash, blake3::Hasher> =
-            AccumulatorMmr::new(leaf_hashes_start.clone());
-        let accumulator_mmr_end: AccumulatorMmr<blake3::Hash, blake3::Hasher> =
-            AccumulatorMmr::new(leaf_hashes_end.clone());
+        let accumulator_mmr_start: MmrAccumulator<blake3::Hash, blake3::Hasher> =
+            MmrAccumulator::new(leaf_hashes_start.clone());
+        let accumulator_mmr_end: MmrAccumulator<blake3::Hash, blake3::Hasher> =
+            MmrAccumulator::new(leaf_hashes_end.clone());
         assert!(accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.get_peaks(),
             &[appended_leaf],
@@ -307,12 +307,12 @@ mod accumulator_mmr_tests {
             .iter()
             .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
             .collect();
-        let accumulator_mmr_start: AccumulatorMmr<blake3::Hash, blake3::Hasher> =
-            AccumulatorMmr::new(leaf_hashes_start.clone());
-        let archive_mmr_start = ArchiveMmr::new(leaf_hashes_start);
+        let accumulator_mmr_start: MmrAccumulator<blake3::Hash, blake3::Hasher> =
+            MmrAccumulator::new(leaf_hashes_start.clone());
+        let archive_mmr_start = ArchivalMmr::new(leaf_hashes_start);
         let membership_proof = archive_mmr_start.prove_membership(3).0;
-        let accumulator_mmr_end: AccumulatorMmr<blake3::Hash, blake3::Hasher> =
-            AccumulatorMmr::new(leaf_hashes_end.clone());
+        let accumulator_mmr_end: MmrAccumulator<blake3::Hash, blake3::Hasher> =
+            MmrAccumulator::new(leaf_hashes_end.clone());
         assert!(accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.get_peaks(),
             &[],
@@ -344,10 +344,10 @@ mod accumulator_mmr_tests {
             .iter()
             .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
             .collect();
-        let accumulator_mmr_start: AccumulatorMmr<blake3::Hash, blake3::Hasher> =
-            AccumulatorMmr::new(leaf_hashes_start.clone());
-        let accumulator_mmr_end: AccumulatorMmr<blake3::Hash, blake3::Hasher> =
-            AccumulatorMmr::new(leaf_hashes_end.clone());
+        let accumulator_mmr_start: MmrAccumulator<blake3::Hash, blake3::Hasher> =
+            MmrAccumulator::new(leaf_hashes_start.clone());
+        let accumulator_mmr_end: MmrAccumulator<blake3::Hash, blake3::Hasher> =
+            MmrAccumulator::new(leaf_hashes_end.clone());
         assert!(accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.get_peaks(),
             &appended_leafs,
@@ -369,13 +369,13 @@ mod accumulator_mmr_tests {
             .iter()
             .map(|x| blake3::hash(bincode::serialize(x).expect("Encoding failed").as_slice()))
             .collect();
-        let accumulator_mmr_start: AccumulatorMmr<blake3::Hash, blake3::Hasher> =
-            AccumulatorMmr::new(leaf_hashes_start.clone());
-        let archive_mmr_start = ArchiveMmr::new(leaf_hashes_start);
+        let accumulator_mmr_start: MmrAccumulator<blake3::Hash, blake3::Hasher> =
+            MmrAccumulator::new(leaf_hashes_start.clone());
+        let archive_mmr_start = ArchivalMmr::new(leaf_hashes_start);
         let membership_proof1 = archive_mmr_start.prove_membership(1).0;
         let membership_proof3 = archive_mmr_start.prove_membership(3).0;
-        let accumulator_mmr_end: AccumulatorMmr<blake3::Hash, blake3::Hasher> =
-            AccumulatorMmr::new(leaf_hashes_end.clone());
+        let accumulator_mmr_end: MmrAccumulator<blake3::Hash, blake3::Hasher> =
+            MmrAccumulator::new(leaf_hashes_end.clone());
         assert!(accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.get_peaks(),
             &[],
@@ -395,7 +395,7 @@ mod accumulator_mmr_tests {
             let bad_digests: Vec<blake3::Hash> = (12u128..12u128 + start_size)
                 .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
                 .collect();
-            let bad_mmr = ArchiveMmr::<blake3::Hash, blake3::Hasher>::new(bad_digests.clone());
+            let bad_mmr = ArchivalMmr::<blake3::Hash, blake3::Hasher>::new(bad_digests.clone());
             let bad_membership_proof: MembershipProof<blake3::Hash, blake3::Hasher> =
                 bad_mmr.prove_membership(0).0;
             let bad_membership_proof_digest = bad_digests[0];
@@ -405,9 +405,9 @@ mod accumulator_mmr_tests {
                     .as_slice(),
             );
             let archival_mmr_init =
-                ArchiveMmr::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_start.clone());
+                ArchivalMmr::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_start.clone());
             let accumulator_mmr =
-                AccumulatorMmr::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_start.clone());
+                MmrAccumulator::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_start.clone());
             for append_size in 0..18 {
                 let appends: Vec<blake3::Hash> = (2000u128..2000u128 + append_size)
                     .map(|x| {
@@ -441,11 +441,11 @@ mod accumulator_mmr_tests {
                         leaf_hashes_mutated.push(appended_digest.to_owned());
                     }
 
-                    let mutated_archival_mmr = ArchiveMmr::<blake3::Hash, blake3::Hasher>::new(
+                    let mutated_archival_mmr = ArchivalMmr::<blake3::Hash, blake3::Hasher>::new(
                         leaf_hashes_mutated.clone(),
                     );
                     let mutated_accumulator_mmr =
-                        ArchiveMmr::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_mutated);
+                        ArchivalMmr::<blake3::Hash, blake3::Hasher>::new(leaf_hashes_mutated);
                     let expected_new_peaks_from_archival = mutated_archival_mmr.get_peaks();
                     let expected_new_peaks_from_accumulator = mutated_accumulator_mmr.get_peaks();
                     assert_eq!(
