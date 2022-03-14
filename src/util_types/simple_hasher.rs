@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
 pub trait Hasher {
-    type Digest: PartialEq;
+    type Digest: ToDigest<Self::Digest> + PartialEq + Clone + std::fmt::Debug;
 
     fn new() -> Self;
     fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
@@ -41,9 +41,9 @@ pub trait ToDigest<Digest> {
 // The specification for MMR from mimblewimble specifies that the
 // node count is included in the hash preimage. Representing the
 // node count as a u128 makes this possible
-impl ToDigest<blake3::Hash> for u128 {
-    fn to_digest(&self) -> blake3::Hash {
-        blake3::Hash::from_hex(format!("{:064x}", self)).unwrap()
+impl ToDigest<Blake3Hash> for u128 {
+    fn to_digest(&self) -> Blake3Hash {
+        (*self).into()
     }
 }
 

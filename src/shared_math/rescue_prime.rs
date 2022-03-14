@@ -1,15 +1,12 @@
-use std::fmt::Display;
-
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
-
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::stark_constraints::BoundaryConstraint;
-use crate::shared_math::traits::IdentityValues;
-
 use super::mpolynomial::MPolynomial;
 use super::polynomial::Polynomial;
 use super::traits::{CyclicGroupGenerator, ModPowU64};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::stark_constraints::BoundaryConstraint;
+use crate::shared_math::traits::IdentityValues;
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 // TODO: Make this work for XFieldElement via trait.
 #[derive(Debug, Clone, Serialize, Deserialize)]

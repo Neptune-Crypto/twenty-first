@@ -16,6 +16,12 @@ impl From<[u8; 32]> for Blake3Hash {
     }
 }
 
+impl From<u128> for Blake3Hash {
+    fn from(n: u128) -> Self {
+        Blake3Hash(blake3::Hash::from_hex(format!("{:064x}", n)).unwrap())
+    }
+}
+
 impl serde::Serialize for Blake3Hash {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -35,4 +41,8 @@ impl<'de> Deserialize<'de> for Blake3Hash {
         let digest: blake3::Hash = bytes.into();
         Ok(Blake3Hash(digest))
     }
+}
+
+pub fn hash(bytes: &[u8]) -> Blake3Hash {
+    Blake3Hash(blake3::hash(bytes))
 }

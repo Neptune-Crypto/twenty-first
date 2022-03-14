@@ -15,17 +15,6 @@ pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
 
 #[derive(Clone, Debug)]
-pub struct BoundaryConstraint {
-    pub cycle: usize,
-    pub register: usize,
-    pub value: PrimeFieldElementFlexible,
-}
-
-// A hashmap from register value to (x, y) value of boundary constraint
-pub type BoundaryConstraintsMap =
-    HashMap<usize, (PrimeFieldElementFlexible, PrimeFieldElementFlexible)>;
-
-#[derive(Clone, Debug)]
 pub struct StarkPreprocessedValuesProver {
     transition_zerofier: Polynomial<PrimeFieldElementFlexible>,
     transition_zerofier_mt: MerkleTree<PrimeFieldElementFlexible>,
@@ -927,5 +916,42 @@ pub mod test_stark_pfef {
             Ok(_) => (),
             Err(err) => panic!("Verification of STARK proof failed with error: {}", err),
         };
+    }
+
+    #[test]
+    fn rp_stark_test() {
+        let prime: U256 = (407u128 * (1 << 119) + 1).into();
+        let expansion_factor = 4usize;
+        let colinearity_checks_count = 2usize;
+        let transition_constraints_degree = 2usize;
+        let generator = PrimeFieldElementFlexible::new(
+            85408008396924667383611388730472331217u128.into(),
+            prime,
+        );
+        let rescue_prime_stark = RescuePrime::from_tutorial();
+
+        let mut stark = StarkPrimeFieldElementFlexible::new(
+            expansion_factor,
+            colinearity_checks_count,
+            rescue_prime_stark.m,
+            rescue_prime_stark.steps_count + 1,
+            transition_constraints_degree,
+            generator,
+        );
+        stark.prover_preprocess();
+
+        let one = PrimeFieldElementFlexible::new(1.into(), prime);
+        let trace = rescue_prime_stark.trace(&one);
+        let air_constraints = rescue_prime_stark.get_air_constraints(stark.omicron);
+        let hash_result = trace.last().unwrap()[0];
+        let boundary_constraints: Vec<BoundaryConstraint> =
+            rescue_prime_stark.get_boundary_constraints(hash_result);
+        let mut proof_stream = ProofStream::default();
+        let _proof = stark.prove(
+            trace,
+            air_constraints,
+            boundary_constraints,
+            &mut proof_stream,
+        );
     }
 }

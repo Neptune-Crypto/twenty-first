@@ -61,7 +61,6 @@ impl ProofStream {
         self.read_index = new_index;
     }
 
-    #[deprecated(note = "Use 'enqueue_length_prepended' instead.")]
     pub fn enqueue<T>(&mut self, item: &T) -> Result<(), Box<dyn Error>>
     where
         T: Serialize,
@@ -85,7 +84,6 @@ impl ProofStream {
         Ok(())
     }
 
-    #[deprecated(note = "Use 'dequeue_length_prepended' instead.")]
     pub fn dequeue<T>(&mut self, byte_length: usize) -> Result<T, Box<dyn Error>>
     where
         T: DeserializeOwned,

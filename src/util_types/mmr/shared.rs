@@ -282,13 +282,13 @@ pub fn calculate_new_peaks_from_append<
     old_leaf_count: u128,
     old_peaks: Vec<HashDigest>,
     new_leaf: HashDigest,
-) -> Option<(Vec<HashDigest>, MembershipProof<HashDigest, H>)> {
+) -> Option<(Vec<HashDigest>, MembershipProof<H>)> {
     let mut peaks = old_peaks;
     let mut new_node_index = data_index_to_node_index(old_leaf_count);
     let (mut new_node_is_right_child, _height) = right_child_and_height(new_node_index);
     peaks.push(new_leaf);
     let mut hasher = H::new();
-    let mut membership_proof: MembershipProof<HashDigest, H> = MembershipProof {
+    let mut membership_proof: MembershipProof<H> = MembershipProof {
         authentication_path: vec![],
         data_index: old_leaf_count,
         _hasher: PhantomData,
@@ -321,7 +321,7 @@ pub fn calculate_new_peaks_from_leaf_mutation<
     old_peaks: &[HashDigest],
     new_leaf: &HashDigest,
     leaf_count: u128,
-    membership_proof: &MembershipProof<HashDigest, H>,
+    membership_proof: &MembershipProof<H>,
 ) -> Option<Vec<HashDigest>>
 where
     u128: ToDigest<HashDigest>,
@@ -364,12 +364,13 @@ where
     Some(calculated_peaks)
 }
 
+// HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+
 /// Get a root commitment to the entire MMR
-pub fn bag_peaks<HashDigest, H>(peaks: &[HashDigest], node_count: u128) -> HashDigest
+pub fn bag_peaks<H>(peaks: &[H::Digest], node_count: u128) -> H::Digest
 where
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-    H: Hasher<Digest = HashDigest> + Clone,
-    u128: ToDigest<HashDigest>,
+    H: Hasher + Clone,
+    u128: ToDigest<H::Digest>,
 {
     // Follows the description on
     // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
@@ -381,7 +382,7 @@ where
         return hasher.hash(&0u128.to_digest());
     }
 
-    let mut acc: HashDigest = hasher.hash_pair(&node_count.to_digest(), &peaks[peaks_count - 1]);
+    let mut acc: H::Digest = hasher.hash_pair(&node_count.to_digest(), &peaks[peaks_count - 1]);
     for i in 1..peaks_count {
         acc = hasher.hash_pair(&peaks[peaks_count - 1 - i], &acc);
     }

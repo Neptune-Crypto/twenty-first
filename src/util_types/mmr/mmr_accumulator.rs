@@ -21,19 +21,24 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-pub struct MmrAccumulator<HashDigest, H> {
+pub struct MmrAccumulator<H>
+where
+    H: Hasher,
+{
     leaf_count: u128,
-    peaks: Vec<HashDigest>,
+    peaks: Vec<H::Digest>,
     _hasher: PhantomData<H>,
 }
 
-impl<HashDigest, H> From<&ArchivalMmr<HashDigest, H>> for MmrAccumulator<HashDigest, H>
+// These 'where' constraints were removed:
+//
+// HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+// u128: ToDigest<HashDigest>,
+impl<H> From<&ArchivalMmr<H>> for MmrAccumulator<H>
 where
-    H: Hasher<Digest = HashDigest> + Clone,
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-    u128: ToDigest<HashDigest>,
+    H: Hasher,
 {
-    fn from(archive: &ArchivalMmr<HashDigest, H>) -> Self {
+    fn from(archive: &ArchivalMmr<H>) -> Self {
         Self {
             leaf_count: archive.count_leaves(),
             peaks: archive.get_peaks(),
@@ -42,13 +47,15 @@ where
     }
 }
 
-impl<HashDigest, H> MmrAccumulator<HashDigest, H>
+// These 'where' constraints were removed:
+//
+// HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+// u128: ToDigest<HashDigest>,
+impl<H> MmrAccumulator<H>
 where
-    H: Hasher<Digest = HashDigest> + Clone,
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-    u128: ToDigest<HashDigest>,
+    H: Hasher + Clone,
 {
-    pub fn init(peaks: Vec<HashDigest>, leaf_count: u128) -> Self {
+    pub fn init(peaks: Vec<H::Digest>, leaf_count: u128) -> Self {
         Self {
             leaf_count,
             peaks,
@@ -57,13 +64,15 @@ where
     }
 }
 
-impl<HashDigest, H> Mmr<HashDigest, H> for MmrAccumulator<HashDigest, H>
+// These 'where' constraints were removed:
+//
+// HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
+// u128: ToDigest<HashDigest>,
+impl<H> Mmr<H> for MmrAccumulator<H>
 where
-    H: Hasher<Digest = HashDigest> + Clone,
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-    u128: ToDigest<HashDigest>,
+    H: Hasher + Clone,
 {
-    fn new(digests: Vec<HashDigest>) -> Self {
+    fn new(digests: Vec<H::Digest>) -> Self {
         // If all the hash digests already exist in memory, we might as well
         // build the shallow MMR from an archival MMR, since it doesn't give
         // asymptotically higher RAM consumption than building it without storing
@@ -80,11 +89,11 @@ where
         }
     }
 
-    fn bag_peaks(&self) -> HashDigest {
-        bag_peaks::<HashDigest, H>(&self.peaks, leaf_count_to_node_count(self.leaf_count))
+    fn bag_peaks(&self) -> H::Digest {
+        bag_peaks::<H::Digest, H>(&self.peaks, leaf_count_to_node_count(self.leaf_count))
     }
 
-    fn get_peaks(&self) -> Vec<HashDigest> {
+    fn get_peaks(&self) -> Vec<H::Digest> {
         self.peaks.clone()
     }
 
@@ -96,8 +105,8 @@ where
         self.leaf_count
     }
 
-    fn append(&mut self, new_leaf: HashDigest) -> MembershipProof<HashDigest, H> {
-        let (new_peaks, membership_proof) = calculate_new_peaks_from_append::<H, HashDigest>(
+    fn append(&mut self, new_leaf: H::Digest) -> MembershipProof<H> {
+        let (new_peaks, membership_proof) = calculate_new_peaks_from_append::<H, H::Digest>(
             self.leaf_count,
             self.peaks.clone(),
             new_leaf,
@@ -112,14 +121,10 @@ where
     /// Mutate an existing leaf. It is the caller's responsibility that the
     /// membership proof is valid. If the membership proof is wrong, the MMR
     /// will end up in a broken state.
-    fn mutate_leaf(
-        &mut self,
-        old_membership_proof: &MembershipProof<HashDigest, H>,
-        new_leaf: &HashDigest,
-    ) {
+    fn mutate_leaf(&mut self, old_membership_proof: &MembershipProof<H>, new_leaf: &H::Digest) {
         let node_index = data_index_to_node_index(old_membership_proof.data_index);
         let mut hasher = H::new();
-        let mut acc_hash: HashDigest = new_leaf.to_owned();
+        let mut acc_hash: H::Digest = new_leaf.to_owned();
         let mut acc_index: u128 = node_index;
         for hash in old_membership_proof.authentication_path.iter() {
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
@@ -153,9 +158,9 @@ where
 
     fn verify_batch_update(
         &self,
-        new_peaks: &[HashDigest],
-        appended_leafs: &[HashDigest],
-        leaf_mutations: &[(HashDigest, MembershipProof<HashDigest, H>)],
+        new_peaks: &[H::Digest],
+        appended_leafs: &[H::Digest],
+        leaf_mutations: &[(H::Digest, MembershipProof<H>)],
     ) -> bool {
         // Verify that all leaf mutations operate on unique leafs and that they do
         // not exceed the total leaf count
@@ -173,9 +178,9 @@ where
             return false;
         }
 
-        let mut leaf_mutation_target_values: Vec<HashDigest> =
+        let mut leaf_mutation_target_values: Vec<H::Digest> =
             leaf_mutations.iter().map(|x| x.0.to_owned()).collect();
-        let mut updated_membership_proofs: Vec<MembershipProof<HashDigest, H>> =
+        let mut updated_membership_proofs: Vec<MembershipProof<H::Digest, H>> =
             leaf_mutations.iter().map(|x| x.1.to_owned()).collect();
 
         // Reverse the leaf mutation vectors, since I would like to apply them in the order
@@ -184,7 +189,7 @@ where
         updated_membership_proofs.reverse();
 
         // First we apply all the leaf mutations
-        let mut running_peaks: Vec<HashDigest> = self.peaks.clone();
+        let mut running_peaks: Vec<H::Digest> = self.peaks.clone();
         while let Some(membership_proof) = updated_membership_proofs.pop() {
             // `new_leaf_value` is guaranteed to exist since `leaf_mutation_target_values`
             // has the same length as `updated_membership_proofs`
@@ -205,7 +210,7 @@ where
             };
 
             // Update all remaining membership proofs with this leaf mutation
-            MembershipProof::<HashDigest, H>::batch_update_from_leaf_mutation(
+            MembershipProof::<H::Digest, H>::batch_update_from_leaf_mutation(
                 &mut updated_membership_proofs,
                 &membership_proof,
                 &new_leaf_value,
@@ -213,7 +218,7 @@ where
         }
 
         // Then apply all the leaf appends
-        let mut new_leafs_cloned: Vec<HashDigest> = appended_leafs.to_vec();
+        let mut new_leafs_cloned: Vec<H::Digest> = appended_leafs.to_vec();
 
         // Reverse the new leafs to apply them in the same order as they were input,
         // using pop
@@ -222,7 +227,7 @@ where
         // Apply all leaf appends and
         let mut running_leaf_count = self.leaf_count;
         while let Some(new_leaf_for_append) = new_leafs_cloned.pop() {
-            let append_res = calculate_new_peaks_from_append::<H, HashDigest>(
+            let append_res = calculate_new_peaks_from_append::<H, H::Digest>(
                 running_leaf_count,
                 running_peaks,
                 new_leaf_for_append,
