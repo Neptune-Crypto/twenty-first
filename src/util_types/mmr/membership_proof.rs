@@ -582,17 +582,14 @@ mod mmr_membership_proof_test {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
-        let leaf_hashes: Vec<Digest> = (14u128..14 + 8).into_iter().collect();
-        let new_leaf = blake3::hash(
-            bincode::serialize(&133337u128)
-                .expect("Encoding failed")
-                .as_slice(),
-        );
+        let leaf_hashes: Vec<Digest> = (14u128..14 + 8).map(|x| x.into()).collect();
+        let new_leaf: Digest = 133337u128.into();
         let mut accumulator_mmr = MmrAccumulator::<Hasher>::new(leaf_hashes.clone());
+
         assert_eq!(8, accumulator_mmr.count_leaves());
         let mut archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
         let original_archival_mmr = archival_mmr.clone();
-        let (mut membership_proof, _peaks): (MembershipProof<Hasher>, Vec<blake3::Hash>) =
+        let (mut membership_proof, _peaks): (MembershipProof<Hasher>, Vec<Digest>) =
             archival_mmr.prove_membership(4);
 
         // 1. Update a leaf in both the accumulator MMR and in the archival MMR
@@ -696,26 +693,23 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_membership_proof_from_leaf_mutation_blake3_big_test() {
+        type Digest = Blake3Hash;
+        type Hasher = blake3::Hasher;
+
         // Build MMR from leaf count 0 to 17, and loop through *each*
         // leaf index for MMR, modifying its membership proof with a
         // leaf update.
-        for leaf_count in 0..65 {
-            let leaf_hashes: Vec<blake3::Hash> = (543217893265643843678u128
-                ..543217893265643843678 + leaf_count)
-                .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
-                .collect();
-            let new_leaf = blake3::hash(
-                bincode::serialize(&133333333333333333333337u128)
-                    .expect("Encoding failed")
-                    .as_slice(),
-            );
+        for leaf_count in 0..=64 {
+            let start: u128 = 543217893265643843678;
+            let leaf_hashes: Vec<Digest> = (start..start + leaf_count).map(|x| x.into()).collect();
+            let new_leaf: Digest = 133333333333333333333337u128.into();
             let archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
 
             // Loop over all leaf indices that we want to modify in the MMR
             for i in 0..leaf_count {
                 let (leaf_mutation_membership_proof, _old_peaks): (
                     MembershipProof<Hasher>,
-                    Vec<blake3::Hash>,
+                    Vec<Digest>,
                 ) = archival_mmr.prove_membership(i);
                 let mut modified_archival_mmr = archival_mmr.clone();
                 modified_archival_mmr.mutate_leaf_raw(i, new_leaf);
@@ -757,18 +751,16 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_membership_proof_from_append_test_simple() {
+        type Digest = Blake3Hash;
+        type Hasher = blake3::Hasher;
+
         let leaf_count = 7;
-        let leaf_hashes: Vec<blake3::Hash> = (14u128..14 + leaf_count)
-            .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
-            .collect();
-        let new_leaf = blake3::hash(
-            bincode::serialize(&133337u128)
-                .expect("Encoding failed")
-                .as_slice(),
-        );
+        let leaf_hashes: Vec<Digest> = (14u128..14 + leaf_count).map(|x| x.into()).collect();
+        let new_leaf: Digest = 133337u128.into();
         let archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
+
         for i in 0..leaf_count {
-            let (mut membership_proof, old_peaks): (MembershipProof<Hasher>, Vec<blake3::Hash>) =
+            let (mut membership_proof, old_peaks): (MembershipProof<Hasher>, Vec<Digest>) =
                 archival_mmr.prove_membership(i);
             let mut appended_archival_mmr = archival_mmr.clone();
             appended_archival_mmr.append(new_leaf.clone());
@@ -800,25 +792,21 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_membership_proof_from_append_big_blake3() {
+        type Digest = Blake3Hash;
+        type Hasher = blake3::Hasher;
+
         // Build MMR from leaf count 0 to 514, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an
         // append update.
-        let new_leaf = blake3::hash(
-            bincode::serialize(&133333333333333333333337u128)
-                .expect("Encoding failed")
-                .as_slice(),
-        );
+        let new_leaf: Digest = 133333333333333333333337u128.into();
+
         for leaf_count in 0..514 {
-            let leaf_hashes: Vec<blake3::Hash> = (543217893265643843678u128
-                ..543217893265643843678 + leaf_count)
-                .map(|x| blake3::hash(bincode::serialize(&x).expect("Encoding failed").as_slice()))
-                .collect();
+            let start: u128 = 543217893265643843678;
+            let leaf_hashes: Vec<Digest> = (start..start + leaf_count).map(|x| x.into()).collect();
             let archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
             for i in 0..leaf_count {
-                let (mut membership_proof, old_peaks): (
-                    MembershipProof<Hasher>,
-                    Vec<blake3::Hash>,
-                ) = archival_mmr.prove_membership(i);
+                let (mut membership_proof, old_peaks): (MembershipProof<Hasher>, Vec<Digest>) =
+                    archival_mmr.prove_membership(i);
                 let mut appended_archival_mmr = archival_mmr.clone();
                 appended_archival_mmr.append(new_leaf.clone());
                 let new_peaks = appended_archival_mmr.get_peaks();
@@ -887,21 +875,23 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_membership_proof_from_append_big_rescue_prime() {
+        type Digest = Vec<BFieldElement>;
+        type Hasher = RescuePrimeProduction;
+
         // Build MMR from leaf count 0 to 9, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an
         // append update.
         let mut rp = RescuePrimeProduction::new();
         for leaf_count in 0..9 {
-            let leaf_hashes: Vec<Vec<BFieldElement>> = (1001..1001 + leaf_count)
+            let leaf_hashes: Vec<Digest> = (1001..1001 + leaf_count)
                 .map(|x| rp.hash(&vec![BFieldElement::new(x)]))
                 .collect();
-            let archival_mmr =
-                ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(leaf_hashes.clone());
+            let archival_mmr = ArchivalMmr::<RescuePrimeProduction>::new(leaf_hashes.clone());
             let new_leaf = rp.hash(&vec![BFieldElement::new(13333337)]);
             for i in 0..leaf_count {
                 let (original_membership_proof, old_peaks): (
-                    MembershipProof<Vec<BFieldElement>, RescuePrimeProduction>,
-                    Vec<Vec<BFieldElement>>,
+                    MembershipProof<RescuePrimeProduction>,
+                    Vec<Digest>,
                 ) = archival_mmr.prove_membership(i);
                 let mut appended_archival_mmr = archival_mmr.clone();
                 appended_archival_mmr.append(new_leaf.clone());

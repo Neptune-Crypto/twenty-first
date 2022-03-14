@@ -186,13 +186,14 @@ pub mod test_simple_hasher {
     #[test]
     fn blake3_digest_from_u128_test() {
         // Verify that u128 values can be converted into Blake3 hash input digests
-        let _128_val: blake3::Hash = 100u128.to_digest();
+        let _128_val: Blake3Hash = 100u128.into();
+        let Blake3Hash(inner) = _128_val;
         assert_eq!(
             vec![
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 100
             ],
-            _128_val.as_bytes()
+            inner.as_bytes()
         );
     }
 

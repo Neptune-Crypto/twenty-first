@@ -669,12 +669,14 @@ mod mmr_test {
 
     #[test]
     fn calculate_new_peaks_from_leaf_mutation_empty_mmr_test() {
+        type Digest = Vec<BFieldElement>;
+        type Hasher = RescuePrimeProduction;
+
         // Verify that the helper function `calculate_new_peaks_from_leaf_mutation` does
         // not crash if called on an empty list of peaks
-        let mut rp = RescuePrimeProduction::new();
+        let mut rp = Hasher::new();
         let new_leaf = rp.hash(&vec![BFieldElement::new(10000)]);
-        let acc =
-            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(vec![new_leaf.clone()]);
+        let acc = ArchivalMmr::<Hasher>::new(vec![new_leaf.clone()]);
         let mp = acc.prove_membership(0).0;
         assert!(
             calculate_new_peaks_from_leaf_mutation::<RescuePrimeProduction, Vec<BFieldElement>>(
