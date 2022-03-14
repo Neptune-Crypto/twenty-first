@@ -11,13 +11,9 @@ pub trait Hasher {
     type Digest: Eq;
 
     fn new() -> Self;
-    fn hash_one<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
-    fn hash_two<Value: ToDigest<Self::Digest>>(
-        &mut self,
-        left_input: &Value,
-        right_input: &Value,
-    ) -> Self::Digest;
-    fn hash_many<Value: ToDigest<Self::Digest>>(&mut self, inputs: &[Value]) -> Self::Digest;
+    fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
+    fn hash_pair(&mut self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest;
+    fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest;
 }
 
 /// In order to hash arbitrary things using a `Hasher`, it must `impl ToDigest<Digest>`
@@ -68,24 +64,21 @@ impl Hasher for blake3::Hasher {
         blake3::Hasher::new()
     }
 
-    fn hash_one<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
+    fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
         self.reset();
         self.update(input.to_digest().as_bytes());
         self.finalize()
     }
 
-    fn hash_two<Value: ToDigest<Self::Digest>>(
-        &mut self,
-        left: &Value,
-        right: &Value,
-    ) -> Self::Digest {
+    fn hash_pair(&mut self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
         self.reset();
         self.update(left.to_digest().as_bytes());
         self.update(right.to_digest().as_bytes());
         self.finalize()
     }
 
-    fn hash_many<Value: ToDigest<Self::Digest>>(&mut self, input: &[Value]) -> blake3::Hash {
+    // Uses blake3::Hasher's sponge
+    fn hash_many(&mut self, input: &[Self::Digest]) -> blake3::Hash {
         self.reset();
         for value in input {
             self.update(value.to_digest().as_bytes());
@@ -107,27 +100,22 @@ impl Hasher for RescuePrimeProduction {
         RescuePrimeProduction(rescue_prime_params::rescue_prime_params_bfield_0())
     }
 
-    fn hash_one<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
+    fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
         self.0.hash(&input.to_digest())
     }
 
-    // TODO: Avoid list copying.
-    fn hash_two<Value: ToDigest<Self::Digest>>(
-        &mut self,
-        left: &Value,
-        right: &Value,
-    ) -> Self::Digest {
-        let input: Vec<BFieldElement> = vec![left.to_digest(), right.to_digest()].concat();
+    fn hash_pair(&mut self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
+        let input: Vec<BFieldElement> = vec![left.clone(), right.clone()].concat();
         self.0.hash(&input)
     }
 
-    fn hash_many<Value: ToDigest<Self::Digest>>(&mut self, input: &[Value]) -> Self::Digest {
-        let mut input_: Vec<BFieldElement> = vec![];
-        for v in input.iter() {
-            let mut digest = v.to_digest().to_owned();
-            input_.append(&mut digest);
+    // TODO: Rewrite this when exposing RescuePrime's sponge
+    fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest {
+        let mut acc = inputs[0].clone();
+        for input in &inputs[1..] {
+            acc = self.hash_pair(&acc, input);
         }
-        self.0.hash(&input_)
+        acc
     }
 }
 
@@ -173,6 +161,7 @@ pub mod test_simple_hasher {
     #[test]
     fn rescue_prime_equivalence_test() {
         let mut rpp: RescuePrimeProduction = RescuePrimeProduction::new();
+
         let input0: Vec<BFieldElement> = vec![1u128, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             .into_iter()
             .map(BFieldElement::new)
@@ -184,7 +173,11 @@ pub mod test_simple_hasher {
             BFieldElement::new(4690418723130302842),
             BFieldElement::new(3079713491308723285),
         ];
-        assert_eq!(expected_output0, rpp.hash_one(&input0));
+        assert_eq!(
+            expected_output0,
+            rpp.hash(&input0),
+            "Hashing a single 1 produces a concrete 5-element output"
+        );
 
         let input2_left: Vec<BFieldElement> = vec![3, 1, 4, 1, 5]
             .into_iter()
@@ -205,20 +198,32 @@ pub mod test_simple_hasher {
         .map(BFieldElement::new)
         .collect();
 
-        assert_eq!(expected_output2, rpp.hash_two(&input2_left, &input2_right));
+        assert_eq!(
+            expected_output2,
+            rpp.hash_pair(&input2_left, &input2_right),
+            "Hashing two 5-element inputs produces a concrete 5-element output"
+        );
 
         let inputs_2: Vec<Vec<BFieldElement>> = vec![
-            vec![BFieldElement::new(3)],
-            vec![BFieldElement::new(1)],
-            vec![BFieldElement::new(4)],
-            vec![BFieldElement::new(1)],
-            vec![BFieldElement::new(5)],
-            vec![BFieldElement::new(9)],
-            vec![BFieldElement::new(2)],
-            vec![BFieldElement::new(6)],
-            vec![BFieldElement::new(5)],
-            vec![BFieldElement::new(3)],
+            vec![
+                BFieldElement::new(3),
+                BFieldElement::new(1),
+                BFieldElement::new(4),
+                BFieldElement::new(1),
+                BFieldElement::new(5),
+            ],
+            vec![
+                BFieldElement::new(9),
+                BFieldElement::new(2),
+                BFieldElement::new(6),
+                BFieldElement::new(5),
+                BFieldElement::new(3),
+            ],
         ];
-        assert_eq!(expected_output2, rpp.hash_many(&inputs_2));
+        assert_eq!(
+            expected_output2,
+            rpp.hash_many(&inputs_2),
+            "Hashing many (two) 5-element inputs corresponds to iteratively hashing two elements"
+        );
     }
 }

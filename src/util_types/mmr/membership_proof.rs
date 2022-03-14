@@ -60,9 +60,9 @@ where
         for hash in self.authentication_path.iter() {
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
             acc_hash = if acc_right {
-                hasher.hash_two(hash, &acc_hash)
+                hasher.hash_pair(hash, &acc_hash)
             } else {
-                hasher.hash_two(&acc_hash, hash)
+                hasher.hash_pair(&acc_hash, hash)
             };
             acc_index = parent(acc_index);
         }
@@ -190,7 +190,7 @@ where
             known_digests.insert(*node_index, acc_hash.to_owned());
 
             // peaks are always left children, so we don't have to check for that
-            acc_hash = hasher.hash_two(old_peak_digest, &acc_hash);
+            acc_hash = hasher.hash_pair(old_peak_digest, &acc_hash);
 
             // once we encouter the first of the needed accumulator indices,
             // we can break. Just like we could in the update for the leaf update
@@ -259,7 +259,7 @@ where
             }
 
             // peaks are always left children, so we don't have to check for that
-            acc_hash = hasher.hash_two(old_peak_digest, &acc_hash);
+            acc_hash = hasher.hash_pair(old_peak_digest, &acc_hash);
         }
 
         // Loop over all membership proofs and insert missing hashes for each
@@ -354,9 +354,9 @@ where
 
             let (acc_right, _acc_height) = right_child_and_height(node_index);
             acc_hash = if acc_right {
-                hasher.hash_two(hash, &acc_hash)
+                hasher.hash_pair(hash, &acc_hash)
             } else {
-                hasher.hash_two(&acc_hash, hash)
+                hasher.hash_pair(&acc_hash, hash)
             };
             node_index = parent(node_index);
             deducible_hashes.insert(node_index, acc_hash.clone());
@@ -415,9 +415,9 @@ where
             }
             let (acc_right, _acc_height) = right_child_and_height(node_index);
             acc_hash = if acc_right {
-                hasher.hash_two(hash, &acc_hash)
+                hasher.hash_pair(hash, &acc_hash)
             } else {
-                hasher.hash_two(&acc_hash, hash)
+                hasher.hash_pair(&acc_hash, hash)
             };
             node_index = parent(node_index);
             deducible_hashes.insert(node_index, acc_hash.clone());
@@ -912,11 +912,11 @@ mod mmr_membership_proof_test {
         let mut rp = RescuePrimeProduction::new();
         for leaf_count in 0..9 {
             let leaf_hashes: Vec<Vec<BFieldElement>> = (1001..1001 + leaf_count)
-                .map(|x| rp.hash_one(&vec![BFieldElement::new(x)]))
+                .map(|x| rp.hash(&vec![BFieldElement::new(x)]))
                 .collect();
             let archival_mmr =
                 ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(leaf_hashes.clone());
-            let new_leaf = rp.hash_one(&vec![BFieldElement::new(13333337)]);
+            let new_leaf = rp.hash(&vec![BFieldElement::new(13333337)]);
             for i in 0..leaf_count {
                 let (original_membership_proof, old_peaks): (
                     MembershipProof<Vec<BFieldElement>, RescuePrimeProduction>,

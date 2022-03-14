@@ -139,12 +139,12 @@ where
         while parent_index < self.digests.len() as u128 {
             let (is_right, height) = right_child_and_height(node_index);
             acc_hash = if is_right {
-                hasher.hash_two(
+                hasher.hash_pair(
                     &self.digests[left_sibling(node_index, height) as usize],
                     &acc_hash,
                 )
             } else {
-                hasher.hash_two(
+                hasher.hash_pair(
                     &acc_hash,
                     &self.digests[right_sibling(node_index, height) as usize],
                 )
@@ -255,7 +255,7 @@ where
             let left_sibling_hash =
                 self.digests[left_sibling(node_index, own_height) as usize].clone();
             let mut hasher = H::new();
-            let parent_hash: HashDigest = hasher.hash_two(&left_sibling_hash, &new_leaf);
+            let parent_hash: HashDigest = hasher.hash_pair(&left_sibling_hash, &new_leaf);
             self.append_raw(parent_hash);
         }
     }
@@ -400,7 +400,7 @@ mod mmr_test {
     fn update_leaf_archival_test() {
         let mut rp = RescuePrimeProduction::new();
         let leaf_hashes: Vec<Vec<BFieldElement>> = (14..17)
-            .map(|x| rp.hash_one(&vec![BFieldElement::new(x)]))
+            .map(|x| rp.hash(&vec![BFieldElement::new(x)]))
             .collect();
         let mut archival_mmr =
             ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(leaf_hashes.clone());
@@ -409,7 +409,7 @@ mod mmr_test {
             Vec<Vec<BFieldElement>>,
         ) = archival_mmr.prove_membership(2);
         assert!(mp.verify(&old_peaks, &leaf_hashes[2], 3).0);
-        let new_leaf = rp.hash_one(&vec![BFieldElement::new(10000)]);
+        let new_leaf = rp.hash(&vec![BFieldElement::new(10000)]);
 
         let mut archival_mmr_clone = archival_mmr.clone();
         archival_mmr_clone.mutate_leaf(&archival_mmr_clone.prove_membership(2).0, &new_leaf);
@@ -432,9 +432,9 @@ mod mmr_test {
         // Create a new archival MMR with the same leaf hashes as in the
         // modified MMR, and verify that the two MMRs are equivalent
         let leaf_hashes_new = vec![
-            rp.hash_one(&vec![BFieldElement::new(14)]),
-            rp.hash_one(&vec![BFieldElement::new(15)]),
-            rp.hash_one(&vec![BFieldElement::new(10000)]),
+            rp.hash(&vec![BFieldElement::new(14)]),
+            rp.hash(&vec![BFieldElement::new(15)]),
+            rp.hash(&vec![BFieldElement::new(10000)]),
         ];
         let archival_mmr_new =
             ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(leaf_hashes_new);
@@ -656,7 +656,7 @@ mod mmr_test {
     fn one_input_mmr_test() {
         let element = vec![BFieldElement::new(14)];
         let mut rp = RescuePrimeProduction::new();
-        let input_hash = rp.hash_one(&element);
+        let input_hash = rp.hash(&element);
         let mut mmr =
             ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(vec![input_hash.clone()]);
         assert_eq!(1, mmr.count_leaves());
@@ -672,7 +672,7 @@ mod mmr_test {
         assert!(valid_res.0);
         assert!(valid_res.1.is_some());
 
-        let new_input_hash = rp.hash_one(&vec![BFieldElement::new(201)]);
+        let new_input_hash = rp.hash(&vec![BFieldElement::new(201)]);
         let original_mmr = mmr.clone();
         mmr.append(new_input_hash.clone());
         assert_eq!(2, mmr.count_leaves());
@@ -689,7 +689,7 @@ mod mmr_test {
         );
 
         let mmr_after_append = mmr.clone();
-        let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
+        let new_leaf: Vec<BFieldElement> = rp.hash(&vec![BFieldElement::new(987223)]);
 
         // When verifying the batch update with two consequtive leaf mutations, we must get the
         // membership proofs prior to all mutations. This is because the `verify_batch_update` method
@@ -720,7 +720,7 @@ mod mmr_test {
     fn two_input_mmr_test() {
         let values: Vec<Vec<BFieldElement>> = (0..2).map(|x| vec![BFieldElement::new(x)]).collect();
         let mut rp = RescuePrimeProduction::new();
-        let input_hashes: Vec<Vec<BFieldElement>> = values.iter().map(|x| rp.hash_one(x)).collect();
+        let input_hashes: Vec<Vec<BFieldElement>> = values.iter().map(|x| rp.hash(x)).collect();
         let mut mmr =
             ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(input_hashes.clone());
         assert_eq!(2, mmr.count_leaves());
@@ -743,13 +743,13 @@ mod mmr_test {
                 .0
         );
 
-        let new_leaf_hash: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(201)]);
+        let new_leaf_hash: Vec<BFieldElement> = rp.hash(&vec![BFieldElement::new(201)]);
         mmr.append(new_leaf_hash.clone());
         assert_eq!(3, mmr.count_leaves());
         assert_eq!(4, mmr.count_nodes());
 
         for &data_index in &[0u128, 1, 2] {
-            let new_leaf: Vec<BFieldElement> = rp.hash_one(&vec![BFieldElement::new(987223)]);
+            let new_leaf: Vec<BFieldElement> = rp.hash(&vec![BFieldElement::new(987223)]);
             let mp = mmr.prove_membership(data_index).0;
             mmr.mutate_leaf(&mp, &new_leaf);
             assert_eq!(new_leaf, mmr.get_leaf(data_index));

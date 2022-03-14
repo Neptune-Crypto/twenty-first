@@ -124,9 +124,9 @@ where
         for hash in old_membership_proof.authentication_path.iter() {
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
             acc_hash = if acc_right {
-                hasher.hash_two(hash, &acc_hash)
+                hasher.hash_pair(hash, &acc_hash)
             } else {
-                hasher.hash_two(&acc_hash, hash)
+                hasher.hash_pair(&acc_hash, hash)
             };
             acc_index = parent(acc_index);
         }

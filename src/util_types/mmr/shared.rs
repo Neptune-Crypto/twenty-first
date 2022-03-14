@@ -303,7 +303,7 @@ pub fn calculate_new_peaks_from_append<
         membership_proof
             .authentication_path
             .push(previous_peak.clone());
-        peaks.push(hasher.hash_two(&previous_peak, &new_hash));
+        peaks.push(hasher.hash_pair(&previous_peak, &new_hash));
         new_node_index += 1;
         new_node_is_right_child = right_child_and_height(new_node_index).0;
     }
@@ -333,9 +333,9 @@ where
     for hash in membership_proof.authentication_path.iter() {
         let (acc_right, _acc_height) = right_child_and_height(acc_index);
         acc_hash = if acc_right {
-            hasher.hash_two(hash, &acc_hash)
+            hasher.hash_pair(hash, &acc_hash)
         } else {
-            hasher.hash_two(&acc_hash, hash)
+            hasher.hash_pair(&acc_hash, hash)
         };
         acc_index = parent(acc_index);
     }
@@ -378,12 +378,12 @@ where
     let mut hasher: H = H::new();
 
     if peaks_count == 0 {
-        return hasher.hash_one(&0u128.to_digest());
+        return hasher.hash(&0u128.to_digest());
     }
 
-    let mut acc: HashDigest = hasher.hash_two(&node_count.to_digest(), &peaks[peaks_count - 1]);
+    let mut acc: HashDigest = hasher.hash_pair(&node_count.to_digest(), &peaks[peaks_count - 1]);
     for i in 1..peaks_count {
-        acc = hasher.hash_two(&peaks[peaks_count - 1 - i], &acc);
+        acc = hasher.hash_pair(&peaks[peaks_count - 1 - i], &acc);
     }
 
     acc
@@ -671,7 +671,7 @@ mod mmr_test {
         // Verify that the helper function `calculate_new_peaks_from_leaf_mutation` does
         // not crash if called on an empty list of peaks
         let mut rp = RescuePrimeProduction::new();
-        let new_leaf = rp.hash_one(&vec![BFieldElement::new(10000)]);
+        let new_leaf = rp.hash(&vec![BFieldElement::new(10000)]);
         let acc =
             ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(vec![new_leaf.clone()]);
         let mp = acc.prove_membership(0).0;
