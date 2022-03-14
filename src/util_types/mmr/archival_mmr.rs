@@ -98,7 +98,7 @@ where
             "membership proof argument list must match internally calculated"
         );
 
-        self.update_leaf_raw(real_membership_proof.data_index, new_leaf.to_owned())
+        self.mutate_leaf_raw(real_membership_proof.data_index, new_leaf.to_owned())
     }
 
     fn verify_batch_update(
@@ -125,7 +125,7 @@ where
     }
 
     /// Update a hash in the existing archival MMR
-    pub fn update_leaf_raw(&mut self, data_index: u128, new_leaf: HashDigest) {
+    pub fn mutate_leaf_raw(&mut self, data_index: u128, new_leaf: HashDigest) {
         // 1. change the leaf value
         let mut node_index = data_index_to_node_index(data_index);
         self.digests[node_index as usize] = new_leaf.clone();
@@ -397,7 +397,7 @@ mod mmr_test {
     }
 
     #[test]
-    fn update_leaf_archival_test() {
+    fn mutate_leaf_archival_test() {
         let mut rp = RescuePrimeProduction::new();
         let leaf_hashes: Vec<Vec<BFieldElement>> = (14..17)
             .map(|x| rp.hash(&vec![BFieldElement::new(x)]))
@@ -414,7 +414,7 @@ mod mmr_test {
         let mut archival_mmr_clone = archival_mmr.clone();
         archival_mmr_clone.mutate_leaf(&archival_mmr_clone.prove_membership(2).0, &new_leaf);
         let new_peaks_clone = archival_mmr_clone.get_peaks();
-        archival_mmr.update_leaf_raw(2, new_leaf.clone());
+        archival_mmr.mutate_leaf_raw(2, new_leaf.clone());
         let new_peaks = archival_mmr.get_peaks();
         assert_eq!(
             new_peaks, new_peaks_clone,
@@ -506,7 +506,7 @@ mod mmr_test {
     }
 
     #[test]
-    fn accumulator_mmr_update_leaf_test() {
+    fn accumulator_mmr_mutate_leaf_test() {
         // Verify that upating leafs in archival and in accumulator MMR results in the same peaks
         // and verify that updating all leafs in an MMR results in the expected MMR
         for size in 1..150 {
@@ -528,7 +528,7 @@ mod mmr_test {
                 let (mp, _archival_peaks) = archival.prove_membership(i);
                 assert_eq!(i, mp.data_index);
                 acc.mutate_leaf(&mp, &new_leaf);
-                archival.update_leaf_raw(i, new_leaf);
+                archival.mutate_leaf_raw(i, new_leaf);
                 let new_archival_peaks = archival.get_peaks();
                 assert_eq!(new_archival_peaks, acc.get_peaks());
             }
@@ -538,7 +538,7 @@ mod mmr_test {
     }
 
     #[test]
-    fn mmr_prove_verify_leaf_update_test() {
+    fn mmr_prove_verify_leaf_mutation_test() {
         for size in 1..150 {
             let new_leaf = blake3::hash(
                 bincode::serialize(&314159265358979u128)
@@ -564,7 +564,7 @@ mod mmr_test {
                 assert_eq!(archival.get_peaks(), peaks_before_update);
 
                 // Verify the update operation using the batch verifier
-                archival.update_leaf_raw(i, new_leaf);
+                archival.mutate_leaf_raw(i, new_leaf);
                 assert!(
                     acc.verify_batch_update(&archival.get_peaks(), &[], &[(new_leaf, mp.clone())]),
                     "Valid batch update parameters must succeed"
@@ -859,8 +859,6 @@ mod mmr_test {
                         .expect("Encoding failed")
                         .as_slice(),
                 );
-                // let mut leaf_update_proof = mmr.prove_update_leaf_raw(data_index, &new_leaf);
-                // assert!(leaf_update_proof.verify(&new_leaf, data_size));
 
                 // The below verify_modify tests should only fail if `wrong_data_index` is
                 // different than `data_index`.
@@ -874,13 +872,13 @@ mod mmr_test {
 
                 // Modify an element in the MMR and run prove/verify for membership
                 let old_leaf = input_hashes[data_index as usize];
-                mmr.update_leaf_raw(data_index, new_leaf.clone());
+                mmr.mutate_leaf_raw(data_index, new_leaf.clone());
                 let (new_mp, new_peaks) = mmr.prove_membership(data_index);
                 assert!(new_mp.verify(&new_peaks, &new_leaf, data_size).0);
                 assert!(!new_mp.verify(&new_peaks, &old_leaf, data_size).0);
 
                 // Return the element to its former value and run prove/verify for membership
-                mmr.update_leaf_raw(data_index, old_leaf.clone());
+                mmr.mutate_leaf_raw(data_index, old_leaf.clone());
                 let (old_mp, old_peaks) = mmr.prove_membership(data_index);
                 assert!(!old_mp.verify(&old_peaks, &new_leaf, data_size).0);
                 assert!(old_mp.verify(&old_peaks, &old_leaf, data_size).0);
