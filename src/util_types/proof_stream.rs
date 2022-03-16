@@ -161,17 +161,6 @@ pub mod test_proof_stream {
         assert_eq!(0, proof_stream.get_read_index());
     }
 
-    #[test]
-    fn ps_blake3_wrapper_bincode_test() {
-        let zero: Blake3Hash = [0; 32].into();
-
-        let res_bytes = bincode::serialize(&zero);
-        let bytes = res_bytes.unwrap();
-
-        assert_eq!(std::mem::size_of::<Blake3Hash>(), 32);
-        assert_eq!(bytes.len(), 40);
-    }
-
     // make random Blake3Hash'es
     // push to stream
     // pop
