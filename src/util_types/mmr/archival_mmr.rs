@@ -486,7 +486,6 @@ mod mmr_test {
 
     #[test]
     fn bag_peaks_blake3_test() {
-        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
         // Then with a bigger dataset
@@ -703,7 +702,6 @@ mod mmr_test {
 
     #[test]
     fn two_input_mmr_test() {
-        type Digest = Vec<BFieldElement>;
         type Hasher = RescuePrimeProduction;
 
         let values: Vec<Vec<BFieldElement>> = (0..2).map(|x| vec![BFieldElement::new(x)]).collect();
@@ -745,7 +743,6 @@ mod mmr_test {
 
     #[test]
     fn variable_size_rescue_prime_mmr_test() {
-        type Digest = Vec<BFieldElement>;
         type Hasher = RescuePrimeProduction;
 
         let node_counts: Vec<u128> = vec![
@@ -818,7 +815,6 @@ mod mmr_test {
         for (data_size, node_count, peak_count) in
             izip!((1u128..34).collect::<Vec<u128>>(), node_counts, peak_counts)
         {
-            let mut hasher = Hasher::new();
             let input_prehashes: Vec<Digest> = (0..data_size).map(|x| (x + 14).into()).collect();
 
             // XXX: We feed prehashes directly into the ArchivalMmr here instead.

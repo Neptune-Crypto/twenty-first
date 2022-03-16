@@ -1,4 +1,5 @@
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 use crate::shared_math::rescue_prime::RescuePrime;
 use crate::shared_math::rescue_prime_params;
 use crate::shared_math::x_field_element::XFieldElement;
@@ -43,6 +44,15 @@ pub trait Hasher {
 /// order to
 pub trait ToDigest<Digest> {
     fn to_digest(&self) -> Digest;
+}
+
+impl ToDigest<Blake3Hash> for PrimeFieldElementFlexible {
+    fn to_digest(&self) -> Blake3Hash {
+        let bytes = bincode::serialize(&self).unwrap();
+        let digest = Blake3Hash(blake3::hash(bytes.as_slice()));
+
+        digest
+    }
 }
 
 // The specification for MMR from mimblewimble specifies that the

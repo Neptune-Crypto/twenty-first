@@ -669,7 +669,6 @@ mod mmr_test {
 
     #[test]
     fn calculate_new_peaks_from_leaf_mutation_empty_mmr_test() {
-        type Digest = Vec<BFieldElement>;
         type Hasher = RescuePrimeProduction;
 
         // Verify that the helper function `calculate_new_peaks_from_leaf_mutation` does

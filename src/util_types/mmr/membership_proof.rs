@@ -462,9 +462,6 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn equality_test() {
-        type Digest = Blake3Hash;
-        type Hasher = blake3::Hasher;
-
         let mp0: MembershipProof<Hasher> = MembershipProof {
             authentication_path: vec![],
             data_index: 4,
@@ -876,7 +873,6 @@ mod mmr_membership_proof_test {
     #[test]
     fn update_membership_proof_from_append_big_rescue_prime() {
         type Digest = Vec<BFieldElement>;
-        type Hasher = RescuePrimeProduction;
 
         // Build MMR from leaf count 0 to 9, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an

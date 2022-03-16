@@ -422,11 +422,8 @@ impl RescuePrime {
 
 #[cfg(test)]
 mod rescue_prime_start_test {
-    use crate::{
-        shared_math::traits::GetPrimitiveRootOfUnity, util_types::proof_stream::ProofStream,
-    };
-
     use super::*;
+    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
 
     #[test]
     fn hash_test_vectors() {

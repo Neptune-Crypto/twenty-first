@@ -515,6 +515,9 @@ where
     }
 }
 
+type SaltedMultiProof<Value, Digest> =
+    [(LeaflessPartialAuthenticationPath<Digest>, Vec<Value>, Value)];
+
 #[derive(Clone, Debug)]
 pub struct SaltedMerkleTree<Value, H>
 where
@@ -679,11 +682,7 @@ where
     pub fn verify_leafless_multi_proof_with_salts_and_values(
         root_hash: H::Digest,
         indices: &[usize],
-        proof: &[(
-            LeaflessPartialAuthenticationPath<H::Digest>,
-            Vec<Value>,
-            Value,
-        )],
+        proof: &SaltedMultiProof<Value, H::Digest>,
     ) -> bool {
         let values: Vec<Value> = proof.iter().map(|x| x.2.clone()).collect();
         let auth_paths_and_salts: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, Vec<Value>)> =
@@ -795,7 +794,7 @@ mod merkle_tree_test {
                     .all(|(i, (_auth_path, value))| *value == elements[indices_usize[i]]));
 
                 // manipulate Merkle root and verify failure
-                let mut bad_root_hash = bad_blake3_hash(mt_32_orig_root_hash);
+                let bad_root_hash = bad_blake3_hash(mt_32_orig_root_hash);
 
                 assert!(
                     !MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
@@ -855,12 +854,10 @@ mod merkle_tree_test {
 
     #[test]
     fn merkle_tree_verify_multi_proof_degenerate_test() {
-        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
         let mut rng = rand::thread_rng();
 
         // Number of Merkle tree leaves
-        let n_values = 8;
         let elements: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
         let zero = BFieldElement::ring_zero();
         let tree = MerkleTree::<BFieldElement, Hasher>::from_vec(&elements, &zero);
@@ -941,7 +938,6 @@ mod merkle_tree_test {
 
     #[test]
     fn merkle_tree_verify_leafless_multi_proof_test() {
-        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
         let mut prng = rand::thread_rng();
@@ -993,7 +989,7 @@ mod merkle_tree_test {
 
                 // Corrupt the root and thereby the tree
                 let orig_root_hash = tree.root_hash;
-                let mut bad_root_hash = bad_blake3_hash(tree.root_hash);
+                let bad_root_hash = bad_blake3_hash(tree.root_hash);
                 let verified = MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
                     bad_root_hash,
                     &indices,
@@ -1029,7 +1025,6 @@ mod merkle_tree_test {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
-        let mut prng = rand::thread_rng();
         let zero = BFieldElement::ring_zero();
         let one = BFieldElement::ring_one();
         let two = BFieldElement::new(2);
@@ -1197,7 +1192,6 @@ mod merkle_tree_test {
 
     #[test]
     fn merkle_tree_get_authentication_path_test() {
-        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
         // 1: Create Merkle tree
@@ -1429,7 +1423,7 @@ mod merkle_tree_test {
             "sibling e"
         );
 
-        let mut root_hash_b = tree_b.get_root();
+        let root_hash_b = tree_b.get_root();
         assert!(Smt::verify_authentication_path(
             *root_hash_b,
             6,
@@ -1503,7 +1497,7 @@ mod merkle_tree_test {
             &auth_paths_salts_values
         ));
 
-        let mut bad_root_hash_b = bad_blake3_hash(*root_hash_b);
+        let bad_root_hash_b = bad_blake3_hash(*root_hash_b);
         assert!(!Smt::verify_leafless_multi_proof_with_salts_and_values(
             bad_root_hash_b.into(),
             &[0, 1],
@@ -1590,7 +1584,7 @@ mod merkle_tree_test {
         ));
 
         // Change root hash again, verify failue
-        let mut another_bad_root_hash_b = bad_blake3_hash(*root_hash_b);
+        let another_bad_root_hash_b = bad_blake3_hash(*root_hash_b);
         assert!(!Smt::verify_leafless_multi_proof(
             another_bad_root_hash_b.into(),
             &[0, 1, 2, 4, 7],
@@ -1601,7 +1595,6 @@ mod merkle_tree_test {
 
     #[test]
     fn salted_merkle_tree_get_authentication_path_xfields_test() {
-        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
         type SMT = SaltedMerkleTree<XFieldElement, Hasher>;
 
@@ -1713,7 +1706,6 @@ mod merkle_tree_test {
 
     #[test]
     fn salted_merkle_tree_regression_test_0() {
-        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
         type SMT = SaltedMerkleTree<BFieldElement, Hasher>;
 
@@ -1812,7 +1804,7 @@ mod merkle_tree_test {
                     &indices,
                     &proof,
                 ));
-                let mut bad_root_hash = bad_blake3_hash(*tree.get_root());
+                let bad_root_hash = bad_blake3_hash(*tree.get_root());
                 assert!(!SMT::verify_leafless_multi_proof_with_salts_and_values(
                     bad_root_hash.into(),
                     &indices,

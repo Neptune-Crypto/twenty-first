@@ -1,6 +1,6 @@
 use super::prime_field_element_flexible::PrimeFieldElementFlexible;
-// use super::stark_pfe_flexible::{StarkPrimeFieldElementFlexible, DOCUMENT_HASH_LENGTH};
-// use super::traits::FromVecu8;
+use super::stark_pfe_flexible::{StarkPrimeFieldElementFlexible, DOCUMENT_HASH_LENGTH};
+use super::traits::FromVecu8;
 use crate::shared_math::rescue_prime_pfe_flexible::RescuePrime;
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils::blake3_digest;
