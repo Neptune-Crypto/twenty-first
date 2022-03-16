@@ -3,6 +3,7 @@ use crate::shared_math::rescue_prime::RescuePrime;
 use crate::shared_math::rescue_prime_params;
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::util_types::blake3_wrapper::Blake3Hash;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 /// A simple `Hasher` trait that allows for hashing one, two or many values into one digest.
 ///
@@ -10,7 +11,13 @@ use serde::{Deserialize, Serialize};
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
 pub trait Hasher {
-    type Digest: ToDigest<Self::Digest> + PartialEq + Clone + std::fmt::Debug;
+    type Digest: ToDigest<Self::Digest>
+        + PartialEq
+        + Clone
+        + std::fmt::Debug
+        + Serialize
+        + DeserializeOwned
+        + Sized;
 
     fn new() -> Self;
     fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;

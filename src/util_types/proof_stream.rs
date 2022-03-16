@@ -147,12 +147,8 @@ impl ProofStream {
 
 #[cfg(test)]
 pub mod test_proof_stream {
-
-    use crate::{
-        shared_math::b_field_element::BFieldElement, util_types::blake3_wrapper::Blake3Hash,
-    };
-
     use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
 
     #[test]
     fn ps_test_default_empty_initiation() {
@@ -185,7 +181,7 @@ pub mod test_proof_stream {
         let mut ps = ProofStream::default();
 
         let bfe_before = BFieldElement::new(213 as u128);
-        ps.enqueue_length_prepended(&bfe_before);
+        assert!(ps.enqueue_length_prepended(&bfe_before).is_ok());
         let bfe_after = ps.dequeue_length_prepended().unwrap();
 
         assert_eq!(
@@ -207,8 +203,8 @@ pub mod test_proof_stream {
         let bfe2_before = BFieldElement::new(783 as u128);
 
         let mut ps = ProofStream::default();
-        ps.enqueue_length_prepended(&bfe1_before);
-        ps.enqueue_length_prepended(&bfe2_before);
+        assert!(ps.enqueue_length_prepended(&bfe1_before).is_ok());
+        assert!(ps.enqueue_length_prepended(&bfe2_before).is_ok());
 
         let bfe1_after = ps.dequeue_length_prepended().unwrap();
         let bfe2_after = ps.dequeue_length_prepended().unwrap();
@@ -225,13 +221,13 @@ pub mod test_proof_stream {
     }
 
     #[test]
-    fn ps_is_FIFO_no_LIFO() {
+    fn ps_is_fifo_no_lifo() {
         let bfe1_before = BFieldElement::new(213 as u128);
         let bfe2_before = BFieldElement::new(783 as u128);
 
         let mut ps = ProofStream::default();
-        ps.enqueue_length_prepended(&bfe1_before);
-        ps.enqueue_length_prepended(&bfe2_before);
+        assert!(ps.enqueue_length_prepended(&bfe1_before).is_ok());
+        assert!(ps.enqueue_length_prepended(&bfe2_before).is_ok());
 
         // Intentionally wrong order
         let bfe2_after_phoney = ps.dequeue_length_prepended().unwrap();

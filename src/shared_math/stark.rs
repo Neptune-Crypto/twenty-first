@@ -11,8 +11,9 @@ use crate::shared_math::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomEl
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::blake3_wrapper::Blake3Hash;
-use crate::util_types::merkle_tree::LeaflessPartialAuthenticationPath;
-use crate::util_types::merkle_tree::{MerkleTree, SaltedMerkleTree};
+use crate::util_types::merkle_tree::{
+    LeaflessPartialAuthenticationPath, MerkleTree, SaltedMerkleTree,
+};
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils;
 use rand::prelude::ThreadRng;
@@ -115,9 +116,9 @@ impl fmt::Display for StarkVerifyError {
 
 type Digest = Blake3Hash;
 type Hasher = blake3::Hasher;
-type SMT = SaltedMerkleTree<BFieldElement, Blake3Hash, blake3::Hasher>;
-type XMT = MerkleTree<XFieldElement, Blake3Hash, blake3::Hasher>;
-type XFri = Fri<XFieldElement, Digest, Hasher>;
+type Smt = SaltedMerkleTree<BFieldElement, blake3::Hasher>;
+type Xmt = MerkleTree<XFieldElement, blake3::Hasher>;
+type XFri = Fri<XFieldElement, Hasher>;
 
 impl Stark {
     pub fn prove(
@@ -253,11 +254,11 @@ impl Stark {
         timer.elapsed("calculate boundary quotients");
 
         // Commit to boundary quotients
-        let mut boundary_quotient_merkle_trees: Vec<SMT> = vec![];
+        let mut boundary_quotient_merkle_trees: Vec<Smt> = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<BFieldElement> =
                 bq.fast_coset_evaluate(&self.field_generator, omega, fri_domain_length as usize);
-            let bq_merkle_tree = SMT::from_vec(
+            let bq_merkle_tree = Smt::from_vec(
                 &boundary_quotient_codeword,
                 &BFieldElement::ring_zero(),
                 B_FIELD_ELEMENT_SALTS_PER_VALUE,
@@ -386,7 +387,7 @@ impl Stark {
             lifted_omega,
             fri_domain_length as usize,
         );
-        let randomizer_mt: XMT = XMT::from_vec(&randomizer_codeword, &XFieldElement::ring_zero());
+        let randomizer_mt: Xmt = Xmt::from_vec(&randomizer_codeword, &XFieldElement::ring_zero());
         let randomizer_mt_root = randomizer_mt.get_root();
         proof_stream.enqueue(randomizer_mt_root)?;
 
@@ -475,7 +476,7 @@ impl Stark {
         timer.elapsed("calculate fast_coset_evaluate of combination polynomial");
 
         // Prove low degree of combination polynomial, and collect indices
-        let fri = Fri::<XFieldElement, Blake3Hash, blake3::Hasher>::new(
+        let fri = XFri::new(
             lifted_field_generator,
             lifted_omega,
             fri_domain_length as usize,
@@ -613,7 +614,7 @@ impl Stark {
                 Vec<BFieldElement>,
                 BFieldElement,
             )> = proof_stream.dequeue_length_prepended()?;
-            let valid = SMT::verify_leafless_multi_proof_with_salts_and_values(
+            let valid = Smt::verify_leafless_multi_proof_with_salts_and_values(
                 bq_root,
                 &duplicated_indices,
                 &proofs,
@@ -635,7 +636,7 @@ impl Stark {
         // Read and verify randomizer leafs
         let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath<Digest>, XFieldElement)> =
             proof_stream.dequeue_length_prepended()?;
-        let valid = XMT::verify_leafless_multi_proof(
+        let valid = Xmt::verify_leafless_multi_proof(
             randomizer_mt_root,
             &duplicated_indices,
             &randomizer_auth_paths,
