@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// The type of digest is determined by the `impl` of a given `Hasher`, and it requires that
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
-pub trait Hasher {
+pub trait Hasher: Sized {
     type Digest: ToDigest<Self::Digest>
         + PartialEq
         + Clone

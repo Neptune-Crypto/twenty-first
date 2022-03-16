@@ -12,21 +12,33 @@ use super::shared::{
     node_indices_added_by_append, parent, right_child_and_height, right_sibling,
 };
 
-// HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MembershipProof<H>
 where
-    H: Hasher + Clone,
+    H: Hasher + Sized,
 {
     pub data_index: u128,
     pub authentication_path: Vec<H::Digest>,
     pub _hasher: PhantomData<H>,
 }
 
+impl<H> Clone for MembershipProof<H>
+where
+    H: Hasher,
+{
+    fn clone(&self) -> Self {
+        Self {
+            data_index: self.data_index,
+            authentication_path: self.authentication_path.clone(),
+            _hasher: PhantomData,
+        }
+    }
+}
+
 impl<HashDigest: PartialEq, H> PartialEq for MembershipProof<H>
 where
     HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-    H: Hasher<Digest = HashDigest> + Clone,
+    H: Hasher<Digest = HashDigest>,
 {
     // Two membership proofs are considered equal if they contain the same authentication path
     // *and* point to the same data index
@@ -462,6 +474,8 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn equality_test() {
+        type Hasher = blake3::Hasher;
+
         let mp0: MembershipProof<Hasher> = MembershipProof {
             authentication_path: vec![],
             data_index: 4,
