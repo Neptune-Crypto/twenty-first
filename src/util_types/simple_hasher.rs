@@ -106,6 +106,15 @@ impl ToDigest<Vec<BFieldElement>> for Vec<BFieldElement> {
     }
 }
 
+/// Trivial implementation when hashing `Vec<BFieldElement>` into `BFieldElement`.
+impl ToDigest<Vec<BFieldElement>> for BFieldElement {
+    fn to_digest(&self) -> Vec<BFieldElement> {
+        let mut digest = vec![*self];
+        digest.append(&mut vec![BFieldElement::ring_zero(); 4]);
+        digest
+    }
+}
+
 // TODO: This 'Blake3Hash' wrapper looks messy, but at least it is contained here. Can we move it to 'blake3_wrapper'?
 impl Hasher for blake3::Hasher {
     type Digest = Blake3Hash;

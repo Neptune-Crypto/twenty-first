@@ -734,6 +734,7 @@ mod merkle_tree_test {
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::blake3_wrapper::Blake3Hash;
+    use crate::util_types::simple_hasher::RescuePrimeProduction;
     use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
     use itertools::Itertools;
     use rand::RngCore;
@@ -1836,5 +1837,53 @@ mod merkle_tree_test {
                 ));
             }
         }
+    }
+
+    #[test]
+    fn verify_all_leaves_individually() {
+        /*
+        Essentially this:
+        ```
+        from_vec
+
+        for each leaf:
+            get ap
+            verify(leaf, ap)
+        ```
+        */
+
+        type Value = BFieldElement;
+        type Hasher = RescuePrimeProduction;
+        type MT = MerkleTree<Value, Hasher>;
+
+        let zero = BFieldElement::ring_zero();
+
+        let exponent = 6;
+        let num_leaves = usize::pow(2, exponent);
+        assert!(
+            other::is_power_of_two(num_leaves),
+            "Size of input for Merkle tree must be a power of 2"
+        );
+
+        let leaves: Vec<BFieldElement> = (0..num_leaves as u128)
+            .map(|i| BFieldElement::new(i))
+            .collect();
+
+        let tree = MT::from_vec(&leaves[..], &zero);
+
+        assert_eq!(
+            tree.get_number_of_leafs(),
+            num_leaves,
+            "All leaves should have been added to the Merkle tree."
+        );
+
+        let root_hash = tree.get_root().to_owned();
+
+        let res = leaves.iter().enumerate().all(|(leaf_idx, leaf)| {
+            let ap = tree.get_authentication_path(leaf_idx);
+            MT::verify_authentication_path(root_hash.clone(), leaf_idx as u32, *leaf, ap)
+        });
+
+        assert!(res, "Some leaf failed to verify.")
     }
 }
