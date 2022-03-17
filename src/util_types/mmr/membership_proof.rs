@@ -35,10 +35,9 @@ where
     }
 }
 
-impl<HashDigest: PartialEq, H> PartialEq for MembershipProof<H>
+impl<H> PartialEq for MembershipProof<H>
 where
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-    H: Hasher<Digest = HashDigest>,
+    H: Hasher,
 {
     // Two membership proofs are considered equal if they contain the same authentication path
     // *and* point to the same data index
@@ -47,27 +46,25 @@ where
     }
 }
 
-impl<HashDigest, H> MembershipProof<H>
+impl<H> MembershipProof<H>
 where
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-    H: Hasher<Digest = HashDigest> + Clone,
+    H: Hasher,
 {
     /// Verify a membership proof for an MMR
     pub fn verify(
         &self,
-        peaks: &[HashDigest],
-        leaf_hash: &HashDigest,
+        peaks: &[H::Digest],
+        leaf_hash: &H::Digest,
         leaf_count: u128,
-    ) -> (bool, Option<HashDigest>)
+    ) -> (bool, Option<H::Digest>)
     where
-        HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-        H: Hasher<Digest = HashDigest> + Clone,
-        u128: ToDigest<HashDigest>,
+        H: Hasher,
+        u128: ToDigest<H::Digest>,
     {
         let node_index = data_index_to_node_index(self.data_index);
 
         let mut hasher = H::new();
-        let mut acc_hash: HashDigest = leaf_hash.to_owned();
+        let mut acc_hash: H::Digest = leaf_hash.to_owned();
         let mut acc_index: u128 = node_index;
         for hash in self.authentication_path.iter() {
             let (acc_right, _acc_height) = right_child_and_height(acc_index);
@@ -146,8 +143,8 @@ where
     pub fn update_from_append(
         &mut self,
         old_leaf_count: u128,
-        new_leaf: &HashDigest,
-        old_peaks: &[HashDigest],
+        new_leaf: &H::Digest,
+        old_peaks: &[H::Digest],
     ) -> bool {
         // 1. Get index of authentication paths's peak
         // 2. Get node indices for nodes added by the append
@@ -185,7 +182,7 @@ where
         // 5 collect all derivable peaks in a hashmap indexed by node index
         // 5.a, collect all node hash digests that are present in the old peaks
         // The keys in the hash map are node indices
-        let mut known_digests: HashMap<u128, HashDigest> = HashMap::new();
+        let mut known_digests: HashMap<u128, H::Digest> = HashMap::new();
         let (_old_peak_heights, old_peak_indices) =
             get_peak_heights_and_peak_node_indices(old_leaf_count);
         for (old_peak_index, old_peak_digest) in old_peak_indices.iter().zip(old_peaks.iter()) {
@@ -231,8 +228,8 @@ where
     pub fn batch_update_from_append(
         membership_proofs: &mut [Self],
         old_leaf_count: u128,
-        new_leaf: &HashDigest,
-        old_peaks: &[HashDigest],
+        new_leaf: &H::Digest,
+        old_peaks: &[H::Digest],
     ) -> Vec<u128> {
         // 1. Get node indices for nodes added by the append
         //   a. If length of this list is one, newly added leaf was a left child. Return.
@@ -245,7 +242,7 @@ where
         // 2 collect all derivable peaks in a hashmap indexed by node index
         // 2.a, collect all node hash digests that are present in the old peaks
         // The keys in the hash map are node indices
-        let mut known_digests: HashMap<u128, HashDigest> = HashMap::new();
+        let mut known_digests: HashMap<u128, H::Digest> = HashMap::new();
         let (_old_peak_heights, old_peak_indices) =
             get_peak_heights_and_peak_node_indices(old_leaf_count);
         for (old_peak_index, old_peak_digest) in old_peak_indices.iter().zip(old_peaks.iter()) {
@@ -319,7 +316,7 @@ where
     pub fn update_from_leaf_mutation(
         &mut self,
         leaf_mutation_membership_proof: &MembershipProof<H>,
-        new_leaf: &HashDigest,
+        new_leaf: &H::Digest,
     ) -> bool {
         let own_node_ap_indices = self.get_node_indices();
         let affected_node_indices = leaf_mutation_membership_proof.get_direct_path_indices();
@@ -343,11 +340,11 @@ where
 
         // If intersection is **not** empty, we need to calculate all deducible node hashes from the
         // `membership_proof` until we meet the intersecting node.
-        let mut deducible_hashes: HashMap<u128, HashDigest> = HashMap::new();
+        let mut deducible_hashes: HashMap<u128, H::Digest> = HashMap::new();
         let mut node_index = data_index_to_node_index(leaf_mutation_membership_proof.data_index);
         deducible_hashes.insert(node_index, new_leaf.clone());
         let mut hasher = H::new();
-        let mut acc_hash: HashDigest = new_leaf.to_owned();
+        let mut acc_hash: H::Digest = new_leaf.to_owned();
 
         // Calculate hashes from the bottom towards the peak. Break when
         // the intersecting node is reached.
@@ -397,17 +394,17 @@ where
     pub fn batch_update_from_leaf_mutation(
         membership_proofs: &mut [Self],
         leaf_mutation_membership_proof: &MembershipProof<H>,
-        new_leaf: &HashDigest,
+        new_leaf: &H::Digest,
     ) -> Vec<u128> {
         // 1. Calculate all hashes that are deducible from the leaf update
         // 2. Iterate through all membership proofs and update digests that
         //    are deducible from the leaf update proof.
 
-        let mut deducible_hashes: HashMap<u128, HashDigest> = HashMap::new();
+        let mut deducible_hashes: HashMap<u128, H::Digest> = HashMap::new();
         let mut node_index = data_index_to_node_index(leaf_mutation_membership_proof.data_index);
         deducible_hashes.insert(node_index, new_leaf.clone());
         let mut hasher = H::new();
-        let mut acc_hash: HashDigest = new_leaf.to_owned();
+        let mut acc_hash: H::Digest = new_leaf.to_owned();
 
         // Calculate hashes from the bottom towards the peak. Break before we
         // calculate the hash of the peak, since peaks are never included in

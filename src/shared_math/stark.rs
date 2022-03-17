@@ -115,10 +115,10 @@ impl fmt::Display for StarkVerifyError {
 }
 
 type Digest = Blake3Hash;
-type Hasher = blake3::Hasher;
-type Smt = SaltedMerkleTree<BFieldElement, blake3::Hasher>;
-type Xmt = MerkleTree<XFieldElement, blake3::Hasher>;
-type XFri = Fri<XFieldElement, Hasher>;
+type StarkHasher = blake3::Hasher;
+type SaltedMt = SaltedMerkleTree<BFieldElement, StarkHasher>;
+type XFieldMt = MerkleTree<XFieldElement, StarkHasher>;
+type XFieldFri = Fri<XFieldElement, StarkHasher>;
 
 impl Stark {
     pub fn prove(
@@ -254,11 +254,11 @@ impl Stark {
         timer.elapsed("calculate boundary quotients");
 
         // Commit to boundary quotients
-        let mut boundary_quotient_merkle_trees: Vec<Smt> = vec![];
+        let mut boundary_quotient_merkle_trees: Vec<SaltedMt> = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<BFieldElement> =
                 bq.fast_coset_evaluate(&self.field_generator, omega, fri_domain_length as usize);
-            let bq_merkle_tree = Smt::from_vec(
+            let bq_merkle_tree = SaltedMt::from_vec(
                 &boundary_quotient_codeword,
                 &BFieldElement::ring_zero(),
                 B_FIELD_ELEMENT_SALTS_PER_VALUE,
@@ -387,7 +387,8 @@ impl Stark {
             lifted_omega,
             fri_domain_length as usize,
         );
-        let randomizer_mt: Xmt = Xmt::from_vec(&randomizer_codeword, &XFieldElement::ring_zero());
+        let randomizer_mt: XFieldMt =
+            XFieldMt::from_vec(&randomizer_codeword, &XFieldElement::ring_zero());
         let randomizer_mt_root = randomizer_mt.get_root();
         proof_stream.enqueue(randomizer_mt_root)?;
 
@@ -476,7 +477,7 @@ impl Stark {
         timer.elapsed("calculate fast_coset_evaluate of combination polynomial");
 
         // Prove low degree of combination polynomial, and collect indices
-        let fri = XFri::new(
+        let fri = XFieldFri::new(
             lifted_field_generator,
             lifted_omega,
             fri_domain_length as usize,
@@ -573,7 +574,7 @@ impl Stark {
         // to check that number here
         let lifted_field_generator: XFieldElement = self.field_generator.lift();
         let lifted_omega: XFieldElement = omega.lift();
-        let fri = XFri::new(
+        let fri = XFieldFri::new(
             lifted_field_generator,
             lifted_omega,
             fri_domain_length as usize,
@@ -614,7 +615,7 @@ impl Stark {
                 Vec<BFieldElement>,
                 BFieldElement,
             )> = proof_stream.dequeue_length_prepended()?;
-            let valid = Smt::verify_leafless_multi_proof_with_salts_and_values(
+            let valid = SaltedMt::verify_leafless_multi_proof_with_salts_and_values(
                 bq_root,
                 &duplicated_indices,
                 &proofs,
@@ -636,7 +637,7 @@ impl Stark {
         // Read and verify randomizer leafs
         let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath<Digest>, XFieldElement)> =
             proof_stream.dequeue_length_prepended()?;
-        let valid = Xmt::verify_leafless_multi_proof(
+        let valid = XFieldMt::verify_leafless_multi_proof(
             randomizer_mt_root,
             &duplicated_indices,
             &randomizer_auth_paths,

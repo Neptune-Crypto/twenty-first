@@ -1,12 +1,9 @@
 use super::membership_proof::MembershipProof;
 use crate::util_types::simple_hasher::Hasher;
 
-// use std::fmt::Debug;
-//    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-
 pub trait Mmr<H>
 where
-    H: Hasher + Clone,
+    H: Hasher,
 {
     fn new(digests: Vec<H::Digest>) -> Self;
     fn bag_peaks(&self) -> H::Digest;

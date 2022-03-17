@@ -25,12 +25,9 @@ pub struct ArchivalMmr<H: Hasher> {
     _hasher: PhantomData<H>,
 }
 
-// These 'where' constraints were removed:
-//
-// H::Digest: ToDigest<H::Digest> + PartialEq + Clone + Debug,
 impl<H> Mmr<H> for ArchivalMmr<H>
 where
-    H: Hasher + Clone,
+    H: Hasher,
     u128: ToDigest<H::Digest>,
 {
     fn new(digests: Vec<H::Digest>) -> Self {
@@ -110,12 +107,9 @@ where
     }
 }
 
-// These 'where' constraints were removed:
-//
-// H::Digest: ToDigest<H::Digest> + PartialEq + Clone + Debug,
 impl<H> ArchivalMmr<H>
 where
-    H: Hasher + Clone,
+    H: Hasher,
     u128: ToDigest<H::Digest>,
 {
     /// Get a leaf from the MMR, will panic if index is out of range
@@ -816,8 +810,6 @@ mod mmr_test {
             izip!((1u128..34).collect::<Vec<u128>>(), node_counts, peak_counts)
         {
             let input_prehashes: Vec<Digest> = (0..data_size).map(|x| (x + 14).into()).collect();
-
-            // XXX: We feed prehashes directly into the ArchivalMmr here instead.
 
             let mut mmr = ArchivalMmr::<Hasher>::new(input_prehashes.clone());
             assert_eq!(data_size, mmr.count_leaves());

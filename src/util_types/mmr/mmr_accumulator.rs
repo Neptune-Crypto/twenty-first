@@ -30,13 +30,9 @@ where
     _hasher: PhantomData<H>,
 }
 
-// These 'where' constraints were removed:
-//
-// HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-// u128: ToDigest<HashDigest>,
 impl<H> From<&ArchivalMmr<H>> for MmrAccumulator<H>
 where
-    H: Hasher + Clone,
+    H: Hasher,
     u128: ToDigest<H::Digest>,
 {
     fn from(archive: &ArchivalMmr<H>) -> Self {
@@ -48,13 +44,10 @@ where
     }
 }
 
-// These 'where' constraints were removed:
-//
-// HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
 // u128: ToDigest<HashDigest>,
 impl<H> MmrAccumulator<H>
 where
-    H: Hasher + Clone,
+    H: Hasher,
 {
     pub fn init(peaks: Vec<H::Digest>, leaf_count: u128) -> Self {
         Self {
@@ -65,13 +58,9 @@ where
     }
 }
 
-// These 'where' constraints were removed:
-//
-// HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-// u128: ToDigest<HashDigest>,
 impl<H> Mmr<H> for MmrAccumulator<H>
 where
-    H: Hasher + Clone,
+    H: Hasher,
     u128: ToDigest<H::Digest>,
 {
     fn new(digests: Vec<H::Digest>) -> Self {
@@ -108,12 +97,9 @@ where
     }
 
     fn append(&mut self, new_leaf: H::Digest) -> MembershipProof<H> {
-        let (new_peaks, membership_proof) = calculate_new_peaks_from_append::<H, H::Digest>(
-            self.leaf_count,
-            self.peaks.clone(),
-            new_leaf,
-        )
-        .unwrap();
+        let (new_peaks, membership_proof) =
+            calculate_new_peaks_from_append::<H>(self.leaf_count, self.peaks.clone(), new_leaf)
+                .unwrap();
         self.peaks = new_peaks;
         self.leaf_count += 1;
 
@@ -229,7 +215,7 @@ where
         // Apply all leaf appends and
         let mut running_leaf_count = self.leaf_count;
         while let Some(new_leaf_for_append) = new_leafs_cloned.pop() {
-            let append_res = calculate_new_peaks_from_append::<H, H::Digest>(
+            let append_res = calculate_new_peaks_from_append::<H>(
                 running_leaf_count,
                 running_peaks,
                 new_leaf_for_append,
