@@ -68,8 +68,52 @@ where
             },
         }
     }
+
+    /*
+    /// Same as `get_value` but flat composition.
+    pub fn get_value2(&self) -> Value {
+        self.0
+            .first()
+            .unwrap_or(panic!("CompressedAuthenticationPath was empty"))
+            .unwrap_or(panic!(
+                "First element of CompressedAuthenticationPath was pruned"
+            ))
+            .value
+            .unwrap_or(panic!(
+                "No value of first element of CompressedAuthenticationPath"
+            ))
+            .clone()
+    }
+
+    pub fn get_value_option(&self) -> Option<Value> {
+        let res = self
+            .0
+            .first()
+            .expect("CompressedAuthenticationPath was empty")
+            .expect("First element of CompressedAuthenticationPath was pruned")
+            .value
+            .expect("No value of first element of CompressedAuthenticationPath")
+            .clone();
+
+        Some(res)
+    }
+    */
 }
 
+/// # Design
+/// The following are implemented as static methods:
+///
+/// - `verify_authentication_path`
+/// - `verify_authentication_path_from_leaf_hash`
+/// - `convert_pat_leafless`
+/// - `verify_leafless_multi_proof`
+/// - `verify_leafless_multi_proof_from_leaf_hashes`
+/// - `unwrap_leafless_partial_authentication_path`
+///
+/// The reason being that they are called from the verifier, who does not have
+/// the original `MerkleTree` object, but only partial information from it,
+/// in the form of the quadrupples: `(root_hash, index, value, auth_path)`.
+/// These are exactly the arguments for the `verify_*` family of static methods.
 impl<Value, H> MerkleTree<Value, H>
 where
     Value: Clone + Serialize + Debug + PartialEq + ToDigest<H::Digest>,
@@ -233,13 +277,13 @@ where
         acc_hash == root_hash
     }
 
-    // Verify the `authentication path' of a `value' with an `index' from the
-    // `root_hash' of a given Merkle tree. Similar to `verify_proof', but instead of
-    // a `proof: Vec<Node<T>>` that contains [ValueNode, ...PathNodes..., RootNode],
-    // we only pass an `auth_path: Vec<Blake3Hash>' with the hashes of the path nodes;
-    // the `root_hash' is passed along separately, and the `value' hash is computed.
-    //
-    // The `index' is to know if a given path element is a left- or a right-sibling.
+    /// Verify the `authentication path' of a `value' with an `index' from the
+    /// `root_hash' of a given Merkle tree. Similar to `verify_proof', but instead of
+    /// a `proof: Vec<Node<T>>` that contains [ValueNode, ...PathNodes..., RootNode],
+    /// we only pass an `auth_path: Vec<Blake3Hash>' with the hashes of the path nodes;
+    /// the `root_hash' is passed along separately, and the `value' hash is computed.
+    ///
+    /// The `index' is to know if a given path element is a left- or a right-sibling.
     pub fn verify_authentication_path(
         root_hash: H::Digest,
         index: u32,
@@ -1843,6 +1887,7 @@ mod merkle_tree_test {
     fn verify_all_leaves_individually() {
         /*
         Essentially this:
+
         ```
         from_vec
 
@@ -1879,11 +1924,30 @@ mod merkle_tree_test {
 
         let root_hash = tree.get_root().to_owned();
 
-        let res = leaves.iter().enumerate().all(|(leaf_idx, leaf)| {
+        for (leaf_idx, leaf) in leaves.iter().enumerate() {
             let ap = tree.get_authentication_path(leaf_idx);
-            MT::verify_authentication_path(root_hash.clone(), leaf_idx as u32, *leaf, ap)
-        });
+            let verdict =
+                MT::verify_authentication_path(root_hash.clone(), leaf_idx as u32, *leaf, ap);
+            assert!(
+                verdict,
+                "Rejected: `leaf: {:?}` at `leaf_idx: {:?}` failed to verify.",
+                { leaf },
+                { leaf_idx }
+            );
+        }
 
-        assert!(res, "Some leaf failed to verify.")
+        // A bonus test
+        let test_leaf = 42;
+        (|leaf_idx: usize, leaf: &BFieldElement| {
+            let ap = tree.get_authentication_path(leaf_idx);
+            let verdict =
+                MT::verify_authentication_path(root_hash.clone(), leaf_idx as u32, *leaf, ap);
+            assert!(
+                verdict,
+                "Rejected: `leaf: {:?}` at `leaf_idx: {:?}` failed to verify.",
+                { leaf },
+                { leaf_idx }
+            );
+        })(test_leaf, &BFieldElement::new(test_leaf as u128))
     }
 }
