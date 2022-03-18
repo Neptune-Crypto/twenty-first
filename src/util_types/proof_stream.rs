@@ -73,7 +73,7 @@ impl ProofStream {
 
     pub fn enqueue_length_prepended<T>(&mut self, item: &T) -> Result<(), Box<dyn Error>>
     where
-        T: Serialize + std::fmt::Debug,
+        T: Serialize,
     {
         let mut serialization_result: Vec<u8> = bincode::serialize(item)?;
         let serialization_result_length: u32 = serialization_result.len() as u32;
@@ -99,21 +99,37 @@ impl ProofStream {
         Ok(item)
     }
 
+    /// A package on a `ProofStream` consist of a `u32` containing the `item_length` of the payload (`item`)
+    /// followed by the payload.  This is similar to _pascal style strings_.
+    /// Corresponds to `pull` in [AoaS](https://aszepieniec.github.io/stark-anatomy/basic-tools#the-fiat-shamir-transform).
+
+    /// # Arguments
+    ///
+    /// * `item` - The payload we want to dequeue and deserialize.
+    /// * `item_length` - The length of the payload in bytes.
+    /// * `sizeof_item_length` - The size of the prepended field.
     pub fn dequeue_length_prepended<T>(&mut self) -> Result<T, Box<dyn Error>>
     where
         T: DeserializeOwned,
     {
+        let sizeof_item_length = std::mem::size_of::<u32>();
+        assert_eq!(sizeof_item_length, 4, "32 bits should equal 4 bytes.");
+
+        let item_length_start = self.read_index;
+        let item_length_end = self.read_index + sizeof_item_length;
         let item_length: u32 =
-            bincode::deserialize(&self.transcript[self.read_index..self.read_index + 4])?;
-        self.read_index += 4;
-        if item_length as usize + self.read_index > self.transcript.len() {
+            bincode::deserialize(&self.transcript[item_length_start..item_length_end])?;
+
+        let item_start = self.read_index + sizeof_item_length;
+        let item_end = item_start + item_length as usize; // Is this cast necessary?
+
+        if self.len() < item_end {
             return Err(Box::new(ProofStreamError::TranscriptLengthExceeded));
         }
 
-        let item: T = bincode::deserialize(
-            &self.transcript[self.read_index..self.read_index + item_length as usize],
-        )?;
-        self.read_index += item_length as usize;
+        let item: T = bincode::deserialize(&self.transcript[item_start..item_end])?;
+
+        self.read_index = item_end;
 
         Ok(item)
     }
@@ -131,13 +147,100 @@ impl ProofStream {
 
 #[cfg(test)]
 pub mod test_proof_stream {
-
     use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
 
     #[test]
-    fn test_default_empty_initiation() {
+    fn ps_test_default_empty_initiation() {
         let proof_stream = ProofStream::default();
         assert!(proof_stream.is_empty());
         assert_eq!(0, proof_stream.get_read_index());
+    }
+
+    // make random Blake3Hash'es
+    // push to stream
+    // pop
+    //
+    // To test: can we push single BFieldElement?
+    // To can: we push a merkle tree?
+
+    #[test]
+    fn ps_empty_ts() {
+        let ps = ProofStream::default();
+        assert_eq!(ps.len(), 0, "The empty ProofStream must have length zero.");
+        let ts = ps.serialize();
+        assert_eq!(
+            ts.len(),
+            0,
+            "The serialization of the empty ProofStream must have length zero."
+        );
+    }
+
+    #[test]
+    fn ps_enqueue_then_dequeue() {
+        let mut ps = ProofStream::default();
+
+        let bfe_before = BFieldElement::new(213 as u128);
+        assert!(ps.enqueue_length_prepended(&bfe_before).is_ok());
+        let bfe_after = ps.dequeue_length_prepended().unwrap();
+
+        assert_eq!(
+            bfe_before, bfe_after,
+            "`enqueue` element followed by `dequeue` should return the same element."
+        );
+    }
+
+    #[test]
+    fn ps_thrice_enqueue_then_dequeue() {
+        ps_enqueue_then_dequeue();
+        ps_enqueue_then_dequeue();
+        ps_enqueue_then_dequeue();
+    }
+
+    #[test]
+    fn ps_enq_deq_enq_deq() {
+        let bfe1_before = BFieldElement::new(213 as u128);
+        let bfe2_before = BFieldElement::new(783 as u128);
+
+        let mut ps = ProofStream::default();
+        assert!(ps.enqueue_length_prepended(&bfe1_before).is_ok());
+        assert!(ps.enqueue_length_prepended(&bfe2_before).is_ok());
+
+        let bfe1_after = ps.dequeue_length_prepended().unwrap();
+        let bfe2_after = ps.dequeue_length_prepended().unwrap();
+
+        assert_eq!(
+            bfe1_before, bfe1_after,
+            "Element 1 has changed on the stream!"
+        );
+
+        assert_eq!(
+            bfe2_before, bfe2_after,
+            "Element 2 has changed on the stream!"
+        );
+    }
+
+    #[test]
+    fn ps_is_fifo_no_lifo() {
+        let bfe1_before = BFieldElement::new(213 as u128);
+        let bfe2_before = BFieldElement::new(783 as u128);
+
+        let mut ps = ProofStream::default();
+        assert!(ps.enqueue_length_prepended(&bfe1_before).is_ok());
+        assert!(ps.enqueue_length_prepended(&bfe2_before).is_ok());
+
+        // Intentionally wrong order
+        let bfe2_after_phoney = ps.dequeue_length_prepended().unwrap();
+        let bfe1_after_phoney = ps.dequeue_length_prepended().unwrap();
+
+        assert_ne!(
+            bfe1_before, bfe1_after_phoney,
+            "ProofStream erroneously has LIFO behavior when it should have FIFO behavior."
+        );
+
+        assert_ne!(
+            bfe2_before, bfe2_after_phoney,
+            "ProofStream erroneously has LIFO behavior when it should have FIFO behavior."
+        );
     }
 }

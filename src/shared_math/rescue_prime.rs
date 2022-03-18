@@ -1,15 +1,12 @@
-use std::fmt::Display;
-
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
-
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::stark::BoundaryConstraint;
-use crate::shared_math::traits::IdentityValues;
-
 use super::mpolynomial::MPolynomial;
 use super::polynomial::Polynomial;
 use super::traits::{CyclicGroupGenerator, ModPowU64};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::stark_constraints::BoundaryConstraint;
+use crate::shared_math::traits::IdentityValues;
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 // TODO: Make this work for XFieldElement via trait.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,7 +187,9 @@ impl RescuePrime {
 
     // Returns the multivariate polynomial which takes the triplet (domain, trace, next_trace) and
     // returns composition polynomial, which is the evaluation of the air for a specific trace.
+    //
     // AIR: [F_p x F_p^m x F_p^m] --> F_p^m
+    //
     // The composition polynomial values are low-degree polynomial combinations
     // (as opposed to linear combinations) of the values:
     // `domain` (scalar), `trace` (vector), `next_trace` (vector).

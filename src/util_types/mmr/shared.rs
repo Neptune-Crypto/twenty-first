@@ -1,11 +1,7 @@
-use std::fmt::Debug;
-use std::marker::PhantomData;
-
-use crate::util_types::simple_hasher::{Hasher, ToDigest};
-
-use crate::shared_math::other::log_2_floor;
-
 use super::membership_proof::MembershipProof;
+use crate::shared_math::other::log_2_floor;
+use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use std::marker::PhantomData;
 
 #[inline]
 pub fn left_child(node_index: u128, height: u128) -> u128 {
@@ -275,20 +271,17 @@ pub fn node_index_to_data_index(node_index: u128) -> Option<u128> {
 /// Return the new peaks of the MMR after adding `new_leaf` as well as the membership
 /// proof for the added leaf.
 /// Returns None if configuration is impossible (too small `old_peaks` input vector)
-pub fn calculate_new_peaks_from_append<
-    H: Hasher<Digest = HashDigest> + Clone,
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
->(
+pub fn calculate_new_peaks_from_append<H: Hasher>(
     old_leaf_count: u128,
-    old_peaks: Vec<HashDigest>,
-    new_leaf: HashDigest,
-) -> Option<(Vec<HashDigest>, MembershipProof<HashDigest, H>)> {
+    old_peaks: Vec<H::Digest>,
+    new_leaf: H::Digest,
+) -> Option<(Vec<H::Digest>, MembershipProof<H>)> {
     let mut peaks = old_peaks;
     let mut new_node_index = data_index_to_node_index(old_leaf_count);
     let (mut new_node_is_right_child, _height) = right_child_and_height(new_node_index);
     peaks.push(new_leaf);
     let mut hasher = H::new();
-    let mut membership_proof: MembershipProof<HashDigest, H> = MembershipProof {
+    let mut membership_proof: MembershipProof<H> = MembershipProof {
         authentication_path: vec![],
         data_index: old_leaf_count,
         _hasher: PhantomData,
@@ -314,21 +307,18 @@ pub fn calculate_new_peaks_from_append<
 /// Calculate a new peak list given the mutation of a leaf
 /// The new peak list will only (max) have *one* element different
 /// than `old_peaks`
-pub fn calculate_new_peaks_from_leaf_mutation<
-    H: Hasher<Digest = HashDigest> + Clone,
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
->(
-    old_peaks: &[HashDigest],
-    new_leaf: &HashDigest,
+pub fn calculate_new_peaks_from_leaf_mutation<H: Hasher>(
+    old_peaks: &[H::Digest],
+    new_leaf: &H::Digest,
     leaf_count: u128,
-    membership_proof: &MembershipProof<HashDigest, H>,
-) -> Option<Vec<HashDigest>>
+    membership_proof: &MembershipProof<H>,
+) -> Option<Vec<H::Digest>>
 where
-    u128: ToDigest<HashDigest>,
+    u128: ToDigest<H::Digest>,
 {
     let node_index = data_index_to_node_index(membership_proof.data_index);
     let mut hasher = H::new();
-    let mut acc_hash: HashDigest = new_leaf.to_owned();
+    let mut acc_hash: H::Digest = new_leaf.to_owned();
     let mut acc_index: u128 = node_index;
     for hash in membership_proof.authentication_path.iter() {
         let (acc_right, _acc_height) = right_child_and_height(acc_index);
@@ -358,18 +348,17 @@ where
         Some(index) => index,
     };
 
-    let mut calculated_peaks: Vec<HashDigest> = old_peaks.to_vec();
+    let mut calculated_peaks: Vec<H::Digest> = old_peaks.to_vec();
     calculated_peaks[peak_height_index] = acc_hash;
 
     Some(calculated_peaks)
 }
 
 /// Get a root commitment to the entire MMR
-pub fn bag_peaks<HashDigest, H>(peaks: &[HashDigest], node_count: u128) -> HashDigest
+pub fn bag_peaks<H>(peaks: &[H::Digest], node_count: u128) -> H::Digest
 where
-    HashDigest: ToDigest<HashDigest> + PartialEq + Clone + Debug,
-    H: Hasher<Digest = HashDigest> + Clone,
-    u128: ToDigest<HashDigest>,
+    H: Hasher,
+    u128: ToDigest<H::Digest>,
 {
     // Follows the description on
     // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
@@ -381,7 +370,7 @@ where
         return hasher.hash(&0u128.to_digest());
     }
 
-    let mut acc: HashDigest = hasher.hash_pair(&node_count.to_digest(), &peaks[peaks_count - 1]);
+    let mut acc: H::Digest = hasher.hash_pair(&node_count.to_digest(), &peaks[peaks_count - 1]);
     for i in 1..peaks_count {
         acc = hasher.hash_pair(&peaks[peaks_count - 1 - i], &acc);
     }
@@ -668,15 +657,16 @@ mod mmr_test {
 
     #[test]
     fn calculate_new_peaks_from_leaf_mutation_empty_mmr_test() {
+        type Hasher = RescuePrimeProduction;
+
         // Verify that the helper function `calculate_new_peaks_from_leaf_mutation` does
         // not crash if called on an empty list of peaks
-        let mut rp = RescuePrimeProduction::new();
+        let mut rp = Hasher::new();
         let new_leaf = rp.hash(&vec![BFieldElement::new(10000)]);
-        let acc =
-            ArchivalMmr::<Vec<BFieldElement>, RescuePrimeProduction>::new(vec![new_leaf.clone()]);
+        let acc = ArchivalMmr::<Hasher>::new(vec![new_leaf.clone()]);
         let mp = acc.prove_membership(0).0;
         assert!(
-            calculate_new_peaks_from_leaf_mutation::<RescuePrimeProduction, Vec<BFieldElement>>(
+            calculate_new_peaks_from_leaf_mutation::<RescuePrimeProduction>(
                 &vec![],
                 &new_leaf,
                 0,

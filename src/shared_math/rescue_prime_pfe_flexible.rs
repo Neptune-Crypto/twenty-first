@@ -1,7 +1,7 @@
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
-use crate::shared_math::stark_pfe_flexible::BoundaryConstraint;
+use crate::shared_math::stark_constraints_pfe_flexible::BoundaryConstraint;
 use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::traits::IdentityValues;
 use num_bigint::BigInt;
@@ -422,14 +422,8 @@ impl RescuePrime {
 
 #[cfg(test)]
 mod rescue_prime_start_test {
-    use crate::{
-        shared_math::{
-            stark_pfe_flexible::StarkPrimeFieldElementFlexible, traits::GetPrimitiveRootOfUnity,
-        },
-        util_types::proof_stream::ProofStream,
-    };
-
     use super::*;
+    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
 
     #[test]
     fn hash_test_vectors() {
@@ -538,42 +532,5 @@ mod rescue_prime_start_test {
                 assert!(eval.is_zero());
             }
         }
-    }
-
-    #[test]
-    fn rp_stark_test() {
-        let prime: U256 = (407u128 * (1 << 119) + 1).into();
-        let expansion_factor = 4usize;
-        let colinearity_checks_count = 2usize;
-        let transition_constraints_degree = 2usize;
-        let generator = PrimeFieldElementFlexible::new(
-            85408008396924667383611388730472331217u128.into(),
-            prime,
-        );
-        let rescue_prime_stark = RescuePrime::from_tutorial();
-
-        let mut stark = StarkPrimeFieldElementFlexible::new(
-            expansion_factor,
-            colinearity_checks_count,
-            rescue_prime_stark.m,
-            rescue_prime_stark.steps_count + 1,
-            transition_constraints_degree,
-            generator,
-        );
-        stark.prover_preprocess();
-
-        let one = PrimeFieldElementFlexible::new(1.into(), prime);
-        let trace = rescue_prime_stark.trace(&one);
-        let air_constraints = rescue_prime_stark.get_air_constraints(stark.omicron);
-        let hash_result = trace.last().unwrap()[0];
-        let boundary_constraints: Vec<BoundaryConstraint> =
-            rescue_prime_stark.get_boundary_constraints(hash_result);
-        let mut proof_stream = ProofStream::default();
-        let _proof = stark.prove(
-            trace,
-            air_constraints,
-            boundary_constraints,
-            &mut proof_stream,
-        );
     }
 }

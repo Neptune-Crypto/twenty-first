@@ -1,19 +1,42 @@
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 use crate::shared_math::rescue_prime::RescuePrime;
 use crate::shared_math::rescue_prime_params;
+use crate::shared_math::x_field_element::XFieldElement;
+use crate::util_types::blake3_wrapper::Blake3Hash;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 /// A simple `Hasher` trait that allows for hashing one, two or many values into one digest.
 ///
 /// The type of digest is determined by the `impl` of a given `Hasher`, and it requires that
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
-pub trait Hasher {
-    type Digest: Eq;
+pub trait Hasher: Sized {
+    type Digest: ToDigest<Self::Digest>
+        + PartialEq
+        + Clone
+        + std::fmt::Debug
+        + Serialize
+        + DeserializeOwned
+        + Sized;
 
     fn new() -> Self;
     fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
     fn hash_pair(&mut self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest;
     fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest;
+
+    // TODO: Consider moving the 'Self::Digest: ToDigest<Self::Digest>' constraint up.
+    fn hash_with_salts<Value>(&mut self, mut digest: Self::Digest, salts: &[Value]) -> Self::Digest
+    where
+        Value: ToDigest<Self::Digest>,
+        Self::Digest: ToDigest<Self::Digest>,
+    {
+        for salt in salts {
+            digest = self.hash_pair(&digest, &salt.to_digest());
+        }
+
+        digest
+    }
 }
 
 /// In order to hash arbitrary things using a `Hasher`, it must `impl ToDigest<Digest>`
@@ -23,19 +46,21 @@ pub trait ToDigest<Digest> {
     fn to_digest(&self) -> Digest;
 }
 
-/// Trivial implementation when hashing `blake3::Hash` into `blake3::Hash`es.
-impl ToDigest<blake3::Hash> for blake3::Hash {
-    fn to_digest(&self) -> blake3::Hash {
-        self.to_owned()
+impl ToDigest<Blake3Hash> for PrimeFieldElementFlexible {
+    fn to_digest(&self) -> Blake3Hash {
+        let bytes = bincode::serialize(&self).unwrap();
+        let digest = Blake3Hash(blake3::hash(bytes.as_slice()));
+
+        digest
     }
 }
 
 // The specification for MMR from mimblewimble specifies that the
 // node count is included in the hash preimage. Representing the
 // node count as a u128 makes this possible
-impl ToDigest<blake3::Hash> for u128 {
-    fn to_digest(&self) -> blake3::Hash {
-        blake3::Hash::from_hex(format!("{:064x}", self)).unwrap()
+impl ToDigest<Blake3Hash> for u128 {
+    fn to_digest(&self) -> Blake3Hash {
+        (*self).into()
     }
 }
 
@@ -50,6 +75,30 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
     }
 }
 
+impl ToDigest<Blake3Hash> for Blake3Hash {
+    fn to_digest(&self) -> Blake3Hash {
+        *self
+    }
+}
+
+impl ToDigest<Blake3Hash> for BFieldElement {
+    fn to_digest(&self) -> Blake3Hash {
+        let bytes = bincode::serialize(&self).unwrap();
+        let digest = Blake3Hash(blake3::hash(bytes.as_slice()));
+
+        digest
+    }
+}
+
+impl ToDigest<Blake3Hash> for XFieldElement {
+    fn to_digest(&self) -> Blake3Hash {
+        let bytes = bincode::serialize(&self).unwrap();
+        let digest = blake3::hash(bytes.as_slice());
+
+        digest.into()
+    }
+}
+
 /// Trivial implementation when hashing `Vec<BFieldElement>` into `Vec<BFieldElement>`s.
 impl ToDigest<Vec<BFieldElement>> for Vec<BFieldElement> {
     fn to_digest(&self) -> Vec<BFieldElement> {
@@ -57,33 +106,48 @@ impl ToDigest<Vec<BFieldElement>> for Vec<BFieldElement> {
     }
 }
 
+/// Trivial implementation when hashing `Vec<BFieldElement>` into `BFieldElement`.
+impl ToDigest<Vec<BFieldElement>> for BFieldElement {
+    fn to_digest(&self) -> Vec<BFieldElement> {
+        let mut digest = vec![*self];
+        digest.append(&mut vec![BFieldElement::ring_zero(); 4]);
+        digest
+    }
+}
+
+// TODO: This 'Blake3Hash' wrapper looks messy, but at least it is contained here. Can we move it to 'blake3_wrapper'?
 impl Hasher for blake3::Hasher {
-    type Digest = blake3::Hash;
+    type Digest = Blake3Hash;
 
     fn new() -> Self {
         blake3::Hasher::new()
     }
 
     fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
+        let Blake3Hash(digest) = input.to_digest();
         self.reset();
-        self.update(input.to_digest().as_bytes());
-        self.finalize()
+        self.update(digest.as_bytes());
+        Blake3Hash(self.finalize())
     }
 
     fn hash_pair(&mut self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
+        let Blake3Hash(left_digest) = left;
+        let Blake3Hash(right_digest) = right;
+
         self.reset();
-        self.update(left.to_digest().as_bytes());
-        self.update(right.to_digest().as_bytes());
-        self.finalize()
+        self.update(left_digest.as_bytes());
+        self.update(right_digest.as_bytes());
+        Blake3Hash(self.finalize())
     }
 
     // Uses blake3::Hasher's sponge
-    fn hash_many(&mut self, input: &[Self::Digest]) -> blake3::Hash {
+    fn hash_many(&mut self, input: &[Self::Digest]) -> Self::Digest {
         self.reset();
-        for value in input {
-            self.update(value.to_digest().as_bytes());
+        for digest in input {
+            let Blake3Hash(digest) = digest;
+            self.update(digest.as_bytes());
         }
-        self.finalize()
+        Blake3Hash(self.finalize())
     }
 }
 
@@ -105,7 +169,7 @@ impl Hasher for RescuePrimeProduction {
     }
 
     fn hash_pair(&mut self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
-        let input: Vec<BFieldElement> = vec![left.clone(), right.clone()].concat();
+        let input: Vec<BFieldElement> = vec![left.to_owned(), right.to_owned()].concat();
         self.0.hash(&input)
     }
 
@@ -148,13 +212,14 @@ pub mod test_simple_hasher {
     #[test]
     fn blake3_digest_from_u128_test() {
         // Verify that u128 values can be converted into Blake3 hash input digests
-        let _128_val: blake3::Hash = 100u128.to_digest();
+        let _128_val: Blake3Hash = 100u128.into();
+        let Blake3Hash(inner) = _128_val;
         assert_eq!(
             vec![
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 100
             ],
-            _128_val.as_bytes()
+            inner.as_bytes()
         );
     }
 

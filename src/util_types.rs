@@ -1,4 +1,5 @@
 // pub mod merkle_mountain_range;
+pub mod blake3_wrapper;
 pub mod merkle_tree;
 pub mod mmr;
 pub mod proof_stream;

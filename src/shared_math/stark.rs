@@ -1,3 +1,4 @@
+use super::stark_constraints::BoundaryConstraint;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::fri::Fri;
 use crate::shared_math::mpolynomial::MPolynomial;
@@ -9,8 +10,10 @@ use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomElements};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
-use crate::util_types::merkle_tree::LeaflessPartialAuthenticationPath;
-use crate::util_types::merkle_tree::{MerkleTree, SaltedMerkleTree};
+use crate::util_types::blake3_wrapper::Blake3Hash;
+use crate::util_types::merkle_tree::{
+    LeaflessPartialAuthenticationPath, MerkleTree, SaltedMerkleTree,
+};
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils;
 use rand::prelude::ThreadRng;
@@ -53,16 +56,6 @@ impl Stark {
         }
     }
 }
-
-#[derive(Clone, Debug)]
-pub struct BoundaryConstraint {
-    pub cycle: usize,
-    pub register: usize,
-    pub value: BFieldElement,
-}
-
-// A hashmap from register value to (x, y) value of boundary constraint
-pub type BoundaryConstraintsMap = HashMap<usize, (BFieldElement, BFieldElement)>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum StarkProofError {
@@ -120,6 +113,12 @@ impl fmt::Display for StarkVerifyError {
         write!(f, "{:?}", self)
     }
 }
+
+type Digest = Blake3Hash;
+type StarkHasher = blake3::Hasher;
+type SaltedMt = SaltedMerkleTree<BFieldElement, StarkHasher>;
+type XFieldMt = MerkleTree<XFieldElement, StarkHasher>;
+type XFieldFri = Fri<XFieldElement, StarkHasher>;
 
 impl Stark {
     pub fn prove(
@@ -255,12 +254,13 @@ impl Stark {
         timer.elapsed("calculate boundary quotients");
 
         // Commit to boundary quotients
-        let mut boundary_quotient_merkle_trees: Vec<SaltedMerkleTree<BFieldElement>> = vec![];
+        let mut boundary_quotient_merkle_trees: Vec<SaltedMt> = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<BFieldElement> =
                 bq.fast_coset_evaluate(&self.field_generator, omega, fri_domain_length as usize);
-            let bq_merkle_tree = SaltedMerkleTree::from_vec(
+            let bq_merkle_tree = SaltedMt::from_vec(
                 &boundary_quotient_codeword,
+                &BFieldElement::ring_zero(),
                 B_FIELD_ELEMENT_SALTS_PER_VALUE,
                 &mut rng,
             );
@@ -387,8 +387,10 @@ impl Stark {
             lifted_omega,
             fri_domain_length as usize,
         );
-        let randomizer_mt: MerkleTree<XFieldElement> = MerkleTree::from_vec(&randomizer_codeword);
-        proof_stream.enqueue(&randomizer_mt.get_root())?;
+        let randomizer_mt: XFieldMt =
+            XFieldMt::from_vec(&randomizer_codeword, &XFieldElement::ring_zero());
+        let randomizer_mt_root = randomizer_mt.get_root();
+        proof_stream.enqueue(randomizer_mt_root)?;
 
         timer.elapsed("fast_coset_evaluate and commit randomizer codeword to proof stream");
 
@@ -475,7 +477,7 @@ impl Stark {
         timer.elapsed("calculate fast_coset_evaluate of combination polynomial");
 
         // Prove low degree of combination polynomial, and collect indices
-        let fri = Fri::<XFieldElement>::new(
+        let fri = XFieldFri::new(
             lifted_field_generator,
             lifted_omega,
             fri_domain_length as usize,
@@ -511,7 +513,7 @@ impl Stark {
         // Open indicated positions in the boundary quotient codewords
         for bq_mt in boundary_quotient_merkle_trees {
             let proofs: Vec<(
-                LeaflessPartialAuthenticationPath,
+                LeaflessPartialAuthenticationPath<Digest>,
                 Vec<BFieldElement>,
                 BFieldElement,
             )> = bq_mt.get_leafless_multi_proof_with_salts_and_values(&quadrupled_indices);
@@ -521,7 +523,7 @@ impl Stark {
         timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for all boundary quotient merkle trees");
 
         // Open indicated positions in the randomizer
-        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath, XFieldElement)> =
+        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath<Digest>, XFieldElement)> =
             randomizer_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
         proof_stream.enqueue_length_prepended(&randomizer_auth_paths)?;
 
@@ -546,13 +548,14 @@ impl Stark {
         // assert!(!omega.mod_pow((fri_domain_length / 2) as u64).is_one());
 
         // Get Merkle root of boundary quotient codewords
-        let mut boundary_quotient_mt_roots: Vec<[u8; 32]> = vec![];
+        let mut boundary_quotient_mt_roots: Vec<Digest> = vec![];
         for _ in 0..self.num_registers {
-            boundary_quotient_mt_roots.push(proof_stream.dequeue(32)?);
+            let bq_mt_root = proof_stream.dequeue(32)?;
+            boundary_quotient_mt_roots.push(bq_mt_root);
         }
         timer.elapsed("get BQ merkle roots from proof stream");
 
-        let randomizer_mt_root: [u8; 32] = proof_stream.dequeue(32)?;
+        let randomizer_mt_root: Digest = proof_stream.dequeue(32)?;
         timer.elapsed("get randomizer_mt_root from proof stream");
 
         // Get weights for nonlinear combination
@@ -571,7 +574,7 @@ impl Stark {
         // to check that number here
         let lifted_field_generator: XFieldElement = self.field_generator.lift();
         let lifted_omega: XFieldElement = omega.lift();
-        let fri = Fri::<XFieldElement>::new(
+        let fri = XFieldFri::new(
             lifted_field_generator,
             lifted_omega,
             fri_domain_length as usize,
@@ -608,11 +611,11 @@ impl Stark {
         for (i, bq_root) in boundary_quotient_mt_roots.into_iter().enumerate() {
             boundary_quotients.push(HashMap::new());
             let proofs: Vec<(
-                LeaflessPartialAuthenticationPath,
+                LeaflessPartialAuthenticationPath<Digest>,
                 Vec<BFieldElement>,
                 BFieldElement,
             )> = proof_stream.dequeue_length_prepended()?;
-            let valid = SaltedMerkleTree::verify_leafless_multi_proof_with_salts_and_values(
+            let valid = SaltedMt::verify_leafless_multi_proof_with_salts_and_values(
                 bq_root,
                 &duplicated_indices,
                 &proofs,
@@ -632,9 +635,9 @@ impl Stark {
         timer.elapsed("Verify boundary quotient Merkle paths");
 
         // Read and verify randomizer leafs
-        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath, XFieldElement)> =
+        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath<Digest>, XFieldElement)> =
             proof_stream.dequeue_length_prepended()?;
-        let valid = MerkleTree::verify_leafless_multi_proof(
+        let valid = XFieldMt::verify_leafless_multi_proof(
             randomizer_mt_root,
             &duplicated_indices,
             &randomizer_auth_paths,

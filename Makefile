@@ -21,6 +21,10 @@ build:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo build $(release)
 
+doc:
+	cargo doc --no-deps
+	xdg-open "target/doc/twenty_first/index.html"
+
 format:
 	cargo fmt
 

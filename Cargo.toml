@@ -22,10 +22,10 @@ hashbrown = "0.12"
 itertools = "0.10"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
-parity-scale-codec = "2"
+parity-scale-codec = "3"
 paw = "1.0"
 phf = { version = "0.10", features = ["macros"] }
-primitive-types = { version = "0.10", features = ["serde"] }
+primitive-types = { version = "0.11", features = ["serde"] }
 rand = "0.8"
 rand_distr = "0.4"
 rand_pcg = "0.3"
@@ -42,14 +42,10 @@ harness = false
 [[bench]]
 name = "ntt_forward"
 harness = false
-
-[[bench]]
-name = "rpsss_bench_sign"
-harness = false
-
-[[bench]]
-name = "rpsss_bench_verify"
-harness = false
+# [[bench]]# name = "rpsss_bench_sign"# harness = false
+# [[bench]]
+# name = "rpsss_bench_verify"
+# harness = false
 
 [[bench]]
 name = "rescue_prime_air_constraints"

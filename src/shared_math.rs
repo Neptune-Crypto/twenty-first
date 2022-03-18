@@ -14,6 +14,8 @@ pub mod rescue_prime_params;
 pub mod rescue_prime_pfe_flexible;
 pub mod rpsss;
 pub mod stark;
+pub mod stark_constraints;
+pub mod stark_constraints_pfe_flexible;
 pub mod stark_pfe_flexible;
 pub mod traits;
 pub mod vector;
