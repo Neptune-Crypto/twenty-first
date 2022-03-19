@@ -68,36 +68,6 @@ where
             },
         }
     }
-
-    /*
-    /// Same as `get_value` but flat composition.
-    pub fn get_value2(&self) -> Value {
-        self.0
-            .first()
-            .unwrap_or(panic!("CompressedAuthenticationPath was empty"))
-            .unwrap_or(panic!(
-                "First element of CompressedAuthenticationPath was pruned"
-            ))
-            .value
-            .unwrap_or(panic!(
-                "No value of first element of CompressedAuthenticationPath"
-            ))
-            .clone()
-    }
-
-    pub fn get_value_option(&self) -> Option<Value> {
-        let res = self
-            .0
-            .first()
-            .expect("CompressedAuthenticationPath was empty")
-            .expect("First element of CompressedAuthenticationPath was pruned")
-            .value
-            .expect("No value of first element of CompressedAuthenticationPath")
-            .clone();
-
-        Some(res)
-    }
-    */
 }
 
 /// # Design
