@@ -1880,7 +1880,9 @@ mod merkle_tree_test {
             "Size of input for Merkle tree must be a power of 2"
         );
 
-        let leaves: Vec<BFieldElement> = (0..num_leaves as u128)
+        let offset = 17;
+
+        let leaves: Vec<BFieldElement> = (offset..num_leaves as u128 + offset)
             .map(|i| BFieldElement::new(i))
             .collect();
 
@@ -1905,19 +1907,61 @@ mod merkle_tree_test {
                 { leaf_idx }
             );
         }
+    }
 
-        // A bonus test
+    #[test]
+    fn verify_some_payload() {
+        /// This tests that we do not confuse indices and payloads in the
+        /// test `verify_all_leaves_individually`.
+
+        type Value = BFieldElement;
+        type Hasher = RescuePrimeProduction;
+        type MT = MerkleTree<Value, Hasher>;
+
+        let zero = BFieldElement::ring_zero();
+
+        let exponent = 6;
+        let num_leaves = usize::pow(2, exponent);
+        assert!(
+            other::is_power_of_two(num_leaves),
+            "Size of input for Merkle tree must be a power of 2"
+        );
+
+        let offset = 17 * 17;
+
+        let mut leaves: Vec<BFieldElement> = (offset..num_leaves as u128 + offset)
+            .map(|i| BFieldElement::new(i))
+            .collect();
+
+        // A payload integrity test
         let test_leaf = 42;
+        let payload_offset = 317;
+        let payload = BFieldElement::new((test_leaf + payload_offset) as u128);
+
+        // Embed
+        leaves[test_leaf] = payload;
+
+        let tree = MT::from_vec(&leaves[..], &zero);
+
+        assert_eq!(
+            tree.get_number_of_leafs(),
+            num_leaves,
+            "All leaves should have been added to the Merkle tree."
+        );
+
+        let root_hash = tree.get_root().to_owned();
+
         (|leaf_idx: usize, leaf: &BFieldElement| {
             let ap = tree.get_authentication_path(leaf_idx);
             let verdict =
                 MT::verify_authentication_path(root_hash.clone(), leaf_idx as u32, *leaf, ap);
+            assert_eq!(tree.get_value_by_index(test_leaf), payload);
             assert!(
                 verdict,
                 "Rejected: `leaf: {:?}` at `leaf_idx: {:?}` failed to verify.",
                 { leaf },
                 { leaf_idx }
             );
-        })(test_leaf, &BFieldElement::new(test_leaf as u128))
+        })(test_leaf, &payload)
     }
 }
