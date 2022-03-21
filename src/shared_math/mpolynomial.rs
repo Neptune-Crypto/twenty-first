@@ -990,7 +990,13 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
             .unwrap_or(&0)
     }
 
-    /// This is sometimes called `total degree`.
+    /// Calculate the "total degree" of a multivariate polynomial.
+    ///
+    /// The total degree is defined as the highest combined degree of any
+    /// term where the combined degree is the sum of all the term's variable
+    /// exponents.
+    ///
+    /// As a convention, the polynomial f(x) = 0 has degree -1.
     pub fn degree(&self) -> Degree {
         if self.is_zero() {
             // The zero polynomial has degree -1.
@@ -1009,11 +1015,11 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         res.unwrap()
     }
 
-    ///  During symbolic evaluation, i.e., when substituting a univariate polynomial for one of the
-    ///  variables, the total degree of the resulting polynomial can be upper bounded.  This bound
-    ///  is the `total_degree_bound`, and can be calculated across all terms.  Only the constant
-    ///  zero polynomial `P(x,..) = 0` has a negative degree and it is always -1.  All other
-    ///  constant polynomials have degree 0.
+    /// During symbolic evaluation, i.e., when substituting a univariate polynomial for one of the
+    /// variables, the total degree of the resulting polynomial can be upper bounded.  This bound
+    /// is the `total_degree_bound`, and can be calculated across all terms.  Only the constant
+    /// zero polynomial `P(x,..) = 0` has a negative degree and it is always -1.  All other
+    /// constant polynomials have degree 0.
     ///
     /// - `max_degrees`:  the max degrees for each of the univariate polynomials.
     /// - `total_degree_bound`:  the max resulting degree from the substitution.
