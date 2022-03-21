@@ -7,6 +7,7 @@ use num_traits::Zero;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::iter::Sum;
@@ -17,6 +18,7 @@ use std::{cmp, fmt};
 use super::traits::PrimeField;
 
 type MCoefficients<T> = HashMap<Vec<u64>, T>;
+type Degree = i64;
 
 const EDMONDS_WEIGHT_CUTOFF_FACTOR: u64 = 2;
 
@@ -983,17 +985,62 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         *self
             .coefficients
             .keys()
-            .map(|coefficients| coefficients.iter().max().unwrap_or(&0))
+            .map(|exponents| exponents.iter().max().unwrap_or(&0))
             .max()
             .unwrap_or(&0)
     }
 
-    pub fn degree(&self) -> u64 {
-        self.coefficients
+    /// Calculate the "total degree" of a multivariate polynomial.
+    ///
+    /// The total degree is defined as the highest combined degree of any
+    /// term where the combined degree is the sum of all the term's variable
+    /// exponents.
+    ///
+    /// As a convention, the polynomial f(x) = 0 has degree -1.
+    pub fn degree(&self) -> Degree {
+        if self.is_zero() {
+            // The zero polynomial has degree -1.
+            return -1;
+        };
+
+        let total_degree: u64 = self
+            .coefficients
             .keys()
-            .map(|coefficients| coefficients.iter().sum::<u64>())
+            .map(|exponents| exponents.iter().sum::<u64>())
             .max()
-            .unwrap_or(0) as u64
+            .unwrap_or(0);
+
+        let res = i64::try_from(total_degree);
+        assert!(res.is_ok());
+        res.unwrap()
+    }
+
+    /// During symbolic evaluation, i.e., when substituting a univariate polynomial for one of the
+    /// variables, the total degree of the resulting polynomial can be upper bounded.  This bound
+    /// is the `total_degree_bound`, and can be calculated across all terms.  Only the constant
+    /// zero polynomial `P(x,..) = 0` has a negative degree and it is always -1.  All other
+    /// constant polynomials have degree 0.
+    ///
+    /// - `max_degrees`:  the max degrees for each of the univariate polynomials.
+    /// - `total_degree_bound`:  the max resulting degree from the substitution.
+    pub fn symbolic_degree_bound(&self, max_degrees: &[i64]) -> Degree {
+        assert_eq!(max_degrees.len(), self.variable_count);
+        let mut total_degree_bound: i64 = -1;
+        for (exponents, _coefficients) in self.coefficients.iter() {
+            let signed_exponents = exponents.iter().map(|e| {
+                let res = i64::try_from(*e);
+                assert!(res.is_ok());
+                res.unwrap()
+            });
+
+            let term_degree_bound = max_degrees
+                .iter()
+                .zip(signed_exponents)
+                .map(|(md, exp)| md * exp)
+                .sum();
+            total_degree_bound = cmp::max(total_degree_bound, term_degree_bound);
+        }
+        total_degree_bound
     }
 }
 
@@ -1142,27 +1189,37 @@ impl<PFElem: PrimeField> Mul for MPolynomial<PFElem> {
 }
 
 #[cfg(test)]
+#[macro_use]
 mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
-    use crate::utils::generate_random_numbers_u128;
+    use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
     use primitive_types::U256;
     use rand::RngCore;
     use std::collections::HashSet;
 
+    // Originally PrimeFieldBig which has now been repurposed to PrimeFieldFlexible
     fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
         let q_u256: U256 = q.into();
         if n < 0 {
             let positive_n: U256 = (-n).into();
             let field_element_n: U256 = positive_n % q_u256;
-
             -PrimeFieldElementFlexible::new(field_element_n, q_u256)
         } else {
             let positive_n: U256 = n.into();
             let field_element_n: U256 = positive_n % q_u256;
             PrimeFieldElementFlexible::new(field_element_n, q_u256)
+        }
+    }
+
+    // This function does what `pfb` used to do.
+    fn pfb_orthodox(n: i128) -> BFieldElement {
+        if n < 0 {
+            -BFieldElement::new((-n) as u128)
+        } else {
+            BFieldElement::new(n as u128)
         }
     }
 
@@ -2013,5 +2070,183 @@ mod test_mpolynomials {
         // adding 1 prevents us from building multivariate polynomial containing zero-coefficients
         let elem = rng.next_u64() % limit + 1;
         BFieldElement::new(elem as u128)
+    }
+
+    #[test]
+    fn symbolic_degree_bound_zero() {
+        let n = 0;
+        let zero_poly: MPolynomial<BFieldElement> = MPolynomial::zero(n);
+        let max_degrees = vec![];
+        let degree_zero = zero_poly.symbolic_degree_bound(&max_degrees);
+
+        assert_eq!(degree_zero, -1)
+    }
+
+    #[test]
+    fn symbolic_degree_bound_simple() {
+        // mpoly(x,y,z) := 3y^2z + 2z
+
+        let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
+
+        mcoef.insert(vec![0, 2, 1], BFieldElement::new(3));
+        mcoef.insert(vec![0, 0, 1], BFieldElement::new(1));
+
+        let mpoly = MPolynomial::<BFieldElement> {
+            variable_count: 3,
+            coefficients: mcoef,
+        };
+
+        let max_degrees = vec![3, 5, 7];
+        let degree_poly = mpoly.symbolic_degree_bound(&max_degrees);
+
+        let expected = cmp::max(0 * 3 + 2 * 5 + 1 * 7, 0 * 3 + 0 * 5 + 1 * 7);
+        assert_eq!(degree_poly, expected);
+    }
+
+    #[test]
+    fn symbolic_degree_bound_simple2() {
+        // mpoly(x,y,z) := 3y^2z + 2z
+
+        let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
+
+        mcoef.insert(vec![11, 13, 29], BFieldElement::new(41));
+        mcoef.insert(vec![19, 23, 17], BFieldElement::new(47));
+
+        let mpoly = MPolynomial::<BFieldElement> {
+            variable_count: 3,
+            coefficients: mcoef,
+        };
+
+        let max_degrees = vec![3, 5, 7];
+        let degree_poly = mpoly.symbolic_degree_bound(&max_degrees);
+
+        let expected = cmp::max(11 * 3 + 13 * 5 + 29 * 7, 19 * 3 + 23 * 5 + 17 * 7);
+        assert_eq!(degree_poly, expected);
+    }
+
+    #[test]
+    fn symbolic_degree_bound_zeroes() {
+        // mpoly(x,y,z) := 3y^2z + 2z
+
+        let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
+
+        mcoef.insert(vec![1, 2, 58], BFieldElement::new(76));
+        mcoef.insert(vec![1, 4, 5], BFieldElement::new(3));
+        mcoef.insert(vec![11, 13, 29], BFieldElement::new(41));
+        mcoef.insert(vec![19, 23, 17], BFieldElement::new(47));
+
+        let mpoly = MPolynomial::<BFieldElement> {
+            variable_count: 3,
+            coefficients: mcoef,
+        };
+
+        let max_degrees = vec![0, 0, 0];
+        let degree_poly = mpoly.symbolic_degree_bound(&max_degrees);
+
+        let expected = 0;
+        assert_eq!(degree_poly, expected);
+    }
+
+    #[test]
+    fn symbolic_degree_bound_ones() {
+        // mpoly(x,y,z) := 3y^2z + 2z
+
+        let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
+
+        mcoef.insert(vec![1, 2, 58], BFieldElement::new(76));
+        mcoef.insert(vec![1, 4, 5], BFieldElement::new(3));
+        mcoef.insert(vec![11, 13, 29], BFieldElement::new(41));
+        mcoef.insert(vec![19, 23, 17], BFieldElement::new(47));
+
+        let mpoly = MPolynomial::<BFieldElement> {
+            variable_count: 3,
+            coefficients: mcoef,
+        };
+
+        let max_degrees = vec![1, 1, 1];
+        let degree_poly = mpoly.symbolic_degree_bound(&max_degrees);
+
+        let expected = 1 + 2 + 58;
+        assert_eq!(degree_poly, expected);
+    }
+
+    /* TODO: Einar
+    #[test]
+    fn symbolic_degree_bound_random() {
+        let variable_count = 3;
+        let term_count = 5;
+        let exponenent_limit: u64 = 7;
+        let coefficient_limit = 11;
+
+        let rnd_mvpoly = gen_mpolynomial(
+            variable_count,
+            term_count,
+            exponenent_limit as u128,
+            coefficient_limit,
+        );
+
+        let mut max_degrees = Vec::<u64>::with_capacity(variable_count);
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..variable_count {
+            max_degrees.push(rng.next_u64() % exponenent_limit + 1);
+        }
+
+        let degree_poly = rnd_mvpoly.symbolic_degree_bound(&max_degrees);
+
+        assert_le!(
+            degree_poly,
+            variable_count as u64 * (exponenent_limit + 1) * (exponenent_limit + 1),
+            "The total degree is the max of the sums of the exponents in any term.",
+        )
+    }
+
+    */
+    fn symbolic_degree_bound_prop_gen() {
+        let variable_count = 4;
+        let term_count = 5;
+        let exponenent_limit: u64 = 7;
+        let coefficient_limit = 12;
+
+        // Generate one MPoly.
+        let mvpoly: MPolynomial<BFieldElement> = gen_mpolynomial(
+            variable_count,
+            term_count,
+            exponenent_limit as u128,
+            coefficient_limit,
+        );
+
+        // Generate one UPoly for each variable in MPoly.
+        let uvpolys: Vec<Polynomial<BFieldElement>> = (0..variable_count)
+            .map(|_| {
+                let q: u64 = 999983;
+                let coefficients: Vec<BFieldElement> =
+                    generate_random_numbers(term_count, q as i128)
+                        .iter()
+                        .map(|x| pfb_orthodox(*x))
+                        .collect();
+
+                Polynomial { coefficients }
+            })
+            .collect();
+
+        // Track A
+        let sym_eval: Degree = mvpoly.evaluate_symbolic(&uvpolys[..]).degree() as Degree;
+
+        // Track B
+        let max_degrees: Vec<Degree> = uvpolys.iter().map(|uvp| uvp.degree() as Degree).collect();
+
+        let sym_bound: Degree = mvpoly.symbolic_degree_bound(&max_degrees[..]);
+
+        assert_eq!(sym_eval, sym_bound)
+    }
+
+    #[test]
+    fn symbolic_degree_bound_prop() {
+        let runs = 100;
+
+        for _ in 0..runs {
+            symbolic_degree_bound_prop_gen();
+        }
     }
 }

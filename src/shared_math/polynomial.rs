@@ -106,10 +106,6 @@ impl<PFElem: PrimeField> PartialEq for Polynomial<PFElem> {
             return false;
         }
 
-        if self.degree() == -1 {
-            return true;
-        }
-
         self.coefficients
             .iter()
             .zip(other.coefficients.iter())
@@ -2876,6 +2872,14 @@ mod test_polynomials {
                 assert_eq!(Some(*coefficient), lifted_coefficient.unlift());
             }
         }
+    }
+
+    #[test]
+    fn constant_zero_eq_constant_zero() {
+        let zero_polynomial1 = Polynomial::<BFieldElement>::ring_zero();
+        let zero_polynomial2 = Polynomial::<BFieldElement>::ring_zero();
+
+        assert!(zero_polynomial1 == zero_polynomial2)
     }
 
     fn gen_polynomial() -> Polynomial<BFieldElement> {
