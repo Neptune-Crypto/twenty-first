@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use crate::shared_math::{b_field_element::BFieldElement, traits::IdentityValues};
 
+#[derive(Debug, Clone)]
 pub struct Register {
     pub cycle: BFieldElement,
     pub instruction_pointer: BFieldElement,
@@ -25,6 +26,32 @@ impl Register {
             is_zero: BFieldElement::ring_zero(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct BaseMatrices {
+    pub processor_matrix: Vec<Register>,
+    pub instruction_matrix: Vec<InstructionMatrixBaseRow>,
+    pub input_matrix: Vec<BFieldElement>,
+    pub output_matrix: Vec<BFieldElement>,
+}
+
+impl BaseMatrices {
+    pub fn default() -> Self {
+        Self {
+            processor_matrix: vec![],
+            instruction_matrix: vec![],
+            input_matrix: vec![],
+            output_matrix: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InstructionMatrixBaseRow {
+    pub instruction_pointer: BFieldElement,
+    pub current_instruction: BFieldElement,
+    pub next_instruction: BFieldElement,
 }
 
 pub fn compile(source_code: &str) -> Option<Vec<BFieldElement>> {
@@ -122,6 +149,152 @@ pub fn run(
     Some((trace_length, input_data_mut, output_data))
 }
 
+pub fn simulate(
+    program: Vec<BFieldElement>,
+    input_data: Vec<BFieldElement>,
+) -> Option<BaseMatrices> {
+    let zero = BFieldElement::ring_zero();
+    let one = BFieldElement::ring_one();
+    let two = BFieldElement::new(2);
+    let mut register = Register::default();
+    register.current_instruction = program[0];
+    if program.len() < 2 {
+        register.next_instruction = zero;
+    } else {
+        register.next_instruction = program[1];
+    }
+
+    let mut memory: HashMap<BFieldElement, BFieldElement> = HashMap::new();
+    let mut input_counter: usize = 0;
+
+    // Prepare tables. For '++[>++<-]' this would give:
+    // 0 + +
+    // 1 + [
+    // 2 [ >
+    // 3 > +
+    // ...
+    let mut base_matrices = BaseMatrices::default();
+    for i in 0..program.len() - 1 {
+        base_matrices
+            .instruction_matrix
+            .push(InstructionMatrixBaseRow {
+                instruction_pointer: BFieldElement::new(i as u128),
+                current_instruction: program[i],
+                next_instruction: program[i + 1],
+            });
+    }
+    base_matrices
+        .instruction_matrix
+        .push(InstructionMatrixBaseRow {
+            instruction_pointer: BFieldElement::new((program.len() - 1) as u128),
+            current_instruction: *program.last().unwrap(),
+            next_instruction: zero,
+        });
+
+    base_matrices.input_matrix.append(&mut input_data.clone());
+
+    // main loop
+    while (register.instruction_pointer.value() as usize) < program.len() {
+        // collect values to add new rows in execution matrices
+        base_matrices.processor_matrix.push(register.clone());
+        base_matrices
+            .instruction_matrix
+            .push(InstructionMatrixBaseRow {
+                instruction_pointer: register.instruction_pointer,
+                current_instruction: register.current_instruction,
+                next_instruction: register.next_instruction,
+            });
+
+        // update pointer registers according to instruction
+        if register.current_instruction == BFieldElement::new('[' as u128) {
+            if register.memory_value.is_zero() {
+                register.instruction_pointer =
+                    program[register.instruction_pointer.value() as usize + 1];
+            } else {
+                register.instruction_pointer += two;
+            }
+        } else if register.current_instruction == BFieldElement::new(']' as u128) {
+            if register.memory_value.is_zero() {
+                register.instruction_pointer =
+                    program[register.instruction_pointer.value() as usize + 1];
+            } else {
+                register.instruction_pointer += two;
+            }
+        } else if register.current_instruction == BFieldElement::new('<' as u128) {
+            register.instruction_pointer += one;
+            register.memory_pointer -= one;
+        } else if register.current_instruction == BFieldElement::new('>' as u128) {
+            register.instruction_pointer += one;
+            register.memory_pointer += one;
+        } else if register.current_instruction == BFieldElement::new('+' as u128) {
+            register.instruction_pointer += one;
+            memory.insert(
+                register.memory_pointer,
+                *memory.get(&register.memory_pointer).unwrap_or(&zero) + one,
+            );
+        } else if register.current_instruction == BFieldElement::new('-' as u128) {
+            register.instruction_pointer += one;
+            memory.insert(
+                register.memory_pointer,
+                *memory.get(&register.memory_pointer).unwrap_or(&zero) - one,
+            );
+        } else if register.current_instruction == BFieldElement::new('.' as u128) {
+            register.instruction_pointer += one;
+            base_matrices
+                .output_matrix
+                .push(*memory.get(&register.memory_pointer).unwrap_or(&zero));
+        } else if register.current_instruction == BFieldElement::new(',' as u128) {
+            register.instruction_pointer += one;
+            let input_char = base_matrices.input_matrix[input_counter];
+            input_counter += 1;
+            memory.insert(register.memory_pointer, input_char);
+            base_matrices.input_matrix.push(input_char);
+        } else {
+            return None;
+        }
+
+        // update non-pointer registers
+        register.cycle += one;
+
+        if (register.instruction_pointer.value() as usize) < program.len() {
+            register.current_instruction = program[register.instruction_pointer.value() as usize];
+        } else {
+            register.current_instruction = zero;
+        }
+
+        if (register.instruction_pointer.value() as usize) < program.len() - 1 {
+            register.next_instruction =
+                program[(register.instruction_pointer.value() as usize) + 1];
+        } else {
+            register.next_instruction = zero;
+        }
+
+        register.memory_value = *memory.get(&register.memory_pointer).unwrap_or(&zero);
+        register.is_zero = if register.memory_value.is_zero() {
+            one
+        } else {
+            zero
+        };
+    }
+
+    base_matrices.processor_matrix.push(register.clone());
+    base_matrices
+        .instruction_matrix
+        .push(InstructionMatrixBaseRow {
+            instruction_pointer: register.instruction_pointer,
+            current_instruction: register.current_instruction,
+            next_instruction: register.next_instruction,
+        });
+
+    // post-process context tables
+    // sort by instruction address
+    base_matrices
+        .instruction_matrix
+        .sort_by_key(|row| row.instruction_pointer.value());
+
+    Some(base_matrices)
+}
+
 #[cfg(test)]
 mod stark_bf_tests {
     use super::*;
@@ -138,18 +311,18 @@ mod stark_bf_tests {
 
     #[test]
     fn compile_two_by_two_test() {
-        let program = "++[>++<-],>[<.>-]";
-        let actual = compile(program);
-        assert!(actual.is_some());
-        assert_eq!(program.len() + 4, actual.unwrap().len());
+        let code = "++[>++<-],>[<.>-]";
+        let actual_program = compile(code);
+        assert!(actual_program.is_some());
+        assert_eq!(code.len() + 4, actual_program.unwrap().len());
     }
 
     #[test]
     fn run_two_by_two_test() {
-        let program = "++[>++<-],>[<.>-]";
-        let actual = compile(program);
+        let code = "++[>++<-],>[<.>-]";
+        let actual_program = compile(code);
         let (_trace_length, inputs, outputs) =
-            run(actual.unwrap(), vec![BFieldElement::new(97)]).unwrap();
+            run(actual_program.unwrap(), vec![BFieldElement::new(97)]).unwrap();
         assert_eq!(
             vec![
                 BFieldElement::new(97),
@@ -160,5 +333,14 @@ mod stark_bf_tests {
             outputs
         );
         assert_eq!(vec![BFieldElement::new(97),], inputs);
+    }
+
+    #[test]
+    fn simulate_two_by_two_test() {
+        let code = "++[>++<-],>[<.>-]";
+        let actual_program = compile(code).unwrap();
+        let base_matrices = simulate(actual_program, vec![BFieldElement::new(97)]);
+
+        println!("{:?}", base_matrices);
     }
 }
