@@ -78,6 +78,7 @@ pub fn compile(source_code: &str) -> Option<Vec<BFieldElement>> {
     }
 }
 
+/// Run program, returns (trace_length, input_data, output_data)
 pub fn run(
     program: Vec<BFieldElement>,
     input_data: Vec<BFieldElement>,
@@ -191,7 +192,7 @@ pub fn simulate(
             next_instruction: zero,
         });
 
-    base_matrices.input_matrix.append(&mut input_data.clone());
+    // base_matrices.input_matrix.append(&mut input_data.clone());
 
     // main loop
     while (register.instruction_pointer.value() as usize) < program.len() {
@@ -214,7 +215,7 @@ pub fn simulate(
                 register.instruction_pointer += two;
             }
         } else if register.current_instruction == BFieldElement::new(']' as u128) {
-            if register.memory_value.is_zero() {
+            if !register.memory_value.is_zero() {
                 register.instruction_pointer =
                     program[register.instruction_pointer.value() as usize + 1];
             } else {
@@ -245,7 +246,7 @@ pub fn simulate(
                 .push(*memory.get(&register.memory_pointer).unwrap_or(&zero));
         } else if register.current_instruction == BFieldElement::new(',' as u128) {
             register.instruction_pointer += one;
-            let input_char = base_matrices.input_matrix[input_counter];
+            let input_char = input_data[input_counter];
             input_counter += 1;
             memory.insert(register.memory_pointer, input_char);
             base_matrices.input_matrix.push(input_char);
@@ -339,8 +340,35 @@ mod stark_bf_tests {
     fn simulate_two_by_two_test() {
         let code = "++[>++<-],>[<.>-]";
         let actual_program = compile(code).unwrap();
-        let base_matrices = simulate(actual_program, vec![BFieldElement::new(97)]);
-
-        println!("{:?}", base_matrices);
+        let base_matrices: BaseMatrices =
+            simulate(actual_program.clone(), vec![BFieldElement::new(97)]).unwrap();
+        let (trace_length, input_data, output_data) =
+            run(actual_program, vec![BFieldElement::new(97)]).unwrap();
+        assert_eq!(trace_length, base_matrices.processor_matrix.len(), "Number of rows in processor matrix from simulate must match trace length returned from 'run'.");
+        assert_eq!(
+            input_data.len(),
+            base_matrices.input_matrix.len(),
+            "Number of rows in input matrix must match length of input data"
+        );
+        assert_eq!(
+            output_data.len(),
+            base_matrices.output_matrix.len(),
+            "Number of rows in output matrix must match length of output data"
+        );
+        assert_eq!(
+            vec![
+                BFieldElement::new(97),
+                BFieldElement::new(97),
+                BFieldElement::new(97),
+                BFieldElement::new(97)
+            ],
+            base_matrices.output_matrix,
+            "Output matrix must match output data"
+        );
+        assert_eq!(
+            vec![BFieldElement::new(97),],
+            base_matrices.input_matrix,
+            "Input matrix must match input data"
+        );
     }
 }
