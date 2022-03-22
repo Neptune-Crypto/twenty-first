@@ -1,4 +1,4 @@
-use super::prime_field_element_flexible::PrimeFieldElementFlexible;
+use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]

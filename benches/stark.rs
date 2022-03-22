@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::rescue_prime::RescuePrime;
 use twenty_first::shared_math::rescue_prime_params as params;
-use twenty_first::shared_math::stark::Stark;
+use twenty_first::shared_math::stark::stark_rp::StarkRp;
 use twenty_first::shared_math::traits::GetPrimitiveRootOfUnity;
 use twenty_first::timing_reporter::TimingReporter;
 use twenty_first::util_types::proof_stream::ProofStream;
@@ -12,7 +12,7 @@ fn stark_medium(criterion: &mut Criterion) {
     let benchmark_id = BenchmarkId::new("large", 7);
     // let rp: RescuePrime = params::rescue_prime_medium_test_params();
     // let benchmark_id = BenchmarkId::new("medium", 5);
-    let stark: Stark = Stark::new(16, 2, rp.m as u32, BFieldElement::new(7));
+    let stark: StarkRp = StarkRp::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
     let mut timer = TimingReporter::start();
 

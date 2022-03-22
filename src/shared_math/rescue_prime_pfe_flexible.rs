@@ -1,7 +1,7 @@
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
-use crate::shared_math::stark_constraints_pfe_flexible::BoundaryConstraint;
+use crate::shared_math::stark::stark_constraints_pfe_flexible::BoundaryConstraint;
 use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::traits::IdentityValues;
 use num_bigint::BigInt;

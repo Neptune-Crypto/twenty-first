@@ -1,4 +1,4 @@
-use super::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::BFieldElement;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
