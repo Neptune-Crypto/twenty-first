@@ -300,10 +300,12 @@ pub fn simulate(
 mod stark_bf_tests {
     use super::*;
 
+    static VERY_SIMPLE_PROGRAM: &str = "++++";
+    static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
+
     #[test]
     fn runtime_test_simple() {
-        let program = "++++";
-        let actual = compile(program);
+        let actual = compile(VERY_SIMPLE_PROGRAM);
         let (trace_length, inputs, outputs) = run(actual.unwrap(), vec![]).unwrap();
         assert!(inputs.is_empty());
         assert!(outputs.is_empty());
@@ -312,16 +314,17 @@ mod stark_bf_tests {
 
     #[test]
     fn compile_two_by_two_test() {
-        let code = "++[>++<-],>[<.>-]";
-        let actual_program = compile(code);
+        let actual_program = compile(TWO_BY_TWO_THEN_OUTPUT);
         assert!(actual_program.is_some());
-        assert_eq!(code.len() + 4, actual_program.unwrap().len());
+        assert_eq!(
+            TWO_BY_TWO_THEN_OUTPUT.len() + 4,
+            actual_program.unwrap().len()
+        );
     }
 
     #[test]
     fn run_two_by_two_test() {
-        let code = "++[>++<-],>[<.>-]";
-        let actual_program = compile(code);
+        let actual_program = compile(TWO_BY_TWO_THEN_OUTPUT);
         let (_trace_length, inputs, outputs) =
             run(actual_program.unwrap(), vec![BFieldElement::new(97)]).unwrap();
         assert_eq!(
@@ -339,7 +342,7 @@ mod stark_bf_tests {
     #[test]
     fn simulate_two_by_two_test() {
         let code = "++[>++<-],>[<.>-]";
-        let actual_program = compile(code).unwrap();
+        let actual_program = compile(TWO_BY_TWO_THEN_OUTPUT).unwrap();
         let base_matrices: BaseMatrices =
             simulate(actual_program.clone(), vec![BFieldElement::new(97)]).unwrap();
         let (trace_length, input_data, output_data) =
