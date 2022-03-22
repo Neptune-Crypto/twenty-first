@@ -341,7 +341,6 @@ mod stark_bf_tests {
 
     #[test]
     fn simulate_two_by_two_test() {
-        let code = "++[>++<-],>[<.>-]";
         let actual_program = compile(TWO_BY_TWO_THEN_OUTPUT).unwrap();
         let base_matrices: BaseMatrices =
             simulate(actual_program.clone(), vec![BFieldElement::new(97)]).unwrap();
