@@ -65,6 +65,10 @@ impl BFieldElement {
         Self(value % Self::QUOTIENT)
     }
 
+    pub fn value(&self) -> u64 {
+        self.0 as u64
+    }
+
     pub fn lift(&self) -> XFieldElement {
         XFieldElement::new_const(*self)
     }
@@ -410,6 +414,17 @@ mod b_prime_field_element_test {
         assert!(one.is_one());
         assert!(bfield_elem!(BFieldElement::MAX + 1).is_zero());
         assert!(bfield_elem!(BFieldElement::MAX + 2).is_one());
+    }
+
+    #[test]
+    fn simple_value_test() {
+        let zero: BFieldElement = bfield_elem!(0);
+        assert_eq!(0, zero.value());
+        let one: BFieldElement = BFieldElement::ring_one();
+        assert_eq!(1, one.value());
+
+        let neinneinnein = bfield_elem!(999);
+        assert_eq!(999, neinneinnein.value());
     }
 
     #[test]
