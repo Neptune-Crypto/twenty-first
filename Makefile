@@ -25,6 +25,11 @@ doc:
 	cargo doc --no-deps
 	xdg-open "target/doc/twenty_first/index.html"
 
+ctags:
+	# Do `cargo install rusty-tags`
+	# See https://github.com/dan-t/rusty-tags
+	rusty-tags vi
+
 format:
 	cargo fmt
 
