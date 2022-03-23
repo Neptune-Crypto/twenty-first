@@ -27,4 +27,23 @@ impl TableCollection {
             output_table,
         }
     }
+
+    pub fn get_max_degree(&self) -> usize {
+        let mut max_degree = 1;
+        for air in self.processor_table.base_transition_constraints() {
+            let degree_bounds: Vec<i64> = vec![
+                self.processor_table.0.interpolant_degree() as i64;
+                self.processor_table.0.base_width * 2
+            ];
+            let degree = air.symbolic_degree_bound(&degree_bounds)
+                - (self.processor_table.0.height - 1) as i64;
+            if max_degree < degree {
+                max_degree = degree;
+            }
+        }
+
+        // TODO: Add the other tables here to ensure that we calculate max degree correctly
+
+        max_degree as usize
+    }
 }

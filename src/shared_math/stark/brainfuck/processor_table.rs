@@ -247,7 +247,7 @@ impl ProcessorTableMore {
     }
 }
 
-struct ProcessorTableMore {
+pub struct ProcessorTableMore {
     codewords: Vec<Vec<BFieldElement>>,
 }
 
@@ -302,7 +302,7 @@ impl TableMoreTrait for ProcessorTableMore {
     }
 }
 
-pub struct ProcessorTable(Table<ProcessorTableMore>);
+pub struct ProcessorTable(pub Table<ProcessorTableMore>);
 
 impl ProcessorTable {
     // named indices for base columns (=register)

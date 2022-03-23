@@ -8,19 +8,23 @@ pub const INSTRUCTION_TABLE: usize = 1;
 pub const MEMORY_TABLE: usize = 2;
 
 pub struct Table<T> {
-    base_width: usize,
-    full_width: usize,
-    length: usize,
-    num_randomizers: usize,
-    height: usize,
-    omicron: BFieldElement,
-    generator: BFieldElement,
-    order: usize,
+    pub base_width: usize,
+    pub full_width: usize,
+    pub length: usize,
+    pub num_randomizers: usize,
+    pub height: usize,
+    pub omicron: BFieldElement,
+    pub generator: BFieldElement,
+    pub order: usize,
     matrix: Vec<Vec<BFieldElement>>,
     pub more: T,
 }
 
 impl<T: TableMoreTrait> Table<T> {
+    pub fn interpolant_degree(&self) -> usize {
+        self.height + self.num_randomizers
+    }
+
     pub fn new(
         base_width: usize,
         full_width: usize,
@@ -30,7 +34,7 @@ impl<T: TableMoreTrait> Table<T> {
         order: usize,
     ) -> Self {
         let height = other::roundup_npo2(length as u64) as usize;
-        let omicron = Self::derive_omicron(generator, order, height);
+        let omicron = Self::derive_omicron(height);
         let matrix = vec![];
         let more = T::new_more();
 
@@ -48,7 +52,8 @@ impl<T: TableMoreTrait> Table<T> {
         }
     }
 
-    fn derive_omicron(generator: BFieldElement, order: usize, height: usize) -> BFieldElement {
+    /// derive a generator with degree og height
+    fn derive_omicron(height: usize) -> BFieldElement {
         BFieldElement::ring_zero()
             .get_primitive_root_of_unity(height as u128)
             .0
