@@ -5,7 +5,7 @@ use crate::shared_math::stark::brainfuck::evaluation_argument::{
 };
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
 use crate::shared_math::stark::brainfuck::processor_table::{
-    IOTable, InstructionTable, MemoryTable, Table, TableCollection,
+    self, IOTable, InstructionTable, MemoryTable, Table, TableCollection,
 };
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
@@ -85,11 +85,11 @@ impl Stark {
 
         // instantiate permutation objects
         let processor_instruction_lhs = (
-            Table::<()>::PROCESSOR_TABLE,
+            processor_table::PROCESSOR_TABLE,
             ProcessorTable::INSTRUCTION_PERMUTATION,
         );
         let processor_instruction_rhs = (
-            Table::<()>::INSTRUCTION_TABLE,
+            processor_table::INSTRUCTION_TABLE,
             InstructionTable::PERMUTATION,
         );
         let processor_instruction_permutation = PermutationArgument::new(
@@ -99,10 +99,10 @@ impl Stark {
         );
 
         let processor_memory_lhs = (
-            Table::<()>::PROCESSOR_TABLE,
+            processor_table::PROCESSOR_TABLE,
             ProcessorTable::MEMORY_PERMUTATION,
         );
-        let processor_memory_rhs = (Table::<()>::MEMORY_TABLE, MemoryTable::PERMUTATION);
+        let processor_memory_rhs = (processor_table::MEMORY_TABLE, MemoryTable::PERMUTATION);
         let processor_memory_permutation =
             PermutationArgument::new(&tables, processor_memory_lhs, processor_memory_rhs);
 

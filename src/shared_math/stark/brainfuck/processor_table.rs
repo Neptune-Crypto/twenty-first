@@ -4,6 +4,10 @@ use crate::shared_math::{
 
 use super::vm::INSTRUCTIONS;
 
+pub const PROCESSOR_TABLE: usize = 0;
+pub const INSTRUCTION_TABLE: usize = 1;
+pub const MEMORY_TABLE: usize = 2;
+
 pub struct Table<T> {
     base_width: usize,
     full_width: usize,
@@ -18,10 +22,6 @@ pub struct Table<T> {
 }
 
 impl<T: TableMoreTrait> Table<T> {
-    pub const PROCESSOR_TABLE: usize = 0;
-    pub const INSTRUCTION_TABLE: usize = 1;
-    pub const MEMORY_TABLE: usize = 2;
-
     pub fn new(
         base_width: usize,
         full_width: usize,
@@ -300,12 +300,12 @@ impl TableMoreTrait for InstructionTableMore {
 
     fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
         let vars = MPolynomial::<BFieldElement>::variables(6, BFieldElement::ring_one());
-        let address = vars[0];
-        let current_instruction = vars[1];
-        let next_instruction = vars[2];
-        let address_next = vars[3];
-        let current_instruction_next = vars[4];
-        let next_instruction_next = vars[5];
+        let address = vars[0].clone();
+        let current_instruction = vars[1].clone();
+        let next_instruction = vars[2].clone();
+        let address_next = vars[3].clone();
+        let current_instruction_next = vars[4].clone();
+        let next_instruction_next = vars[5].clone();
 
         InstructionTable::transition_constraints_afo_named_variables(
             address,
@@ -361,11 +361,15 @@ impl InstructionTable {
         let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
 
         // instruction pointer increases by 0 or 1
-        polynomials.push((address_next - address - one) * (address_next - address));
+        polynomials.push(
+            (address_next.clone() - address.clone() - one.clone())
+                * (address_next.clone() - address.clone()),
+        );
 
         // if address is the same, then current instruction is also
         polynomials.push(
-            (address_next - address - one) * (current_instruction_next - current_instruction),
+            (address_next.clone() - address.clone() - one.clone())
+                * (current_instruction_next - current_instruction),
         );
 
         // if address is the same, then next instruction is also
