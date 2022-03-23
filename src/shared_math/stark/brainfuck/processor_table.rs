@@ -84,33 +84,6 @@ impl ProcessorTableMore {
         let mut polynomials: [MPolynomial<BFieldElement>; 3] =
             [zero.clone(), zero.clone(), zero.clone()];
 
-        // elif instr == '+':
-        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
-        //         instruction_pointer - one
-        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
-        //     polynomials[ProcessorTable.current_instruction] = memory_value_next - \
-        //         memory_value - one
-
-        // elif instr == '-':
-        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
-        //         instruction_pointer - one
-        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
-        //     polynomials[ProcessorTable.current_instruction] = memory_value_next - \
-        //         memory_value + one
-
-        // elif instr == ',':
-        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
-        //         instruction_pointer - one
-        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
-        //     # memory value, set by evaluation argument
-        //     polynomials[ProcessorTable.current_instruction] = zero
-
-        // elif instr == '.':
-        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
-        //         instruction_pointer - one
-        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
-        //     polynomials[ProcessorTable.current_instruction] = memory_value_next - memory_value
-
         // # account for padding:
         // # deactivate all polynomials if current instruction is zero
         // for i in range(len(polynomials)):
@@ -159,7 +132,7 @@ impl ProcessorTableMore {
                     - one.clone();
                 polynomials[1] =
                     memory_pointer_next.to_owned() - memory_pointer.to_owned() + one.clone();
-                // memory value, satisfied by permutation argument
+                // Memory value constraint cannot be calculated in processor table for this command. So we don't set it.
                 polynomials[2] = zero.clone();
             }
             '>' => {
@@ -170,36 +143,80 @@ impl ProcessorTableMore {
                 //         memory_pointer - one
                 //     # memory value, satisfied by permutation argument
                 //     polynomials[ProcessorTable.current_instruction] = zero
-                polynomials[0] = todo!();
-                polynomials[1] = todo!();
-                polynomials[2] = todo!();
+                polynomials[0] =
+                    instruction_pointer_next.to_owned() - memory_pointer.to_owned() - one.clone();
+                polynomials[1] =
+                    memory_pointer_next.to_owned() - memory_pointer.to_owned() - one.clone();
+                // Memory value constraint cannot be calculated in processor table for this command. So we don't set it.
+                polynomials[2] = zero.clone();
             }
             '+' => {
-                polynomials[0] = todo!();
-                polynomials[1] = todo!();
-                polynomials[2] = todo!();
+                // elif instr == '+':
+                //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+                //         instruction_pointer - one
+                //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+                //     polynomials[ProcessorTable.current_instruction] = memory_value_next - \
+                //         memory_value - one
+                polynomials[0] = instruction_pointer_next.to_owned()
+                    - instruction_pointer.to_owned()
+                    - one.clone();
+                polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
+                polynomials[2] =
+                    memory_value_next.to_owned() - memory_value.to_owned() - one.clone();
             }
             '-' => {
-                polynomials[0] = todo!();
-                polynomials[1] = todo!();
-                polynomials[2] = todo!();
+                // elif instr == '-':
+                //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+                //         instruction_pointer - one
+                //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+                //     polynomials[ProcessorTable.current_instruction] = memory_value_next - \
+                //         memory_value + one
+                polynomials[0] = instruction_pointer_next.to_owned()
+                    - instruction_pointer.to_owned()
+                    - one.clone();
+                polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
+                polynomials[2] =
+                    memory_value_next.to_owned() - memory_value.to_owned() + one.clone();
             }
             ',' => {
-                polynomials[0] = todo!();
-                polynomials[1] = todo!();
-                polynomials[2] = todo!();
+                // elif instr == ',':
+                //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+                //         instruction_pointer - one
+                //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+                //     # memory value, set by evaluation argument
+                //     polynomials[ProcessorTable.current_instruction] = zero
+
+                polynomials[0] = instruction_pointer_next.to_owned()
+                    - instruction_pointer.to_owned()
+                    - one.clone();
+                polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
+                // Memory value constraint cannot be calculated in processor table for this command. So we don't set it.
+                polynomials[2] = zero.clone();
             }
             '.' => {
-                polynomials[0] = todo!();
-                polynomials[1] = todo!();
-                polynomials[2] = todo!();
+                // elif instr == '.':
+                //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+                //         instruction_pointer - one
+                //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+                //     polynomials[ProcessorTable.current_instruction] = memory_value_next - memory_value
+                polynomials[0] = instruction_pointer_next.to_owned()
+                    - instruction_pointer.to_owned()
+                    - one.clone();
+                polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
+                // Memory value is unchanged
+                polynomials[2] = memory_value_next.to_owned() - memory_value.to_owned();
             }
             _ => {
                 panic!("Unrecognized instruction. Got: {}", instruction);
             }
         }
 
-        todo!()
+        // Account for padding by deactivating all polynomials if the instruction is zero
+        for poly in polynomials.iter_mut() {
+            *poly = poly.to_owned() * current_instruction.to_owned();
+        }
+
+        polynomials
     }
 
     fn ifnot_instruction(
