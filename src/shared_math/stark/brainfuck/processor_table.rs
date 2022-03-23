@@ -2,6 +2,8 @@ use crate::shared_math::{
     b_field_element::BFieldElement, mpolynomial::MPolynomial, other, x_field_element::XFieldElement,
 };
 
+use super::vm::INSTRUCTIONS;
+
 pub struct Table<T> {
     base_width: usize,
     full_width: usize,
@@ -57,6 +59,49 @@ pub trait TableMoreTrait {
     fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>>;
 }
 
+impl ProcessorTableMore {
+    fn transition_constraints_afo_named_variables(
+        cycle: MPolynomial<BFieldElement>,
+        instruction_pointer: MPolynomial<BFieldElement>,
+        current_instruction: MPolynomial<BFieldElement>,
+        next_instruction: MPolynomial<BFieldElement>,
+        memory_pointer: MPolynomial<BFieldElement>,
+        memory_value: MPolynomial<BFieldElement>,
+        is_zero: MPolynomial<BFieldElement>,
+        cycle_next: MPolynomial<BFieldElement>,
+        instruction_pointer_next: MPolynomial<BFieldElement>,
+        current_instruction_next: MPolynomial<BFieldElement>,
+        next_instruction_next: MPolynomial<BFieldElement>,
+        memory_pointer_next: MPolynomial<BFieldElement>,
+        memory_value_next: MPolynomial<BFieldElement>,
+        is_zero_next: MPolynomial<BFieldElement>,
+    ) {
+        for c in INSTRUCTIONS.iter() {
+            // Max degree: 3
+            let instr = Self::instruction_polynomials(
+                c,
+                cycle,
+                instruction_pointer,
+                current_instruction,
+                next_instruction,
+                memory_pointer,
+                memory_value,
+                is_zero,
+                cycle_next,
+                instruction_pointer_next,
+                current_instruction_next,
+                next_instruction_next,
+                memory_pointer_next,
+                memory_value_next,
+                is_zero_next,
+            );
+
+            // Max degree: 7
+            let deselector = Self::if_not_instruction(c, current_instruction);
+        }
+    }
+}
+
 struct ProcessorTableMore {
     codewords: Vec<Vec<BFieldElement>>,
 }
@@ -67,6 +112,27 @@ impl TableMoreTrait for ProcessorTableMore {
     }
 
     fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
+        let mut variables = MPolynomial::<BFieldElement>::variables(14, BFieldElement::ring_one());
+        variables.reverse();
+        let cycle = variables.pop();
+        let instruction_pointer = variables.pop();
+        let current_instruction = variables.pop();
+        let next_instruction = variables.pop();
+        let memory_pointer = variables.pop();
+        let memory_value = variables.pop();
+        let is_zero = variables.pop();
+        let cycle_next = variables.pop();
+        let instruction_pointer_next = variables.pop();
+        let current_instruction_next = variables.pop();
+        let next_instruction_next = variables.pop();
+        let memory_pointer_next = variables.pop();
+        let memory_value_next = variables.pop();
+        let is_zero_next = variables.pop();
+        assert!(
+            variables.is_empty(),
+            "Variables must be empty after destructuring into named variables"
+        );
+
         todo!()
     }
 }

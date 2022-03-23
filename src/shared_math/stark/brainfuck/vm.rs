@@ -3,6 +3,8 @@ use std::collections::HashMap;
 
 use crate::shared_math::{b_field_element::BFieldElement, traits::IdentityValues};
 
+pub const INSTRUCTIONS: [char; 8] = ['[', ']', '<', '>', '+', '-', ',', '.'];
+
 #[derive(Debug, Clone)]
 pub struct Register {
     pub cycle: BFieldElement,
