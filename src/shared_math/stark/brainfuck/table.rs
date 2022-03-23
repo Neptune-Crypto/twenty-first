@@ -22,7 +22,7 @@ pub struct Table<T> {
 
 impl<T: TableMoreTrait> Table<T> {
     pub fn interpolant_degree(&self) -> usize {
-        self.height + self.num_randomizers
+        self.height + self.num_randomizers - 1
     }
 
     pub fn new(
@@ -33,7 +33,11 @@ impl<T: TableMoreTrait> Table<T> {
         generator: BFieldElement,
         order: usize,
     ) -> Self {
-        let height = other::roundup_npo2(length as u64) as usize;
+        let height = if length != 0 {
+            other::roundup_npo2(length as u64) as usize
+        } else {
+            0
+        };
         let omicron = Self::derive_omicron(height);
         let matrix = vec![];
         let more = T::new_more();
@@ -54,6 +58,10 @@ impl<T: TableMoreTrait> Table<T> {
 
     /// derive a generator with degree og height
     fn derive_omicron(height: usize) -> BFieldElement {
+        if height == 0 {
+            return BFieldElement::ring_one();
+        }
+
         BFieldElement::ring_zero()
             .get_primitive_root_of_unity(height as u128)
             .0
