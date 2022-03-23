@@ -1,4 +1,7 @@
 pub mod evaluation_argument;
+pub mod instruction_table;
+pub mod io_table;
+pub mod memory_table;
 pub mod permutation_argument;
 pub mod processor_table;
 pub mod stark;

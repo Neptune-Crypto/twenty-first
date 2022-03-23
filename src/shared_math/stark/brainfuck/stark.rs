@@ -1,12 +1,11 @@
-use std::fs::Permissions;
-
 use crate::shared_math::stark::brainfuck::evaluation_argument::{
     EvaluationArgument, ProgramEvaluationArgument,
 };
+use crate::shared_math::stark::brainfuck::instruction_table::InstructionTable;
+use crate::shared_math::stark::brainfuck::io_table::IOTable;
+use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
-use crate::shared_math::stark::brainfuck::processor_table::{
-    self, IOTable, InstructionTable, MemoryTable, Table,
-};
+use crate::shared_math::stark::brainfuck::table;
 use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
@@ -86,24 +85,18 @@ impl Stark {
 
         // instantiate permutation objects
         let processor_instruction_lhs = (
-            processor_table::PROCESSOR_TABLE,
+            table::PROCESSOR_TABLE,
             ProcessorTable::INSTRUCTION_PERMUTATION,
         );
-        let processor_instruction_rhs = (
-            processor_table::INSTRUCTION_TABLE,
-            InstructionTable::PERMUTATION,
-        );
+        let processor_instruction_rhs = (table::INSTRUCTION_TABLE, InstructionTable::PERMUTATION);
         let processor_instruction_permutation = PermutationArgument::new(
             &tables,
             processor_instruction_lhs,
             processor_instruction_rhs,
         );
 
-        let processor_memory_lhs = (
-            processor_table::PROCESSOR_TABLE,
-            ProcessorTable::MEMORY_PERMUTATION,
-        );
-        let processor_memory_rhs = (processor_table::MEMORY_TABLE, MemoryTable::PERMUTATION);
+        let processor_memory_lhs = (table::PROCESSOR_TABLE, ProcessorTable::MEMORY_PERMUTATION);
+        let processor_memory_rhs = (table::MEMORY_TABLE, MemoryTable::PERMUTATION);
         let processor_memory_permutation =
             PermutationArgument::new(&tables, processor_memory_lhs, processor_memory_rhs);
 

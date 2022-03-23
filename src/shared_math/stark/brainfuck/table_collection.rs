@@ -1,4 +1,7 @@
-use super::processor_table::{IOTable, InstructionTable, MemoryTable, ProcessorTable};
+use super::{
+    instruction_table::InstructionTable, io_table::IOTable, memory_table::MemoryTable,
+    processor_table::ProcessorTable,
+};
 
 pub struct TableCollection {
     pub processor_table: ProcessorTable,
