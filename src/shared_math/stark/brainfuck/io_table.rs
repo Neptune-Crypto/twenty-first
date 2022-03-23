@@ -17,11 +17,11 @@ impl TableMoreTrait for IOTableMore {
         }
     }
 
-    fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         todo!()
     }
 
-    fn base_boundary_constraints() -> Vec<MPolynomial<BFieldElement>> {
+    fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         todo!()
     }
 }

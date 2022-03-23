@@ -11,7 +11,7 @@ impl TableMoreTrait for InstructionTableMore {
         InstructionTableMore(())
     }
 
-    fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         let vars = MPolynomial::<BFieldElement>::variables(6, BFieldElement::ring_one());
         let address = vars[0].clone();
         let current_instruction = vars[1].clone();
@@ -35,7 +35,7 @@ impl TableMoreTrait for InstructionTableMore {
     //     x = MPolynomial.variables(self.width, self.field)
     //     zero = MPolynomial.zero()
     //     return [x[InstructionTable.address]-zero]
-    fn base_boundary_constraints() -> Vec<MPolynomial<BFieldElement>> {
+    fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         let x = MPolynomial::<BFieldElement>::variables(
             InstructionTable::FULL_WIDTH,
             BFieldElement::ring_one(),

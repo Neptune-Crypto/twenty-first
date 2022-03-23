@@ -1,4 +1,7 @@
-use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial, other};
+use crate::shared_math::{
+    b_field_element::BFieldElement, mpolynomial::MPolynomial, other,
+    traits::GetPrimitiveRootOfUnity,
+};
 
 pub const PROCESSOR_TABLE: usize = 0;
 pub const INSTRUCTION_TABLE: usize = 1;
@@ -46,12 +49,15 @@ impl<T: TableMoreTrait> Table<T> {
     }
 
     fn derive_omicron(generator: BFieldElement, order: usize, height: usize) -> BFieldElement {
-        todo!()
+        BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(height as u128)
+            .0
+            .unwrap()
     }
 }
 
 pub trait TableMoreTrait {
     fn new_more() -> Self;
-    fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>>;
-    fn base_boundary_constraints() -> Vec<MPolynomial<BFieldElement>>;
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
+    fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
 }
