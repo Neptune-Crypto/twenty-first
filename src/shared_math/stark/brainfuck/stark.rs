@@ -23,8 +23,8 @@ pub struct Stark {
     num_colinearity_checks: usize,
     num_randomizers: usize,
     // base_tables: [BaseTable; 5],
-    // permutation_arguments: [PermuationArgument; 2],
-    // evaluation_arguments: [EvaluationArgument; 3],
+    io_evaluation_arguments: [EvaluationArgument; 2],
+    program_evaluation_argument: ProgramEvaluationArgument,
     max_degree: usize,
     fri: Fri<XFieldElement, blake3::Hasher>,
 }
@@ -126,12 +126,13 @@ impl Stark {
             tables.output_table.terminal_index(),
             output_symbols,
         );
+        let io_evaluation_arguments = [input_evaluation, output_evaluation];
 
         // program_evaluation = ProgramEvaluationArgument(
         //     [0, 1, 2, 6], 4, program)
         let program_challenge_indices = vec![0, 1, 2, 6];
         let program_terminal_index = 4;
-        let program_evaluation = ProgramEvaluationArgument::new(
+        let program_evaluation_argument = ProgramEvaluationArgument::new(
             program_challenge_indices,
             program_terminal_index,
             program,
