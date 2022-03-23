@@ -84,8 +84,66 @@ impl ProcessorTableMore {
         let mut polynomials: [MPolynomial<BFieldElement>; 3] =
             [zero.clone(), zero.clone(), zero.clone()];
 
+        // elif instr == ']':
+        //     polynomials[ProcessorTable.cycle] = is_zero * (instruction_pointer_next - instruction_pointer - two) + \
+        //         memory_value * (instruction_pointer_next - next_instruction)
+        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+        //     polynomials[ProcessorTable.current_instruction] = memory_value_next - memory_value
+
+        // elif instr == '<':
+        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+        //         instruction_pointer - one
+        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - \
+        //         memory_pointer + one
+        //     # memory value, satisfied by permutation argument
+        //     polynomials[ProcessorTable.current_instruction] = zero
+
+        // elif instr == '>':
+        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+        //         instruction_pointer - one
+        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - \
+        //         memory_pointer - one
+        //     # memory value, satisfied by permutation argument
+        //     polynomials[ProcessorTable.current_instruction] = zero
+
+        // elif instr == '+':
+        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+        //         instruction_pointer - one
+        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+        //     polynomials[ProcessorTable.current_instruction] = memory_value_next - \
+        //         memory_value - one
+
+        // elif instr == '-':
+        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+        //         instruction_pointer - one
+        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+        //     polynomials[ProcessorTable.current_instruction] = memory_value_next - \
+        //         memory_value + one
+
+        // elif instr == ',':
+        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+        //         instruction_pointer - one
+        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+        //     # memory value, set by evaluation argument
+        //     polynomials[ProcessorTable.current_instruction] = zero
+
+        // elif instr == '.':
+        //     polynomials[ProcessorTable.cycle] = instruction_pointer_next - \
+        //         instruction_pointer - one
+        //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+        //     polynomials[ProcessorTable.current_instruction] = memory_value_next - memory_value
+
+        // # account for padding:
+        // # deactivate all polynomials if current instruction is zero
+        // for i in range(len(polynomials)):
+        //     polynomials[i] *= current_instruction
         match instruction {
             '[' => {
+                //     if instr == '[':
+                //     polynomials[ProcessorTable.cycle] = memory_value * (instruction_pointer_next - instruction_pointer - two) + \
+                //         is_zero * (instruction_pointer_next - next_instruction)
+                //     polynomials[ProcessorTable.instruction_pointer] = memory_pointer_next - memory_pointer
+                //     polynomials[ProcessorTable.current_instruction] = memory_value_next - memory_value
                 polynomials[0] = todo!();
                 polynomials[1] = todo!();
                 polynomials[2] = todo!();
@@ -207,9 +265,9 @@ impl ProcessorTableMore {
 
         // Instruction independent polynomials
         let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
-        polynomials[4] = cycle_next - cycle - one.clone();
-        polynomials[5] = is_zero.clone() * memory_value;
-        polynomials[6] = is_zero.clone() * (one - is_zero);
+        polynomials[3] = cycle_next - cycle - one.clone();
+        polynomials[4] = is_zero.clone() * memory_value;
+        polynomials[5] = is_zero.clone() * (one - is_zero);
 
         polynomials
     }
@@ -227,26 +285,42 @@ impl TableMoreTrait for ProcessorTableMore {
     fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
         let mut variables = MPolynomial::<BFieldElement>::variables(14, BFieldElement::ring_one());
         variables.reverse();
-        let cycle = variables.pop();
-        let instruction_pointer = variables.pop();
-        let current_instruction = variables.pop();
-        let next_instruction = variables.pop();
-        let memory_pointer = variables.pop();
-        let memory_value = variables.pop();
-        let is_zero = variables.pop();
-        let cycle_next = variables.pop();
-        let instruction_pointer_next = variables.pop();
-        let current_instruction_next = variables.pop();
-        let next_instruction_next = variables.pop();
-        let memory_pointer_next = variables.pop();
-        let memory_value_next = variables.pop();
-        let is_zero_next = variables.pop();
+        let cycle = variables.pop().unwrap();
+        let instruction_pointer = variables.pop().unwrap();
+        let current_instruction = variables.pop().unwrap();
+        let next_instruction = variables.pop().unwrap();
+        let memory_pointer = variables.pop().unwrap();
+        let memory_value = variables.pop().unwrap();
+        let is_zero = variables.pop().unwrap();
+        let cycle_next = variables.pop().unwrap();
+        let instruction_pointer_next = variables.pop().unwrap();
+        let current_instruction_next = variables.pop().unwrap();
+        let next_instruction_next = variables.pop().unwrap();
+        let memory_pointer_next = variables.pop().unwrap();
+        let memory_value_next = variables.pop().unwrap();
+        let is_zero_next = variables.pop().unwrap();
         assert!(
             variables.is_empty(),
             "Variables must be empty after destructuring into named variables"
         );
 
-        todo!()
+        Self::transition_constraints_afo_named_variables(
+            cycle,
+            instruction_pointer,
+            current_instruction,
+            next_instruction,
+            memory_pointer,
+            memory_value,
+            is_zero,
+            cycle_next,
+            instruction_pointer_next,
+            current_instruction_next,
+            next_instruction_next,
+            memory_pointer_next,
+            memory_value_next,
+            is_zero_next,
+        )
+        .into()
     }
 
     fn base_boundary_constraints() -> Vec<MPolynomial<BFieldElement>> {
