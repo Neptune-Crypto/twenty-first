@@ -187,7 +187,22 @@ impl TableMoreTrait for InstructionTableMore {
     }
 
     fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
-        todo!()
+        let vars = MPolynomial::<BFieldElement>::variables(6, BFieldElement::ring_one());
+        let address = vars[0];
+        let current_instruction = vars[1];
+        let next_instruction = vars[2];
+        let address_next = vars[3];
+        let current_instruction_next = vars[4];
+        let next_instruction_next = vars[5];
+
+        InstructionTable::transition_constraints_afo_named_variables(
+            address,
+            current_instruction,
+            next_instruction,
+            address_next,
+            current_instruction_next,
+            next_instruction_next,
+        )
     }
 }
 
@@ -220,6 +235,32 @@ impl InstructionTable {
         );
 
         Self(table)
+    }
+
+    fn transition_constraints_afo_named_variables(
+        address: MPolynomial<BFieldElement>,
+        current_instruction: MPolynomial<BFieldElement>,
+        next_instruction: MPolynomial<BFieldElement>,
+        address_next: MPolynomial<BFieldElement>,
+        current_instruction_next: MPolynomial<BFieldElement>,
+        next_instruction_next: MPolynomial<BFieldElement>,
+    ) -> Vec<MPolynomial<BFieldElement>> {
+        let mut polynomials: Vec<MPolynomial<BFieldElement>> = vec![];
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+
+        // instruction pointer increases by 0 or 1
+        polynomials.push((address_next - address - one) * (address_next - address));
+
+        // if address is the same, then current instruction is also
+        polynomials.push(
+            (address_next - address - one) * (current_instruction_next - current_instruction),
+        );
+
+        // if address is the same, then next instruction is also
+        polynomials
+            .push((address_next - address - one) * (next_instruction_next - next_instruction));
+
+        polynomials
     }
 }
 
