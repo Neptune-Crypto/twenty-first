@@ -177,11 +177,13 @@ impl ProcessorTable {
     }
 }
 
-pub struct InstructionTable(Table<()>);
+pub struct InstructionTable(Table<InstructionTableMore>);
 
-impl TableMoreTrait for () {
+pub struct InstructionTableMore(());
+
+impl TableMoreTrait for InstructionTableMore {
     fn new_more() -> Self {
-        ()
+        InstructionTableMore(())
     }
 
     fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
@@ -208,7 +210,7 @@ impl InstructionTable {
         let base_width = 3;
         let full_width = 5;
 
-        let table = Table::<()>::new(
+        let table = Table::<InstructionTableMore>::new(
             base_width,
             full_width,
             length,
@@ -221,7 +223,19 @@ impl InstructionTable {
     }
 }
 
-pub struct MemoryTable(Table<()>);
+pub struct MemoryTable(Table<MemoryTableMore>);
+
+pub struct MemoryTableMore(());
+
+impl TableMoreTrait for MemoryTableMore {
+    fn new_more() -> Self {
+        MemoryTableMore(())
+    }
+
+    fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
+    }
+}
 
 impl MemoryTable {
     // named indices for base columns
@@ -241,7 +255,7 @@ impl MemoryTable {
         let base_width = 3;
         let full_width = 4;
 
-        let table = Table::<()>::new(
+        let table = Table::<MemoryTableMore>::new(
             base_width,
             full_width,
             length,
