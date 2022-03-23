@@ -60,6 +60,95 @@ pub trait TableMoreTrait {
 }
 
 impl ProcessorTableMore {
+    fn instruction_polynomials(
+        instruction: char,
+        cycle: &MPolynomial<BFieldElement>,
+        instruction_pointer: &MPolynomial<BFieldElement>,
+        current_instruction: &MPolynomial<BFieldElement>,
+        next_instruction: &MPolynomial<BFieldElement>,
+        memory_pointer: &MPolynomial<BFieldElement>,
+        memory_value: &MPolynomial<BFieldElement>,
+        is_zero: &MPolynomial<BFieldElement>,
+        cycle_next: &MPolynomial<BFieldElement>,
+        instruction_pointer_next: &MPolynomial<BFieldElement>,
+        current_instruction_next: &MPolynomial<BFieldElement>,
+        next_instruction_next: &MPolynomial<BFieldElement>,
+        memory_pointer_next: &MPolynomial<BFieldElement>,
+        memory_value_next: &MPolynomial<BFieldElement>,
+        is_zero_next: &MPolynomial<BFieldElement>,
+    ) -> [MPolynomial<BFieldElement>; 3] {
+        let zero = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+        let two = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+        let mut polynomials: [MPolynomial<BFieldElement>; 3] =
+            [zero.clone(), zero.clone(), zero.clone()];
+
+        match instruction {
+            '[' => {
+                polynomials[0] = todo!();
+                polynomials[1] = todo!();
+                polynomials[2] = todo!();
+            }
+            ']' => {
+                polynomials[0] = todo!();
+                polynomials[1] = todo!();
+                polynomials[2] = todo!();
+            }
+            '<' => {
+                polynomials[0] = todo!();
+                polynomials[1] = todo!();
+                polynomials[2] = todo!();
+            }
+            '>' => {
+                polynomials[0] = todo!();
+                polynomials[1] = todo!();
+                polynomials[2] = todo!();
+            }
+            '+' => {
+                polynomials[0] = todo!();
+                polynomials[1] = todo!();
+                polynomials[2] = todo!();
+            }
+            '-' => {
+                polynomials[0] = todo!();
+                polynomials[1] = todo!();
+                polynomials[2] = todo!();
+            }
+            ',' => {
+                polynomials[0] = todo!();
+                polynomials[1] = todo!();
+                polynomials[2] = todo!();
+            }
+            '.' => {
+                polynomials[0] = todo!();
+                polynomials[1] = todo!();
+                polynomials[2] = todo!();
+            }
+            _ => {
+                panic!("Unrecognized instruction. Got: {}", instruction);
+            }
+        }
+
+        todo!()
+    }
+
+    fn ifnot_instruction(
+        instruction: char,
+        indeterminate: &MPolynomial<BFieldElement>,
+    ) -> MPolynomial<BFieldElement> {
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+        let mut acc = one;
+        for c in INSTRUCTIONS.iter() {
+            if *c != instruction {
+                acc = acc
+                    * (indeterminate.to_owned()
+                        - MPolynomial::from_constant(BFieldElement::new(*c as u128), 14));
+            }
+        }
+
+        acc
+    }
+
     fn transition_constraints_afo_named_variables(
         cycle: MPolynomial<BFieldElement>,
         instruction_pointer: MPolynomial<BFieldElement>,
@@ -75,30 +164,53 @@ impl ProcessorTableMore {
         memory_pointer_next: MPolynomial<BFieldElement>,
         memory_value_next: MPolynomial<BFieldElement>,
         is_zero_next: MPolynomial<BFieldElement>,
-    ) {
+    ) -> [MPolynomial<BFieldElement>; 6] {
+        // TODO: Is variable count = 14 here?
+        let elem = MPolynomial::<BFieldElement>::zero(14);
+        let mut polynomials: [MPolynomial<BFieldElement>; 6] = [
+            elem.clone(),
+            elem.clone(),
+            elem.clone(),
+            elem.clone(),
+            elem.clone(),
+            elem,
+        ];
+
         for c in INSTRUCTIONS.iter() {
             // Max degree: 3
-            let instr = Self::instruction_polynomials(
-                c,
-                cycle,
-                instruction_pointer,
-                current_instruction,
-                next_instruction,
-                memory_pointer,
-                memory_value,
-                is_zero,
-                cycle_next,
-                instruction_pointer_next,
-                current_instruction_next,
-                next_instruction_next,
-                memory_pointer_next,
-                memory_value_next,
-                is_zero_next,
+            let instrs: [MPolynomial<BFieldElement>; 3] = Self::instruction_polynomials(
+                *c,
+                &cycle,
+                &instruction_pointer,
+                &current_instruction,
+                &next_instruction,
+                &memory_pointer,
+                &memory_value,
+                &is_zero,
+                &cycle_next,
+                &instruction_pointer_next,
+                &current_instruction_next,
+                &next_instruction_next,
+                &memory_pointer_next,
+                &memory_value_next,
+                &is_zero_next,
             );
 
             // Max degree: 7
-            let deselector = Self::if_not_instruction(c, current_instruction);
+            let deselector = Self::ifnot_instruction(*c, &current_instruction);
+
+            for (i, instr) in instrs.iter().enumerate() {
+                polynomials[i] += deselector.to_owned() * instr.to_owned();
+            }
         }
+
+        // Instruction independent polynomials
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+        polynomials[4] = cycle_next - cycle - one.clone();
+        polynomials[5] = is_zero.clone() * memory_value;
+        polynomials[6] = is_zero.clone() * (one - is_zero);
+
+        polynomials
     }
 }
 
