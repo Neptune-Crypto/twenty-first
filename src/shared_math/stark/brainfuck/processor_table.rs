@@ -57,6 +57,7 @@ impl<T: TableMoreTrait> Table<T> {
 pub trait TableMoreTrait {
     fn new_more() -> Self;
     fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>>;
+    fn base_boundary_constraints() -> Vec<MPolynomial<BFieldElement>>;
 }
 
 impl ProcessorTableMore {
@@ -247,6 +248,10 @@ impl TableMoreTrait for ProcessorTableMore {
 
         todo!()
     }
+
+    fn base_boundary_constraints() -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
+    }
 }
 
 pub struct ProcessorTable(Table<ProcessorTableMore>);
@@ -267,18 +272,19 @@ impl ProcessorTable {
     pub const INPUT_EVALUATION: usize = 9;
     pub const OUTPUT_EVALUATION: usize = 10;
 
+    // base and extension table width
+    pub const BASE_WIDTH: usize = 7;
+    pub const FULL_WIDTH: usize = 11;
+
     pub fn new(
         length: usize,
         num_randomizers: usize,
         generator: BFieldElement,
         order: usize,
     ) -> Self {
-        let base_width = 7;
-        let full_width = 11;
-
         let table = Table::<ProcessorTableMore>::new(
-            base_width,
-            full_width,
+            Self::BASE_WIDTH,
+            Self::FULL_WIDTH,
             length,
             num_randomizers,
             generator,
@@ -316,6 +322,24 @@ impl TableMoreTrait for InstructionTableMore {
             next_instruction_next,
         )
     }
+
+    // def base_boundary_constraints(self):
+    //     # format: mpolynomial
+    //     x = MPolynomial.variables(self.width, self.field)
+    //     zero = MPolynomial.zero()
+    //     return [x[InstructionTable.address]-zero]
+    fn base_boundary_constraints() -> Vec<MPolynomial<BFieldElement>> {
+        let x = MPolynomial::<BFieldElement>::variables(
+            InstructionTable::FULL_WIDTH,
+            BFieldElement::ring_one(),
+        );
+
+        // Why create 'x' and then throw all but 'address' away?
+        let address = x[InstructionTable::ADDRESS].clone();
+        let zero = MPolynomial::<BFieldElement>::zero(InstructionTable::FULL_WIDTH);
+
+        vec![address - zero]
+    }
 }
 
 impl InstructionTable {
@@ -328,18 +352,19 @@ impl InstructionTable {
     pub const PERMUTATION: usize = 3;
     pub const EVALUATION: usize = 4;
 
+    // base and extension table width
+    pub const BASE_WIDTH: usize = 3;
+    pub const FULL_WIDTH: usize = 5;
+
     pub fn new(
         length: usize,
         num_randomizers: usize,
         generator: BFieldElement,
         order: usize,
     ) -> Self {
-        let base_width = 3;
-        let full_width = 5;
-
         let table = Table::<InstructionTableMore>::new(
-            base_width,
-            full_width,
+            Self::BASE_WIDTH,
+            Self::FULL_WIDTH,
             length,
             num_randomizers,
             generator,
@@ -392,6 +417,10 @@ impl TableMoreTrait for MemoryTableMore {
     fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
         todo!()
     }
+
+    fn base_boundary_constraints() -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
+    }
 }
 
 impl MemoryTable {
@@ -403,18 +432,19 @@ impl MemoryTable {
     // named indices for extension columns
     pub const PERMUTATION: usize = 3;
 
+    // base and extension table width
+    pub const BASE_WIDTH: usize = 3;
+    pub const FULL_WIDTH: usize = 4;
+
     pub fn new(
         length: usize,
         num_randomizers: usize,
         generator: BFieldElement,
         order: usize,
     ) -> Self {
-        let base_width = 3;
-        let full_width = 4;
-
         let table = Table::<MemoryTableMore>::new(
-            base_width,
-            full_width,
+            Self::BASE_WIDTH,
+            Self::FULL_WIDTH,
             length,
             num_randomizers,
             generator,
@@ -443,18 +473,23 @@ impl TableMoreTrait for IOTableMore {
     fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
         todo!()
     }
+
+    fn base_boundary_constraints() -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
+    }
 }
 
 impl IOTable {
+    pub const BASE_WIDTH: usize = 1;
+    pub const FULL_WIDTH: usize = 2;
+
     // TODO: Refactor to avoid duplicate code.
     pub fn new_input_table(length: usize, generator: BFieldElement, order: usize) -> Self {
         let num_randomizers = 0;
-        let base_width = 1;
-        let full_width = 2;
 
         let mut table = Table::<IOTableMore>::new(
-            base_width,
-            full_width,
+            Self::BASE_WIDTH,
+            Self::FULL_WIDTH,
             length,
             num_randomizers,
             generator,
