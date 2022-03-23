@@ -1,4 +1,4 @@
-use super::processor_table::TableCollection;
+use super::table_collection::TableCollection;
 
 pub struct PermutationArgument<'a> {
     tables: &'a TableCollection,

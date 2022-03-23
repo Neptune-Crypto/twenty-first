@@ -5,8 +5,9 @@ use crate::shared_math::stark::brainfuck::evaluation_argument::{
 };
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
 use crate::shared_math::stark::brainfuck::processor_table::{
-    self, IOTable, InstructionTable, MemoryTable, Table, TableCollection,
+    self, IOTable, InstructionTable, MemoryTable, Table,
 };
+use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
