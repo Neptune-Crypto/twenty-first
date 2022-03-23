@@ -138,9 +138,19 @@ impl Stark {
             program,
         );
 
-        // TODO: Save these three:
-        // self.evaluation_arguments = [
-        //     input_evaluation, output_evaluation, program_evaluation]
+        // Compute max degree
+        let max_degree = 1;
+        // for table in tables
+        // # compute fri domain length
+        // self.max_degree = 1
+        // for table in self.base_tables:
+        //     for air in table.base_transition_constraints():
+        //         degree_bounds = [table.interpolant_degree()] * \
+        //             table.base_width * 2
+        //         degree = air.symbolic_degree_bound(
+        //             degree_bounds) - (table.height - 1)
+        //         if self.max_degree < degree:
+        //             self.max_degree = degree
 
         // TODO: compute fri domain length
         // TODO: instantiate self.fri object

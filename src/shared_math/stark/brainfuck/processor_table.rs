@@ -1,4 +1,6 @@
-use crate::shared_math::{b_field_element::BFieldElement, other, x_field_element::XFieldElement};
+use crate::shared_math::{
+    b_field_element::BFieldElement, mpolynomial::MPolynomial, other, x_field_element::XFieldElement,
+};
 
 pub struct Table<T> {
     base_width: usize,
@@ -52,17 +54,20 @@ impl<T: TableMoreTrait> Table<T> {
 
 pub trait TableMoreTrait {
     fn new_more() -> Self;
+    fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>>;
 }
 
 struct ProcessorTableMore {
     codewords: Vec<Vec<BFieldElement>>,
-    // b_codewords: Vec<Vec<BFieldElement>>,
-    // x_codewords: Vec<Vec<XFieldElement>>,
 }
 
 impl TableMoreTrait for ProcessorTableMore {
     fn new_more() -> Self {
         ProcessorTableMore { codewords: vec![] }
+    }
+
+    fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
     }
 }
 
@@ -111,6 +116,10 @@ pub struct InstructionTable(Table<()>);
 impl TableMoreTrait for () {
     fn new_more() -> Self {
         ()
+    }
+
+    fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
     }
 }
 
@@ -192,6 +201,10 @@ impl TableMoreTrait for IOTableMore {
             challenge_index: 0,
             terminal_index: 0,
         }
+    }
+
+    fn base_transition_constraints() -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
     }
 }
 
