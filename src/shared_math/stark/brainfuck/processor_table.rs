@@ -2,18 +2,20 @@ use super::table::{Table, TableMoreTrait, TableTrait};
 use super::vm::INSTRUCTIONS;
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
 
-pub struct ProcessorTableMore {
-    codewords: Vec<Vec<BFieldElement>>,
-}
-
-impl ProcessorTableMore {}
-
 impl TableMoreTrait for ProcessorTableMore {
     fn new_more() -> Self {
         ProcessorTableMore { codewords: vec![] }
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ProcessorTableMore {
+    codewords: Vec<Vec<BFieldElement>>,
+}
+
+impl ProcessorTableMore {}
+
+#[derive(Debug, Clone)]
 pub struct ProcessorTable(pub Table<ProcessorTableMore>);
 
 impl ProcessorTable {

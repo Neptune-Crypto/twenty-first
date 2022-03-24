@@ -1,5 +1,6 @@
 use crate::shared_math::b_field_element::BFieldElement;
 
+// TODO: Share symbols with reference
 pub struct EvaluationArgument {
     pub challenge_index: usize,
     pub terminal_index: usize,

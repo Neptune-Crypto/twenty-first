@@ -4,6 +4,7 @@ use super::memory_table::MemoryTable;
 use super::processor_table::ProcessorTable;
 use super::table::TableTrait;
 
+#[derive(Debug, Clone)]
 pub struct TableCollection {
     pub processor_table: ProcessorTable,
     pub instruction_table: InstructionTable,

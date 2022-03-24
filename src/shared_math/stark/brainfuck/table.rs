@@ -8,6 +8,7 @@ pub const PROCESSOR_TABLE: usize = 0;
 pub const INSTRUCTION_TABLE: usize = 1;
 pub const MEMORY_TABLE: usize = 2;
 
+#[derive(Debug, Clone)]
 pub struct Table<T> {
     pub base_width: usize,
     pub full_width: usize,

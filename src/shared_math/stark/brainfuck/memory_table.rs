@@ -2,8 +2,10 @@ use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomia
 
 use super::table::{Table, TableMoreTrait, TableTrait};
 
+#[derive(Debug, Clone)]
 pub struct MemoryTable(Table<MemoryTableMore>);
 
+#[derive(Debug, Clone)]
 pub struct MemoryTableMore(());
 
 impl TableMoreTrait for MemoryTableMore {

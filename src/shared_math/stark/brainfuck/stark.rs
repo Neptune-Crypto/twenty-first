@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::stark::brainfuck::evaluation_argument::{
     EvaluationArgument, ProgramEvaluationArgument,
@@ -19,15 +21,17 @@ pub struct Stark {
     program: Vec<BFieldElement>,
     input_symbols: Vec<BFieldElement>,
     output_symbols: Vec<BFieldElement>,
-    expansion_factor: usize,
+    expansion_factor: u64,
     security_level: usize,
-    num_colinearity_checks: usize,
+    colinearity_checks_count: usize,
     num_randomizers: usize,
-    // base_tables: [BaseTable; 5],
+    base_tables: Rc<TableCollection>,
+    max_degree: u64,
+    fri: Fri<XFieldElement, blake3::Hasher>,
+
+    permutation_arguments: [PermutationArgument; 2],
     io_evaluation_arguments: [EvaluationArgument; 2],
     program_evaluation_argument: ProgramEvaluationArgument,
-    max_degree: usize,
-    fri: Fri<XFieldElement, blake3::Hasher>,
 }
 
 impl Stark {
@@ -76,7 +80,7 @@ impl Stark {
         let input_table = IOTable::new_input_table(input_symbols.len(), smooth_generator, order);
         let output_table = IOTable::new_output_table(input_symbols.len(), smooth_generator, order);
 
-        let tables = TableCollection::new(
+        let base_tables = TableCollection::new(
             processor_table,
             instruction_table,
             memory_table,
@@ -85,23 +89,28 @@ impl Stark {
         );
 
         // instantiate permutation objects
+        let rc_base_tables = Rc::new(base_tables);
+
         let processor_instruction_lhs = (
             table::PROCESSOR_TABLE,
             ProcessorTable::INSTRUCTION_PERMUTATION,
         );
         let processor_instruction_rhs = (table::INSTRUCTION_TABLE, InstructionTable::PERMUTATION);
         let processor_instruction_permutation = PermutationArgument::new(
-            &tables,
+            rc_base_tables.clone(),
             processor_instruction_lhs,
             processor_instruction_rhs,
         );
 
         let processor_memory_lhs = (table::PROCESSOR_TABLE, ProcessorTable::MEMORY_PERMUTATION);
         let processor_memory_rhs = (table::MEMORY_TABLE, MemoryTable::PERMUTATION);
-        let processor_memory_permutation =
-            PermutationArgument::new(&tables, processor_memory_lhs, processor_memory_rhs);
+        let processor_memory_permutation = PermutationArgument::new(
+            rc_base_tables.clone(),
+            processor_memory_lhs,
+            processor_memory_rhs,
+        );
 
-        let permutation_arguments: Vec<PermutationArgument> = vec![
+        let permutation_arguments: [PermutationArgument; 2] = [
             processor_instruction_permutation,
             processor_memory_permutation,
         ];
@@ -109,17 +118,17 @@ impl Stark {
         // input_evaluation = EvaluationArgument(
         //     8, 2, [BaseFieldElement(ord(i), self.field) for i in input_symbols])
         let input_evaluation = EvaluationArgument::new(
-            tables.input_table.challenge_index(),
-            tables.input_table.terminal_index(),
-            input_symbols,
+            rc_base_tables.input_table.challenge_index(),
+            rc_base_tables.input_table.terminal_index(),
+            input_symbols.clone(),
         );
 
         // output_evaluation = EvaluationArgument(
         //     9, 3, [BaseFieldElement(ord(o), self.field) for o in output_symbols])
         let output_evaluation = EvaluationArgument::new(
-            tables.output_table.challenge_index(),
-            tables.output_table.terminal_index(),
-            output_symbols,
+            rc_base_tables.output_table.challenge_index(),
+            rc_base_tables.output_table.terminal_index(),
+            output_symbols.clone(),
         );
         let io_evaluation_arguments = [input_evaluation, output_evaluation];
 
@@ -127,14 +136,15 @@ impl Stark {
         //     [0, 1, 2, 6], 4, program)
         let program_challenge_indices = vec![0, 1, 2, 6];
         let program_terminal_index = 4;
+
         let program_evaluation_argument = ProgramEvaluationArgument::new(
             program_challenge_indices,
             program_terminal_index,
-            program,
+            program.clone(),
         );
 
         // Compute max degree
-        let mut max_degree: u64 = tables.get_max_degree();
+        let mut max_degree: u64 = rc_base_tables.get_max_degree();
         max_degree = roundup_npo2(max_degree) - 1;
         let fri_domain_length: u64 = (max_degree + 1) * expansion_factor;
 
@@ -152,21 +162,21 @@ impl Stark {
             colinearity_checks_count,
         );
 
-        // for table in tables
-        // # compute fri domain length
-        // self.max_degree = 1
-        // for table in self.base_tables:
-        //     for air in table.base_transition_constraints():
-        //         degree_bounds = [table.interpolant_degree()] * \
-        //             table.base_width * 2
-        //         degree = air.symbolic_degree_bound(
-        //             degree_bounds) - (table.height - 1)
-        //         if self.max_degree < degree:
-        //             self.max_degree = degree
-
-        // TODO: compute fri domain length
-        // TODO: instantiate self.fri object
-
-        todo!()
+        Self {
+            trace_length,
+            program,
+            input_symbols,
+            output_symbols,
+            expansion_factor,
+            security_level,
+            colinearity_checks_count,
+            num_randomizers,
+            base_tables: rc_base_tables,
+            max_degree,
+            fri,
+            permutation_arguments,
+            io_evaluation_arguments,
+            program_evaluation_argument,
+        }
     }
 }

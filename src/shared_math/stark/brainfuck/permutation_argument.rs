@@ -1,14 +1,15 @@
 use super::table_collection::TableCollection;
+use std::rc::Rc;
 
-pub struct PermutationArgument<'a> {
-    tables: &'a TableCollection,
+pub struct PermutationArgument {
+    tables: Rc<TableCollection>,
     lhs: (usize, usize),
     rhs: (usize, usize),
 }
 
-impl<'a> PermutationArgument<'a> {
+impl PermutationArgument {
     // FIXME: Change (usize, usize) into something readable
-    pub fn new(tables: &'a TableCollection, lhs: (usize, usize), rhs: (usize, usize)) -> Self {
+    pub fn new(tables: Rc<TableCollection>, lhs: (usize, usize), rhs: (usize, usize)) -> Self {
         PermutationArgument { tables, lhs, rhs }
     }
 }
