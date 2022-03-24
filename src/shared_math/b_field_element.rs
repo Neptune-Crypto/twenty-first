@@ -69,6 +69,11 @@ impl BFieldElement {
         self.0 as u64
     }
 
+    /// Get a generator for the entire field
+    pub fn generator() -> Self {
+        BFieldElement::new(7)
+    }
+
     pub fn lift(&self) -> XFieldElement {
         XFieldElement::new_const(*self)
     }
@@ -425,6 +430,17 @@ mod b_prime_field_element_test {
 
         let neinneinnein = bfield_elem!(999);
         assert_eq!(999, neinneinnein.value());
+    }
+
+    #[test]
+    fn simple_generator_test() {
+        assert_eq!(bfield_elem!(7), BFieldElement::generator());
+        assert!(bfield_elem!(7)
+            .mod_pow(((1u128 << 64) - (1u128 << 32)) as u64)
+            .is_one());
+        assert!(!bfield_elem!(7)
+            .mod_pow(((1u128 << 64) - (1u128 << 32)) as u64 / 2)
+            .is_one());
     }
 
     #[test]
