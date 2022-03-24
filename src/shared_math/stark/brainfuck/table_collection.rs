@@ -31,7 +31,7 @@ impl TableCollection {
         }
     }
 
-    pub fn get_max_degree(&self) -> usize {
+    pub fn get_max_degree(&self) -> u64 {
         // TODO: Comment these in when the max_degree is calculated correctly and max_degree test passes.
         [
             Self::get_max_degree_helper(&self.processor_table),
@@ -43,7 +43,7 @@ impl TableCollection {
         .iter()
         .max()
         .unwrap_or(&1)
-        .to_owned() as usize
+        .to_owned() as u64
 
         // for air in self.processor_table.base_transition_constraints() {
         //     let degree_bounds: Vec<i64> = vec![

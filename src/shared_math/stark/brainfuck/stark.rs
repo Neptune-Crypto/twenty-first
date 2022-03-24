@@ -1,3 +1,4 @@
+use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::stark::brainfuck::evaluation_argument::{
     EvaluationArgument, ProgramEvaluationArgument,
 };
@@ -37,11 +38,11 @@ impl Stark {
         output_symbols: Vec<BFieldElement>,
     ) -> Self {
         let log_expansion_factor = 2; // TODO: For speed
-        let expansion_factor: usize = 1 << log_expansion_factor;
+        let expansion_factor: u64 = 1 << log_expansion_factor;
         let security_level = 2; // TODO: Consider increasing this
-        let num_colinearity_checks = security_level / log_expansion_factor;
+        let colinearity_checks_count = security_level / log_expansion_factor;
         assert!(
-            num_colinearity_checks > 0,
+            colinearity_checks_count > 0,
             "At least one colinearity check is required"
         );
         assert!(
@@ -133,7 +134,24 @@ impl Stark {
         );
 
         // Compute max degree
-        let max_degree = 1;
+        let mut max_degree: u64 = tables.get_max_degree();
+        max_degree = roundup_npo2(max_degree) - 1;
+        let fri_domain_length: u64 = (max_degree + 1) * expansion_factor;
+
+        // Instantiate FRI object
+        let b_field_generator = BFieldElement::generator();
+        let b_field_omega = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(fri_domain_length as u128)
+            .0
+            .unwrap();
+        let fri: Fri<XFieldElement, blake3::Hasher> = Fri::new(
+            b_field_generator.lift(),
+            b_field_omega.lift(),
+            fri_domain_length as usize,
+            expansion_factor as usize,
+            colinearity_checks_count,
+        );
+
         // for table in tables
         // # compute fri domain length
         // self.max_degree = 1
