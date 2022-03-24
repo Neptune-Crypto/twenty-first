@@ -34,6 +34,7 @@ impl Register {
 pub struct BaseMatrices {
     pub processor_matrix: Vec<Register>,
     pub instruction_matrix: Vec<InstructionMatrixBaseRow>,
+    pub memory_matrix: Vec<MemoryMatrixBaseRow>,
     pub input_matrix: Vec<BFieldElement>,
     pub output_matrix: Vec<BFieldElement>,
 }
@@ -43,6 +44,7 @@ impl BaseMatrices {
         Self {
             processor_matrix: vec![],
             instruction_matrix: vec![],
+            memory_matrix: vec![],
             input_matrix: vec![],
             output_matrix: vec![],
         }
@@ -54,6 +56,13 @@ pub struct InstructionMatrixBaseRow {
     pub instruction_pointer: BFieldElement,
     pub current_instruction: BFieldElement,
     pub next_instruction: BFieldElement,
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryMatrixBaseRow {
+    pub cycle: BFieldElement,
+    pub address: BFieldElement,
+    pub value: BFieldElement,
 }
 
 pub fn compile(source_code: &str) -> Option<Vec<BFieldElement>> {
