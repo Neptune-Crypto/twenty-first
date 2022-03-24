@@ -50,7 +50,7 @@ impl InstructionTable {
     }
 
     pub fn pad(&mut self) {
-        while !other::is_power_of_two(self.0.matrix.len()) {
+        while self.0.matrix.len() != 0 && !other::is_power_of_two(self.0.matrix.len()) {
             let last = self.0.matrix.last().unwrap();
             let padding = InstructionMatrixBaseRow {
                 instruction_pointer: last[Self::ADDRESS],
