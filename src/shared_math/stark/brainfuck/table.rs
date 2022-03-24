@@ -18,7 +18,7 @@ pub struct Table<T> {
     pub omicron: BFieldElement,
     pub generator: BFieldElement,
     pub order: usize,
-    matrix: Vec<Vec<BFieldElement>>,
+    pub matrix: Vec<Vec<BFieldElement>>,
     pub more: T,
 }
 

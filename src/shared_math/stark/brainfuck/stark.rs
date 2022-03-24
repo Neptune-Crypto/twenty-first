@@ -15,6 +15,9 @@ use crate::shared_math::{
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
     x_field_element::XFieldElement,
 };
+use crate::util_types::proof_stream::ProofStream;
+
+use super::vm::{InstructionMatrixBaseRow, Register};
 
 pub struct Stark {
     trace_length: usize,
@@ -178,5 +181,40 @@ impl Stark {
             io_evaluation_arguments,
             program_evaluation_argument,
         }
+    }
+
+    // def prove(self, running_time, program, processor_matrix, instruction_matrix, input_matrix, output_matrix, proof_stream=None):
+
+    pub fn prove(
+        &mut self,
+        trace_length: usize,
+        program: Vec<BFieldElement>,
+        processor_matrix: Vec<Register>,
+        instruction_matrix: Vec<InstructionMatrixBaseRow>,
+        input_matrix: Vec<BFieldElement>,
+        output_matrix: Vec<BFieldElement>,
+    ) -> ProofStream {
+        assert_eq!(trace_length, processor_matrix.len());
+        assert_eq!(
+            trace_length + program.len(),
+            instruction_matrix.len(),
+            "instruction_matrix must contain both the execution trace and the program"
+        );
+
+        // populate tables' matrices
+        let tables: &mut TableCollection = Rc::get_mut(&mut self.base_tables).unwrap();
+        tables.processor_table.0.matrix = processor_matrix.into_iter().map(|x| x.into()).collect();
+        tables.instruction_table.0.matrix =
+            instruction_matrix.into_iter().map(|x| x.into()).collect();
+        tables.input_table.0.matrix = input_matrix.into_iter().map(|x| vec![x]).collect();
+        tables.output_table.0.matrix = output_matrix.into_iter().map(|x| vec![x]).collect();
+
+        // pad table to height 2^k
+        tables.processor_table.pad();
+        tables.instruction_table.pad();
+        tables.input_table.pad();
+        tables.output_table.pad();
+
+        todo!()
     }
 }

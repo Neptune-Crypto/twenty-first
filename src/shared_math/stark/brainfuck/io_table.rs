@@ -3,7 +3,7 @@ use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomia
 use super::table::{Table, TableMoreTrait, TableTrait};
 
 #[derive(Debug, Clone)]
-pub struct IOTable(Table<IOTableMore>);
+pub struct IOTable(pub Table<IOTableMore>);
 
 #[derive(Debug, Clone)]
 pub struct IOTableMore {

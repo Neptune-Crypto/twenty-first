@@ -16,6 +16,20 @@ pub struct Register {
     pub is_zero: BFieldElement,
 }
 
+impl From<Register> for Vec<BFieldElement> {
+    fn from(register: Register) -> Self {
+        vec![
+            register.cycle,
+            register.instruction_pointer,
+            register.current_instruction,
+            register.next_instruction,
+            register.memory_pointer,
+            register.memory_value,
+            register.is_zero,
+        ]
+    }
+}
+
 impl Register {
     pub fn default() -> Self {
         Self {
@@ -56,6 +70,16 @@ pub struct InstructionMatrixBaseRow {
     pub instruction_pointer: BFieldElement,
     pub current_instruction: BFieldElement,
     pub next_instruction: BFieldElement,
+}
+
+impl From<InstructionMatrixBaseRow> for Vec<BFieldElement> {
+    fn from(row: InstructionMatrixBaseRow) -> Self {
+        vec![
+            row.instruction_pointer,
+            row.current_instruction,
+            row.next_instruction,
+        ]
+    }
 }
 
 #[derive(Debug, Clone)]

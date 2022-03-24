@@ -1,5 +1,6 @@
 use super::table::{Table, TableMoreTrait, TableTrait};
-use super::vm::INSTRUCTIONS;
+use super::vm::{Register, INSTRUCTIONS};
+use crate::shared_math::other;
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
 
 impl TableMoreTrait for ProcessorTableMore {
@@ -54,6 +55,22 @@ impl ProcessorTable {
         );
 
         Self(table)
+    }
+
+    pub fn pad(&mut self) {
+        while !other::is_power_of_two(self.0.matrix.len()) {
+            let last = self.0.matrix.last().unwrap();
+            let padding = Register {
+                cycle: last[ProcessorTable::CYCLE],
+                instruction_pointer: last[ProcessorTable::INSTRUCTION_POINTER],
+                current_instruction: last[ProcessorTable::CURRENT_INSTRUCTION],
+                next_instruction: last[ProcessorTable::NEXT_INSTRUCTION],
+                memory_pointer: last[ProcessorTable::MEMORY_POINTER],
+                memory_value: last[ProcessorTable::MEMORY_VALUE],
+                is_zero: last[ProcessorTable::IS_ZERO],
+            };
+            self.0.matrix.push(padding.into());
+        }
     }
 
     fn transition_constraints_afo_named_variables(
@@ -416,22 +433,11 @@ mod processor_table_tests {
             for step in 0..processor_matrix.len() - 1 {
                 let register: Register = processor_matrix[step].clone();
                 let next_register: Register = processor_matrix[step + 1].clone();
-                let point: Vec<BFieldElement> = vec![
-                    register.cycle,
-                    register.instruction_pointer,
-                    register.current_instruction,
-                    register.next_instruction,
-                    register.memory_pointer,
-                    register.memory_value,
-                    register.is_zero,
-                    next_register.cycle,
-                    next_register.instruction_pointer,
-                    next_register.current_instruction,
-                    next_register.next_instruction,
-                    next_register.memory_pointer,
-                    next_register.memory_value,
-                    next_register.is_zero,
-                ];
+
+                let foo: Vec<BFieldElement> = register.into();
+                let bar: Vec<BFieldElement> = next_register.into();
+                let mut point: Vec<BFieldElement> = vec![foo, bar].concat();
+
                 for air_constraint in air_constraints.iter() {
                     assert!(air_constraint.evaluate(&point).is_zero());
                 }
