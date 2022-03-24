@@ -30,7 +30,7 @@ pub struct Stark {
     num_randomizers: usize,
     base_tables: Rc<TableCollection>,
     max_degree: u64,
-    fri: Fri<XFieldElement, blake3::Hasher>,
+    fri: Fri<BFieldElement, blake3::Hasher>,
 
     permutation_arguments: [PermutationArgument; 2],
     io_evaluation_arguments: [EvaluationArgument; 2],
@@ -157,9 +157,9 @@ impl Stark {
             .get_primitive_root_of_unity(fri_domain_length as u128)
             .0
             .unwrap();
-        let fri: Fri<XFieldElement, blake3::Hasher> = Fri::new(
-            b_field_generator.lift(),
-            b_field_omega.lift(),
+        let fri: Fri<BFieldElement, blake3::Hasher> = Fri::new(
+            b_field_generator,
+            b_field_omega,
             fri_domain_length as usize,
             expansion_factor as usize,
             colinearity_checks_count,

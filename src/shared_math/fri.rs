@@ -1,6 +1,8 @@
+use super::b_field_element::BFieldElement;
 use super::other::{log_2_ceil, log_2_floor};
 use super::polynomial::Polynomial;
-use crate::shared_math::ntt::intt;
+use super::x_field_element::XFieldElement;
+use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::traits::PrimeField;
 use crate::util_types::merkle_tree::{LeaflessPartialAuthenticationPath, MerkleTree};
 use crate::util_types::proof_stream::ProofStream;
@@ -37,6 +39,56 @@ pub struct Fri<PF: PrimeField, H> {
     expansion_factor: usize,         // = domain_length / trace_length
     colinearity_checks_count: usize, //
     _hasher: PhantomData<H>,
+}
+
+pub struct FriDomain<PF: PrimeField> {
+    offset: PF,
+    omega: PF,
+    length: u32,
+}
+
+impl<PF: PrimeField> FriDomain<PF> {
+    pub fn x_value(&self, index: u32) -> PF {
+        self.omega.mod_pow_u32(index) * self.offset
+    }
+
+    pub fn x_values(&self) -> Vec<PF> {
+        (0..self.length)
+            .map(|i| self.omega.mod_pow_u32(i) * self.offset)
+            .collect()
+    }
+
+    pub fn evaluate(&self, polynomial: &Polynomial<PF>, zero: PF) -> Vec<PF> {
+        assert!(zero.is_zero(), "zero must be zero");
+        let mut polynomial_representation: Vec<PF> =
+            polynomial.scale(&self.offset).coefficients.clone();
+        polynomial_representation.resize(self.length as usize, zero);
+        ntt(
+            &mut polynomial_representation,
+            self.omega,
+            log_2_ceil(self.length as u64) as u32,
+        );
+
+        polynomial_representation
+    }
+
+    pub fn interpolate(&self, values: &[PF]) -> Polynomial<PF> {
+        Polynomial::<PF>::fast_coset_interpolate(&self.offset, self.omega, values)
+    }
+}
+
+impl FriDomain<BFieldElement> {
+    pub fn xevaluate(&self, polynomial: &Polynomial<XFieldElement>) -> Vec<XFieldElement> {
+        polynomial.fast_coset_evaluate(&self.offset.lift(), self.omega.lift(), self.length as usize)
+    }
+
+    pub fn xinterpolate(&self, values: &[XFieldElement]) -> Polynomial<XFieldElement> {
+        Polynomial::<XFieldElement>::fast_coset_interpolate(
+            &self.offset.lift(),
+            self.omega.lift(),
+            values,
+        )
+    }
 }
 
 type CodewordEvaluation<T> = (usize, T);
