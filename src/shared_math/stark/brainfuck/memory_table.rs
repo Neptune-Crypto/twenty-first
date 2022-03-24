@@ -6,7 +6,7 @@ use crate::shared_math::{
 use super::table::{Table, TableMoreTrait, TableTrait};
 
 #[derive(Debug, Clone)]
-pub struct MemoryTable(Table<MemoryTableMore>);
+pub struct MemoryTable(pub Table<MemoryTableMore>);
 
 #[derive(Debug, Clone)]
 pub struct MemoryTableMore(());

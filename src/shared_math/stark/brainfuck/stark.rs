@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
+use rand::thread_rng;
+
 use crate::shared_math::other::roundup_npo2;
+use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::stark::brainfuck::evaluation_argument::{
     EvaluationArgument, ProgramEvaluationArgument,
 };
@@ -10,6 +13,7 @@ use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
 use crate::shared_math::stark::brainfuck::table;
 use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
+use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
@@ -214,6 +218,26 @@ impl Stark {
         tables.instruction_table.pad();
         tables.input_table.pad();
         tables.output_table.pad();
+
+        // Instantiate the memory table object
+        tables.memory_table.0.matrix = MemoryTable::derive_matrix(&tables.processor_table.0.matrix);
+
+        let proof_stream = ProofStream::default();
+
+        // Generate randomizer codewords for zero-knowledge
+        let mut rng = thread_rng();
+        let randomizer_polynomial = Polynomial::new(XFieldElement::random_elements(
+            self.max_degree as usize + 1,
+            &mut rng,
+        ));
+        let randomizer_codeword = self.fri.domain.xevaluate(&randomizer_polynomial);
+
+        // base_codewords = reduce(
+        //     lambda x, y: x+y, [table.lde(self.fri.domain) for table in self.tables], [])
+        // all_base_codewords = randomizer_codewords + base_codewords
+
+        // base_degree_bounds = reduce(
+        //     lambda x, y: x+y, [[table.interpolant_degree()] * table.base_width for table in self.tables], [])
 
         todo!()
     }
