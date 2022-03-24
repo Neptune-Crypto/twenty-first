@@ -85,7 +85,7 @@ impl Stark {
 
         let memory_table = MemoryTable::new(trace_length, num_randomizers, smooth_generator, order);
         let input_table = IOTable::new_input_table(input_symbols.len(), smooth_generator, order);
-        let output_table = IOTable::new_output_table(input_symbols.len(), smooth_generator, order);
+        let output_table = IOTable::new_output_table(output_symbols.len(), smooth_generator, order);
 
         let base_tables = TableCollection::new(
             processor_table,
