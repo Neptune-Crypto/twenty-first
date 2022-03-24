@@ -230,7 +230,16 @@ impl Stark {
             self.max_degree as usize + 1,
             &mut rng,
         ));
-        let randomizer_codeword = self.fri.domain.xevaluate(&randomizer_polynomial);
+        let randomizer_codeword: Vec<XFieldElement> =
+            self.fri.domain.xevaluate(&randomizer_polynomial);
+        let randomizer_codewords: Vec<Vec<BFieldElement>> = randomizer_codeword
+            .iter()
+            .map(|x| x.get_coefficients().into())
+            .collect();
+
+        let base_codewords: Vec<Vec<BFieldElement>> =
+            tables.get_and_set_all_base_codewords(&self.fri.domain);
+        let all_base_codewords = vec![base_codewords, randomizer_codewords].concat();
 
         // base_codewords = reduce(
         //     lambda x, y: x+y, [table.lde(self.fri.domain) for table in self.tables], [])

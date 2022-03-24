@@ -1,8 +1,10 @@
 use rand::thread_rng;
 
+use crate::shared_math::fri::FriDomain;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues};
+use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{
     b_field_element::BFieldElement, mpolynomial::MPolynomial, other,
     traits::GetPrimitiveRootOfUnity,
@@ -23,6 +25,7 @@ pub struct Table<T> {
     pub generator: BFieldElement,
     pub order: usize,
     pub matrix: Vec<Vec<BFieldElement>>,
+    pub codewords: Vec<Vec<BFieldElement>>,
     pub more: T,
 }
 
@@ -43,6 +46,7 @@ impl<T: TableMoreTrait> Table<T> {
         let omicron = Self::derive_omicron(height);
         let matrix = vec![];
         let more = T::new_more();
+        let codewords = vec![];
 
         Self {
             base_width,
@@ -55,6 +59,7 @@ impl<T: TableMoreTrait> Table<T> {
             order,
             matrix,
             more,
+            codewords,
         }
     }
 
@@ -125,6 +130,22 @@ impl<T: TableMoreTrait> Table<T> {
         }
 
         polynomials
+    }
+
+    /// Evaluate the base table
+    pub fn lde(&mut self, domain: &FriDomain<BFieldElement>) -> Vec<Vec<BFieldElement>> {
+        let polynomials =
+            self.interpolate_columns(domain.omega, domain.length, (0..self.base_width).collect());
+        self.codewords = polynomials
+            .iter()
+            .map(|p| domain.evaluate(p, BFieldElement::ring_zero()))
+            .collect();
+        self.codewords.clone()
+    }
+
+    pub fn ldex(&self, domain: FriDomain<BFieldElement>) -> Vec<Vec<XFieldElement>> {
+        // TODO: See `lde` and pattern match from that
+        todo!()
     }
 }
 
