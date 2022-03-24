@@ -104,10 +104,84 @@ impl TableTrait for IOTable {
     }
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        todo!()
+        vec![]
     }
 
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        todo!()
+        vec![]
+    }
+}
+
+#[cfg(test)]
+mod io_table_tests {
+    use super::*;
+    use crate::shared_math::stark::brainfuck::vm::{InstructionMatrixBaseRow, MemoryMatrixBaseRow};
+    use crate::shared_math::{
+        stark::brainfuck::{
+            self,
+            vm::{BaseMatrices, Register},
+        },
+        traits::{GetPrimitiveRootOfUnity, IdentityValues},
+    };
+
+    static VERY_SIMPLE_PROGRAM: &str = "++++";
+    static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
+    static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+
+    // When we simulate a program, this generates a collection of matrices that contain
+    // "abstract" execution traces. When we evaluate the base transition constraints on
+    // the rows (points) from the InstructionTable matrix, these should evaluate to zero.
+    #[test]
+    fn io_base_table_evaluate_to_zero_on_execution_trace_test() {
+        for source_code in [VERY_SIMPLE_PROGRAM, TWO_BY_TWO_THEN_OUTPUT, HELLO_WORLD] {
+            let actual_program = brainfuck::vm::compile(source_code).unwrap();
+            let input_data = vec![BFieldElement::new(97)];
+            let base_matrices: BaseMatrices =
+                brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
+
+            let input_matrix = base_matrices.input_matrix;
+            let output_matrix = base_matrices.output_matrix;
+
+            let number_of_randomizers = 2;
+            let order = 1 << 32;
+            let smooth_generator = BFieldElement::ring_zero()
+                .get_primitive_root_of_unity(order)
+                .0
+                .unwrap();
+
+            // instantiate table objects
+            let input_table: IOTable =
+                IOTable::new_input_table(input_matrix.len(), smooth_generator, order as usize);
+            let output_table: IOTable =
+                IOTable::new_output_table(output_matrix.len(), smooth_generator, order as usize);
+
+            let input_air_constraints = input_table.base_transition_constraints();
+            let output_air_constraints = output_table.base_transition_constraints();
+
+            let step_count = std::cmp::max(0, input_matrix.len() as isize - 1) as usize;
+            for step in 0..step_count {
+                let input_row: BFieldElement = input_matrix[step].clone();
+                let input_next_row: BFieldElement = input_matrix[step + 1].clone();
+                let input_point: Vec<BFieldElement> = vec![input_row, input_next_row];
+
+                // Since there are no base air constraints on either IOTables,
+                // We're evaluating that the zero polynomial in a set of points
+                // is zero. This is a trivial test, but it should still hold.
+                for air_constraint in input_air_constraints.iter() {
+                    assert!(air_constraint.evaluate(&input_point).is_zero());
+                }
+
+                let output_row: BFieldElement = output_matrix[step].clone();
+                let output_next_row: BFieldElement = output_matrix[step + 1].clone();
+                let output_point: Vec<BFieldElement> = vec![output_row, output_next_row];
+
+                // Since there are no base air constraints on either IOTables,
+                // We're evaluating that the zero polynomial in a set of points
+                // is zero. This is a trivial test, but it should still hold.
+                for air_constraint in output_air_constraints.iter() {
+                    assert!(air_constraint.evaluate(&output_point).is_zero());
+                }
+            }
+        }
     }
 }

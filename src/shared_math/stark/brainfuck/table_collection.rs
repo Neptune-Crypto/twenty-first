@@ -35,8 +35,8 @@ impl TableCollection {
             self.processor_table.max_degree(),
             self.instruction_table.max_degree(),
             self.memory_table.max_degree(),
-            // self.input_table.max_degree(),
-            // self.output_table.max_degree(),
+            self.input_table.max_degree(),
+            self.output_table.max_degree(),
         ]
         .iter()
         .max()
