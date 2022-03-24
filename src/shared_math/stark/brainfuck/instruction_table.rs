@@ -206,7 +206,7 @@ mod instruction_table_tests {
                 .unwrap();
 
             // instantiate table objects
-            let instruction_table: InstructionTable = InstructionTable::new(
+            let mut instruction_table: InstructionTable = InstructionTable::new(
                 instruction_matrix.len(),
                 number_of_randomizers,
                 smooth_generator,
@@ -227,6 +227,26 @@ mod instruction_table_tests {
                     next_row.current_instruction,
                     next_row.next_instruction,
                 ];
+
+                for air_constraint in air_constraints.iter() {
+                    assert!(air_constraint.evaluate(&point).is_zero());
+                }
+            }
+
+            // Test air constraints after padding as well
+            instruction_table.0.matrix = instruction_matrix.into_iter().map(|x| x.into()).collect();
+            instruction_table.pad();
+
+            assert!(
+                other::is_power_of_two(instruction_table.0.matrix.len()),
+                "Matrix length must be power of 2 after padding"
+            );
+
+            let air_constraints = instruction_table.base_transition_constraints();
+            for step in 0..instruction_table.0.matrix.len() - 1 {
+                let register = instruction_table.0.matrix[step].clone();
+                let next_register = instruction_table.0.matrix[step + 1].clone();
+                let point: Vec<BFieldElement> = vec![register, next_register].concat();
 
                 for air_constraint in air_constraints.iter() {
                     assert!(air_constraint.evaluate(&point).is_zero());

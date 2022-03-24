@@ -397,10 +397,7 @@ impl TableTrait for ProcessorTable {
 mod processor_table_tests {
     use super::*;
     use crate::shared_math::{
-        stark::brainfuck::{
-            self,
-            vm::{BaseMatrices, Register},
-        },
+        stark::brainfuck::{self, vm::BaseMatrices},
         traits::{GetPrimitiveRootOfUnity, IdentityValues},
     };
 
@@ -442,12 +439,14 @@ mod processor_table_tests {
                 }
             }
 
-            // test air constraints after padding as well
-
+            // Test air constraints after padding as well
             processor_table.0.matrix = processor_matrix.into_iter().map(|x| x.into()).collect();
             processor_table.pad();
 
-            assert!(other::is_power_of_two(processor_table.0.matrix.len()));
+            assert!(
+                other::is_power_of_two(processor_table.0.matrix.len()),
+                "Matrix length must be power of 2 after padding"
+            );
 
             let air_constraints = processor_table.base_transition_constraints();
             for step in 0..processor_table.0.matrix.len() - 1 {
