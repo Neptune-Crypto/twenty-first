@@ -1,4 +1,7 @@
-use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
+use crate::shared_math::{
+    b_field_element::BFieldElement, mpolynomial::MPolynomial,
+    stark::brainfuck::processor_table::ProcessorTable,
+};
 
 use super::table::{Table, TableMoreTrait, TableTrait};
 
@@ -43,6 +46,26 @@ impl MemoryTable {
         );
 
         Self(table)
+    }
+
+    // @staticmethod
+    // def derive_matrix(processor_matrix, num_randomizers):
+    //     matrix = [[pt[ProcessorTable.cycle], pt[ProcessorTable.memory_pointer],
+    //               pt[ProcessorTable.memory_value]] for pt in processor_matrix]
+    //     matrix.sort(key=lambda mt: mt[MemoryTable.memory_pointer].value)
+    //     return matrix
+    pub fn derive_matrix(processor_matrix: &[Vec<BFieldElement>]) -> Vec<Vec<BFieldElement>> {
+        let mut matrix = vec![];
+        for pt in processor_matrix.iter() {
+            matrix.push(vec![
+                pt[ProcessorTable::CYCLE],
+                pt[ProcessorTable::MEMORY_POINTER],
+                pt[ProcessorTable::MEMORY_VALUE],
+            ]);
+        }
+
+        matrix.sort_by_key(|k| k[MemoryTable::MEMORY_POINTER].value());
+        matrix
     }
 
     fn transition_constraints_afo_named_variables(
