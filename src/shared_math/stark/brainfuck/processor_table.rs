@@ -393,9 +393,9 @@ mod rescue_prime_start_test {
     fn processor_base_table_evaluate_to_zero_on_execution_trace_test() {
         for source_code in [VERY_SIMPLE_PROGRAM, TWO_BY_TWO_THEN_OUTPUT, HELLO_WORLD] {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
+            let input_data = vec![BFieldElement::new(97)];
             let base_matrices: BaseMatrices =
-                brainfuck::vm::simulate(actual_program.clone(), vec![BFieldElement::new(97)])
-                    .unwrap();
+                brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
             let processor_matrix = base_matrices.processor_matrix;
             let number_of_randomizers = 2;
             let order = 1 << 32;

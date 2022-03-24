@@ -3,8 +3,6 @@ use super::io_table::IOTable;
 use super::memory_table::MemoryTable;
 use super::processor_table::ProcessorTable;
 use super::table::TableTrait;
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 
 pub struct TableCollection {
     pub processor_table: ProcessorTable,
@@ -78,14 +76,25 @@ mod brainfuck_table_collection_tests {
     #[test]
     fn max_degree_test() {
         let actual_program = brainfuck::vm::compile(PRINT_EXCLAMATION_MARKS).unwrap();
-        let base_matrices: BaseMatrices =
-            brainfuck::vm::simulate(actual_program.clone(), vec![]).unwrap();
+        let input_data = vec![];
+        let table_collection = create_table_collection(&actual_program, &input_data);
+
+        // 1153 is derived from running Python Brainfuck Stark
+        assert_eq!(1153, table_collection.get_max_degree());
+    }
+
+    fn create_table_collection(
+        program: &[BFieldElement],
+        input_data: &[BFieldElement],
+    ) -> TableCollection {
+        let base_matrices: BaseMatrices = brainfuck::vm::simulate(program, input_data).unwrap();
         let number_of_randomizers = 1;
         let order = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(order)
             .0
             .unwrap();
+
         let processor_table = ProcessorTable::new(
             base_matrices.processor_matrix.len(),
             number_of_randomizers,
@@ -115,14 +124,12 @@ mod brainfuck_table_collection_tests {
             order as usize,
         );
 
-        let table_collection = TableCollection::new(
+        TableCollection::new(
             processor_table,
             instruction_table,
             memory_table,
             input_table,
             output_table,
-        );
-
-        assert_eq!(1153, table_collection.get_max_degree());
+        )
     }
 }

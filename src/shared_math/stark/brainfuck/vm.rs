@@ -152,10 +152,7 @@ pub fn run(
     Some((trace_length, input_data_mut, output_data))
 }
 
-pub fn simulate(
-    program: Vec<BFieldElement>,
-    input_data: Vec<BFieldElement>,
-) -> Option<BaseMatrices> {
+pub fn simulate(program: &[BFieldElement], input_data: &[BFieldElement]) -> Option<BaseMatrices> {
     let zero = BFieldElement::ring_zero();
     let one = BFieldElement::ring_one();
     let two = BFieldElement::new(2);
@@ -344,8 +341,8 @@ mod stark_bf_tests {
     #[test]
     fn simulate_two_by_two_test() {
         let actual_program = compile(TWO_BY_TWO_THEN_OUTPUT).unwrap();
-        let base_matrices: BaseMatrices =
-            simulate(actual_program.clone(), vec![BFieldElement::new(97)]).unwrap();
+        let input_data = vec![BFieldElement::new(97)];
+        let base_matrices: BaseMatrices = simulate(&actual_program, &input_data).unwrap();
         let (trace_length, input_data, output_data) =
             run(actual_program, vec![BFieldElement::new(97)]).unwrap();
         assert_eq!(trace_length, base_matrices.processor_matrix.len(), "Number of rows in processor matrix from simulate must match trace length returned from 'run'.");
