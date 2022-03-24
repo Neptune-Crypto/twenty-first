@@ -33,7 +33,7 @@ impl TableCollection {
         // TODO: Comment these in when the max_degree is calculated correctly and max_degree test passes.
         [
             self.processor_table.max_degree(),
-            // self.instruction_table.max_degree(),
+            self.instruction_table.max_degree(),
             // self.memory_table.max_degree(),
             // self.input_table.max_degree(),
             // self.output_table.max_degree(),
