@@ -126,6 +126,20 @@ mod brainfuck_table_collection_tests {
             vec![32, 32, 32, 32, 32, 32, 32, 64, 64, 64, 32, 32, 32, 0, 31],
             table_collection_bigger.get_all_base_degree_bounds()
         );
+
+        // observed from Python BF STARK engine with program
+        // `++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.`:
+        // [1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, -1, 15]
+        let program_hello_world = brainfuck::vm::compile(HELLO_WORLD).unwrap();
+        let table_collection_bigger =
+            create_table_collection(&program_hello_world, &[BFieldElement::new(33)]);
+        assert_eq!(
+            vec![
+                1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, -1,
+                15
+            ],
+            table_collection_bigger.get_all_base_degree_bounds()
+        );
     }
 
     fn create_table_collection(
