@@ -48,7 +48,6 @@ impl Register {
 pub struct BaseMatrices {
     pub processor_matrix: Vec<Register>,
     pub instruction_matrix: Vec<InstructionMatrixBaseRow>,
-    pub memory_matrix: Vec<MemoryMatrixBaseRow>,
     pub input_matrix: Vec<BFieldElement>,
     pub output_matrix: Vec<BFieldElement>,
 }
@@ -58,7 +57,6 @@ impl BaseMatrices {
         Self {
             processor_matrix: vec![],
             instruction_matrix: vec![],
-            memory_matrix: vec![],
             input_matrix: vec![],
             output_matrix: vec![],
         }
@@ -87,6 +85,12 @@ pub struct MemoryMatrixBaseRow {
     pub cycle: BFieldElement,
     pub address: BFieldElement,
     pub value: BFieldElement,
+}
+
+impl From<MemoryMatrixBaseRow> for Vec<BFieldElement> {
+    fn from(row: MemoryMatrixBaseRow) -> Self {
+        vec![row.cycle, row.address, row.value]
+    }
 }
 
 pub fn compile(source_code: &str) -> Option<Vec<BFieldElement>> {

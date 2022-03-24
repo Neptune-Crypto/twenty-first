@@ -203,7 +203,20 @@ mod memory_table_tests {
             let base_matrices: BaseMatrices =
                 brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
 
-            let memory_matrix = base_matrices.memory_matrix;
+            let processor_matrix_from_simulate: Vec<Vec<BFieldElement>> = base_matrices
+                .processor_matrix
+                .into_iter()
+                .map(|register| {
+                    let row: Vec<BFieldElement> = register.into();
+                    row
+                })
+                .collect();
+            let derived_memory_matrix = MemoryTable::derive_matrix(&processor_matrix_from_simulate);
+
+            assert!(
+                !derived_memory_matrix.is_empty(),
+                "All tested programs update memory"
+            );
 
             let number_of_randomizers = 2;
             let order = 1 << 32;
@@ -214,7 +227,7 @@ mod memory_table_tests {
 
             // instantiate table objects
             let memory_table: MemoryTable = MemoryTable::new(
-                memory_matrix.len(),
+                derived_memory_matrix.len(),
                 number_of_randomizers,
                 smooth_generator,
                 order as usize,
@@ -222,19 +235,11 @@ mod memory_table_tests {
 
             let air_constraints = memory_table.base_transition_constraints();
 
-            let step_count = std::cmp::max(0, memory_matrix.len() as isize - 1) as usize;
+            let step_count = std::cmp::max(0, derived_memory_matrix.len() as isize - 1) as usize;
             for step in 0..step_count {
-                let row: MemoryMatrixBaseRow = memory_matrix[step].clone();
-                let next_row: MemoryMatrixBaseRow = memory_matrix[step + 1].clone();
-
-                let point: Vec<BFieldElement> = vec![
-                    row.cycle,
-                    row.address,
-                    row.value,
-                    next_row.cycle,
-                    next_row.address,
-                    next_row.value,
-                ];
+                let row: Vec<BFieldElement> = derived_memory_matrix[step].clone();
+                let next_row: Vec<BFieldElement> = derived_memory_matrix[step + 1].clone();
+                let point: Vec<BFieldElement> = vec![row, next_row].concat();
 
                 for air_constraint in air_constraints.iter() {
                     assert!(air_constraint.evaluate(&point).is_zero());
