@@ -1,6 +1,6 @@
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
 
-use super::table::{Table, TableMoreTrait};
+use super::table::{Table, TableMoreTrait, TableTrait};
 
 pub struct MemoryTable(Table<MemoryTableMore>);
 
@@ -9,14 +9,6 @@ pub struct MemoryTableMore(());
 impl TableMoreTrait for MemoryTableMore {
     fn new_more() -> Self {
         MemoryTableMore(())
-    }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        todo!()
-    }
-
-    fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        todo!()
     }
 }
 
@@ -49,5 +41,47 @@ impl MemoryTable {
         );
 
         Self(table)
+    }
+}
+
+impl TableTrait for MemoryTable {
+    fn base_width(&self) -> usize {
+        self.0.base_width
+    }
+
+    fn full_width(&self) -> usize {
+        self.0.full_width
+    }
+
+    fn length(&self) -> usize {
+        self.0.length
+    }
+
+    fn num_randomizers(&self) -> usize {
+        self.0.num_randomizers
+    }
+
+    fn height(&self) -> usize {
+        self.0.height
+    }
+
+    fn omicron(&self) -> BFieldElement {
+        self.0.omicron
+    }
+
+    fn generator(&self) -> BFieldElement {
+        self.0.generator
+    }
+
+    fn order(&self) -> usize {
+        self.0.order
+    }
+
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
+    }
+
+    fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
     }
 }

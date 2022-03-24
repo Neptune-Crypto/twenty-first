@@ -1,7 +1,10 @@
-use super::{
-    instruction_table::InstructionTable, io_table::IOTable, memory_table::MemoryTable,
-    processor_table::ProcessorTable,
-};
+use super::instruction_table::InstructionTable;
+use super::io_table::IOTable;
+use super::memory_table::MemoryTable;
+use super::processor_table::ProcessorTable;
+use super::table::TableTrait;
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 
 pub struct TableCollection {
     pub processor_table: ProcessorTable,
@@ -29,22 +32,41 @@ impl TableCollection {
     }
 
     pub fn get_max_degree(&self) -> usize {
-        let mut max_degree = 1;
-        for air in self.processor_table.base_transition_constraints() {
-            let degree_bounds: Vec<i64> = vec![
-                self.processor_table.0.interpolant_degree() as i64;
-                self.processor_table.0.base_width * 2
-            ];
-            let degree = air.symbolic_degree_bound(&degree_bounds)
-                - (self.processor_table.0.height - 1) as i64;
-            if max_degree < degree {
-                max_degree = degree;
-            }
-        }
+        // TODO: Comment these in when the max_degree is calculated correctly and max_degree test passes.
+        [
+            Self::get_max_degree_helper(&self.processor_table),
+            // Self::get_max_degree_helper(&self.instruction_table),
+            // Self::get_max_degree_helper(&self.memory_table),
+            // Self::get_max_degree_helper(&self.input_table),
+            // Self::get_max_degree_helper(&self.output_table),
+        ]
+        .iter()
+        .max()
+        .unwrap_or(&1)
+        .to_owned() as usize
 
-        // TODO: Add the other tables here to ensure that we calculate max degree correctly
+        // for air in self.processor_table.base_transition_constraints() {
+        //     let degree_bounds: Vec<i64> = vec![
+        //         self.processor_table.0.interpolant_degree() as i64;
+        //         self.processor_table.0.base_width * 2
+        //     ];
+        //     let degree = air.symbolic_degree_bound(&degree_bounds)
+        //         - (self.processor_table.0.height - 1) as i64;
+        //     max_degree = std::cmp::max(degree, max_degree);
+        // }
+    }
 
-        max_degree as usize
+    fn get_max_degree_helper<T: TableTrait>(table: &T) -> Degree {
+        let degree_bounds: Vec<i64> =
+            vec![table.interpolant_degree() as i64; table.base_width() * 2];
+        let hm: Degree = table
+            .base_transition_constraints()
+            .iter()
+            .map(|air| air.symbolic_degree_bound(&degree_bounds) - (table.height() as Degree - 1))
+            .max()
+            .unwrap_or(0);
+
+        hm
     }
 }
 

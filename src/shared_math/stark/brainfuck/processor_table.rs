@@ -1,11 +1,123 @@
+use super::table::{Table, TableMoreTrait, TableTrait};
+use super::vm::INSTRUCTIONS;
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
 
-use super::{
-    table::{Table, TableMoreTrait},
-    vm::INSTRUCTIONS,
-};
+pub struct ProcessorTableMore {
+    codewords: Vec<Vec<BFieldElement>>,
+}
 
-impl ProcessorTableMore {
+impl ProcessorTableMore {}
+
+impl TableMoreTrait for ProcessorTableMore {
+    fn new_more() -> Self {
+        ProcessorTableMore { codewords: vec![] }
+    }
+}
+
+pub struct ProcessorTable(pub Table<ProcessorTableMore>);
+
+impl ProcessorTable {
+    // named indices for base columns (=register)
+    pub const CYCLE: usize = 0;
+    pub const INSTRUCTION_POINTER: usize = 1;
+    pub const CURRENT_INSTRUCTION: usize = 2;
+    pub const NEXT_INSTRUCTION: usize = 3;
+    pub const MEMORY_POINTER: usize = 4;
+    pub const MEMORY_VALUE: usize = 5;
+    pub const IS_ZERO: usize = 6;
+
+    // named indices for extension columns
+    pub const INSTRUCTION_PERMUTATION: usize = 7;
+    pub const MEMORY_PERMUTATION: usize = 8;
+    pub const INPUT_EVALUATION: usize = 9;
+    pub const OUTPUT_EVALUATION: usize = 10;
+
+    // base and extension table width
+    pub const BASE_WIDTH: usize = 7;
+    pub const FULL_WIDTH: usize = 11;
+
+    pub fn new(
+        length: usize,
+        num_randomizers: usize,
+        generator: BFieldElement,
+        order: usize,
+    ) -> Self {
+        let table = Table::<ProcessorTableMore>::new(
+            Self::BASE_WIDTH,
+            Self::FULL_WIDTH,
+            length,
+            num_randomizers,
+            generator,
+            order,
+        );
+
+        Self(table)
+    }
+
+    fn transition_constraints_afo_named_variables(
+        cycle: MPolynomial<BFieldElement>,
+        instruction_pointer: MPolynomial<BFieldElement>,
+        current_instruction: MPolynomial<BFieldElement>,
+        next_instruction: MPolynomial<BFieldElement>,
+        memory_pointer: MPolynomial<BFieldElement>,
+        memory_value: MPolynomial<BFieldElement>,
+        is_zero: MPolynomial<BFieldElement>,
+        cycle_next: MPolynomial<BFieldElement>,
+        instruction_pointer_next: MPolynomial<BFieldElement>,
+        current_instruction_next: MPolynomial<BFieldElement>,
+        next_instruction_next: MPolynomial<BFieldElement>,
+        memory_pointer_next: MPolynomial<BFieldElement>,
+        memory_value_next: MPolynomial<BFieldElement>,
+        is_zero_next: MPolynomial<BFieldElement>,
+    ) -> [MPolynomial<BFieldElement>; 6] {
+        // TODO: Is variable count = 14 here?
+        let elem = MPolynomial::<BFieldElement>::zero(14);
+        let mut polynomials: [MPolynomial<BFieldElement>; 6] = [
+            elem.clone(),
+            elem.clone(),
+            elem.clone(),
+            elem.clone(),
+            elem.clone(),
+            elem,
+        ];
+
+        for c in INSTRUCTIONS.iter() {
+            // Max degree: 3
+            let instrs: [MPolynomial<BFieldElement>; 3] = Self::instruction_polynomials(
+                *c,
+                &cycle,
+                &instruction_pointer,
+                &current_instruction,
+                &next_instruction,
+                &memory_pointer,
+                &memory_value,
+                &is_zero,
+                &cycle_next,
+                &instruction_pointer_next,
+                &current_instruction_next,
+                &next_instruction_next,
+                &memory_pointer_next,
+                &memory_value_next,
+                &is_zero_next,
+            );
+
+            // Max degree: 7
+            let deselector = Self::ifnot_instruction(*c, &current_instruction);
+
+            for (i, instr) in instrs.iter().enumerate() {
+                polynomials[i] += deselector.to_owned() * instr.to_owned();
+            }
+        }
+
+        // Instruction independent polynomials
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+        polynomials[3] = cycle_next - cycle - one.clone();
+        polynomials[4] = is_zero.clone() * memory_value;
+        polynomials[5] = is_zero.clone() * (one - is_zero);
+
+        polynomials
+    }
+
     fn instruction_polynomials(
         instruction: char,
         cycle: &MPolynomial<BFieldElement>,
@@ -181,79 +293,39 @@ impl ProcessorTableMore {
 
         acc
     }
+}
 
-    fn transition_constraints_afo_named_variables(
-        cycle: MPolynomial<BFieldElement>,
-        instruction_pointer: MPolynomial<BFieldElement>,
-        current_instruction: MPolynomial<BFieldElement>,
-        next_instruction: MPolynomial<BFieldElement>,
-        memory_pointer: MPolynomial<BFieldElement>,
-        memory_value: MPolynomial<BFieldElement>,
-        is_zero: MPolynomial<BFieldElement>,
-        cycle_next: MPolynomial<BFieldElement>,
-        instruction_pointer_next: MPolynomial<BFieldElement>,
-        current_instruction_next: MPolynomial<BFieldElement>,
-        next_instruction_next: MPolynomial<BFieldElement>,
-        memory_pointer_next: MPolynomial<BFieldElement>,
-        memory_value_next: MPolynomial<BFieldElement>,
-        is_zero_next: MPolynomial<BFieldElement>,
-    ) -> [MPolynomial<BFieldElement>; 6] {
-        // TODO: Is variable count = 14 here?
-        let elem = MPolynomial::<BFieldElement>::zero(14);
-        let mut polynomials: [MPolynomial<BFieldElement>; 6] = [
-            elem.clone(),
-            elem.clone(),
-            elem.clone(),
-            elem.clone(),
-            elem.clone(),
-            elem,
-        ];
-
-        for c in INSTRUCTIONS.iter() {
-            // Max degree: 3
-            let instrs: [MPolynomial<BFieldElement>; 3] = Self::instruction_polynomials(
-                *c,
-                &cycle,
-                &instruction_pointer,
-                &current_instruction,
-                &next_instruction,
-                &memory_pointer,
-                &memory_value,
-                &is_zero,
-                &cycle_next,
-                &instruction_pointer_next,
-                &current_instruction_next,
-                &next_instruction_next,
-                &memory_pointer_next,
-                &memory_value_next,
-                &is_zero_next,
-            );
-
-            // Max degree: 7
-            let deselector = Self::ifnot_instruction(*c, &current_instruction);
-
-            for (i, instr) in instrs.iter().enumerate() {
-                polynomials[i] += deselector.to_owned() * instr.to_owned();
-            }
-        }
-
-        // Instruction independent polynomials
-        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
-        polynomials[3] = cycle_next - cycle - one.clone();
-        polynomials[4] = is_zero.clone() * memory_value;
-        polynomials[5] = is_zero.clone() * (one - is_zero);
-
-        polynomials
+impl TableTrait for ProcessorTable {
+    fn base_width(&self) -> usize {
+        self.0.base_width
     }
-}
 
-pub struct ProcessorTableMore {
-    codewords: Vec<Vec<BFieldElement>>,
-}
+    fn full_width(&self) -> usize {
+        self.0.full_width
+    }
 
-impl TableMoreTrait for ProcessorTableMore {
-    fn new_more() -> Self {
-        ProcessorTableMore { codewords: vec![] }
+    fn length(&self) -> usize {
+        self.0.length
+    }
+
+    fn num_randomizers(&self) -> usize {
+        self.0.num_randomizers
+    }
+
+    fn height(&self) -> usize {
+        self.0.height
+    }
+
+    fn omicron(&self) -> BFieldElement {
+        self.0.omicron
+    }
+
+    fn generator(&self) -> BFieldElement {
+        self.0.generator
+    }
+
+    fn order(&self) -> usize {
+        self.0.order
     }
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
@@ -299,51 +371,6 @@ impl TableMoreTrait for ProcessorTableMore {
 
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         todo!()
-    }
-}
-
-pub struct ProcessorTable(pub Table<ProcessorTableMore>);
-
-impl ProcessorTable {
-    // named indices for base columns (=register)
-    pub const CYCLE: usize = 0;
-    pub const INSTRUCTION_POINTER: usize = 1;
-    pub const CURRENT_INSTRUCTION: usize = 2;
-    pub const NEXT_INSTRUCTION: usize = 3;
-    pub const MEMORY_POINTER: usize = 4;
-    pub const MEMORY_VALUE: usize = 5;
-    pub const IS_ZERO: usize = 6;
-
-    // named indices for extension columns
-    pub const INSTRUCTION_PERMUTATION: usize = 7;
-    pub const MEMORY_PERMUTATION: usize = 8;
-    pub const INPUT_EVALUATION: usize = 9;
-    pub const OUTPUT_EVALUATION: usize = 10;
-
-    // base and extension table width
-    pub const BASE_WIDTH: usize = 7;
-    pub const FULL_WIDTH: usize = 11;
-
-    pub fn new(
-        length: usize,
-        num_randomizers: usize,
-        generator: BFieldElement,
-        order: usize,
-    ) -> Self {
-        let table = Table::<ProcessorTableMore>::new(
-            Self::BASE_WIDTH,
-            Self::FULL_WIDTH,
-            length,
-            num_randomizers,
-            generator,
-            order,
-        );
-
-        Self(table)
-    }
-
-    pub fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        self.0.more.base_transition_constraints()
     }
 }
 

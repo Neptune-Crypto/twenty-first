@@ -21,10 +21,6 @@ pub struct Table<T> {
 }
 
 impl<T: TableMoreTrait> Table<T> {
-    pub fn interpolant_degree(&self) -> usize {
-        self.height + self.num_randomizers - 1
-    }
-
     pub fn new(
         base_width: usize,
         full_width: usize,
@@ -69,8 +65,24 @@ impl<T: TableMoreTrait> Table<T> {
     }
 }
 
-pub trait TableMoreTrait {
-    fn new_more() -> Self;
+pub trait TableTrait {
+    fn base_width(&self) -> usize;
+    fn full_width(&self) -> usize;
+    fn length(&self) -> usize;
+    fn num_randomizers(&self) -> usize;
+    fn height(&self) -> usize;
+    fn omicron(&self) -> BFieldElement;
+    fn generator(&self) -> BFieldElement;
+    fn order(&self) -> usize;
+
+    fn interpolant_degree(&self) -> usize {
+        self.height() + self.num_randomizers() - 1
+    }
+
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
+}
+
+pub trait TableMoreTrait {
+    fn new_more() -> Self;
 }

@@ -1,6 +1,6 @@
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
 
-use super::table::{Table, TableMoreTrait};
+use super::table::{Table, TableMoreTrait, TableTrait};
 
 pub struct InstructionTable(Table<InstructionTableMore>);
 
@@ -9,43 +9,6 @@ pub struct InstructionTableMore(());
 impl TableMoreTrait for InstructionTableMore {
     fn new_more() -> Self {
         InstructionTableMore(())
-    }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        let vars = MPolynomial::<BFieldElement>::variables(6, BFieldElement::ring_one());
-        let address = vars[0].clone();
-        let current_instruction = vars[1].clone();
-        let next_instruction = vars[2].clone();
-        let address_next = vars[3].clone();
-        let current_instruction_next = vars[4].clone();
-        let next_instruction_next = vars[5].clone();
-
-        InstructionTable::transition_constraints_afo_named_variables(
-            address,
-            current_instruction,
-            next_instruction,
-            address_next,
-            current_instruction_next,
-            next_instruction_next,
-        )
-    }
-
-    // def base_boundary_constraints(self):
-    //     # format: mpolynomial
-    //     x = MPolynomial.variables(self.width, self.field)
-    //     zero = MPolynomial.zero()
-    //     return [x[InstructionTable.address]-zero]
-    fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        let x = MPolynomial::<BFieldElement>::variables(
-            InstructionTable::FULL_WIDTH,
-            BFieldElement::ring_one(),
-        );
-
-        // Why create 'x' and then throw all but 'address' away?
-        let address = x[InstructionTable::ADDRESS].clone();
-        let zero = MPolynomial::<BFieldElement>::zero(InstructionTable::FULL_WIDTH);
-
-        vec![address - zero]
     }
 }
 
@@ -109,5 +72,76 @@ impl InstructionTable {
             .push((address_next - address - one) * (next_instruction_next - next_instruction));
 
         polynomials
+    }
+}
+
+impl TableTrait for InstructionTable {
+    fn base_width(&self) -> usize {
+        self.0.base_width
+    }
+
+    fn full_width(&self) -> usize {
+        self.0.full_width
+    }
+
+    fn length(&self) -> usize {
+        self.0.length
+    }
+
+    fn num_randomizers(&self) -> usize {
+        self.0.num_randomizers
+    }
+
+    fn height(&self) -> usize {
+        self.0.height
+    }
+
+    fn omicron(&self) -> BFieldElement {
+        self.0.omicron
+    }
+
+    fn generator(&self) -> BFieldElement {
+        self.0.generator
+    }
+
+    fn order(&self) -> usize {
+        self.0.order
+    }
+
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
+        let vars = MPolynomial::<BFieldElement>::variables(6, BFieldElement::ring_one());
+        let address = vars[0].clone();
+        let current_instruction = vars[1].clone();
+        let next_instruction = vars[2].clone();
+        let address_next = vars[3].clone();
+        let current_instruction_next = vars[4].clone();
+        let next_instruction_next = vars[5].clone();
+
+        InstructionTable::transition_constraints_afo_named_variables(
+            address,
+            current_instruction,
+            next_instruction,
+            address_next,
+            current_instruction_next,
+            next_instruction_next,
+        )
+    }
+
+    // def base_boundary_constraints(self):
+    //     # format: mpolynomial
+    //     x = MPolynomial.variables(self.width, self.field)
+    //     zero = MPolynomial.zero()
+    //     return [x[InstructionTable.address]-zero]
+    fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
+        let x = MPolynomial::<BFieldElement>::variables(
+            InstructionTable::FULL_WIDTH,
+            BFieldElement::ring_one(),
+        );
+
+        // Why create 'x' and then throw all but 'address' away?
+        let address = x[InstructionTable::ADDRESS].clone();
+        let zero = MPolynomial::<BFieldElement>::zero(InstructionTable::FULL_WIDTH);
+
+        vec![address - zero]
     }
 }

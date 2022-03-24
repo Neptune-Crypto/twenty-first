@@ -18,7 +18,7 @@ use std::{cmp, fmt};
 use super::traits::PrimeField;
 
 type MCoefficients<T> = HashMap<Vec<u64>, T>;
-type Degree = i64;
+pub type Degree = i64;
 
 const EDMONDS_WEIGHT_CUTOFF_FACTOR: u64 = 2;
 
