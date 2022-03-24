@@ -375,7 +375,7 @@ impl TableTrait for ProcessorTable {
 }
 
 #[cfg(test)]
-mod rescue_prime_start_test {
+mod processor_table_tests {
     use super::*;
     use crate::shared_math::{
         stark::brainfuck::{
@@ -414,7 +414,6 @@ mod rescue_prime_start_test {
             for step in 0..processor_matrix.len() - 1 {
                 let register: Register = processor_matrix[step].clone();
                 let next_register: Register = processor_matrix[step + 1].clone();
-                register.current_instruction;
                 let point: Vec<BFieldElement> = vec![
                     register.cycle,
                     register.instruction_pointer,

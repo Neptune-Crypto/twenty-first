@@ -53,7 +53,10 @@ impl InstructionTable {
         next_instruction_next: MPolynomial<BFieldElement>,
     ) -> Vec<MPolynomial<BFieldElement>> {
         let mut polynomials: Vec<MPolynomial<BFieldElement>> = vec![];
-        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+
+        let variable_count = Self::BASE_WIDTH * 2;
+        let one =
+            MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), variable_count);
 
         // instruction pointer increases by 0 or 1
         polynomials.push(
@@ -109,7 +112,10 @@ impl TableTrait for InstructionTable {
     }
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        let vars = MPolynomial::<BFieldElement>::variables(6, BFieldElement::ring_one());
+        let variable_count = Self::BASE_WIDTH * 2;
+        let vars =
+            MPolynomial::<BFieldElement>::variables(variable_count, BFieldElement::ring_one());
+
         let address = vars[0].clone();
         let current_instruction = vars[1].clone();
         let next_instruction = vars[2].clone();
@@ -143,5 +149,72 @@ impl TableTrait for InstructionTable {
         let zero = MPolynomial::<BFieldElement>::zero(InstructionTable::FULL_WIDTH);
 
         vec![address - zero]
+    }
+}
+
+#[cfg(test)]
+mod instruction_table_tests {
+    use super::*;
+    use crate::shared_math::stark::brainfuck::vm::InstructionMatrixBaseRow;
+    use crate::shared_math::{
+        stark::brainfuck::{
+            self,
+            vm::{BaseMatrices, Register},
+        },
+        traits::{GetPrimitiveRootOfUnity, IdentityValues},
+    };
+
+    static VERY_SIMPLE_PROGRAM: &str = "++++";
+    static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
+    static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+
+    // When we simulate a program, this generates a collection of matrices that contain
+    // "abstract" execution traces. When we evaluate the base transition constraints on
+    // the rows (points) from the InstructionTable matrix, these should evaluate to zero.
+    #[test]
+    fn instruction_base_table_evaluate_to_zero_on_execution_trace_test() {
+        for source_code in [VERY_SIMPLE_PROGRAM, TWO_BY_TWO_THEN_OUTPUT, HELLO_WORLD] {
+            let actual_program = brainfuck::vm::compile(source_code).unwrap();
+            let input_data = vec![BFieldElement::new(97)];
+            let base_matrices: BaseMatrices =
+                brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
+
+            let instruction_matrix = base_matrices.instruction_matrix;
+
+            let number_of_randomizers = 2;
+            let order = 1 << 32;
+            let smooth_generator = BFieldElement::ring_zero()
+                .get_primitive_root_of_unity(order)
+                .0
+                .unwrap();
+
+            // instantiate table objects
+            let instruction_table: InstructionTable = InstructionTable::new(
+                instruction_matrix.len(),
+                number_of_randomizers,
+                smooth_generator,
+                order as usize,
+            );
+
+            let air_constraints = instruction_table.base_transition_constraints();
+
+            for step in 0..instruction_matrix.len() - 1 {
+                let row: InstructionMatrixBaseRow = instruction_matrix[step].clone();
+                let next_row: InstructionMatrixBaseRow = instruction_matrix[step + 1].clone();
+
+                let point: Vec<BFieldElement> = vec![
+                    row.instruction_pointer,
+                    row.current_instruction,
+                    row.next_instruction,
+                    next_row.instruction_pointer,
+                    next_row.current_instruction,
+                    next_row.next_instruction,
+                ];
+
+                for air_constraint in air_constraints.iter() {
+                    assert!(air_constraint.evaluate(&point).is_zero());
+                }
+            }
+        }
     }
 }
