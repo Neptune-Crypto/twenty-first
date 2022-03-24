@@ -1,6 +1,9 @@
-use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
+use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial, other};
 
-use super::table::{Table, TableMoreTrait, TableTrait};
+use super::{
+    table::{Table, TableMoreTrait, TableTrait},
+    vm::InstructionMatrixBaseRow,
+};
 
 #[derive(Debug, Clone)]
 pub struct InstructionTable(pub Table<InstructionTableMore>);
@@ -44,6 +47,18 @@ impl InstructionTable {
         );
 
         Self(table)
+    }
+
+    pub fn pad(&mut self) {
+        while !other::is_power_of_two(self.0.matrix.len()) {
+            let last = self.0.matrix.last().unwrap();
+            let padding = InstructionMatrixBaseRow {
+                instruction_pointer: last[Self::ADDRESS],
+                current_instruction: BFieldElement::ring_zero(),
+                next_instruction: BFieldElement::ring_zero(),
+            };
+            self.0.matrix.push(padding.into());
+        }
     }
 
     fn transition_constraints_afo_named_variables(

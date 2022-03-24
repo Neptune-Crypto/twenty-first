@@ -1,4 +1,4 @@
-use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
+use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial, other};
 
 use super::table::{Table, TableMoreTrait, TableTrait};
 
@@ -61,6 +61,14 @@ impl IOTable {
         table.more.terminal_index = 3;
 
         Self(table)
+    }
+
+    pub fn pad(&mut self) {
+        // TODO: The current python code does something else here
+        while !other::is_power_of_two(self.0.matrix.len()) {
+            let padding: Vec<BFieldElement> = vec![BFieldElement::ring_zero()];
+            self.0.matrix.push(padding);
+        }
     }
 
     pub fn challenge_index(&self) -> usize {
