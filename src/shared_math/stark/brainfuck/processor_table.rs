@@ -61,10 +61,10 @@ impl ProcessorTable {
         while !other::is_power_of_two(self.0.matrix.len()) {
             let last = self.0.matrix.last().unwrap();
             let padding = Register {
-                cycle: last[ProcessorTable::CYCLE],
+                cycle: last[ProcessorTable::CYCLE] + BFieldElement::ring_one(),
                 instruction_pointer: last[ProcessorTable::INSTRUCTION_POINTER],
-                current_instruction: last[ProcessorTable::CURRENT_INSTRUCTION],
-                next_instruction: last[ProcessorTable::NEXT_INSTRUCTION],
+                current_instruction: BFieldElement::ring_zero(),
+                next_instruction: BFieldElement::ring_zero(),
                 memory_pointer: last[ProcessorTable::MEMORY_POINTER],
                 memory_value: last[ProcessorTable::MEMORY_VALUE],
                 is_zero: last[ProcessorTable::IS_ZERO],
@@ -422,21 +422,38 @@ mod processor_table_tests {
                 .get_primitive_root_of_unity(order)
                 .0
                 .unwrap();
+
             // instantiate table objects
-            let processor_table: ProcessorTable = ProcessorTable::new(
+            let mut processor_table: ProcessorTable = ProcessorTable::new(
                 processor_matrix.len(),
                 number_of_randomizers,
                 smooth_generator,
                 order as usize,
             );
+
             let air_constraints = processor_table.base_transition_constraints();
             for step in 0..processor_matrix.len() - 1 {
-                let register: Register = processor_matrix[step].clone();
-                let next_register: Register = processor_matrix[step + 1].clone();
+                let register: Vec<BFieldElement> = processor_matrix[step].clone().into();
+                let next_register: Vec<BFieldElement> = processor_matrix[step + 1].clone().into();
+                let point: Vec<BFieldElement> = vec![register, next_register].concat();
 
-                let foo: Vec<BFieldElement> = register.into();
-                let bar: Vec<BFieldElement> = next_register.into();
-                let mut point: Vec<BFieldElement> = vec![foo, bar].concat();
+                for air_constraint in air_constraints.iter() {
+                    assert!(air_constraint.evaluate(&point).is_zero());
+                }
+            }
+
+            // test air constraints after padding as well
+
+            processor_table.0.matrix = processor_matrix.into_iter().map(|x| x.into()).collect();
+            processor_table.pad();
+
+            assert!(other::is_power_of_two(processor_table.0.matrix.len()));
+
+            let air_constraints = processor_table.base_transition_constraints();
+            for step in 0..processor_table.0.matrix.len() - 1 {
+                let register = processor_table.0.matrix[step].clone();
+                let next_register = processor_table.0.matrix[step + 1].clone();
+                let point: Vec<BFieldElement> = vec![register, next_register].concat();
 
                 for air_constraint in air_constraints.iter() {
                     assert!(air_constraint.evaluate(&point).is_zero());
