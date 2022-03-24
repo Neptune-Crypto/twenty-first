@@ -34,11 +34,11 @@ impl TableCollection {
     pub fn get_max_degree(&self) -> u64 {
         // TODO: Comment these in when the max_degree is calculated correctly and max_degree test passes.
         [
-            Self::get_max_degree_helper(&self.processor_table),
-            // Self::get_max_degree_helper(&self.instruction_table),
-            // Self::get_max_degree_helper(&self.memory_table),
-            // Self::get_max_degree_helper(&self.input_table),
-            // Self::get_max_degree_helper(&self.output_table),
+            self.processor_table.max_degree(),
+            // self.instruction_table.max_degree(),
+            // self.memory_table.max_degree(),
+            // self.input_table.max_degree(),
+            // self.output_table.max_degree(),
         ]
         .iter()
         .max()
@@ -54,19 +54,6 @@ impl TableCollection {
         //         - (self.processor_table.0.height - 1) as i64;
         //     max_degree = std::cmp::max(degree, max_degree);
         // }
-    }
-
-    fn get_max_degree_helper<T: TableTrait>(table: &T) -> Degree {
-        let degree_bounds: Vec<i64> =
-            vec![table.interpolant_degree() as i64; table.base_width() * 2];
-        let hm: Degree = table
-            .base_transition_constraints()
-            .iter()
-            .map(|air| air.symbolic_degree_bound(&degree_bounds) - (table.height() as Degree - 1))
-            .max()
-            .unwrap_or(0);
-
-        hm
     }
 }
 

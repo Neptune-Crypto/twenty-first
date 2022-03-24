@@ -1,3 +1,4 @@
+use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::{
     b_field_element::BFieldElement, mpolynomial::MPolynomial, other,
     traits::GetPrimitiveRootOfUnity,
@@ -77,6 +78,16 @@ pub trait TableTrait {
 
     fn interpolant_degree(&self) -> usize {
         self.height() + self.num_randomizers() - 1
+    }
+
+    fn max_degree(&self) -> Degree {
+        let degree_bounds: Vec<i64> = vec![self.interpolant_degree() as i64; self.base_width() * 2];
+
+        self.base_transition_constraints()
+            .iter()
+            .map(|air| air.symbolic_degree_bound(&degree_bounds) - (self.height() as Degree - 1))
+            .max()
+            .unwrap_or(0)
     }
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
