@@ -1,9 +1,12 @@
 use crate::shared_math::{
     b_field_element::BFieldElement, mpolynomial::MPolynomial,
-    stark::brainfuck::processor_table::ProcessorTable,
+    stark::brainfuck::processor_table::ProcessorTable, x_field_element::XFieldElement,
 };
 
-use super::table::{Table, TableMoreTrait, TableTrait};
+use super::{
+    stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT},
+    table::{Table, TableMoreTrait, TableTrait},
+};
 
 #[derive(Debug, Clone)]
 pub struct MemoryTable(pub Table<MemoryTableMore>);
@@ -172,6 +175,14 @@ impl TableTrait for MemoryTable {
     }
 
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
+    }
+
+    fn extend(
+        &mut self,
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
+    ) {
         todo!()
     }
 }

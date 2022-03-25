@@ -28,8 +28,8 @@ use crate::util_types::simple_hasher::{Hasher, RescuePrimeProduction};
 
 use super::vm::{InstructionMatrixBaseRow, Register};
 
-const EXTENSION_CHALLENGE_COUNT: u16 = 11;
-const PERMUTATION_ARGUMENTS_COUNT: usize = 2;
+pub const EXTENSION_CHALLENGE_COUNT: u16 = 11;
+pub const PERMUTATION_ARGUMENTS_COUNT: usize = 2;
 
 pub struct Stark {
     trace_length: usize,
@@ -293,8 +293,10 @@ impl Stark {
         // let challenges = self.sample_weights(11, proof_stream.prover_fiat_shamir());
         // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
         // must not change though, it should remain `Vec<XFieldElement>`.
-        let challenges: Vec<XFieldElement> =
-            Self::sample_weights(EXTENSION_CHALLENGE_COUNT, proof_stream.prover_fiat_shamir());
+        let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
+            Self::sample_weights(EXTENSION_CHALLENGE_COUNT, proof_stream.prover_fiat_shamir())
+                .try_into()
+                .unwrap();
 
         let initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT] =
             XFieldElement::random_elements(PERMUTATION_ARGUMENTS_COUNT, &mut rng)

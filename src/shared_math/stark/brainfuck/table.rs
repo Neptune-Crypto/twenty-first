@@ -10,6 +10,8 @@ use crate::shared_math::{
     traits::GetPrimitiveRootOfUnity,
 };
 
+use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
+
 pub const PROCESSOR_TABLE: usize = 0;
 pub const INSTRUCTION_TABLE: usize = 1;
 pub const MEMORY_TABLE: usize = 2;
@@ -25,7 +27,10 @@ pub struct Table<T> {
     pub generator: BFieldElement,
     pub order: usize,
     pub matrix: Vec<Vec<BFieldElement>>,
+    // TODO: Consider making extended values into `Option` types
+    pub extended_matrix: Vec<Vec<XFieldElement>>,
     pub codewords: Vec<Vec<BFieldElement>>,
+    pub extended_codewords: Vec<Vec<XFieldElement>>,
     pub more: T,
 }
 
@@ -45,8 +50,10 @@ impl<T: TableMoreTrait> Table<T> {
         };
         let omicron = Self::derive_omicron(height);
         let matrix = vec![];
+        let extended_matrix = vec![];
         let more = T::new_more();
         let codewords = vec![];
+        let extended_codewords = vec![];
 
         Self {
             base_width,
@@ -58,8 +65,10 @@ impl<T: TableMoreTrait> Table<T> {
             generator,
             order,
             matrix,
+            extended_matrix,
             more,
             codewords,
+            extended_codewords,
         }
     }
 
@@ -158,6 +167,11 @@ pub trait TableTrait {
     fn omicron(&self) -> BFieldElement;
     fn generator(&self) -> BFieldElement;
     fn order(&self) -> usize;
+    fn extend(
+        &mut self,
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
+    );
 
     fn interpolant_degree(&self) -> Degree {
         self.height() as Degree + self.num_randomizers() as Degree - 1

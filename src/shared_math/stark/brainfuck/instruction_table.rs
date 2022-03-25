@@ -1,6 +1,9 @@
-use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial, other};
+use crate::shared_math::{
+    b_field_element::BFieldElement, mpolynomial::MPolynomial, other, x_field_element::XFieldElement,
+};
 
 use super::{
+    stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT},
     table::{Table, TableMoreTrait, TableTrait},
     vm::InstructionMatrixBaseRow,
 };
@@ -166,6 +169,14 @@ impl TableTrait for InstructionTable {
         let zero = MPolynomial::<BFieldElement>::zero(InstructionTable::FULL_WIDTH);
 
         vec![address - zero]
+    }
+
+    fn extend(
+        &mut self,
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
+    ) {
+        todo!()
     }
 }
 

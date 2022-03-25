@@ -1,6 +1,8 @@
+use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
 use super::table::{Table, TableMoreTrait, TableTrait};
 use super::vm::{Register, INSTRUCTIONS};
 use crate::shared_math::other;
+use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
 
 impl TableMoreTrait for ProcessorTableMore {
@@ -389,6 +391,14 @@ impl TableTrait for ProcessorTable {
     }
 
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
+    }
+
+    fn extend(
+        &mut self,
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
+    ) {
         todo!()
     }
 }
