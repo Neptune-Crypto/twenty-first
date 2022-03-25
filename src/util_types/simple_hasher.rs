@@ -37,6 +37,11 @@ pub trait Hasher: Sized {
 
         digest
     }
+
+    fn fiat_shamir<Value: ToDigest<Self::Digest>>(&mut self, items: &[Value]) -> Self::Digest {
+        let digests: Vec<Self::Digest> = items.iter().map(|item| item.to_digest()).collect();
+        self.hash_many(&digests)
+    }
 }
 
 /// In order to hash arbitrary things using a `Hasher`, it must `impl ToDigest<Digest>`
