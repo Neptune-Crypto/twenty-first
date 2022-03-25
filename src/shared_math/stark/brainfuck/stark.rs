@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+use std::error::Error;
 use std::rc::Rc;
 
 use rand::thread_rng;
@@ -13,15 +15,21 @@ use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
 use crate::shared_math::stark::brainfuck::table;
 use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
-use crate::shared_math::traits::GetRandomElements;
+use crate::shared_math::traits::{FromVecu8, GetRandomElements};
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
     x_field_element::XFieldElement,
 };
+use crate::util_types::blake3_wrapper::Blake3Hash;
+use crate::util_types::merkle_tree::{MerkleTree, SaltedMerkleTree};
 use crate::util_types::proof_stream::ProofStream;
+use crate::util_types::simple_hasher::{Hasher, RescuePrimeProduction};
 
 use super::vm::{InstructionMatrixBaseRow, Register};
+
+const EXTENSION_CHALLENGE_COUNT: u16 = 11;
+const PERMUTATION_ARGUMENTS_COUNT: usize = 2;
 
 pub struct Stark {
     trace_length: usize,
@@ -36,12 +44,24 @@ pub struct Stark {
     max_degree: u64,
     fri: Fri<BFieldElement, blake3::Hasher>,
 
-    permutation_arguments: [PermutationArgument; 2],
+    permutation_arguments: [PermutationArgument; PERMUTATION_ARGUMENTS_COUNT],
     io_evaluation_arguments: [EvaluationArgument; 2],
     program_evaluation_argument: ProgramEvaluationArgument,
 }
 
 impl Stark {
+    fn sample_weights(number: u16, seed: Vec<u8>) -> Vec<XFieldElement> {
+        // TODO: Change this to use Rescue prime instead of Vec<u8>/Blake3
+        let mut challenges: Vec<XFieldElement> = vec![];
+        for i in 0..11 {
+            let mut mutated_challenge_seed = seed.clone();
+            mutated_challenge_seed[0] = ((mutated_challenge_seed[0] as u16 + i) % 256) as u8;
+            challenges.push(XFieldElement::ring_zero().from_vecu8(mutated_challenge_seed));
+        }
+
+        challenges
+    }
+
     pub fn new(
         trace_length: usize,
         program: Vec<BFieldElement>,
@@ -197,7 +217,7 @@ impl Stark {
         instruction_matrix: Vec<InstructionMatrixBaseRow>,
         input_matrix: Vec<BFieldElement>,
         output_matrix: Vec<BFieldElement>,
-    ) -> ProofStream {
+    ) -> Result<ProofStream, Box<dyn Error>> {
         assert_eq!(trace_length, processor_matrix.len());
         assert_eq!(
             trace_length + program.len(),
@@ -222,8 +242,6 @@ impl Stark {
         // Instantiate the memory table object
         tables.memory_table.0.matrix = MemoryTable::derive_matrix(&tables.processor_table.0.matrix);
 
-        let proof_stream = ProofStream::default();
-
         // Generate randomizer codewords for zero-knowledge
         let mut rng = thread_rng();
         let randomizer_polynomial = Polynomial::new(XFieldElement::random_elements(
@@ -241,12 +259,47 @@ impl Stark {
             tables.get_and_set_all_base_codewords(&self.fri.domain);
         let all_base_codewords = vec![base_codewords, randomizer_codewords].concat();
 
-        // base_codewords = reduce(
-        //     lambda x, y: x+y, [table.lde(self.fri.domain) for table in self.tables], [])
-        // all_base_codewords = randomizer_codewords + base_codewords
+        let base_degree_bounds = tables.get_all_base_degree_bounds();
 
-        // base_degree_bounds = reduce(
-        //     lambda x, y: x+y, [[table.interpolant_degree()] * table.base_width for table in self.tables], [])
+        // TODO: How do I make a single Merkle tree from many codewords?
+        // If the Merkle trees are always opened for all base codewords for a single index, then
+        // we *should* be able to make a commitment to *each* index and store that list of commitments
+        // in a single Merkle tree. This list of commitments will have length 2^k, so this should be
+        // possible, as the MT requires a leaf count that is a power of two.
+        let transposed_base_codewords: Vec<Vec<BFieldElement>> = (0..all_base_codewords[0].len())
+            .map(|i| {
+                all_base_codewords
+                    .iter()
+                    .map(|inner| inner[i].clone())
+                    .collect::<Vec<BFieldElement>>()
+            })
+            .collect();
+        let mut hasher = RescuePrimeProduction::new();
+        let base_codeword_digests_by_index: Vec<Vec<BFieldElement>> = transposed_base_codewords
+            .iter()
+            .map(|values| hasher.hash(values))
+            .collect();
+        let base_merkle_tree =
+            MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::from_digests(
+                &base_codeword_digests_by_index,
+                &vec![BFieldElement::ring_zero()],
+            );
+
+        // Commit to base codewords
+        let mut proof_stream = ProofStream::default();
+        proof_stream.enqueue(base_merkle_tree.get_root())?;
+
+        // Get coefficients for table extension
+        // let challenges = self.sample_weights(11, proof_stream.prover_fiat_shamir());
+        // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
+        // must not change though, it should remain `Vec<XFieldElement>`.
+        let challenges: Vec<XFieldElement> =
+            Self::sample_weights(EXTENSION_CHALLENGE_COUNT, proof_stream.prover_fiat_shamir());
+
+        let initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT] =
+            XFieldElement::random_elements(PERMUTATION_ARGUMENTS_COUNT, &mut rng)
+                .try_into()
+                .unwrap();
 
         todo!()
     }

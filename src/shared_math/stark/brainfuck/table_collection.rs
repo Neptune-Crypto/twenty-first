@@ -60,11 +60,12 @@ impl TableCollection {
         .concat()
     }
 
-    // TODO: Add small test of this function
+    /// Calculate all codewords on the table objects, and return those codewords as a list of codewords
     pub fn get_and_set_all_base_codewords(
         &mut self,
         fri_domain: &FriDomain<BFieldElement>,
     ) -> Vec<Vec<BFieldElement>> {
+        // TODO: Add small test of this function
         [
             self.processor_table.0.lde(&fri_domain),
             self.instruction_table.0.lde(&fri_domain),
