@@ -276,9 +276,22 @@ impl Stark {
             })
             .collect();
         let mut hasher = RescuePrimeProduction::new();
+
+        // Current length of each element in `transposed_base_codewords` is 18 which exceeds
+        // max length of RP hash function. So we chop it into elements that will fit into the
+        // rescue prime hash function. This is done by chopping the hash function input into
+        // chunks of `max_length / 2` and calling `hash_many` on this input. Half the max
+        // length is needed since the chunks are hashed two at a time.
         let base_codeword_digests_by_index: Vec<Vec<BFieldElement>> = transposed_base_codewords
-            .iter()
-            .map(|values| hasher.hash(values))
+            .clone()
+            .into_iter()
+            .map(|values| {
+                let chunks: Vec<Vec<BFieldElement>> = values
+                    .chunks(hasher.0.max_input_length / 2)
+                    .map(|s| s.into())
+                    .collect();
+                hasher.hash_many(&chunks)
+            })
             .collect();
         let base_merkle_tree =
             MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::from_digests(
@@ -329,13 +342,13 @@ mod brainfuck_stark_tests {
         let base_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
         let mut stark = Stark::new(trace_length, program, input_symbols, output_symbols);
-        // let proof_stream = stark
-        //     .prove(
-        //         base_matrices.processor_matrix,
-        //         base_matrices.instruction_matrix,
-        //         base_matrices.input_matrix,
-        //         base_matrices.output_matrix,
-        //     )
-        //     .unwrap();
+        let proof_stream = stark
+            .prove(
+                base_matrices.processor_matrix,
+                base_matrices.instruction_matrix,
+                base_matrices.input_matrix,
+                base_matrices.output_matrix,
+            )
+            .unwrap();
     }
 }
