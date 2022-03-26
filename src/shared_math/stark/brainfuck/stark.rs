@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::convert::TryInto;
 use std::error::Error;
 use std::rc::Rc;
@@ -224,23 +224,22 @@ impl Stark {
             "instruction_matrix must contain both the execution trace and the program"
         );
 
-        let mut tables = self.base_tables.borrow_mut();
-        tables.processor_table.0.matrix = processor_matrix.into_iter().map(|x| x.into()).collect();
-        tables.instruction_table.0.matrix =
-            instruction_matrix.into_iter().map(|x| x.into()).collect();
-        tables.input_table.0.matrix = input_matrix.into_iter().map(|x| vec![x]).collect();
-        tables.output_table.0.matrix = output_matrix.into_iter().map(|x| vec![x]).collect();
+        self.base_tables.borrow_mut().set_matrices(
+            processor_matrix,
+            instruction_matrix,
+            input_matrix,
+            output_matrix,
+        );
 
-        // pad table to height 2^k
-        tables.processor_table.pad();
-        tables.instruction_table.pad();
-        tables.input_table.pad();
-        tables.output_table.pad();
+        self.base_tables.borrow_mut().pad();
 
         // Instantiate the memory table object
-        tables.memory_table.0.matrix = MemoryTable::derive_matrix(&tables.processor_table.0.matrix);
+        let processor_matrix_clone = self.base_tables.borrow().processor_table.0.matrix.clone();
+        self.base_tables.borrow_mut().memory_table.0.matrix =
+            MemoryTable::derive_matrix(processor_matrix_clone);
 
         // Generate randomizer codewords for zero-knowledge
+        // This generates three B field randomizer codewords, each with the same length as the FRI domain
         let mut rng = thread_rng();
         let randomizer_polynomial = Polynomial::new(XFieldElement::random_elements(
             self.max_degree as usize + 1,
@@ -248,16 +247,20 @@ impl Stark {
         ));
         let randomizer_codeword: Vec<XFieldElement> =
             self.fri.domain.xevaluate(&randomizer_polynomial);
-        let randomizer_codewords: Vec<Vec<BFieldElement>> = randomizer_codeword
-            .iter()
-            .map(|x| x.get_coefficients().into())
-            .collect();
+        let mut randomizer_codewords: [Vec<BFieldElement>; 3] = [vec![], vec![], vec![]];
+        for x_elem in randomizer_codeword.iter() {
+            randomizer_codewords[0].push(x_elem.coefficients[0]);
+            randomizer_codewords[1].push(x_elem.coefficients[1]);
+            randomizer_codewords[2].push(x_elem.coefficients[2]);
+        }
 
-        let base_codewords: Vec<Vec<BFieldElement>> =
-            tables.get_and_set_all_base_codewords(&self.fri.domain);
-        let all_base_codewords = vec![base_codewords, randomizer_codewords].concat();
+        let base_codewords: Vec<Vec<BFieldElement>> = self
+            .base_tables
+            .borrow_mut()
+            .get_and_set_all_base_codewords(&self.fri.domain);
+        let all_base_codewords = vec![base_codewords, randomizer_codewords.into()].concat();
 
-        let base_degree_bounds = tables.get_all_base_degree_bounds();
+        let base_degree_bounds = self.base_tables.borrow().get_all_base_degree_bounds();
 
         // TODO: How do I make a single Merkle tree from many codewords?
         // If the Merkle trees are always opened for all base codewords for a single index, then

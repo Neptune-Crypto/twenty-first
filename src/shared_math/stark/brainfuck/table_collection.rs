@@ -1,3 +1,5 @@
+use std::cell::RefMut;
+
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::fri::FriDomain;
 use crate::shared_math::mpolynomial::Degree;
@@ -7,6 +9,7 @@ use super::io_table::IOTable;
 use super::memory_table::MemoryTable;
 use super::processor_table::ProcessorTable;
 use super::table::TableTrait;
+use super::vm::{InstructionMatrixBaseRow, Register};
 
 #[derive(Debug, Clone)]
 pub struct TableCollection {
@@ -35,7 +38,6 @@ impl TableCollection {
     }
 
     pub fn get_max_degree(&self) -> u64 {
-        // TODO: Comment these in when the max_degree is calculated correctly and max_degree test passes.
         [
             self.processor_table.max_degree(),
             self.instruction_table.max_degree(),
@@ -60,12 +62,32 @@ impl TableCollection {
         .concat()
     }
 
+    pub fn set_matrices(
+        &mut self,
+        processor_matrix: Vec<Register>,
+        instruction_matrix: Vec<InstructionMatrixBaseRow>,
+        input_matrix: Vec<BFieldElement>,
+        output_matrix: Vec<BFieldElement>,
+    ) {
+        self.processor_table.0.matrix = processor_matrix.into_iter().map(|x| x.into()).collect();
+        self.instruction_table.0.matrix =
+            instruction_matrix.into_iter().map(|x| x.into()).collect();
+        self.input_table.0.matrix = input_matrix.into_iter().map(|x| vec![x]).collect();
+        self.output_table.0.matrix = output_matrix.into_iter().map(|x| vec![x]).collect();
+    }
+
+    pub fn pad(&mut self) {
+        self.processor_table.pad();
+        self.instruction_table.pad();
+        self.input_table.pad();
+        self.output_table.pad();
+    }
+
     /// Calculate all codewords on the table objects, and return those codewords as a list of codewords
     pub fn get_and_set_all_base_codewords(
         &mut self,
         fri_domain: &FriDomain<BFieldElement>,
     ) -> Vec<Vec<BFieldElement>> {
-        // TODO: Add small test of this function
         [
             self.processor_table.0.lde(&fri_domain),
             self.instruction_table.0.lde(&fri_domain),
@@ -79,6 +101,8 @@ impl TableCollection {
 
 #[cfg(test)]
 mod brainfuck_table_collection_tests {
+    use std::{cell::RefCell, rc::Rc};
+
     use super::*;
     use crate::shared_math::{
         b_field_element::BFieldElement,
@@ -140,6 +164,45 @@ mod brainfuck_table_collection_tests {
                 15
             ],
             table_collection_bigger.get_all_base_degree_bounds()
+        );
+    }
+
+    #[test]
+    fn get_and_set_all_base_codewords_test() {
+        let program_small = brainfuck::vm::compile("++++").unwrap();
+        let matrices: BaseMatrices = brainfuck::vm::simulate(&program_small, &[]).unwrap();
+        let table_collection: TableCollection = create_table_collection(&program_small, &[]);
+        let tc_ref = Rc::new(RefCell::new(table_collection));
+        tc_ref.borrow_mut().set_matrices(
+            matrices.processor_matrix,
+            matrices.instruction_matrix,
+            matrices.input_matrix,
+            matrices.output_matrix,
+        );
+        tc_ref.borrow_mut().pad();
+
+        // Instantiate the memory table object
+        let processor_matrix_clone = tc_ref.borrow().processor_table.0.matrix.clone();
+        tc_ref.borrow_mut().memory_table.0.matrix =
+            MemoryTable::derive_matrix(processor_matrix_clone);
+
+        let mock_fri_domain_length = 256;
+        let fri_domain = FriDomain {
+            length: mock_fri_domain_length,
+            offset: BFieldElement::new(7),
+            omega: BFieldElement::ring_zero()
+                .get_primitive_root_of_unity(mock_fri_domain_length as u128)
+                .0
+                .unwrap(),
+        };
+
+        assert_eq!(
+            15,
+            tc_ref
+                .borrow_mut()
+                .get_and_set_all_base_codewords(&fri_domain)
+                .len(),
+            "Number of base tables must match that from Python tutorial"
         );
     }
 

@@ -93,6 +93,13 @@ impl<T: TableMoreTrait> Table<T> {
         omega_order: usize,
         column_indices: Vec<usize>,
     ) -> Vec<Polynomial<BFieldElement>> {
+        // Ensure that `matrix` is set and padded before running this function
+        assert_eq!(
+            self.height,
+            self.matrix.len(),
+            "Table matrix must be set and padded before interpolation"
+        );
+
         assert!(
             omega.mod_pow(omega_order as u64).is_one(),
             "omega must have indicated order"

@@ -57,7 +57,7 @@ impl MemoryTable {
     //               pt[ProcessorTable.memory_value]] for pt in processor_matrix]
     //     matrix.sort(key=lambda mt: mt[MemoryTable.memory_pointer].value)
     //     return matrix
-    pub fn derive_matrix(processor_matrix: &[Vec<BFieldElement>]) -> Vec<Vec<BFieldElement>> {
+    pub fn derive_matrix(processor_matrix: Vec<Vec<BFieldElement>>) -> Vec<Vec<BFieldElement>> {
         let mut matrix = vec![];
         for pt in processor_matrix.iter() {
             matrix.push(vec![
@@ -222,7 +222,7 @@ mod memory_table_tests {
                     row
                 })
                 .collect();
-            let derived_memory_matrix = MemoryTable::derive_matrix(&processor_matrix_from_simulate);
+            let derived_memory_matrix = MemoryTable::derive_matrix(processor_matrix_from_simulate);
 
             assert!(
                 !derived_memory_matrix.is_empty(),
