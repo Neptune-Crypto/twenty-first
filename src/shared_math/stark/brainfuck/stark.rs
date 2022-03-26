@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::convert::TryInto;
 use std::error::Error;
 use std::rc::Rc;
@@ -40,7 +41,7 @@ pub struct Stark {
     security_level: usize,
     colinearity_checks_count: usize,
     num_randomizers: usize,
-    base_tables: Rc<TableCollection>,
+    base_tables: Rc<RefCell<TableCollection>>,
     max_degree: u64,
     fri: Fri<BFieldElement, blake3::Hasher>,
 
@@ -116,7 +117,7 @@ impl Stark {
         );
 
         // instantiate permutation objects
-        let rc_base_tables = Rc::new(base_tables);
+        let rc_base_tables = Rc::new(RefCell::new(base_tables));
 
         let processor_instruction_lhs = (
             table::PROCESSOR_TABLE,
@@ -145,16 +146,16 @@ impl Stark {
         // input_evaluation = EvaluationArgument(
         //     8, 2, [BaseFieldElement(ord(i), self.field) for i in input_symbols])
         let input_evaluation = EvaluationArgument::new(
-            rc_base_tables.input_table.challenge_index(),
-            rc_base_tables.input_table.terminal_index(),
+            rc_base_tables.borrow().input_table.challenge_index(),
+            rc_base_tables.borrow().input_table.terminal_index(),
             input_symbols.clone(),
         );
 
         // output_evaluation = EvaluationArgument(
         //     9, 3, [BaseFieldElement(ord(o), self.field) for o in output_symbols])
         let output_evaluation = EvaluationArgument::new(
-            rc_base_tables.output_table.challenge_index(),
-            rc_base_tables.output_table.terminal_index(),
+            rc_base_tables.borrow().output_table.challenge_index(),
+            rc_base_tables.borrow().output_table.terminal_index(),
             output_symbols.clone(),
         );
         let io_evaluation_arguments = [input_evaluation, output_evaluation];
@@ -171,7 +172,7 @@ impl Stark {
         );
 
         // Compute max degree
-        let mut max_degree: u64 = rc_base_tables.get_max_degree();
+        let mut max_degree: u64 = rc_base_tables.borrow().get_max_degree();
         max_degree = roundup_npo2(max_degree) - 1;
         let fri_domain_length: u64 = (max_degree + 1) * expansion_factor;
 
@@ -211,22 +212,19 @@ impl Stark {
 
     pub fn prove(
         &mut self,
-        trace_length: usize,
-        program: Vec<BFieldElement>,
         processor_matrix: Vec<Register>,
         instruction_matrix: Vec<InstructionMatrixBaseRow>,
         input_matrix: Vec<BFieldElement>,
         output_matrix: Vec<BFieldElement>,
     ) -> Result<ProofStream, Box<dyn Error>> {
-        assert_eq!(trace_length, processor_matrix.len());
+        assert_eq!(self.trace_length, processor_matrix.len());
         assert_eq!(
-            trace_length + program.len(),
+            self.trace_length + self.program.len(),
             instruction_matrix.len(),
             "instruction_matrix must contain both the execution trace and the program"
         );
 
-        // populate tables' matrices
-        let tables: &mut TableCollection = Rc::get_mut(&mut self.base_tables).unwrap();
+        let mut tables = self.base_tables.borrow_mut();
         tables.processor_table.0.matrix = processor_matrix.into_iter().map(|x| x.into()).collect();
         tables.instruction_table.0.matrix =
             instruction_matrix.into_iter().map(|x| x.into()).collect();
@@ -303,6 +301,38 @@ impl Stark {
                 .try_into()
                 .unwrap();
 
-        todo!()
+        Ok(proof_stream)
+    }
+}
+
+#[cfg(test)]
+mod brainfuck_stark_tests {
+    use super::*;
+    use crate::shared_math::{
+        b_field_element::BFieldElement,
+        stark::brainfuck::{
+            self,
+            vm::{BaseMatrices, Register},
+        },
+        traits::{GetPrimitiveRootOfUnity, IdentityValues},
+    };
+
+    #[test]
+    fn prove_verify_test() {
+        let program: Vec<BFieldElement> =
+            brainfuck::vm::compile(brainfuck::vm::VERY_SIMPLE_PROGRAM).unwrap();
+        let (trace_length, input_symbols, output_symbols) =
+            brainfuck::vm::run(&program, vec![]).unwrap();
+        let base_matrices: BaseMatrices =
+            brainfuck::vm::simulate(&program, &input_symbols).unwrap();
+        let mut stark = Stark::new(trace_length, program, input_symbols, output_symbols);
+        // let proof_stream = stark
+        //     .prove(
+        //         base_matrices.processor_matrix,
+        //         base_matrices.instruction_matrix,
+        //         base_matrices.input_matrix,
+        //         base_matrices.output_matrix,
+        //     )
+        //     .unwrap();
     }
 }

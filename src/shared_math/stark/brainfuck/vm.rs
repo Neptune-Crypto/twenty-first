@@ -5,6 +5,12 @@ use crate::shared_math::{b_field_element::BFieldElement, traits::IdentityValues}
 
 pub const INSTRUCTIONS: [char; 8] = ['[', ']', '<', '>', '+', '-', ',', '.'];
 
+// Example programs
+pub static VERY_SIMPLE_PROGRAM: &str = "+++";
+pub static PRINT_EXCLAMATION_MARKS: &str = ">++++++++++[>+++><<-]>+++><<>.................";
+pub static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+pub static PRINT_17_CHARS: &str = ",.................";
+
 #[derive(Debug, Clone)]
 pub struct Register {
     pub cycle: BFieldElement,
@@ -117,17 +123,17 @@ pub fn compile(source_code: &str) -> Option<Vec<BFieldElement>> {
     }
 }
 
-/// Run program, returns (trace_length, input_data, output_data)
+/// Run program, returns (trace_length, input_symbols, output_symbols)
 pub fn run(
-    program: Vec<BFieldElement>,
-    input_data: Vec<BFieldElement>,
+    program: &[BFieldElement],
+    input_symbols: Vec<BFieldElement>,
 ) -> Option<(usize, Vec<BFieldElement>, Vec<BFieldElement>)> {
     let mut instruction_pointer: usize = 0;
     let mut memory_pointer: BFieldElement = BFieldElement::ring_zero();
     let mut memory: HashMap<BFieldElement, BFieldElement> = HashMap::new();
     let mut output_data: Vec<BFieldElement> = vec![];
     let mut input_counter: usize = 0;
-    let mut input_data_mut = input_data;
+    let mut input_data_mut = input_symbols;
     let zero = BFieldElement::ring_zero();
     let one = BFieldElement::ring_one();
     let term = Term::stdout();
@@ -189,7 +195,10 @@ pub fn run(
     Some((trace_length, input_data_mut, output_data))
 }
 
-pub fn simulate(program: &[BFieldElement], input_data: &[BFieldElement]) -> Option<BaseMatrices> {
+pub fn simulate(
+    program: &[BFieldElement],
+    input_symbols: &[BFieldElement],
+) -> Option<BaseMatrices> {
     let zero = BFieldElement::ring_zero();
     let one = BFieldElement::ring_one();
     let two = BFieldElement::new(2);
@@ -282,7 +291,7 @@ pub fn simulate(program: &[BFieldElement], input_data: &[BFieldElement]) -> Opti
                 .push(*memory.get(&register.memory_pointer).unwrap_or(&zero));
         } else if register.current_instruction == BFieldElement::new(',' as u128) {
             register.instruction_pointer += one;
-            let input_char = input_data[input_counter];
+            let input_char = input_symbols[input_counter];
             input_counter += 1;
             memory.insert(register.memory_pointer, input_char);
             base_matrices.input_matrix.push(input_char);
@@ -342,7 +351,7 @@ mod stark_bf_tests {
     #[test]
     fn runtime_test_simple() {
         let actual = compile(VERY_SIMPLE_PROGRAM);
-        let (trace_length, inputs, outputs) = run(actual.unwrap(), vec![]).unwrap();
+        let (trace_length, inputs, outputs) = run(&actual.unwrap(), vec![]).unwrap();
         assert!(inputs.is_empty());
         assert!(outputs.is_empty());
         assert_eq!(5, trace_length);
@@ -362,7 +371,7 @@ mod stark_bf_tests {
     fn run_two_by_two_test() {
         let actual_program = compile(TWO_BY_TWO_THEN_OUTPUT);
         let (_trace_length, inputs, outputs) =
-            run(actual_program.unwrap(), vec![BFieldElement::new(97)]).unwrap();
+            run(&actual_program.unwrap(), vec![BFieldElement::new(97)]).unwrap();
         assert_eq!(
             vec![
                 BFieldElement::new(97),
@@ -381,7 +390,7 @@ mod stark_bf_tests {
         let input_data = vec![BFieldElement::new(97)];
         let base_matrices: BaseMatrices = simulate(&actual_program, &input_data).unwrap();
         let (trace_length, input_data, output_data) =
-            run(actual_program, vec![BFieldElement::new(97)]).unwrap();
+            run(&actual_program, vec![BFieldElement::new(97)]).unwrap();
         assert_eq!(trace_length, base_matrices.processor_matrix.len(), "Number of rows in processor matrix from simulate must match trace length returned from 'run'.");
         assert_eq!(
             input_data.len(),
