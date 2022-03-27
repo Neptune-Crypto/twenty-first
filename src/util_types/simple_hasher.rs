@@ -42,6 +42,19 @@ pub trait Hasher: Sized {
         let digests: Vec<Self::Digest> = items.iter().map(|item| item.to_digest()).collect();
         self.hash_many(&digests)
     }
+
+    // FIXME: Consider not using u128 here; we just do it out of convenience because the trait impl existed already.
+    fn get_n_hash_rounds(&mut self, seed: &Self::Digest, count: usize) -> Vec<Self::Digest>
+    where
+        u128: ToDigest<Self::Digest>,
+    {
+        let mut digests = Vec::with_capacity(count);
+        for i in 0..count {
+            let digest = self.hash_pair(seed, &(i as u128).to_digest());
+            digests.push(digest);
+        }
+        digests
+    }
 }
 
 /// In order to hash arbitrary things using a `Hasher`, it must `impl ToDigest<Digest>`
