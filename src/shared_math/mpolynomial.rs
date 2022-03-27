@@ -15,7 +15,9 @@ use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 use std::rc::Rc;
 use std::{cmp, fmt};
 
+use super::b_field_element::BFieldElement;
 use super::traits::PrimeField;
+use super::x_field_element::XFieldElement;
 
 type MCoefficients<T> = HashMap<Vec<u64>, T>;
 pub type Degree = i64;
@@ -239,6 +241,21 @@ impl<PFElem: PrimeField> Display for MPolynomial<PFElem> {
         };
 
         write!(f, "\n  {}", output)
+    }
+}
+
+impl MPolynomial<BFieldElement> {
+    // TODO: Consider moving to STARK where it is actually used, or somewhere else?
+    pub fn lift_coefficients_to_xfield(&self) -> MPolynomial<XFieldElement> {
+        let mut new_coefficients: HashMap<Vec<u64>, XFieldElement> = HashMap::new();
+        self.coefficients.iter().for_each(|(key, value)| {
+            new_coefficients.insert(key.to_owned(), value.lift());
+        });
+
+        MPolynomial {
+            variable_count: self.variable_count,
+            coefficients: new_coefficients,
+        }
     }
 }
 
@@ -1372,6 +1389,19 @@ mod test_mpolynomials {
         let q = 23;
         assert_eq!(get_big_mpol(q), get_big_mpol_extra_variabel(q));
         assert_ne!(get_big_mpol(q), get_big_mpol_extra_variabel(q) + get_x(q));
+    }
+
+    #[test]
+    fn lift_coefficients_to_xfield_test() {
+        let b_field_mpol = gen_mpolynomial(4, 6, 4, 100);
+        let x_field_mpol = b_field_mpol.lift_coefficients_to_xfield();
+        assert_eq!(b_field_mpol.degree(), x_field_mpol.degree());
+        for (exponents, coefficient) in x_field_mpol.coefficients.iter() {
+            assert_eq!(
+                coefficient.unlift().unwrap(),
+                b_field_mpol.coefficients[exponents]
+            );
+        }
     }
 
     #[test]
