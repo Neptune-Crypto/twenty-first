@@ -64,14 +64,6 @@ impl XFieldElement {
         }
     }
 
-    pub fn get_coefficients(&self) -> [BFieldElement; 3] {
-        [
-            self.coefficients[0],
-            self.coefficients[1],
-            self.coefficients[2],
-        ]
-    }
-
     pub fn unlift(&self) -> Option<BFieldElement> {
         if self.coefficients[1].is_zero() && self.coefficients[2].is_zero() {
             Some(self.coefficients[0])
@@ -491,16 +483,6 @@ mod x_field_element_test {
         assert!(!one_as_constant_term_1.is_one());
         assert!(!one_as_constant_term_0.is_zero());
         assert!(!one_as_constant_term_1.is_zero());
-    }
-
-    #[test]
-    fn get_coefficients_test() {
-        let mut rng = rand::thread_rng();
-        let rand_xs = XFieldElement::random_elements(1, &mut rng);
-        let coefficients: [BFieldElement; 3] = rand_xs[0].get_coefficients();
-        assert_eq!(rand_xs[0].coefficients[0], coefficients[0]);
-        assert_eq!(rand_xs[0].coefficients[1], coefficients[1]);
-        assert_eq!(rand_xs[0].coefficients[2], coefficients[2]);
     }
 
     #[test]
