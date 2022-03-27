@@ -317,6 +317,8 @@ impl Stark {
                 .try_into()
                 .unwrap();
 
+        self.base_tables.borrow_mut().extend(challenges, initials);
+
         Ok(proof_stream)
     }
 }

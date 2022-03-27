@@ -195,6 +195,10 @@ pub trait TableTrait {
     }
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
+    fn transition_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<MPolynomial<XFieldElement>>;
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
 }
 

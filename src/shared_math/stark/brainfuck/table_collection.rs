@@ -2,12 +2,14 @@ use std::cell::RefMut;
 
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::fri::FriDomain;
-use crate::shared_math::mpolynomial::Degree;
+use crate::shared_math::mpolynomial::{Degree, MPolynomial};
+use crate::shared_math::x_field_element::XFieldElement;
 
 use super::instruction_table::InstructionTable;
 use super::io_table::IOTable;
 use super::memory_table::MemoryTable;
 use super::processor_table::ProcessorTable;
+use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
 use super::table::TableTrait;
 use super::vm::{InstructionMatrixBaseRow, Register};
 
@@ -96,6 +98,15 @@ impl TableCollection {
             self.output_table.0.lde(&fri_domain),
         ]
         .concat()
+    }
+
+    pub fn extend(
+        &mut self,
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
+    ) {
+        self.processor_table.extend(all_challenges, all_initials);
+        // TODO: Add calls to the other tables as well
     }
 }
 

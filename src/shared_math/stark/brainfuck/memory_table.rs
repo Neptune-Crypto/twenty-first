@@ -185,6 +185,13 @@ impl TableTrait for MemoryTable {
     ) {
         todo!()
     }
+
+    fn transition_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<MPolynomial<XFieldElement>> {
+        todo!()
+    }
 }
 
 #[cfg(test)]

@@ -1,19 +1,32 @@
+use std::convert::TryInto;
+
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
 use super::table::{Table, TableMoreTrait, TableTrait};
 use super::vm::{Register, INSTRUCTIONS};
 use crate::shared_math::other;
+use crate::shared_math::traits::{IdentityValues, PrimeField};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
 
 impl TableMoreTrait for ProcessorTableMore {
     fn new_more() -> Self {
-        ProcessorTableMore { codewords: vec![] }
+        ProcessorTableMore {
+            codewords: vec![],
+            instruction_permutation_terminal: XFieldElement::ring_zero(),
+            memory_permutation_terminal: XFieldElement::ring_zero(),
+            input_evaluation_terminal: XFieldElement::ring_zero(),
+            output_evaluation_terminal: XFieldElement::ring_zero(),
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct ProcessorTableMore {
     codewords: Vec<Vec<BFieldElement>>,
+    instruction_permutation_terminal: XFieldElement,
+    memory_permutation_terminal: XFieldElement,
+    input_evaluation_terminal: XFieldElement,
+    output_evaluation_terminal: XFieldElement,
 }
 
 impl ProcessorTableMore {}
@@ -123,7 +136,8 @@ impl ProcessorTable {
             );
 
             // Max degree: 7
-            let deselector = Self::ifnot_instruction(*c, &current_instruction);
+            let deselector: MPolynomial<BFieldElement> =
+                Self::ifnot_instruction(*c, &current_instruction, BFieldElement::ring_one());
 
             for (i, instr) in instrs.iter().enumerate() {
                 polynomials[i] += deselector.to_owned() * instr.to_owned();
@@ -298,17 +312,33 @@ impl ProcessorTable {
         polynomials
     }
 
-    fn ifnot_instruction(
+    fn if_instruction<PF: PrimeField>(
         instruction: char,
-        indeterminate: &MPolynomial<BFieldElement>,
-    ) -> MPolynomial<BFieldElement> {
-        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
-        let mut acc = one;
+        indeterminate: &MPolynomial<PF>,
+        one: PF,
+    ) -> MPolynomial<PF> {
+        assert!(one.is_one(), "one must be one");
+        // TODO: I think `FULL_WIDTH` is correct here, as this is only used on the extension table
+        MPolynomial::from_constant(
+            one.new_from_usize(instruction as usize),
+            2 * Self::FULL_WIDTH,
+        ) - indeterminate.to_owned()
+    }
+
+    fn ifnot_instruction<PF: PrimeField>(
+        instruction: char,
+        indeterminate: &MPolynomial<PF>,
+        one: PF,
+    ) -> MPolynomial<PF> {
+        assert!(one.is_one(), "one must be one");
+        // TODO: Should this 14 (variable count) be 22?
+        let mpol_one = MPolynomial::<PF>::from_constant(one, 14);
+        let mut acc = mpol_one;
         for c in INSTRUCTIONS.iter() {
             if *c != instruction {
                 acc = acc
                     * (indeterminate.to_owned()
-                        - MPolynomial::from_constant(BFieldElement::new(*c as u128), 14));
+                        - MPolynomial::from_constant(one.new_from_usize(*c as usize), 14));
             }
         }
 
@@ -394,32 +424,218 @@ impl TableTrait for ProcessorTable {
         todo!()
     }
 
+    fn transition_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<MPolynomial<XFieldElement>> {
+        let [a, b, c, d, e, f, alpha, beta, gamma, delta, _eta]: [MPolynomial<XFieldElement>;
+            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            .iter()
+            .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
+            .collect::<Vec<MPolynomial<XFieldElement>>>()
+            .try_into()
+            .unwrap();
+        let b_field_variables: [MPolynomial<BFieldElement>; 2 * Self::FULL_WIDTH] =
+            MPolynomial::variables(2 * Self::FULL_WIDTH, BFieldElement::ring_one())
+                .try_into()
+                .unwrap();
+        let [b_field_cycle, b_field_instruction_pointer, b_field_current_instruction, b_field_next_instruction, b_field_memory_pointer, b_field_memory_value, b_field_is_zero, b_field_instruction_permutation, b_field_memory_permutation, b_field_input_evaluation, b_field_output_evaluation, b_field_cycle_next, b_field_instruction_pointer_next, b_field_current_instruction_next, b_field_next_instruction_next, b_field_memory_pointer_next, b_field_memory_value_next, b_field_is_zero_next, b_field_instruction_permutation_next, b_field_memory_permutation_next, b_field_input_evaluation_next, b_field_output_evaluation_next] =
+            b_field_variables;
+
+        let b_field_polynomials = Self::transition_constraints_afo_named_variables(
+            b_field_cycle,
+            b_field_instruction_pointer,
+            b_field_current_instruction,
+            b_field_next_instruction,
+            b_field_memory_pointer,
+            b_field_memory_value,
+            b_field_is_zero,
+            b_field_cycle_next,
+            b_field_instruction_pointer_next,
+            b_field_current_instruction_next,
+            b_field_next_instruction_next,
+            b_field_memory_pointer_next,
+            b_field_memory_value_next,
+            b_field_is_zero_next,
+        );
+        assert_eq!(
+            6,
+            b_field_polynomials.len(),
+            "processor base table is expected to have 6 transition constraint polynomials"
+        );
+
+        let x_field_variables: [MPolynomial<XFieldElement>; 2 * Self::FULL_WIDTH] =
+            MPolynomial::variables(2 * Self::FULL_WIDTH, XFieldElement::ring_one())
+                .try_into()
+                .unwrap();
+        let [cycle, instruction_pointer, current_instruction, next_instruction, memory_pointer, memory_value, is_zero, instruction_permutation, memory_permutation, input_evaluation, output_evaluation, cycle_next, instruction_pointer_next, current_instruction_next, next_instruction_next, memory_pointer_next, memory_value_next, is_zero_next, instruction_permutation_next, memory_permutation_next, input_evaluation_next, output_evaluation_next] =
+            x_field_variables;
+
+        let mut polynomials: Vec<MPolynomial<XFieldElement>> = b_field_polynomials
+            .iter()
+            .map(|mpol| mpol.lift_coefficients_to_xfield())
+            .collect();
+
+        // extension AIR polynomials
+        // running product for instruction permutation
+        polynomials.push(
+            (instruction_permutation
+                * (alpha
+                    - a * instruction_pointer.clone()
+                    - b * current_instruction.clone()
+                    - c * next_instruction.clone())
+                - instruction_permutation_next.clone())
+                * current_instruction.clone(),
+        );
+
+        // running product for memory permutation
+        polynomials.push(
+            memory_permutation * (beta - d * cycle - e * memory_pointer - f * memory_value.clone())
+                - memory_permutation_next,
+        );
+
+        // running evaluation for input
+        polynomials.push(
+            (input_evaluation_next.clone() - input_evaluation.clone() * gamma - memory_value_next)
+                * Self::ifnot_instruction(',', &current_instruction, XFieldElement::ring_one())
+                * current_instruction.clone()
+                + (input_evaluation_next.clone() - input_evaluation.clone())
+                    * Self::if_instruction(
+                        ',',
+                        &current_instruction.clone(),
+                        XFieldElement::ring_one(),
+                    ),
+        );
+
+        // running evaluation for output
+        polynomials.push(
+            (output_evaluation_next.clone()
+                - output_evaluation.clone() * delta
+                - memory_value.clone())
+                * Self::ifnot_instruction('.', &current_instruction, XFieldElement::ring_one())
+                * current_instruction.clone()
+                + (output_evaluation_next.clone() - output_evaluation.clone())
+                    * Self::if_instruction(
+                        '.',
+                        &current_instruction.clone(),
+                        XFieldElement::ring_one(),
+                    ),
+        );
+
+        assert_eq!(
+            10,
+            polynomials.len(),
+            "Number of transition constraints for extension table must be 10."
+        );
+
+        polynomials
+    }
+
     fn extend(
         &mut self,
         all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
-        todo!()
+        let [a, b, c, d, e, f, alpha, beta, gamma, delta, _eta] = all_challenges;
+        let [processor_instruction_permutation_initial, processor_memory_permutation_initial] =
+            all_initials;
+
+        // Prepare for loop
+        let mut instruction_permutation_running_product: XFieldElement =
+            processor_instruction_permutation_initial;
+        let mut memory_permutation_running_product: XFieldElement =
+            processor_memory_permutation_initial;
+        let mut input_evaluation_running_evaluation = XFieldElement::ring_zero();
+        let mut output_evaluation_running_evaluation = XFieldElement::ring_zero();
+
+        // Preallocate memory for the extended matrix
+        let mut extended_matrix: Vec<Vec<XFieldElement>> =
+            vec![Vec::with_capacity(self.full_width()); self.0.matrix.len()]; // Vec::with_capacity(self.0.matrix.len());
+        for (i, row) in self.0.matrix.iter().enumerate() {
+            // First, copy over existing row
+            for j in 0..self.base_width() {
+                extended_matrix[i].push(row[j].lift());
+            }
+
+            // 1. running product for instruction permutation
+            extended_matrix[i].push(instruction_permutation_running_product);
+            if !extended_matrix[i][Self::CURRENT_INSTRUCTION].is_zero() {
+                instruction_permutation_running_product *= alpha
+                    - a * extended_matrix[i][Self::INSTRUCTION_POINTER]
+                    - b * extended_matrix[i][Self::CURRENT_INSTRUCTION]
+                    - c * extended_matrix[i][Self::NEXT_INSTRUCTION];
+            }
+
+            // 2. running product for memory access
+            extended_matrix[i].push(memory_permutation_running_product);
+            memory_permutation_running_product *= beta
+                - d * extended_matrix[i][Self::CYCLE]
+                - e * extended_matrix[i][Self::MEMORY_POINTER]
+                - f * extended_matrix[i][Self::MEMORY_VALUE];
+
+            // 3. evaluation for input
+            extended_matrix[i].push(input_evaluation_running_evaluation);
+            if row[Self::CURRENT_INSTRUCTION] == BFieldElement::new(',' as u128) {
+                input_evaluation_running_evaluation = input_evaluation_running_evaluation * gamma
+                    + self.0.matrix[i + 1][Self::MEMORY_VALUE].lift();
+                // the memory-value register only assumes the input value after the instruction has been performed
+                // TODO: Is that a fair assumption?
+            }
+
+            // 4. evaluation for output
+            extended_matrix[i].push(output_evaluation_running_evaluation);
+            if row[Self::CURRENT_INSTRUCTION] == BFieldElement::new('.' as u128) {
+                output_evaluation_running_evaluation = output_evaluation_running_evaluation * delta
+                    + extended_matrix[i][Self::MEMORY_VALUE];
+            }
+        }
+
+        self.0.extended_matrix = extended_matrix;
+        self.0.extended_codewords = self
+            .0
+            .codewords
+            .iter()
+            .map(|row| row.iter().map(|elem| elem.lift()).collect())
+            .collect();
+
+        self.0.more.instruction_permutation_terminal = instruction_permutation_running_product;
+        self.0.more.memory_permutation_terminal = memory_permutation_running_product;
+        self.0.more.input_evaluation_terminal = input_evaluation_running_evaluation;
+        self.0.more.output_evaluation_terminal = output_evaluation_running_evaluation;
     }
 }
 
 #[cfg(test)]
 mod processor_table_tests {
+    use rand::thread_rng;
+
     use super::*;
     use crate::shared_math::{
         stark::brainfuck::{self, vm::BaseMatrices},
-        traits::{GetPrimitiveRootOfUnity, IdentityValues},
+        traits::{GetPrimitiveRootOfUnity, GetRandomElements, IdentityValues},
     };
 
     static VERY_SIMPLE_PROGRAM: &str = "++++";
     static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
     static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+    static ROT13: &str = ",+++++++++++++.,+++++++++++++.,+++++++++++++.";
 
     #[test]
     fn processor_base_table_evaluate_to_zero_on_execution_trace_test() {
-        for source_code in [VERY_SIMPLE_PROGRAM, TWO_BY_TWO_THEN_OUTPUT, HELLO_WORLD] {
+        let mut rng = thread_rng();
+
+        for source_code in [
+            VERY_SIMPLE_PROGRAM,
+            TWO_BY_TWO_THEN_OUTPUT,
+            HELLO_WORLD,
+            ROT13,
+        ] {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
-            let input_data = vec![BFieldElement::new(97)];
+            let input_data = vec![
+                BFieldElement::new(97),
+                BFieldElement::new(98),
+                BFieldElement::new(100),
+            ];
             let base_matrices: BaseMatrices =
                 brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
             let processor_matrix = base_matrices.processor_matrix;
@@ -467,6 +683,29 @@ mod processor_table_tests {
                 for air_constraint in air_constraints.iter() {
                     assert!(air_constraint.evaluate(&point).is_zero());
                 }
+            }
+
+            // Test the same for the extended matrix
+            let challenges: [XFieldElement; 11] = XFieldElement::random_elements(11, &mut rng)
+                .try_into()
+                .unwrap();
+            processor_table.extend(
+                challenges,
+                XFieldElement::random_elements(2, &mut rng)
+                    .try_into()
+                    .unwrap(),
+            );
+            let x_air_constraints = processor_table.transition_constraints_ext(challenges);
+            for step in 0..processor_table.0.matrix.len() - 1 {
+                let row = processor_table.0.extended_matrix[step].clone();
+                let next_register = processor_table.0.extended_matrix[step + 1].clone();
+                let xpoint: Vec<XFieldElement> = vec![row.clone(), next_register.clone()].concat();
+
+                for x_air_constraint in x_air_constraints.iter() {
+                    assert!(x_air_constraint.evaluate(&xpoint).is_zero());
+                }
+
+                // TODO: Can we add a negative test here?
             }
         }
     }
