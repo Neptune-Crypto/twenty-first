@@ -1,8 +1,8 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 use crate::shared_math::rescue_prime::RescuePrime;
-use crate::shared_math::rescue_prime_params;
 use crate::shared_math::x_field_element::XFieldElement;
+use crate::shared_math::{other, rescue_prime_params};
 use crate::util_types::blake3_wrapper::Blake3Hash;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,6 @@ pub trait Hasher: Sized {
     fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
     fn hash_pair(&mut self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest;
     fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest;
-
     // TODO: Consider moving the 'Self::Digest: ToDigest<Self::Digest>' constraint up.
     fn hash_with_salts<Value>(&mut self, mut digest: Self::Digest, salts: &[Value]) -> Self::Digest
     where
@@ -41,6 +40,35 @@ pub trait Hasher: Sized {
     fn fiat_shamir<Value: ToDigest<Self::Digest>>(&mut self, items: &[Value]) -> Self::Digest {
         let digests: Vec<Self::Digest> = items.iter().map(|item| item.to_digest()).collect();
         self.hash_many(&digests)
+    }
+
+    /// Given a uniform random `input` digest and a `max` that is a power of two,
+    /// produce a uniform random number in the interval `[0; max)`. The input should
+    /// be a Fiat-Shamir digest to ensure a high degree of randomness.
+    ///
+    /// - `input`: A hash digest
+    /// - `max`: The (non-inclusive) upper bound (a power of two)
+    fn random_index(&self, input: &Self::Digest, max: usize) -> usize {
+        assert!(other::is_power_of_two(max));
+
+        // FIXME: Default serialization of vectors uses length-prefixing, which means
+        // the first 64 bits of the byte-serialization mostly contain zeroes and so are
+        // not very random at all.
+        let bytes = bincode::serialize(input).unwrap();
+        let length_prefix_offset: usize = 8;
+        let mut byte_counter: usize = length_prefix_offset;
+        let mut max_bits: usize = other::log_2_floor(max as u64) as usize;
+        let mut acc: usize = 0;
+
+        while max_bits > 0 {
+            let take = std::cmp::min(8, max_bits);
+            let add = (bytes[byte_counter] >> (8 - take)) as usize;
+            acc = (acc << take) + add;
+            max_bits -= take;
+            byte_counter += 1;
+        }
+
+        acc
     }
 
     // FIXME: Consider not using u128 here; we just do it out of convenience because the trait impl existed already.
@@ -204,6 +232,10 @@ impl Hasher for RescuePrimeProduction {
 #[cfg(test)]
 pub mod test_simple_hasher {
 
+    use rand::{thread_rng, Rng};
+
+    use crate::shared_math::traits::GetRandomElements;
+
     use super::*;
 
     #[test]
@@ -299,5 +331,24 @@ pub mod test_simple_hasher {
             rpp.hash_many(&inputs_2),
             "Hashing many a single digest with hash_many must not return the input"
         );
+    }
+
+    #[test]
+    fn random_index_test() {
+        let mut hasher: RescuePrimeProduction = RescuePrimeProduction::new();
+
+        // TODO: Test that this is uniformly random by samling.
+
+        let mut rng = rand::thread_rng();
+        for element in BFieldElement::random_elements(100, &mut rng) {
+            let digest = hasher.hash(&vec![element]);
+            let power_of_two = rng.gen_range(0..=32) as usize;
+            let max = 1 << power_of_two;
+            let index = hasher.random_index(&digest, max);
+
+            assert!(index < max);
+        }
+
+        println!("log_2_floor(256) = {}", other::log_2_floor(512));
     }
 }
