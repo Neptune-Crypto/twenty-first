@@ -51,12 +51,14 @@ pub struct Stark {
 }
 
 impl Stark {
+    // TODO: Change this to use Rescue prime instead of Vec<u8>/Blake3
+    // TODO: Use simple_hasher's get_n_hash_rounds() instead.
     fn sample_weights(number: u16, seed: Vec<u8>) -> Vec<XFieldElement> {
-        // TODO: Change this to use Rescue prime instead of Vec<u8>/Blake3
         let mut challenges: Vec<XFieldElement> = vec![];
-        for i in 0..11 {
+        for i in 0..number {
             let mut mutated_challenge_seed = seed.clone();
             mutated_challenge_seed[0] = ((mutated_challenge_seed[0] as u16 + i) % 256) as u8;
+            // This is wrong:
             challenges.push(XFieldElement::ring_zero().from_vecu8(mutated_challenge_seed));
         }
 
@@ -304,7 +306,7 @@ impl Stark {
         proof_stream.enqueue(base_merkle_tree.get_root())?;
 
         // Get coefficients for table extension
-        // let challenges = self.sample_weights(11, proof_stream.prover_fiat_shamir());
+        // let challenges = self.sample_weights(EXTENSION_CHALLENGE_COUNT, proof_stream.prover_fiat_shamir());
         // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
         // must not change though, it should remain `Vec<XFieldElement>`.
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =

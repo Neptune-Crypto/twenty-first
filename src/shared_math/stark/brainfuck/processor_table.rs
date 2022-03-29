@@ -686,9 +686,10 @@ mod processor_table_tests {
             }
 
             // Test the same for the extended matrix
-            let challenges: [XFieldElement; 11] = XFieldElement::random_elements(11, &mut rng)
-                .try_into()
-                .unwrap();
+            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
+                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+                    .try_into()
+                    .unwrap();
             processor_table.extend(
                 challenges,
                 XFieldElement::random_elements(2, &mut rng)
