@@ -399,8 +399,11 @@ impl TableTrait for InstructionTable {
 
 #[cfg(test)]
 mod instruction_table_tests {
+    use rand::thread_rng;
+
     use super::*;
     use crate::shared_math::stark::brainfuck::vm::InstructionMatrixBaseRow;
+    use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::{
         stark::brainfuck::{
             self,
@@ -417,7 +420,9 @@ mod instruction_table_tests {
     // "abstract" execution traces. When we evaluate the base transition constraints on
     // the rows (points) from the InstructionTable matrix, these should evaluate to zero.
     #[test]
-    fn instruction_base_table_evaluate_to_zero_on_execution_trace_test() {
+    fn instruction_table_constraints_evaluate_to_zero_test() {
+        let mut rng = thread_rng();
+
         for source_code in [VERY_SIMPLE_PROGRAM, TWO_BY_TWO_THEN_OUTPUT, HELLO_WORLD] {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
             let input_data = vec![BFieldElement::new(97)];
@@ -478,6 +483,29 @@ mod instruction_table_tests {
 
                 for air_constraint in air_constraints.iter() {
                     assert!(air_constraint.evaluate(&point).is_zero());
+                }
+            }
+
+            // Test the same for the extended matrix
+            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
+                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+                    .try_into()
+                    .unwrap();
+            instruction_table.extend(
+                challenges,
+                XFieldElement::random_elements(2, &mut rng)
+                    .try_into()
+                    .unwrap(),
+            );
+
+            let air_constraints = instruction_table.transition_constraints_ext(challenges);
+            for step in 0..instruction_table.0.extended_matrix.len() - 1 {
+                let register = instruction_table.0.extended_matrix[step].clone();
+                let next_register = instruction_table.0.extended_matrix[step + 1].clone();
+                let xpoint: Vec<XFieldElement> = vec![register, next_register].concat();
+
+                for air_constraint in air_constraints.iter() {
+                    assert!(air_constraint.evaluate(&xpoint).is_zero());
                 }
             }
         }
