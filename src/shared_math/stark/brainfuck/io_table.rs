@@ -14,6 +14,7 @@ pub struct IOTable(pub Table<IOTableMore>);
 pub struct IOTableMore {
     pub challenge_index: usize,
     pub terminal_index: usize,
+    pub evaluation_terminal: XFieldElement,
 }
 
 impl TableMoreTrait for IOTableMore {
@@ -21,11 +22,18 @@ impl TableMoreTrait for IOTableMore {
         IOTableMore {
             challenge_index: 0,
             terminal_index: 0,
+            evaluation_terminal: XFieldElement::ring_zero(),
         }
     }
 }
 
 impl IOTable {
+    // named indices for base columns
+    pub const COLUMN: usize = 0;
+
+    // named indices for extension columns
+    pub const EVALUATION: usize = 1;
+
     pub const BASE_WIDTH: usize = 1;
     pub const FULL_WIDTH: usize = 2;
 
@@ -131,21 +139,93 @@ impl TableTrait for IOTable {
         all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
-        todo!()
+        let iota = all_challenges[self.0.more.challenge_index];
+
+        // algebra stuff
+        let zero = XFieldElement::ring_zero();
+        let one = XFieldElement::ring_one();
+
+        // prepare loop
+        let mut extended_matrix: Vec<Vec<XFieldElement>> =
+            vec![Vec::with_capacity(self.full_width()); self.0.matrix.len()];
+        let mut io_running_evaluation = zero;
+        let mut evaluation_terminal = zero;
+
+        // loop over all rows of table
+        for (i, row) in self.0.matrix.iter().enumerate() {
+            // first, copy over existing row
+            // new_row = [xfield.lift(nr) for nr in row]
+            let mut new_row: Vec<XFieldElement> = row
+                .into_iter()
+                .map(|&bfe| XFieldElement::new_const(bfe))
+                .collect();
+
+            // io_running_evaluation = io_running_evaluation * iota + new_row[IOTable.column]
+            let io_running_evaluation = io_running_evaluation * iota + new_row[IOTable::COLUMN];
+
+            // new_row += [io_running_evaluation]
+            new_row.push(io_running_evaluation);
+
+            // if i == self.length - 1:
+            //     evaluation_terminal = io_running_evaluation
+            if i == self.length() - 1 {
+                evaluation_terminal = io_running_evaluation;
+            }
+
+            extended_matrix[i] = new_row;
+        }
+
+        assert!(
+            other::is_power_of_two(self.height()),
+            "height of io_table must be 2^k"
+        );
+
+        // self.matrix = extended_matrix
+        self.0.extended_matrix = extended_matrix;
+
+        // self.codewords = [[xfield.lift(c) for c in cdwd]
+        //                   for cdwd in self.codewords]
+        self.0.extended_codewords = self
+            .0
+            .codewords
+            .iter()
+            .map(|row| row.iter().map(|elem| elem.lift()).collect())
+            .collect();
+
+        // self.evaluation_terminal = evaluation_terminal
+        self.0.more.evaluation_terminal = evaluation_terminal;
     }
 
     fn transition_constraints_ext(
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        let variable_count = Self::FULL_WIDTH * 2;
+        let vars =
+            MPolynomial::<XFieldElement>::variables(variable_count, XFieldElement::ring_one());
+        let iota = MPolynomial::from_constant(challenges[self.challenge_index()], variable_count);
+
+        // let _input = vars[0];
+        let evaluation = vars[1].clone();
+        let input_next = vars[2].clone();
+        let evaluation_next = vars[3].clone();
+
+        // polynomials = []
+        // polynomials += [evaluation * iota + input_next - evaluation_next]
+        // return polynomials
+        vec![evaluation * iota + input_next - evaluation_next]
     }
 }
 
 #[cfg(test)]
 mod io_table_tests {
+    use std::convert::TryInto;
+
+    use rand::thread_rng;
+
     use super::*;
     use crate::shared_math::stark::brainfuck::vm::{InstructionMatrixBaseRow, MemoryMatrixBaseRow};
+    use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::{
         stark::brainfuck::{
             self,
@@ -166,7 +246,9 @@ mod io_table_tests {
     // "abstract" execution traces. When we evaluate the base transition constraints on
     // the rows (points) from the InstructionTable matrix, these should evaluate to zero.
     #[test]
-    fn io_base_table_evaluate_to_zero_on_execution_trace_test() {
+    fn io_table_constraints_evaluate_to_zero_on_test() {
+        let mut rng = thread_rng();
+
         for source_code in [
             VERY_SIMPLE_PROGRAM,
             TWO_BY_TWO_THEN_OUTPUT,
@@ -265,6 +347,49 @@ mod io_table_tests {
 
                 for air_constraint in output_air_constraints.iter() {
                     assert!(air_constraint.evaluate(&point).is_zero());
+                }
+            }
+
+            // Test the same for the extended matrix on both input_table and output_table
+
+            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
+                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+                    .try_into()
+                    .unwrap();
+
+            input_table.extend(
+                challenges,
+                XFieldElement::random_elements(2, &mut rng)
+                    .try_into()
+                    .unwrap(),
+            );
+
+            let air_constraints = input_table.transition_constraints_ext(challenges);
+            for step in 0..input_table.0.extended_matrix.len() - 1 {
+                let register = input_table.0.extended_matrix[step].clone();
+                let next_register = input_table.0.extended_matrix[step + 1].clone();
+                let xpoint: Vec<XFieldElement> = vec![register, next_register].concat();
+
+                for air_constraint in air_constraints.iter() {
+                    assert!(air_constraint.evaluate(&xpoint).is_zero());
+                }
+            }
+
+            output_table.extend(
+                challenges,
+                XFieldElement::random_elements(2, &mut rng)
+                    .try_into()
+                    .unwrap(),
+            );
+
+            let air_constraints = output_table.transition_constraints_ext(challenges);
+            for step in 0..output_table.0.extended_matrix.len() - 1 {
+                let register = output_table.0.extended_matrix[step].clone();
+                let next_register = output_table.0.extended_matrix[step + 1].clone();
+                let xpoint: Vec<XFieldElement> = vec![register, next_register].concat();
+
+                for air_constraint in air_constraints.iter() {
+                    assert!(air_constraint.evaluate(&xpoint).is_zero());
                 }
             }
         }
