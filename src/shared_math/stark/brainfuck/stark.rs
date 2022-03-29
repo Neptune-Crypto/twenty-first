@@ -1,10 +1,4 @@
-use std::cell::{RefCell, RefMut};
-use std::convert::TryInto;
-use std::error::Error;
-use std::rc::Rc;
-
-use rand::thread_rng;
-
+use super::vm::{InstructionMatrixBaseRow, Register};
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::stark::brainfuck::evaluation_argument::{
@@ -26,8 +20,11 @@ use crate::util_types::blake3_wrapper::Blake3Hash;
 use crate::util_types::merkle_tree::{MerkleTree, SaltedMerkleTree};
 use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, RescuePrimeProduction};
-
-use super::vm::{InstructionMatrixBaseRow, Register};
+use rand::thread_rng;
+use std::cell::{RefCell, RefMut};
+use std::convert::TryInto;
+use std::error::Error;
+use std::rc::Rc;
 
 pub const EXTENSION_CHALLENGE_COUNT: u16 = 11;
 pub const PERMUTATION_ARGUMENTS_COUNT: usize = 2;

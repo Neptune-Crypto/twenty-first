@@ -11,7 +11,6 @@ use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomia
 impl TableMoreTrait for ProcessorTableMore {
     fn new_more() -> Self {
         ProcessorTableMore {
-            codewords: vec![],
             instruction_permutation_terminal: XFieldElement::ring_zero(),
             memory_permutation_terminal: XFieldElement::ring_zero(),
             input_evaluation_terminal: XFieldElement::ring_zero(),
@@ -22,7 +21,6 @@ impl TableMoreTrait for ProcessorTableMore {
 
 #[derive(Debug, Clone)]
 pub struct ProcessorTableMore {
-    codewords: Vec<Vec<BFieldElement>>,
     instruction_permutation_terminal: XFieldElement,
     memory_permutation_terminal: XFieldElement,
     input_evaluation_terminal: XFieldElement,
@@ -104,7 +102,6 @@ impl ProcessorTable {
         memory_value_next: MPolynomial<BFieldElement>,
         is_zero_next: MPolynomial<BFieldElement>,
     ) -> [MPolynomial<BFieldElement>; 6] {
-        // TODO: Is variable count = 14 here?
         let elem = MPolynomial::<BFieldElement>::zero(14);
         let mut polynomials: [MPolynomial<BFieldElement>; 6] = [
             elem.clone(),
@@ -621,7 +618,7 @@ mod processor_table_tests {
     static ROT13: &str = ",+++++++++++++.,+++++++++++++.,+++++++++++++.";
 
     #[test]
-    fn processor_base_table_evaluate_to_zero_on_execution_trace_test() {
+    fn processor_table_constraints_evaluate_to_zero_test() {
         let mut rng = thread_rng();
 
         for source_code in [
