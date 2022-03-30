@@ -140,10 +140,7 @@ impl TableTrait for IOTable {
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
         let iota = all_challenges[self.0.more.challenge_index];
-
-        // algebra stuff
         let zero = XFieldElement::ring_zero();
-        let one = XFieldElement::ring_one();
 
         // prepare loop
         let mut extended_matrix: Vec<Vec<XFieldElement>> =
@@ -161,7 +158,7 @@ impl TableTrait for IOTable {
                 .collect();
 
             // io_running_evaluation = io_running_evaluation * iota + new_row[IOTable.column]
-            let io_running_evaluation = io_running_evaluation * iota + new_row[IOTable::COLUMN];
+            io_running_evaluation = io_running_evaluation * iota + new_row[IOTable::COLUMN];
 
             // new_row += [io_running_evaluation]
             new_row.push(io_running_evaluation);
@@ -172,12 +169,13 @@ impl TableTrait for IOTable {
                 evaluation_terminal = io_running_evaluation;
             }
 
+            // extended_matrix += [new_row]
             extended_matrix[i] = new_row;
         }
 
         assert!(
-            other::is_power_of_two(self.height()),
-            "height of io_table must be 2^k"
+            self.height() == 0 || other::is_power_of_two(self.height()),
+            "height of io_table must be 2^k, or 0"
         );
 
         // self.matrix = extended_matrix
@@ -219,20 +217,14 @@ impl TableTrait for IOTable {
 
 #[cfg(test)]
 mod io_table_tests {
-    use std::convert::TryInto;
-
-    use rand::thread_rng;
-
     use super::*;
-    use crate::shared_math::stark::brainfuck::vm::{InstructionMatrixBaseRow, MemoryMatrixBaseRow};
+    use crate::shared_math::stark::brainfuck;
+    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::{
-        stark::brainfuck::{
-            self,
-            vm::{BaseMatrices, Register},
-        },
-        traits::{GetPrimitiveRootOfUnity, IdentityValues},
-    };
+    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
+    use rand::thread_rng;
+    use std::cmp::max;
+    use std::convert::TryInto;
 
     static VERY_SIMPLE_PROGRAM: &str = "++++";
     static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
@@ -255,6 +247,7 @@ mod io_table_tests {
             HELLO_WORLD,
             ODD_INPUT_OUTPUT_SIZES,
         ] {
+            // Run program
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
             let input_data = vec![
                 BFieldElement::new(76),
@@ -264,9 +257,6 @@ mod io_table_tests {
             let base_matrices: BaseMatrices =
                 brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
 
-            let input_matrix = base_matrices.input_matrix;
-            let output_matrix = base_matrices.output_matrix;
-
             let number_of_randomizers = 2;
             let order = 1 << 32;
             let smooth_generator = BFieldElement::ring_zero()
@@ -275,121 +265,91 @@ mod io_table_tests {
                 .unwrap();
 
             // instantiate table objects
-            let mut input_table: IOTable =
-                IOTable::new_input_table(input_matrix.len(), smooth_generator, order as usize);
-            let mut output_table: IOTable =
-                IOTable::new_output_table(output_matrix.len(), smooth_generator, order as usize);
-
-            let input_air_constraints = input_table.base_transition_constraints();
-            let output_air_constraints = output_table.base_transition_constraints();
-
-            let mut step_count = std::cmp::max(0, input_matrix.len() as isize - 1) as usize;
-            for step in 0..step_count {
-                let input_row: BFieldElement = input_matrix[step].clone();
-                let input_next_row: BFieldElement = input_matrix[step + 1].clone();
-                let input_point: Vec<BFieldElement> = vec![input_row, input_next_row];
-
-                // Since there are no base air constraints on either IOTables,
-                // We're evaluating that the zero polynomial in a set of points
-                // is zero. This is a trivial test, but it should still hold.
-                for air_constraint in input_air_constraints.iter() {
-                    assert!(air_constraint.evaluate(&input_point).is_zero());
-                }
-            }
-
-            step_count = std::cmp::max(0, output_matrix.len() as isize - 1) as usize;
-            for step in 0..step_count {
-                let output_row: BFieldElement = output_matrix[step].clone();
-                let output_next_row: BFieldElement = output_matrix[step + 1].clone();
-                let output_point: Vec<BFieldElement> = vec![output_row, output_next_row];
-
-                // Since there are no base air constraints on either IOTables,
-                // We're evaluating that the zero polynomial in a set of points
-                // is zero. This is a trivial test, but it should still hold.
-                for air_constraint in output_air_constraints.iter() {
-                    assert!(air_constraint.evaluate(&output_point).is_zero());
-                }
-            }
-
-            // Test air constraints after padding as well
-            input_table.0.matrix = input_matrix.into_iter().map(|x| vec![x]).collect();
-            input_table.pad();
-            output_table.0.matrix = output_matrix.into_iter().map(|x| vec![x]).collect();
-            output_table.pad();
-
-            assert!(
-                input_table.0.matrix.len() == 0
-                    || other::is_power_of_two(input_table.0.matrix.len()),
-                "Matrix length must be power of 2 after padding"
-            );
-            assert!(
-                output_table.0.matrix.len() == 0
-                    || other::is_power_of_two(output_table.0.matrix.len()),
-                "Matrix length must be power of 2 after padding"
+            let input_table_: IOTable = IOTable::new_input_table(
+                base_matrices.input_matrix.len(),
+                smooth_generator,
+                order as usize,
             );
 
-            step_count = std::cmp::max(0, input_table.0.matrix.len() as isize - 1) as usize;
-            for step in 0..step_count {
-                let register = input_table.0.matrix[step].clone();
-                let next_register = input_table.0.matrix[step + 1].clone();
-                let point: Vec<BFieldElement> = vec![register, next_register].concat();
+            let output_table_: IOTable = IOTable::new_output_table(
+                base_matrices.output_matrix.len(),
+                smooth_generator,
+                order as usize,
+            );
 
-                for air_constraint in input_air_constraints.iter() {
-                    assert!(air_constraint.evaluate(&point).is_zero());
+            // Prepare test cases
+            let mut cases = [
+                (input_table_, base_matrices.input_matrix),
+                (output_table_, base_matrices.output_matrix),
+            ];
+
+            for (io_table, io_matrix) in cases.iter_mut() {
+                // Test base transition constraints
+                let io_air_constraints = io_table.base_transition_constraints();
+
+                let matrix_len = io_table.0.matrix.len() as isize;
+                let base_steps = max(0, matrix_len - 1) as usize;
+                for step in 0..base_steps {
+                    let row: BFieldElement = io_matrix[step].clone();
+                    let next_row: BFieldElement = io_matrix[step + 1].clone();
+                    let point: Vec<BFieldElement> = vec![row, next_row];
+
+                    // Since there are no base AIR constraints on either IOTables,
+                    // We're evaluating that the empty set of polynomials evaluated
+                    // in a set of points results in zero.
+                    //
+                    // This is a trivial test, but it should still hold.
+                    for air_constraint in io_air_constraints.iter() {
+                        assert!(air_constraint.evaluate(&point).is_zero());
+                    }
                 }
-            }
 
-            step_count = std::cmp::max(0, output_table.0.matrix.len() as isize - 1) as usize;
-            for step in 0..step_count {
-                let register = output_table.0.matrix[step].clone();
-                let next_register = output_table.0.matrix[step + 1].clone();
-                let point: Vec<BFieldElement> = vec![register, next_register].concat();
+                // Test base transition constraints after padding
+                io_table.0.matrix = io_matrix.into_iter().map(|x| vec![x.clone()]).collect();
+                io_table.pad();
 
-                for air_constraint in output_air_constraints.iter() {
-                    assert!(air_constraint.evaluate(&point).is_zero());
+                let padded_matrix_len = io_table.0.matrix.len() as isize;
+                assert!(
+                    padded_matrix_len == 0 || other::is_power_of_two(padded_matrix_len),
+                    "Matrix length must be power of 2 after padding"
+                );
+
+                let padded_steps = max(0, padded_matrix_len - 1) as usize;
+                for step in 0..padded_steps {
+                    let row = io_table.0.matrix[step].clone();
+                    let next_row = io_table.0.matrix[step + 1].clone();
+                    let point: Vec<BFieldElement> = vec![row, next_row].concat();
+
+                    for air_constraint in io_air_constraints.iter() {
+                        assert!(air_constraint.evaluate(&point).is_zero());
+                    }
                 }
-            }
 
-            // Test the same for the extended matrix on both input_table and output_table
+                // Test transition constraints on extension table
+                let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
+                    XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+                        .try_into()
+                        .unwrap();
 
-            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
-                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+                let initials = XFieldElement::random_elements(2, &mut rng)
                     .try_into()
                     .unwrap();
 
-            input_table.extend(
-                challenges,
-                XFieldElement::random_elements(2, &mut rng)
-                    .try_into()
-                    .unwrap(),
-            );
+                io_table.extend(challenges, initials);
 
-            let air_constraints = input_table.transition_constraints_ext(challenges);
-            for step in 0..input_table.0.extended_matrix.len() - 1 {
-                let register = input_table.0.extended_matrix[step].clone();
-                let next_register = input_table.0.extended_matrix[step + 1].clone();
-                let xpoint: Vec<XFieldElement> = vec![register, next_register].concat();
+                // Get transition constraints for extension table instead
+                let io_air_constraints_ext = io_table.transition_constraints_ext(challenges);
 
-                for air_constraint in air_constraints.iter() {
-                    assert!(air_constraint.evaluate(&xpoint).is_zero());
-                }
-            }
+                let extended_matrix_len = io_table.0.extended_matrix.len() as isize;
+                let extended_steps = max(0, extended_matrix_len - 1) as usize;
+                for step in 0..extended_steps {
+                    let row = io_table.0.extended_matrix[step].clone();
+                    let next_row = io_table.0.extended_matrix[step + 1].clone();
+                    let xpoint: Vec<XFieldElement> = vec![row, next_row].concat();
 
-            output_table.extend(
-                challenges,
-                XFieldElement::random_elements(2, &mut rng)
-                    .try_into()
-                    .unwrap(),
-            );
-
-            let air_constraints = output_table.transition_constraints_ext(challenges);
-            for step in 0..output_table.0.extended_matrix.len() - 1 {
-                let register = output_table.0.extended_matrix[step].clone();
-                let next_register = output_table.0.extended_matrix[step + 1].clone();
-                let xpoint: Vec<XFieldElement> = vec![register, next_register].concat();
-
-                for air_constraint in air_constraints.iter() {
-                    assert!(air_constraint.evaluate(&xpoint).is_zero());
+                    for air_constraint_ext in io_air_constraints_ext.iter() {
+                        assert!(air_constraint_ext.evaluate(&xpoint).is_zero());
+                    }
                 }
             }
         }
