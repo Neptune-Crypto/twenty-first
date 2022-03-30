@@ -1,16 +1,14 @@
-use rand::thread_rng;
-
+use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
+use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::fri::FriDomain;
 use crate::shared_math::mpolynomial::Degree;
+use crate::shared_math::mpolynomial::MPolynomial;
+use crate::shared_math::other;
 use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::GetPrimitiveRootOfUnity;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues};
 use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::{
-    b_field_element::BFieldElement, mpolynomial::MPolynomial, other,
-    traits::GetPrimitiveRootOfUnity,
-};
-
-use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
+use rand::thread_rng;
 
 pub const PROCESSOR_TABLE: usize = 0;
 pub const INSTRUCTION_TABLE: usize = 1;
