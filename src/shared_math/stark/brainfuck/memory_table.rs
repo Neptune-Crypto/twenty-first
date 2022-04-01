@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use crate::shared_math::{
     b_field_element::BFieldElement, mpolynomial::MPolynomial,
     stark::brainfuck::processor_table::ProcessorTable, x_field_element::XFieldElement,
@@ -184,6 +186,61 @@ impl TableTrait for MemoryTable {
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
         todo!()
+    }
+
+    fn transition_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<MPolynomial<XFieldElement>> {
+        let [_a, _b, _c, d, e, f, _alpha, beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
+            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            .iter()
+            .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
+            .collect::<Vec<MPolynomial<XFieldElement>>>()
+            .try_into()
+            .unwrap();
+
+        let b_field_variables: [MPolynomial<BFieldElement>; 2 * Self::FULL_WIDTH] =
+            MPolynomial::variables(2 * Self::FULL_WIDTH, BFieldElement::ring_one())
+                .try_into()
+                .unwrap();
+        let [b_field_cycle, b_field_address, b_field_value, _b_field_permutation, b_field_cycle_next, b_field_address_next, b_field_value_next, _b_field_permutation_next] =
+            b_field_variables;
+
+        let b_field_polynomials = Self::transition_constraints_afo_named_variables(
+            b_field_cycle,
+            b_field_address,
+            b_field_value,
+            // b_field_permutation, why are these not passed?
+            b_field_cycle_next,
+            b_field_address_next,
+            b_field_value_next,
+            // b_field_permutation_next,
+        );
+
+        let b_field_polylen = b_field_polynomials.len();
+        assert_eq!(
+            b_field_polylen, 3,
+            "number of transition constraints from MemoryTable is {}, but expected 3",
+            b_field_polylen
+        );
+
+        let x_field_variables: [MPolynomial<XFieldElement>; 2 * Self::FULL_WIDTH] =
+            MPolynomial::variables(2 * Self::FULL_WIDTH, XFieldElement::ring_one())
+                .try_into()
+                .unwrap();
+        let [cycle, address, value, permutation, _cycle_next, _address_next, _value_next, permutation_next] =
+            x_field_variables;
+
+        let mut polynomials: Vec<MPolynomial<XFieldElement>> = b_field_polynomials
+            .iter()
+            .map(|mpol| mpol.lift_coefficients_to_xfield())
+            .collect();
+
+        polynomials
+            .push(permutation * (beta - d * cycle - e * address - f * value) - permutation_next);
+
+        polynomials
     }
 }
 
