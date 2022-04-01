@@ -348,7 +348,17 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         true
     }
 
+    /// Returns an `MPolynomial` instance over `variable_count` variables
+    /// that evaluates to `element` everywhere.
+    /// I.e.
+    ///     P(x,y..,z) = element
+    ///
+    /// Note that in this encoding
+    ///     P(x,y) == P(x,w)
+    /// but
+    ///     P(x,y) != P(x,y,z).
     pub fn from_constant(element: PFElem, variable_count: usize) -> Self {
+        // Potential guarantee: assert!(!element.zero);
         let mut cs: MCoefficients<PFElem> = HashMap::new();
         cs.insert(vec![0; variable_count], element);
         Self {
