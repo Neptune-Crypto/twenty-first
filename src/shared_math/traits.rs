@@ -104,6 +104,7 @@ pub trait PrimeField:
     + Hash
     + Inverse
 {
+    /// Montgomery Batch Inversion
     // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
     fn batch_inversion(input: Vec<Self>) -> Vec<Self> {
         let input_length = input.len();
