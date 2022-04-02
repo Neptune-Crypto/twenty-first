@@ -14,11 +14,15 @@ use super::{
 pub struct MemoryTable(pub Table<MemoryTableMore>);
 
 #[derive(Debug, Clone)]
-pub struct MemoryTableMore(());
+pub struct MemoryTableMore {
+    pub permutation_terminal: XFieldElement,
+}
 
 impl TableMoreTrait for MemoryTableMore {
     fn new_more() -> Self {
-        MemoryTableMore(())
+        MemoryTableMore {
+            permutation_terminal: XFieldElement::ring_zero(),
+        }
     }
 }
 
@@ -185,7 +189,62 @@ impl TableTrait for MemoryTable {
         all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
-        todo!()
+        let a = all_challenges[0];
+        let b = all_challenges[1];
+        let c = all_challenges[2];
+        let d = all_challenges[3];
+        let e = all_challenges[4];
+        let f = all_challenges[5];
+        let alpha = all_challenges[6];
+        let beta = all_challenges[7];
+        let gamma = all_challenges[8];
+        let delta = all_challenges[9];
+        let eta = all_challenges[10];
+
+        let processor_instruction_permutation_initial = all_initials[0];
+        let processor_memory_permutation_initial = all_initials[1];
+
+        // algebra stuff
+        let zero = XFieldElement::ring_zero();
+        let one = XFieldElement::ring_one();
+
+        // prepare loop
+        let mut extended_matrix: Vec<Vec<XFieldElement>> =
+            vec![Vec::with_capacity(self.full_width()); self.0.matrix.len()];
+        let mut memory_permutation_running_product = processor_memory_permutation_initial;
+
+        // loop over all rows of table
+        for (i, row) in self.0.matrix.iter().enumerate() {
+            // first, copy over existing row
+            // new_row = [xfield.lift(nr) for nr in row]
+            let mut new_row: Vec<XFieldElement> = row
+                .into_iter()
+                .map(|&bfe| XFieldElement::new_const(bfe))
+                .collect();
+
+            new_row.push(memory_permutation_running_product);
+            memory_permutation_running_product *= beta
+                - d * new_row[MemoryTable::CYCLE]
+                - e * new_row[MemoryTable::MEMORY_POINTER]
+                - f * new_row[MemoryTable::MEMORY_VALUE];
+
+            extended_matrix[i] = new_row;
+        }
+
+        // self.matrix = extended_matrix
+        self.0.extended_matrix = extended_matrix;
+
+        // self.codewords = [[xfield.lift(c) for c in cdwd]
+        //                   for cdwd in self.codewords]
+        self.0.extended_codewords = self
+            .0
+            .codewords
+            .iter()
+            .map(|row| row.iter().map(|elem| elem.lift()).collect())
+            .collect();
+
+        // self.evaluation_terminal = evaluation_terminal
+        self.0.more.permutation_terminal = memory_permutation_running_product;
     }
 
     fn transition_constraints_ext(
@@ -246,17 +305,23 @@ impl TableTrait for MemoryTable {
 
 #[cfg(test)]
 mod memory_table_tests {
+    use std::convert::TryInto;
+
+    use rand::thread_rng;
+
     use super::*;
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
+    use crate::shared_math::traits::GetRandomElements;
 
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on
     // the rows (points) from the InstructionTable matrix, these should evaluate to zero.
     #[test]
     fn memory_base_table_evaluate_to_zero_on_execution_trace_test() {
+        let mut rng = thread_rng();
         for source_code in sample_programs::get_all_sample_programs().iter() {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
             let input_data = vec![BFieldElement::new(97)];
@@ -286,7 +351,7 @@ mod memory_table_tests {
                 .unwrap();
 
             // instantiate table objects
-            let memory_table: MemoryTable = MemoryTable::new(
+            let mut memory_table: MemoryTable = MemoryTable::new(
                 derived_memory_matrix.len(),
                 number_of_randomizers,
                 smooth_generator,
@@ -303,6 +368,33 @@ mod memory_table_tests {
 
                 for air_constraint in air_constraints.iter() {
                     assert!(air_constraint.evaluate(&point).is_zero());
+                }
+            }
+
+            // Test transition constraints on extension table
+            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
+                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+                    .try_into()
+                    .unwrap();
+
+            let initials = XFieldElement::random_elements(2, &mut rng)
+                .try_into()
+                .unwrap();
+
+            memory_table.extend(challenges, initials);
+
+            // Get transition constraints for extension table instead
+            let mem_air_constraints_ext = memory_table.transition_constraints_ext(challenges);
+
+            let extended_matrix_len = memory_table.0.extended_matrix.len() as isize;
+            let extended_steps = std::cmp::max(0, extended_matrix_len - 1) as usize;
+            for step in 0..extended_steps {
+                let row = memory_table.0.extended_matrix[step].clone();
+                let next_row = memory_table.0.extended_matrix[step + 1].clone();
+                let xpoint: Vec<XFieldElement> = vec![row, next_row].concat();
+
+                for air_constraint_ext in mem_air_constraints_ext.iter() {
+                    assert!(air_constraint_ext.evaluate(&xpoint).is_zero());
                 }
             }
         }
