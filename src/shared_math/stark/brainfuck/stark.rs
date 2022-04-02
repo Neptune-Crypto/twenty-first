@@ -29,6 +29,7 @@ use std::rc::Rc;
 
 pub const EXTENSION_CHALLENGE_COUNT: u16 = 11;
 pub const PERMUTATION_ARGUMENTS_COUNT: usize = 2;
+pub const TERMINAL_COUNT: usize = 5;
 
 pub struct Stark {
     trace_length: usize,
@@ -381,7 +382,8 @@ impl Stark {
 mod brainfuck_stark_tests {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::stark::brainfuck::{self, vm::BaseMatrices};
+    use crate::shared_math::stark::brainfuck;
+    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
 
     #[test]
     fn prove_verify_test() {

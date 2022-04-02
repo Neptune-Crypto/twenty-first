@@ -1,4 +1,4 @@
-use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
+use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::fri::FriDomain;
 use crate::shared_math::mpolynomial::Degree;
@@ -269,12 +269,106 @@ pub trait TableTrait {
             .unwrap_or(-1)
     }
 
+    fn all_quotient_degree_bounds(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; TERMINAL_COUNT as usize],
+    ) -> Vec<Degree> {
+        // boundary_degree_bounds = self.boundary_quotient_degree_bounds(challenges)
+        let boundary_degree_bounds = self.boundary_quotient_degree_bounds(challenges);
+
+        // transition_degree_bounds = self.transition_quotient_degree_bounds(challenges)
+        let transition_degree_bounds = self.transition_quotient_degree_bounds(challenges);
+
+        // terminal_degree_bounds = self.terminal_quotient_degree_bounds(challenges, terminals)
+        let terminal_degree_bounds = self.terminal_quotient_degree_bounds(challenges, terminals);
+
+        // return boundary_degree_bounds + transition_degree_bounds + terminal_degree_bounds
+        vec![
+            boundary_degree_bounds,
+            transition_degree_bounds,
+            terminal_degree_bounds,
+        ]
+        .concat()
+    }
+
+    fn boundary_quotient_degree_bounds(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<Degree> {
+        // max_degrees = [self.interpolant_degree()] * self.full_width
+        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.full_width()];
+
+        // degree_bounds = [mpo.symbolic_degree_bound(
+        //     max_degrees) - 1 for mpo in self.boundary_constraints_ext(challenges)]
+        let degree_bounds: Vec<Degree> = self
+            .boundary_constraints_ext(challenges)
+            .iter()
+            .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - 1)
+            .collect();
+
+        // return degree_bounds
+        degree_bounds
+    }
+
+    fn transition_quotient_degree_bounds(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<Degree> {
+        // max_degrees = [self.interpolant_degree()] * (2*self.full_width)
+        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); 2 * self.full_width()];
+
+        // transition_constraints = self.transition_constraints_ext(challenges)
+        let transition_constraints = self.transition_constraints_ext(challenges);
+
+        // degree_bounds = []
+        // for i in range(len(transition_constraints)):
+        //     mpo = transition_constraints[i]
+        //     symbolic_degree_bound = mpo.symbolic_degree_bound(max_degrees)
+        //     degree_bounds += [symbolic_degree_bound - self.height + 1]
+        // return degree_bounds
+        let height = self.height() as Degree;
+        transition_constraints
+            .iter()
+            .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - height + 1)
+            .collect::<Vec<Degree>>()
+    }
+
+    fn terminal_quotient_degree_bounds(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; TERMINAL_COUNT as usize],
+    ) -> Vec<Degree> {
+        // max_degrees = [self.interpolant_degree()] * self.full_width
+        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.full_width()];
+
+        // degree_bounds = [mpo.symbolic_degree_bound(
+        //     max_degrees) - 1 for mpo in self.terminal_constraints_ext(challenges, terminals)]
+        // return degree_bounds
+        self.terminal_constraints_ext(challenges, terminals)
+            .iter()
+            .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - 1)
+            .collect::<Vec<Degree>>()
+    }
+
+    // IMPLEMENT THESE!
+
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
     fn transition_constraints_ext(
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>>;
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
+
+    fn boundary_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<MPolynomial<BFieldElement>>;
+    fn terminal_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; TERMINAL_COUNT as usize],
+    ) -> Vec<MPolynomial<XFieldElement>>;
 }
 
 pub trait TableMoreTrait {
