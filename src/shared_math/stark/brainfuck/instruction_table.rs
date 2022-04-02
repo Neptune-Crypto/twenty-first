@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 
+use crate::shared_math::stark::brainfuck::stark::TERMINAL_COUNT;
 use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::{
     b_field_element::BFieldElement, mpolynomial::MPolynomial, other, x_field_element::XFieldElement,
@@ -401,15 +402,59 @@ impl TableTrait for InstructionTable {
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        let [a, b, c, _d, _e, _f, _alpha, _beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
+            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            .iter()
+            .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
+            .collect::<Vec<MPolynomial<XFieldElement>>>()
+            .try_into()
+            .unwrap();
+
+        let x: Vec<MPolynomial<XFieldElement>> =
+            MPolynomial::variables(self.full_width(), XFieldElement::ring_one());
+
+        vec![
+            x[Self::ADDRESS].clone(),
+            x[Self::EVALUATION].clone()
+                - a * x[Self::ADDRESS].clone()
+                - b * x[Self::CURRENT_INSTRUCTION].clone()
+                - c * x[Self::NEXT_INSTRUCTION].clone(),
+        ]
     }
 
     fn terminal_constraints_ext(
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
+        terminals: [XFieldElement; TERMINAL_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        let [a, b, c, _d, _e, _f, alpha, _beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
+            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            .iter()
+            .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
+            .collect::<Vec<MPolynomial<XFieldElement>>>()
+            .try_into()
+            .unwrap();
+        let [processor_instruction_permutation_terminal, _processor_memory_permutation_terminal, _processor_input_evaluation_terminal, _processor_output_evaluation_terminal, instruction_evaluation_terminal]: [MPolynomial<XFieldElement>;
+            TERMINAL_COUNT as usize] = terminals
+            .iter()
+            .map(|terminal| MPolynomial::from_constant(*terminal, 2 * Self::FULL_WIDTH))
+            .collect::<Vec<MPolynomial<XFieldElement>>>()
+            .try_into()
+            .unwrap();
+
+        let x: Vec<MPolynomial<XFieldElement>> =
+            MPolynomial::variables(self.full_width(), XFieldElement::ring_one());
+
+        vec![
+            (x[Self::PERMUTATION].clone()
+                * (alpha
+                    - a * x[Self::ADDRESS].clone()
+                    - b * x[Self::CURRENT_INSTRUCTION].clone()
+                    - c * x[Self::NEXT_INSTRUCTION].clone())
+                - processor_instruction_permutation_terminal)
+                * x[Self::CURRENT_INSTRUCTION].clone(),
+            x[Self::EVALUATION].clone() - instruction_evaluation_terminal,
+        ]
     }
 }
 
