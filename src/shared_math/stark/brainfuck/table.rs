@@ -6,6 +6,7 @@ use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetPrimitiveRootOfUnity;
+use crate::shared_math::traits::Inverse;
 use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::PrimeField;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues};
@@ -69,15 +70,6 @@ impl<T: TableMoreTrait> Table<T> {
             more,
             codewords,
             extended_codewords,
-        }
-    }
-
-    /// Returns the relation between the FRI domain and the omicron domain
-    pub fn unit_distance(&self, omega_order: usize) -> usize {
-        if self.height == 0 {
-            0
-        } else {
-            omega_order / self.height
         }
     }
 
@@ -260,6 +252,15 @@ pub trait TableTrait {
         self.height() as Degree + self.num_randomizers() as Degree - 1
     }
 
+    /// Returns the relation between the FRI domain and the omicron domain
+    fn unit_distance(&self, omega_order: usize) -> usize {
+        if self.height() == 0 {
+            0
+        } else {
+            omega_order / self.height()
+        }
+    }
+
     fn max_degree(&self) -> Degree {
         let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.base_width() * 2];
 
@@ -373,15 +374,68 @@ pub trait TableTrait {
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
     ) -> Vec<Vec<XFieldElement>> {
-        todo!()
+        let one = BFieldElement::ring_one();
+        let x_values: Vec<BFieldElement> = fri_domain.x_values();
+        let subgroup_zerofier: Vec<BFieldElement> = x_values
+            .iter()
+            .map(|x| x.mod_pow_u32(self.height() as u32) - one)
+            .collect();
+        let subgroup_zerofier_inverse = if self.height() == 0 {
+            subgroup_zerofier
+        } else {
+            BFieldElement::batch_inversion(subgroup_zerofier)
+        };
+
+        let zerofier_inverse: Vec<BFieldElement> = x_values
+            .into_iter()
+            .enumerate()
+            .map(|(i, x)| subgroup_zerofier_inverse[i] * (x - self.omicron().inverse()))
+            .collect();
+
+        let transition_constraints = self.transition_constraints_ext(challenges);
+
+        let mut quotients: Vec<Vec<XFieldElement>> = vec![];
+        for tc in transition_constraints {
+            let mut quotient_codeword: Vec<XFieldElement> = vec![];
+            let mut composition_codeword: Vec<XFieldElement> = vec![];
+            for i in 0..fri_domain.length {
+                let current: Vec<XFieldElement> =
+                    (0..self.full_width()).map(|j| codewords[j][i]).collect();
+                let next: Vec<XFieldElement> = (0..self.full_width())
+                    .map(|j| {
+                        codewords[j]
+                            [(i + self.unit_distance(fri_domain.length)) % fri_domain.length]
+                    })
+                    .collect();
+                let point = vec![current, next].concat();
+                let composition_evaluation = tc.evaluate(&point);
+                composition_codeword.push(composition_evaluation.clone());
+                quotient_codeword.push(composition_evaluation * zerofier_inverse[i].lift());
+                // TODO: `composition_codeword` is not returned from this function! Why?
+            }
+
+            quotients.push(quotient_codeword);
+
+            // If the `DEBUG` environment variable is set, interpolate the quotient and check the degree
+            if std::env::var("DEBUG").is_ok() {
+                let interpolated: Polynomial<XFieldElement> =
+                    fri_domain.xinterpolate(&quotients.last().unwrap());
+                if interpolated.degree() >= fri_domain.length as isize - 1 {
+                    println!("terminal index: ");
+                    assert!(false, "interpolated degree was too high");
+                }
+            }
+        }
+
+        quotients
     }
 
     fn terminal_quotients(
         &self,
-        fri_domain: &FriDomain<BFieldElement>,
-        codewords: &[Vec<XFieldElement>],
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        terminals: [XFieldElement; TERMINAL_COUNT],
+        _fri_domain: &FriDomain<BFieldElement>,
+        _codewords: &[Vec<XFieldElement>],
+        _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        _terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
         todo!()
     }
