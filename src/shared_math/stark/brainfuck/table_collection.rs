@@ -106,6 +106,8 @@ impl TableCollection {
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
         self.processor_table.extend(all_challenges, all_initials);
+        self.instruction_table.extend(all_challenges, all_initials);
+
         // TODO: Add calls to the other tables as well
     }
 }

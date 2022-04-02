@@ -137,8 +137,9 @@ impl TableTrait for IOTable {
     fn extend(
         &mut self,
         all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
+        _all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
+        // `iota` is called `gamma` or `delta` in the other `extend()`s.
         let iota = all_challenges[self.0.more.challenge_index];
         let zero = XFieldElement::ring_zero();
 
@@ -150,12 +151,11 @@ impl TableTrait for IOTable {
 
         // loop over all rows of table
         for (i, row) in self.0.matrix.iter().enumerate() {
+            // TODO: Avoid re-allocating each row a second time; `extended_matrix` is pre-allocated.
+
             // first, copy over existing row
             // new_row = [xfield.lift(nr) for nr in row]
-            let mut new_row: Vec<XFieldElement> = row
-                .into_iter()
-                .map(|&bfe| XFieldElement::new_const(bfe))
-                .collect();
+            let mut new_row: Vec<XFieldElement> = row.into_iter().map(|bfe| bfe.lift()).collect();
 
             // io_running_evaluation = io_running_evaluation * iota + new_row[IOTable.column]
             io_running_evaluation = io_running_evaluation * iota + new_row[IOTable::COLUMN];

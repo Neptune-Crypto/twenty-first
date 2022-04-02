@@ -94,6 +94,7 @@ impl InstructionTable {
         );
 
         // if address is the same, then current instruction is also
+        // (i.e., program memory is read-only)
         polynomials.push(
             (address_next.clone() - address.clone() - one.clone())
                 * (current_instruction_next - current_instruction),
@@ -273,7 +274,7 @@ impl TableTrait for InstructionTable {
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        let [a, b, c, d, e, f, alpha, beta, gamma, delta, eta]: [MPolynomial<XFieldElement>;
+        let [a, b, c, _d, _e, _f, alpha, _beta, _gamma, _delta, eta]: [MPolynomial<XFieldElement>;
             EXTENSION_CHALLENGE_COUNT as usize] = challenges
             .iter()
             .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
@@ -329,7 +330,7 @@ impl TableTrait for InstructionTable {
         );
 
         let address_lifted = address.lift_coefficients_to_xfield();
-        let current_instruction_lifted = current_instruction.lift_coefficients_to_xfield();
+        let _current_instruction_lifted = current_instruction.lift_coefficients_to_xfield();
         let next_instruction_lifted = next_instruction.lift_coefficients_to_xfield();
 
         let address_next_lifted = address_next.lift_coefficients_to_xfield();
@@ -413,7 +414,6 @@ mod instruction_table_tests {
     };
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
 
-
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on
     // the rows (points) from the InstructionTable matrix, these should evaluate to zero.
@@ -423,7 +423,11 @@ mod instruction_table_tests {
         
         for source_code in sample_programs::get_all_sample_programs().iter() {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
-            let input_data = vec![BFieldElement::new(97)];
+            let input_data = vec![
+                BFieldElement::new(97),
+                BFieldElement::new(98),
+                BFieldElement::new(99),
+            ];
             let base_matrices: BaseMatrices =
                 brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
 
