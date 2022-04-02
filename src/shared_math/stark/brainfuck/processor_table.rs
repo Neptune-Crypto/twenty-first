@@ -653,6 +653,43 @@ impl TableTrait for ProcessorTable {
         self.0.more.input_evaluation_terminal = input_evaluation_running_evaluation;
         self.0.more.output_evaluation_terminal = output_evaluation_running_evaluation;
     }
+
+    fn boundary_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<MPolynomial<BFieldElement>> {
+        // field = challenges[0].field
+        // # format: mpolynomial
+        // x = MPolynomial.variables(self.full_width, field)
+        let x = MPolynomial::<BFieldElement>::variables(Self::FULL_WIDTH, BFieldElement::ring_one());
+
+        // one = MPolynomial.constant(field.one())
+        // zero = MPolynomial.zero()
+        let zero = MPolynomial::<BFieldElement>::zero(Self::FULL_WIDTH);
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), Self::FULL_WIDTH);
+
+        vec![
+            x[ProcessorTable::CYCLE] - zero,
+            x[ProcessorTable::INSTRUCTION_POINTER] - zero,
+            // x[Self::CURRENT_INSTRUCTION] - ??),
+            // x[Self::NEXT_INSTRUCTION] - ??),
+            x[Self::MEMORY_POINTER] - zero,
+            x[Self::MEMORY_VALUE] - zero,
+            x[Self::IS_ZERO] - one,
+            // x[Self::INSTRUCTION_PERMUTATION] - one,
+            // x[Self::MEMORY_PERMUTATION] - one,
+            x[Self::INPUT_EVALUATION] - zero,
+            x[Self::OUTPUT_EVALUATION] - zero,
+        ]
+    }
+
+    fn terminal_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
+    ) -> Vec<MPolynomial<XFieldElement>> {
+        todo!()
+    }
 }
 
 #[cfg(test)]

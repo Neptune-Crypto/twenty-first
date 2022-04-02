@@ -396,6 +396,21 @@ impl TableTrait for InstructionTable {
 
         polynomials
     }
+
+    fn boundary_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
+    }
+
+    fn terminal_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
+    ) -> Vec<MPolynomial<XFieldElement>> {
+        todo!()
+    }
 }
 
 #[cfg(test)]
