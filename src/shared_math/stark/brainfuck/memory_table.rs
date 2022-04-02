@@ -197,15 +197,10 @@ impl TableTrait for MemoryTable {
 #[cfg(test)]
 mod memory_table_tests {
     use super::*;
-    use crate::shared_math::stark::brainfuck::vm::{InstructionMatrixBaseRow, MemoryMatrixBaseRow};
-    use crate::shared_math::{
-        stark::brainfuck::{
-            self,
-            vm::{BaseMatrices, Register},
-        },
-        traits::{GetPrimitiveRootOfUnity, IdentityValues},
-    };
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
+    use crate::shared_math::stark::brainfuck;
+    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
+    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
 
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on

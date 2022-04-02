@@ -245,7 +245,7 @@ mod io_table_tests {
             let base_matrices: BaseMatrices =
                 brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
 
-            let number_of_randomizers = 2;
+            let _number_of_randomizers = 2;
             let order = 1 << 32;
             let smooth_generator = BFieldElement::ring_zero()
                 .get_primitive_root_of_unity(order)
@@ -275,6 +275,12 @@ mod io_table_tests {
                 // Test base transition constraints
                 let io_air_constraints = io_table.base_transition_constraints();
 
+                assert_eq!(
+                    0,
+                    io_air_constraints.len(),
+                    "There are exactly 0 base AIR constraints for IOTable"
+                );
+
                 let matrix_len = io_table.0.matrix.len() as isize;
                 let base_steps = max(0, matrix_len - 1) as usize;
                 for step in 0..base_steps {
@@ -283,10 +289,8 @@ mod io_table_tests {
                     let point: Vec<BFieldElement> = vec![row, next_row];
 
                     // Since there are no base AIR constraints on either IOTables,
-                    // We're evaluating that the empty set of polynomials evaluated
-                    // in a set of points results in zero.
-                    //
-                    // This is a trivial test, but it should still hold.
+                    // the following for loop is never entered. This is a trivial
+                    // test, but it should still hold.
                     for air_constraint in io_air_constraints.iter() {
                         assert!(air_constraint.evaluate(&point).is_zero());
                     }
@@ -308,6 +312,9 @@ mod io_table_tests {
                     let next_row = io_table.0.matrix[step + 1].clone();
                     let point: Vec<BFieldElement> = vec![row, next_row].concat();
 
+                    // Since there are no base AIR constraints on either IOTables,
+                    // the following for loop is never entered. This is a trivial
+                    // test, but it should still hold.
                     for air_constraint in io_air_constraints.iter() {
                         assert!(air_constraint.evaluate(&point).is_zero());
                     }
@@ -319,14 +326,21 @@ mod io_table_tests {
                         .try_into()
                         .unwrap();
 
-                let initials = XFieldElement::random_elements(2, &mut rng)
-                    .try_into()
-                    .unwrap();
+                let initials =
+                    XFieldElement::random_elements(PERMUTATION_ARGUMENTS_COUNT, &mut rng)
+                        .try_into()
+                        .unwrap();
 
                 io_table.extend(challenges, initials);
 
                 // Get transition constraints for extension table instead
                 let io_air_constraints_ext = io_table.transition_constraints_ext(challenges);
+
+                assert_eq!(
+                    1,
+                    io_air_constraints_ext.len(),
+                    "There is exactly 1 extension AIR constraint for IOTable"
+                );
 
                 let extended_matrix_len = io_table.0.extended_matrix.len() as isize;
                 let extended_steps = max(0, extended_matrix_len - 1) as usize;

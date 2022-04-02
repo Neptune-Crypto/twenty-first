@@ -1,10 +1,3 @@
-use std::cell::RefMut;
-
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::fri::FriDomain;
-use crate::shared_math::mpolynomial::{Degree, MPolynomial};
-use crate::shared_math::x_field_element::XFieldElement;
-
 use super::instruction_table::InstructionTable;
 use super::io_table::IOTable;
 use super::memory_table::MemoryTable;
@@ -12,6 +5,10 @@ use super::processor_table::ProcessorTable;
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
 use super::table::TableTrait;
 use super::vm::{InstructionMatrixBaseRow, Register};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::fri::FriDomain;
+use crate::shared_math::mpolynomial::Degree;
+use crate::shared_math::x_field_element::XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct TableCollection {
@@ -107,25 +104,22 @@ impl TableCollection {
     ) {
         self.processor_table.extend(all_challenges, all_initials);
         self.instruction_table.extend(all_challenges, all_initials);
-
-        // TODO: Add calls to the other tables as well
+        // self.memory_table.extend(all_challenges, all_initials);
+        self.input_table.extend(all_challenges, all_initials);
+        self.output_table.extend(all_challenges, all_initials);
     }
 }
 
 #[cfg(test)]
 mod brainfuck_table_collection_tests {
-    use std::{cell::RefCell, rc::Rc};
-
     use super::*;
-    use crate::shared_math::{
-        b_field_element::BFieldElement,
-        stark::brainfuck::{
-            self,
-            vm::{BaseMatrices, Register},
-        },
-        traits::{GetPrimitiveRootOfUnity, IdentityValues},
-    };
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::stark::brainfuck;
+    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
+    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     // EXPECTED:
     // max_degree = 1153

@@ -157,7 +157,7 @@ impl<T: TableMoreTrait> Table<T> {
         self.codewords.clone()
     }
 
-    pub fn ldex(&self, domain: FriDomain<BFieldElement>) -> Vec<Vec<XFieldElement>> {
+    pub fn ldex(&self, _domain: FriDomain<BFieldElement>) -> Vec<Vec<XFieldElement>> {
         // TODO: See `lde` and pattern match from that
         todo!()
     }

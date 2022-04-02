@@ -186,7 +186,7 @@ impl TableTrait for InstructionTable {
         all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
-        let [a, b, c, d, e, f, alpha, beta, gamma, delta, eta] = all_challenges;
+        let [a, b, c, _d, _e, _f, alpha, _beta, _gamma, _delta, eta] = all_challenges;
         let [processor_instruction_permutation_initial, _processor_memory_permutation_initial] =
             all_initials;
 
@@ -400,19 +400,14 @@ impl TableTrait for InstructionTable {
 
 #[cfg(test)]
 mod instruction_table_tests {
-    use rand::thread_rng;
-
     use super::*;
+    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::stark::brainfuck::vm::InstructionMatrixBaseRow;
+    use crate::shared_math::stark::brainfuck::{self};
     use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::{
-        stark::brainfuck::{
-            self,
-            vm::{BaseMatrices, Register},
-        },
-        traits::{GetPrimitiveRootOfUnity, IdentityValues},
-    };
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
+    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
+    use rand::thread_rng;
 
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on

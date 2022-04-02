@@ -152,20 +152,20 @@ impl ProcessorTable {
 
     fn instruction_polynomials(
         instruction: char,
-        cycle: &MPolynomial<BFieldElement>,
+        _cycle: &MPolynomial<BFieldElement>,
         instruction_pointer: &MPolynomial<BFieldElement>,
         current_instruction: &MPolynomial<BFieldElement>,
         next_instruction: &MPolynomial<BFieldElement>,
         memory_pointer: &MPolynomial<BFieldElement>,
         memory_value: &MPolynomial<BFieldElement>,
         is_zero: &MPolynomial<BFieldElement>,
-        cycle_next: &MPolynomial<BFieldElement>,
+        _cycle_next: &MPolynomial<BFieldElement>,
         instruction_pointer_next: &MPolynomial<BFieldElement>,
-        current_instruction_next: &MPolynomial<BFieldElement>,
-        next_instruction_next: &MPolynomial<BFieldElement>,
+        _current_instruction_next: &MPolynomial<BFieldElement>,
+        _next_instruction_next: &MPolynomial<BFieldElement>,
         memory_pointer_next: &MPolynomial<BFieldElement>,
         memory_value_next: &MPolynomial<BFieldElement>,
-        is_zero_next: &MPolynomial<BFieldElement>,
+        _is_zero_next: &MPolynomial<BFieldElement>,
     ) -> [MPolynomial<BFieldElement>; 3] {
         let zero = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_zero(), 14);
         let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
@@ -436,8 +436,36 @@ impl TableTrait for ProcessorTable {
             MPolynomial::variables(2 * Self::FULL_WIDTH, BFieldElement::ring_one())
                 .try_into()
                 .unwrap();
-        let [b_field_cycle, b_field_instruction_pointer, b_field_current_instruction, b_field_next_instruction, b_field_memory_pointer, b_field_memory_value, b_field_is_zero, b_field_instruction_permutation, b_field_memory_permutation, b_field_input_evaluation, b_field_output_evaluation, b_field_cycle_next, b_field_instruction_pointer_next, b_field_current_instruction_next, b_field_next_instruction_next, b_field_memory_pointer_next, b_field_memory_value_next, b_field_is_zero_next, b_field_instruction_permutation_next, b_field_memory_permutation_next, b_field_input_evaluation_next, b_field_output_evaluation_next] =
-            b_field_variables;
+        let [
+            // row n+1
+            b_field_cycle,
+            b_field_instruction_pointer,
+            b_field_current_instruction,
+            b_field_next_instruction,
+            b_field_memory_pointer,
+            b_field_memory_value,
+            b_field_is_zero,
+
+            // row n
+            _b_field_instruction_permutation,
+            _b_field_memory_permutation,
+            _b_field_input_evaluation,
+            _b_field_output_evaluation,
+
+            // row n+1
+            b_field_cycle_next,
+            b_field_instruction_pointer_next,
+            b_field_current_instruction_next,
+            b_field_next_instruction_next,
+            b_field_memory_pointer_next,
+            b_field_memory_value_next,
+            b_field_is_zero_next,
+            
+            // row n+1
+            _b_field_instruction_permutation_next,
+            _b_field_memory_permutation_next,
+            _b_field_input_evaluation_next,
+            _b_field_output_evaluation_next] = b_field_variables;
 
         let b_field_polynomials = Self::transition_constraints_afo_named_variables(
             b_field_cycle,
@@ -465,8 +493,33 @@ impl TableTrait for ProcessorTable {
             MPolynomial::variables(2 * Self::FULL_WIDTH, XFieldElement::ring_one())
                 .try_into()
                 .unwrap();
-        let [cycle, instruction_pointer, current_instruction, next_instruction, memory_pointer, memory_value, is_zero, instruction_permutation, memory_permutation, input_evaluation, output_evaluation, cycle_next, instruction_pointer_next, current_instruction_next, next_instruction_next, memory_pointer_next, memory_value_next, is_zero_next, instruction_permutation_next, memory_permutation_next, input_evaluation_next, output_evaluation_next] =
-            x_field_variables;
+        let [
+            // row n
+            cycle,
+            instruction_pointer,
+            current_instruction,
+            next_instruction,
+            memory_pointer,
+            memory_value,
+            _is_zero,
+            // row n
+            instruction_permutation,
+            memory_permutation,
+            input_evaluation,
+            output_evaluation,
+            // row n+1
+            _cycle_next,
+            _instruction_pointer_next,
+            _current_instruction_next,
+            _next_instruction_next,
+            _memory_pointer_next,
+            memory_value_next,
+            _is_zero_next,
+            // row n+1
+            instruction_permutation_next,
+            memory_permutation_next,
+            input_evaluation_next,
+            output_evaluation_next] = x_field_variables;
 
         let mut polynomials: Vec<MPolynomial<XFieldElement>> = b_field_polynomials
             .iter()

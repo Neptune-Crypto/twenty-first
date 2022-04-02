@@ -16,12 +16,11 @@ use crate::shared_math::{
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
     x_field_element::XFieldElement,
 };
-use crate::util_types::blake3_wrapper::Blake3Hash;
-use crate::util_types::merkle_tree::{MerkleTree, SaltedMerkleTree};
+use crate::util_types::merkle_tree::MerkleTree;
 use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, RescuePrimeProduction};
 use rand::thread_rng;
-use std::cell::{RefCell, RefMut};
+use std::cell::RefCell;
 use std::convert::TryInto;
 use std::error::Error;
 use std::rc::Rc;
@@ -259,7 +258,7 @@ impl Stark {
             .get_and_set_all_base_codewords(&self.fri.domain);
         let all_base_codewords = vec![base_codewords, randomizer_codewords.into()].concat();
 
-        let base_degree_bounds = self.base_tables.borrow().get_all_base_degree_bounds();
+        let _base_degree_bounds = self.base_tables.borrow().get_all_base_degree_bounds();
 
         // TODO: How do I make a single Merkle tree from many codewords?
         // If the Merkle trees are always opened for all base codewords for a single index, then
@@ -325,14 +324,8 @@ impl Stark {
 #[cfg(test)]
 mod brainfuck_stark_tests {
     use super::*;
-    use crate::shared_math::{
-        b_field_element::BFieldElement,
-        stark::brainfuck::{
-            self,
-            vm::{BaseMatrices, Register},
-        },
-        traits::{GetPrimitiveRootOfUnity, IdentityValues},
-    };
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::stark::brainfuck::{self, vm::BaseMatrices};
 
     #[test]
     fn prove_verify_test() {
@@ -343,7 +336,7 @@ mod brainfuck_stark_tests {
         let base_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
         let mut stark = Stark::new(trace_length, program, input_symbols, output_symbols);
-        let proof_stream = stark
+        let _proof_stream = stark
             .prove(
                 base_matrices.processor_matrix,
                 base_matrices.instruction_matrix,
