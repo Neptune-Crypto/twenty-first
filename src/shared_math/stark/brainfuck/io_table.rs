@@ -213,14 +213,29 @@ impl TableTrait for IOTable {
         // return polynomials
         vec![evaluation * iota + input_next - evaluation_next]
     }
+
+    fn boundary_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<MPolynomial<BFieldElement>> {
+        todo!()
+    }
+
+    fn terminal_constraints_ext(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
+    ) -> Vec<MPolynomial<XFieldElement>> {
+        todo!()
+    }
 }
 
 #[cfg(test)]
 mod io_table_tests {
     use super::*;
     use crate::shared_math::stark::brainfuck;
-    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
+    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use rand::thread_rng;
