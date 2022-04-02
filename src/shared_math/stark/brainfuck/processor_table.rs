@@ -611,22 +611,13 @@ mod processor_table_tests {
         stark::brainfuck::{self, vm::BaseMatrices},
         traits::{GetPrimitiveRootOfUnity, GetRandomElements, IdentityValues},
     };
-
-    static VERY_SIMPLE_PROGRAM: &str = "++++";
-    static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
-    static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
-    static ROT13: &str = ",+++++++++++++.,+++++++++++++.,+++++++++++++.";
+    use crate::shared_math::stark::brainfuck::vm::sample_programs;
 
     #[test]
     fn processor_table_constraints_evaluate_to_zero_test() {
         let mut rng = thread_rng();
 
-        for source_code in [
-            VERY_SIMPLE_PROGRAM,
-            TWO_BY_TWO_THEN_OUTPUT,
-            HELLO_WORLD,
-            ROT13,
-        ] {
+        for source_code in sample_programs::get_all_sample_programs().iter() {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
             let input_data = vec![
                 BFieldElement::new(97),

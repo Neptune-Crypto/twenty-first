@@ -123,10 +123,8 @@ mod brainfuck_table_collection_tests {
         },
         traits::{GetPrimitiveRootOfUnity, IdentityValues},
     };
+    use crate::shared_math::stark::brainfuck::vm::sample_programs;
 
-    static PRINT_EXCLAMATION_MARKS: &str = ">++++++++++[>+++><<-]>+++><<>.................";
-    static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
-    static PRINT_17_CHARS: &str = ",.................";
     // EXPECTED:
     // max_degree = 1153
     // max_degree = 2047
@@ -134,7 +132,7 @@ mod brainfuck_table_collection_tests {
 
     #[test]
     fn max_degree_test() {
-        let actual_program = brainfuck::vm::compile(PRINT_EXCLAMATION_MARKS).unwrap();
+        let actual_program = brainfuck::vm::compile(sample_programs::PRINT_EXCLAMATION_MARKS).unwrap();
         let input_data = vec![];
         let table_collection = create_table_collection(&actual_program, &input_data);
 
@@ -144,7 +142,7 @@ mod brainfuck_table_collection_tests {
 
     #[test]
     fn base_degree_bounds_test() {
-        let program_small = brainfuck::vm::compile("++++").unwrap();
+        let program_small = brainfuck::vm::compile(sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
         let table_collection_small = create_table_collection(&program_small, &[]);
         // observed from Python BF STARK engine with program `++++`:
         // [8, 8, 8, 8, 8, 8, 8, 16, 16, 16, 8, 8, 8, -1, -1]
@@ -155,7 +153,7 @@ mod brainfuck_table_collection_tests {
 
         // observed from Python BF STARK engine with program `,.................`:
         // [32, 32, 32, 32, 32, 32, 32, 64, 64, 64, 32, 32, 32, 0, 31]
-        let program_bigger = brainfuck::vm::compile(PRINT_17_CHARS).unwrap();
+        let program_bigger = brainfuck::vm::compile(sample_programs::PRINT_17_CHARS).unwrap();
         let table_collection_bigger =
             create_table_collection(&program_bigger, &[BFieldElement::new(33)]);
         assert_eq!(
@@ -166,13 +164,13 @@ mod brainfuck_table_collection_tests {
         // observed from Python BF STARK engine with program
         // `++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.`:
         // [1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, -1, 15]
-        let program_hello_world = brainfuck::vm::compile(HELLO_WORLD).unwrap();
+        let program_hello_world = brainfuck::vm::compile(sample_programs::HELLO_WORLD).unwrap();
         let table_collection_bigger =
             create_table_collection(&program_hello_world, &[BFieldElement::new(33)]);
         assert_eq!(
             vec![
                 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, -1,
-                15
+                15,
             ],
             table_collection_bigger.get_all_base_degree_bounds()
         );
@@ -180,7 +178,7 @@ mod brainfuck_table_collection_tests {
 
     #[test]
     fn get_and_set_all_base_codewords_test() {
-        let program_small = brainfuck::vm::compile("++++").unwrap();
+        let program_small = brainfuck::vm::compile(sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
         let matrices: BaseMatrices = brainfuck::vm::simulate(&program_small, &[]).unwrap();
         let table_collection: TableCollection = create_table_collection(&program_small, &[]);
         let tc_ref = Rc::new(RefCell::new(table_collection));

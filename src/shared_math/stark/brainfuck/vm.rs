@@ -341,16 +341,31 @@ pub fn simulate(
     Some(base_matrices)
 }
 
+pub mod sample_programs {
+    pub static VERY_SIMPLE_PROGRAM: &str = "++++";
+    pub static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
+    pub static PRINT_EXCLAMATION_MARKS: &str = ">++++++++++[>+++><<-]>+++><<>.................";
+    pub static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+    pub static PRINT_17_CHARS: &str = ",.................";
+    pub static ROT13: &str = ",+++++++++++++.,+++++++++++++.,+++++++++++++.";
+
+    pub fn get_all_sample_programs() -> Vec<&'static str> {
+        vec![VERY_SIMPLE_PROGRAM,
+             TWO_BY_TWO_THEN_OUTPUT,
+             PRINT_EXCLAMATION_MARKS,
+             HELLO_WORLD,
+             PRINT_17_CHARS,
+             ROT13]
+    }
+}
+
 #[cfg(test)]
 mod stark_bf_tests {
     use super::*;
 
-    static VERY_SIMPLE_PROGRAM: &str = "++++";
-    static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
-
     #[test]
     fn runtime_test_simple() {
-        let actual = compile(VERY_SIMPLE_PROGRAM);
+        let actual = compile(sample_programs::VERY_SIMPLE_PROGRAM);
         let (trace_length, inputs, outputs) = run(&actual.unwrap(), vec![]).unwrap();
         assert!(inputs.is_empty());
         assert!(outputs.is_empty());
@@ -359,17 +374,17 @@ mod stark_bf_tests {
 
     #[test]
     fn compile_two_by_two_test() {
-        let actual_program = compile(TWO_BY_TWO_THEN_OUTPUT);
+        let actual_program = compile(sample_programs::TWO_BY_TWO_THEN_OUTPUT);
         assert!(actual_program.is_some());
         assert_eq!(
-            TWO_BY_TWO_THEN_OUTPUT.len() + 4,
+            sample_programs::TWO_BY_TWO_THEN_OUTPUT.len() + 4,
             actual_program.unwrap().len()
         );
     }
 
     #[test]
     fn run_two_by_two_test() {
-        let actual_program = compile(TWO_BY_TWO_THEN_OUTPUT);
+        let actual_program = compile(sample_programs::TWO_BY_TWO_THEN_OUTPUT);
         let (_trace_length, inputs, outputs) =
             run(&actual_program.unwrap(), vec![BFieldElement::new(97)]).unwrap();
         assert_eq!(
@@ -377,16 +392,16 @@ mod stark_bf_tests {
                 BFieldElement::new(97),
                 BFieldElement::new(97),
                 BFieldElement::new(97),
-                BFieldElement::new(97)
+                BFieldElement::new(97),
             ],
             outputs
         );
-        assert_eq!(vec![BFieldElement::new(97),], inputs);
+        assert_eq!(vec![BFieldElement::new(97)], inputs);
     }
 
     #[test]
     fn simulate_two_by_two_test() {
-        let actual_program = compile(TWO_BY_TWO_THEN_OUTPUT).unwrap();
+        let actual_program = compile(sample_programs::TWO_BY_TWO_THEN_OUTPUT).unwrap();
         let input_data = vec![BFieldElement::new(97)];
         let base_matrices: BaseMatrices = simulate(&actual_program, &input_data).unwrap();
         let (trace_length, input_data, output_data) =

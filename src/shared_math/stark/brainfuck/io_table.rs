@@ -220,19 +220,12 @@ mod io_table_tests {
     use super::*;
     use crate::shared_math::stark::brainfuck;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
+    use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use rand::thread_rng;
     use std::cmp::max;
     use std::convert::TryInto;
-
-    static VERY_SIMPLE_PROGRAM: &str = "++++";
-    static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
-    static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
-
-    // This test is added to ensure that padding is not the identity operator on *all* tests,
-    // that at least *one* call to `pad` mutates both the input and the output table.
-    static ODD_INPUT_OUTPUT_SIZES: &str = ",.,.,.";
 
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on
@@ -241,12 +234,7 @@ mod io_table_tests {
     fn io_table_constraints_evaluate_to_zero_on_test() {
         let mut rng = thread_rng();
 
-        for source_code in [
-            VERY_SIMPLE_PROGRAM,
-            TWO_BY_TWO_THEN_OUTPUT,
-            HELLO_WORLD,
-            ODD_INPUT_OUTPUT_SIZES,
-        ] {
+        for source_code in sample_programs::get_all_sample_programs().iter() {
             // Run program
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
             let input_data = vec![
