@@ -352,6 +352,40 @@ pub trait TableTrait {
             .collect::<Vec<Degree>>()
     }
 
+    fn all_quotients(
+        &self,
+        fri_domain: &FriDomain<BFieldElement>,
+        codewords: &[Vec<XFieldElement>],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; TERMINAL_COUNT],
+    ) -> Vec<Vec<XFieldElement>> {
+        let boundary_quotients = self.boundary_quotients(fri_domain, codewords, challenges);
+        let transition_quotients = self.transition_quotients(fri_domain, codewords, challenges);
+        let terminal_quotients =
+            self.terminal_quotients(fri_domain, codewords, challenges, terminals);
+
+        vec![boundary_quotients, transition_quotients, terminal_quotients].concat()
+    }
+
+    fn transition_quotients(
+        &self,
+        fri_domain: &FriDomain<BFieldElement>,
+        codewords: &[Vec<XFieldElement>],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<Vec<XFieldElement>> {
+        todo!()
+    }
+
+    fn terminal_quotients(
+        &self,
+        fri_domain: &FriDomain<BFieldElement>,
+        codewords: &[Vec<XFieldElement>],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; TERMINAL_COUNT],
+    ) -> Vec<Vec<XFieldElement>> {
+        todo!()
+    }
+
     fn boundary_quotients(
         &self,
         fri_domain: &FriDomain<BFieldElement>,
