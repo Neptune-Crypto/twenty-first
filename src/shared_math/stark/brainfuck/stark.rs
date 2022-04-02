@@ -1,4 +1,5 @@
 use super::vm::{InstructionMatrixBaseRow, Register};
+use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::stark::brainfuck::evaluation_argument::{

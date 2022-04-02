@@ -61,6 +61,32 @@ impl TableCollection {
         .concat()
     }
 
+    pub fn get_all_extension_degree_bounds(&self) -> Vec<Degree> {
+        [
+            vec![
+                self.processor_table.interpolant_degree();
+                self.processor_table.full_width() - self.processor_table.base_width()
+            ],
+            vec![
+                self.instruction_table.interpolant_degree();
+                self.instruction_table.full_width() - self.instruction_table.base_width()
+            ],
+            vec![
+                self.memory_table.interpolant_degree();
+                self.memory_table.full_width() - self.memory_table.base_width()
+            ],
+            vec![
+                self.input_table.interpolant_degree();
+                self.input_table.full_width() - self.input_table.base_width()
+            ],
+            vec![
+                self.output_table.interpolant_degree();
+                self.output_table.full_width() - self.output_table.base_width()
+            ],
+        ]
+        .concat()
+    }
+
     pub fn set_matrices(
         &mut self,
         processor_matrix: Vec<Register>,
@@ -167,7 +193,7 @@ mod brainfuck_table_collection_tests {
     }
 
     #[test]
-    fn base_degree_bounds_test() {
+    fn degree_bounds_test() {
         let program_small = brainfuck::vm::compile(sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
         let table_collection_small = create_table_collection(&program_small, &[]);
         // observed from Python BF STARK engine with program `++++`:
@@ -176,29 +202,61 @@ mod brainfuck_table_collection_tests {
             vec![8, 8, 8, 8, 8, 8, 8, 16, 16, 16, 8, 8, 8, -1, -1],
             table_collection_small.get_all_base_degree_bounds()
         );
+        assert_eq!(
+            vec![8, 8, 8, 8, 16, 16, 8, -1, -1],
+            table_collection_small.get_all_extension_degree_bounds()
+        );
 
         // observed from Python BF STARK engine with program `,.................`:
         // [32, 32, 32, 32, 32, 32, 32, 64, 64, 64, 32, 32, 32, 0, 31]
         let program_bigger = brainfuck::vm::compile(sample_programs::PRINT_17_CHARS).unwrap();
-        let table_collection_bigger =
+        let mut table_collection =
             create_table_collection(&program_bigger, &[BFieldElement::new(33)]);
         assert_eq!(
             vec![32, 32, 32, 32, 32, 32, 32, 64, 64, 64, 32, 32, 32, 0, 31],
-            table_collection_bigger.get_all_base_degree_bounds()
+            table_collection.get_all_base_degree_bounds()
+        );
+        assert_eq!(
+            vec![32, 32, 32, 32, 64, 64, 32, 0, 31],
+            table_collection.get_all_extension_degree_bounds()
         );
 
         // observed from Python BF STARK engine with program
         // `++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.`:
         // [1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, -1, 15]
         let program_hello_world = brainfuck::vm::compile(sample_programs::HELLO_WORLD).unwrap();
-        let table_collection_bigger =
-            create_table_collection(&program_hello_world, &[BFieldElement::new(33)]);
+        table_collection = create_table_collection(&program_hello_world, &[]);
         assert_eq!(
             vec![
                 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, -1,
                 15,
             ],
-            table_collection_bigger.get_all_base_degree_bounds()
+            table_collection.get_all_base_degree_bounds()
+        );
+        assert_eq!(
+            vec![1024, 1024, 1024, 1024, 1024, 1024, 1024, -1, 15],
+            table_collection.get_all_extension_degree_bounds()
+        );
+
+        // observed from Python BF STARK engine with program
+        // `,+++++++++++++.,+++++++++++++.,+++++++++++++.`:
+        // [64, 64, 64, 64, 64, 64, 64, 128, 128, 128, 64, 64, 64, 3, 3]
+        let program_hello_world = brainfuck::vm::compile(sample_programs::ROT13).unwrap();
+        table_collection = create_table_collection(
+            &program_hello_world,
+            &[
+                BFieldElement::new(33),
+                BFieldElement::new(34),
+                BFieldElement::new(35),
+            ],
+        );
+        assert_eq!(
+            vec![64, 64, 64, 64, 64, 64, 64, 128, 128, 128, 64, 64, 64, 3, 3],
+            table_collection.get_all_base_degree_bounds()
+        );
+        assert_eq!(
+            vec![64, 64, 64, 64, 128, 128, 64, 3, 3],
+            table_collection.get_all_extension_degree_bounds()
         );
     }
 
