@@ -379,8 +379,16 @@ pub trait TableTrait {
             quotient_codewords.push(quotient_codeword);
         }
 
-        // TODO: Consider adding Alan's debugging code here,
-        // to run if the `DEBUG` environment variable is set
+        // If the `DEBUG` environment variable is set, run this extra validity check
+        if std::env::var("DEBUG").is_ok() {
+            for qc in quotient_codewords.iter() {
+                let interpolated = fri_domain.xinterpolate(qc);
+                assert!(
+                    interpolated.degree() < fri_domain.length as isize - 1,
+                    "The degree of boundary quotient must not be maximal"
+                );
+            }
+        }
 
         quotient_codewords
     }
