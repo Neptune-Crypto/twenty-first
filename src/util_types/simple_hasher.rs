@@ -175,7 +175,7 @@ impl Hasher for RescuePrimeProduction {
 
     // TODO: Rewrite this when exposing RescuePrime's sponge
     fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest {
-        let mut acc = inputs[0].clone();
+        let mut acc = self.hash(&inputs[0]);
         for input in &inputs[1..] {
             acc = self.hash_pair(&acc, input);
         }
@@ -269,26 +269,17 @@ pub mod test_simple_hasher {
             "Hashing two 5-element inputs produces a concrete 5-element output"
         );
 
-        let inputs_2: Vec<Vec<BFieldElement>> = vec![
-            vec![
-                BFieldElement::new(3),
-                BFieldElement::new(1),
-                BFieldElement::new(4),
-                BFieldElement::new(1),
-                BFieldElement::new(5),
-            ],
-            vec![
-                BFieldElement::new(9),
-                BFieldElement::new(2),
-                BFieldElement::new(6),
-                BFieldElement::new(5),
-                BFieldElement::new(3),
-            ],
-        ];
-        assert_eq!(
-            expected_output2,
+        let inputs_2: Vec<Vec<BFieldElement>> = vec![vec![
+            BFieldElement::new(3),
+            BFieldElement::new(1),
+            BFieldElement::new(4),
+            BFieldElement::new(1),
+            BFieldElement::new(5),
+        ]];
+        assert_ne!(
+            inputs_2[0],
             rpp.hash_many(&inputs_2),
-            "Hashing many (two) 5-element inputs corresponds to iteratively hashing two elements"
+            "Hashing many a single digest with hash_many must not return the input"
         );
     }
 }
