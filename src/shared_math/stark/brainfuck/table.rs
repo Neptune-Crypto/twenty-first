@@ -7,6 +7,7 @@ use crate::shared_math::other;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetPrimitiveRootOfUnity;
 use crate::shared_math::traits::ModPowU32;
+use crate::shared_math::traits::PrimeField;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues};
 use crate::shared_math::x_field_element::XFieldElement;
 use rand::thread_rng;
@@ -349,6 +350,39 @@ pub trait TableTrait {
             .iter()
             .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - 1)
             .collect::<Vec<Degree>>()
+    }
+
+    fn boundary_quotients(
+        &self,
+        fri_domain: &FriDomain<BFieldElement>,
+        codewords: &[Vec<XFieldElement>],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+    ) -> Vec<Vec<XFieldElement>> {
+        assert!(!codewords.is_empty(), "Codewords must be non-empty");
+        let mut quotient_codewords: Vec<Vec<XFieldElement>> = vec![];
+        let boundary_constraints: Vec<MPolynomial<XFieldElement>> =
+            self.boundary_constraints_ext(challenges);
+        let one = fri_domain.omega.ring_one();
+        let zerofier: Vec<BFieldElement> = (0..fri_domain.length)
+            .map(|i| fri_domain.x_value(i as u32) - one)
+            .collect();
+        let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
+        for bc in boundary_constraints {
+            let quotient_codeword: Vec<XFieldElement> = (0..fri_domain.length)
+                .map(|i| {
+                    let point: Vec<XFieldElement> = (0..self.full_width())
+                        .map(|j| codewords[j][i] * zerofier_inverse[i].lift())
+                        .collect();
+                    bc.evaluate(&point)
+                })
+                .collect();
+            quotient_codewords.push(quotient_codeword);
+        }
+
+        // TODO: Consider adding Alan's debugging code here,
+        // to run if the `DEBUG` environment variable is set
+
+        quotient_codewords
     }
 
     // IMPLEMENT THESE!

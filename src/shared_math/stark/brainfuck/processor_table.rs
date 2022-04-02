@@ -668,19 +668,20 @@ impl TableTrait for ProcessorTable {
         let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
         let one = MPolynomial::<XFieldElement>::from_constant(XFieldElement::ring_one(), Self::FULL_WIDTH);
 
-        vec![
-            x[ProcessorTable::CYCLE] - zero,
-            x[ProcessorTable::INSTRUCTION_POINTER] - zero,
-            // x[Self::CURRENT_INSTRUCTION] - ??),
-            // x[Self::NEXT_INSTRUCTION] - ??),
-            x[Self::MEMORY_POINTER] - zero,
-            x[Self::MEMORY_VALUE] - zero,
-            x[Self::IS_ZERO] - one,
-            // x[Self::INSTRUCTION_PERMUTATION] - one,
-            // x[Self::MEMORY_PERMUTATION] - one,
-            x[Self::INPUT_EVALUATION] - zero,
-            x[Self::OUTPUT_EVALUATION] - zero,
-        ]
+        todo!()
+        // vec![
+        //     x[ProcessorTable::CYCLE] - zero,
+        //     x[ProcessorTable::INSTRUCTION_POINTER] - zero,
+        //     // x[Self::CURRENT_INSTRUCTION] - ??),
+        //     // x[Self::NEXT_INSTRUCTION] - ??),
+        //     x[Self::MEMORY_POINTER] - zero,
+        //     x[Self::MEMORY_VALUE] - zero,
+        //     x[Self::IS_ZERO] - one,
+        //     // x[Self::INSTRUCTION_PERMUTATION] - one,
+        //     // x[Self::MEMORY_PERMUTATION] - one,
+        //     x[Self::INPUT_EVALUATION] - zero,
+        //     x[Self::OUTPUT_EVALUATION] - zero,
+        // ]
     }
 
     fn terminal_constraints_ext(
