@@ -6,6 +6,7 @@ use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetPrimitiveRootOfUnity;
+use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues};
 use crate::shared_math::x_field_element::XFieldElement;
 use rand::thread_rng;
@@ -70,6 +71,15 @@ impl<T: TableMoreTrait> Table<T> {
         }
     }
 
+    /// Returns the relation between the FRI domain and the omicron domain
+    pub fn unit_distance(&self, omega_order: usize) -> usize {
+        if self.height == 0 {
+            0
+        } else {
+            omega_order / self.height
+        }
+    }
+
     /// derive a generator with degree og height
     fn derive_omicron(height: usize) -> BFieldElement {
         if height == 0 {
@@ -85,7 +95,7 @@ impl<T: TableMoreTrait> Table<T> {
     /// Return the interpolation of columns. The `column_indices` variable
     /// must be called with *all* the column indices for this particular table,
     /// if it is called with a subset, it *will* fail.
-    pub fn interpolate_columns(
+    pub fn b_interpolate_columns(
         &self,
         omega: BFieldElement,
         omega_order: usize,
@@ -146,10 +156,72 @@ impl<T: TableMoreTrait> Table<T> {
         polynomials
     }
 
+    // TODO: Consider merging this with B-field interpolation method
+    pub fn x_interpolate_columns(
+        &self,
+        omega: XFieldElement,
+        omega_order: usize,
+        column_indices: Vec<usize>,
+    ) -> Vec<Polynomial<XFieldElement>> {
+        // Ensure that `matrix` is set and padded before running this function
+        assert_eq!(
+            self.height,
+            self.extended_matrix.len(),
+            "Table matrix must be set and padded before interpolation"
+        );
+
+        assert!(
+            omega.mod_pow_u32(omega_order as u32).is_one(),
+            "omega must have indicated order"
+        );
+        assert!(
+            !omega.mod_pow_u32(omega_order as u32 / 2).is_one(),
+            "omega must be a primitive root of indicated order"
+        );
+
+        if self.height == 0 {
+            return vec![Polynomial::ring_zero(); column_indices.len()];
+        }
+
+        assert!(
+            self.height >= self.num_randomizers,
+            "Temporary restriction that number of randomizers must not exceed table height"
+        );
+
+        let mut polynomials: Vec<Polynomial<XFieldElement>> = vec![];
+        let omicron_domain: Vec<XFieldElement> = (0..self.height)
+            .map(|i| self.omicron.lift().mod_pow_u32(i as u32))
+            .collect();
+        let randomizer_domain: Vec<XFieldElement> = (0..self.num_randomizers)
+            .map(|i| omega * omicron_domain[i])
+            .collect();
+        let domain = vec![omicron_domain, randomizer_domain].concat();
+        let mut rng = thread_rng();
+        for c in column_indices {
+            let trace: Vec<XFieldElement> = self.extended_matrix.iter().map(|row| row[c]).collect();
+            let randomizers: Vec<XFieldElement> =
+                XFieldElement::random_elements(self.num_randomizers, &mut rng);
+            let values = vec![trace, randomizers].concat();
+            assert_eq!(
+                values.len(),
+                domain.len(),
+                "Length of x values and y values must match"
+            );
+            polynomials.push(Polynomial::fast_interpolate(
+                &domain,
+                &values,
+                &omega,
+                omega_order,
+            ));
+        }
+
+        polynomials
+    }
+
     /// Evaluate the base table
     pub fn lde(&mut self, domain: &FriDomain<BFieldElement>) -> Vec<Vec<BFieldElement>> {
-        let polynomials =
-            self.interpolate_columns(domain.omega, domain.length, (0..self.base_width).collect());
+        let polynomials: Vec<Polynomial<BFieldElement>> =
+            self.b_interpolate_columns(domain.omega, domain.length, (0..self.base_width).collect());
         self.codewords = polynomials
             .iter()
             .map(|p| domain.evaluate(p, BFieldElement::ring_zero()))
@@ -157,9 +229,14 @@ impl<T: TableMoreTrait> Table<T> {
         self.codewords.clone()
     }
 
-    pub fn ldex(&self, _domain: FriDomain<BFieldElement>) -> Vec<Vec<XFieldElement>> {
-        // TODO: See `lde` and pattern match from that
-        todo!()
+    pub fn ldex(&mut self, domain: &FriDomain<BFieldElement>) -> Vec<Vec<XFieldElement>> {
+        let polynomials = self.x_interpolate_columns(
+            domain.omega.lift(),
+            domain.length,
+            (self.base_width..self.full_width).collect(),
+        );
+        self.extended_codewords = polynomials.iter().map(|p| domain.xevaluate(p)).collect();
+        self.extended_codewords.clone()
     }
 }
 
@@ -268,10 +345,9 @@ mod table_tests {
                 BFieldElement::new(0),
             ],
         ];
-        let interpolants: Vec<Polynomial<BFieldElement>> =
-            instruction_table
-                .0
-                .interpolate_columns(omega, 16, vec![0, 1, 2]);
+        let interpolants: Vec<Polynomial<BFieldElement>> = instruction_table
+            .0
+            .b_interpolate_columns(omega, 16, vec![0, 1, 2]);
 
         // Verify that when we evaluate the interpolants in the omicron domain, we get the
         // values that we defined for the matrix values

@@ -97,6 +97,20 @@ impl TableCollection {
         .concat()
     }
 
+    pub fn get_and_set_all_extension_codewords(
+        &mut self,
+        fri_domain: &FriDomain<BFieldElement>,
+    ) -> Vec<Vec<XFieldElement>> {
+        [
+            self.processor_table.0.ldex(fri_domain),
+            self.instruction_table.0.ldex(fri_domain),
+            self.memory_table.0.ldex(fri_domain),
+            self.input_table.0.ldex(fri_domain),
+            self.output_table.0.ldex(fri_domain),
+        ]
+        .concat()
+    }
+
     pub fn extend(
         &mut self,
         all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
@@ -104,21 +118,36 @@ impl TableCollection {
     ) {
         self.processor_table.extend(all_challenges, all_initials);
         self.instruction_table.extend(all_challenges, all_initials);
-        // self.memory_table.extend(all_challenges, all_initials);
+        self.memory_table.extend(all_challenges, all_initials);
         self.input_table.extend(all_challenges, all_initials);
         self.output_table.extend(all_challenges, all_initials);
+    }
+
+    pub fn get_terminals(&self) -> Vec<XFieldElement> {
+        vec![
+            self.processor_table.0.more.instruction_permutation_terminal,
+            self.processor_table.0.more.memory_permutation_terminal,
+            self.processor_table.0.more.input_evaluation_terminal,
+            self.processor_table.0.more.output_evaluation_terminal,
+            self.instruction_table.0.more.evaluation_terminal,
+        ]
     }
 }
 
 #[cfg(test)]
 mod brainfuck_table_collection_tests {
+    use rand::thread_rng;
+
     use super::*;
-    use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::polynomial::Polynomial;
     use crate::shared_math::stark::brainfuck;
+    use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::traits::GetPrimitiveRootOfUnity;
+    use crate::shared_math::traits::GetRandomElements;
     use std::cell::RefCell;
+    use std::convert::TryInto;
     use std::rc::Rc;
 
     // EXPECTED:
@@ -128,7 +157,8 @@ mod brainfuck_table_collection_tests {
 
     #[test]
     fn max_degree_test() {
-        let actual_program = brainfuck::vm::compile(sample_programs::PRINT_EXCLAMATION_MARKS).unwrap();
+        let actual_program =
+            brainfuck::vm::compile(sample_programs::PRINT_EXCLAMATION_MARKS).unwrap();
         let input_data = vec![];
         let table_collection = create_table_collection(&actual_program, &input_data);
 
@@ -173,16 +203,16 @@ mod brainfuck_table_collection_tests {
     }
 
     #[test]
-    fn get_and_set_all_base_codewords_test() {
+    fn get_and_set_all_codewords_test() {
         let program_small = brainfuck::vm::compile(sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
         let matrices: BaseMatrices = brainfuck::vm::simulate(&program_small, &[]).unwrap();
         let table_collection: TableCollection = create_table_collection(&program_small, &[]);
         let tc_ref = Rc::new(RefCell::new(table_collection));
         tc_ref.borrow_mut().set_matrices(
-            matrices.processor_matrix,
-            matrices.instruction_matrix,
-            matrices.input_matrix,
-            matrices.output_matrix,
+            matrices.processor_matrix.clone(),
+            matrices.instruction_matrix.clone(),
+            matrices.input_matrix.clone(),
+            matrices.output_matrix.clone(),
         );
         tc_ref.borrow_mut().pad();
 
@@ -201,13 +231,104 @@ mod brainfuck_table_collection_tests {
                 .unwrap(),
         };
 
+        let base_codewords = tc_ref
+            .borrow_mut()
+            .get_and_set_all_base_codewords(&fri_domain);
         assert_eq!(
             15,
-            tc_ref
-                .borrow_mut()
-                .get_and_set_all_base_codewords(&fri_domain)
-                .len(),
+            base_codewords.len(),
             "Number of base tables must match that from Python tutorial"
+        );
+        let interpolants: Vec<Polynomial<BFieldElement>> = base_codewords
+            .iter()
+            .map(|bc| fri_domain.interpolate(bc))
+            .collect();
+
+        // Verify that the FRI-domain evaluations derived from the matrix values correspond with
+        // the matrix values
+        let mut i = 0;
+        for column_index in 0..tc_ref.borrow().processor_table.0.base_width {
+            for (j, registers) in matrices.processor_matrix.clone().into_iter().enumerate() {
+                let register_values: Vec<BFieldElement> = registers.into();
+                assert_eq!(
+                    register_values[column_index],
+                    interpolants[i]
+                        .evaluate(&tc_ref.borrow().processor_table.omicron().mod_pow(j as u64)),
+                    "The interpolation of the FRI-domain evaluations must agree with the execution trace from processor table"
+                )
+            }
+            i += 1;
+        }
+        for column_index in 0..tc_ref.borrow().instruction_table.0.base_width {
+            for (j, row) in matrices.instruction_matrix.clone().into_iter().enumerate() {
+                let row_values: Vec<BFieldElement> = row.into();
+                assert_eq!(
+                    row_values[column_index],
+                    interpolants[i]
+                        .evaluate(&tc_ref.borrow().instruction_table.omicron().mod_pow(j as u64)),
+                    "The interpolation of the FRI-domain evaluations must agree with the execution trace from instruction table"
+                )
+            }
+            i += 1;
+        }
+        for column_index in 0..tc_ref.borrow().input_table.0.base_width {
+            for (j, element) in matrices.input_matrix.clone().into_iter().enumerate() {
+                let row = vec![element];
+                assert_eq!(
+                    row[column_index],
+                    interpolants[i]
+                        .evaluate(&tc_ref.borrow().input_table.omicron().mod_pow(j as u64)),
+                    "The interpolation of the FRI-domain evaluations must agree with the execution trace from input table"
+                )
+            }
+            i += 1;
+        }
+        for column_index in 0..tc_ref.borrow().output_table.0.base_width {
+            for (j, element) in matrices.output_matrix.clone().into_iter().enumerate() {
+                let row = vec![element];
+                assert_eq!(
+                    row[column_index],
+                    interpolants[i]
+                        .evaluate(&tc_ref.borrow().output_table.omicron().mod_pow(j as u64)),
+                    "The interpolation of the FRI-domain evaluations must agree with the execution trace from output table"
+                )
+            }
+            i += 1;
+        }
+
+        assert!(
+            base_codewords
+                .iter()
+                .all(|ec| ec.len() == fri_domain.length),
+            "All base codewords must be evaluated over the Ω domain",
+        );
+
+        // Extend and verify that extension codewords are also calculated correctly
+        let mut rng = thread_rng();
+        let all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
+            XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+                .try_into()
+                .unwrap();
+        let all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT as usize] =
+            XFieldElement::random_elements(PERMUTATION_ARGUMENTS_COUNT as usize, &mut rng)
+                .try_into()
+                .unwrap();
+
+        tc_ref.borrow_mut().extend(all_challenges, all_initials);
+        let extended_codewords: Vec<Vec<XFieldElement>> = tc_ref
+            .borrow_mut()
+            .get_and_set_all_extension_codewords(&fri_domain);
+        assert_eq!(
+            9,
+            extended_codewords.len(),
+            "Number of extension tables must match that from Python tutorial"
+        );
+
+        assert!(
+            extended_codewords
+                .iter()
+                .all(|ec| ec.len() == fri_domain.length),
+            "All extension codewords must be evaluated over the Ω domain",
         );
     }
 

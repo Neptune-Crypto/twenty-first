@@ -16,8 +16,8 @@ pub struct InstructionTable(pub Table<InstructionTableMore>);
 
 #[derive(Debug, Clone)]
 pub struct InstructionTableMore {
-    permutation_terminal: XFieldElement,
-    evaluation_terminal: XFieldElement,
+    pub permutation_terminal: XFieldElement,
+    pub evaluation_terminal: XFieldElement,
 }
 
 impl TableMoreTrait for InstructionTableMore {
@@ -401,11 +401,11 @@ impl TableTrait for InstructionTable {
 #[cfg(test)]
 mod instruction_table_tests {
     use super::*;
+    use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::stark::brainfuck::vm::InstructionMatrixBaseRow;
     use crate::shared_math::stark::brainfuck::{self};
     use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use rand::thread_rng;
 
@@ -415,7 +415,7 @@ mod instruction_table_tests {
     #[test]
     fn instruction_table_constraints_evaluate_to_zero_test() {
         let mut rng = thread_rng();
-        
+
         for source_code in sample_programs::get_all_sample_programs().iter() {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
             let input_data = vec![

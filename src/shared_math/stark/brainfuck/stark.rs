@@ -317,6 +317,12 @@ impl Stark {
 
         self.base_tables.borrow_mut().extend(challenges, initials);
 
+        let terminals: Vec<XFieldElement> = self.base_tables.borrow().get_terminals();
+        let extension_codewords = self
+            .base_tables
+            .borrow_mut()
+            .get_and_set_all_extension_codewords(&self.fri.domain);
+
         Ok(proof_stream)
     }
 }

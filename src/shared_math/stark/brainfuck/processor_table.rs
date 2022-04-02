@@ -21,10 +21,10 @@ impl TableMoreTrait for ProcessorTableMore {
 
 #[derive(Debug, Clone)]
 pub struct ProcessorTableMore {
-    instruction_permutation_terminal: XFieldElement,
-    memory_permutation_terminal: XFieldElement,
-    input_evaluation_terminal: XFieldElement,
-    output_evaluation_terminal: XFieldElement,
+    pub instruction_permutation_terminal: XFieldElement,
+    pub memory_permutation_terminal: XFieldElement,
+    pub input_evaluation_terminal: XFieldElement,
+    pub output_evaluation_terminal: XFieldElement,
 }
 
 impl ProcessorTableMore {}
