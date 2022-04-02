@@ -189,24 +189,20 @@ impl TableTrait for MemoryTable {
         all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
-        let a = all_challenges[0];
-        let b = all_challenges[1];
-        let c = all_challenges[2];
+        let _a = all_challenges[0];
+        let _b = all_challenges[1];
+        let _c = all_challenges[2];
         let d = all_challenges[3];
         let e = all_challenges[4];
         let f = all_challenges[5];
-        let alpha = all_challenges[6];
+        let _alpha = all_challenges[6];
         let beta = all_challenges[7];
-        let gamma = all_challenges[8];
-        let delta = all_challenges[9];
-        let eta = all_challenges[10];
+        let _gamma = all_challenges[8];
+        let _delta = all_challenges[9];
+        let _eta = all_challenges[10];
 
-        let processor_instruction_permutation_initial = all_initials[0];
+        let _processor_instruction_permutation_initial = all_initials[0];
         let processor_memory_permutation_initial = all_initials[1];
-
-        // algebra stuff
-        let zero = XFieldElement::ring_zero();
-        let one = XFieldElement::ring_one();
 
         // prepare loop
         let mut extended_matrix: Vec<Vec<XFieldElement>> =
@@ -217,10 +213,7 @@ impl TableTrait for MemoryTable {
         for (i, row) in self.0.matrix.iter().enumerate() {
             // first, copy over existing row
             // new_row = [xfield.lift(nr) for nr in row]
-            let mut new_row: Vec<XFieldElement> = row
-                .into_iter()
-                .map(|&bfe| XFieldElement::new_const(bfe))
-                .collect();
+            let mut new_row: Vec<XFieldElement> = row.into_iter().map(|bfe| bfe.lift()).collect();
 
             new_row.push(memory_permutation_running_product);
             memory_permutation_running_product *= beta
@@ -270,16 +263,14 @@ impl TableTrait for MemoryTable {
             b_field_cycle,
             b_field_address,
             b_field_value,
-            // b_field_permutation, why are these not passed?
             b_field_cycle_next,
             b_field_address_next,
             b_field_value_next,
-            // b_field_permutation_next,
         );
 
         let b_field_polylen = b_field_polynomials.len();
         assert_eq!(
-            b_field_polylen, 3,
+            3, b_field_polylen,
             "number of transition constraints from MemoryTable is {}, but expected 3",
             b_field_polylen
         );
