@@ -297,7 +297,26 @@ impl TableTrait for MemoryTable {
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
+        let x =
+            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+
+        // return [x[MemoryTable.cycle] - zero,  # cycle
+        //         x[MemoryTable.memory_pointer] - zero,  # memory pointer
+        //         x[MemoryTable.memory_value] - zero,  # memory value
+        //         # x[MemoryExtension.permutation] - one   # permutation
+        //         ]
+
+        let cycle = x[MemoryTable::CYCLE].clone();
+        let memory_pointer = x[MemoryTable::MEMORY_POINTER].clone();
+        let memory_value = x[MemoryTable::MEMORY_VALUE].clone();
+
+        vec![
+            cycle - zero.clone(),
+            memory_pointer - zero.clone(),
+            memory_value - zero,
+            // x[MemoryExtension::PERMUTATION] - one,
+        ]
     }
 
     fn terminal_constraints_ext(
@@ -305,7 +324,42 @@ impl TableTrait for MemoryTable {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
         terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        // def terminal_constraints_ext(self, challenges, terminals):
+        // field = challenges[0].field
+        // a, b, c, d, e, f, alpha, beta, gamma, delta, eta = [
+        //     MPolynomial.constant(ch) for ch in challenges]
+        let [_a, _b, _c, d, e, f, _alpha, beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
+            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            .iter()
+            .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
+            .collect::<Vec<MPolynomial<XFieldElement>>>()
+            .try_into()
+            .unwrap();
+
+        // FIXME: Name terminals consistently when unpacking
+        // permutation = terminals[1]
+        let permutation =
+            MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
+
+        // x = MPolynomial.variables(self.full_width, field)
+        let x =
+            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+
+        let cycle = x[MemoryTable::CYCLE].clone();
+        let memory_pointer = x[MemoryTable::MEMORY_POINTER].clone();
+        let memory_value = x[MemoryTable::MEMORY_VALUE].clone();
+
+        // # [permutation *
+        // #                 (beta - d * cycle
+        // #                  - e * address
+        // #                  - f * value)
+        // #                 - permutation_next]
+
+        // return [x[MemoryTable.permutation] * (beta - d * x[MemoryTable.cycle]
+        //                                            - e * x[MemoryTable.memory_pointer]
+        //                                            - f * x[MemoryTable.memory_value])
+        //         - MPolynomial.constant(permutation)]
+        vec![permutation * (beta - d * cycle - e * memory_pointer - f * memory_value)]
     }
 }
 

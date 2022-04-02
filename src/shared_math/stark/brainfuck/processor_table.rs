@@ -667,21 +667,27 @@ impl TableTrait for ProcessorTable {
         // zero = MPolynomial.zero()
         let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
         let one = MPolynomial::<XFieldElement>::from_constant(XFieldElement::ring_one(), Self::FULL_WIDTH);
+        let cycle = x[ProcessorTable::CYCLE].clone();
+        let instruction_pointer = x[ProcessorTable::INSTRUCTION_POINTER].clone();
+        let memory_pointer = x[Self::MEMORY_POINTER].clone();
+        let memory_value = x[Self::MEMORY_VALUE].clone();
+        let is_zero = x[Self::IS_ZERO].clone();
+        let input_evaluation = x[Self::INPUT_EVALUATION].clone();
+        let output_evaluation = x[Self::OUTPUT_EVALUATION].clone();
 
-        todo!()
-        // vec![
-        //     x[ProcessorTable::CYCLE] - zero,
-        //     x[ProcessorTable::INSTRUCTION_POINTER] - zero,
-        //     // x[Self::CURRENT_INSTRUCTION] - ??),
-        //     // x[Self::NEXT_INSTRUCTION] - ??),
-        //     x[Self::MEMORY_POINTER] - zero,
-        //     x[Self::MEMORY_VALUE] - zero,
-        //     x[Self::IS_ZERO] - one,
-        //     // x[Self::INSTRUCTION_PERMUTATION] - one,
-        //     // x[Self::MEMORY_PERMUTATION] - one,
-        //     x[Self::INPUT_EVALUATION] - zero,
-        //     x[Self::OUTPUT_EVALUATION] - zero,
-        // ]
+        vec![
+            cycle - zero.clone(),
+            instruction_pointer - zero.clone(),
+            // x[Self::CURRENT_INSTRUCTION] - ??),
+            // x[Self::NEXT_INSTRUCTION] - ??),
+            memory_pointer - zero.clone(),
+            memory_value - zero.clone(),
+            is_zero - one,
+            // x[Self::INSTRUCTION_PERMUTATION] - one,
+            // x[Self::MEMORY_PERMUTATION] - one,
+            input_evaluation - zero.clone(),
+            output_evaluation - zero,
+        ]
     }
 
     fn terminal_constraints_ext(
@@ -689,7 +695,79 @@ impl TableTrait for ProcessorTable {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
         terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        // a, b, c, d, e, f, alpha, beta, gamma, delta, eta = [
+        //     MPolynomial.constant(ch) for ch in challenges]
+        let [_a, _b, _c, d, e, f, _alpha, beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
+            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            .iter()
+            .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
+            .collect::<Vec<MPolynomial<XFieldElement>>>()
+            .try_into()
+            .unwrap();
+
+        // x = MPolynomial.variables(self.full_width, field)
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+
+        // FIXME: These anonymous constant offsets into `terminals` are a bit concerning!
+        let terminals_1 = MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
+        let terminals_2 = MPolynomial::<XFieldElement>::from_constant(terminals[2], Self::FULL_WIDTH);
+        let terminals_3 = MPolynomial::<XFieldElement>::from_constant(terminals[3], Self::FULL_WIDTH);
+
+        let current_instruction = x[ProcessorTable::CURRENT_INSTRUCTION].clone();
+        let memory_permutation = x[ProcessorTable::MEMORY_PERMUTATION].clone();
+        let cycle = x[ProcessorTable::CYCLE].clone();
+        let memory_pointer = x[ProcessorTable::MEMORY_POINTER].clone();
+        let memory_value = x[ProcessorTable::MEMORY_VALUE].clone();
+
+        let input_evaluation = x[ProcessorTable::INPUT_EVALUATION].clone();
+        let output_evaluation = x[ProcessorTable::OUTPUT_EVALUATION].clone();
+
+        // airs = []
+        let mut constraints = vec![];
+
+        // # running product for instruction permutation
+        // # polynomials += [(instruction_permutation *
+        // #                 (self.alpha
+        // #                   - self.a * instruction_pointer
+        // #                   - self.b * current_instruction
+        // #                   - self.c * next_instruction)
+        // #                 - instruction_permutation_next) * current_instruction]
+        // airs += [x[ProcessorTable.current_instruction]]
+        constraints.push(current_instruction);
+
+        // # running product for memory permutation
+        // # polynomials += [memory_permutation *
+        // #                 (self.beta - self.d * cycle
+        // #                  - self.e * memory_pointer - self.f * memory_value)
+        // #                 - memory_permutation_next]
+        // airs += [MPolynomial.constant(
+        //            terminals[1])
+        //              - x[ProcessorTable.memory_permutation]
+        //                  * (beta - d * x[ProcessorTable.cycle]
+        //                          - e * x[ProcessorTable.memory_pointer]
+        //                          - f * x[ProcessorTable.memory_value])]
+        constraints.push(terminals_1 - memory_permutation * (beta.clone() - d * cycle - e * memory_pointer - f * memory_value));
+
+        // # running evaluation for input
+        // # polynomials += [(input_evaluation_next \
+        // #                   - input_evaluation * self.gamma \
+        // #                   - memory_value) * ProcessorTable.ifnot_instruction(',', current_instruction) * current_instruction \
+        // #               + (input_evaluation_next - input_evaluation) * ProcessorTable.if_instruction(',', current_instruction)]
+        // airs += [MPolynomial.constant(terminals[2]) -
+        //          x[ProcessorTable.input_evaluation]]
+        constraints.push(terminals_2 - input_evaluation);
+
+        // # running evaluation for output
+        // # polynomials += [(output_evaluation_next - output_evaluation * self.delta - memory_value) * ProcessorTable.ifnot_instruction(
+        // #     '.', current_instruction) * current_instruction + (output_evaluation_next - output_evaluation) * ProcessorTable.if_instruction('.', current_instruction)]
+        // airs += [MPolynomial.constant(terminals[3]) -
+        //          x[ProcessorTable.output_evaluation]]
+        constraints.push(terminals_3 - output_evaluation);
+
+        // assert(len(airs) == 4), "number of terminal airs did not match with expectation"
+        // return airs
+
+        constraints
     }
 }
 
