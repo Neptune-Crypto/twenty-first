@@ -301,11 +301,11 @@ mod memory_table_tests {
     use rand::thread_rng;
 
     use super::*;
-    use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck;
+    use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
-    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use crate::shared_math::traits::GetRandomElements;
+    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
 
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on

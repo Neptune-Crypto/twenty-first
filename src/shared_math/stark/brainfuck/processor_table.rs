@@ -657,16 +657,16 @@ impl TableTrait for ProcessorTable {
     fn boundary_constraints_ext(
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-    ) -> Vec<MPolynomial<BFieldElement>> {
+    ) -> Vec<MPolynomial<XFieldElement>> {
         // field = challenges[0].field
         // # format: mpolynomial
         // x = MPolynomial.variables(self.full_width, field)
-        let x = MPolynomial::<BFieldElement>::variables(Self::FULL_WIDTH, BFieldElement::ring_one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
 
         // one = MPolynomial.constant(field.one())
         // zero = MPolynomial.zero()
-        let zero = MPolynomial::<BFieldElement>::zero(Self::FULL_WIDTH);
-        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), Self::FULL_WIDTH);
+        let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
+        let one = MPolynomial::<XFieldElement>::from_constant(XFieldElement::ring_one(), Self::FULL_WIDTH);
 
         vec![
             x[ProcessorTable::CYCLE] - zero,

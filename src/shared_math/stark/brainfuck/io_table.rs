@@ -217,7 +217,7 @@ impl TableTrait for IOTable {
     fn boundary_constraints_ext(
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-    ) -> Vec<MPolynomial<BFieldElement>> {
+    ) -> Vec<MPolynomial<XFieldElement>> {
         todo!()
     }
 

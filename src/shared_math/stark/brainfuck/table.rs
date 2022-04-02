@@ -363,7 +363,8 @@ pub trait TableTrait {
     fn boundary_constraints_ext(
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-    ) -> Vec<MPolynomial<BFieldElement>>;
+    ) -> Vec<MPolynomial<XFieldElement>>;
+
     fn terminal_constraints_ext(
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
