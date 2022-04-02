@@ -20,6 +20,7 @@ use crate::shared_math::{
 use crate::util_types::merkle_tree::MerkleTree;
 use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, RescuePrimeProduction};
+use itertools::Itertools;
 use rand::thread_rng;
 use std::cell::RefCell;
 use std::convert::TryInto;
@@ -323,6 +324,54 @@ impl Stark {
             .base_tables
             .borrow_mut()
             .get_and_set_all_extension_codewords(&self.fri.domain);
+
+        let transposed_extension_codewords: Vec<Vec<XFieldElement>> = (0..extension_codewords[0]
+            .len())
+            .map(|i| {
+                extension_codewords
+                    .iter()
+                    .map(|inner| inner[i].clone())
+                    .collect::<Vec<XFieldElement>>()
+            })
+            .collect();
+        let extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
+            transposed_extension_codewords
+                .clone()
+                .into_iter()
+                .map(|xvalues| {
+                    let bvalues: Vec<BFieldElement> = xvalues
+                        .into_iter()
+                        .map(|x| x.coefficients.clone().to_vec())
+                        .concat();
+                    assert_eq!(
+                        27,
+                        bvalues.len(),
+                        "9 X-field elements must become 27 B-field elements"
+                    );
+                    let chunks: Vec<Vec<BFieldElement>> = bvalues
+                        .chunks(hasher.0.max_input_length / 2)
+                        .map(|s| s.into())
+                        .collect();
+                    assert_eq!(
+                        6,
+                        chunks.len(),
+                        "27 B-field elements must be divided into 6 chunks for hashing"
+                    );
+                    hasher.hash_many(&chunks)
+                })
+                .collect();
+        println!(
+            "extension_codeword_digests_by_index.len() = {}",
+            extension_codeword_digests_by_index.len()
+        );
+        let extension_tree = MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::from_digests(
+            &extension_codeword_digests_by_index,
+            &vec![BFieldElement::ring_zero()],
+        );
+        proof_stream.enqueue(extension_tree.get_root())?;
+
+        let extension_degree_bounds: Vec<Degree> =
+            self.base_tables.borrow().get_all_extension_degree_bounds();
 
         Ok(proof_stream)
     }
