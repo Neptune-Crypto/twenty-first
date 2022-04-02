@@ -315,7 +315,11 @@ mod memory_table_tests {
         let mut rng = thread_rng();
         for source_code in sample_programs::get_all_sample_programs().iter() {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
-            let input_data = vec![BFieldElement::new(97)];
+            let input_data = vec![
+                BFieldElement::new(97),
+                BFieldElement::new(98),
+                BFieldElement::new(99),
+            ];
             let base_matrices: BaseMatrices =
                 brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
 
