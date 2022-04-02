@@ -5,12 +5,6 @@ use crate::shared_math::{b_field_element::BFieldElement, traits::IdentityValues}
 
 pub const INSTRUCTIONS: [char; 8] = ['[', ']', '<', '>', '+', '-', ',', '.'];
 
-// Example programs
-pub static VERY_SIMPLE_PROGRAM: &str = "+++";
-pub static PRINT_EXCLAMATION_MARKS: &str = ">++++++++++[>+++><<-]>+++><<>.................";
-pub static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
-pub static PRINT_17_CHARS: &str = ",.................";
-
 #[derive(Debug, Clone)]
 pub struct Register {
     pub cycle: BFieldElement,
@@ -350,12 +344,14 @@ pub mod sample_programs {
     pub static ROT13: &str = ",+++++++++++++.,+++++++++++++.,+++++++++++++.";
 
     pub fn get_all_sample_programs() -> Vec<&'static str> {
-        vec![VERY_SIMPLE_PROGRAM,
-             TWO_BY_TWO_THEN_OUTPUT,
-             PRINT_EXCLAMATION_MARKS,
-             HELLO_WORLD,
-             PRINT_17_CHARS,
-             ROT13]
+        vec![
+            VERY_SIMPLE_PROGRAM,
+            TWO_BY_TWO_THEN_OUTPUT,
+            PRINT_EXCLAMATION_MARKS,
+            HELLO_WORLD,
+            PRINT_17_CHARS,
+            ROT13,
+        ]
     }
 }
 

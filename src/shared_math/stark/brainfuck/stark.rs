@@ -386,7 +386,7 @@ mod brainfuck_stark_tests {
     #[test]
     fn prove_verify_test() {
         let program: Vec<BFieldElement> =
-            brainfuck::vm::compile(brainfuck::vm::VERY_SIMPLE_PROGRAM).unwrap();
+            brainfuck::vm::compile(brainfuck::vm::sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
         let (trace_length, input_symbols, output_symbols) =
             brainfuck::vm::run(&program, vec![]).unwrap();
         let base_matrices: BaseMatrices =
