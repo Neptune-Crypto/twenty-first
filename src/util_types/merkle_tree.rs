@@ -996,7 +996,7 @@ mod merkle_tree_test {
 
             for _ in 0..3 {
                 // Ask for an arbitrary amount of indices less than the total
-                let n_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
+                let mut n_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
 
                 // Generate that amount of indices in the valid index range [0,128)
                 let indices: Vec<usize> =
@@ -1005,6 +1005,9 @@ mod merkle_tree_test {
                         .map(|x| *x as usize)
                         .unique()
                         .collect();
+
+                // Prevent out of bounds later in case a duplicate index was removed.
+                n_indices = indices.len();
 
                 let proof = tree.get_leafless_multi_proof_with_values(&indices);
 
