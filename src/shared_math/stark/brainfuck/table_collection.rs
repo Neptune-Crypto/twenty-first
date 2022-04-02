@@ -173,6 +173,7 @@ mod brainfuck_table_collection_tests {
     use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use crate::shared_math::traits::GetRandomElements;
     use std::cell::RefCell;
+    use std::collections::HashMap;
     use std::convert::TryInto;
     use std::rc::Rc;
 
@@ -194,70 +195,65 @@ mod brainfuck_table_collection_tests {
 
     #[test]
     fn degree_bounds_test() {
-        let program_small = brainfuck::vm::compile(sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
-        let table_collection_small = create_table_collection(&program_small, &[]);
-        // observed from Python BF STARK engine with program `++++`:
-        // [8, 8, 8, 8, 8, 8, 8, 16, 16, 16, 8, 8, 8, -1, -1]
-        assert_eq!(
-            vec![8, 8, 8, 8, 8, 8, 8, 16, 16, 16, 8, 8, 8, -1, -1],
-            table_collection_small.get_all_base_degree_bounds()
+        let mut expected_bounds: HashMap<&str, (Vec<Degree>, Vec<Degree>)> = HashMap::new();
+
+        // The expected values have been found from the Python STARK BF tutorial
+        expected_bounds.insert(
+            sample_programs::VERY_SIMPLE_PROGRAM,
+            (
+                vec![8, 8, 8, 8, 8, 8, 8, 16, 16, 16, 8, 8, 8, -1, -1],
+                vec![8, 8, 8, 8, 16, 16, 8, -1, -1],
+            ),
         );
-        assert_eq!(
-            vec![8, 8, 8, 8, 16, 16, 8, -1, -1],
-            table_collection_small.get_all_extension_degree_bounds()
+        expected_bounds.insert(
+            sample_programs::PRINT_17_CHARS,
+            (
+                vec![32, 32, 32, 32, 32, 32, 32, 64, 64, 64, 32, 32, 32, 0, 31],
+                vec![32, 32, 32, 32, 64, 64, 32, 0, 31],
+            ),
+        );
+        expected_bounds.insert(
+            sample_programs::HELLO_WORLD,
+            (
+                vec![
+                    1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
+                    -1, 15,
+                ],
+                vec![1024, 1024, 1024, 1024, 1024, 1024, 1024, -1, 15],
+            ),
+        );
+        expected_bounds.insert(
+            sample_programs::ROT13,
+            (
+                vec![64, 64, 64, 64, 64, 64, 64, 128, 128, 128, 64, 64, 64, 3, 3],
+                vec![64, 64, 64, 64, 128, 128, 64, 3, 3],
+            ),
         );
 
-        // observed from Python BF STARK engine with program `,.................`:
-        // [32, 32, 32, 32, 32, 32, 32, 64, 64, 64, 32, 32, 32, 0, 31]
-        let program_bigger = brainfuck::vm::compile(sample_programs::PRINT_17_CHARS).unwrap();
-        let mut table_collection =
-            create_table_collection(&program_bigger, &[BFieldElement::new(33)]);
-        assert_eq!(
-            vec![32, 32, 32, 32, 32, 32, 32, 64, 64, 64, 32, 32, 32, 0, 31],
-            table_collection.get_all_base_degree_bounds()
-        );
-        assert_eq!(
-            vec![32, 32, 32, 32, 64, 64, 32, 0, 31],
-            table_collection.get_all_extension_degree_bounds()
-        );
-
-        // observed from Python BF STARK engine with program
-        // `++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.`:
-        // [1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, -1, 15]
-        let program_hello_world = brainfuck::vm::compile(sample_programs::HELLO_WORLD).unwrap();
-        table_collection = create_table_collection(&program_hello_world, &[]);
-        assert_eq!(
-            vec![
-                1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, -1,
-                15,
-            ],
-            table_collection.get_all_base_degree_bounds()
-        );
-        assert_eq!(
-            vec![1024, 1024, 1024, 1024, 1024, 1024, 1024, -1, 15],
-            table_collection.get_all_extension_degree_bounds()
-        );
-
-        // observed from Python BF STARK engine with program
-        // `,+++++++++++++.,+++++++++++++.,+++++++++++++.`:
-        // [64, 64, 64, 64, 64, 64, 64, 128, 128, 128, 64, 64, 64, 3, 3]
-        let program_hello_world = brainfuck::vm::compile(sample_programs::ROT13).unwrap();
-        table_collection = create_table_collection(
-            &program_hello_world,
-            &[
-                BFieldElement::new(33),
-                BFieldElement::new(34),
-                BFieldElement::new(35),
-            ],
-        );
-        assert_eq!(
-            vec![64, 64, 64, 64, 64, 64, 64, 128, 128, 128, 64, 64, 64, 3, 3],
-            table_collection.get_all_base_degree_bounds()
-        );
-        assert_eq!(
-            vec![64, 64, 64, 64, 128, 128, 64, 3, 3],
-            table_collection.get_all_extension_degree_bounds()
-        );
+        // Verify that `get_all_base_degree_bounds` and `get_all_extension_degree_bounds` return
+        // the expected values
+        for (code, (expected_base_bounds, expected_extension_bounds)) in expected_bounds.into_iter()
+        {
+            let program = brainfuck::vm::compile(code).unwrap();
+            let table_collection = create_table_collection(
+                &program,
+                &[
+                    BFieldElement::new(33),
+                    BFieldElement::new(34),
+                    BFieldElement::new(35),
+                ],
+            );
+            assert_eq!(
+                expected_base_bounds,
+                table_collection.get_all_base_degree_bounds(),
+                "base degree bounds must match expected value from Python BF-STARK tutorial"
+            );
+            assert_eq!(
+                expected_extension_bounds,
+                table_collection.get_all_extension_degree_bounds(),
+                "extension degree bounds must match expected value from Python BF-STARK tutorial"
+            );
+        }
     }
 
     #[test]
