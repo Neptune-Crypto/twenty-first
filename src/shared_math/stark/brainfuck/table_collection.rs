@@ -9,6 +9,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::fri::FriDomain;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::x_field_element::XFieldElement;
+use itertools::Itertools;
 
 #[derive(Debug, Clone)]
 pub struct TableCollection {
@@ -37,54 +38,25 @@ impl TableCollection {
     }
 
     pub fn get_max_degree(&self) -> u64 {
-        [
-            self.processor_table.max_degree(),
-            self.instruction_table.max_degree(),
-            self.memory_table.max_degree(),
-            self.input_table.max_degree(),
-            self.output_table.max_degree(),
-        ]
-        .iter()
-        .max()
-        .unwrap_or(&1)
-        .to_owned() as u64
+        self.into_iter()
+            .map(|table| table.max_degree())
+            .max()
+            .unwrap_or(1) as u64
     }
 
     pub fn get_all_base_degree_bounds(&self) -> Vec<Degree> {
-        [
-            vec![self.processor_table.interpolant_degree(); self.processor_table.base_width()],
-            vec![self.instruction_table.interpolant_degree(); self.instruction_table.base_width()],
-            vec![self.memory_table.interpolant_degree(); self.memory_table.base_width()],
-            vec![self.input_table.interpolant_degree(); self.input_table.base_width()],
-            vec![self.output_table.interpolant_degree(); self.output_table.base_width()],
-        ]
-        .concat()
+        self.into_iter()
+            .map(|table| vec![table.interpolant_degree(); table.base_width()])
+            .concat()
     }
 
     pub fn get_all_extension_degree_bounds(&self) -> Vec<Degree> {
-        [
-            vec![
-                self.processor_table.interpolant_degree();
-                self.processor_table.full_width() - self.processor_table.base_width()
-            ],
-            vec![
-                self.instruction_table.interpolant_degree();
-                self.instruction_table.full_width() - self.instruction_table.base_width()
-            ],
-            vec![
-                self.memory_table.interpolant_degree();
-                self.memory_table.full_width() - self.memory_table.base_width()
-            ],
-            vec![
-                self.input_table.interpolant_degree();
-                self.input_table.full_width() - self.input_table.base_width()
-            ],
-            vec![
-                self.output_table.interpolant_degree();
-                self.output_table.full_width() - self.output_table.base_width()
-            ],
-        ]
-        .concat()
+        self.into_iter()
+            .map(|table| {
+                let extension_width = table.full_width() - table.base_width();
+                vec![table.interpolant_degree(); extension_width]
+            })
+            .concat()
     }
 
     pub fn set_matrices(
@@ -159,6 +131,7 @@ impl TableCollection {
         ]
     }
 
+    // TODO: Replace this with an `.iter().map(|table| ...)` when `extended_codewords` lives on the trait.
     pub fn all_quotients(
         &self,
         fri_domain: &FriDomain<BFieldElement>,
@@ -204,23 +177,27 @@ impl TableCollection {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Degree> {
-        let mut i = 0;
-        let pt = self
-            .processor_table
-            .all_quotient_degree_bounds(challenges, terminals);
-        let instt = self
-            .instruction_table
-            .all_quotient_degree_bounds(challenges, terminals);
-        let mt = self
-            .memory_table
-            .all_quotient_degree_bounds(challenges, terminals);
-        let inptt = self
-            .input_table
-            .all_quotient_degree_bounds(challenges, terminals);
-        let ot = self
-            .output_table
-            .all_quotient_degree_bounds(challenges, terminals);
-        vec![pt, instt, mt, inptt, ot].concat()
+        self.into_iter()
+            .map(|table| table.all_quotient_degree_bounds(challenges, terminals))
+            .concat()
+    }
+}
+
+/// Make TableCollection iterable in such a way that each table is seen as a `TableTrait` value.
+impl<'a> IntoIterator for &'a TableCollection {
+    type Item = &'a dyn TableTrait;
+
+    type IntoIter = std::array::IntoIter<&'a dyn TableTrait, 5>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [
+            &self.processor_table as &'a dyn TableTrait,
+            &self.instruction_table as &'a dyn TableTrait,
+            &self.memory_table as &'a dyn TableTrait,
+            &self.input_table as &'a dyn TableTrait,
+            &self.output_table as &'a dyn TableTrait,
+        ]
+        .into_iter()
     }
 }
 

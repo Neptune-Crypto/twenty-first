@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::fri::FriDomain;
@@ -516,18 +514,6 @@ pub trait TableTrait {
         }
 
         quotient_codewords
-    }
-
-    fn as_mpolynomial_vars<PF: PrimeField, const WIDTH: usize>(
-        &self,
-        challenges: [PF; EXTENSION_CHALLENGE_COUNT],
-    ) -> [MPolynomial<PF>; EXTENSION_CHALLENGE_COUNT] {
-        challenges
-            .iter()
-            .map(|challenge| MPolynomial::<PF>::from_constant(*challenge, WIDTH))
-            .collect::<Vec<MPolynomial<PF>>>()
-            .try_into()
-            .unwrap()
     }
 
     // IMPLEMENT THESE!

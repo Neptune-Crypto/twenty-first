@@ -2,7 +2,7 @@
 name = "twenty-first"
 version = "0.1.0"
 authors = ["sword_smith <thorkilk@gmail.me>"]
-edition = "2018"
+edition = "2021"
 
 [dev-dependencies]
 criterion = "0.3"
