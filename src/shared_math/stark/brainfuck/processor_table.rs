@@ -65,6 +65,7 @@ impl ProcessorTable {
             num_randomizers,
             generator,
             order,
+            "Processor table".to_string()
         );
 
         Self(table)
@@ -358,6 +359,10 @@ impl TableTrait for ProcessorTable {
 
     fn num_randomizers(&self) -> usize {
         self.0.num_randomizers
+    }
+
+    fn name(&self) -> &str {
+        &self.0.name
     }
 
     fn height(&self) -> usize {

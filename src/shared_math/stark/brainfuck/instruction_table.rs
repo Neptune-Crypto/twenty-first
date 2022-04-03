@@ -57,6 +57,7 @@ impl InstructionTable {
             num_randomizers,
             generator,
             order,
+            "Instruction table".to_string(),
         );
 
         Self(table)
@@ -124,6 +125,10 @@ impl TableTrait for InstructionTable {
 
     fn num_randomizers(&self) -> usize {
         self.0.num_randomizers
+    }
+
+    fn name(&self) -> &str {
+        &self.0.name
     }
 
     fn height(&self) -> usize {

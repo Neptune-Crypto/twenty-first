@@ -48,6 +48,7 @@ impl MemoryTable {
             num_randomizers,
             generator,
             order,
+            "Memory table".to_string(),
         );
 
         Self(table)
@@ -132,6 +133,10 @@ impl TableTrait for MemoryTable {
 
     fn length(&self) -> usize {
         self.0.length
+    }
+
+    fn name(&self) -> &str {
+        &self.0.name
     }
 
     fn num_randomizers(&self) -> usize {

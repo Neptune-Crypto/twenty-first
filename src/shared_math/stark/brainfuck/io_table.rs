@@ -47,6 +47,7 @@ impl IOTable {
             num_randomizers,
             generator,
             order,
+            "Input table".to_string(),
         );
 
         table.more.challenge_index = 8;
@@ -67,6 +68,7 @@ impl IOTable {
             num_randomizers,
             generator,
             order,
+            "Output table".to_string(),
         );
 
         table.more.challenge_index = 9;
@@ -103,6 +105,10 @@ impl TableTrait for IOTable {
 
     fn length(&self) -> usize {
         self.0.length
+    }
+
+    fn name(&self) -> &str {
+        &self.0.name
     }
 
     fn num_randomizers(&self) -> usize {

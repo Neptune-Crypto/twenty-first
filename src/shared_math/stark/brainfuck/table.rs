@@ -22,6 +22,7 @@ pub struct Table<T> {
     pub base_width: usize,
     pub full_width: usize,
     pub length: usize,
+    pub name: String,
     pub num_randomizers: usize,
     pub height: usize,
     pub omicron: BFieldElement,
@@ -43,6 +44,7 @@ impl<T: TableMoreTrait> Table<T> {
         num_randomizers: usize,
         generator: BFieldElement,
         order: usize,
+        name: String,
     ) -> Self {
         let height = if length != 0 {
             other::roundup_npo2(length as u64) as usize
@@ -60,6 +62,7 @@ impl<T: TableMoreTrait> Table<T> {
             base_width,
             full_width,
             length,
+            name,
             num_randomizers,
             height,
             omicron,
@@ -250,6 +253,7 @@ pub trait TableTrait {
     fn full_width(&self) -> usize;
     fn length(&self) -> usize;
     fn num_randomizers(&self) -> usize;
+    fn name(&self) -> &str;
     fn height(&self) -> usize;
     fn omicron(&self) -> BFieldElement;
     fn generator(&self) -> BFieldElement;
@@ -468,7 +472,16 @@ pub trait TableTrait {
         }
 
         // TODO: Add Alan's debug logic here for when the `DEBUG`
-        // environment variable is set.
+        if std::env::var("DEBUG").is_ok() {
+            for (i, qc) in quotient_codewords.iter().enumerate() {
+                let interpolated = fri_domain.xinterpolate(qc);
+                assert!(
+                    interpolated.degree() < fri_domain.length as isize - 1,
+                    "Degree of terminal quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}. Unsatisfied constraint: {}", i, self.name(), interpolated.degree(), fri_domain.length, terminal_constraints[i]
+                );
+            }
+        }
+
         quotient_codewords
     }
 
@@ -500,11 +513,11 @@ pub trait TableTrait {
 
         // If the `DEBUG` environment variable is set, run this extra validity check
         if std::env::var("DEBUG").is_ok() {
-            for qc in quotient_codewords.iter() {
+            for (i, qc) in quotient_codewords.iter().enumerate() {
                 let interpolated = fri_domain.xinterpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
-                    "The degree of boundary quotient must not be maximal"
+                    "Degree of boundary quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}", i, self.name(), interpolated.degree(), fri_domain.length
                 );
             }
         }
