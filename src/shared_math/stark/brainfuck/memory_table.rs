@@ -331,7 +331,7 @@ impl TableTrait for MemoryTable {
         let [_a, _b, _c, d, e, f, _alpha, beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
             EXTENSION_CHALLENGE_COUNT as usize] = challenges
             .iter()
-            .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
+            .map(|challenge| MPolynomial::from_constant(*challenge, Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
             .try_into()
             .unwrap();

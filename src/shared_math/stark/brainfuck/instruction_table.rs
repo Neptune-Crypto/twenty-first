@@ -405,7 +405,7 @@ impl TableTrait for InstructionTable {
         let [a, b, c, _d, _e, _f, _alpha, _beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
             EXTENSION_CHALLENGE_COUNT as usize] = challenges
             .iter()
-            .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
+            .map(|challenge| MPolynomial::from_constant(*challenge, Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
             .try_into()
             .unwrap();
@@ -430,14 +430,14 @@ impl TableTrait for InstructionTable {
         let [a, b, c, _d, _e, _f, alpha, _beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
             EXTENSION_CHALLENGE_COUNT as usize] = challenges
             .iter()
-            .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
+            .map(|challenge| MPolynomial::from_constant(*challenge, Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
             .try_into()
             .unwrap();
         let [processor_instruction_permutation_terminal, _processor_memory_permutation_terminal, _processor_input_evaluation_terminal, _processor_output_evaluation_terminal, instruction_evaluation_terminal]: [MPolynomial<XFieldElement>;
             TERMINAL_COUNT as usize] = terminals
             .iter()
-            .map(|terminal| MPolynomial::from_constant(*terminal, 2 * Self::FULL_WIDTH))
+            .map(|terminal| MPolynomial::from_constant(*terminal, Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
             .try_into()
             .unwrap();
