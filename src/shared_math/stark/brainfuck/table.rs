@@ -386,10 +386,11 @@ pub trait TableTrait {
             BFieldElement::batch_inversion(subgroup_zerofier)
         };
 
+        let omicron_inverse = self.omicron().inverse();
         let zerofier_inverse: Vec<BFieldElement> = x_values
             .into_iter()
             .enumerate()
-            .map(|(i, x)| subgroup_zerofier_inverse[i] * (x - self.omicron().inverse()))
+            .map(|(i, x)| subgroup_zerofier_inverse[i] * (x - omicron_inverse))
             .collect();
 
         let transition_constraints = self.transition_constraints_ext(challenges);
@@ -432,12 +433,35 @@ pub trait TableTrait {
 
     fn terminal_quotients(
         &self,
-        _fri_domain: &FriDomain<BFieldElement>,
-        _codewords: &[Vec<XFieldElement>],
-        _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        _terminals: [XFieldElement; TERMINAL_COUNT],
+        fri_domain: &FriDomain<BFieldElement>,
+        codewords: &[Vec<XFieldElement>],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
-        todo!()
+        let omicron_inverse = self.omicron().inverse();
+        let zerofier_codeword: Vec<BFieldElement> = fri_domain
+            .x_values()
+            .into_iter()
+            .map(|x| x - omicron_inverse)
+            .collect();
+        let zerofier_inverse = BFieldElement::batch_inversion(zerofier_codeword);
+        let terminal_constraints = self.terminal_constraints_ext(challenges, terminals);
+        let mut quotient_codewords: Vec<Vec<XFieldElement>> = vec![];
+        for termc in terminal_constraints.iter() {
+            let quotient_codeword: Vec<XFieldElement> = (0..fri_domain.length)
+                .map(|i| {
+                    let point: Vec<XFieldElement> = (0..self.full_width())
+                        .map(|j| codewords[j][i] * zerofier_inverse[i].lift())
+                        .collect();
+                    termc.evaluate(&point)
+                })
+                .collect();
+            quotient_codewords.push(quotient_codeword);
+        }
+
+        // TODO: Add Alan's debug logic here for when the `DEBUG`
+        // environment variable is set.
+        quotient_codewords
     }
 
     fn boundary_quotients(
@@ -458,10 +482,9 @@ pub trait TableTrait {
         for bc in boundary_constraints {
             let quotient_codeword: Vec<XFieldElement> = (0..fri_domain.length)
                 .map(|i| {
-                    let point: Vec<XFieldElement> = (0..self.full_width())
-                        .map(|j| codewords[j][i] * zerofier_inverse[i].lift())
-                        .collect();
-                    bc.evaluate(&point)
+                    let point: Vec<XFieldElement> =
+                        (0..self.full_width()).map(|j| codewords[j][i]).collect();
+                    bc.evaluate(&point) * zerofier_inverse[i].lift()
                 })
                 .collect();
             quotient_codewords.push(quotient_codeword);
