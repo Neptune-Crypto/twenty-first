@@ -1,3 +1,4 @@
+use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::{
     b_field_element::BFieldElement, mpolynomial::MPolynomial, other, x_field_element::XFieldElement,
 };
@@ -218,7 +219,14 @@ impl TableTrait for IOTable {
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        // x = MPolynomial.variables(self.full_width, field)
+        let x =
+            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let evaluation = x[IOTable::EVALUATION].clone();
+        let column = x[IOTable::COLUMN].clone();
+
+        // return [x[IOTable.evaluation] - x[IOTable.column]]  # evaluation
+        vec![evaluation - column]
     }
 
     fn terminal_constraints_ext(
@@ -226,7 +234,41 @@ impl TableTrait for IOTable {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
         terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        // if self.height != 0:
+        //     assert(not terminals[self.terminal_index].is_zero(
+        //     )), "evaluation terminal for non-empty IOTable is zero but shouldn't be!"
+
+        // field = challenges[0].field
+        // iota = challenges[self.challenge_index]
+        let iota = challenges[self.0.more.challenge_index];
+
+        // offset = MPolynomial.constant(
+        //     iota ^ (self.height - self.length))
+        let offset = MPolynomial::from_constant(
+            iota.mod_pow_u32((self.height() - self.length()) as u32),
+            Self::FULL_WIDTH,
+        );
+
+        // evaluation_terminal = MPolynomial.constant(terminals[self.terminal_index])
+        let evaluation_terminal = MPolynomial::<XFieldElement>::from_constant(
+            terminals[self.0.more.terminal_index],
+            Self::FULL_WIDTH,
+        );
+
+        // x = MPolynomial.variables(self.full_width, field)
+        let x =
+            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let evaluation = x[IOTable::EVALUATION].clone();
+
+        // # In every additional row, the running evaluation variable is
+        // # multiplied by another factor iota. So we multiply by iota^diff
+        // # to get the value of the evaluation terminal after all 2^k rows.
+        // actual_terminal = evaluation_terminal * offset
+        let actual_terminal = evaluation_terminal * offset;
+
+        // # polynomials += [evaluation * gamma + input_ - evaluation_next]
+        // return [x[IOTable.evaluation] - evaluation_terminal * offset]
+        vec![evaluation - actual_terminal]
     }
 }
 
