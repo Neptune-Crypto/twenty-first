@@ -2,7 +2,7 @@ use super::instruction_table::InstructionTable;
 use super::io_table::IOTable;
 use super::memory_table::MemoryTable;
 use super::processor_table::ProcessorTable;
-use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
+use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use super::table::TableTrait;
 use super::vm::{InstructionMatrixBaseRow, Register};
 use crate::shared_math::b_field_element::BFieldElement;
@@ -149,14 +149,78 @@ impl TableCollection {
         self.output_table.extend(all_challenges, all_initials);
     }
 
-    pub fn get_terminals(&self) -> Vec<XFieldElement> {
-        vec![
+    pub fn get_terminals(&self) -> [XFieldElement; TERMINAL_COUNT] {
+        [
             self.processor_table.0.more.instruction_permutation_terminal,
             self.processor_table.0.more.memory_permutation_terminal,
             self.processor_table.0.more.input_evaluation_terminal,
             self.processor_table.0.more.output_evaluation_terminal,
             self.instruction_table.0.more.evaluation_terminal,
         ]
+    }
+
+    pub fn all_quotients(
+        &self,
+        fri_domain: &FriDomain<BFieldElement>,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; TERMINAL_COUNT],
+    ) -> Vec<Vec<XFieldElement>> {
+        let pt = self.processor_table.all_quotients(
+            fri_domain,
+            &self.processor_table.0.extended_codewords,
+            challenges,
+            terminals,
+        );
+        let instt = self.instruction_table.all_quotients(
+            fri_domain,
+            &self.instruction_table.0.extended_codewords,
+            challenges,
+            terminals,
+        );
+        let mt = self.memory_table.all_quotients(
+            fri_domain,
+            &self.memory_table.0.extended_codewords,
+            challenges,
+            terminals,
+        );
+        let inpt = self.input_table.all_quotients(
+            fri_domain,
+            &self.input_table.0.extended_codewords,
+            challenges,
+            terminals,
+        );
+        let ot = self.output_table.all_quotients(
+            fri_domain,
+            &self.output_table.0.extended_codewords,
+            challenges,
+            terminals,
+        );
+
+        vec![pt, instt, mt, inpt, ot].concat()
+    }
+
+    pub fn all_quotient_degree_bounds(
+        &self,
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        terminals: [XFieldElement; TERMINAL_COUNT],
+    ) -> Vec<Degree> {
+        let mut i = 0;
+        let pt = self
+            .processor_table
+            .all_quotient_degree_bounds(challenges, terminals);
+        let instt = self
+            .instruction_table
+            .all_quotient_degree_bounds(challenges, terminals);
+        let mt = self
+            .memory_table
+            .all_quotient_degree_bounds(challenges, terminals);
+        let inptt = self
+            .input_table
+            .all_quotient_degree_bounds(challenges, terminals);
+        let ot = self
+            .output_table
+            .all_quotient_degree_bounds(challenges, terminals);
+        vec![pt, instt, mt, inptt, ot].concat()
     }
 }
 
@@ -195,7 +259,8 @@ mod brainfuck_table_collection_tests {
 
     #[test]
     fn degree_bounds_test() {
-        let mut expected_bounds: HashMap<&str, (Vec<Degree>, Vec<Degree>)> = HashMap::new();
+        let mut expected_bounds: HashMap<&str, (Vec<Degree>, Vec<Degree>, Vec<Degree>)> =
+            HashMap::new();
 
         // The expected values have been found from the Python STARK BF tutorial
         expected_bounds.insert(
@@ -203,6 +268,10 @@ mod brainfuck_table_collection_tests {
             (
                 vec![8, 8, 8, 8, 8, 8, 8, 16, 16, 16, 8, 8, 8, -1, -1],
                 vec![8, 8, 8, 8, 16, 16, 8, -1, -1],
+                vec![
+                    7, 7, 7, 7, 7, 7, 7, 73, 65, 65, 1, 9, 9, 17, 9, 65, 65, 7, 15, 7, 7, 15, 15,
+                    17, 17, 17, 33, 17, 47, 15, 7, 7, 7, 9, 17, 9, 9, 15, -2, 0, -1, -2, 0, -1,
+                ],
             ),
         );
         expected_bounds.insert(
@@ -210,6 +279,11 @@ mod brainfuck_table_collection_tests {
             (
                 vec![32, 32, 32, 32, 32, 32, 32, 64, 64, 64, 32, 32, 32, 0, 31],
                 vec![32, 32, 32, 32, 64, 64, 32, 0, 31],
+                vec![
+                    31, 31, 31, 31, 31, 31, 31, 289, 257, 257, 1, 33, 33, 65, 33, 257, 257, 31, 63,
+                    31, 31, 63, 63, 65, 65, 65, 129, 65, 191, 63, 31, 31, 31, 33, 65, 33, 33, 63,
+                    -1, 0, -1, 30, 0, 30,
+                ],
             ),
         );
         expected_bounds.insert(
@@ -220,6 +294,12 @@ mod brainfuck_table_collection_tests {
                     -1, 15,
                 ],
                 vec![1024, 1024, 1024, 1024, 1024, 1024, 1024, -1, 15],
+                vec![
+                    1023, 1023, 1023, 1023, 1023, 1023, 1023, 9217, 8193, 8193, 1, 1025, 1025,
+                    2049, 1025, 8193, 8193, 1023, 2047, 1023, 1023, 1023, 1023, 1025, 1025, 1025,
+                    2049, 1025, 3071, 1023, 1023, 1023, 1023, 1025, 2049, 1025, 1025, 2047, -2, 0,
+                    -1, 14, 0, 14,
+                ],
             ),
         );
         expected_bounds.insert(
@@ -227,12 +307,18 @@ mod brainfuck_table_collection_tests {
             (
                 vec![64, 64, 64, 64, 64, 64, 64, 128, 128, 128, 64, 64, 64, 3, 3],
                 vec![64, 64, 64, 64, 128, 128, 64, 3, 3],
+                vec![
+                    63, 63, 63, 63, 63, 63, 63, 577, 513, 513, 1, 65, 65, 129, 65, 513, 513, 63,
+                    127, 63, 63, 127, 127, 129, 129, 129, 257, 129, 383, 127, 63, 63, 63, 65, 129,
+                    65, 65, 127, 2, 0, 2, 2, 0, 2,
+                ],
             ),
         );
 
         // Verify that `get_all_base_degree_bounds` and `get_all_extension_degree_bounds` return
         // the expected values
-        for (code, (expected_base_bounds, expected_extension_bounds)) in expected_bounds.into_iter()
+        for (code, (expected_base_bounds, expected_extension_bounds, expected_quotient_bounds)) in
+            expected_bounds.into_iter()
         {
             let program = brainfuck::vm::compile(code).unwrap();
             let table_collection = create_table_collection(
@@ -246,12 +332,24 @@ mod brainfuck_table_collection_tests {
             assert_eq!(
                 expected_base_bounds,
                 table_collection.get_all_base_degree_bounds(),
-                "base degree bounds must match expected value from Python BF-STARK tutorial"
+                "base degree bounds must match expected value from Python BF-STARK tutorial for code {}", code
             );
             assert_eq!(
                 expected_extension_bounds,
                 table_collection.get_all_extension_degree_bounds(),
-                "extension degree bounds must match expected value from Python BF-STARK tutorial"
+                "extension degree bounds must match expected value from Python BF-STARK tutorial for code {}", code
+            );
+            let mut rng = thread_rng();
+            let challenges: [XFieldElement; 11] = XFieldElement::random_elements(11, &mut rng)
+                .try_into()
+                .unwrap();
+            let terminals: [XFieldElement; 5] = XFieldElement::random_elements(5, &mut rng)
+                .try_into()
+                .unwrap();
+            assert_eq!(
+                expected_quotient_bounds,
+                table_collection.all_quotient_degree_bounds(challenges, terminals),
+                "extension degree bounds must match expected value from Python BF-STARK tutorial for code {}", code
             );
         }
     }

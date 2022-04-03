@@ -324,10 +324,6 @@ impl TableTrait for MemoryTable {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
         terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        // def terminal_constraints_ext(self, challenges, terminals):
-        // field = challenges[0].field
-        // a, b, c, d, e, f, alpha, beta, gamma, delta, eta = [
-        //     MPolynomial.constant(ch) for ch in challenges]
         let [_a, _b, _c, d, e, f, _alpha, beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
             EXTENSION_CHALLENGE_COUNT as usize] = challenges
             .iter()
@@ -336,8 +332,6 @@ impl TableTrait for MemoryTable {
             .try_into()
             .unwrap();
 
-        // FIXME: Name terminals consistently when unpacking
-        // permutation = terminals[1]
         let permutation =
             MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
 
@@ -349,17 +343,11 @@ impl TableTrait for MemoryTable {
         let memory_pointer = x[MemoryTable::MEMORY_POINTER].clone();
         let memory_value = x[MemoryTable::MEMORY_VALUE].clone();
 
-        // # [permutation *
-        // #                 (beta - d * cycle
-        // #                  - e * address
-        // #                  - f * value)
-        // #                 - permutation_next]
-
-        // return [x[MemoryTable.permutation] * (beta - d * x[MemoryTable.cycle]
-        //                                            - e * x[MemoryTable.memory_pointer]
-        //                                            - f * x[MemoryTable.memory_value])
-        //         - MPolynomial.constant(permutation)]
-        vec![permutation * (beta - d * cycle - e * memory_pointer - f * memory_value)]
+        vec![
+            x[Self::PERMUTATION].clone()
+                * (beta - d * cycle - e * memory_pointer - f * memory_value)
+                - permutation,
+        ]
     }
 }
 

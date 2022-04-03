@@ -320,7 +320,6 @@ impl Stark {
 
         self.base_tables.borrow_mut().extend(challenges, initials);
 
-        let terminals: Vec<XFieldElement> = self.base_tables.borrow().get_terminals();
         let extension_codewords = self
             .base_tables
             .borrow_mut()
@@ -361,10 +360,6 @@ impl Stark {
                     hasher.hash_many(&chunks)
                 })
                 .collect();
-        println!(
-            "extension_codeword_digests_by_index.len() = {}",
-            extension_codeword_digests_by_index.len()
-        );
         let extension_tree = MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::from_digests(
             &extension_codeword_digests_by_index,
             &vec![BFieldElement::ring_zero()],
@@ -373,6 +368,16 @@ impl Stark {
 
         let extension_degree_bounds: Vec<Degree> =
             self.base_tables.borrow().get_all_extension_degree_bounds();
+
+        let terminals: [XFieldElement; TERMINAL_COUNT] = self.base_tables.borrow().get_terminals();
+        let quotient_codewords =
+            self.base_tables
+                .borrow()
+                .all_quotients(&self.fri.domain, challenges, terminals);
+        let quotient_degree_bounds = self
+            .base_tables
+            .borrow()
+            .all_quotient_degree_bounds(challenges, terminals);
 
         Ok(proof_stream)
     }
