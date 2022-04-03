@@ -462,10 +462,9 @@ pub trait TableTrait {
         for termc in terminal_constraints.iter() {
             let quotient_codeword: Vec<XFieldElement> = (0..fri_domain.length)
                 .map(|i| {
-                    let point: Vec<XFieldElement> = (0..self.full_width())
-                        .map(|j| codewords[j][i] * zerofier_inverse[i].lift())
-                        .collect();
-                    termc.evaluate(&point)
+                    let point: Vec<XFieldElement> =
+                        (0..self.full_width()).map(|j| codewords[j][i]).collect();
+                    termc.evaluate(&point) * zerofier_inverse[i].lift()
                 })
                 .collect();
             quotient_codewords.push(quotient_codeword);
