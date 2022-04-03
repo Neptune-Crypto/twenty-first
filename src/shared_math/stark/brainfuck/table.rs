@@ -355,10 +355,6 @@ pub trait TableTrait {
     ) -> Vec<Degree> {
         // max_degrees = [self.interpolant_degree()] * self.full_width
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.full_width()];
-
-        // degree_bounds = [mpo.symbolic_degree_bound(
-        //     max_degrees) - 1 for mpo in self.terminal_constraints_ext(challenges, terminals)]
-        // return degree_bounds
         self.terminal_constraints_ext(challenges, terminals)
             .iter()
             .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - 1)

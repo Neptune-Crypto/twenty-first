@@ -372,14 +372,26 @@ impl Stark {
             self.base_tables.borrow().get_all_extension_degree_bounds();
 
         let terminals: [XFieldElement; TERMINAL_COUNT] = self.base_tables.borrow().get_terminals();
-        let quotient_codewords =
+
+        let mut quotient_codewords =
             self.base_tables
                 .borrow()
                 .all_quotients(&self.fri.domain, challenges, terminals);
-        let quotient_degree_bounds = self
+        let mut quotient_degree_bounds = self
             .base_tables
             .borrow()
             .all_quotient_degree_bounds(challenges, terminals);
+
+        for pa in self.permutation_arguments.iter() {
+            quotient_codewords.push(pa.quotient(&self.fri.domain));
+            quotient_degree_bounds.push(pa.quotient_degree_bound());
+        }
+
+        for t in terminals.iter() {
+            proof_stream.enqueue(t)?;
+        }
+
+        // TODO: Get weights for nonlinear combination
 
         Ok(proof_stream)
     }

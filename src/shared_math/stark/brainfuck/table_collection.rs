@@ -37,6 +37,28 @@ impl TableCollection {
         }
     }
 
+    pub fn get_table_codeword_by_index(&self, index: usize) -> &Vec<Vec<XFieldElement>> {
+        match index {
+            0 => &self.processor_table.0.extended_codewords,
+            1 => &self.instruction_table.0.extended_codewords,
+            2 => &self.memory_table.0.extended_codewords,
+            3 => &self.input_table.0.extended_codewords,
+            4 => &self.output_table.0.extended_codewords,
+            _ => panic!("Unrecognized index. Got: {}", index),
+        }
+    }
+
+    pub fn get_table_interpolant_degree_by_index(&self, index: usize) -> Degree {
+        match index {
+            0 => self.processor_table.interpolant_degree(),
+            1 => self.instruction_table.interpolant_degree(),
+            2 => self.memory_table.interpolant_degree(),
+            3 => self.input_table.interpolant_degree(),
+            4 => self.output_table.interpolant_degree(),
+            _ => panic!("Unrecognized index. Got: {}", index),
+        }
+    }
+
     pub fn get_max_degree(&self) -> u64 {
         self.into_iter()
             .map(|table| table.max_degree())
@@ -350,7 +372,7 @@ mod brainfuck_table_collection_tests {
         tc_ref.borrow_mut().memory_table.0.matrix =
             MemoryTable::derive_matrix(processor_matrix_clone);
 
-        let mock_fri_domain_length = 256;
+        let mock_fri_domain_length = 512;
         let fri_domain = FriDomain {
             length: mock_fri_domain_length,
             offset: BFieldElement::new(7),

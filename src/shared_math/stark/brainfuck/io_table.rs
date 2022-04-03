@@ -3,7 +3,7 @@ use super::table::{Table, TableMoreTrait, TableTrait};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
-use crate::shared_math::traits::ModPowU32;
+use crate::shared_math::traits::{IdentityValues, ModPowU32};
 use crate::shared_math::x_field_element::XFieldElement;
 
 #[derive(Debug, Clone)]
@@ -235,6 +235,12 @@ impl TableTrait for IOTable {
         // if self.height != 0:
         //     assert(not terminals[self.terminal_index].is_zero(
         //     )), "evaluation terminal for non-empty IOTable is zero but shouldn't be!"
+        if self.height() != 0 {
+            assert!(
+                !terminals[self.terminal_index()].is_zero(),
+                "Evaluation terminal for non-empty IOTable is zero, but shouldn't be"
+            );
+        }
 
         // field = challenges[0].field
         // iota = challenges[self.challenge_index]
