@@ -39,7 +39,7 @@ impl Register {
             next_instruction: BFieldElement::ring_zero(),
             memory_pointer: BFieldElement::ring_zero(),
             memory_value: BFieldElement::ring_zero(),
-            is_zero: BFieldElement::ring_zero(),
+            is_zero: BFieldElement::ring_one(),
         }
     }
 }
