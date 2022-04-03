@@ -11,7 +11,7 @@ use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
 use crate::shared_math::stark::brainfuck::table;
 use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
-use crate::shared_math::traits::{FromVecu8, GetRandomElements};
+use crate::shared_math::traits::{FromVecu8, GetRandomElements, ModPowU32};
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
@@ -259,8 +259,8 @@ impl Stark {
             .base_tables
             .borrow_mut()
             .get_and_set_all_base_codewords(&self.fri.domain);
-        let base_codewords_count = base_codewords.len();
-        let all_base_codewords = vec![base_codewords, b_randomizer_codewords.into()].concat();
+        let all_base_codewords =
+            vec![base_codewords.clone(), b_randomizer_codewords.into()].concat();
 
         let _base_degree_bounds = self.base_tables.borrow().get_all_base_degree_bounds();
 
@@ -416,7 +416,94 @@ impl Stark {
         );
 
         let mut terms: Vec<Vec<XFieldElement>> = vec![x_randomizer_codeword];
-        assert_eq!(base_codewords_count, num_base_polynomials);
+        assert_eq!(base_codewords.len(), num_base_polynomials);
+        let fri_x_values: Vec<BFieldElement> = self.fri.domain.x_values();
+        for (i, (bc, bdb)) in base_codewords
+            .iter()
+            .zip(_base_degree_bounds.iter())
+            .enumerate()
+        {
+            let bc_lifted: Vec<XFieldElement> = bc.iter().map(|bfe| bfe.lift()).collect();
+            terms.push(bc_lifted);
+            let shift = (self.max_degree as Degree - bdb) as u32;
+            let bc_shifted: Vec<XFieldElement> = fri_x_values
+                .iter()
+                .zip(bc.iter())
+                .map(|(x, &bce)| (bce * x.mod_pow_u32(shift)).lift())
+                .collect();
+            terms.push(bc_shifted);
+
+            if std::env::var("DEBUG").is_ok() {
+                let interpolated = self.fri.domain.xinterpolate(terms.last().unwrap());
+                assert!(
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted base codeword with index {} must be of maximal degree {}. Got {}.",
+                    i,
+                    self.max_degree,
+                    interpolated.degree()
+                );
+            }
+        }
+
+        assert_eq!(extension_codewords.len(), num_extension_polynomials);
+        for (i, (ec, edb)) in extension_codewords
+            .iter()
+            .zip(extension_degree_bounds.iter())
+            .enumerate()
+        {
+            terms.push(ec.to_vec());
+            let shift = (self.max_degree as Degree - edb) as u32;
+            let ec_shifted: Vec<XFieldElement> = fri_x_values
+                .iter()
+                .zip(ec.iter())
+                .map(|(x, &ece)| ece * x.mod_pow_u32(shift).lift())
+                .collect();
+            terms.push(ec_shifted);
+
+            if std::env::var("DEBUG").is_ok() {
+                let interpolated = self.fri.domain.xinterpolate(terms.last().unwrap());
+                assert!(
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
+                    i,
+                    self.max_degree,
+                    interpolated.degree()
+                );
+            }
+        }
+
+        // assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
+        // for (i, (qc, qdb)) in quotient_codewords
+        //     .iter()
+        //     .zip(quotient_degree_bounds.iter())
+        //     .enumerate()
+        // {
+        //     terms.push(qc.to_vec());
+        //     let shift = (self.max_degree as Degree - qdb) as u32;
+        //     let qc_shifted: Vec<XFieldElement> = fri_x_values
+        //         .iter()
+        //         .zip(qc.iter())
+        //         .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift())
+        //         .collect();
+        //     terms.push(qc_shifted);
+
+        //     if std::env::var("DEBUG").is_ok() {
+        //         let interpolated = self.fri.domain.xinterpolate(terms.last().unwrap());
+        //         assert!(
+        //             interpolated.degree() == -1
+        //                 || interpolated.degree() == self.max_degree as isize,
+        //             "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}.",
+        //             i,
+        //             self.max_degree,
+        //             interpolated.degree()
+        //         );
+        //     }
+        // }
+
+        // // Take weighted sum
+        // assert_eq!(terms.len(), weights.len());
 
         Ok(proof_stream)
     }
