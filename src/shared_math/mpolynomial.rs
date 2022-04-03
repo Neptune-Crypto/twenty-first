@@ -1026,7 +1026,11 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
     pub fn symbolic_degree_bound(&self, max_degrees: &[i64]) -> Degree {
         assert_eq!(max_degrees.len(), self.variable_count);
         let mut total_degree_bound: i64 = -1;
-        for (exponents, _coefficients) in self.coefficients.iter() {
+        for (exponents, coefficients) in self.coefficients.iter() {
+            if coefficients.is_zero() {
+                continue;
+            }
+
             let signed_exponents = exponents.iter().map(|e| {
                 let res = i64::try_from(*e);
                 assert!(res.is_ok());
@@ -2093,7 +2097,7 @@ mod test_mpolynomials {
 
         let mpoly = MPolynomial::<BFieldElement> {
             variable_count: 3,
-            coefficients: mcoef,
+            coefficients: mcoef.clone(),
         };
 
         let max_degrees = vec![3, 5, 7];
@@ -2101,6 +2105,23 @@ mod test_mpolynomials {
 
         let expected = cmp::max(0 * 3 + 2 * 5 + 1 * 7, 0 * 3 + 0 * 5 + 1 * 7);
         assert_eq!(degree_poly, expected);
+
+        // Verify that a zero-coefficient does not alter the result
+        let new_key = vec![4, 2, 1];
+        mcoef.insert(new_key.clone(), BFieldElement::new(0));
+        let mpoly_alt = MPolynomial::<BFieldElement> {
+            variable_count: 3,
+            coefficients: mcoef.clone(),
+        };
+        assert_eq!(expected, mpoly_alt.symbolic_degree_bound(&max_degrees));
+
+        // Verify that the result is different when the coefficient is non-zero
+        mcoef.insert(new_key.clone(), BFieldElement::new(4562));
+        let mpoly_alt_alt = MPolynomial::<BFieldElement> {
+            variable_count: 3,
+            coefficients: mcoef,
+        };
+        assert_ne!(expected, mpoly_alt_alt.symbolic_degree_bound(&max_degrees));
     }
 
     #[test]
