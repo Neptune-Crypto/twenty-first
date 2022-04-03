@@ -228,8 +228,20 @@ impl<T: TableMoreTrait> Table<T> {
             domain.length,
             (self.base_width..self.full_width).collect(),
         );
-        self.extended_codewords = polynomials.iter().map(|p| domain.xevaluate(p)).collect();
-        self.extended_codewords.clone()
+        let extended_codewords = polynomials
+            .iter()
+            .map(|p| domain.xevaluate(p))
+            .collect::<Vec<Vec<XFieldElement>>>();
+        self.extended_codewords = vec![
+            self.codewords
+                .iter()
+                .map(|x| x.iter().map(|y| y.lift()).collect::<Vec<XFieldElement>>())
+                .collect::<Vec<Vec<XFieldElement>>>(),
+            extended_codewords.clone(),
+        ]
+        .concat();
+
+        extended_codewords
     }
 }
 
