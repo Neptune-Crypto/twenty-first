@@ -246,20 +246,21 @@ impl Stark {
             self.max_degree as usize + 1,
             &mut rng,
         ));
-        let randomizer_codeword: Vec<XFieldElement> =
+        let x_randomizer_codeword: Vec<XFieldElement> =
             self.fri.domain.xevaluate(&randomizer_polynomial);
-        let mut randomizer_codewords: [Vec<BFieldElement>; 3] = [vec![], vec![], vec![]];
-        for x_elem in randomizer_codeword.iter() {
-            randomizer_codewords[0].push(x_elem.coefficients[0]);
-            randomizer_codewords[1].push(x_elem.coefficients[1]);
-            randomizer_codewords[2].push(x_elem.coefficients[2]);
+        let mut b_randomizer_codewords: [Vec<BFieldElement>; 3] = [vec![], vec![], vec![]];
+        for x_elem in x_randomizer_codeword.iter() {
+            b_randomizer_codewords[0].push(x_elem.coefficients[0]);
+            b_randomizer_codewords[1].push(x_elem.coefficients[1]);
+            b_randomizer_codewords[2].push(x_elem.coefficients[2]);
         }
 
         let base_codewords: Vec<Vec<BFieldElement>> = self
             .base_tables
             .borrow_mut()
             .get_and_set_all_base_codewords(&self.fri.domain);
-        let all_base_codewords = vec![base_codewords, randomizer_codewords.into()].concat();
+        let base_codewords_count = base_codewords.len();
+        let all_base_codewords = vec![base_codewords, b_randomizer_codewords.into()].concat();
 
         let _base_degree_bounds = self.base_tables.borrow().get_all_base_degree_bounds();
 
@@ -392,6 +393,30 @@ impl Stark {
         }
 
         // TODO: Get weights for nonlinear combination
+        let num_base_polynomials: usize = self
+            .base_tables
+            .borrow()
+            .into_iter()
+            .map(|table| table.base_width())
+            .sum();
+        let num_extension_polynomials: usize = self
+            .base_tables
+            .borrow()
+            .into_iter()
+            .map(|table| table.full_width() - table.base_width())
+            .sum();
+        let num_randomizer_polynomials: usize = 1;
+        let num_quotient_polynomials: usize = quotient_degree_bounds.len();
+        let weights_seed = proof_stream.prover_fiat_shamir();
+        let weights = Self::sample_weights(
+            (num_randomizer_polynomials
+                + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials))
+                as u8,
+            weights_seed,
+        );
+
+        let mut terms: Vec<Vec<XFieldElement>> = vec![x_randomizer_codeword];
+        assert_eq!(base_codewords_count, num_base_polynomials);
 
         Ok(proof_stream)
     }
@@ -413,6 +438,9 @@ mod brainfuck_stark_tests {
         let base_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
         let mut stark = Stark::new(trace_length, program, input_symbols, output_symbols);
+
+        // TODO: If we set the `DEBUG` environment variable here, we *should* catch a lot of bugs.
+        // Do we want to do that?
         let _proof_stream = stark
             .prove(
                 base_matrices.processor_matrix,
