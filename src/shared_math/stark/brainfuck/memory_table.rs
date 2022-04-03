@@ -1,14 +1,10 @@
+use super::processor_table::ProcessorTable;
+use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
+use super::table::{Table, TableMoreTrait, TableTrait};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::mpolynomial::MPolynomial;
+use crate::shared_math::x_field_element::XFieldElement;
 use std::convert::TryInto;
-
-use crate::shared_math::{
-    b_field_element::BFieldElement, mpolynomial::MPolynomial,
-    stark::brainfuck::processor_table::ProcessorTable, x_field_element::XFieldElement,
-};
-
-use super::{
-    stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT},
-    table::{Table, TableMoreTrait, TableTrait},
-};
 
 #[derive(Debug, Clone)]
 pub struct MemoryTable(pub Table<MemoryTableMore>);
@@ -186,7 +182,7 @@ impl TableTrait for MemoryTable {
 
     fn extend(
         &mut self,
-        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
         let _a = all_challenges[0];
@@ -242,10 +238,10 @@ impl TableTrait for MemoryTable {
 
     fn transition_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let [_a, _b, _c, d, e, f, _alpha, beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
-            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            EXTENSION_CHALLENGE_COUNT] = challenges
             .iter()
             .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
@@ -295,7 +291,7 @@ impl TableTrait for MemoryTable {
 
     fn boundary_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
         let x =
@@ -321,11 +317,11 @@ impl TableTrait for MemoryTable {
 
     fn terminal_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let [_a, _b, _c, d, e, f, _alpha, beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
-            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            EXTENSION_CHALLENGE_COUNT] = challenges
             .iter()
             .map(|challenge| MPolynomial::from_constant(*challenge, Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
@@ -424,8 +420,8 @@ mod memory_table_tests {
             }
 
             // Test transition constraints on extension table
-            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
-                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
+                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
                     .try_into()
                     .unwrap();
 

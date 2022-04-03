@@ -139,7 +139,7 @@ impl TableCollection {
 
     pub fn extend(
         &mut self,
-        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
         self.processor_table.extend(all_challenges, all_initials);
@@ -162,7 +162,7 @@ impl TableCollection {
     pub fn all_quotients(
         &self,
         fri_domain: &FriDomain<BFieldElement>,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
         let pt = self.processor_table.all_quotients(
@@ -201,7 +201,7 @@ impl TableCollection {
 
     pub fn all_quotient_degree_bounds(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Degree> {
         let mut i = 0;
@@ -457,8 +457,8 @@ mod brainfuck_table_collection_tests {
 
         // Extend and verify that extension codewords are also calculated correctly
         let mut rng = thread_rng();
-        let all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
-            XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+        let all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
+            XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
                 .try_into()
                 .unwrap();
         let all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT as usize] =

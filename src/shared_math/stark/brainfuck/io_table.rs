@@ -1,12 +1,10 @@
+use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
+use super::table::{Table, TableMoreTrait, TableTrait};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::mpolynomial::MPolynomial;
+use crate::shared_math::other;
 use crate::shared_math::traits::ModPowU32;
-use crate::shared_math::{
-    b_field_element::BFieldElement, mpolynomial::MPolynomial, other, x_field_element::XFieldElement,
-};
-
-use super::{
-    stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT},
-    table::{Table, TableMoreTrait, TableTrait},
-};
+use crate::shared_math::x_field_element::XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct IOTable(pub Table<IOTableMore>);
@@ -137,7 +135,7 @@ impl TableTrait for IOTable {
 
     fn extend(
         &mut self,
-        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         _all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
         // `iota` is called `gamma` or `delta` in the other `extend()`s.
@@ -197,7 +195,7 @@ impl TableTrait for IOTable {
 
     fn transition_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let variable_count = Self::FULL_WIDTH * 2;
         let vars =
@@ -217,7 +215,7 @@ impl TableTrait for IOTable {
 
     fn boundary_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         // x = MPolynomial.variables(self.full_width, field)
         let x =
@@ -231,8 +229,8 @@ impl TableTrait for IOTable {
 
     fn terminal_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         // if self.height != 0:
         //     assert(not terminals[self.terminal_index].is_zero(
@@ -378,8 +376,8 @@ mod io_table_tests {
                 }
 
                 // Test transition constraints on extension table
-                let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
-                    XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+                let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
+                    XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
                         .try_into()
                         .unwrap();
 

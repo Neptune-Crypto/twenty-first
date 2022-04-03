@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::fri::FriDomain;
@@ -256,7 +258,7 @@ pub trait TableTrait {
     fn order(&self) -> usize;
     fn extend(
         &mut self,
-        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     );
 
@@ -285,8 +287,8 @@ pub trait TableTrait {
 
     fn all_quotient_degree_bounds(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        terminals: [XFieldElement; TERMINAL_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Degree> {
         // boundary_degree_bounds = self.boundary_quotient_degree_bounds(challenges)
         let boundary_degree_bounds = self.boundary_quotient_degree_bounds(challenges);
@@ -308,7 +310,7 @@ pub trait TableTrait {
 
     fn boundary_quotient_degree_bounds(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Degree> {
         // max_degrees = [self.interpolant_degree()] * self.full_width
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.full_width()];
@@ -327,7 +329,7 @@ pub trait TableTrait {
 
     fn transition_quotient_degree_bounds(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Degree> {
         // max_degrees = [self.interpolant_degree()] * (2*self.full_width)
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); 2 * self.full_width()];
@@ -350,8 +352,8 @@ pub trait TableTrait {
 
     fn terminal_quotient_degree_bounds(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        terminals: [XFieldElement; TERMINAL_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Degree> {
         // max_degrees = [self.interpolant_degree()] * self.full_width
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.full_width()];
@@ -369,7 +371,7 @@ pub trait TableTrait {
         &self,
         fri_domain: &FriDomain<BFieldElement>,
         codewords: &[Vec<XFieldElement>],
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
         let boundary_quotients = self.boundary_quotients(fri_domain, codewords, challenges);
@@ -384,7 +386,7 @@ pub trait TableTrait {
         &self,
         fri_domain: &FriDomain<BFieldElement>,
         codewords: &[Vec<XFieldElement>],
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
         let one = BFieldElement::ring_one();
         let x_values: Vec<BFieldElement> = fri_domain.x_values();
@@ -447,7 +449,7 @@ pub trait TableTrait {
         &self,
         fri_domain: &FriDomain<BFieldElement>,
         codewords: &[Vec<XFieldElement>],
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
         let omicron_inverse = self.omicron().inverse();
@@ -480,7 +482,7 @@ pub trait TableTrait {
         &self,
         fri_domain: &FriDomain<BFieldElement>,
         codewords: &[Vec<XFieldElement>],
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
         assert!(!codewords.is_empty(), "Codewords must be non-empty");
         let mut quotient_codewords: Vec<Vec<XFieldElement>> = vec![];
@@ -516,24 +518,36 @@ pub trait TableTrait {
         quotient_codewords
     }
 
+    fn as_mpolynomial_vars<PF: PrimeField, const WIDTH: usize>(
+        &self,
+        challenges: [PF; EXTENSION_CHALLENGE_COUNT],
+    ) -> [MPolynomial<PF>; EXTENSION_CHALLENGE_COUNT] {
+        challenges
+            .iter()
+            .map(|challenge| MPolynomial::<PF>::from_constant(*challenge, WIDTH))
+            .collect::<Vec<MPolynomial<PF>>>()
+            .try_into()
+            .unwrap()
+    }
+
     // IMPLEMENT THESE!
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
     fn transition_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>>;
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
 
     fn boundary_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>>;
 
     fn terminal_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        terminals: [XFieldElement; TERMINAL_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>>;
 }
 

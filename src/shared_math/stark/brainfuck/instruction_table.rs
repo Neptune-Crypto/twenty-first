@@ -184,7 +184,7 @@ impl TableTrait for InstructionTable {
 
     fn extend(
         &mut self,
-        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
         let [a, b, c, _d, _e, _f, alpha, _beta, _gamma, _delta, eta] = all_challenges;
@@ -273,10 +273,10 @@ impl TableTrait for InstructionTable {
 
     fn transition_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let [a, b, c, _d, _e, _f, alpha, _beta, _gamma, _delta, eta]: [MPolynomial<XFieldElement>;
-            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            EXTENSION_CHALLENGE_COUNT] = challenges
             .iter()
             .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
@@ -400,10 +400,10 @@ impl TableTrait for InstructionTable {
 
     fn boundary_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let [a, b, c, _d, _e, _f, _alpha, _beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
-            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            EXTENSION_CHALLENGE_COUNT] = challenges
             .iter()
             .map(|challenge| MPolynomial::from_constant(*challenge, Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
@@ -424,18 +424,18 @@ impl TableTrait for InstructionTable {
 
     fn terminal_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        terminals: [XFieldElement; TERMINAL_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let [a, b, c, _d, _e, _f, alpha, _beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
-            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            EXTENSION_CHALLENGE_COUNT] = challenges
             .iter()
             .map(|challenge| MPolynomial::from_constant(*challenge, Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
             .try_into()
             .unwrap();
         let [processor_instruction_permutation_terminal, _processor_memory_permutation_terminal, _processor_input_evaluation_terminal, _processor_output_evaluation_terminal, instruction_evaluation_terminal]: [MPolynomial<XFieldElement>;
-            TERMINAL_COUNT as usize] = terminals
+            TERMINAL_COUNT] = terminals
             .iter()
             .map(|terminal| MPolynomial::from_constant(*terminal, Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
@@ -544,8 +544,8 @@ mod instruction_table_tests {
             }
 
             // Test the same for the extended matrix
-            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
-                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
+                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
                     .try_into()
                     .unwrap();
             instruction_table.extend(

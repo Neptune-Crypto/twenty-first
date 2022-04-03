@@ -423,10 +423,10 @@ impl TableTrait for ProcessorTable {
 
     fn transition_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let [a, b, c, d, e, f, alpha, beta, gamma, delta, _eta]: [MPolynomial<XFieldElement>;
-            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            EXTENSION_CHALLENGE_COUNT] = challenges
             .iter()
             .map(|challenge| MPolynomial::from_constant(*challenge, 2 * Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
@@ -583,7 +583,7 @@ impl TableTrait for ProcessorTable {
 
     fn extend(
         &mut self,
-        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) {
         let [a, b, c, d, e, f, alpha, beta, gamma, delta, _eta] = all_challenges;
@@ -656,7 +656,7 @@ impl TableTrait for ProcessorTable {
 
     fn boundary_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         // field = challenges[0].field
         // # format: mpolynomial
@@ -692,13 +692,13 @@ impl TableTrait for ProcessorTable {
 
     fn terminal_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize],
-        terminals: [XFieldElement; super::stark::TERMINAL_COUNT as usize],
+        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        terminals: [XFieldElement; super::stark::TERMINAL_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         // a, b, c, d, e, f, alpha, beta, gamma, delta, eta = [
         //     MPolynomial.constant(ch) for ch in challenges]
         let [_a, _b, _c, d, e, f, _alpha, beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
-            EXTENSION_CHALLENGE_COUNT as usize] = challenges
+            EXTENSION_CHALLENGE_COUNT] = challenges
             .iter()
             .map(|challenge| MPolynomial::from_constant(*challenge, Self::FULL_WIDTH))
             .collect::<Vec<MPolynomial<XFieldElement>>>()
@@ -843,8 +843,8 @@ mod processor_table_tests {
             }
 
             // Test the same for the extended matrix
-            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT as usize] =
-                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT as usize, &mut rng)
+            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
+                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
                     .try_into()
                     .unwrap();
             processor_table.extend(
