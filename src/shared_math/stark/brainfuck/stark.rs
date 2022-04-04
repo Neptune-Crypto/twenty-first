@@ -407,13 +407,6 @@ impl Stark {
             .sum();
         let num_randomizer_polynomials: usize = 1;
         let num_quotient_polynomials: usize = quotient_degree_bounds.len();
-        let weights_seed = proof_stream.prover_fiat_shamir();
-        let weights = Self::sample_weights(
-            (num_randomizer_polynomials
-                + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials))
-                as u8,
-            weights_seed,
-        );
 
         let mut terms: Vec<Vec<XFieldElement>> = vec![x_randomizer_codeword];
         assert_eq!(base_codewords.len(), num_base_polynomials);
@@ -474,36 +467,75 @@ impl Stark {
             }
         }
 
-        // assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
-        // for (i, (qc, qdb)) in quotient_codewords
-        //     .iter()
-        //     .zip(quotient_degree_bounds.iter())
-        //     .enumerate()
-        // {
-        //     terms.push(qc.to_vec());
-        //     let shift = (self.max_degree as Degree - qdb) as u32;
-        //     let qc_shifted: Vec<XFieldElement> = fri_x_values
-        //         .iter()
-        //         .zip(qc.iter())
-        //         .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift())
-        //         .collect();
-        //     terms.push(qc_shifted);
+        assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
+        for (i, (qc, qdb)) in quotient_codewords
+            .iter()
+            .zip(quotient_degree_bounds.iter())
+            .enumerate()
+        {
+            terms.push(qc.to_vec());
+            let shift = (self.max_degree as Degree - qdb) as u32;
+            let qc_shifted: Vec<XFieldElement> = fri_x_values
+                .iter()
+                .zip(qc.iter())
+                .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift())
+                .collect();
+            terms.push(qc_shifted);
 
-        //     if std::env::var("DEBUG").is_ok() {
-        //         let interpolated = self.fri.domain.xinterpolate(terms.last().unwrap());
-        //         assert!(
-        //             interpolated.degree() == -1
-        //                 || interpolated.degree() == self.max_degree as isize,
-        //             "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}.",
-        //             i,
-        //             self.max_degree,
-        //             interpolated.degree()
-        //         );
-        //     }
-        // }
+            // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
+            if std::env::var("DEBUG").is_ok() {
+                let interpolated = self.fri.domain.xinterpolate(terms.last().unwrap());
+                let unshifted_degree = self
+                    .fri
+                    .domain
+                    .xinterpolate(&terms[terms.len() - 2])
+                    .degree();
+                assert!(
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. Actual degree of unshifted codeword: {}. Shift = {}",
+                    i,
+                    self.max_degree,
+                    interpolated.degree(),
+                    qdb,
+                    unshifted_degree,
+                    shift
+                );
+            }
+        }
+
+        let weights_seed = proof_stream.prover_fiat_shamir();
+        let weights = Self::sample_weights(
+            (num_randomizer_polynomials
+                + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials))
+                as u8,
+            weights_seed,
+        );
 
         // // Take weighted sum
-        // assert_eq!(terms.len(), weights.len());
+        assert_eq!(
+            terms.len(),
+            weights.len(),
+            "Number of terms in non-linear combination must match number of weights"
+        );
+
+        let combination_codeword: Vec<XFieldElement> = weights
+            .iter()
+            .zip(terms.iter())
+            .map(|(w, t)| {
+                (0..self.fri.domain.length)
+                    .map(|i| *w * t[i])
+                    .collect::<Vec<XFieldElement>>()
+            })
+            .fold(
+                vec![XFieldElement::ring_zero(); weights.len()],
+                |acc, weighted_terms| {
+                    acc.iter()
+                        .zip(weighted_terms.iter())
+                        .map(|(a, wt)| *a + *wt)
+                        .collect()
+                },
+            );
 
         Ok(proof_stream)
     }
