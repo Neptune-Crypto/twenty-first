@@ -56,7 +56,7 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u128> = phf_map! {
 };
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize, Default)]
 pub struct BFieldElement(u128);
 
 impl BFieldElement {
@@ -121,6 +121,12 @@ impl BFieldElement {
 impl fmt::Display for BFieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<u32> for BFieldElement {
+    fn from(value: u32) -> Self {
+        BFieldElement::new(value.into())
     }
 }
 
