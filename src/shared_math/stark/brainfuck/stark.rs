@@ -31,6 +31,8 @@ pub const EXTENSION_CHALLENGE_COUNT: usize = 11;
 pub const PERMUTATION_ARGUMENTS_COUNT: usize = 2;
 pub const TERMINAL_COUNT: usize = 5;
 
+const SIZE_OF_RP_HASH_IN_BYTES: usize = 8 + 5 * 128 / 8;
+
 pub struct Stark {
     trace_length: usize,
     program: Vec<BFieldElement>,
@@ -320,7 +322,9 @@ impl Stark {
 
         // Commit to base codewords
         let mut proof_stream = ProofStream::default();
-        proof_stream.enqueue(base_merkle_tree.get_root())?;
+        let base_merkle_tree_root: &Vec<BFieldElement> = base_merkle_tree.get_root();
+        println!("prover is feeling lucky: {:?}", base_merkle_tree_root);
+        proof_stream.enqueue(base_merkle_tree_root)?;
 
         // Get coefficients for table extension
         // let challenges = self.sample_weights(EXTENSION_CHALLENGE_COUNT, proof_stream.prover_fiat_shamir());
@@ -529,6 +533,7 @@ impl Stark {
                 as u8,
             weights_seed,
         );
+        println!("prover is feeling lucky about weights = {:?}", weights);
 
         // // Take weighted sum
         assert_eq!(
@@ -620,6 +625,107 @@ impl Stark {
 
         Ok(proof_stream)
     }
+
+    pub fn verify(&self, proof_stream: &mut ProofStream) -> Result<bool, Box<dyn Error>> {
+        let base_merkle_tree_root: Vec<BFieldElement> =
+            proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
+        println!("verifier is feeling lucky: {:?}", base_merkle_tree_root);
+
+        // Get coefficients for table extension
+        // let challenges = self.sample_weights(EXTENSION_CHALLENGE_COUNT, proof_stream.prover_fiat_shamir());
+        // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
+        // must not change though, it should remain `Vec<XFieldElement>`.
+        let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
+            EXTENSION_CHALLENGE_COUNT as u8,
+            proof_stream.verifier_fiat_shamir(),
+        )
+        .try_into()
+        .unwrap();
+
+        let extension_tree_merkle_root: Vec<BFieldElement> =
+            proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
+        let processor_instruction_permutation_terminal: XFieldElement =
+            proof_stream.dequeue(3 * 128 / 8)?;
+        let processor_memory_permutation_terminal: XFieldElement =
+            proof_stream.dequeue(3 * 128 / 8)?;
+        let processor_input_evaluation_terminal: XFieldElement =
+            proof_stream.dequeue(3 * 128 / 8)?;
+        let processor_output_evaluation_terminal: XFieldElement =
+            proof_stream.dequeue(3 * 128 / 8)?;
+        let instruction_evaluation_terminal: XFieldElement = proof_stream.dequeue(3 * 128 / 8)?;
+        let terminals = [
+            processor_instruction_permutation_terminal,
+            processor_memory_permutation_terminal,
+            processor_input_evaluation_terminal,
+            processor_output_evaluation_terminal,
+            instruction_evaluation_terminal,
+        ];
+
+        let base_degree_bounds: Vec<Degree> = self
+            .tables
+            .borrow()
+            .into_iter()
+            .map(|table| vec![table.interpolant_degree(); table.base_width()])
+            .concat();
+
+        let extension_degree_bounds: Vec<Degree> = self
+            .tables
+            .borrow()
+            .into_iter()
+            .map(|table| vec![table.interpolant_degree(); table.full_width() - table.base_width()])
+            .concat();
+
+        // # get weights for nonlinear combination
+        // #  - 1 randomizer
+        // #  - 2 for every other polynomial (base, extension, quotients)
+        // num_base_polynomials = sum(
+        //     table.base_width for table in self.tables)
+        let num_base_polynomials = base_degree_bounds.len();
+
+        // num_extension_polynomials = sum(
+        //     table.full_width - table.base_width for table in self.tables)
+        let num_extension_polynomials = extension_degree_bounds.len();
+
+        // num_randomizer_polynomials = 1
+        let num_randomizer_polynomials = 1;
+
+        // num_quotient_polynomials = sum(table.num_quotients(
+        //     challenges, terminals) for table in self.tables)
+        let num_quotient_polynomials: usize = self
+            .tables
+            .borrow()
+            .into_iter()
+            .map(|table| {
+                table
+                    .all_quotient_degree_bounds(challenges, terminals)
+                    .len()
+            })
+            .sum();
+
+        // num_difference_quotients = len(self.permutation_arguments)
+        let num_difference_quotients = self.permutation_arguments.len();
+
+        // weights_seed = proof_stream.verifier_fiat_shamir()
+        // weights = self.sample_weights(
+        //     num_randomizer_polynomials +
+        //     2*num_base_polynomials +
+        //     2*num_extension_polynomials +
+        //     2*num_quotient_polynomials +
+        //     2*num_difference_quotients,
+        //     weights_seed)
+        let weights_seed: Vec<u8> = proof_stream.verifier_fiat_shamir();
+        let weights: Vec<XFieldElement> = Self::sample_weights(
+            (num_randomizer_polynomials
+                + 2 * num_base_polynomials
+                + 2 * num_extension_polynomials
+                + 2 * num_quotient_polynomials
+                + 2 * num_difference_quotients) as u8,
+            weights_seed,
+        );
+        println!("verifier is feeling lucky about weights = {:?}", weights);
+
+        Ok(false) // FIXME
+    }
 }
 
 #[cfg(test)]
@@ -641,7 +747,7 @@ mod brainfuck_stark_tests {
 
         // TODO: If we set the `DEBUG` environment variable here, we *should* catch a lot of bugs.
         // Do we want to do that?
-        let _proof_stream = stark
+        let mut proof_stream = stark
             .prove(
                 base_matrices.processor_matrix,
                 base_matrices.instruction_matrix,
@@ -649,5 +755,9 @@ mod brainfuck_stark_tests {
                 base_matrices.output_matrix,
             )
             .unwrap();
+
+        let verifier_verdict: Result<bool, Box<dyn Error>> = stark.verify(&mut proof_stream);
+        assert!(verifier_verdict.is_ok(), "verifier shouldn't crash");
+        // assert!(verifier_verdict.unwrap(), "verifier should agree");
     }
 }
