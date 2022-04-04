@@ -23,6 +23,7 @@ use crate::util_types::simple_hasher::{Hasher, RescuePrimeProduction, ToDigest};
 use itertools::Itertools;
 use rand::thread_rng;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
 use std::rc::Rc;
@@ -309,7 +310,7 @@ impl Stark {
             .map(|values| {
                 let chunks: Vec<Vec<BFieldElement>> = values
                     .chunks(hasher.0.max_input_length / 2)
-                    .map(|s| s.into())
+                    .map(|s| s.to_vec())
                     .collect();
                 hasher.hash_many(&chunks)
             })
@@ -533,7 +534,7 @@ impl Stark {
                 as u8,
             weights_seed,
         );
-        println!("prover is feeling lucky about weights = {:?}", weights);
+        // println!("prover is feeling lucky about weights = {:?}", weights);
 
         // // Take weighted sum
         assert_eq!(
@@ -572,8 +573,11 @@ impl Stark {
                 &combination_codeword_digests,
                 &vec![BFieldElement::ring_zero()],
             );
-        proof_stream.enqueue(combination_tree.get_root())?;
+        let combination_root: &Vec<BFieldElement> = combination_tree.get_root();
+        println!("Prover: combination_root = {:?}", combination_root);
+        proof_stream.enqueue(combination_root)?;
 
+        // TODO: Consider factoring out code to find `unit_distances`, duplicated in verifier
         let mut unit_distances: Vec<usize> = self
             .tables
             .borrow()
@@ -588,17 +592,21 @@ impl Stark {
         let indices_seed = proof_stream.prover_fiat_shamir();
         let indices =
             Self::sample_indices(self.security_level, indices_seed, self.fri.domain.length);
+        println!("Prover: indices = {:?}", indices);
 
         // Open leafs of zipped codewords at indicated positions
         for index in indices {
             for unit_distance in unit_distances.iter() {
-                let idx = (index + unit_distance) % self.fri.domain.length;
+                let idx: usize = (index + unit_distance) % self.fri.domain.length;
 
                 let element: Vec<BFieldElement> = transposed_base_codewords[idx].clone();
+                println!("prover: element = {:?}", element);
+                println!("element.len() = {}", element.len());
                 let auth_path: Vec<Vec<BFieldElement>> =
                     base_merkle_tree.get_authentication_path(idx);
                 proof_stream.enqueue(&element)?;
-                proof_stream.enqueue(&auth_path)?;
+                // proof_stream.enqueue(&auth_path)?;
+                proof_stream.enqueue_length_prepended(&auth_path)?;
 
                 let leaf_digest = base_codeword_digests_by_index[idx].clone();
                 let success = MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::verify_authentication_path_from_leaf_hash(
@@ -705,14 +713,6 @@ impl Stark {
         // num_difference_quotients = len(self.permutation_arguments)
         let num_difference_quotients = self.permutation_arguments.len();
 
-        // weights_seed = proof_stream.verifier_fiat_shamir()
-        // weights = self.sample_weights(
-        //     num_randomizer_polynomials +
-        //     2*num_base_polynomials +
-        //     2*num_extension_polynomials +
-        //     2*num_quotient_polynomials +
-        //     2*num_difference_quotients,
-        //     weights_seed)
         let weights_seed: Vec<u8> = proof_stream.verifier_fiat_shamir();
         let weights: Vec<XFieldElement> = Self::sample_weights(
             (num_randomizer_polynomials
@@ -722,7 +722,51 @@ impl Stark {
                 + 2 * num_difference_quotients) as u8,
             weights_seed,
         );
-        println!("verifier is feeling lucky about weights = {:?}", weights);
+        // println!("verifier is feeling lucky about weights = {:?}", weights);
+
+        let combination_root: Vec<BFieldElement> =
+            proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
+        println!("Verifier: combination_root = {:?}", combination_root);
+        let indices_seed: Vec<u8> = proof_stream.verifier_fiat_shamir();
+        let indices =
+            Self::sample_indices(self.security_level, indices_seed, self.fri.domain.length);
+        println!("Verifier: indices = {:?}", indices);
+
+        // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
+        let mut unit_distances: Vec<usize> = self
+            .tables
+            .borrow()
+            .into_iter()
+            .map(|table| table.unit_distance(self.fri.domain.length))
+            .collect();
+        unit_distances.push(0);
+        unit_distances.sort();
+        unit_distances.dedup();
+
+        let mut hasher = RescuePrimeProduction::new();
+        let mut tuples: HashMap<usize, XFieldElement> = HashMap::new();
+        for index in indices {
+            for unit_distance in unit_distances.iter() {
+                let idx = (index + unit_distance) % self.fri.domain.length;
+                let element: Vec<BFieldElement> = proof_stream.dequeue(8 + 18 * 128 / 8)?;
+                let auth_path: Vec<Vec<BFieldElement>> = proof_stream.dequeue_length_prepended()?;
+                println!("verifier: element = {:?}", element);
+
+                let hash_input: Vec<Vec<BFieldElement>> = element
+                    .chunks(hasher.0.max_input_length / 2)
+                    .map(|s| s.to_vec())
+                    .collect();
+                let leaf_hash: Vec<BFieldElement> = hasher.hash_many(&hash_input);
+                let mt_base_success = MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::verify_authentication_path_from_leaf_hash(base_merkle_tree_root, idx as u32, leaf_hash, auth_path);
+                if !mt_base_success {
+                    // TODO: Replace this by a specific error type, or just return `Ok(false)`
+                    panic!("Failed to verify authentication path for base codeword");
+                    // return Ok(false);
+                }
+
+                tuples.insert(idx, element.iter().map(|bfe| bfe.lift());
+            }
+        }
 
         Ok(false) // FIXME
     }
