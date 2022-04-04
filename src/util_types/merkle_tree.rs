@@ -243,7 +243,7 @@ where
         auth_path
     }
 
-    fn verify_authentication_path_from_leaf_hash(
+    pub fn verify_authentication_path_from_leaf_hash(
         root_hash: H::Digest,
         index: u32,
         leaf_hash: H::Digest,

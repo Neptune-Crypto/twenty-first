@@ -83,8 +83,8 @@ impl FriDomain<BFieldElement> {
 
 #[derive(Debug, Clone)]
 pub struct Fri<PF: PrimeField, H> {
-    expansion_factor: usize,         // = domain_length / trace_length
-    colinearity_checks_count: usize, // number of colinearity checks in each round
+    pub expansion_factor: usize,         // = domain_length / trace_length
+    pub colinearity_checks_count: usize, // number of colinearity checks in each round
     pub domain: FriDomain<PF>,
     _hasher: PhantomData<H>,
 }

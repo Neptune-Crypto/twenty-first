@@ -161,6 +161,12 @@ impl ToDigest<Vec<BFieldElement>> for BFieldElement {
     }
 }
 
+impl ToDigest<Vec<BFieldElement>> for XFieldElement {
+    fn to_digest(&self) -> Vec<BFieldElement> {
+        self.coefficients.to_vec()
+    }
+}
+
 // TODO: This 'Blake3Hash' wrapper looks messy, but at least it is contained here. Can we move it to 'blake3_wrapper'?
 impl Hasher for blake3::Hasher {
     type Digest = Blake3Hash;
