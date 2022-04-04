@@ -2,15 +2,25 @@ use crate::shared_math::fri::Fri;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other::log_2_ceil;
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
-use crate::shared_math::traits::FromVecu8;
 use crate::shared_math::traits::{CyclicGroupGenerator, GetPrimitiveRootOfUnity, IdentityValues};
+use crate::shared_math::traits::{FromVecu8, ModPowU32};
 use crate::util_types::blake3_wrapper::Blake3Hash;
-use crate::util_types::merkle_tree::{LeaflessPartialAuthenticationPath, MerkleTree};
+use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::util_types::simple_hasher::Hasher;
 use crate::{shared_math::polynomial::Polynomial, util_types::proof_stream::ProofStream, utils};
 use rand::{RngCore, SeedableRng};
 use rand_pcg::Pcg64;
 use std::fmt;
+use std::iter::zip;
 use std::{collections::HashMap, error::Error};
+
+fn lookup_multiple<T: Clone>(indices: &[usize], values: &[T]) -> Vec<T> {
+    let mut res = Vec::new();
+    for &i in indices {
+        res.push(values[i].clone());
+    }
+    res
+}
 
 use super::stark_constraints_pfe_flexible::BoundaryConstraint;
 use super::stark_verify_error::{MerkleProofError, StarkVerifyError};
@@ -24,7 +34,7 @@ type StarkPfeDigest = Blake3Hash;
 #[derive(Clone, Debug)]
 pub struct StarkPreprocessedValuesProver {
     transition_zerofier: Polynomial<PrimeFieldElementFlexible>,
-    transition_zerofier_mt: MerkleTree<PrimeFieldElementFlexible, StarkPfeHasher>,
+    transition_zerofier_mt: MerkleTree<StarkPfeHasher>,
 }
 
 #[derive(Clone, Debug)]
@@ -127,19 +137,23 @@ impl<'a> StarkPrimeFieldElementFlexible {
     // Compute and set the preprocess values for both the prover and verifier, not a trusted
     // function as all functions are computed locally
     pub fn prover_preprocess(&mut self) {
+        let hasher = StarkPfeHasher::new();
         let transition_zerofier: Polynomial<PrimeFieldElementFlexible> = Polynomial::fast_zerofier(
             &self.omicron_domain[..self.original_trace_length - 1],
             &self.omicron,
             self.omicron_domain.len(),
         );
+
         let transition_zerofier_codeword: Vec<PrimeFieldElementFlexible> = transition_zerofier
             .fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain.length);
+
+        let transition_zerofier_codeword_digests: Vec<_> = transition_zerofier_codeword
+            .iter()
+            .map(|x| hasher.hash(x))
+            .collect();
         let transition_zerofier_mt =
-            MerkleTree::<PrimeFieldElementFlexible, StarkPfeHasher>::from_vec(
-                &transition_zerofier_codeword,
-                &self.omega,
-            );
-        let transition_zerofier_mt_root = *transition_zerofier_mt.get_root();
+            MerkleTree::<StarkPfeHasher>::from_digests(&transition_zerofier_codeword_digests);
+        let transition_zerofier_mt_root = transition_zerofier_mt.get_root();
 
         self.preprocessed_values = Some(StarkPreprocessedValues {
             transition_zerofier_mt_root,
@@ -313,11 +327,13 @@ impl StarkPrimeFieldElementFlexible {
         boundary_constraints: Vec<BoundaryConstraint>,
         proof_stream: &mut ProofStream,
     ) -> Result<(), Box<dyn Error>> {
+        let hasher = StarkPfeHasher::new();
+
         if !self.ready_for_prove() {
             return Err(Box::new(StarkProofError::MissingPreprocessedValues));
         }
 
-        let transition_zerofier: Polynomial<PrimeFieldElementFlexible> = self
+        let transition_zerofier_polynomial: Polynomial<PrimeFieldElementFlexible> = self
             .preprocessed_values
             .as_ref()
             .unwrap()
@@ -326,7 +342,7 @@ impl StarkPrimeFieldElementFlexible {
             .unwrap()
             .transition_zerofier
             .clone();
-        let transition_zerofier_mt: MerkleTree<PrimeFieldElementFlexible, StarkPfeHasher> = self
+        let transition_zerofier_mt: MerkleTree<StarkPfeHasher> = self
             .preprocessed_values
             .as_ref()
             .unwrap()
@@ -389,13 +405,17 @@ impl StarkPrimeFieldElementFlexible {
         }
 
         // Commit to boundary quotients
-        let mut boundary_quotient_merkle_trees: Vec<
-            MerkleTree<PrimeFieldElementFlexible, StarkPfeHasher>,
-        > = vec![];
+        let mut boundary_quotient_merkle_trees: Vec<MerkleTree<StarkPfeHasher>> = vec![];
+        let mut boundary_quotient_codewords: Vec<Vec<PrimeFieldElementFlexible>> = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<PrimeFieldElementFlexible> =
                 bq.fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain.length);
-            let bq_merkle_tree = MerkleTree::from_vec(&boundary_quotient_codeword, &self.omega);
+            boundary_quotient_codewords.push(boundary_quotient_codeword.clone());
+            let boundary_quotient_codeword_digests: Vec<_> = boundary_quotient_codeword
+                .iter()
+                .map(|x| hasher.hash(x))
+                .collect();
+            let bq_merkle_tree = MerkleTree::from_digests(&boundary_quotient_codeword_digests);
             proof_stream.enqueue(&bq_merkle_tree.get_root())?;
             boundary_quotient_merkle_trees.push(bq_merkle_tree);
         }
@@ -428,7 +448,7 @@ impl StarkPrimeFieldElementFlexible {
                 .map(|tp| {
                     Polynomial::fast_coset_divide(
                         tp,
-                        &transition_zerofier,
+                        &transition_zerofier_polynomial,
                         self.field_generator,
                         self.omicron,
                         self.omicron_domain.len(),
@@ -451,10 +471,10 @@ impl StarkPrimeFieldElementFlexible {
 
         let randomizer_codeword: Vec<PrimeFieldElementFlexible> = randomizer_polynomial
             .fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain.length);
-        let randomizer_mt = MerkleTree::<PrimeFieldElementFlexible, StarkPfeHasher>::from_vec(
-            &randomizer_codeword,
-            &self.omega,
-        );
+        let randomizer_codeword_digests: Vec<_> =
+            randomizer_codeword.iter().map(|x| hasher.hash(x)).collect();
+        let randomizer_mt =
+            MerkleTree::<StarkPfeHasher>::from_digests(&randomizer_codeword_digests);
         proof_stream.enqueue(&randomizer_mt.get_root())?;
 
         // Sanity check, should probably be removed
@@ -527,34 +547,56 @@ impl StarkPrimeFieldElementFlexible {
         let mut quadrupled_indices = duplicated_indices.clone();
         quadrupled_indices.append(
             &mut duplicated_indices
+                .clone()
                 .into_iter()
                 .map(|i| (i + self.fri.domain.length / 2) % self.fri.domain.length)
                 .collect(),
         );
         quadrupled_indices.sort_unstable();
+        println!("quad {:?  }.", quadrupled_indices);
 
         // Open indicated positions in the boundary quotient codewords
-        for bq_mt in boundary_quotient_merkle_trees {
-            let bq_proof: Vec<(
-                LeaflessPartialAuthenticationPath<StarkPfeDigest>,
+        for (j, bq_mt) in boundary_quotient_merkle_trees.into_iter().enumerate() {
+            let auth_paths = bq_mt.get_multi_proof(&quadrupled_indices);
+            //let leaves = bq_mt.get_leaves_by_indices(&quadrupled_indices);
+            let values: Vec<PrimeFieldElementFlexible> = quadrupled_indices
+                .iter()
+                .map(|i| boundary_quotient_codewords[j][*i])
+                .collect();
+            assert_eq!(auth_paths.len(), values.len());
+            /*
+            let ap_value_pairs: Vec<(
+                PartialAuthenticationPath<StarkPfeDigest>,
                 PrimeFieldElementFlexible,
-            )> = bq_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
-            proof_stream.enqueue_length_prepended(&bq_proof)?;
+            )> = zip(auth_paths, values).collect();
+            */
+            proof_stream.enqueue_length_prepended(&auth_paths)?;
+            proof_stream.enqueue_length_prepended(&values)?;
         }
 
         // Open indicated positions in the randomizer
-        let randomizer_proof: Vec<(
-            LeaflessPartialAuthenticationPath<StarkPfeDigest>,
-            PrimeFieldElementFlexible,
-        )> = randomizer_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
+        let randomizer_proof: Vec<PartialAuthenticationPath<StarkPfeDigest>> =
+            randomizer_mt.get_multi_proof(&quadrupled_indices);
+        let randomizer_proof_values: Vec<PrimeFieldElementFlexible> =
+            lookup_multiple(&quadrupled_indices, &randomizer_codeword);
         proof_stream.enqueue_length_prepended(&randomizer_proof)?;
+        proof_stream.enqueue_length_prepended(&randomizer_proof_values)?;
 
         // Open indicated positions in the zerofier
-        let transition_zerofier_proof: Vec<(
-            LeaflessPartialAuthenticationPath<StarkPfeDigest>,
-            PrimeFieldElementFlexible,
-        )> = transition_zerofier_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
+        let transition_zerofier_proof: Vec<PartialAuthenticationPath<StarkPfeDigest>> =
+            transition_zerofier_mt.get_multi_proof(&quadrupled_indices);
         proof_stream.enqueue_length_prepended(&transition_zerofier_proof)?;
+
+        let transition_zerofier_proof_values: Vec<PrimeFieldElementFlexible> = quadrupled_indices
+            .iter()
+            .map(|i| {
+                transition_zerofier_polynomial
+                    .evaluate(&(self.field_generator * self.omega.mod_pow_u32(*i as u32)))
+            })
+            .collect();
+
+        // let transition_zerofier_proof_values: Vec<StarkPfeDigest> = todo!();
+        proof_stream.enqueue_length_prepended(&transition_zerofier_proof_values)?;
 
         Ok(())
     }
@@ -568,6 +610,7 @@ impl StarkPrimeFieldElementFlexible {
         if !self.ready_for_verify() {
             return Err(Box::new(StarkVerifyError::MissingPreprocessedValues));
         }
+        let hasher = StarkPfeHasher::new();
 
         let transition_zerofier_mt_root: StarkPfeDigest = self
             .preprocessed_values
@@ -611,42 +654,57 @@ impl StarkPrimeFieldElementFlexible {
                 .collect(),
         );
         duplicated_indices.sort_unstable();
+        println!("dup {:?}", duplicated_indices);
 
         // Read and verify boundary quotient leafs
         // revealed boundary quotient codeword values, indexed by (register, codeword index)
         let mut boundary_quotients: Vec<HashMap<usize, PrimeFieldElementFlexible>> = vec![];
         for (i, bq_root) in boundary_quotient_mt_roots.into_iter().enumerate() {
             boundary_quotients.push(HashMap::new());
-            let bq_proof: Vec<(
-                LeaflessPartialAuthenticationPath<StarkPfeDigest>,
-                PrimeFieldElementFlexible,
-            )> = proof_stream.dequeue_length_prepended()?;
-            let valid =
-                MerkleTree::<PrimeFieldElementFlexible, StarkPfeHasher>::verify_leafless_multi_proof(bq_root, &duplicated_indices, &bq_proof);
+
+            let auth_paths: Vec<PartialAuthenticationPath<StarkPfeDigest>> =
+                proof_stream.dequeue_length_prepended()?;
+            let values: Vec<PrimeFieldElementFlexible> = proof_stream.dequeue_length_prepended()?;
+            let leaves: Vec<_> = values.iter().map(|x| hasher.hash(x)).collect();
+            let auth_pairs: Vec<_> = zip(auth_paths, leaves).collect();
+
+            let valid = MerkleTree::<StarkPfeHasher>::verify_multi_proof(
+                bq_root,
+                &duplicated_indices,
+                &auth_pairs,
+            );
             if !valid {
                 return Err(Box::new(StarkVerifyError::BadMerkleProof(
                     MerkleProofError::BoundaryQuotientError(i),
                 )));
             }
 
-            duplicated_indices.iter().zip(bq_proof.iter()).for_each(
-                |(index, (_auth_path, value))| {
+            duplicated_indices
+                .iter()
+                .zip(values.iter())
+                .for_each(|(index, value)| {
                     boundary_quotients[i].insert(*index, *value);
-                },
-            );
+                });
         }
 
         // Read and verify randomizer leafs
-        let randomizer_proof: Vec<(
-            LeaflessPartialAuthenticationPath<StarkPfeDigest>,
-            PrimeFieldElementFlexible,
-        )> = proof_stream.dequeue_length_prepended()?;
-        let valid =
-            MerkleTree::<PrimeFieldElementFlexible, StarkPfeHasher>::verify_leafless_multi_proof(
-                randomizer_mt_root,
-                &duplicated_indices,
-                &randomizer_proof,
-            );
+        let randomizer_proof: Vec<PartialAuthenticationPath<StarkPfeDigest>> =
+            proof_stream.dequeue_length_prepended()?;
+        let randomizer_proof_values: Vec<PrimeFieldElementFlexible> =
+            proof_stream.dequeue_length_prepended()?;
+
+        let randomizer_proof_digests: Vec<_> = randomizer_proof_values
+            .iter()
+            .map(|x| hasher.hash(x))
+            .collect();
+
+        let auth_pairs: Vec<_> = zip(randomizer_proof, randomizer_proof_digests).collect();
+
+        let valid = MerkleTree::<StarkPfeHasher>::verify_multi_proof(
+            randomizer_mt_root,
+            &duplicated_indices,
+            &auth_pairs,
+        );
         if !valid {
             return Err(Box::new(StarkVerifyError::BadMerkleProof(
                 MerkleProofError::RandomizerError,
@@ -656,22 +714,31 @@ impl StarkPrimeFieldElementFlexible {
         let mut randomizer_values: HashMap<usize, PrimeFieldElementFlexible> = HashMap::new();
         duplicated_indices
             .iter()
-            .zip(randomizer_proof.iter())
-            .for_each(|(index, (_auth_path, value))| {
+            .zip(randomizer_proof_values.iter())
+            .for_each(|(index, value)| {
                 randomizer_values.insert(*index, *value);
             });
 
         // Read and verify transition zerofier leafs
-        let transition_zerofier_proof: Vec<(
-            LeaflessPartialAuthenticationPath<StarkPfeDigest>,
-            PrimeFieldElementFlexible,
-        )> = proof_stream.dequeue_length_prepended()?;
-        let valid =
-            MerkleTree::<PrimeFieldElementFlexible, StarkPfeHasher>::verify_leafless_multi_proof(
-                transition_zerofier_mt_root.to_owned(),
-                &duplicated_indices,
-                &transition_zerofier_proof,
-            );
+        let transition_zerofier_proof: Vec<PartialAuthenticationPath<StarkPfeDigest>> =
+            proof_stream.dequeue_length_prepended()?;
+
+        let transition_zerofier_proof_values: Vec<PrimeFieldElementFlexible> =
+            proof_stream.dequeue_length_prepended()?;
+
+        let transition_zerofier_proof_digests: Vec<_> = transition_zerofier_proof_values
+            .iter()
+            .map(|x| hasher.hash(x))
+            .collect();
+        let transition_zerofier_proof_auth_pairs: Vec<_> =
+            zip(transition_zerofier_proof, transition_zerofier_proof_digests).collect();
+
+        let valid = MerkleTree::<StarkPfeHasher>::verify_multi_proof(
+            transition_zerofier_mt_root.to_owned(),
+            &duplicated_indices,
+            &transition_zerofier_proof_auth_pairs,
+        );
+        //assert!(false, "SADFDSAFDSADSAGSAGDSAF");
         if !valid {
             return Err(Box::new(StarkVerifyError::BadMerkleProof(
                 MerkleProofError::TransitionZerofierError,
@@ -682,8 +749,8 @@ impl StarkPrimeFieldElementFlexible {
             HashMap::new();
         duplicated_indices
             .iter()
-            .zip(transition_zerofier_proof.iter())
-            .for_each(|(index, (_auth_path, value))| {
+            .zip(transition_zerofier_proof_values.iter())
+            .for_each(|(index, value)| {
                 transition_zerofier_values.insert(*index, *value);
             });
 

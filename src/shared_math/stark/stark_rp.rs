@@ -11,10 +11,9 @@ use crate::shared_math::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomEl
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::blake3_wrapper::Blake3Hash;
-use crate::util_types::merkle_tree::{
-    LeaflessPartialAuthenticationPath, MerkleTree, SaltedMerkleTree,
-};
+use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath, SaltedMerkleTree};
 use crate::util_types::proof_stream::ProofStream;
+use crate::util_types::simple_hasher::Hasher;
 use crate::utils;
 use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
@@ -22,6 +21,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
+use std::iter::zip;
 
 type Degree = i64;
 
@@ -119,8 +119,8 @@ impl fmt::Display for StarkVerifyError {
 
 type Digest = Blake3Hash;
 type StarkHasher = blake3::Hasher;
-type SaltedMt = SaltedMerkleTree<BFieldElement, StarkHasher>;
-type XFieldMt = MerkleTree<XFieldElement, StarkHasher>;
+type SaltedMt = SaltedMerkleTree<StarkHasher>;
+type XFieldMt = MerkleTree<StarkHasher>;
 type XFieldFri = Fri<XFieldElement, StarkHasher>;
 
 impl StarkRp {
@@ -134,6 +134,9 @@ impl StarkRp {
         input_omicron: BFieldElement,
     ) -> Result<(u32, BFieldElement), Box<dyn Error>> {
         let mut timer = TimingReporter::start();
+
+        let hasher = StarkHasher::new();
+        //let mut rng = rand::thread_rng();
 
         // infer details about computation
         let original_trace_length = trace.len() as i64;
@@ -258,14 +261,30 @@ impl StarkRp {
 
         // Commit to boundary quotients
         let mut boundary_quotient_merkle_trees: Vec<SaltedMt> = vec![];
+        let mut boundary_quotient_codewords: Vec<Vec<BFieldElement>> = vec![];
+
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<BFieldElement> =
                 bq.fast_coset_evaluate(&self.field_generator, omega, fri_domain_length as usize);
-            let bq_merkle_tree = SaltedMt::from_vec(
-                &boundary_quotient_codeword,
-                &BFieldElement::ring_zero(),
-                B_FIELD_ELEMENT_SALTS_PER_VALUE,
+
+            boundary_quotient_codewords.push(boundary_quotient_codeword.clone());
+            // Build MT
+            let boundary_quotient_codeword_digests: Vec<_> = boundary_quotient_codeword
+                .iter()
+                .map(|x| hasher.hash(x))
+                .collect();
+
+            let salts_per_leaf = 5;
+            let rnd_values = BFieldElement::random_elements(
+                boundary_quotient_codeword.len() * salts_per_leaf,
                 &mut rng,
+            );
+            let boundary_quotient_codeword_salts: Vec<_> =
+                rnd_values.iter().map(|x| hasher.hash(x)).collect();
+
+            let bq_merkle_tree = SaltedMt::from_digests(
+                &boundary_quotient_codeword_digests,
+                &boundary_quotient_codeword_salts,
             );
             proof_stream.enqueue(&bq_merkle_tree.get_root())?;
             boundary_quotient_merkle_trees.push(bq_merkle_tree);
@@ -390,10 +409,13 @@ impl StarkRp {
             lifted_omega,
             fri_domain_length as usize,
         );
-        let randomizer_mt: XFieldMt =
-            XFieldMt::from_vec(&randomizer_codeword, &XFieldElement::ring_zero());
+
+        let randomizer_codeword_digests: Vec<_> =
+            randomizer_codeword.iter().map(|x| hasher.hash(x)).collect();
+        let randomizer_mt: XFieldMt = XFieldMt::from_digests(&randomizer_codeword_digests);
+
         let randomizer_mt_root = randomizer_mt.get_root();
-        proof_stream.enqueue(randomizer_mt_root)?;
+        proof_stream.enqueue(&randomizer_mt_root)?;
 
         timer.elapsed("fast_coset_evaluate and commit randomizer codeword to proof stream");
 
@@ -514,21 +536,32 @@ impl StarkRp {
         timer.elapsed("sort quadrupled indices");
 
         // Open indicated positions in the boundary quotient codewords
-        for bq_mt in boundary_quotient_merkle_trees {
-            let proofs: Vec<(
-                LeaflessPartialAuthenticationPath<Digest>,
-                Vec<BFieldElement>,
-                BFieldElement,
-            )> = bq_mt.get_leafless_multi_proof_with_salts_and_values(&quadrupled_indices);
-            proof_stream.enqueue_length_prepended(&proofs)?;
+        for (j, bq_mt) in boundary_quotient_merkle_trees.into_iter().enumerate() {
+            let authetication_paths_and_salts: Vec<(
+                PartialAuthenticationPath<Digest>,
+                Vec<Digest>, // salts
+            )> = bq_mt.get_multi_proof_and_salts(&quadrupled_indices);
+            proof_stream.enqueue_length_prepended(&authetication_paths_and_salts)?;
+            let values: Vec<BFieldElement> = quadrupled_indices
+                .iter()
+                .map(|i| boundary_quotient_codewords[j][*i])
+                .collect();
+
+            proof_stream.enqueue_length_prepended(&values)?;
         }
 
         timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for all boundary quotient merkle trees");
 
         // Open indicated positions in the randomizer
-        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath<Digest>, XFieldElement)> =
-            randomizer_mt.get_leafless_multi_proof_with_values(&quadrupled_indices);
+        let randomizer_auth_paths: Vec<PartialAuthenticationPath<Digest>> =
+            randomizer_mt.get_multi_proof(&quadrupled_indices);
         proof_stream.enqueue_length_prepended(&randomizer_auth_paths)?;
+
+        let randomizer_values: Vec<XFieldElement> = quadrupled_indices
+            .iter()
+            .map(|&i| randomizer_codeword[i])
+            .collect();
+        proof_stream.enqueue_length_prepended(&randomizer_values)?;
 
         timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for randomizer");
         let report = timer.finish();
@@ -549,6 +582,7 @@ impl StarkRp {
         let mut timer = TimingReporter::start();
         // assert!(omega.mod_pow(fri_domain_length as u64).is_one());
         // assert!(!omega.mod_pow((fri_domain_length / 2) as u64).is_one());
+        let hasher: StarkHasher = Hasher::new();
 
         // Get Merkle root of boundary quotient codewords
         let mut boundary_quotient_mt_roots: Vec<Digest> = vec![];
@@ -608,20 +642,26 @@ impl StarkRp {
         duplicated_indices.sort_unstable();
         timer.elapsed("Calculate indices");
 
+        let duplicated_indices_local = duplicated_indices.clone();
         // Read and verify boundary quotient leafs
         // revealed boundary quotient codeword values, indexed by (register, codeword index)
         let mut boundary_quotients: Vec<HashMap<usize, BFieldElement>> = vec![];
         for (i, bq_root) in boundary_quotient_mt_roots.into_iter().enumerate() {
             boundary_quotients.push(HashMap::new());
-            let proofs: Vec<(
-                LeaflessPartialAuthenticationPath<Digest>,
-                Vec<BFieldElement>,
-                BFieldElement,
+            let authentication_paths_and_salts: Vec<(
+                PartialAuthenticationPath<Digest>,
+                Vec<Digest>, // salts
             )> = proof_stream.dequeue_length_prepended()?;
-            let valid = SaltedMt::verify_leafless_multi_proof_with_salts_and_values(
+
+            let bq_values: Vec<BFieldElement> = proof_stream.dequeue_length_prepended()?;
+
+            let unsalted_leaves: Vec<_> = bq_values.iter().map(|x| hasher.hash(x)).collect();
+
+            let valid = SaltedMt::verify_multi_proof(
                 bq_root,
-                &duplicated_indices,
-                &proofs,
+                &duplicated_indices_local,
+                &unsalted_leaves,
+                &authentication_paths_and_salts,
             );
             if !valid {
                 return Err(Box::new(StarkVerifyError::BadMerkleProof(
@@ -629,22 +669,31 @@ impl StarkRp {
                 )));
             }
 
-            duplicated_indices.iter().zip(proofs.iter()).for_each(
-                |(index, (_authentication_path, _salts, value))| {
-                    boundary_quotients[i].insert(*index, *value);
-                },
+            assert_eq!(
+                duplicated_indices_local.len(),
+                bq_values.len(),
+                "Index set and values from prover should correspond."
             );
+            for (index, value) in zip(duplicated_indices_local.clone(), bq_values) {
+                boundary_quotients[i].insert(index, value);
+            }
         }
         timer.elapsed("Verify boundary quotient Merkle paths");
 
         // Read and verify randomizer leafs
-        let randomizer_auth_paths: Vec<(LeaflessPartialAuthenticationPath<Digest>, XFieldElement)> =
+        let randomizer_auth_paths: Vec<PartialAuthenticationPath<Digest>> =
             proof_stream.dequeue_length_prepended()?;
-        let valid = XFieldMt::verify_leafless_multi_proof(
-            randomizer_mt_root,
-            &duplicated_indices,
-            &randomizer_auth_paths,
-        );
+        let revealed_randomizer_values: Vec<XFieldElement> =
+            proof_stream.dequeue_length_prepended()?;
+        let randomizer_values_digests: Vec<_> = revealed_randomizer_values
+            .iter()
+            .map(|x| hasher.hash(x))
+            .collect();
+
+        let auth_pairs: Vec<_> = zip(randomizer_auth_paths, randomizer_values_digests).collect();
+
+        let valid =
+            XFieldMt::verify_multi_proof(randomizer_mt_root, &duplicated_indices, &auth_pairs);
         if !valid {
             return Err(Box::new(StarkVerifyError::BadMerkleProof(
                 MerkleProofError::RandomizerError,
@@ -654,12 +703,17 @@ impl StarkRp {
 
         // Insert randomizer values in HashMap
         let mut randomizer_values: HashMap<usize, XFieldElement> = HashMap::new();
+        /*
         duplicated_indices
             .iter()
             .zip(randomizer_auth_paths.iter())
             .for_each(|(index, (_auth_path, value))| {
                 randomizer_values.insert(*index, *value);
             });
+        */
+        for (index, value) in zip(duplicated_indices, revealed_randomizer_values) {
+            randomizer_values.insert(index, value);
+        }
 
         let omicron = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(omicron_domain_length as u128)

@@ -1,7 +1,6 @@
 // pub mod merkle_mountain_range;
 pub mod blake3_wrapper;
 pub mod merkle_tree;
-pub mod merkle_tree_anew;
 pub mod mmr;
 pub mod proof_stream;
 pub mod proof_stream_typed;

@@ -5,7 +5,7 @@ use super::traits::ModPowU32;
 use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::traits::{IdentityValues, PrimeField};
-use crate::util_types::merkle_tree::{LeaflessPartialAuthenticationPath, MerkleTree};
+use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use crate::utils::{blake3_digest, get_index_from_bytes};
@@ -37,36 +37,6 @@ pub struct FriDomain<PF: PrimeField> {
     pub omega: PF,
     pub length: usize,
 }
-
-// impl<PF: PrimeField> FriDomain<PF> {
-//     pub fn x_value(&self, index: u32) -> PF {
-//         self.omega.mod_pow_u32(index) * self.offset
-//     }
-
-//     pub fn x_values(&self) -> Vec<PF> {
-//         (0..self.length)
-//             .map(|i| self.omega.mod_pow_u32(i as u32) * self.offset)
-//             .collect()
-//     }
-
-//     pub fn evaluate(&self, polynomial: &Polynomial<PF>, zero: PF) -> Vec<PF> {
-//         assert!(zero.is_zero(), "zero must be zero");
-//         let mut polynomial_representation: Vec<PF> =
-//             polynomial.scale(&self.offset).coefficients.clone();
-//         polynomial_representation.resize(self.length as usize, zero);
-//         ntt(
-//             &mut polynomial_representation,
-//             self.omega,
-//             log_2_ceil(self.length as u64) as u32,
-//         );
-
-//         polynomial_representation
-//     }
-
-//     pub fn interpolate(&self, values: &[PF]) -> Polynomial<PF> {
-//         Polynomial::<PF>::fast_coset_interpolate(&self.offset, self.omega, values)
-//     }
-// }
 
 impl FriDomain<XFieldElement> {
     pub fn x_evaluate(&self, polynomial: &Polynomial<XFieldElement>) -> Vec<XFieldElement> {
@@ -165,23 +135,27 @@ where
         );
 
         // Commit phase
-        let merkle_trees: Vec<MerkleTree<PF, H>> = self.commit(codeword, proof_stream)?;
-        let codewords: Vec<Vec<PF>> = merkle_trees.iter().map(|x| x.to_vec()).collect();
+        let values_and_merkle_trees: Vec<(Vec<PF>, MerkleTree<H>)> =
+            self.commit(codeword, proof_stream)?;
+        let codewords: Vec<Vec<_>> = values_and_merkle_trees
+            .iter()
+            .map(|(_, mt)| mt.get_all_leaves())
+            .collect();
 
         // fiat-shamir phase (get indices)
         let top_level_indices = self.sample_indices(&proof_stream.prover_fiat_shamir());
 
         // query phase
         let mut c_indices = top_level_indices.clone();
-        for i in 0..merkle_trees.len() - 1 {
+        for i in 0..values_and_merkle_trees.len() - 1 {
             c_indices = c_indices
                 .clone()
                 .iter()
                 .map(|x| x % (codewords[i].len() / 2))
                 .collect();
             self.query(
-                merkle_trees[i].clone(),
-                merkle_trees[i + 1].clone(),
+                values_and_merkle_trees[i].clone(),
+                values_and_merkle_trees[i + 1].clone(),
                 &c_indices,
                 proof_stream,
             )?;
@@ -190,24 +164,26 @@ where
         Ok(top_level_indices)
     }
 
+    #[allow(clippy::type_complexity)]
     fn commit(
         &self,
         codeword: &[PF],
         proof_stream: &mut ProofStream,
-    ) -> Result<Vec<MerkleTree<PF, H>>, Box<dyn Error>> {
+    ) -> Result<Vec<(Vec<PF>, MerkleTree<H>)>, Box<dyn Error>> {
         let mut generator = self.domain.omega;
         let mut offset = self.domain.offset;
         let mut codeword_local = codeword.to_vec();
+        let hasher = H::new();
 
-        let zero: PF = generator.ring_zero();
         let one: PF = generator.ring_one();
         let two: PF = one + one;
         let two_inv = one / two;
 
         // Compute and send Merkle root
-        let mut mt = MerkleTree::from_vec(&codeword_local, &zero);
-        proof_stream.enqueue_length_prepended(mt.get_root())?;
-        let mut merkle_trees = vec![mt];
+        let mut leaves: Vec<H::Digest> = codeword_local.iter().map(|x| hasher.hash(x)).collect();
+        let mut mt = MerkleTree::from_digests(&leaves);
+        proof_stream.enqueue_length_prepended(&mt.get_root())?;
+        let mut values_and_merkle_trees = vec![(codeword_local.clone(), mt)];
 
         let (num_rounds, _) = self.num_rounds();
         for _ in 0..num_rounds {
@@ -232,12 +208,13 @@ where
                     * ((one + alpha * x_offset_inverses[i]) * codeword_local[i]
                         + (one - alpha * x_offset_inverses[i]) * codeword_local[n / 2 + i]);
             }
-            codeword_local.resize(n / 2, zero);
+            codeword_local.truncate(n / 2);
 
             // Compute and send Merkle root
-            mt = MerkleTree::from_vec(&codeword_local, &zero);
-            proof_stream.enqueue_length_prepended(mt.get_root())?;
-            merkle_trees.push(mt);
+            leaves = codeword_local.iter().map(|x| hasher.hash(x)).collect();
+            mt = MerkleTree::from_digests(&leaves);
+            proof_stream.enqueue_length_prepended(&mt.get_root())?;
+            values_and_merkle_trees.push((codeword_local.clone(), mt));
 
             // Update subgroup generator and offset
             generator = generator * generator;
@@ -248,7 +225,7 @@ where
         let last_codeword = codeword_local;
         proof_stream.enqueue_length_prepended(&last_codeword)?;
 
-        Ok(merkle_trees)
+        Ok(values_and_merkle_trees)
     }
 
     // Return the c-indices for the 1st round of FRI
@@ -306,28 +283,39 @@ where
 
     fn query(
         &self,
-        current_mt: MerkleTree<PF, H>,
-        next_mt: MerkleTree<PF, H>,
+        current_values_and_mt: (Vec<PF>, MerkleTree<H>),
+        next_values_and_mt: (Vec<PF>, MerkleTree<H>),
         c_indices: &[usize],
         proof_stream: &mut ProofStream,
     ) -> Result<(), Box<dyn Error>> {
         let a_indices: Vec<usize> = c_indices.to_vec();
         let mut b_indices: Vec<usize> = c_indices
             .iter()
-            .map(|x| x + current_mt.get_number_of_leafs() / 2)
+            .map(|x| x + current_values_and_mt.1.get_leaf_count() / 2)
             .collect();
         let mut ab_indices = a_indices;
         ab_indices.append(&mut b_indices);
 
         // Reveal authentication paths
-        let current_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, PF)> =
-            current_mt.get_leafless_multi_proof_with_values(&ab_indices);
+        let current_ap_with_value: Vec<(PartialAuthenticationPath<H::Digest>, PF)> =
+            current_values_and_mt
+                .1
+                .get_multi_proof(&ab_indices)
+                .into_iter()
+                .zip(ab_indices.iter())
+                .map(|(ap, i)| (ap, current_values_and_mt.0[*i]))
+                .collect();
 
-        let next_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, PF)> =
-            next_mt.get_leafless_multi_proof_with_values(c_indices);
+        let next_ap: Vec<(PartialAuthenticationPath<H::Digest>, PF)> = next_values_and_mt
+            .1
+            .get_multi_proof(c_indices)
+            .into_iter()
+            .zip(c_indices.iter())
+            .map(|(ap, i)| (ap, next_values_and_mt.0[*i]))
+            .collect();
 
-        proof_stream.enqueue_length_prepended(&current_proof)?;
-        proof_stream.enqueue_length_prepended(&next_proof)?;
+        proof_stream.enqueue_length_prepended(&current_ap_with_value)?;
+        proof_stream.enqueue_length_prepended(&next_ap)?;
 
         Ok(())
     }
@@ -336,6 +324,7 @@ where
         &self,
         proof_stream: &mut ProofStream,
     ) -> Result<Vec<CodewordEvaluation<PF>>, Box<dyn Error>> {
+        let hasher = H::new();
         let mut omega = self.domain.omega;
         let mut offset = self.domain.offset;
         let (num_rounds, degree_of_last_round) = self.num_rounds();
@@ -357,10 +346,10 @@ where
         let mut last_codeword: Vec<PF> = proof_stream.dequeue_length_prepended::<Vec<PF>>()?;
 
         // Check if last codeword matches the given root
-        let zero = omega.ring_zero();
-        let last_codeword_mt = MerkleTree::<PF, H>::from_vec(&last_codeword, &zero);
+        let leaves: Vec<_> = last_codeword.iter().map(|x| hasher.hash(x)).collect();
+        let last_codeword_mt = MerkleTree::<H>::from_digests(&leaves);
         let last_root = roots.last().unwrap();
-        if last_root != last_codeword_mt.get_root() {
+        if *last_root != last_codeword_mt.get_root() {
             return Err(Box::new(ValidationError::BadMerkleRootForLastCodeword));
         }
 
@@ -407,25 +396,28 @@ where
             ab_indices.append(&mut b_indices.clone());
 
             // Read values and check colinearity
-            let ab_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, PF)> =
+            let ab_proof: Vec<(PartialAuthenticationPath<H::Digest>, PF)> =
                 proof_stream.dequeue_length_prepended()?;
-            let c_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, PF)> =
+            let c_proof: Vec<(PartialAuthenticationPath<H::Digest>, PF)> =
                 proof_stream.dequeue_length_prepended()?;
 
+            let ab_proof_val: Vec<_> = ab_proof
+                .iter()
+                .map(|(pap, value)| (pap.clone(), hasher.hash(value)))
+                .collect();
+
+            let c_proof_val: Vec<_> = c_proof
+                .iter()
+                .map(|(pap, value)| (pap.clone(), hasher.hash(value)))
+                .collect();
+
             // verify Merkle authentication paths
-            if !MerkleTree::<PF, H>::verify_leafless_multi_proof(
-                roots[r].clone(),
-                &ab_indices,
-                &ab_proof,
-            ) {
+            if !MerkleTree::<H>::verify_multi_proof(roots[r].clone(), &ab_indices, &ab_proof_val) {
                 return Err(Box::new(ValidationError::BadMerkleProof));
             }
 
-            if !MerkleTree::<PF, H>::verify_leafless_multi_proof(
-                roots[r + 1].clone(),
-                &c_indices,
-                &c_proof,
-            ) {
+            if !MerkleTree::<H>::verify_multi_proof(roots[r + 1].clone(), &c_indices, &c_proof_val)
+            {
                 return Err(Box::new(ValidationError::BadMerkleProof));
             }
 

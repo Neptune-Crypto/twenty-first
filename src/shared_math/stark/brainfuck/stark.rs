@@ -323,17 +323,15 @@ impl Stark {
                 hasher.hash_many(&chunks)
             })
             .collect_into_vec(&mut base_codeword_digests_by_index);
-        let base_merkle_tree = MerkleTree::<Vec<BFieldElement>, StarkHasher>::from_digests(
-            &base_codeword_digests_by_index,
-            &vec![BFieldElement::ring_zero()],
-        );
+        let base_merkle_tree =
+            MerkleTree::<StarkHasher>::from_digests(&base_codeword_digests_by_index);
 
         timer.elapsed("base_merkle_tree");
 
         // Commit to base codewords
         let mut proof_stream = StarkProofStream::default();
-        let base_merkle_tree_root: &Vec<BFieldElement> = base_merkle_tree.get_root();
-        proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root.to_owned()));
+        let base_merkle_tree_root: Vec<BFieldElement> = base_merkle_tree.get_root();
+        proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root));
 
         timer.elapsed("proof_stream.enqueue");
 
@@ -407,11 +405,9 @@ impl Stark {
             })
             .collect_into_vec(&mut extension_codeword_digests_by_index);
 
-        let extension_tree = MerkleTree::<Vec<BFieldElement>, StarkHasher>::from_digests(
-            &extension_codeword_digests_by_index,
-            &vec![BFieldElement::ring_zero()],
-        );
-        proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root().to_owned()));
+        let extension_tree =
+            MerkleTree::<StarkHasher>::from_digests(&extension_codeword_digests_by_index);
+        proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root()));
 
         timer.elapsed("extension_tree");
 
@@ -621,12 +617,10 @@ impl Stark {
                 hasher.hash(&digest)
             })
             .collect_into_vec(&mut combination_codeword_digests);
-        let combination_tree = MerkleTree::<Vec<BFieldElement>, StarkHasher>::from_digests(
-            &combination_codeword_digests,
-            &vec![BFieldElement::ring_zero()],
-        );
-        let combination_root: &Vec<BFieldElement> = combination_tree.get_root();
-        proof_stream.enqueue(&Item::MerkleRoot(combination_root.to_owned()));
+        let combination_tree =
+            MerkleTree::<StarkHasher>::from_digests(&combination_codeword_digests);
+        let combination_root: Vec<BFieldElement> = combination_tree.get_root();
+        proof_stream.enqueue(&Item::MerkleRoot(combination_root.clone()));
 
         timer.elapsed("combination_tree");
 
@@ -659,7 +653,7 @@ impl Stark {
             self.fri.prove(&combination_codeword, &mut proof_stream)?;
         timer.elapsed("fri.prove");
         assert_eq!(
-            *combination_root, combination_root_verify,
+            combination_root, combination_root_verify,
             "Combination root from STARK and from FRI must agree"
         );
 
@@ -673,8 +667,12 @@ impl Stark {
                     base_merkle_tree.get_authentication_path(idx);
 
                 let leaf_digest = base_codeword_digests_by_index[idx].clone();
-                let success = MerkleTree::<Vec<BFieldElement>, StarkHasher>::verify_authentication_path_from_leaf_hash(
-                    base_merkle_tree.get_root().clone(), idx as u32, leaf_digest, auth_path.clone());
+                let success = MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
+                    base_merkle_tree.get_root(),
+                    idx as u32,
+                    leaf_digest,
+                    auth_path.clone(),
+                );
                 assert!(success, "authentication path for base tree must be valid");
 
                 proof_stream.enqueue(&Item::TransposedBaseElements(elements));
@@ -698,13 +696,15 @@ impl Stark {
             let revealed_combination_element = combination_codeword[index];
             let revealed_combination_auth_path = combination_tree.get_authentication_path(index);
 
-            assert!(MerkleTree::<Vec<BFieldElement>, StarkHasher>::
-                    verify_authentication_path_from_leaf_hash(
-                combination_tree.get_root().to_owned(),
-                index as u32,
-                combination_codeword_digests[index].clone(),
-                revealed_combination_auth_path.clone(),
-            ), "Combination Merkle Tree authentication path must verify");
+            assert!(
+                MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
+                    combination_tree.get_root(),
+                    index as u32,
+                    combination_codeword_digests[index].clone(),
+                    revealed_combination_auth_path.clone(),
+                ),
+                "Combination Merkle Tree authentication path must verify"
+            );
 
             proof_stream.enqueue(&Item::RevealedCombinationElement(
                 revealed_combination_element,
@@ -836,8 +836,13 @@ impl Stark {
                     .map(|s| s.to_vec())
                     .collect();
                 let leaf_hash: Vec<BFieldElement> = hasher.hash_many(&hash_input);
-                let mt_base_success = MerkleTree::<Vec<BFieldElement>, StarkHasher>::verify_authentication_path_from_leaf_hash(
-                    base_merkle_tree_root.clone(), idx as u32, leaf_hash, auth_path);
+                let mt_base_success =
+                    MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
+                        base_merkle_tree_root.clone(),
+                        idx as u32,
+                        leaf_hash,
+                        auth_path,
+                    );
                 if !mt_base_success {
                     // TODO: Replace this by a specific error type, or just return `Ok(false)`
                     panic!("Failed to verify authentication path for base codeword");
@@ -876,8 +881,13 @@ impl Stark {
                     .collect();
                 let ext_leaf_hash = hasher.hash_many(&extension_element_chunked);
 
-                let mt_ext_success = MerkleTree::<Vec<BFieldElement>, StarkHasher>::verify_authentication_path_from_leaf_hash(
-                    extension_tree_merkle_root.clone(), idx as u32, ext_leaf_hash, extension_auth_path);
+                let mt_ext_success =
+                    MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
+                        extension_tree_merkle_root.clone(),
+                        idx as u32,
+                        ext_leaf_hash,
+                        extension_auth_path,
+                    );
                 if !mt_ext_success {
                     // TODO: Replace this by a specific error type, or just return `Ok(false)`
                     panic!("Failed to verify authentication path for extended codeword");
@@ -1111,13 +1121,14 @@ impl Stark {
                 proof_stream_.dequeue()?.as_authentication_path()?;
 
             assert!(
-                MerkleTree::<Vec<BFieldElement>, StarkHasher>::
-                verify_authentication_path_from_leaf_hash(
+                MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
                     combination_root.clone(),
                     index as u32,
                     hasher.hash(&combination_leaf.coefficients.to_vec()),
                     combination_path,
-                ), "The combination root must match with the combination authentication path");
+                ),
+                "The combination root must match with the combination authentication path"
+            );
 
             assert_eq!(
                 combination_leaf, inner_product,

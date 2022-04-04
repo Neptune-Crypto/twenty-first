@@ -28,9 +28,9 @@ pub trait Hasher: Sized + Send + Sync {
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest;
     fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest;
     // TODO: Consider moving the 'Self::Digest: ToDigest<Self::Digest>' constraint up.
-    fn hash_with_salts<Value>(&self, mut digest: Self::Digest, salts: &[Value]) -> Self::Digest
+    fn hash_with_salts<Salt>(&self, mut digest: Self::Digest, salts: &[Salt]) -> Self::Digest
     where
-        Value: ToDigest<Self::Digest>,
+        Salt: ToDigest<Self::Digest>,
         Self::Digest: ToDigest<Self::Digest>,
     {
         for salt in salts {

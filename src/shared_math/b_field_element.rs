@@ -8,6 +8,7 @@ use crate::shared_math::traits::{
 };
 use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
+
 use phf::phf_map;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
