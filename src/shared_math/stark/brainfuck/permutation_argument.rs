@@ -56,4 +56,8 @@ impl PermutationArgument {
         let degree = cmp::max(lhs_interpolant_degree, rhs_interpolant_degree);
         degree - 1
     }
+
+    pub fn evaluate_difference(&self, points: &[Vec<XFieldElement>]) -> XFieldElement {
+        points[self.lhs.0][self.lhs.1] - points[self.rhs.0][self.rhs.1]
+    }
 }

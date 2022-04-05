@@ -11,7 +11,7 @@ use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
 use crate::shared_math::stark::brainfuck::table;
 use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
-use crate::shared_math::traits::{FromVecu8, GetRandomElements, ModPowU32};
+use crate::shared_math::traits::{FromVecu8, GetRandomElements, Inverse, ModPowU32};
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
@@ -26,7 +26,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
-use std::iter::zip;
 use std::rc::Rc;
 
 pub const EXTENSION_CHALLENGE_COUNT: usize = 11;
@@ -326,7 +325,7 @@ impl Stark {
         // Commit to base codewords
         let mut proof_stream = ProofStream::default();
         let base_merkle_tree_root: &Vec<BFieldElement> = base_merkle_tree.get_root();
-        println!("prover is feeling lucky: {:?}", base_merkle_tree_root);
+        // println!("prover is feeling lucky: {:?}", base_merkle_tree_root);
         proof_stream.enqueue(base_merkle_tree_root)?;
 
         // Get coefficients for table extension
@@ -545,6 +544,8 @@ impl Stark {
             "Number of terms in non-linear combination must match number of weights"
         );
 
+        println!("prover weights len: {:?}", weights.len());
+
         let combination_codeword: Vec<XFieldElement> = weights
             .iter()
             .zip(terms.iter())
@@ -576,7 +577,7 @@ impl Stark {
                 &vec![BFieldElement::ring_zero()],
             );
         let combination_root: &Vec<BFieldElement> = combination_tree.get_root();
-        println!("Prover: combination_root = {:?}", combination_root);
+        // println!("Prover: combination_root = {:?}", combination_root);
         proof_stream.enqueue(combination_root)?;
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in verifier
@@ -594,19 +595,19 @@ impl Stark {
         let indices_seed = proof_stream.prover_fiat_shamir();
         let indices =
             Self::sample_indices(self.security_level, indices_seed, self.fri.domain.length);
-        println!("Prover: indices = {:?}", indices);
+        // println!("Prover: indices = {:?}", indices);
 
         // Open leafs of zipped codewords at indicated positions
-        for index in indices {
+        for index in indices.iter() {
             for unit_distance in unit_distances.iter() {
                 let idx: usize = (index + unit_distance) % self.fri.domain.length;
 
-                let element: Vec<BFieldElement> = transposed_base_codewords[idx].clone();
-                println!("prover: element = {:?}", element);
-                println!("element.len() = {}", element.len());
+                let elements: Vec<BFieldElement> = transposed_base_codewords[idx].clone();
+                // println!("prover: element = {:?}", elements);
+                // println!("element.len() = {}", elements.len());
                 let auth_path: Vec<Vec<BFieldElement>> =
                     base_merkle_tree.get_authentication_path(idx);
-                proof_stream.enqueue(&element)?;
+                proof_stream.enqueue(&elements)?;
                 // proof_stream.enqueue(&auth_path)?;
                 proof_stream.enqueue_length_prepended(&auth_path)?;
 
@@ -615,12 +616,36 @@ impl Stark {
                     base_merkle_tree.get_root().clone(), idx as u32, leaf_digest, auth_path);
                 assert!(success, "authentication path for base tree must be valid");
 
-                let the_value = transposed_extension_codewords[idx].clone();
-                let the_auth_path = extension_tree.get_authentication_path(idx);
-                proof_stream.enqueue(&the_value)?;
-                proof_stream.enqueue_length_prepended(&the_auth_path)?;
+                let extension_elements: Vec<XFieldElement> =
+                    transposed_extension_codewords[idx].clone();
+                let extension_path: Vec<Vec<BFieldElement>> =
+                    extension_tree.get_authentication_path(idx);
+                proof_stream.enqueue(&extension_elements)?;
+                proof_stream.enqueue_length_prepended(&extension_path)?;
             }
         }
+
+        // open combination codeword at the same positions
+        for index in indices {
+            let revealed_combination_element = combination_codeword[index];
+            let revealed_combination_auth_path = combination_tree.get_authentication_path(index);
+            proof_stream.enqueue(&revealed_combination_element)?;
+            proof_stream.enqueue_length_prepended(&revealed_combination_auth_path)?;
+            assert!(MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::
+                    verify_authentication_path_from_leaf_hash(
+                combination_tree.get_root().to_owned(),
+                index as u32,
+                combination_codeword_digests[index].clone(),
+                revealed_combination_auth_path,
+            ), "Combination Merkle Tree authentication path must verify");
+        }
+        //        for index in indices:
+        //            proof_stream.push(combination_tree.leafs[index])
+        //            proof_stream.push(combination_tree.open(index))
+        //            assert(Merkle.verify(combination_tree.root(),
+        //                  index,
+        //                  combination_tree.open(index),
+        //                  combination_tree.leafs[index]))
 
         // prove low degree of combination polynomial, and collect indices
         let xfri = Fri::<XFieldElement, RescuePrimeProduction>::new(
@@ -639,7 +664,7 @@ impl Stark {
     pub fn verify(&self, proof_stream: &mut ProofStream) -> Result<bool, Box<dyn Error>> {
         let base_merkle_tree_root: Vec<BFieldElement> =
             proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
-        println!("verifier is feeling lucky: {:?}", base_merkle_tree_root);
+        // println!("verifier is feeling lucky: {:?}", base_merkle_tree_root);
 
         // Get coefficients for table extension
         // let challenges = self.sample_weights(EXTENSION_CHALLENGE_COUNT, proof_stream.prover_fiat_shamir());
@@ -690,7 +715,7 @@ impl Stark {
         //  - 2 for every other polynomial (base, extension, quotients)
         let num_base_polynomials = base_degree_bounds.len();
         let num_extension_polynomials = extension_degree_bounds.len();
-        let num_randomizer_polynomials = 3;
+        let num_randomizer_polynomials = 1;
         let num_quotient_polynomials: usize = self
             .tables
             .borrow()
@@ -716,11 +741,11 @@ impl Stark {
 
         let combination_root: Vec<BFieldElement> =
             proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
-        println!("Verifier: combination_root = {:?}", combination_root);
+        // println!("Verifier: combination_root = {:?}", combination_root);
         let indices_seed: Vec<u8> = proof_stream.verifier_fiat_shamir();
         let indices =
             Self::sample_indices(self.security_level, indices_seed, self.fri.domain.length);
-        println!("Verifier: indices = {:?}", indices);
+        // println!("Verifier: indices = {:?}", indices);
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
         let mut unit_distances: Vec<usize> = self
@@ -742,7 +767,7 @@ impl Stark {
                 let idx = (index + unit_distance) % self.fri.domain.length;
                 let elements: Vec<BFieldElement> = proof_stream.dequeue(8 + 18 * 128 / 8)?;
                 let auth_path: Vec<Vec<BFieldElement>> = proof_stream.dequeue_length_prepended()?;
-                println!("verifier: element = {:?}", elements);
+                // println!("verifier: element = {:?}", elements);
 
                 let hash_input: Vec<Vec<BFieldElement>> = elements
                     .chunks(hasher.0.max_input_length / 2)
@@ -758,7 +783,21 @@ impl Stark {
                 }
 
                 // tuples[idx] = [self.xfield.lift(e) for e in list(element)]
-                tuples.insert(idx, elements.iter().map(|bfe| bfe.lift()).collect());
+                let randomizer: XFieldElement =
+                    XFieldElement::new([elements[0], elements[1], elements[2]]);
+                assert_eq!(
+                    1, num_randomizer_polynomials,
+                    "For now number of randomizers must be 1"
+                );
+                let mut values: Vec<XFieldElement> = vec![randomizer];
+                values.extend_from_slice(
+                    &elements
+                        .iter()
+                        .skip(3 * num_randomizer_polynomials)
+                        .map(|bfe| bfe.lift())
+                        .collect::<Vec<XFieldElement>>(),
+                );
+                tuples.insert(idx, values);
 
                 // element = proof_stream.pull()
                 // salt, path = proof_stream.pull()
@@ -905,26 +944,123 @@ impl Stark {
                 );
                 base_acc_index += table.base_width();
                 ext_acc_index += table.full_width() - table.base_width();
+                for (constraint, bound) in table
+                    .transition_constraints_ext(challenges)
+                    .iter()
+                    .zip(table.transition_quotient_degree_bounds(challenges).iter())
+                {
+                    let eval =
+                        constraint.evaluate(&vec![point.to_owned(), next_point.clone()].concat());
+                    // If height == 0, then there is no subgroup where the transition polynomials should be zero.
+                    // The fast zerofier (based on group theory) needs a non-empty group.
+                    // Forcing it on an empty group generates a division by zero error.
+                    let quotient = if table.height() == 0 {
+                        XFieldElement::ring_zero()
+                    } else {
+                        let num = (self.fri.domain.x_value(index as u32)
+                            - table.omicron().inverse())
+                        .lift();
+                        let denom = self
+                            .fri
+                            .domain
+                            .x_value(index as u32)
+                            .mod_pow_u32(table.height() as u32)
+                            .lift()
+                            - XFieldElement::ring_one();
+                        eval * num / denom
+                    };
+                    terms.push(quotient);
+                    let shift = (self.max_degree as i64 - bound) as u32;
+                    terms.push(
+                        quotient
+                            * self
+                                .fri
+                                .domain
+                                .x_value(index as u32)
+                                .mod_pow_u32(shift)
+                                .lift(),
+                    );
+                }
 
-                // for constraint, bound in zip(table.transition_constraints_ext(challenges), table.transition_quotient_degree_bounds(challenges)):
-                //     eval = constraint.evaluate(
-                //     point + next_point)
-                // # If height == 0, then there is no subgroup where the transition polynomials should be zero.
-                // # The fast zerofier (based on group theory) needs a non-empty group.
-                // # Forcing it on an empty group generates a division by zero error.
-                // if table.height == 0:
-                //     quotient = self.xfield.zero()
-                // else:
-                // quotient = eval * self.xfield.lift(self.fri.domain(index) - table.omicron.inverse()) / (
-                //     self.xfield.lift(self.fri.domain(index) ^ table.height) - self.xfield.one())
-                // terms += [quotient]
-                // shift = self.max_degree - bound
-                // terms += [quotient *
-                //     self.xfield.lift(self.fri.domain(index) ^ shift)]
+                // terminal
+                for (constraint, bound) in table
+                    .terminal_constraints_ext(challenges, terminals)
+                    .iter()
+                    .zip(
+                        table
+                            .terminal_quotient_degree_bounds(challenges, terminals)
+                            .iter(),
+                    )
+                {
+                    let eval = constraint.evaluate(point);
+                    let quotient = eval
+                        / (self.fri.domain.x_value(index as u32).lift()
+                            - table.omicron().inverse().lift());
+                    terms.push(quotient);
+                    let shift = (self.max_degree as i64 - bound) as u32;
+                    terms.push(
+                        quotient
+                            * self
+                                .fri
+                                .domain
+                                .x_value(index as u32)
+                                .mod_pow_u32(shift)
+                                .lift(),
+                    )
+                }
             }
-        }
 
-        Ok(false) // FIXME
+            for arg in self.permutation_arguments.iter() {
+                let quotient = arg.evaluate_difference(&points)
+                    / (self.fri.domain.x_value(index as u32).lift() - XFieldElement::ring_one());
+                terms.push(quotient);
+                let degree_bound = arg.quotient_degree_bound();
+                let shift = (self.max_degree as i64 - degree_bound) as u32;
+                terms.push(
+                    quotient
+                        * self
+                            .fri
+                            .domain
+                            .x_value(index as u32)
+                            .mod_pow_u32(shift)
+                            .lift(),
+                );
+            }
+
+            println!("verify weights len: {:?}", weights.len());
+
+            assert_eq!(
+                weights.len(),
+                terms.len(),
+                "length of terms must be equal to length of weights"
+            );
+            // compute inner product of weights and terms
+            // Todo: implement `sum` on XFieldElements
+            let inner_product = weights
+                .iter()
+                .zip(terms.into_iter())
+                .map(|(w, t)| *w * t)
+                .fold(XFieldElement::ring_zero(), |x, y| x + y);
+            // get value of the combination codeword to test the inner product against
+            let combination_leaf: XFieldElement = proof_stream.dequeue(3 * 128 / 8)?;
+            let combination_path: Vec<Vec<BFieldElement>> =
+                proof_stream.dequeue_length_prepended()?;
+
+            assert!(
+                MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::
+                verify_authentication_path_from_leaf_hash(
+                    combination_root.clone(),
+                    index as u32,
+                    hasher.hash(&combination_leaf.coefficients.to_vec()),
+                    combination_path,
+                ), "The combination root must match with the combination authentication path");
+
+            assert_eq!(
+                combination_leaf, inner_product,
+                "The combination leaf must equal the inner product"
+            );
+        }
+        Ok(true)
     }
 }
 
