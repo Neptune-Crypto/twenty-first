@@ -181,7 +181,8 @@ impl Stark {
         );
         let io_evaluation_arguments = [input_evaluation, output_evaluation];
 
-        let program_challenge_indices = vec![0, 1, 2, 6];
+        let program_challenge_indices: [usize; PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT] =
+            [0, 1, 2, 10];
         let program_terminal_index = 4;
 
         let program_evaluation_argument = ProgramEvaluationArgument::new(
