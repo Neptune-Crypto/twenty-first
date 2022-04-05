@@ -46,7 +46,7 @@ pub struct Stark {
     tables: Rc<RefCell<TableCollection>>,
     // TODO: turn max_degree into i64 to match other degrees, which are i64
     max_degree: u64,
-    fri: Fri<BFieldElement, blake3::Hasher>,
+    fri: Fri<XFieldElement, blake3::Hasher>,
 
     permutation_arguments: [PermutationArgument; PERMUTATION_ARGUMENTS_COUNT],
     _io_evaluation_arguments: [EvaluationArgument; 2],
@@ -200,9 +200,9 @@ impl Stark {
             .get_primitive_root_of_unity(fri_domain_length as u128)
             .0
             .unwrap();
-        let fri: Fri<BFieldElement, blake3::Hasher> = Fri::new(
-            b_field_generator,
-            b_field_omega,
+        let fri: Fri<XFieldElement, blake3::Hasher> = Fri::new(
+            b_field_generator.lift(),
+            b_field_omega.lift(),
             fri_domain_length as usize,
             expansion_factor as usize,
             colinearity_checks_count,
@@ -261,7 +261,7 @@ impl Stark {
             &mut rng,
         ));
         let x_randomizer_codeword: Vec<XFieldElement> =
-            self.fri.domain.xevaluate(&randomizer_polynomial);
+            self.fri.domain.x_evaluate(&randomizer_polynomial);
         let mut b_randomizer_codewords: [Vec<BFieldElement>; 3] = [vec![], vec![], vec![]];
         for x_elem in x_randomizer_codeword.iter() {
             b_randomizer_codewords[0].push(x_elem.coefficients[0]);
@@ -422,7 +422,7 @@ impl Stark {
 
         let mut terms: Vec<Vec<XFieldElement>> = vec![x_randomizer_codeword];
         assert_eq!(base_codewords.len(), num_base_polynomials);
-        let fri_x_values: Vec<BFieldElement> = self.fri.domain.x_values();
+        let fri_x_values: Vec<BFieldElement> = self.fri.domain.b_domain_values();
         for (i, (bc, bdb)) in base_codewords
             .iter()
             .zip(base_degree_bounds.iter())
@@ -439,7 +439,7 @@ impl Stark {
             terms.push(bc_shifted);
 
             if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.xinterpolate(terms.last().unwrap());
+                let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
                 assert!(
                     interpolated.degree() == -1
                         || interpolated.degree() == self.max_degree as isize,
@@ -467,7 +467,7 @@ impl Stark {
             terms.push(ec_shifted);
 
             if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.xinterpolate(terms.last().unwrap());
+                let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
                 assert!(
                     interpolated.degree() == -1
                         || interpolated.degree() == self.max_degree as isize,
@@ -496,11 +496,11 @@ impl Stark {
 
             // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
             if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.xinterpolate(terms.last().unwrap());
+                let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
                 let unshifted_degree = self
                     .fri
                     .domain
-                    .xinterpolate(&terms[terms.len() - 2])
+                    .x_interpolate(&terms[terms.len() - 2])
                     .degree();
                 assert!(
                     interpolated.degree() == -1
@@ -622,16 +622,8 @@ impl Stark {
             ), "Combination Merkle Tree authentication path must verify");
         }
 
-        // prove low degree of combination polynomial
-        let xfri = Fri::<XFieldElement, RescuePrimeProduction>::new(
-            self.fri.domain.offset.lift(),
-            self.fri.domain.omega.lift(),
-            self.fri.domain.length,
-            self.fri.expansion_factor,
-            self.fri.colinearity_checks_count,
-        );
-
-        let _indices = xfri.prove(&combination_codeword, &mut proof_stream)?;
+        // prove low degree of combination polynomial, and collect indices
+        let _indices = self.fri.prove(&combination_codeword, &mut proof_stream)?;
 
         Ok(proof_stream)
     }
@@ -813,7 +805,7 @@ impl Stark {
                         * self
                             .fri
                             .domain
-                            .x_value(index as u32)
+                            .b_domain_value(index as u32)
                             .mod_pow_u32(shift)
                             .lift(),
                 );
@@ -839,7 +831,7 @@ impl Stark {
                         * self
                             .fri
                             .domain
-                            .x_value(index as u32)
+                            .b_domain_value(index as u32)
                             .mod_pow_u32(shift)
                             .lift(),
                 )
@@ -882,7 +874,7 @@ impl Stark {
                 {
                     let eval = constraint.evaluate(point);
                     let quotient = eval
-                        / (self.fri.domain.x_value(index as u32).lift()
+                        / (self.fri.domain.b_domain_value(index as u32).lift()
                             - XFieldElement::ring_one());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
@@ -891,7 +883,7 @@ impl Stark {
                             * self
                                 .fri
                                 .domain
-                                .x_value(index as u32)
+                                .b_domain_value(index as u32)
                                 .mod_pow_u32(shift)
                                 .lift(),
                     );
@@ -922,13 +914,13 @@ impl Stark {
                     let quotient = if table.height() == 0 {
                         XFieldElement::ring_zero()
                     } else {
-                        let num = (self.fri.domain.x_value(index as u32)
+                        let num = (self.fri.domain.b_domain_value(index as u32)
                             - table.omicron().inverse())
                         .lift();
                         let denom = self
                             .fri
                             .domain
-                            .x_value(index as u32)
+                            .b_domain_value(index as u32)
                             .mod_pow_u32(table.height() as u32)
                             .lift()
                             - XFieldElement::ring_one();
@@ -941,7 +933,7 @@ impl Stark {
                             * self
                                 .fri
                                 .domain
-                                .x_value(index as u32)
+                                .b_domain_value(index as u32)
                                 .mod_pow_u32(shift)
                                 .lift(),
                     );
@@ -959,7 +951,7 @@ impl Stark {
                 {
                     let eval = constraint.evaluate(point);
                     let quotient = eval
-                        / (self.fri.domain.x_value(index as u32).lift()
+                        / (self.fri.domain.b_domain_value(index as u32).lift()
                             - table.omicron().inverse().lift());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
@@ -968,7 +960,7 @@ impl Stark {
                             * self
                                 .fri
                                 .domain
-                                .x_value(index as u32)
+                                .b_domain_value(index as u32)
                                 .mod_pow_u32(shift)
                                 .lift(),
                     )
@@ -977,7 +969,8 @@ impl Stark {
 
             for arg in self.permutation_arguments.iter() {
                 let quotient = arg.evaluate_difference(&points)
-                    / (self.fri.domain.x_value(index as u32).lift() - XFieldElement::ring_one());
+                    / (self.fri.domain.b_domain_value(index as u32).lift()
+                        - XFieldElement::ring_one());
                 terms.push(quotient);
                 let degree_bound = arg.quotient_degree_bound();
                 let shift = (self.max_degree as i64 - degree_bound) as u32;
@@ -986,7 +979,7 @@ impl Stark {
                         * self
                             .fri
                             .domain
-                            .x_value(index as u32)
+                            .b_domain_value(index as u32)
                             .mod_pow_u32(shift)
                             .lift(),
                 );

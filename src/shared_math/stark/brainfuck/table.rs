@@ -215,25 +215,28 @@ impl<T: TableMoreTrait> Table<T> {
     }
 
     /// Evaluate the base table
-    pub fn lde(&mut self, domain: &FriDomain<BFieldElement>) -> Vec<Vec<BFieldElement>> {
-        let polynomials: Vec<Polynomial<BFieldElement>> =
-            self.b_interpolate_columns(domain.omega, domain.length, (0..self.base_width).collect());
+    pub fn lde(&mut self, domain: &FriDomain<XFieldElement>) -> Vec<Vec<BFieldElement>> {
+        let polynomials: Vec<Polynomial<BFieldElement>> = self.b_interpolate_columns(
+            domain.omega.unlift().unwrap(),
+            domain.length,
+            (0..self.base_width).collect(),
+        );
         self.codewords = polynomials
             .iter()
-            .map(|p| domain.evaluate(p, BFieldElement::ring_zero()))
+            .map(|p| domain.b_evaluate(p, BFieldElement::ring_zero()))
             .collect();
         self.codewords.clone()
     }
 
-    pub fn ldex(&mut self, domain: &FriDomain<BFieldElement>) -> Vec<Vec<XFieldElement>> {
+    pub fn ldex(&mut self, domain: &FriDomain<XFieldElement>) -> Vec<Vec<XFieldElement>> {
         let polynomials = self.x_interpolate_columns(
-            domain.omega.lift(),
+            domain.omega,
             domain.length,
             (self.base_width..self.full_width).collect(),
         );
         let extended_codewords = polynomials
             .iter()
-            .map(|p| domain.xevaluate(p))
+            .map(|p| domain.x_evaluate(p))
             .collect::<Vec<Vec<XFieldElement>>>();
         self.extended_codewords = vec![
             self.codewords
@@ -350,7 +353,7 @@ pub trait TableTrait {
 
     fn all_quotients(
         &self,
-        fri_domain: &FriDomain<BFieldElement>,
+        fri_domain: &FriDomain<XFieldElement>,
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
@@ -365,12 +368,12 @@ pub trait TableTrait {
 
     fn transition_quotients(
         &self,
-        fri_domain: &FriDomain<BFieldElement>,
+        fri_domain: &FriDomain<XFieldElement>,
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
         let one = BFieldElement::ring_one();
-        let x_values: Vec<BFieldElement> = fri_domain.x_values();
+        let x_values: Vec<BFieldElement> = fri_domain.b_domain_values();
         let subgroup_zerofier: Vec<BFieldElement> = x_values
             .iter()
             .map(|x| x.mod_pow_u32(self.height() as u32) - one)
@@ -415,7 +418,7 @@ pub trait TableTrait {
             // If the `DEBUG` environment variable is set, interpolate the quotient and check the degree
             if std::env::var("DEBUG").is_ok() {
                 let interpolated: Polynomial<XFieldElement> =
-                    fri_domain.xinterpolate(quotients.last().unwrap());
+                    fri_domain.x_interpolate(quotients.last().unwrap());
                 assert!(
                     interpolated.degree() >= fri_domain.length as isize - 1,
                     "interpolated degree was too high"
@@ -428,14 +431,14 @@ pub trait TableTrait {
 
     fn terminal_quotients(
         &self,
-        fri_domain: &FriDomain<BFieldElement>,
+        fri_domain: &FriDomain<XFieldElement>,
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
         let omicron_inverse = self.omicron().inverse();
         let zerofier_codeword: Vec<BFieldElement> = fri_domain
-            .x_values()
+            .b_domain_values()
             .into_iter()
             .map(|x| x - omicron_inverse)
             .collect();
@@ -455,7 +458,7 @@ pub trait TableTrait {
 
         if std::env::var("DEBUG").is_ok() {
             for (i, qc) in quotient_codewords.iter().enumerate() {
-                let interpolated = fri_domain.xinterpolate(qc);
+                let interpolated = fri_domain.x_interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
                     "Degree of terminal quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}. Unsatisfied constraint: {}", i, self.name(), interpolated.degree(), fri_domain.length, terminal_constraints[i]
@@ -468,7 +471,7 @@ pub trait TableTrait {
 
     fn boundary_quotients(
         &self,
-        fri_domain: &FriDomain<BFieldElement>,
+        fri_domain: &FriDomain<XFieldElement>,
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
@@ -476,9 +479,9 @@ pub trait TableTrait {
         let mut quotient_codewords: Vec<Vec<XFieldElement>> = vec![];
         let boundary_constraints: Vec<MPolynomial<XFieldElement>> =
             self.boundary_constraints_ext(challenges);
-        let one = fri_domain.omega.ring_one();
+        let one = BFieldElement::ring_one();
         let zerofier: Vec<BFieldElement> = (0..fri_domain.length)
-            .map(|i| fri_domain.x_value(i as u32) - one)
+            .map(|i| fri_domain.b_domain_value(i as u32) - one)
             .collect();
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
         for bc in boundary_constraints {
@@ -495,7 +498,7 @@ pub trait TableTrait {
         // If the `DEBUG` environment variable is set, run this extra validity check
         if std::env::var("DEBUG").is_ok() {
             for (i, qc) in quotient_codewords.iter().enumerate() {
-                let interpolated = fri_domain.xinterpolate(qc);
+                let interpolated = fri_domain.x_interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
                     "Degree of boundary quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}", i, self.name(), interpolated.degree(), fri_domain.length

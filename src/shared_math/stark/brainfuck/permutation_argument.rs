@@ -24,9 +24,9 @@ impl PermutationArgument {
         PermutationArgument { tables, lhs, rhs }
     }
 
-    pub fn quotient(&self, fri_domain: &FriDomain<BFieldElement>) -> Vec<XFieldElement> {
-        // The linter seems to mistakenly think that a collect is not needed here
-        #[allow(clippy::needless_collect)]
+    // The linter seems to mistakenly think that a collect is not needed here
+    #[allow(clippy::needless_collect)]
+    pub fn quotient(&self, fri_domain: &FriDomain<XFieldElement>) -> Vec<XFieldElement> {
         let difference_codeword: Vec<XFieldElement> = self
             .tables
             .borrow()
@@ -36,8 +36,11 @@ impl PermutationArgument {
             .map(|(l, r)| *l - *r)
             .collect();
         let one: BFieldElement = BFieldElement::ring_one();
-        let zerofier: Vec<BFieldElement> =
-            fri_domain.x_values().into_iter().map(|x| x - one).collect();
+        let zerofier: Vec<BFieldElement> = fri_domain
+            .b_domain_values()
+            .into_iter()
+            .map(|x| x - one)
+            .collect();
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
         difference_codeword
             .into_iter()

@@ -1,9 +1,10 @@
 use super::b_field_element::BFieldElement;
 use super::other::{log_2_ceil, log_2_floor};
 use super::polynomial::Polynomial;
+use super::traits::ModPowU32;
 use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
-use crate::shared_math::traits::PrimeField;
+use crate::shared_math::traits::{IdentityValues, PrimeField};
 use crate::util_types::merkle_tree::{LeaflessPartialAuthenticationPath, MerkleTree};
 use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
@@ -37,44 +38,80 @@ pub struct FriDomain<PF: PrimeField> {
     pub length: usize,
 }
 
-impl<PF: PrimeField> FriDomain<PF> {
-    pub fn x_value(&self, index: u32) -> PF {
-        self.omega.mod_pow_u32(index) * self.offset
+// impl<PF: PrimeField> FriDomain<PF> {
+//     pub fn x_value(&self, index: u32) -> PF {
+//         self.omega.mod_pow_u32(index) * self.offset
+//     }
+
+//     pub fn x_values(&self) -> Vec<PF> {
+//         (0..self.length)
+//             .map(|i| self.omega.mod_pow_u32(i as u32) * self.offset)
+//             .collect()
+//     }
+
+//     pub fn evaluate(&self, polynomial: &Polynomial<PF>, zero: PF) -> Vec<PF> {
+//         assert!(zero.is_zero(), "zero must be zero");
+//         let mut polynomial_representation: Vec<PF> =
+//             polynomial.scale(&self.offset).coefficients.clone();
+//         polynomial_representation.resize(self.length as usize, zero);
+//         ntt(
+//             &mut polynomial_representation,
+//             self.omega,
+//             log_2_ceil(self.length as u64) as u32,
+//         );
+
+//         polynomial_representation
+//     }
+
+//     pub fn interpolate(&self, values: &[PF]) -> Polynomial<PF> {
+//         Polynomial::<PF>::fast_coset_interpolate(&self.offset, self.omega, values)
+//     }
+// }
+
+impl FriDomain<XFieldElement> {
+    pub fn x_evaluate(&self, polynomial: &Polynomial<XFieldElement>) -> Vec<XFieldElement> {
+        polynomial.fast_coset_evaluate(&self.offset, self.omega, self.length as usize)
     }
 
-    pub fn x_values(&self) -> Vec<PF> {
+    pub fn x_interpolate(&self, values: &[XFieldElement]) -> Polynomial<XFieldElement> {
+        Polynomial::<XFieldElement>::fast_coset_interpolate(&self.offset, self.omega, values)
+    }
+
+    pub fn b_domain_value(&self, index: u32) -> BFieldElement {
+        self.omega.unlift().unwrap().mod_pow_u32(index) * self.offset.unlift().unwrap()
+    }
+
+    pub fn b_domain_values(&self) -> Vec<BFieldElement> {
         (0..self.length)
-            .map(|i| self.omega.mod_pow_u32(i as u32) * self.offset)
+            .map(|i| {
+                self.omega.unlift().unwrap().mod_pow_u32(i as u32) * self.offset.unlift().unwrap()
+            })
             .collect()
     }
 
-    pub fn evaluate(&self, polynomial: &Polynomial<PF>, zero: PF) -> Vec<PF> {
+    pub fn b_evaluate(
+        &self,
+        polynomial: &Polynomial<BFieldElement>,
+        zero: BFieldElement,
+    ) -> Vec<BFieldElement> {
         assert!(zero.is_zero(), "zero must be zero");
-        let mut polynomial_representation: Vec<PF> = polynomial.scale(&self.offset).coefficients;
+        let mut polynomial_representation: Vec<BFieldElement> = polynomial
+            .scale(&self.offset.unlift().unwrap())
+            .coefficients;
         polynomial_representation.resize(self.length as usize, zero);
         ntt(
             &mut polynomial_representation,
-            self.omega,
+            self.omega.unlift().unwrap(),
             log_2_ceil(self.length as u64) as u32,
         );
 
         polynomial_representation
     }
 
-    pub fn interpolate(&self, values: &[PF]) -> Polynomial<PF> {
-        Polynomial::<PF>::fast_coset_interpolate(&self.offset, self.omega, values)
-    }
-}
-
-impl FriDomain<BFieldElement> {
-    pub fn xevaluate(&self, polynomial: &Polynomial<XFieldElement>) -> Vec<XFieldElement> {
-        polynomial.fast_coset_evaluate(&self.offset.lift(), self.omega.lift(), self.length as usize)
-    }
-
-    pub fn xinterpolate(&self, values: &[XFieldElement]) -> Polynomial<XFieldElement> {
-        Polynomial::<XFieldElement>::fast_coset_interpolate(
-            &self.offset.lift(),
-            self.omega.lift(),
+    pub fn b_interpolate(&self, values: &[BFieldElement]) -> Polynomial<BFieldElement> {
+        Polynomial::<BFieldElement>::fast_coset_interpolate(
+            &self.offset.unlift().unwrap(),
+            self.omega.unlift().unwrap(),
             values,
         )
     }
@@ -486,30 +523,36 @@ mod fri_domain_tests {
                 .0
                 .unwrap();
             let domain = FriDomain {
-                offset: BFieldElement::generator(),
-                omega,
+                offset: BFieldElement::generator().lift(),
+                omega: omega.lift(),
                 length: order as usize,
             };
             let expected_x_values: Vec<BFieldElement> = (0..order)
                 .map(|i| BFieldElement::generator() * omega.mod_pow(i as u64))
                 .collect();
-            let x_values = domain.x_values();
+            let x_values = domain.b_domain_values();
             assert_eq!(expected_x_values, x_values);
 
             // Verify that `x_value` also returns expected values
             for i in 0..order {
-                assert_eq!(expected_x_values[i as usize], domain.x_value(i as u32));
+                assert_eq!(
+                    expected_x_values[i as usize],
+                    domain.b_domain_value(i as u32)
+                );
             }
 
             let pol = Polynomial::<BFieldElement>::new(x_squared_coefficients.clone());
-            let values = domain.evaluate(&pol, BFieldElement::ring_zero());
+            let values = domain.b_evaluate(&pol, BFieldElement::ring_zero());
             assert_ne!(values, x_squared_coefficients);
-            let interpolant = domain.interpolate(&values);
+            let interpolant = domain.b_interpolate(&values);
             assert_eq!(pol, interpolant);
 
             // Verify that batch-evaluated values match a manual evaluation
             for i in 0..order {
-                assert_eq!(pol.evaluate(&domain.x_value(i as u32)), values[i as usize]);
+                assert_eq!(
+                    pol.evaluate(&domain.b_domain_value(i as u32)),
+                    values[i as usize]
+                );
             }
 
             let x_squared_coefficients_lifted: Vec<XFieldElement> = x_squared_coefficients
@@ -518,9 +561,9 @@ mod fri_domain_tests {
                 .map(|x| x.lift())
                 .collect();
             let xpol = Polynomial::new(x_squared_coefficients_lifted.clone());
-            let x_field_x_values = domain.xevaluate(&xpol);
+            let x_field_x_values = domain.x_evaluate(&xpol);
             assert_ne!(x_field_x_values, x_squared_coefficients_lifted);
-            let x_interpolant = domain.xinterpolate(&x_field_x_values);
+            let x_interpolant = domain.x_interpolate(&x_field_x_values);
             assert_eq!(xpol, x_interpolant);
         }
     }
