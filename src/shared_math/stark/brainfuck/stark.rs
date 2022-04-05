@@ -3,7 +3,7 @@ use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::stark::brainfuck::evaluation_argument::{
-    EvaluationArgument, ProgramEvaluationArgument,
+    EvaluationArgument, ProgramEvaluationArgument, PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT,
 };
 use crate::shared_math::stark::brainfuck::instruction_table::InstructionTable;
 use crate::shared_math::stark::brainfuck::io_table::IOTable;
