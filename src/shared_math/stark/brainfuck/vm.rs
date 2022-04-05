@@ -231,8 +231,6 @@ pub fn simulate(
             next_instruction: zero,
         });
 
-    // base_matrices.input_matrix.append(&mut input_data.clone());
-
     // main loop
     while (register.instruction_pointer.value() as usize) < program.len() {
         // collect values to add new rows in execution matrices

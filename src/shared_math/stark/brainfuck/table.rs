@@ -292,16 +292,12 @@ pub trait TableTrait {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Degree> {
-        // boundary_degree_bounds = self.boundary_quotient_degree_bounds(challenges)
         let boundary_degree_bounds = self.boundary_quotient_degree_bounds(challenges);
 
-        // transition_degree_bounds = self.transition_quotient_degree_bounds(challenges)
         let transition_degree_bounds = self.transition_quotient_degree_bounds(challenges);
 
-        // terminal_degree_bounds = self.terminal_quotient_degree_bounds(challenges, terminals)
         let terminal_degree_bounds = self.terminal_quotient_degree_bounds(challenges, terminals);
 
-        // return boundary_degree_bounds + transition_degree_bounds + terminal_degree_bounds
         vec![
             boundary_degree_bounds,
             transition_degree_bounds,
@@ -314,18 +310,14 @@ pub trait TableTrait {
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Degree> {
-        // max_degrees = [self.interpolant_degree()] * self.full_width
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.full_width()];
 
-        // degree_bounds = [mpo.symbolic_degree_bound(
-        //     max_degrees) - 1 for mpo in self.boundary_constraints_ext(challenges)]
         let degree_bounds: Vec<Degree> = self
             .boundary_constraints_ext(challenges)
             .iter()
             .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - 1)
             .collect();
 
-        // return degree_bounds
         degree_bounds
     }
 
@@ -333,18 +325,10 @@ pub trait TableTrait {
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Degree> {
-        // max_degrees = [self.interpolant_degree()] * (2*self.full_width)
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); 2 * self.full_width()];
 
-        // transition_constraints = self.transition_constraints_ext(challenges)
         let transition_constraints = self.transition_constraints_ext(challenges);
 
-        // degree_bounds = []
-        // for i in range(len(transition_constraints)):
-        //     mpo = transition_constraints[i]
-        //     symbolic_degree_bound = mpo.symbolic_degree_bound(max_degrees)
-        //     degree_bounds += [symbolic_degree_bound - self.height + 1]
-        // return degree_bounds
         let height = self.height() as Degree;
         transition_constraints
             .iter()
@@ -357,7 +341,6 @@ pub trait TableTrait {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Degree> {
-        // max_degrees = [self.interpolant_degree()] * self.full_width
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.full_width()];
         self.terminal_constraints_ext(challenges, terminals)
             .iter()
@@ -470,7 +453,6 @@ pub trait TableTrait {
             quotient_codewords.push(quotient_codeword);
         }
 
-        // TODO: Add Alan's debug logic here for when the `DEBUG`
         if std::env::var("DEBUG").is_ok() {
             for (i, qc) in quotient_codewords.iter().enumerate() {
                 let interpolated = fri_domain.xinterpolate(qc);
@@ -523,8 +505,6 @@ pub trait TableTrait {
 
         quotient_codewords
     }
-
-    // IMPLEMENT THESE!
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>>;
     fn transition_constraints_ext(

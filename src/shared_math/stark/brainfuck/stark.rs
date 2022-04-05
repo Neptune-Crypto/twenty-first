@@ -167,16 +167,12 @@ impl Stark {
             processor_memory_permutation,
         ];
 
-        // input_evaluation = EvaluationArgument(
-        //     8, 2, [BaseFieldElement(ord(i), self.field) for i in input_symbols])
         let input_evaluation = EvaluationArgument::new(
             rc_base_tables.borrow().input_table.challenge_index(),
             rc_base_tables.borrow().input_table.terminal_index(),
             input_symbols.clone(),
         );
 
-        // output_evaluation = EvaluationArgument(
-        //     9, 3, [BaseFieldElement(ord(o), self.field) for o in output_symbols])
         let output_evaluation = EvaluationArgument::new(
             rc_base_tables.borrow().output_table.challenge_index(),
             rc_base_tables.borrow().output_table.terminal_index(),
@@ -184,8 +180,6 @@ impl Stark {
         );
         let io_evaluation_arguments = [input_evaluation, output_evaluation];
 
-        // program_evaluation = ProgramEvaluationArgument(
-        //     [0, 1, 2, 6], 4, program)
         let program_challenge_indices = vec![0, 1, 2, 6];
         let program_terminal_index = 4;
 
@@ -231,8 +225,6 @@ impl Stark {
             program_evaluation_argument,
         }
     }
-
-    // def prove(self, running_time, program, processor_matrix, instruction_matrix, input_matrix, output_matrix, proof_stream=None):
 
     pub fn prove(
         &mut self,
@@ -325,11 +317,9 @@ impl Stark {
         // Commit to base codewords
         let mut proof_stream = ProofStream::default();
         let base_merkle_tree_root: &Vec<BFieldElement> = base_merkle_tree.get_root();
-        // println!("prover is feeling lucky: {:?}", base_merkle_tree_root);
         proof_stream.enqueue(base_merkle_tree_root)?;
 
         // Get coefficients for table extension
-        // let challenges = self.sample_weights(EXTENSION_CHALLENGE_COUNT, proof_stream.prover_fiat_shamir());
         // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
         // must not change though, it should remain `Vec<XFieldElement>`.
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
@@ -415,7 +405,6 @@ impl Stark {
             proof_stream.enqueue(t)?;
         }
 
-        // TODO: Get weights for nonlinear combination
         let num_base_polynomials: usize = self
             .tables
             .borrow()
@@ -528,6 +517,7 @@ impl Stark {
             }
         }
 
+        // Get weights for nonlinear combination
         let weights_seed = proof_stream.prover_fiat_shamir();
         let weights = Self::sample_weights(
             (num_randomizer_polynomials
@@ -535,17 +525,14 @@ impl Stark {
                 as u8,
             weights_seed,
         );
-        // println!("prover is feeling lucky about weights = {:?}", weights);
 
-        // // Take weighted sum
         assert_eq!(
             terms.len(),
             weights.len(),
             "Number of terms in non-linear combination must match number of weights"
         );
 
-        println!("prover weights len: {:?}", weights.len());
-
+        // Take weighted sum
         let combination_codeword: Vec<XFieldElement> = weights
             .iter()
             .zip(terms.iter())
@@ -577,7 +564,6 @@ impl Stark {
                 &vec![BFieldElement::ring_zero()],
             );
         let combination_root: &Vec<BFieldElement> = combination_tree.get_root();
-        // println!("Prover: combination_root = {:?}", combination_root);
         proof_stream.enqueue(combination_root)?;
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in verifier
@@ -595,7 +581,6 @@ impl Stark {
         let indices_seed = proof_stream.prover_fiat_shamir();
         let indices =
             Self::sample_indices(self.security_level, indices_seed, self.fri.domain.length);
-        // println!("Prover: indices = {:?}", indices);
 
         // Open leafs of zipped codewords at indicated positions
         for index in indices.iter() {
@@ -603,8 +588,6 @@ impl Stark {
                 let idx: usize = (index + unit_distance) % self.fri.domain.length;
 
                 let elements: Vec<BFieldElement> = transposed_base_codewords[idx].clone();
-                // println!("prover: element = {:?}", elements);
-                // println!("element.len() = {}", elements.len());
                 let auth_path: Vec<Vec<BFieldElement>> =
                     base_merkle_tree.get_authentication_path(idx);
                 proof_stream.enqueue(&elements)?;
@@ -639,15 +622,8 @@ impl Stark {
                 revealed_combination_auth_path,
             ), "Combination Merkle Tree authentication path must verify");
         }
-        //        for index in indices:
-        //            proof_stream.push(combination_tree.leafs[index])
-        //            proof_stream.push(combination_tree.open(index))
-        //            assert(Merkle.verify(combination_tree.root(),
-        //                  index,
-        //                  combination_tree.open(index),
-        //                  combination_tree.leafs[index]))
 
-        // prove low degree of combination polynomial, and collect indices
+        // prove low degree of combination polynomial
         let xfri = Fri::<XFieldElement, RescuePrimeProduction>::new(
             self.fri.domain.offset.lift(),
             self.fri.domain.omega.lift(),
@@ -664,10 +640,8 @@ impl Stark {
     pub fn verify(&self, proof_stream: &mut ProofStream) -> Result<bool, Box<dyn Error>> {
         let base_merkle_tree_root: Vec<BFieldElement> =
             proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
-        // println!("verifier is feeling lucky: {:?}", base_merkle_tree_root);
 
         // Get coefficients for table extension
-        // let challenges = self.sample_weights(EXTENSION_CHALLENGE_COUNT, proof_stream.prover_fiat_shamir());
         // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
         // must not change though, it should remain `Vec<XFieldElement>`.
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
@@ -737,15 +711,13 @@ impl Stark {
                 + 2 * num_difference_quotients) as u8,
             weights_seed,
         );
-        // println!("verifier is feeling lucky about weights = {:?}", weights);
 
         let combination_root: Vec<BFieldElement> =
             proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
-        // println!("Verifier: combination_root = {:?}", combination_root);
+
         let indices_seed: Vec<u8> = proof_stream.verifier_fiat_shamir();
         let indices =
             Self::sample_indices(self.security_level, indices_seed, self.fri.domain.length);
-        // println!("Verifier: indices = {:?}", indices);
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
         let mut unit_distances: Vec<usize> = self
@@ -767,7 +739,6 @@ impl Stark {
                 let idx = (index + unit_distance) % self.fri.domain.length;
                 let elements: Vec<BFieldElement> = proof_stream.dequeue(8 + 18 * 128 / 8)?;
                 let auth_path: Vec<Vec<BFieldElement>> = proof_stream.dequeue_length_prepended()?;
-                // println!("verifier: element = {:?}", elements);
 
                 let hash_input: Vec<Vec<BFieldElement>> = elements
                     .chunks(hasher.0.max_input_length / 2)
@@ -782,7 +753,6 @@ impl Stark {
                     // return Ok(false);
                 }
 
-                // tuples[idx] = [self.xfield.lift(e) for e in list(element)]
                 let randomizer: XFieldElement =
                     XFieldElement::new([elements[0], elements[1], elements[2]]);
                 assert_eq!(
@@ -799,15 +769,11 @@ impl Stark {
                 );
                 tuples.insert(idx, values);
 
-                // element = proof_stream.pull()
-                // salt, path = proof_stream.pull()
                 let extension_elements: Vec<XFieldElement> =
                     proof_stream.dequeue(8 + 9 * 3 * 128 / 8)?;
                 let extension_auth_path: Vec<Vec<BFieldElement>> =
                     proof_stream.dequeue_length_prepended()?;
 
-                // verifier_verdict = verifier_verdict and SaltedMerkle.verify(
-                //     extension_root, idx, salt, path, element)
                 let extension_element_chunked: Vec<Vec<BFieldElement>> = extension_elements
                     .clone()
                     .into_iter()
@@ -826,7 +792,6 @@ impl Stark {
                     // return Ok(false);
                 }
 
-                // tuples[idx] = tuples[idx] + list(element)
                 tuples.insert(idx, vec![tuples[&idx].clone(), extension_elements].concat());
             }
         }
@@ -881,8 +846,7 @@ impl Stark {
                 )
             }
 
-            // collect terms: quotients
-            // quotients need to be computed
+            // collect terms: quotients, quotients need to be computed
             let mut acc_index = num_randomizer_polynomials;
             let mut points: Vec<Vec<XFieldElement>> = vec![];
             for table in self.tables.borrow().into_iter() {
@@ -1029,13 +993,12 @@ impl Stark {
                 );
             }
 
-            println!("verify weights len: {:?}", weights.len());
-
             assert_eq!(
                 weights.len(),
                 terms.len(),
                 "length of terms must be equal to length of weights"
             );
+
             // compute inner product of weights and terms
             // Todo: implement `sum` on XFieldElements
             let inner_product = weights

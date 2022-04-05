@@ -54,12 +54,6 @@ impl MemoryTable {
         Self(table)
     }
 
-    // @staticmethod
-    // def derive_matrix(processor_matrix, num_randomizers):
-    //     matrix = [[pt[ProcessorTable.cycle], pt[ProcessorTable.memory_pointer],
-    //               pt[ProcessorTable.memory_value]] for pt in processor_matrix]
-    //     matrix.sort(key=lambda mt: mt[MemoryTable.memory_pointer].value)
-    //     return matrix
     pub fn derive_matrix(processor_matrix: Vec<Vec<BFieldElement>>) -> Vec<Vec<BFieldElement>> {
         let mut matrix = vec![];
         for pt in processor_matrix.iter() {
@@ -89,7 +83,7 @@ impl MemoryTable {
 
         // 1. memory pointer increases by one, zero, or minus one
 
-        // # <=>. (MP*=MP+1) \/ (MP*=MP)
+        // <=>. (MP*=MP+1) \/ (MP*=MP)
         // polynomials += [(address_next - address - one)
         //                 * (address_next - address)]
         polynomials.push(
@@ -99,9 +93,9 @@ impl MemoryTable {
 
         // 2. if memory pointer does not increase, then memory value can change only if cycle counter increases by one
 
-        // #        <=>. MP*=MP => (MV*=/=MV => CLK*=CLK+1)
-        // #        <=>. MP*=/=MP \/ (MV*=/=MV => CLK*=CLK+1)
-        // # (DNF:) <=>. MP*=/=MP \/ MV*=MV \/ CLK*=CLK+1
+        //        <=>. MP*=MP => (MV*=/=MV => CLK*=CLK+1)
+        //        <=>. MP*=/=MP \/ (MV*=/=MV => CLK*=CLK+1)
+        // (DNF:) <=>. MP*=/=MP \/ MV*=MV \/ CLK*=CLK+1
         // polynomials += [(address_next - address - one) *
         //                 (value_next - value) * (cycle_next - cycle - one)]
         polynomials.push(
@@ -112,8 +106,8 @@ impl MemoryTable {
 
         // 3. if memory pointer increases by one, then memory value must be set to zero
 
-        // #        <=>. MP*=MP+1 => MV* = 0
-        // # (DNF:) <=>. MP*=/=MP+1 \/ MV*=0
+        //        <=>. MP*=MP+1 => MV* = 0
+        // (DNF:) <=>. MP*=/=MP+1 \/ MV*=0
         // polynomials += [(address_next - address)
         //                 * value_next]
         polynomials.push((address_next - address) * value_next);
@@ -212,8 +206,6 @@ impl TableTrait for MemoryTable {
 
         // loop over all rows of table
         for (i, row) in self.0.matrix.iter().enumerate() {
-            // first, copy over existing row
-            // new_row = [xfield.lift(nr) for nr in row]
             let mut new_row: Vec<XFieldElement> = row.into_iter().map(|bfe| bfe.lift()).collect();
 
             new_row.push(memory_permutation_running_product);
@@ -225,11 +217,8 @@ impl TableTrait for MemoryTable {
             extended_matrix[i] = new_row;
         }
 
-        // self.matrix = extended_matrix
         self.0.extended_matrix = extended_matrix;
 
-        // self.codewords = [[xfield.lift(c) for c in cdwd]
-        //                   for cdwd in self.codewords]
         self.0.extended_codewords = self
             .0
             .codewords
@@ -237,7 +226,6 @@ impl TableTrait for MemoryTable {
             .map(|row| row.iter().map(|elem| elem.lift()).collect())
             .collect();
 
-        // self.evaluation_terminal = evaluation_terminal
         self.0.more.permutation_terminal = memory_permutation_running_product;
     }
 
@@ -302,12 +290,6 @@ impl TableTrait for MemoryTable {
         let x =
             MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
 
-        // return [x[MemoryTable.cycle] - zero,  # cycle
-        //         x[MemoryTable.memory_pointer] - zero,  # memory pointer
-        //         x[MemoryTable.memory_value] - zero,  # memory value
-        //         # x[MemoryExtension.permutation] - one   # permutation
-        //         ]
-
         let cycle = x[MemoryTable::CYCLE].clone();
         let memory_pointer = x[MemoryTable::MEMORY_POINTER].clone();
         let memory_value = x[MemoryTable::MEMORY_VALUE].clone();
@@ -316,7 +298,6 @@ impl TableTrait for MemoryTable {
             cycle - zero.clone(),
             memory_pointer - zero.clone(),
             memory_value - zero,
-            // x[MemoryExtension::PERMUTATION] - one,
         ]
     }
 
@@ -336,7 +317,6 @@ impl TableTrait for MemoryTable {
         let permutation =
             MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
 
-        // x = MPolynomial.variables(self.full_width, field)
         let x =
             MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
 

@@ -240,11 +240,6 @@ mod brainfuck_table_collection_tests {
     use std::convert::TryInto;
     use std::rc::Rc;
 
-    // EXPECTED:
-    // max_degree = 1153
-    // max_degree = 2047
-    // fri_domain_length = 8192
-
     #[test]
     fn max_degree_test() {
         let actual_program =
