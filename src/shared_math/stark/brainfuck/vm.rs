@@ -340,6 +340,7 @@ pub mod sample_programs {
     pub static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
     pub static PRINT_17_CHARS: &str = ",.................";
     pub static ROT13: &str = ",+++++++++++++.,+++++++++++++.,+++++++++++++.";
+    pub static SHORT_INPUT_AND_OUTPUT: &str = ",.,+.,++.";
 
     pub fn get_all_sample_programs() -> Vec<&'static str> {
         vec![

@@ -1019,6 +1019,25 @@ impl Stark {
                 "The combination leaf must equal the inner product"
             );
         }
+
+        // Verify low degree of combination polynomial
+        self.fri.verify(proof_stream)?;
+
+        // Verify external terminals
+        for (i, iea) in self._io_evaluation_arguments.iter().enumerate() {
+            if iea.select_terminal(terminals) != iea.compute_terminal(challenges) {
+                return Err(Box::new(StarkVerifyError::EvaluationArgument(i)));
+            }
+        }
+
+        if self._program_evaluation_argument.select_terminal(terminals)
+            != self
+                ._program_evaluation_argument
+                .compute_terminal(challenges)
+        {
+            return Err(Box::new(StarkVerifyError::ProgramEvaluationArgument));
+        }
+
         Ok(true)
     }
 }
@@ -1033,9 +1052,16 @@ mod brainfuck_stark_tests {
     #[test]
     fn prove_verify_test() {
         let program: Vec<BFieldElement> =
-            brainfuck::vm::compile(brainfuck::vm::sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
-        let (trace_length, input_symbols, output_symbols) =
-            brainfuck::vm::run(&program, vec![]).unwrap();
+            brainfuck::vm::compile(brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT).unwrap();
+        let (trace_length, input_symbols, output_symbols) = brainfuck::vm::run(
+            &program,
+            vec![
+                BFieldElement::new(97),
+                BFieldElement::new(98),
+                BFieldElement::new(99),
+            ],
+        )
+        .unwrap();
         let base_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
         let mut stark = Stark::new(trace_length, program, input_symbols, output_symbols);
@@ -1052,7 +1078,9 @@ mod brainfuck_stark_tests {
             .unwrap();
 
         let verifier_verdict: Result<bool, Box<dyn Error>> = stark.verify(&mut proof_stream);
-        assert!(verifier_verdict.is_ok(), "verifier shouldn't crash");
-        assert!(verifier_verdict.unwrap(), "verifier should agree");
+        match verifier_verdict {
+            Ok(_) => (),
+            Err(err) => panic!("error in STARK verifier: {}", err),
+        };
     }
 }
