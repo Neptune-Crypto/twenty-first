@@ -26,6 +26,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
+use std::iter::zip;
 use std::rc::Rc;
 
 pub const EXTENSION_CHALLENGE_COUNT: usize = 11;
@@ -44,6 +45,7 @@ pub struct Stark {
     colinearity_checks_count: usize,
     num_randomizers: usize,
     tables: Rc<RefCell<TableCollection>>,
+    // TODO: turn max_degree into i64 to match other degrees, which are i64
     max_degree: u64,
     fri: Fri<BFieldElement, blake3::Hasher>,
 
@@ -79,7 +81,7 @@ impl Stark {
         for i in 0..number {
             let mut mutated_challenge_seed = seed.clone();
             mutated_challenge_seed[0] = ((mutated_challenge_seed[0] as u16 + i as u16) % 256) as u8;
-            // This is wrong:
+            // This is wrong because it doesn't re-hash above value:
             challenges.push(XFieldElement::ring_zero().from_vecu8(mutated_challenge_seed));
         }
 
@@ -282,7 +284,7 @@ impl Stark {
             .borrow_mut()
             .get_and_set_all_base_codewords(&self.fri.domain);
         let all_base_codewords =
-            vec![base_codewords.clone(), b_randomizer_codewords.into()].concat();
+            vec![b_randomizer_codewords.into(), base_codewords.clone()].concat();
 
         // TODO: How do I make a single Merkle tree from many codewords?
         // If the Merkle trees are always opened for all base codewords for a single index, then
@@ -683,22 +685,12 @@ impl Stark {
             .map(|table| vec![table.interpolant_degree(); table.full_width() - table.base_width()])
             .concat();
 
-        // # get weights for nonlinear combination
-        // #  - 1 randomizer
-        // #  - 2 for every other polynomial (base, extension, quotients)
-        // num_base_polynomials = sum(
-        //     table.base_width for table in self.tables)
+        // get weights for nonlinear combination
+        //  - 1 randomizer
+        //  - 2 for every other polynomial (base, extension, quotients)
         let num_base_polynomials = base_degree_bounds.len();
-
-        // num_extension_polynomials = sum(
-        //     table.full_width - table.base_width for table in self.tables)
         let num_extension_polynomials = extension_degree_bounds.len();
-
-        // num_randomizer_polynomials = 1
-        let num_randomizer_polynomials = 1;
-
-        // num_quotient_polynomials = sum(table.num_quotients(
-        //     challenges, terminals) for table in self.tables)
+        let num_randomizer_polynomials = 3;
         let num_quotient_polynomials: usize = self
             .tables
             .borrow()
@@ -709,8 +701,6 @@ impl Stark {
                     .len()
             })
             .sum();
-
-        // num_difference_quotients = len(self.permutation_arguments)
         let num_difference_quotients = self.permutation_arguments.len();
 
         let weights_seed: Vec<u8> = proof_stream.verifier_fiat_shamir();
@@ -853,23 +843,84 @@ impl Stark {
             }
 
             // collect terms: quotients
-            // # quotients need to be computed
-            // acc_index = num_randomizer_polynomials
-            // points = []
-            // for table in self.tables:
-            //     step = table.base_width
-            //     points += [tuples[index][acc_index:(acc_index+step)]]
-            //     acc_index += step
+            // quotients need to be computed
             let mut acc_index = num_randomizer_polynomials;
             let mut points: Vec<Vec<XFieldElement>> = vec![];
-            // TODO: We think this loop can be collapsed to a one-liner
-            // points.extend_from_slice(&tuples[&index][acc_index..acc_index + num_base_polynomials]);
-            // acc_index += num_base_polynomials;
             for table in self.tables.borrow().into_iter() {
                 let table_base_width = table.base_width();
-                // points.extend_from_slice(&tuples[&index][acc_index..acc_index + table_base_width]);
                 points.push(tuples[&index][acc_index..acc_index + table_base_width].to_vec());
                 acc_index += table_base_width;
+            }
+
+            assert_eq!(
+                extension_offset, acc_index,
+                "Column count in verifier must match until extension columns"
+            );
+
+            for (point, table) in points.iter_mut().zip(self.tables.borrow().into_iter()) {
+                let step_size = table.full_width() - table.base_width();
+                point.extend_from_slice(&tuples[&index][acc_index..acc_index + step_size]);
+                acc_index += step_size;
+            }
+
+            assert_eq!(
+                tuples[&index].len(),
+                acc_index,
+                "Column count in verifier must match until end"
+            );
+
+            let mut base_acc_index = num_randomizer_polynomials;
+            let mut ext_acc_index = extension_offset;
+            for (point, table) in points.iter().zip(self.tables.borrow().into_iter()) {
+                // boundary
+                for (constraint, bound) in table
+                    .boundary_constraints_ext(challenges)
+                    .iter()
+                    .zip(table.boundary_quotient_degree_bounds(challenges).iter())
+                {
+                    let eval = constraint.evaluate(point);
+                    let quotient = eval
+                        / (self.fri.domain.x_value(index as u32).lift()
+                            - XFieldElement::ring_one());
+                    terms.push(quotient);
+                    let shift = (self.max_degree as i64 - bound) as u32;
+                    terms.push(
+                        self.fri
+                            .domain
+                            .x_value(index as u32)
+                            .mod_pow_u32(shift)
+                            .lift(),
+                    );
+                }
+
+                // transition
+                let unit_distance = table.unit_distance(self.fri.domain.length);
+                let next_index = (index + unit_distance) % self.fri.domain.length;
+                let mut next_point = tuples[&next_index]
+                    [base_acc_index..base_acc_index + table.base_width()]
+                    .to_vec();
+                next_point.extend_from_slice(
+                    &tuples[&next_index]
+                        [ext_acc_index..ext_acc_index + table.full_width() - table.base_width()],
+                );
+                base_acc_index += table.base_width();
+                ext_acc_index += table.full_width() - table.base_width();
+
+                // for constraint, bound in zip(table.transition_constraints_ext(challenges), table.transition_quotient_degree_bounds(challenges)):
+                //     eval = constraint.evaluate(
+                //     point + next_point)
+                // # If height == 0, then there is no subgroup where the transition polynomials should be zero.
+                // # The fast zerofier (based on group theory) needs a non-empty group.
+                // # Forcing it on an empty group generates a division by zero error.
+                // if table.height == 0:
+                //     quotient = self.xfield.zero()
+                // else:
+                // quotient = eval * self.xfield.lift(self.fri.domain(index) - table.omicron.inverse()) / (
+                //     self.xfield.lift(self.fri.domain(index) ^ table.height) - self.xfield.one())
+                // terms += [quotient]
+                // shift = self.max_degree - bound
+                // terms += [quotient *
+                //     self.xfield.lift(self.fri.domain(index) ^ shift)]
             }
         }
 
