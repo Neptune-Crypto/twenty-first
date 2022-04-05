@@ -64,7 +64,7 @@ impl InstructionTable {
     }
 
     pub fn pad(&mut self) {
-        while self.0.matrix.len() != 0 && !other::is_power_of_two(self.0.matrix.len()) {
+        while !self.0.matrix.is_empty() && !other::is_power_of_two(self.0.matrix.len()) {
             let last = self.0.matrix.last().unwrap();
             let padding = InstructionMatrixBaseRow {
                 instruction_pointer: last[Self::ADDRESS],
@@ -205,7 +205,7 @@ impl TableTrait for InstructionTable {
         for (i, row) in self.0.matrix.iter().enumerate() {
             // first, copy over existing row
             let mut new_row: Vec<XFieldElement> = row
-                .into_iter()
+                .iter()
                 .map(|&bfe| XFieldElement::new_const(bfe))
                 .collect();
 
@@ -310,19 +310,19 @@ impl TableTrait for InstructionTable {
 
         // TODO: Explain what this polynomial does:
         polynomials.push(
-            (permutation_lifted.clone()
+            (permutation_lifted
                 * (alpha
                     - a.clone() * address_lifted.clone()
                     - b.clone() * current_instruction_lifted.clone()
-                    - c.clone() * next_instruction_lifted.clone())
-                - permutation_next_lifted.clone())
-                * current_instruction_lifted.clone(),
+                    - c.clone() * next_instruction_lifted)
+                - permutation_next_lifted)
+                * current_instruction_lifted,
         );
 
         let ifnewaddress: MPolynomial<XFieldElement> =
             address_next_lifted.clone() - address_lifted.clone();
         let ifoldaddress: MPolynomial<XFieldElement> = address_next_lifted.clone()
-            - address_lifted.clone()
+            - address_lifted
             - MPolynomial::from_constant(XFieldElement::ring_one(), 2 * Self::FULL_WIDTH);
 
         polynomials.push(

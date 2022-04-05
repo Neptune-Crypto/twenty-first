@@ -26,6 +26,10 @@ where
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
     pub fn len(&self) -> usize {
         self.items.len()
     }
@@ -59,7 +63,6 @@ mod proof_stream_typed_tests {
     use itertools::Itertools;
 
     use super::*;
-    use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::simple_hasher::RescuePrimeProduction;
 

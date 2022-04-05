@@ -238,7 +238,7 @@ impl Hasher for RescuePrimeProduction {
 #[cfg(test)]
 pub mod test_simple_hasher {
 
-    use rand::{thread_rng, Rng};
+    use rand::Rng;
 
     use crate::shared_math::traits::GetRandomElements;
 

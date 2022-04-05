@@ -37,20 +37,20 @@ const SIZE_OF_RP_HASH_IN_BYTES: usize = 8 + 5 * 128 / 8;
 pub struct Stark {
     trace_length: usize,
     program: Vec<BFieldElement>,
-    input_symbols: Vec<BFieldElement>,
-    output_symbols: Vec<BFieldElement>,
-    expansion_factor: u64,
+    // TODO: Are all these fields really not needed?
+    _input_symbols: Vec<BFieldElement>,
+    _output_symbols: Vec<BFieldElement>,
+    _expansion_factor: u64,
     security_level: usize,
-    colinearity_checks_count: usize,
-    num_randomizers: usize,
+    _num_randomizers: usize,
     tables: Rc<RefCell<TableCollection>>,
     // TODO: turn max_degree into i64 to match other degrees, which are i64
     max_degree: u64,
     fri: Fri<BFieldElement, blake3::Hasher>,
 
     permutation_arguments: [PermutationArgument; PERMUTATION_ARGUMENTS_COUNT],
-    io_evaluation_arguments: [EvaluationArgument; 2],
-    program_evaluation_argument: ProgramEvaluationArgument,
+    _io_evaluation_arguments: [EvaluationArgument; 2],
+    _program_evaluation_argument: ProgramEvaluationArgument,
 }
 
 impl Stark {
@@ -211,18 +211,17 @@ impl Stark {
         Self {
             trace_length,
             program,
-            input_symbols,
-            output_symbols,
-            expansion_factor,
+            _input_symbols: input_symbols,
+            _output_symbols: output_symbols,
+            _expansion_factor: expansion_factor,
             security_level,
-            colinearity_checks_count,
-            num_randomizers,
+            _num_randomizers: num_randomizers,
             tables: rc_base_tables,
             max_degree,
             fri,
             permutation_arguments,
-            io_evaluation_arguments,
-            program_evaluation_argument,
+            _io_evaluation_arguments: io_evaluation_arguments,
+            _program_evaluation_argument: program_evaluation_argument,
         }
     }
 
@@ -286,7 +285,7 @@ impl Stark {
             .map(|i| {
                 all_base_codewords
                     .iter()
-                    .map(|inner| inner[i].clone())
+                    .map(|inner| inner[i])
                     .collect::<Vec<BFieldElement>>()
             })
             .collect();
@@ -346,7 +345,7 @@ impl Stark {
             .map(|i| {
                 extension_codewords
                     .iter()
-                    .map(|inner| inner[i].clone())
+                    .map(|inner| inner[i])
                     .collect::<Vec<XFieldElement>>()
             })
             .collect();
@@ -574,7 +573,7 @@ impl Stark {
             .map(|table| table.unit_distance(self.fri.domain.length))
             .collect();
         unit_distances.push(0);
-        unit_distances.sort();
+        unit_distances.sort_unstable();
         unit_distances.dedup();
 
         // Get indices of leafs to prove nonlinear combination
@@ -727,7 +726,7 @@ impl Stark {
             .map(|table| table.unit_distance(self.fri.domain.length))
             .collect();
         unit_distances.push(0);
-        unit_distances.sort();
+        unit_distances.sort_unstable();
         unit_distances.dedup();
 
         let mut hasher = RescuePrimeProduction::new();
@@ -831,10 +830,10 @@ impl Stark {
 
             // TODO: We don't seem to need a separate loop for the base and extension columns.
             // But merging them would also require concatenating the degree bounds vector.
-            for i in 0..num_extension_polynomials {
+            for (i, edb) in extension_degree_bounds.iter().enumerate() {
                 let extension_element: XFieldElement = tuples[&index][extension_offset + i];
                 terms.push(extension_element);
-                let shift = (self.max_degree as i64 - extension_degree_bounds[i]) as u32;
+                let shift = (self.max_degree as i64 - edb) as u32;
                 terms.push(
                     extension_element
                         * self

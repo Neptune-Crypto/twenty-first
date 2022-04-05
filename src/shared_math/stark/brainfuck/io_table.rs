@@ -79,7 +79,7 @@ impl IOTable {
 
     pub fn pad(&mut self) {
         // TODO: The current python code does something else here
-        while self.0.matrix.len() != 0 && !other::is_power_of_two(self.0.matrix.len()) {
+        while !self.0.matrix.is_empty() && !other::is_power_of_two(self.0.matrix.len()) {
             let padding: Vec<BFieldElement> = vec![BFieldElement::ring_zero()];
             self.0.matrix.push(padding);
         }
@@ -159,7 +159,7 @@ impl TableTrait for IOTable {
             // TODO: Avoid re-allocating each row a second time; `extended_matrix` is pre-allocated.
 
             // first, copy over existing row
-            let mut new_row: Vec<XFieldElement> = row.into_iter().map(|bfe| bfe.lift()).collect();
+            let mut new_row: Vec<XFieldElement> = row.iter().map(|bfe| bfe.lift()).collect();
 
             io_running_evaluation = io_running_evaluation * iota + new_row[IOTable::COLUMN];
 
@@ -207,7 +207,8 @@ impl TableTrait for IOTable {
 
     fn boundary_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        // TODO: Is `challenges` really not needed here?
+        _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let x =
             MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());

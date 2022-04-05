@@ -206,7 +206,7 @@ impl TableTrait for MemoryTable {
 
         // loop over all rows of table
         for (i, row) in self.0.matrix.iter().enumerate() {
-            let mut new_row: Vec<XFieldElement> = row.into_iter().map(|bfe| bfe.lift()).collect();
+            let mut new_row: Vec<XFieldElement> = row.iter().map(|bfe| bfe.lift()).collect();
 
             new_row.push(memory_permutation_running_product);
             memory_permutation_running_product *= beta
@@ -284,7 +284,8 @@ impl TableTrait for MemoryTable {
 
     fn boundary_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        // TODO: Is `challenges` really not needed here?
+        _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
         let x =

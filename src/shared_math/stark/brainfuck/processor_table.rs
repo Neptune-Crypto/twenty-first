@@ -65,14 +65,14 @@ impl ProcessorTable {
             num_randomizers,
             generator,
             order,
-            "Processor table".to_string()
+            "Processor table".to_string(),
         );
 
         Self(table)
     }
 
     pub fn pad(&mut self) {
-        while self.0.matrix.len() != 0 && !other::is_power_of_two(self.0.matrix.len()) {
+        while !self.0.matrix.is_empty() && !other::is_power_of_two(self.0.matrix.len()) {
             let last = self.0.matrix.last().unwrap();
             let padding = Register {
                 cycle: last[ProcessorTable::CYCLE] + BFieldElement::ring_one(),
@@ -87,6 +87,8 @@ impl ProcessorTable {
         }
     }
 
+    // We *could* consider fixing this, I guess...
+    #[allow(clippy::too_many_arguments)]
     fn transition_constraints_afo_named_variables(
         cycle: MPolynomial<BFieldElement>,
         instruction_pointer: MPolynomial<BFieldElement>,
@@ -151,6 +153,8 @@ impl ProcessorTable {
         polynomials
     }
 
+    // We *could* consider fixing this, I guess...
+    #[allow(clippy::too_many_arguments)]
     fn instruction_polynomials(
         instruction: char,
         _cycle: &MPolynomial<BFieldElement>,
@@ -177,9 +181,7 @@ impl ProcessorTable {
         match instruction {
             '[' => {
                 polynomials[0] = memory_value.to_owned()
-                    * (instruction_pointer_next.to_owned()
-                        - instruction_pointer.to_owned()
-                        - two.clone())
+                    * (instruction_pointer_next.to_owned() - instruction_pointer.to_owned() - two)
                     + is_zero.to_owned()
                         * (instruction_pointer_next.to_owned() - next_instruction.to_owned());
                 polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
@@ -187,9 +189,7 @@ impl ProcessorTable {
             }
             ']' => {
                 polynomials[0] = is_zero.to_owned()
-                    * (instruction_pointer_next.to_owned()
-                        - instruction_pointer.to_owned()
-                        - two.clone())
+                    * (instruction_pointer_next.to_owned() - instruction_pointer.to_owned() - two)
                     + memory_value.to_owned()
                         * (instruction_pointer_next.to_owned() - next_instruction.to_owned());
                 polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
@@ -199,49 +199,42 @@ impl ProcessorTable {
                 polynomials[0] = instruction_pointer_next.to_owned()
                     - instruction_pointer.to_owned()
                     - one.clone();
-                polynomials[1] =
-                    memory_pointer_next.to_owned() - memory_pointer.to_owned() + one.clone();
+                polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned() + one;
                 // Memory value constraint cannot be calculated in processor table for this command. So we don't set it.
-                polynomials[2] = zero.clone();
+                polynomials[2] = zero;
             }
             '>' => {
                 polynomials[0] = instruction_pointer_next.to_owned()
                     - instruction_pointer.to_owned()
                     - one.clone();
-                polynomials[1] =
-                    memory_pointer_next.to_owned() - memory_pointer.to_owned() - one.clone();
+                polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned() - one;
                 // Memory value constraint cannot be calculated in processor table for this command. So we don't set it.
-                polynomials[2] = zero.clone();
+                polynomials[2] = zero;
             }
             '+' => {
                 polynomials[0] = instruction_pointer_next.to_owned()
                     - instruction_pointer.to_owned()
                     - one.clone();
                 polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
-                polynomials[2] =
-                    memory_value_next.to_owned() - memory_value.to_owned() - one.clone();
+                polynomials[2] = memory_value_next.to_owned() - memory_value.to_owned() - one;
             }
             '-' => {
                 polynomials[0] = instruction_pointer_next.to_owned()
                     - instruction_pointer.to_owned()
                     - one.clone();
                 polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
-                polynomials[2] =
-                    memory_value_next.to_owned() - memory_value.to_owned() + one.clone();
+                polynomials[2] = memory_value_next.to_owned() - memory_value.to_owned() + one;
             }
             ',' => {
-
-                polynomials[0] = instruction_pointer_next.to_owned()
-                    - instruction_pointer.to_owned()
-                    - one.clone();
+                polynomials[0] =
+                    instruction_pointer_next.to_owned() - instruction_pointer.to_owned() - one;
                 polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
                 // Memory value constraint cannot be calculated in processor table for this command. So we don't set it.
-                polynomials[2] = zero.clone();
+                polynomials[2] = zero;
             }
             '.' => {
-                polynomials[0] = instruction_pointer_next.to_owned()
-                    - instruction_pointer.to_owned()
-                    - one.clone();
+                polynomials[0] =
+                    instruction_pointer_next.to_owned() - instruction_pointer.to_owned() - one;
                 polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
                 // Memory value is unchanged
                 polynomials[2] = memory_value_next.to_owned() - memory_value.to_owned();
@@ -412,7 +405,7 @@ impl TableTrait for ProcessorTable {
             b_field_memory_pointer_next,
             b_field_memory_value_next,
             b_field_is_zero_next,
-            
+
             // row n+1
             _b_field_instruction_permutation_next,
             _b_field_memory_permutation_next,
@@ -483,10 +476,10 @@ impl TableTrait for ProcessorTable {
         polynomials.push(
             (instruction_permutation
                 * (alpha
-                    - a * instruction_pointer.clone()
+                    - a * instruction_pointer
                     - b * current_instruction.clone()
-                    - c * next_instruction.clone())
-                - instruction_permutation_next.clone())
+                    - c * next_instruction)
+                - instruction_permutation_next)
                 * current_instruction.clone(),
         );
 
@@ -501,27 +494,17 @@ impl TableTrait for ProcessorTable {
             (input_evaluation_next.clone() - input_evaluation.clone() * gamma - memory_value_next)
                 * Self::ifnot_instruction(',', &current_instruction, XFieldElement::ring_one())
                 * current_instruction.clone()
-                + (input_evaluation_next.clone() - input_evaluation.clone())
-                    * Self::if_instruction(
-                        ',',
-                        &current_instruction.clone(),
-                        XFieldElement::ring_one(),
-                    ),
+                + (input_evaluation_next - input_evaluation)
+                    * Self::if_instruction(',', &current_instruction, XFieldElement::ring_one()),
         );
 
         // running evaluation for output
         polynomials.push(
-            (output_evaluation_next.clone()
-                - output_evaluation.clone() * delta
-                - memory_value.clone())
+            (output_evaluation_next.clone() - output_evaluation.clone() * delta - memory_value)
                 * Self::ifnot_instruction('.', &current_instruction, XFieldElement::ring_one())
                 * current_instruction.clone()
-                + (output_evaluation_next.clone() - output_evaluation.clone())
-                    * Self::if_instruction(
-                        '.',
-                        &current_instruction.clone(),
-                        XFieldElement::ring_one(),
-                    ),
+                + (output_evaluation_next - output_evaluation)
+                    * Self::if_instruction('.', &current_instruction, XFieldElement::ring_one()),
         );
 
         assert_eq!(
@@ -552,12 +535,11 @@ impl TableTrait for ProcessorTable {
 
         // Preallocate memory for the extended matrix
         let mut extended_matrix: Vec<Vec<XFieldElement>> =
-            vec![Vec::with_capacity(self.full_width()); self.0.matrix.len()]; 
+            vec![Vec::with_capacity(self.full_width()); self.0.matrix.len()];
         for (i, row) in self.0.matrix.iter().enumerate() {
             // First, copy over existing row
-            for j in 0..self.base_width() {
-                extended_matrix[i].push(row[j].lift());
-            }
+            extended_matrix[i]
+                .append(&mut row[0..self.base_width()].iter().map(|x| x.lift()).collect());
 
             // 1. running product for instruction permutation
             extended_matrix[i].push(instruction_permutation_running_product);
@@ -608,12 +590,17 @@ impl TableTrait for ProcessorTable {
 
     fn boundary_constraints_ext(
         &self,
-        challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        // TODO: Is `challenges` really not needed here?
+        _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let x =
+            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
 
         let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
-        let one = MPolynomial::<XFieldElement>::from_constant(XFieldElement::ring_one(), Self::FULL_WIDTH);
+        let one = MPolynomial::<XFieldElement>::from_constant(
+            XFieldElement::ring_one(),
+            Self::FULL_WIDTH,
+        );
         let cycle = x[ProcessorTable::CYCLE].clone();
         let instruction_pointer = x[ProcessorTable::INSTRUCTION_POINTER].clone();
         let memory_pointer = x[Self::MEMORY_POINTER].clone();
@@ -650,12 +637,16 @@ impl TableTrait for ProcessorTable {
             .try_into()
             .unwrap();
 
-        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let x =
+            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
 
         // FIXME: These anonymous constant offsets into `terminals` are not very clear!
-        let terminals_1 = MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
-        let terminals_2 = MPolynomial::<XFieldElement>::from_constant(terminals[2], Self::FULL_WIDTH);
-        let terminals_3 = MPolynomial::<XFieldElement>::from_constant(terminals[3], Self::FULL_WIDTH);
+        let terminals_1 =
+            MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
+        let terminals_2 =
+            MPolynomial::<XFieldElement>::from_constant(terminals[2], Self::FULL_WIDTH);
+        let terminals_3 =
+            MPolynomial::<XFieldElement>::from_constant(terminals[3], Self::FULL_WIDTH);
 
         let current_instruction = x[ProcessorTable::CURRENT_INSTRUCTION].clone();
         let memory_permutation = x[ProcessorTable::MEMORY_PERMUTATION].clone();
@@ -666,17 +657,13 @@ impl TableTrait for ProcessorTable {
         let input_evaluation = x[ProcessorTable::INPUT_EVALUATION].clone();
         let output_evaluation = x[ProcessorTable::OUTPUT_EVALUATION].clone();
 
-        let mut constraints = vec![];
-
-        constraints.push(current_instruction);
-
-        constraints.push(terminals_1 - memory_permutation * (beta.clone() - d * cycle - e * memory_pointer - f * memory_value));
-
-        constraints.push(terminals_2 - input_evaluation);
-
-        constraints.push(terminals_3 - output_evaluation);
-
-        constraints
+        vec![
+            current_instruction,
+            terminals_1
+                - memory_permutation * (beta - d * cycle - e * memory_pointer - f * memory_value),
+            terminals_2 - input_evaluation,
+            terminals_3 - output_evaluation,
+        ]
     }
 }
 
@@ -685,11 +672,11 @@ mod processor_table_tests {
     use rand::thread_rng;
 
     use super::*;
+    use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::{
         stark::brainfuck::{self, vm::BaseMatrices},
         traits::{GetPrimitiveRootOfUnity, GetRandomElements, IdentityValues},
     };
-    use crate::shared_math::stark::brainfuck::vm::sample_programs;
 
     #[test]
     fn processor_table_constraints_evaluate_to_zero_test() {

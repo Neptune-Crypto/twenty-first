@@ -394,7 +394,7 @@ pub trait TableTrait {
         for tc in transition_constraints {
             let mut quotient_codeword: Vec<XFieldElement> = vec![];
             let mut composition_codeword: Vec<XFieldElement> = vec![];
-            for i in 0..fri_domain.length {
+            for (i, z_inverse) in zerofier_inverse.iter().enumerate() {
                 let current: Vec<XFieldElement> =
                     (0..self.full_width()).map(|j| codewords[j][i]).collect();
                 let next: Vec<XFieldElement> = (0..self.full_width())
@@ -405,8 +405,8 @@ pub trait TableTrait {
                     .collect();
                 let point = vec![current, next].concat();
                 let composition_evaluation = tc.evaluate(&point);
-                composition_codeword.push(composition_evaluation.clone());
-                quotient_codeword.push(composition_evaluation * zerofier_inverse[i].lift());
+                composition_codeword.push(composition_evaluation);
+                quotient_codeword.push(composition_evaluation * z_inverse.lift());
                 // TODO: `composition_codeword` is not returned from this function! Why?
             }
 
@@ -415,11 +415,11 @@ pub trait TableTrait {
             // If the `DEBUG` environment variable is set, interpolate the quotient and check the degree
             if std::env::var("DEBUG").is_ok() {
                 let interpolated: Polynomial<XFieldElement> =
-                    fri_domain.xinterpolate(&quotients.last().unwrap());
-                if interpolated.degree() >= fri_domain.length as isize - 1 {
-                    println!("terminal index: ");
-                    assert!(false, "interpolated degree was too high");
-                }
+                    fri_domain.xinterpolate(quotients.last().unwrap());
+                assert!(
+                    interpolated.degree() >= fri_domain.length as isize - 1,
+                    "interpolated degree was too high"
+                );
             }
         }
 

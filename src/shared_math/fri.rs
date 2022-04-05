@@ -50,8 +50,7 @@ impl<PF: PrimeField> FriDomain<PF> {
 
     pub fn evaluate(&self, polynomial: &Polynomial<PF>, zero: PF) -> Vec<PF> {
         assert!(zero.is_zero(), "zero must be zero");
-        let mut polynomial_representation: Vec<PF> =
-            polynomial.scale(&self.offset).coefficients.clone();
+        let mut polynomial_representation: Vec<PF> = polynomial.scale(&self.offset).coefficients;
         polynomial_representation.resize(self.length as usize, zero);
         ntt(
             &mut polynomial_representation,

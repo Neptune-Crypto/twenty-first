@@ -25,6 +25,8 @@ impl PermutationArgument {
     }
 
     pub fn quotient(&self, fri_domain: &FriDomain<BFieldElement>) -> Vec<XFieldElement> {
+        // The linter seems to mistakenly think that a collect is not needed here
+        #[allow(clippy::needless_collect)]
         let difference_codeword: Vec<XFieldElement> = self
             .tables
             .borrow()
