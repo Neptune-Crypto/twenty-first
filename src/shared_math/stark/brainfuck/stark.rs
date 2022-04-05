@@ -11,6 +11,7 @@ use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
 use crate::shared_math::stark::brainfuck::table;
 use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
+use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
 use crate::shared_math::traits::{FromVecu8, GetRandomElements, Inverse, ModPowU32};
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,

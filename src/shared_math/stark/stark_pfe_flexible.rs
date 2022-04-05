@@ -13,6 +13,7 @@ use std::fmt;
 use std::{collections::HashMap, error::Error};
 
 use super::stark_constraints_pfe_flexible::BoundaryConstraint;
+use super::stark_verify_error::{MerkleProofError, StarkVerifyError};
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
@@ -176,42 +177,6 @@ pub enum StarkProofError {
 impl Error for StarkProofError {}
 
 impl fmt::Display for StarkProofError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum MerkleProofError {
-    BoundaryQuotientError(usize),
-    RandomizerError,
-    TransitionZerofierError,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum StarkVerifyError {
-    BadAirPaths,
-    BadNextAirPaths,
-    BadAirBoundaryIndentity(usize),
-    BadAirTransitionIdentity(usize),
-    BadBoundaryConditionAuthenticationPaths,
-    BadMerkleProof(MerkleProofError),
-    LinearCombinationAuthenticationPath,
-    LinearCombinationMismatch(usize), // integer refers to first index where a mismatch is found
-    LinearCombinationTupleMismatch(usize), // integer refers to first index where a mismatch is found
-    InputOutputMismatch,
-    HighDegreeExtendedComputationalTrace,
-    HighDegreeBoundaryQuotient,
-    HighDegreeTransitionQuotient,
-    HighDegreeLinearCombination,
-    MissingPreprocessedValues,
-    NonZeroBoundaryRemainder,
-    NonZeroTransitionRemainder,
-}
-
-impl Error for StarkVerifyError {}
-
-impl fmt::Display for StarkVerifyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
