@@ -616,7 +616,7 @@ impl Stark {
                 let the_value = transposed_extension_codewords[idx].clone();
                 let the_auth_path = extension_tree.get_authentication_path(idx);
                 proof_stream.enqueue(&the_value)?;
-                proof_stream.enqueue(&the_auth_path)?;
+                proof_stream.enqueue_length_prepended(&the_auth_path)?;
             }
         }
 
@@ -744,8 +744,8 @@ impl Stark {
         unit_distances.dedup();
 
         let mut hasher = RescuePrimeProduction::new();
-        let mut tuples: HashMap<usize, XFieldElement> = HashMap::new();
-        for index in indices {
+        let mut tuples: HashMap<usize, Vec<XFieldElement>> = HashMap::new();
+        for index in indices.clone() {
             for unit_distance in unit_distances.iter() {
                 let idx = (index + unit_distance) % self.fri.domain.length;
                 let element: Vec<BFieldElement> = proof_stream.dequeue(8 + 18 * 128 / 8)?;
@@ -757,15 +757,119 @@ impl Stark {
                     .map(|s| s.to_vec())
                     .collect();
                 let leaf_hash: Vec<BFieldElement> = hasher.hash_many(&hash_input);
-                let mt_base_success = MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::verify_authentication_path_from_leaf_hash(base_merkle_tree_root, idx as u32, leaf_hash, auth_path);
+                let mt_base_success = MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::verify_authentication_path_from_leaf_hash(
+                    base_merkle_tree_root.clone(), idx as u32, leaf_hash, auth_path);
                 if !mt_base_success {
                     // TODO: Replace this by a specific error type, or just return `Ok(false)`
                     panic!("Failed to verify authentication path for base codeword");
                     // return Ok(false);
                 }
 
-                tuples.insert(idx, element.iter().map(|bfe| bfe.lift());
+                // tuples[idx] = [self.xfield.lift(e) for e in list(element)]
+                tuples.insert(idx, element.iter().map(|bfe| bfe.lift()).collect());
+
+                // element = proof_stream.pull()
+                // salt, path = proof_stream.pull()
+                let the_value: Vec<XFieldElement> = proof_stream.dequeue(8 + 27 * 128 / 8)?;
+                let the_auth_path: Vec<Vec<BFieldElement>> =
+                    proof_stream.dequeue_length_prepended()?;
+
+                // verifier_verdict = verifier_verdict and SaltedMerkle.verify(
+                //     extension_root, idx, salt, path, element)
+                let the_value_chunked_as_digests: Vec<Vec<BFieldElement>> = the_value
+                    .clone()
+                    .into_iter()
+                    .map(|xfe| xfe.coefficients.clone().to_vec())
+                    .concat()
+                    .chunks(hasher.0.max_input_length / 2)
+                    .map(|s| s.to_vec())
+                    .collect();
+                let ext_leaf_hash = hasher.hash_many(&the_value_chunked_as_digests);
+
+                let mt_ext_success = MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::verify_authentication_path_from_leaf_hash(
+                    extension_tree_merkle_root.clone(), idx as u32, ext_leaf_hash, the_auth_path);
+                if !mt_ext_success {
+                    // TODO: Replace this by a specific error type, or just return `Ok(false)`
+                    panic!("Failed to verify authentication path for extended codeword");
+                    // return Ok(false);
+                }
+
+                // tuples[idx] = tuples[idx] + list(element)
+                tuples.insert(idx, vec![tuples[&idx].clone(), the_value].concat());
             }
+        }
+
+        // # verify nonlinear combination
+        // for index in indices:
+        for index in indices {
+            // # collect terms: randomizer
+            // terms: list[ExtensionFieldElement] = tuples[index][0:num_randomizer_polynomials]
+            let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
+                .map(|i| tuples[&index][i])
+                .collect();
+
+            // # collect terms: base
+            // for i in range(num_randomizer_polynomials, num_randomizer_polynomials+num_base_polynomials):
+            //     terms += [tuples[index][i]]
+            //     shift = self.max_degree - \
+            //         base_degree_bounds[i-num_randomizer_polynomials]
+            //     terms += [tuples[index][i] *
+            //               self.xfield.lift(self.fri.domain(index) ^ shift)]
+            for i in (num_randomizer_polynomials..num_randomizer_polynomials + num_base_polynomials)
+            {
+                terms.push(tuples[&index][i]);
+                let shift: u32 = (self.max_degree as i64
+                    - base_degree_bounds[i - num_randomizer_polynomials])
+                    as u32;
+                terms.push(
+                    tuples[&index][i]
+                        * self
+                            .fri
+                            .domain
+                            .x_value(index as u32)
+                            .mod_pow_u32(shift)
+                            .lift(),
+                );
+            }
+
+            // # collect terms: extension
+            // extension_offset = num_randomizer_polynomials + \
+            //     sum(table.base_width for table in self.tables)
+            let extension_offset = num_randomizer_polynomials + num_base_polynomials;
+
+            assert_eq!(
+                terms.len(),
+                2 * extension_offset - num_randomizer_polynomials,
+                "number of terms does not match with extension offset"
+            );
+
+            // for i in range(num_extension_polynomials):
+            //     terms += [tuples[index][extension_offset+i]]
+            //     shift = self.max_degree - extension_degree_bounds[i]
+            //     terms += [tuples[index][extension_offset+i]
+            //               * self.xfield.lift(self.fri.domain(index) ^ shift)]
+            for i in 0..num_extension_polynomials {
+                let hm: XFieldElement = tuples[&index][extension_offset + i];
+                terms.push(hm);
+                let shift = (self.max_degree as i64 - extension_degree_bounds[i]) as u32;
+                terms.push(
+                    hm * self
+                        .fri
+                        .domain
+                        .x_value(index as u32)
+                        .mod_pow_u32(shift)
+                        .lift(),
+                )
+            }
+
+            // # collect terms: quotients
+            // # quotients need to be computed
+            // acc_index = num_randomizer_polynomials
+            // points = []
+            // for table in self.tables:
+            //     step = table.base_width
+            //     points += [tuples[index][acc_index:(acc_index+step)]]
+            //     acc_index += step
         }
 
         Ok(false) // FIXME
