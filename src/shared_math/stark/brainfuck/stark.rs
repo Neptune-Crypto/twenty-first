@@ -924,11 +924,13 @@ impl Stark {
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
                     terms.push(
-                        self.fri
-                            .domain
-                            .x_value(index as u32)
-                            .mod_pow_u32(shift)
-                            .lift(),
+                        quotient
+                            * self
+                                .fri
+                                .domain
+                                .x_value(index as u32)
+                                .mod_pow_u32(shift)
+                                .lift(),
                     );
                 }
 
@@ -1094,6 +1096,6 @@ mod brainfuck_stark_tests {
 
         let verifier_verdict: Result<bool, Box<dyn Error>> = stark.verify(&mut proof_stream);
         assert!(verifier_verdict.is_ok(), "verifier shouldn't crash");
-        // assert!(verifier_verdict.unwrap(), "verifier should agree");
+        assert!(verifier_verdict.unwrap(), "verifier should agree");
     }
 }
