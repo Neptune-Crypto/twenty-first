@@ -50,8 +50,8 @@ pub struct Stark {
     fri: Fri<XFieldElement, blake3::Hasher>,
 
     permutation_arguments: [PermutationArgument; PERMUTATION_ARGUMENTS_COUNT],
-    _io_evaluation_arguments: [EvaluationArgument; 2],
-    _program_evaluation_argument: ProgramEvaluationArgument,
+    io_evaluation_arguments: [EvaluationArgument; 2],
+    program_evaluation_argument: ProgramEvaluationArgument,
 }
 
 impl Stark {
@@ -222,8 +222,8 @@ impl Stark {
             max_degree,
             fri,
             permutation_arguments,
-            _io_evaluation_arguments: io_evaluation_arguments,
-            _program_evaluation_argument: program_evaluation_argument,
+            io_evaluation_arguments,
+            program_evaluation_argument,
         }
     }
 
@@ -1024,15 +1024,15 @@ impl Stark {
         self.fri.verify(proof_stream)?;
 
         // Verify external terminals
-        for (i, iea) in self._io_evaluation_arguments.iter().enumerate() {
+        for (i, iea) in self.io_evaluation_arguments.iter().enumerate() {
             if iea.select_terminal(terminals) != iea.compute_terminal(challenges) {
                 return Err(Box::new(StarkVerifyError::EvaluationArgument(i)));
             }
         }
 
-        if self._program_evaluation_argument.select_terminal(terminals)
+        if self.program_evaluation_argument.select_terminal(terminals)
             != self
-                ._program_evaluation_argument
+                .program_evaluation_argument
                 .compute_terminal(challenges)
         {
             return Err(Box::new(StarkVerifyError::ProgramEvaluationArgument));
