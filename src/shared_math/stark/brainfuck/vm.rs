@@ -335,6 +335,7 @@ pub fn simulate(
 
 pub mod sample_programs {
     pub static VERY_SIMPLE_PROGRAM: &str = "++++";
+    pub static TWO_BY_TWO: &str = "++[>++<-]";
     pub static TWO_BY_TWO_THEN_OUTPUT: &str = "++[>++<-],>[<.>-]";
     pub static PRINT_EXCLAMATION_MARKS: &str = ">++++++++++[>+++><<-]>+++><<>.................";
     pub static HELLO_WORLD: &str = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
@@ -345,6 +346,7 @@ pub mod sample_programs {
     pub fn get_all_sample_programs() -> Vec<&'static str> {
         vec![
             VERY_SIMPLE_PROGRAM,
+            TWO_BY_TWO,
             TWO_BY_TWO_THEN_OUTPUT,
             PRINT_EXCLAMATION_MARKS,
             HELLO_WORLD,
@@ -359,6 +361,15 @@ mod stark_bf_tests {
     use super::*;
 
     #[test]
+    fn compile_two_by_two_test() {
+        let actual = compile(sample_programs::TWO_BY_TWO).unwrap();
+        let expected: Vec<BFieldElement> = [43, 43, 91, 11, 62, 43, 43, 60, 45, 93, 4]
+            .map(BFieldElement::new)
+            .to_vec();
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
     fn runtime_test_simple() {
         let actual = compile(sample_programs::VERY_SIMPLE_PROGRAM);
         let (trace_length, inputs, outputs) = run(&actual.unwrap(), vec![]).unwrap();
@@ -368,7 +379,7 @@ mod stark_bf_tests {
     }
 
     #[test]
-    fn compile_two_by_two_test() {
+    fn compile_two_by_two_then_output_test() {
         let actual_program = compile(sample_programs::TWO_BY_TWO_THEN_OUTPUT);
         assert!(actual_program.is_some());
         assert_eq!(
