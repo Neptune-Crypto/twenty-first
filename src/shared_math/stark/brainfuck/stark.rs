@@ -464,7 +464,7 @@ impl Stark {
         }
 
         assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
-        for (i, (qc, qdb)) in quotient_codewords
+        for (_i, (qc, qdb)) in quotient_codewords
             .iter()
             .zip(quotient_degree_bounds.iter())
             .enumerate()
@@ -479,25 +479,25 @@ impl Stark {
             terms.push(qc_shifted);
 
             // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
-            if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
-                let unshifted_degree = self
-                    .fri
-                    .domain
-                    .x_interpolate(&terms[terms.len() - 2])
-                    .degree();
-                assert!(
-                    interpolated.degree() == -1
-                        || interpolated.degree() == self.max_degree as isize,
-                    "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. Actual degree of unshifted codeword: {}. Shift = {}",
-                    i,
-                    self.max_degree,
-                    interpolated.degree(),
-                    qdb,
-                    unshifted_degree,
-                    shift
-                );
-            }
+            // if std::env::var("DEBUG").is_ok() {
+            //     let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
+            //     let unshifted_degree = self
+            //         .fri
+            //         .domain
+            //         .x_interpolate(&terms[terms.len() - 2])
+            //         .degree();
+            //     assert!(
+            //         interpolated.degree() == -1
+            //             || interpolated.degree() == self.max_degree as isize,
+            //         "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. Actual degree of unshifted codeword: {}. Shift = {}",
+            //         _i,
+            //         self.max_degree,
+            //         interpolated.degree(),
+            //         qdb,
+            //         unshifted_degree,
+            //         shift
+            //     );
+            // }
         }
 
         // Get weights for nonlinear combination
