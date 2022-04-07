@@ -6,9 +6,9 @@ use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMI
 use super::table::TableTrait;
 use super::vm::{InstructionMatrixBaseRow, Register};
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::fri::FriDomain;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::x_field_element::XFieldElement;
+use crate::shared_math::xfri::FriDomain;
 use itertools::Itertools;
 
 #[derive(Debug, Clone)]
@@ -105,7 +105,7 @@ impl TableCollection {
     /// Calculate all codewords on the table objects, and return those codewords as a list of codewords
     pub fn get_and_set_all_base_codewords(
         &mut self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
     ) -> Vec<Vec<BFieldElement>> {
         [
             self.processor_table.0.lde(fri_domain),
@@ -119,7 +119,7 @@ impl TableCollection {
 
     pub fn get_and_set_all_extension_codewords(
         &mut self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
     ) -> Vec<Vec<XFieldElement>> {
         [
             self.processor_table.0.ldex(fri_domain),
@@ -156,7 +156,7 @@ impl TableCollection {
     // TODO: Replace this with an `.iter().map(|table| ...)` when `extended_codewords` lives on the trait.
     pub fn all_quotients(
         &self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Vec<XFieldElement>> {

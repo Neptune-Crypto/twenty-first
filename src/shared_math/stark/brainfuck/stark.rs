@@ -17,9 +17,9 @@ use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
 use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
 use crate::shared_math::traits::{FromVecu8, GetRandomElements, Inverse, ModPowU32};
 use crate::shared_math::{
-    b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
+    b_field_element::BFieldElement, other::is_power_of_two,
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
-    x_field_element::XFieldElement,
+    x_field_element::XFieldElement, xfri::Fri,
 };
 use crate::util_types::merkle_tree::MerkleTree;
 use crate::util_types::proof_stream::ProofStream;
@@ -636,7 +636,9 @@ impl Stark {
         }
 
         // prove low degree of combination polynomial, and collect indices
-        let _indices = self.fri.prove(&combination_codeword, &mut proof_stream)?;
+        let _indices =
+            self.fri
+                .prove(&combination_codeword, &mut proof_stream, &mut proof_stream_)?;
 
         Ok((proof_stream, proof_stream_))
     }
