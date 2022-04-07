@@ -16,7 +16,7 @@ where
     Item: IntoIterator<Item = BFieldElement> + Clone,
     H: Hasher<Digest = Vec<BFieldElement>>,
 {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         ProofStream {
             items: vec![],
             items_index: 0,
@@ -107,7 +107,7 @@ mod proof_stream_typed_tests {
 
     #[test]
     fn enqueue_dequeue_test() {
-        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::new();
+        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::default();
         let ps: &mut ProofStream<TestItem, RescuePrimeProduction> = &mut proof_stream;
 
         // Empty
@@ -159,7 +159,7 @@ mod proof_stream_typed_tests {
     // Property: prover_fiat_shamir() is equivalent to verifier_fiat_shamir() when the entire stream has been read.
     #[test]
     fn prover_verifier_fiat_shamir_test() {
-        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::new();
+        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::default();
         let ps: &mut ProofStream<TestItem, RescuePrimeProduction> = &mut proof_stream;
 
         let mut hasher = RescuePrimeProduction::new();

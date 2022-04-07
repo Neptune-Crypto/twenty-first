@@ -1,7 +1,9 @@
+use super::stark_proof_stream::StarkProofStream;
 use super::vm::{InstructionMatrixBaseRow, Register};
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::rescue_prime::RescuePrime;
 use crate::shared_math::stark::brainfuck::evaluation_argument::{
     EvaluationArgument, ProgramEvaluationArgument, PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT,
 };
@@ -9,6 +11,7 @@ use crate::shared_math::stark::brainfuck::instruction_table::InstructionTable;
 use crate::shared_math::stark::brainfuck::io_table::IOTable;
 use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
+use crate::shared_math::stark::brainfuck::stark_proof_stream::Item;
 use crate::shared_math::stark::brainfuck::table;
 use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
 use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
@@ -57,25 +60,6 @@ pub struct Stark {
 impl Stark {
     // TODO: Change this to use Rescue prime instead of Vec<u8>/Blake3
     // TODO: Use simple_hasher's get_n_hash_rounds() instead.
-    // TODO: Also: This does prevent repeated indices which I think reduces security
-    fn sample_indices(number: usize, seed: Vec<u8>, bound: usize) -> Vec<usize> {
-        let mut indices: Vec<usize> = vec![];
-        for i in 0..number {
-            let mut byte_array: Vec<u8> = seed.clone();
-            byte_array.append(&mut i.to_be_bytes().to_vec());
-            let digest: Vec<u8> = blake3::hash(&byte_array).as_bytes().to_vec();
-            let mut integer: u128 = 0;
-            for b in digest.iter().take(16) {
-                integer = integer * 256 + *b as u128;
-            }
-            indices.push((integer % bound as u128) as usize);
-        }
-
-        indices
-    }
-
-    // TODO: Change this to use Rescue prime instead of Vec<u8>/Blake3
-    // TODO: Use simple_hasher's get_n_hash_rounds() instead.
     fn sample_weights(number: u8, seed: Vec<u8>) -> Vec<XFieldElement> {
         let mut challenges: Vec<XFieldElement> = vec![];
         for i in 0..number {
@@ -86,6 +70,21 @@ impl Stark {
         }
 
         challenges
+    }
+
+    fn sample_weights_(
+        hasher: &mut RescuePrimeProduction,
+        seed: &<RescuePrimeProduction as Hasher>::Digest,
+        count: usize,
+    ) -> Vec<XFieldElement> {
+        // FIXME: Perhaps re-use hasher.
+        // FIXME: To make this work for blake3::Hasher, we need .into()s.
+        // FIXME: When digests get a length of 6, produce half as many digests as XFieldElements.
+        hasher
+            .get_n_hash_rounds(seed, count)
+            .iter()
+            .map(|digest| XFieldElement::new([digest[0], digest[1], digest[2]]))
+            .collect()
     }
 
     pub fn new(
@@ -233,7 +232,7 @@ impl Stark {
         instruction_matrix: Vec<InstructionMatrixBaseRow>,
         input_matrix: Vec<BFieldElement>,
         output_matrix: Vec<BFieldElement>,
-    ) -> Result<ProofStream, Box<dyn Error>> {
+    ) -> Result<(ProofStream, StarkProofStream), Box<dyn Error>> {
         assert_eq!(self.trace_length, processor_matrix.len());
         assert_eq!(
             self.trace_length + self.program.len(),
@@ -317,15 +316,18 @@ impl Stark {
 
         // Commit to base codewords
         let mut proof_stream = ProofStream::default();
+        let mut proof_stream_ = StarkProofStream::default();
         let base_merkle_tree_root: &Vec<BFieldElement> = base_merkle_tree.get_root();
         proof_stream.enqueue(base_merkle_tree_root)?;
+        proof_stream_.enqueue(&Item::MerkleRoot(base_merkle_tree_root.to_owned()));
 
         // Get coefficients for table extension
         // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
         // must not change though, it should remain `Vec<XFieldElement>`.
-        let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
-            EXTENSION_CHALLENGE_COUNT as u8,
-            proof_stream.prover_fiat_shamir(),
+        let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights_(
+            &mut hasher,
+            &proof_stream_.prover_fiat_shamir(),
+            EXTENSION_CHALLENGE_COUNT,
         )
         .try_into()
         .unwrap();
@@ -382,6 +384,7 @@ impl Stark {
             &vec![BFieldElement::ring_zero()],
         );
         proof_stream.enqueue(extension_tree.get_root())?;
+        proof_stream_.enqueue(&Item::MerkleRoot(extension_tree.get_root().to_owned()));
 
         let extension_degree_bounds: Vec<Degree> =
             self.tables.borrow().get_all_extension_degree_bounds();
@@ -405,6 +408,7 @@ impl Stark {
         for t in terminals.iter() {
             proof_stream.enqueue(t)?;
         }
+        proof_stream_.enqueue(&Item::Terminals(terminals));
 
         let num_base_polynomials: usize = self
             .tables
@@ -519,13 +523,10 @@ impl Stark {
         }
 
         // Get weights for nonlinear combination
-        let weights_seed = proof_stream.prover_fiat_shamir();
-        let weights = Self::sample_weights(
-            (num_randomizer_polynomials
-                + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials))
-                as u8,
-            weights_seed,
-        );
+        let weights_seed: Vec<BFieldElement> = proof_stream_.prover_fiat_shamir();
+        let weights_count = num_randomizer_polynomials
+            + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials);
+        let weights = Self::sample_weights_(&mut hasher, &weights_seed, weights_count);
 
         assert_eq!(
             terms.len(),
@@ -566,6 +567,7 @@ impl Stark {
             );
         let combination_root: &Vec<BFieldElement> = combination_tree.get_root();
         proof_stream.enqueue(combination_root)?;
+        proof_stream_.enqueue(&Item::MerkleRoot(combination_root.to_owned()));
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in verifier
         let mut unit_distances: Vec<usize> = self
@@ -579,9 +581,9 @@ impl Stark {
         unit_distances.dedup();
 
         // Get indices of leafs to prove nonlinear combination
-        let indices_seed = proof_stream.prover_fiat_shamir();
+        let indices_seed: Vec<BFieldElement> = proof_stream_.prover_fiat_shamir();
         let indices =
-            Self::sample_indices(self.security_level, indices_seed, self.fri.domain.length);
+            hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
 
         // Open leafs of zipped codewords at indicated positions
         for index in indices.iter() {
@@ -592,8 +594,9 @@ impl Stark {
                 let auth_path: Vec<Vec<BFieldElement>> =
                     base_merkle_tree.get_authentication_path(idx);
                 proof_stream.enqueue(&elements)?;
-                // proof_stream.enqueue(&auth_path)?;
+                proof_stream_.enqueue(&Item::TransposedBaseElements(elements));
                 proof_stream.enqueue_length_prepended(&auth_path)?;
+                proof_stream_.enqueue(&Item::AuthenticationPath(auth_path));
 
                 let leaf_digest = base_codeword_digests_by_index[idx].clone();
                 let success = MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::verify_authentication_path_from_leaf_hash(
@@ -605,7 +608,11 @@ impl Stark {
                 let extension_path: Vec<Vec<BFieldElement>> =
                     extension_tree.get_authentication_path(idx);
                 proof_stream.enqueue(&extension_elements)?;
+                proof_stream_.enqueue(&Item::TransposedExtensionElements(
+                    extension_elements.to_owned(),
+                ));
                 proof_stream.enqueue_length_prepended(&extension_path)?;
+                proof_stream_.enqueue(&Item::AuthenticationPath(extension_path));
             }
         }
 
@@ -614,7 +621,11 @@ impl Stark {
             let revealed_combination_element = combination_codeword[index];
             let revealed_combination_auth_path = combination_tree.get_authentication_path(index);
             proof_stream.enqueue(&revealed_combination_element)?;
+            proof_stream_.enqueue(&Item::RevealedCombinationElement(
+                revealed_combination_element,
+            ));
             proof_stream.enqueue_length_prepended(&revealed_combination_auth_path)?;
+            proof_stream_.enqueue(&Item::AuthenticationPath(revealed_combination_auth_path));
             assert!(MerkleTree::<Vec<BFieldElement>, RescuePrimeProduction>::
                     verify_authentication_path_from_leaf_hash(
                 combination_tree.get_root().to_owned(),
@@ -627,7 +638,7 @@ impl Stark {
         // prove low degree of combination polynomial, and collect indices
         let _indices = self.fri.prove(&combination_codeword, &mut proof_stream)?;
 
-        Ok(proof_stream)
+        Ok((proof_stream, proof_stream_))
     }
 
     pub fn verify(&self, proof_stream: &mut ProofStream) -> Result<bool, Box<dyn Error>> {
@@ -708,9 +719,11 @@ impl Stark {
         let combination_root: Vec<BFieldElement> =
             proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
 
-        let indices_seed: Vec<u8> = proof_stream.verifier_fiat_shamir();
+        let mut hasher = RescuePrimeProduction::new();
+        // let indices_seed: Vec<u8> = proof_stream.verifier_fiat_shamir();
+        let indices_seed: Vec<BFieldElement> = proof_stream_.verifier_fiat_shamir();
         let indices =
-            Self::sample_indices(self.security_level, indices_seed, self.fri.domain.length);
+            hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
         let mut unit_distances: Vec<usize> = self
