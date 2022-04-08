@@ -1,6 +1,6 @@
 use crate::shared_math::{
-    b_field_element::BFieldElement, fri::FriDomain, mpolynomial::Degree, traits::PrimeField,
-    x_field_element::XFieldElement,
+    b_field_element::BFieldElement, mpolynomial::Degree, traits::PrimeField,
+    x_field_element::XFieldElement, xfri::FriDomain,
 };
 
 use super::table_collection::TableCollection;
@@ -26,7 +26,7 @@ impl PermutationArgument {
 
     // The linter seems to mistakenly think that a collect is not needed here
     #[allow(clippy::needless_collect)]
-    pub fn quotient(&self, fri_domain: &FriDomain<XFieldElement>) -> Vec<XFieldElement> {
+    pub fn quotient(&self, fri_domain: &FriDomain) -> Vec<XFieldElement> {
         let difference_codeword: Vec<XFieldElement> = self
             .tables
             .borrow()

@@ -1,5 +1,7 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::util_types::simple_hasher::Hasher;
+use std::error::Error;
+use std::fmt::Display;
 use std::marker::PhantomData;
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -11,12 +13,37 @@ pub struct ProofStream<Item, H> {
     _hasher: PhantomData<H>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ProofStreamError {
+    pub message: String,
+}
+
+impl ProofStreamError {
+    pub fn new(message: &str) -> Self {
+        Self {
+            message: message.to_string(),
+        }
+    }
+
+    pub fn boxed(message: &str) -> Box<dyn Error> {
+        Box::new(Self::new(message))
+    }
+}
+
+impl Display for ProofStreamError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{}", self.message)
+    }
+}
+
+impl Error for ProofStreamError {}
+
 impl<Item, H> ProofStream<Item, H>
 where
     Item: IntoIterator<Item = BFieldElement> + Clone,
     H: Hasher<Digest = Vec<BFieldElement>>,
 {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         ProofStream {
             items: vec![],
             items_index: 0,
@@ -40,11 +67,15 @@ where
         self.transcript.append(&mut elems);
     }
 
-    pub fn dequeue(&mut self) -> Option<Item> {
-        let (item, elems_len) = self.items.get(self.items_index)?;
+    pub fn dequeue(&mut self) -> Result<Item, Box<dyn Error>> {
+        let (item, elems_len) = self
+            .items
+            .get(self.items_index)
+            .ok_or_else(|| ProofStreamError::boxed("Could not dequeue, queue empty"))?;
+
         self.items_index += 1;
         self.transcript_index += elems_len;
-        Some(item.clone())
+        Ok(item.clone())
     }
 
     pub fn prover_fiat_shamir(&self) -> H::Digest {
@@ -107,12 +138,12 @@ mod proof_stream_typed_tests {
 
     #[test]
     fn enqueue_dequeue_test() {
-        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::new();
+        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::default();
         let ps: &mut ProofStream<TestItem, RescuePrimeProduction> = &mut proof_stream;
 
         // Empty
 
-        assert_eq!(None, ps.dequeue(), "cannot dequeue empty");
+        assert!(ps.dequeue().is_err(), "cannot dequeue empty");
 
         // B
 
@@ -121,8 +152,8 @@ mod proof_stream_typed_tests {
         let item_1 = TestItem::ManyB(bs_expected.clone());
         ps.enqueue(&item_1);
 
-        let item_1_option: Option<TestItem> = ps.dequeue();
-        assert!(item_1_option.is_some(), "item 1 exists in queue");
+        let item_1_option = ps.dequeue();
+        assert!(item_1_option.is_ok(), "item 1 exists in queue");
 
         let item_1_actual: TestItem = item_1_option.unwrap();
         assert!(item_1_actual.as_xs().is_none(), "wrong type of item 1");
@@ -134,7 +165,7 @@ mod proof_stream_typed_tests {
 
         // Empty
 
-        assert_eq!(None, ps.dequeue(), "queue has become empty");
+        assert!(ps.dequeue().is_err(), "queue has become empty");
 
         // X
 
@@ -144,8 +175,8 @@ mod proof_stream_typed_tests {
         let item_2 = TestItem::ManyX(xs_expected.clone());
         ps.enqueue(&item_2);
 
-        let item_2_option: Option<TestItem> = ps.dequeue();
-        assert!(item_2_option.is_some(), "item 2 exists in queue");
+        let item_2_option = ps.dequeue();
+        assert!(item_2_option.is_ok(), "item 2 exists in queue");
 
         let item_2_actual: TestItem = item_2_option.unwrap();
         assert!(item_2_actual.as_bs().is_none(), "wrong type of item 2");
@@ -159,13 +190,13 @@ mod proof_stream_typed_tests {
     // Property: prover_fiat_shamir() is equivalent to verifier_fiat_shamir() when the entire stream has been read.
     #[test]
     fn prover_verifier_fiat_shamir_test() {
-        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::new();
+        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::default();
         let ps: &mut ProofStream<TestItem, RescuePrimeProduction> = &mut proof_stream;
 
         let mut hasher = RescuePrimeProduction::new();
         let digest_1 = hasher.hash(&BFieldElement::ring_one());
         ps.enqueue(&TestItem::ManyB(digest_1));
-        ps.dequeue();
+        let _result = ps.dequeue();
 
         assert_eq!(
             ps.prover_fiat_shamir(),
@@ -182,7 +213,7 @@ mod proof_stream_typed_tests {
             "prover_fiat_shamir() and verifier_fiat_shamir() are different when the stream isn't fully read"
         );
 
-        ps.dequeue();
+        let _result = ps.dequeue();
 
         assert_eq!(
             ps.prover_fiat_shamir(),

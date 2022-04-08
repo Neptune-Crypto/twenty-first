@@ -37,6 +37,7 @@ pub trait Hasher: Sized {
         digest
     }
 
+    // FIXME: Chunk these more efficiently by making it abstract and moving it into RescuePrimeProduction's impl.
     fn fiat_shamir<Value: ToDigest<Self::Digest>>(&mut self, items: &[Value]) -> Self::Digest {
         let digests: Vec<Self::Digest> = items.iter().map(|item| item.to_digest()).collect();
         self.hash_many(&digests)
@@ -48,7 +49,7 @@ pub trait Hasher: Sized {
     ///
     /// - `input`: A hash digest
     /// - `max`: The (non-inclusive) upper bound (a power of two)
-    fn random_index(&self, input: &Self::Digest, max: usize) -> usize {
+    fn sample_index(&self, input: &Self::Digest, max: usize) -> usize {
         assert!(other::is_power_of_two(max));
 
         // FIXME: Default serialization of vectors uses length-prefixing, which means
@@ -69,6 +70,29 @@ pub trait Hasher: Sized {
         }
 
         acc
+    }
+
+    // FIXME: This is not uniform.
+    fn sample_index_not_power_of_two(&self, input: &Self::Digest, max: usize) -> usize {
+        self.sample_index(input, other::roundup_npo2(max as u64) as usize) % max
+    }
+
+    /// Given a uniform random `seed` digest, a `max` that is a power of two,
+    /// produce `count` uniform random numbers (sample indices) in the interval
+    /// `[0; max)`. The seed should be a Fiat-Shamir digest to ensure a high
+    /// degree of randomness.
+    ///
+    /// - `count`: The number of sample indices
+    /// - `seed`: A hash digest
+    /// - `max`: The (non-inclusive) upper bound (a power of two)
+    fn sample_indices(&mut self, count: usize, seed: &Self::Digest, max: usize) -> Vec<usize>
+    where
+        u128: ToDigest<Self::Digest>,
+    {
+        self.get_n_hash_rounds(seed, count)
+            .iter()
+            .map(|random_input| self.sample_index(random_input, max))
+            .collect()
     }
 
     // FIXME: Consider not using u128 here; we just do it out of convenience because the trait impl existed already.
@@ -350,7 +374,7 @@ pub mod test_simple_hasher {
             let digest = hasher.hash(&vec![element]);
             let power_of_two = rng.gen_range(0..=32) as usize;
             let max = 1 << power_of_two;
-            let index = hasher.random_index(&digest, max);
+            let index = hasher.sample_index(&digest, max);
 
             assert!(index < max);
         }
