@@ -2269,14 +2269,14 @@ mod test_mpolynomials {
     fn symbolic_degree_bound_prop_gen() {
         let variable_count = 4;
         let term_count = 5;
-        let exponenent_limit: u64 = 7;
+        let exponent_limit: u64 = 7;
         let coefficient_limit = 12;
 
         // Generate one MPoly.
         let mvpoly: MPolynomial<BFieldElement> = gen_mpolynomial(
             variable_count,
             term_count,
-            exponenent_limit as u128,
+            exponent_limit as u128,
             coefficient_limit,
         );
 
