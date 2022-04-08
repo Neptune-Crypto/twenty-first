@@ -1,6 +1,7 @@
 use console::Term;
 use std::collections::HashMap;
 
+use crate::shared_math::traits::Inverse;
 use crate::shared_math::{b_field_element::BFieldElement, traits::IdentityValues};
 
 pub const INSTRUCTIONS: [char; 8] = ['[', ']', '<', '>', '+', '-', ',', '.'];
@@ -13,7 +14,7 @@ pub struct Register {
     pub next_instruction: BFieldElement,
     pub memory_pointer: BFieldElement,
     pub memory_value: BFieldElement,
-    pub is_zero: BFieldElement,
+    pub memory_value_inverse: BFieldElement,
 }
 
 impl From<Register> for Vec<BFieldElement> {
@@ -25,7 +26,7 @@ impl From<Register> for Vec<BFieldElement> {
             register.next_instruction,
             register.memory_pointer,
             register.memory_value,
-            register.is_zero,
+            register.memory_value_inverse,
         ]
     }
 }
@@ -39,7 +40,7 @@ impl Register {
             next_instruction: BFieldElement::ring_zero(),
             memory_pointer: BFieldElement::ring_zero(),
             memory_value: BFieldElement::ring_zero(),
-            is_zero: BFieldElement::ring_one(),
+            memory_value_inverse: BFieldElement::ring_zero(),
         }
     }
 }
@@ -308,10 +309,10 @@ pub fn simulate(
         }
 
         register.memory_value = *memory.get(&register.memory_pointer).unwrap_or(&zero);
-        register.is_zero = if register.memory_value.is_zero() {
-            one
-        } else {
+        register.memory_value_inverse = if register.memory_value.is_zero() {
             zero
+        } else {
+            register.memory_value.inverse()
         };
     }
 
@@ -428,13 +429,13 @@ mod stark_bf_tests {
                 BFieldElement::new(97),
                 BFieldElement::new(97),
                 BFieldElement::new(97),
-                BFieldElement::new(97)
+                BFieldElement::new(97),
             ],
             base_matrices.output_matrix,
             "Output matrix must match output data"
         );
         assert_eq!(
-            vec![BFieldElement::new(97),],
+            vec![BFieldElement::new(97)],
             base_matrices.input_matrix,
             "Input matrix must match input data"
         );

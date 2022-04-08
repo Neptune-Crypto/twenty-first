@@ -1161,15 +1161,15 @@ mod brainfuck_stark_tests {
             }
 
             register.memory_value = *memory.get(&register.memory_pointer).unwrap_or(&zero);
-            register.is_zero = if register.memory_value.is_zero() {
-                one
-            } else {
+            register.memory_value_inverse = if register.memory_value.is_zero() {
                 zero
+            } else {
+                register.memory_value.inverse()
             };
 
             // This is the 2nd part of the attack
             if register.current_instruction == BFieldElement::new('[' as u128) {
-                register.is_zero = zero;
+                register.memory_value_inverse = BFieldElement::new(42);
             }
         }
 

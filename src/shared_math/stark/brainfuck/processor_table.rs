@@ -40,7 +40,7 @@ impl ProcessorTable {
     pub const NEXT_INSTRUCTION: usize = 3;
     pub const MEMORY_POINTER: usize = 4;
     pub const MEMORY_VALUE: usize = 5;
-    pub const IS_ZERO: usize = 6;
+    pub const MEMORY_VALUE_INVERSE: usize = 6;
 
     // named indices for extension columns
     pub const INSTRUCTION_PERMUTATION: usize = 7;
@@ -81,7 +81,7 @@ impl ProcessorTable {
                 next_instruction: BFieldElement::ring_zero(),
                 memory_pointer: last[ProcessorTable::MEMORY_POINTER],
                 memory_value: last[ProcessorTable::MEMORY_VALUE],
-                is_zero: last[ProcessorTable::IS_ZERO],
+                memory_value_inverse: last[ProcessorTable::MEMORY_VALUE_INVERSE],
             };
             self.0.matrix.push(padding.into());
         }
@@ -96,14 +96,14 @@ impl ProcessorTable {
         next_instruction: MPolynomial<BFieldElement>,
         memory_pointer: MPolynomial<BFieldElement>,
         memory_value: MPolynomial<BFieldElement>,
-        is_zero: MPolynomial<BFieldElement>,
+        memory_value_inverse: MPolynomial<BFieldElement>,
         cycle_next: MPolynomial<BFieldElement>,
         instruction_pointer_next: MPolynomial<BFieldElement>,
         current_instruction_next: MPolynomial<BFieldElement>,
         next_instruction_next: MPolynomial<BFieldElement>,
         memory_pointer_next: MPolynomial<BFieldElement>,
         memory_value_next: MPolynomial<BFieldElement>,
-        is_zero_next: MPolynomial<BFieldElement>,
+        memory_value_inverse_next: MPolynomial<BFieldElement>,
     ) -> [MPolynomial<BFieldElement>; 6] {
         let elem = MPolynomial::<BFieldElement>::zero(14);
         let mut polynomials: [MPolynomial<BFieldElement>; 6] = [
@@ -116,7 +116,7 @@ impl ProcessorTable {
         ];
 
         for c in INSTRUCTIONS.iter() {
-            // Max degree: 3
+            // Max degree: 4
             let instrs: [MPolynomial<BFieldElement>; 3] = Self::instruction_polynomials(
                 *c,
                 &cycle,
@@ -125,14 +125,14 @@ impl ProcessorTable {
                 &next_instruction,
                 &memory_pointer,
                 &memory_value,
-                &is_zero,
+                &memory_value_inverse,
                 &cycle_next,
                 &instruction_pointer_next,
                 &current_instruction_next,
                 &next_instruction_next,
                 &memory_pointer_next,
                 &memory_value_next,
-                &is_zero_next,
+                &memory_value_inverse_next,
             );
 
             // Max degree: 7
@@ -147,9 +147,11 @@ impl ProcessorTable {
         // Instruction independent polynomials
         let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
         polynomials[3] = cycle_next - cycle - one.clone();
-        polynomials[4] = is_zero.clone() * memory_value;
-        polynomials[5] = is_zero.clone() * (one - is_zero);
+        let memory_value_is_zero = memory_value.clone() * memory_value_inverse.clone() - one;
+        polynomials[4] = memory_value * memory_value_is_zero.clone();
+        polynomials[5] = memory_value_inverse * memory_value_is_zero;
 
+        // max degree: 11
         polynomials
     }
 
@@ -163,14 +165,14 @@ impl ProcessorTable {
         next_instruction: &MPolynomial<BFieldElement>,
         memory_pointer: &MPolynomial<BFieldElement>,
         memory_value: &MPolynomial<BFieldElement>,
-        is_zero: &MPolynomial<BFieldElement>,
+        memory_value_inverse: &MPolynomial<BFieldElement>,
         _cycle_next: &MPolynomial<BFieldElement>,
         instruction_pointer_next: &MPolynomial<BFieldElement>,
         _current_instruction_next: &MPolynomial<BFieldElement>,
         _next_instruction_next: &MPolynomial<BFieldElement>,
         memory_pointer_next: &MPolynomial<BFieldElement>,
         memory_value_next: &MPolynomial<BFieldElement>,
-        _is_zero_next: &MPolynomial<BFieldElement>,
+        _memory_value_inverse_next: &MPolynomial<BFieldElement>,
     ) -> [MPolynomial<BFieldElement>; 3] {
         let zero = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_zero(), 14);
         let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
@@ -178,17 +180,19 @@ impl ProcessorTable {
         let mut polynomials: [MPolynomial<BFieldElement>; 3] =
             [zero.clone(), zero.clone(), zero.clone()];
 
+        let memory_value_is_zero =
+            memory_value.clone() * memory_value_inverse.clone() - one.clone();
         match instruction {
             '[' => {
                 polynomials[0] = memory_value.to_owned()
                     * (instruction_pointer_next.to_owned() - instruction_pointer.to_owned() - two)
-                    + is_zero.to_owned()
+                    + memory_value_is_zero
                         * (instruction_pointer_next.to_owned() - next_instruction.to_owned());
                 polynomials[1] = memory_pointer_next.to_owned() - memory_pointer.to_owned();
                 polynomials[2] = memory_value_next.to_owned() - memory_value.to_owned();
             }
             ']' => {
-                polynomials[0] = is_zero.to_owned()
+                polynomials[0] = memory_value_is_zero
                     * (instruction_pointer_next.to_owned() - instruction_pointer.to_owned() - two)
                     + memory_value.to_owned()
                         * (instruction_pointer_next.to_owned() - next_instruction.to_owned());
@@ -249,6 +253,7 @@ impl ProcessorTable {
             *poly = poly.to_owned() * current_instruction.to_owned();
         }
 
+        // max degree: 4
         polynomials
     }
 
@@ -330,14 +335,14 @@ impl TableTrait for ProcessorTable {
         let next_instruction = variables.pop().unwrap();
         let memory_pointer = variables.pop().unwrap();
         let memory_value = variables.pop().unwrap();
-        let is_zero = variables.pop().unwrap();
+        let memory_value_inverse = variables.pop().unwrap();
         let cycle_next = variables.pop().unwrap();
         let instruction_pointer_next = variables.pop().unwrap();
         let current_instruction_next = variables.pop().unwrap();
         let next_instruction_next = variables.pop().unwrap();
         let memory_pointer_next = variables.pop().unwrap();
         let memory_value_next = variables.pop().unwrap();
-        let is_zero_next = variables.pop().unwrap();
+        let memory_value_inverse_next = variables.pop().unwrap();
         assert!(
             variables.is_empty(),
             "Variables must be empty after destructuring into named variables"
@@ -350,14 +355,14 @@ impl TableTrait for ProcessorTable {
             next_instruction,
             memory_pointer,
             memory_value,
-            is_zero,
+            memory_value_inverse,
             cycle_next,
             instruction_pointer_next,
             current_instruction_next,
             next_instruction_next,
             memory_pointer_next,
             memory_value_next,
-            is_zero_next,
+            memory_value_inverse_next,
         )
         .into()
     }
@@ -382,35 +387,35 @@ impl TableTrait for ProcessorTable {
                 .try_into()
                 .unwrap();
         let [
-            // row n+1
-            b_field_cycle,
-            b_field_instruction_pointer,
-            b_field_current_instruction,
-            b_field_next_instruction,
-            b_field_memory_pointer,
-            b_field_memory_value,
-            b_field_is_zero,
+        // row n+1
+        b_field_cycle,
+        b_field_instruction_pointer,
+        b_field_current_instruction,
+        b_field_next_instruction,
+        b_field_memory_pointer,
+        b_field_memory_value,
+        b_field_is_zero,
 
-            // row n
-            _b_field_instruction_permutation,
-            _b_field_memory_permutation,
-            _b_field_input_evaluation,
-            _b_field_output_evaluation,
+        // row n
+        _b_field_instruction_permutation,
+        _b_field_memory_permutation,
+        _b_field_input_evaluation,
+        _b_field_output_evaluation,
 
-            // row n+1
-            b_field_cycle_next,
-            b_field_instruction_pointer_next,
-            b_field_current_instruction_next,
-            b_field_next_instruction_next,
-            b_field_memory_pointer_next,
-            b_field_memory_value_next,
-            b_field_is_zero_next,
+        // row n+1
+        b_field_cycle_next,
+        b_field_instruction_pointer_next,
+        b_field_current_instruction_next,
+        b_field_next_instruction_next,
+        b_field_memory_pointer_next,
+        b_field_memory_value_next,
+        b_field_is_zero_next,
 
-            // row n+1
-            _b_field_instruction_permutation_next,
-            _b_field_memory_permutation_next,
-            _b_field_input_evaluation_next,
-            _b_field_output_evaluation_next] = b_field_variables;
+        // row n+1
+        _b_field_instruction_permutation_next,
+        _b_field_memory_permutation_next,
+        _b_field_input_evaluation_next,
+        _b_field_output_evaluation_next] = b_field_variables;
 
         let b_field_polynomials = Self::transition_constraints_afo_named_variables(
             b_field_cycle,
@@ -439,32 +444,32 @@ impl TableTrait for ProcessorTable {
                 .try_into()
                 .unwrap();
         let [
-            // row n
-            cycle,
-            instruction_pointer,
-            current_instruction,
-            next_instruction,
-            memory_pointer,
-            memory_value,
-            _is_zero,
-            // row n
-            instruction_permutation,
-            memory_permutation,
-            input_evaluation,
-            output_evaluation,
-            // row n+1
-            _cycle_next,
-            _instruction_pointer_next,
-            _current_instruction_next,
-            _next_instruction_next,
-            _memory_pointer_next,
-            memory_value_next,
-            _is_zero_next,
-            // row n+1
-            instruction_permutation_next,
-            memory_permutation_next,
-            input_evaluation_next,
-            output_evaluation_next] = x_field_variables;
+        // row n
+        cycle,
+        instruction_pointer,
+        current_instruction,
+        next_instruction,
+        memory_pointer,
+        memory_value,
+        _is_zero,
+        // row n
+        instruction_permutation,
+        memory_permutation,
+        input_evaluation,
+        output_evaluation,
+        // row n+1
+        _cycle_next,
+        _instruction_pointer_next,
+        _current_instruction_next,
+        _next_instruction_next,
+        _memory_pointer_next,
+        memory_value_next,
+        _is_zero_next,
+        // row n+1
+        instruction_permutation_next,
+        memory_permutation_next,
+        input_evaluation_next,
+        output_evaluation_next] = x_field_variables;
 
         let mut polynomials: Vec<MPolynomial<XFieldElement>> = b_field_polynomials
             .iter()
@@ -597,15 +602,11 @@ impl TableTrait for ProcessorTable {
             MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
 
         let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
-        let one = MPolynomial::<XFieldElement>::from_constant(
-            XFieldElement::ring_one(),
-            Self::FULL_WIDTH,
-        );
         let cycle = x[ProcessorTable::CYCLE].clone();
         let instruction_pointer = x[ProcessorTable::INSTRUCTION_POINTER].clone();
         let memory_pointer = x[Self::MEMORY_POINTER].clone();
         let memory_value = x[Self::MEMORY_VALUE].clone();
-        let is_zero = x[Self::IS_ZERO].clone();
+        let memory_value_inverse = x[Self::MEMORY_VALUE_INVERSE].clone();
         let input_evaluation = x[Self::INPUT_EVALUATION].clone();
         let output_evaluation = x[Self::OUTPUT_EVALUATION].clone();
 
@@ -616,7 +617,7 @@ impl TableTrait for ProcessorTable {
             // x[Self::NEXT_INSTRUCTION] - ??),
             memory_pointer - zero.clone(),
             memory_value - zero.clone(),
-            is_zero - one,
+            memory_value_inverse - zero.clone(),
             // x[Self::INSTRUCTION_PERMUTATION] - one,
             // x[Self::MEMORY_PERMUTATION] - one,
             input_evaluation - zero.clone(),
