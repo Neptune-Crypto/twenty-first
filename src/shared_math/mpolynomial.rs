@@ -228,19 +228,22 @@ impl fmt::Display for PrecalculationError {
 }
 
 impl<PFElem: PrimeField> Display for MPolynomial<PFElem> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let output = if self.is_zero() {
             "0".to_string()
         } else {
+            // todo: use something like this:
+            // loop over all exponents, then
+            // sort_by_key(|exponents| exponents[i]);
             let mut term_strings = self
                 .coefficients
                 .iter()
                 .sorted_by_key(|x| x.0[0])
                 .map(|(k, v)| Self::term_print(k, v));
-            term_strings.join("\n+ ")
+            term_strings.join(" + ")
         };
 
-        write!(f, "\n  {}", output)
+        write!(f, "{}", output)
     }
 }
 
@@ -308,7 +311,7 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         }
 
         let mut str_elems: Vec<String> = vec![];
-        if !coefficient.is_one() {
+        if !coefficient.is_one() || exponents.iter().all(|&x| x.is_zero()) {
             str_elems.push(coefficient.to_string());
         }
 
@@ -2309,5 +2312,23 @@ mod test_mpolynomials {
         for _ in 0..runs {
             symbolic_degree_bound_prop_gen();
         }
+    }
+
+    #[test]
+    fn print_display_test() {
+        let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
+
+        mcoef.insert(vec![0, 0], BFieldElement::new(1));
+        mcoef.insert(vec![0, 1], BFieldElement::new(5));
+        mcoef.insert(vec![2, 0], BFieldElement::new(6));
+        mcoef.insert(vec![3, 4], BFieldElement::new(7));
+
+        let mpoly = MPolynomial {
+            variable_count: 2,
+            coefficients: mcoef,
+        };
+
+        let expected = "1 + 5*x_1 + 6*x_0^2 + 7*x_0^3*x_1^4";
+        assert_eq!(expected, format!("{}", mpoly));
     }
 }
