@@ -253,7 +253,8 @@ where
         let mut counter = 0u32;
         for _ in 0..self.colinearity_checks_count {
             let digest: H::Digest = hasher.hash_pair(seed, &(counter as u128).to_digest());
-            let index: usize = hasher.sample_index(&digest, remaining_last_round_exponents.len());
+            let index: usize =
+                hasher.sample_index_not_power_of_two(&digest, remaining_last_round_exponents.len());
             last_indices.push(remaining_last_round_exponents.remove(index));
             counter += 1;
         }
@@ -558,7 +559,7 @@ mod fri_domain_tests {
 }
 
 #[cfg(test)]
-mod fri_tests {
+mod xfri_tests {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::traits::GetPrimitiveRootOfUnity;
@@ -659,8 +660,8 @@ mod fri_tests {
         let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
 
         let mut points: Vec<XFieldElement>;
-        for n in &[1, 10, 50, 100, 255] {
-            points = subgroup.clone().iter().map(|p| p.mod_pow_u32(*n)).collect();
+        for n in [1, 10, 50, 100, 255] {
+            points = subgroup.clone().iter().map(|p| p.mod_pow_u32(n)).collect();
 
             // TODO: Test elsewhere that proof_stream can be re-used for multiple .prove().
             let mut proof_stream: StarkProofStream = StarkProofStream::default();
