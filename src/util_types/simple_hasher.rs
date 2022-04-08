@@ -77,8 +77,8 @@ pub trait Hasher: Sized {
     /// `[0; max)`. The seed should be a Fiat-Shamir digest to ensure a high
     /// degree of randomness.
     ///
-    /// - `seed`: A hash digest
     /// - `count`: The number of sample indices
+    /// - `seed`: A hash digest
     /// - `max`: The (non-inclusive) upper bound (a power of two)
     fn sample_indices(&mut self, count: usize, seed: &Self::Digest, max: usize) -> Vec<usize>
     where
