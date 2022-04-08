@@ -394,7 +394,7 @@ pub trait TableTrait {
         let transition_constraints = self.transition_constraints_ext(challenges);
 
         let mut quotients: Vec<Vec<XFieldElement>> = vec![];
-        for tc in transition_constraints {
+        for tc in transition_constraints.iter() {
             let mut quotient_codeword: Vec<XFieldElement> = vec![];
             let mut composition_codeword: Vec<XFieldElement> = vec![];
             for (i, z_inverse) in zerofier_inverse.iter().enumerate() {
@@ -414,14 +414,15 @@ pub trait TableTrait {
             }
 
             quotients.push(quotient_codeword);
+        }
+        // If the `DEBUG` environment variable is set, interpolate the quotient and check the degree
 
-            // If the `DEBUG` environment variable is set, interpolate the quotient and check the degree
-            if std::env::var("DEBUG").is_ok() {
-                let interpolated: Polynomial<XFieldElement> =
-                    fri_domain.x_interpolate(quotients.last().unwrap());
+        if std::env::var("DEBUG").is_ok() {
+            for (i, qc) in quotients.iter().enumerate() {
+                let interpolated: Polynomial<XFieldElement> = fri_domain.x_interpolate(qc);
                 assert!(
-                    interpolated.degree() >= fri_domain.length as isize - 1,
-                    "interpolated degree was too high"
+                    interpolated.degree() < fri_domain.length as isize - 1,
+                    "Degree of transition quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}. Unsatisfied constraint: {}", i, self.name(), interpolated.degree(), fri_domain.length, transition_constraints[i]
                 );
             }
         }

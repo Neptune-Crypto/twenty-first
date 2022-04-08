@@ -464,7 +464,7 @@ impl Stark {
         }
 
         assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
-        for (i, (qc, qdb)) in quotient_codewords
+        for (_i, (qc, qdb)) in quotient_codewords
             .iter()
             .zip(quotient_degree_bounds.iter())
             .enumerate()
@@ -479,25 +479,25 @@ impl Stark {
             terms.push(qc_shifted);
 
             // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
-            if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
-                let unshifted_degree = self
-                    .fri
-                    .domain
-                    .x_interpolate(&terms[terms.len() - 2])
-                    .degree();
-                assert!(
-                    interpolated.degree() == -1
-                        || interpolated.degree() == self.max_degree as isize,
-                    "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. Actual degree of unshifted codeword: {}. Shift = {}",
-                    i,
-                    self.max_degree,
-                    interpolated.degree(),
-                    qdb,
-                    unshifted_degree,
-                    shift
-                );
-            }
+            // if std::env::var("DEBUG").is_ok() {
+            //     let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
+            //     let unshifted_degree = self
+            //         .fri
+            //         .domain
+            //         .x_interpolate(&terms[terms.len() - 2])
+            //         .degree();
+            //     assert!(
+            //         interpolated.degree() == -1
+            //             || interpolated.degree() == self.max_degree as isize,
+            //         "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. Actual degree of unshifted codeword: {}. Shift = {}",
+            //         _i,
+            //         self.max_degree,
+            //         interpolated.degree(),
+            //         qdb,
+            //         unshifted_degree,
+            //         shift
+            //     );
+            // }
         }
 
         // Get weights for nonlinear combination
@@ -1035,6 +1035,224 @@ mod brainfuck_stark_tests {
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::stark::brainfuck;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
+    use crate::shared_math::traits::IdentityValues;
+
+    fn mallorys_simulate(
+        program: &[BFieldElement],
+        input_symbols: &[BFieldElement],
+    ) -> Option<BaseMatrices> {
+        let zero = BFieldElement::ring_zero();
+        let one = BFieldElement::ring_one();
+        let two = BFieldElement::new(2);
+        let mut register = Register::default();
+        register.current_instruction = program[0];
+        if program.len() < 2 {
+            register.next_instruction = zero;
+        } else {
+            register.next_instruction = program[1];
+        }
+
+        let mut memory: HashMap<BFieldElement, BFieldElement> = HashMap::new();
+        let mut input_counter: usize = 0;
+
+        // Prepare tables. For '++[>++<-]' this would give:
+        // 0 + +
+        // 1 + [
+        // 2 [ >
+        // 3 > +
+        // ...
+        let mut base_matrices = BaseMatrices::default();
+        for i in 0..program.len() - 1 {
+            base_matrices
+                .instruction_matrix
+                .push(InstructionMatrixBaseRow {
+                    instruction_pointer: BFieldElement::new(i as u128),
+                    current_instruction: program[i],
+                    next_instruction: program[i + 1],
+                });
+        }
+        base_matrices
+            .instruction_matrix
+            .push(InstructionMatrixBaseRow {
+                instruction_pointer: BFieldElement::new((program.len() - 1) as u128),
+                current_instruction: *program.last().unwrap(),
+                next_instruction: zero,
+            });
+
+        // main loop
+        while (register.instruction_pointer.value() as usize) < program.len() {
+            // collect values to add new rows in execution matrices
+            base_matrices.processor_matrix.push(register.clone());
+            base_matrices
+                .instruction_matrix
+                .push(InstructionMatrixBaseRow {
+                    instruction_pointer: register.instruction_pointer,
+                    current_instruction: register.current_instruction,
+                    next_instruction: register.next_instruction,
+                });
+
+            // update pointer registers according to instruction
+            if register.current_instruction == BFieldElement::new('[' as u128) {
+                // This is the 1st part of the attack, a loop is *always* entered
+                register.instruction_pointer += two;
+
+                // Original version is commented out below
+                // if register.memory_value.is_zero() {
+                //     register.instruction_pointer =
+                //         program[register.instruction_pointer.value() as usize + 1];
+                // } else {
+                //     register.instruction_pointer += two;
+                // }
+            } else if register.current_instruction == BFieldElement::new(']' as u128) {
+                if !register.memory_value.is_zero() {
+                    register.instruction_pointer =
+                        program[register.instruction_pointer.value() as usize + 1];
+                } else {
+                    register.instruction_pointer += two;
+                }
+            } else if register.current_instruction == BFieldElement::new('<' as u128) {
+                register.instruction_pointer += one;
+                register.memory_pointer -= one;
+            } else if register.current_instruction == BFieldElement::new('>' as u128) {
+                register.instruction_pointer += one;
+                register.memory_pointer += one;
+            } else if register.current_instruction == BFieldElement::new('+' as u128) {
+                register.instruction_pointer += one;
+                memory.insert(
+                    register.memory_pointer,
+                    *memory.get(&register.memory_pointer).unwrap_or(&zero) + one,
+                );
+            } else if register.current_instruction == BFieldElement::new('-' as u128) {
+                register.instruction_pointer += one;
+                memory.insert(
+                    register.memory_pointer,
+                    *memory.get(&register.memory_pointer).unwrap_or(&zero) - one,
+                );
+            } else if register.current_instruction == BFieldElement::new('.' as u128) {
+                register.instruction_pointer += one;
+                base_matrices
+                    .output_matrix
+                    .push(*memory.get(&register.memory_pointer).unwrap_or(&zero));
+            } else if register.current_instruction == BFieldElement::new(',' as u128) {
+                register.instruction_pointer += one;
+                let input_char = input_symbols[input_counter];
+                input_counter += 1;
+                memory.insert(register.memory_pointer, input_char);
+                base_matrices.input_matrix.push(input_char);
+            } else {
+                return None;
+            }
+
+            // update non-pointer registers
+            register.cycle += one;
+
+            if (register.instruction_pointer.value() as usize) < program.len() {
+                register.current_instruction =
+                    program[register.instruction_pointer.value() as usize];
+            } else {
+                register.current_instruction = zero;
+            }
+
+            if (register.instruction_pointer.value() as usize) < program.len() - 1 {
+                register.next_instruction =
+                    program[(register.instruction_pointer.value() as usize) + 1];
+            } else {
+                register.next_instruction = zero;
+            }
+
+            register.memory_value = *memory.get(&register.memory_pointer).unwrap_or(&zero);
+            register.memory_value_inverse = if register.memory_value.is_zero() {
+                zero
+            } else {
+                register.memory_value.inverse()
+            };
+
+            // This is the 2nd part of the attack
+            if register.current_instruction == BFieldElement::new('[' as u128) {
+                register.memory_value_inverse = BFieldElement::new(42);
+            }
+        }
+
+        base_matrices.processor_matrix.push(register.clone());
+        base_matrices
+            .instruction_matrix
+            .push(InstructionMatrixBaseRow {
+                instruction_pointer: register.instruction_pointer,
+                current_instruction: register.current_instruction,
+                next_instruction: register.next_instruction,
+            });
+
+        // post-process context tables
+        // sort by instruction address
+        base_matrices
+            .instruction_matrix
+            .sort_by_key(|row| row.instruction_pointer.value());
+
+        Some(base_matrices)
+    }
+
+    #[test]
+    fn set_adversarial_is_zero_value_test() {
+        // Expected (honest) output state:
+        // `memory_pointer`
+        //        |
+        //        |
+        //        V
+        //    [1, 0] with cycle = 3
+        // Malory's output state:
+        // `memory_pointer`
+        //     |
+        //     |
+        //     V
+        //    [0, 2] with cycle = 8
+
+        // Run honest execution, verify that it succeeds in prover/verifier
+        let program: Vec<BFieldElement> = brainfuck::vm::compile("+>[++<-]").unwrap();
+        let input_symbols: Vec<BFieldElement> = vec![];
+        let regular_matrices: BaseMatrices =
+            brainfuck::vm::simulate(&program, &input_symbols).unwrap();
+        let mut regular_stark = Stark::new(
+            regular_matrices.processor_matrix.len(),
+            program.clone(),
+            input_symbols.clone(),
+            vec![],
+        );
+        let mut regular_proof_stream: StarkProofStream = regular_stark
+            .prove(
+                regular_matrices.processor_matrix,
+                regular_matrices.instruction_matrix,
+                regular_matrices.input_matrix,
+                regular_matrices.output_matrix,
+            )
+            .unwrap();
+        let regular_verify = regular_stark.verify(&mut regular_proof_stream);
+        assert!(regular_verify.unwrap(), "Regular execution must succeed");
+
+        // Run attack, verify that it is caught by the verifier
+        let mallorys_matrices: BaseMatrices = mallorys_simulate(&program, &input_symbols).unwrap();
+        let mut mallorys_stark = Stark::new(
+            mallorys_matrices.processor_matrix.len(),
+            program,
+            input_symbols,
+            vec![],
+        );
+        let mut mallorys_proof_stream: StarkProofStream = mallorys_stark
+            .prove(
+                mallorys_matrices.processor_matrix,
+                mallorys_matrices.instruction_matrix,
+                mallorys_matrices.input_matrix,
+                mallorys_matrices.output_matrix,
+            )
+            .unwrap();
+
+        let mallorys_verify = mallorys_stark.verify(&mut mallorys_proof_stream);
+        match mallorys_verify {
+            Ok(true) => {
+                panic!("Attack passes the STARK verifier!!")
+            }
+            _ => (),
+        }
+    }
 
     #[test]
     fn prove_verify_test() {
