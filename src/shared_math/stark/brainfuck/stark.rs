@@ -1,5 +1,5 @@
 use super::stark_proof_stream::StarkProofStream;
-use super::vm::{InstructionMatrixBaseRow, Register};
+use super::vm::{BaseMatrices, InstructionMatrixBaseRow, Register};
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
@@ -213,23 +213,20 @@ impl Stark {
 
     pub fn prove(
         &mut self,
-        processor_matrix: Vec<Register>,
-        instruction_matrix: Vec<InstructionMatrixBaseRow>,
-        input_matrix: Vec<BFieldElement>,
-        output_matrix: Vec<BFieldElement>,
+        base_matrices: BaseMatrices,
     ) -> Result<StarkProofStream, Box<dyn Error>> {
-        assert_eq!(self.trace_length, processor_matrix.len());
+        assert_eq!(self.trace_length, base_matrices.processor_matrix.len());
         assert_eq!(
             self.trace_length + self.program.len(),
-            instruction_matrix.len(),
+            base_matrices.instruction_matrix.len(),
             "instruction_matrix must contain both the execution trace and the program"
         );
 
         self.tables.borrow_mut().set_matrices(
-            processor_matrix,
-            instruction_matrix,
-            input_matrix,
-            output_matrix,
+            base_matrices.processor_matrix,
+            base_matrices.instruction_matrix,
+            base_matrices.input_matrix,
+            base_matrices.output_matrix,
         );
 
         self.tables.borrow_mut().pad();
@@ -1217,14 +1214,8 @@ mod brainfuck_stark_tests {
             input_symbols.clone(),
             vec![],
         );
-        let mut regular_proof_stream: StarkProofStream = regular_stark
-            .prove(
-                regular_matrices.processor_matrix,
-                regular_matrices.instruction_matrix,
-                regular_matrices.input_matrix,
-                regular_matrices.output_matrix,
-            )
-            .unwrap();
+        let mut regular_proof_stream: StarkProofStream =
+            regular_stark.prove(regular_matrices).unwrap();
         let regular_verify = regular_stark.verify(&mut regular_proof_stream);
         assert!(regular_verify.unwrap(), "Regular execution must succeed");
 
@@ -1236,14 +1227,8 @@ mod brainfuck_stark_tests {
             input_symbols,
             vec![],
         );
-        let mut mallorys_proof_stream: StarkProofStream = mallorys_stark
-            .prove(
-                mallorys_matrices.processor_matrix,
-                mallorys_matrices.instruction_matrix,
-                mallorys_matrices.input_matrix,
-                mallorys_matrices.output_matrix,
-            )
-            .unwrap();
+        let mut mallorys_proof_stream: StarkProofStream =
+            mallorys_stark.prove(mallorys_matrices).unwrap();
 
         let mallorys_verify = mallorys_stark.verify(&mut mallorys_proof_stream);
         match mallorys_verify {
@@ -1273,14 +1258,7 @@ mod brainfuck_stark_tests {
 
         // TODO: If we set the `DEBUG` environment variable here, we *should* catch a lot of bugs.
         // Do we want to do that?
-        let mut proof_stream = stark
-            .prove(
-                base_matrices.processor_matrix,
-                base_matrices.instruction_matrix,
-                base_matrices.input_matrix,
-                base_matrices.output_matrix,
-            )
-            .unwrap();
+        let mut proof_stream = stark.prove(base_matrices).unwrap();
 
         let verifier_verdict: Result<bool, Box<dyn Error>> = stark.verify(&mut proof_stream);
         match verifier_verdict {
