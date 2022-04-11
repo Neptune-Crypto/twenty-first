@@ -33,7 +33,7 @@ fn stark_medium(criterion: &mut Criterion) {
     let report = timer.finish();
     println!("{}", report);
 
-    let mut group = criterion.benchmark_group("stark");
+    let mut group = criterion.benchmark_group("stark_rp");
     group.sample_size(10);
     group.bench_function(benchmark_id, |bencher| {
         bencher.iter(|| {

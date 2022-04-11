@@ -41,6 +41,10 @@ name = "polynomial_square"
 harness = false
 
 [[bench]]
+name = "stark_bf"
+harness = false
+
+[[bench]]
 name = "ntt_forward"
 harness = false
 
@@ -57,7 +61,7 @@ name = "rescue_prime_air_constraints"
 harness = false
 
 [[bench]]
-name = "stark"
+name = "stark_rp"
 harness = false
 
 [profile.dev]

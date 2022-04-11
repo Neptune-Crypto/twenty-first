@@ -1,5 +1,5 @@
 use super::stark_proof_stream::StarkProofStream;
-use super::vm::{BaseMatrices, InstructionMatrixBaseRow, Register};
+use super::vm::BaseMatrices;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
@@ -1031,7 +1031,9 @@ mod brainfuck_stark_tests {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::stark::brainfuck;
-    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
+    use crate::shared_math::stark::brainfuck::vm::{
+        BaseMatrices, InstructionMatrixBaseRow, Register,
+    };
     use crate::shared_math::traits::IdentityValues;
 
     fn mallorys_simulate(
@@ -1265,5 +1267,28 @@ mod brainfuck_stark_tests {
             Ok(_) => (),
             Err(err) => panic!("error in STARK verifier: {}", err),
         };
+    }
+
+    fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
+        let program = brainfuck::vm::compile(program_code).unwrap();
+        let (trace_length, input_symbols, output_symbols) =
+            brainfuck::vm::run(&program, input.to_vec()).unwrap();
+        let base_matrices: BaseMatrices =
+            brainfuck::vm::simulate(&program, &input_symbols).unwrap();
+        let mut stark = Stark::new(trace_length, program, input_symbols, output_symbols);
+        let mut proof_stream = stark.prove(base_matrices).unwrap();
+        let verifier_verdict = stark.verify(&mut proof_stream);
+        match verifier_verdict {
+            Ok(_) => (),
+            Err(err) => panic!("error in STARK verifier: {}", err),
+        };
+    }
+
+    #[test]
+    fn prove_verify_again_test() {
+        let program_code = brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT;
+        let input = [97].map(BFieldElement::new).to_vec();
+
+        compile_simulate_prove_verify(program_code, &input);
     }
 }
