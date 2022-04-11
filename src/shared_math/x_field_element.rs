@@ -56,6 +56,16 @@ impl XFieldElement {
         Self { coefficients }
     }
 
+    pub fn new_u128(coeffs: [u128; 3]) -> Self {
+        Self {
+            coefficients: [
+                BFieldElement::new(coeffs[0]),
+                BFieldElement::new(coeffs[1]),
+                BFieldElement::new(coeffs[2]),
+            ],
+        }
+    }
+
     pub fn new_const(element: BFieldElement) -> Self {
         let zero = BFieldElement::ring_zero();
 
@@ -195,7 +205,7 @@ impl Display for XFieldElement {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}x^2 + {}x + {}",
+            "({}x^2 + {}x + {})",
             self.coefficients[2], self.coefficients[1], self.coefficients[0]
         )
     }

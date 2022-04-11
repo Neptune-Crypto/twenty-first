@@ -2316,7 +2316,7 @@ mod test_mpolynomials {
     }
 
     #[test]
-    fn print_display_test() {
+    fn print_display_bfield_test() {
         let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
 
         mcoef.insert(vec![0, 0], BFieldElement::new(1));
@@ -2330,6 +2330,24 @@ mod test_mpolynomials {
         };
 
         let expected = "1 + 6*x_0^2 + 5*x_1 + 7*x_0^3*x_1^4";
+        assert_eq!(expected, format!("{}", mpoly));
+    }
+
+    #[test]
+    fn print_display_xfield_test() {
+        let mut mcoef: MCoefficients<XFieldElement> = HashMap::new();
+
+        mcoef.insert(vec![0, 0], XFieldElement::new_u128([5, 6, 7]));
+        mcoef.insert(vec![0, 1], XFieldElement::new_u128([8, 9, 10]));
+        mcoef.insert(vec![2, 0], XFieldElement::new_u128([11, 12, 13]));
+        mcoef.insert(vec![3, 4], XFieldElement::new_u128([14, 15, 16]));
+
+        let mpoly = MPolynomial {
+            variable_count: 2,
+            coefficients: mcoef,
+        };
+
+        let expected = "(7x^2 + 6x + 5) + (13x^2 + 12x + 11)*x_0^2 + (10x^2 + 9x + 8)*x_1 + (16x^2 + 15x + 14)*x_0^3*x_1^4";
         assert_eq!(expected, format!("{}", mpoly));
     }
 }
