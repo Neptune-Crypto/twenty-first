@@ -232,15 +232,16 @@ impl<PFElem: PrimeField> Display for MPolynomial<PFElem> {
         let output = if self.is_zero() {
             "0".to_string()
         } else {
-            // todo: use something like this:
-            // loop over all exponents, then
-            // sort_by_key(|exponents| exponents[i]);
-            let mut term_strings = self
-                .coefficients
-                .iter()
-                .sorted_by_key(|x| x.0[0])
-                .map(|(k, v)| Self::term_print(k, v));
-            term_strings.join(" + ")
+            // Stable sort once per variable. This implementation is implicit “invlex” monomial
+            // order printed in reverse, i.e., constant term comes first, high-degree monomials are
+            // printed last.
+            let mut coefficients_iter = self.coefficients.iter().sorted_by_key(|x| x.0[0]);
+            for i in 1..self.variable_count {
+                coefficients_iter = coefficients_iter.sorted_by_key(|x| x.0[i]);
+            }
+            coefficients_iter
+                .map(|(k, v)| Self::term_print(k, v))
+                .join(" + ")
         };
 
         write!(f, "{}", output)
@@ -2328,7 +2329,7 @@ mod test_mpolynomials {
             coefficients: mcoef,
         };
 
-        let expected = "1 + 5*x_1 + 6*x_0^2 + 7*x_0^3*x_1^4";
+        let expected = "1 + 6*x_0^2 + 5*x_1 + 7*x_0^3*x_1^4";
         assert_eq!(expected, format!("{}", mpoly));
     }
 }
