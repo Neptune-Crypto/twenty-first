@@ -61,11 +61,10 @@ impl GetRandomElements for Blake3Hash {
         let mut values: Vec<Blake3Hash> = Vec::with_capacity(length);
 
         while values.len() < length {
-            let hi = prng.next_u64();
-            let lo = prng.next_u64();
-            let combined: u128 = ((hi as u128) << 64) & (lo as u128);
+            let mut random_256bits = [0u8; 32];
+            prng.fill_bytes(&mut random_256bits);
 
-            values.push(Blake3Hash::from(combined));
+            values.push(Blake3Hash::from(random_256bits));
         }
 
         values
@@ -103,7 +102,7 @@ mod blake3_wrapper_test {
 
     #[test]
     fn generate_random_digests() {
-        let n = 1001;
+        let n = 17;
         let mut rng = rand::thread_rng();
         let digests = Blake3Hash::random_elements(n, &mut rng);
 
