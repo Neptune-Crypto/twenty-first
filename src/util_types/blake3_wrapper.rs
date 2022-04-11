@@ -1,5 +1,9 @@
+use rand::prelude::ThreadRng;
+use rand::RngCore;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Serialize};
+
+use crate::shared_math::traits::GetRandomElements;
 
 /// A wrapper around `blake3::Hash` because it does not Serialize.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -52,6 +56,22 @@ pub fn hash(bytes: &[u8]) -> Blake3Hash {
     Blake3Hash(blake3::hash(bytes))
 }
 
+impl GetRandomElements for Blake3Hash {
+    fn random_elements(length: usize, prng: &mut ThreadRng) -> Vec<Self> {
+        let mut values: Vec<Blake3Hash> = Vec::with_capacity(length);
+
+        while values.len() < length {
+            let hi = prng.next_u64();
+            let lo = prng.next_u64();
+            let combined: u128 = ((hi as u128) << 64) & (lo as u128);
+
+            values.push(Blake3Hash::from(combined));
+        }
+
+        values
+    }
+}
+
 #[cfg(test)]
 mod blake3_wrapper_test {
     use super::*;
@@ -79,5 +99,14 @@ mod blake3_wrapper_test {
 
         assert_eq!(std::mem::size_of::<Blake3Hash>(), 32);
         assert_eq!(bytes.len(), 32);
+    }
+
+    #[test]
+    fn generate_random_digests() {
+        let n = 1001;
+        let mut rng = rand::thread_rng();
+        let digests = Blake3Hash::random_elements(n, &mut rng);
+
+        assert_eq!(n, digests.len())
     }
 }
