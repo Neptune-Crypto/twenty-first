@@ -135,27 +135,27 @@ where
             .collect()
     }
 
-    pub fn from_vec(values: &[Value], zero: &Value) -> Self {
+    // TODO: Experiment, only been tested indirectly, through `from_vec` which calls
+    // this function
+    pub fn from_digests(digests: &[H::Digest], zero: &H::Digest) -> Self {
         assert!(
-            other::is_power_of_two(values.len()),
+            other::is_power_of_two(digests.len()),
             "Size of input for Merkle tree must be a power of 2"
         );
-
-        let mut hasher = H::new();
-        let zero_hash = hasher.hash(zero);
 
         let mut nodes: Vec<Node<Value, H::Digest>> = vec![
             Node {
                 value: None,
-                hash: zero_hash,
+                hash: zero.to_owned(),
             };
-            2 * values.len()
+            2 * digests.len()
         ];
-        for i in 0..values.len() {
-            nodes[values.len() + i].hash = hasher.hash(&values[i].to_digest());
-            nodes[values.len() + i].value = Some(values[i].clone());
+
+        for i in 0..digests.len() {
+            nodes[digests.len() + i].hash = digests[i].to_owned();
         }
 
+        let mut hasher = H::new();
         // loop from `len(L) - 1` to 1
         for i in (1..(nodes.len() / 2)).rev() {
             let left = nodes[i * 2].hash.clone();
@@ -165,15 +165,37 @@ where
 
         // nodes[0] is never used for anything.
         let root_hash = nodes[1].hash.clone();
-        let height = log_2_floor(values.len() as u64) as u8 + 1;
+        let height = log_2_floor(digests.len() as u64) as u8 + 1;
         let _hasher = PhantomData;
 
-        MerkleTree {
+        Self {
             root_hash,
             nodes,
             height,
             _hasher,
         }
+    }
+
+    pub fn from_vec(values: &[Value], zero: &Value) -> Self {
+        assert!(
+            other::is_power_of_two(values.len()),
+            "Size of input for Merkle tree must be a power of 2"
+        );
+
+        // find all digests
+        let mut hasher = H::new();
+        let digests: Vec<H::Digest> = values
+            .iter()
+            .map(|val| hasher.hash(&val.to_digest()))
+            .collect();
+        let mut mt = Self::from_digests(&digests, &zero.to_digest());
+
+        // Populate the values since `from_digests` leaves the values as `None`
+        for i in 0..values.len() {
+            mt.nodes[values.len() + i].value = Some(values[i].clone());
+        }
+
+        mt
     }
 
     pub fn get_proof(&self, mut index: usize) -> Vec<Node<Value, H::Digest>> {
@@ -221,7 +243,7 @@ where
         auth_path
     }
 
-    fn verify_authentication_path_from_leaf_hash(
+    pub fn verify_authentication_path_from_leaf_hash(
         root_hash: H::Digest,
         index: u32,
         leaf_hash: H::Digest,
@@ -974,7 +996,7 @@ mod merkle_tree_test {
 
             for _ in 0..3 {
                 // Ask for an arbitrary amount of indices less than the total
-                let n_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
+                let mut n_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
 
                 // Generate that amount of indices in the valid index range [0,128)
                 let indices: Vec<usize> =
@@ -983,6 +1005,9 @@ mod merkle_tree_test {
                         .map(|x| *x as usize)
                         .unique()
                         .collect();
+
+                // Prevent out of bounds later in case a duplicate index was removed.
+                n_indices = indices.len();
 
                 let proof = tree.get_leafless_multi_proof_with_values(&indices);
 

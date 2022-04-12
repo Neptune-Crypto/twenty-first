@@ -18,7 +18,6 @@ pub fn log_2_floor(x: u64) -> u64 {
 }
 
 pub fn log_2_ceil(x: u64) -> u64 {
-    // if x is a power of 2, return log_2_floor. Otherwise return log_2_floor + 1.
     if is_power_of_two(x) {
         log_2_floor(x)
     } else {

@@ -2,7 +2,7 @@
 name = "twenty-first"
 version = "0.1.0"
 authors = ["sword_smith <thorkilk@gmail.me>"]
-edition = "2018"
+edition = "2021"
 
 [dev-dependencies]
 criterion = "0.3"
@@ -18,6 +18,7 @@ anyhow = "1.0"
 bincode = "1.3"
 blake3 = "1.2"
 byteorder = "1.4"
+console = "0"
 hashbrown = "0.12"
 itertools = "0.10"
 num-bigint = { version = "0.4", features = ["serde"] }
@@ -40,9 +41,17 @@ name = "polynomial_square"
 harness = false
 
 [[bench]]
+name = "stark_bf"
+harness = false
+
+[[bench]]
 name = "ntt_forward"
 harness = false
-# [[bench]]# name = "rpsss_bench_sign"# harness = false
+
+# [[bench]]
+# name = "rpsss_bench_sign"
+# harness = false
+
 # [[bench]]
 # name = "rpsss_bench_verify"
 # harness = false
@@ -52,7 +61,7 @@ name = "rescue_prime_air_constraints"
 harness = false
 
 [[bench]]
-name = "stark"
+name = "stark_rp"
 harness = false
 
 [profile.dev]

@@ -13,6 +13,7 @@ use std::fmt;
 use std::{collections::HashMap, error::Error};
 
 use super::stark_constraints_pfe_flexible::BoundaryConstraint;
+use super::stark_verify_error::{MerkleProofError, StarkVerifyError};
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;
@@ -132,7 +133,7 @@ impl<'a> StarkPrimeFieldElementFlexible {
             self.omicron_domain.len(),
         );
         let transition_zerofier_codeword: Vec<PrimeFieldElementFlexible> = transition_zerofier
-            .fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain_length);
+            .fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain.length);
         let transition_zerofier_mt =
             MerkleTree::<PrimeFieldElementFlexible, StarkPfeHasher>::from_vec(
                 &transition_zerofier_codeword,
@@ -176,42 +177,6 @@ pub enum StarkProofError {
 impl Error for StarkProofError {}
 
 impl fmt::Display for StarkProofError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum MerkleProofError {
-    BoundaryQuotientError(usize),
-    RandomizerError,
-    TransitionZerofierError,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum StarkVerifyError {
-    BadAirPaths,
-    BadNextAirPaths,
-    BadAirBoundaryIndentity(usize),
-    BadAirTransitionIdentity(usize),
-    BadBoundaryConditionAuthenticationPaths,
-    BadMerkleProof(MerkleProofError),
-    LinearCombinationAuthenticationPath,
-    LinearCombinationMismatch(usize), // integer refers to first index where a mismatch is found
-    LinearCombinationTupleMismatch(usize), // integer refers to first index where a mismatch is found
-    InputOutputMismatch,
-    HighDegreeExtendedComputationalTrace,
-    HighDegreeBoundaryQuotient,
-    HighDegreeTransitionQuotient,
-    HighDegreeLinearCombination,
-    MissingPreprocessedValues,
-    NonZeroBoundaryRemainder,
-    NonZeroTransitionRemainder,
-}
-
-impl Error for StarkVerifyError {}
-
-impl fmt::Display for StarkVerifyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -429,7 +394,7 @@ impl StarkPrimeFieldElementFlexible {
         > = vec![];
         for bq in boundary_quotients.iter() {
             let boundary_quotient_codeword: Vec<PrimeFieldElementFlexible> =
-                bq.fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain_length);
+                bq.fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain.length);
             let bq_merkle_tree = MerkleTree::from_vec(&boundary_quotient_codeword, &self.omega);
             proof_stream.enqueue(&bq_merkle_tree.get_root())?;
             boundary_quotient_merkle_trees.push(bq_merkle_tree);
@@ -485,7 +450,7 @@ impl StarkPrimeFieldElementFlexible {
         };
 
         let randomizer_codeword: Vec<PrimeFieldElementFlexible> = randomizer_polynomial
-            .fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain_length);
+            .fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain.length);
         let randomizer_mt = MerkleTree::<PrimeFieldElementFlexible, StarkPfeHasher>::from_vec(
             &randomizer_codeword,
             &self.omega,
@@ -545,7 +510,7 @@ impl StarkPrimeFieldElementFlexible {
         let combined_codeword = combination.fast_coset_evaluate(
             &self.field_generator,
             self.omega,
-            self.fri.domain_length,
+            self.fri.domain.length,
         );
 
         // Prove low degree of combination polynomial, and collect indices
@@ -556,14 +521,14 @@ impl StarkPrimeFieldElementFlexible {
         duplicated_indices.append(
             &mut indices
                 .into_iter()
-                .map(|i| (i + self.expansion_factor) % self.fri.domain_length)
+                .map(|i| (i + self.expansion_factor) % self.fri.domain.length)
                 .collect(),
         );
         let mut quadrupled_indices = duplicated_indices.clone();
         quadrupled_indices.append(
             &mut duplicated_indices
                 .into_iter()
-                .map(|i| (i + self.fri.domain_length / 2) % self.fri.domain_length)
+                .map(|i| (i + self.fri.domain.length / 2) % self.fri.domain.length)
                 .collect(),
         );
         quadrupled_indices.sort_unstable();
@@ -642,7 +607,7 @@ impl StarkPrimeFieldElementFlexible {
         duplicated_indices.append(
             &mut indices
                 .iter()
-                .map(|i| (*i + self.expansion_factor) % self.fri.domain_length)
+                .map(|i| (*i + self.expansion_factor) % self.fri.domain.length)
                 .collect(),
         );
         duplicated_indices.sort_unstable();
@@ -734,7 +699,7 @@ impl StarkPrimeFieldElementFlexible {
             let current_x: PrimeFieldElementFlexible =
                 self.field_generator * self.omega.mod_pow(current_index.into());
             let next_index: usize =
-                (current_index + self.expansion_factor) % self.fri.domain_length;
+                (current_index + self.expansion_factor) % self.fri.domain.length;
             let next_x: PrimeFieldElementFlexible =
                 self.field_generator * self.omega.mod_pow(next_index.into());
             let mut current_trace: Vec<PrimeFieldElementFlexible> = (0..self.register_count)

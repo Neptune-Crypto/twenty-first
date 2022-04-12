@@ -15,10 +15,12 @@ use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 use std::rc::Rc;
 use std::{cmp, fmt};
 
+use super::b_field_element::BFieldElement;
 use super::traits::PrimeField;
+use super::x_field_element::XFieldElement;
 
 type MCoefficients<T> = HashMap<Vec<u64>, T>;
-type Degree = i64;
+pub type Degree = i64;
 
 const EDMONDS_WEIGHT_CUTOFF_FACTOR: u64 = 2;
 
@@ -242,6 +244,21 @@ impl<PFElem: PrimeField> Display for MPolynomial<PFElem> {
     }
 }
 
+impl MPolynomial<BFieldElement> {
+    // TODO: Consider moving to STARK where it is actually used, or somewhere else?
+    pub fn lift_coefficients_to_xfield(&self) -> MPolynomial<XFieldElement> {
+        let mut new_coefficients: HashMap<Vec<u64>, XFieldElement> = HashMap::new();
+        self.coefficients.iter().for_each(|(key, value)| {
+            new_coefficients.insert(key.to_owned(), value.lift());
+        });
+
+        MPolynomial {
+            variable_count: self.variable_count,
+            coefficients: new_coefficients,
+        }
+    }
+}
+
 impl<PFElem: PrimeField> PartialEq for MPolynomial<PFElem> {
     fn eq(&self, other: &Self) -> bool {
         let (shortest, var_count, longest) = if self.variable_count > other.variable_count {
@@ -331,7 +348,17 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         true
     }
 
+    /// Returns an `MPolynomial` instance over `variable_count` variables
+    /// that evaluates to `element` everywhere.
+    /// I.e.
+    ///     P(x,y..,z) = element
+    ///
+    /// Note that in this encoding
+    ///     P(x,y) == P(x,w)
+    /// but
+    ///     P(x,y) != P(x,y,z).
     pub fn from_constant(element: PFElem, variable_count: usize) -> Self {
+        // Potential guarantee: assert!(!element.zero);
         let mut cs: MCoefficients<PFElem> = HashMap::new();
         cs.insert(vec![0; variable_count], element);
         Self {
@@ -340,9 +367,9 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         }
     }
 
-    // Returns the multivariate polynomials representing each indeterminates linear function
-    // with a leading coefficient of one. For three indeterminates, returns:
-    // [f(x,y,z) = x, f(x,y,z) = y, f(x,y,z) = z]
+    /// Returns the multivariate polynomials representing each indeterminates linear function
+    /// with a leading coefficient of one. For three indeterminates, returns:
+    /// [f(x,y,z) = x, f(x,y,z) = y, f(x,y,z) = z]
     pub fn variables(variable_count: usize, one: PFElem) -> Vec<Self> {
         assert!(one.is_one(), "Provided one must be one");
         let mut res: Vec<Self> = vec![];
@@ -516,7 +543,7 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         assert_eq!(
             self.variable_count,
             point.len(),
-            "Dimensionality of multivariate polynomial and point must agree in evaluate"
+            "Dimensionality of multivariate polynomial, {}, and dimensionality of point, {}, must agree in evaluate", self.variable_count, point.len()
         );
         let mut acc = point[0].ring_zero();
         for (k, v) in self.coefficients.iter() {
@@ -1376,6 +1403,19 @@ mod test_mpolynomials {
         let q = 23;
         assert_eq!(get_big_mpol(q), get_big_mpol_extra_variabel(q));
         assert_ne!(get_big_mpol(q), get_big_mpol_extra_variabel(q) + get_x(q));
+    }
+
+    #[test]
+    fn lift_coefficients_to_xfield_test() {
+        let b_field_mpol = gen_mpolynomial(4, 6, 4, 100);
+        let x_field_mpol = b_field_mpol.lift_coefficients_to_xfield();
+        assert_eq!(b_field_mpol.degree(), x_field_mpol.degree());
+        for (exponents, coefficient) in x_field_mpol.coefficients.iter() {
+            assert_eq!(
+                coefficient.unlift().unwrap(),
+                b_field_mpol.coefficients[exponents]
+            );
+        }
     }
 
     #[test]

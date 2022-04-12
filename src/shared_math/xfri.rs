@@ -1,14 +1,13 @@
 use super::b_field_element::BFieldElement;
 use super::other::{log_2_ceil, log_2_floor};
 use super::polynomial::Polynomial;
-use super::traits::ModPowU32;
+use super::stark::brainfuck::stark_proof_stream::{Item, StarkProofStream};
+use super::traits::{CyclicGroupGenerator, ModPowU32};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::traits::{IdentityValues, PrimeField};
 use crate::util_types::merkle_tree::{LeaflessPartialAuthenticationPath, MerkleTree};
-use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
-use crate::utils::{blake3_digest, get_index_from_bytes};
 use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
@@ -32,43 +31,13 @@ pub enum ValidationError {
 }
 
 #[derive(Debug, Clone)]
-pub struct FriDomain<PF: PrimeField> {
-    pub offset: PF,
-    pub omega: PF,
+pub struct FriDomain {
+    pub offset: XFieldElement,
+    pub omega: XFieldElement,
     pub length: usize,
 }
 
-// impl<PF: PrimeField> FriDomain<PF> {
-//     pub fn x_value(&self, index: u32) -> PF {
-//         self.omega.mod_pow_u32(index) * self.offset
-//     }
-
-//     pub fn x_values(&self) -> Vec<PF> {
-//         (0..self.length)
-//             .map(|i| self.omega.mod_pow_u32(i as u32) * self.offset)
-//             .collect()
-//     }
-
-//     pub fn evaluate(&self, polynomial: &Polynomial<PF>, zero: PF) -> Vec<PF> {
-//         assert!(zero.is_zero(), "zero must be zero");
-//         let mut polynomial_representation: Vec<PF> =
-//             polynomial.scale(&self.offset).coefficients.clone();
-//         polynomial_representation.resize(self.length as usize, zero);
-//         ntt(
-//             &mut polynomial_representation,
-//             self.omega,
-//             log_2_ceil(self.length as u64) as u32,
-//         );
-
-//         polynomial_representation
-//     }
-
-//     pub fn interpolate(&self, values: &[PF]) -> Polynomial<PF> {
-//         Polynomial::<PF>::fast_coset_interpolate(&self.offset, self.omega, values)
-//     }
-// }
-
-impl FriDomain<XFieldElement> {
+impl FriDomain {
     pub fn x_evaluate(&self, polynomial: &Polynomial<XFieldElement>) -> Vec<XFieldElement> {
         polynomial.fast_coset_evaluate(&self.offset, self.omega, self.length as usize)
     }
@@ -118,23 +87,22 @@ impl FriDomain<XFieldElement> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Fri<PF: PrimeField, H> {
+pub struct Fri<H> {
     pub expansion_factor: usize,         // = domain_length / trace_length
     pub colinearity_checks_count: usize, // number of colinearity checks in each round
-    pub domain: FriDomain<PF>,
+    pub domain: FriDomain,
     _hasher: PhantomData<H>,
 }
 
 type CodewordEvaluation<T> = (usize, T);
 
-impl<PF, H> Fri<PF, H>
+impl<H> Fri<H>
 where
-    PF: PrimeField + ToDigest<H::Digest>,
-    H: Hasher,
+    H: Hasher<Digest = Vec<BFieldElement>>,
 {
     pub fn new(
-        offset: PF,
-        omega: PF,
+        offset: XFieldElement,
+        omega: XFieldElement,
         domain_length: usize,
         expansion_factor: usize,
         colinearity_checks_count: usize,
@@ -155,8 +123,8 @@ where
 
     pub fn prove(
         &self,
-        codeword: &[PF],
-        proof_stream: &mut ProofStream,
+        codeword: &[XFieldElement],
+        proof_stream: &mut StarkProofStream,
     ) -> Result<Vec<usize>, Box<dyn Error>> {
         assert_eq!(
             self.domain.length,
@@ -165,11 +133,12 @@ where
         );
 
         // Commit phase
-        let merkle_trees: Vec<MerkleTree<PF, H>> = self.commit(codeword, proof_stream)?;
-        let codewords: Vec<Vec<PF>> = merkle_trees.iter().map(|x| x.to_vec()).collect();
+        let merkle_trees: Vec<MerkleTree<XFieldElement, H>> =
+            self.commit(codeword, proof_stream)?;
+        let codewords: Vec<Vec<XFieldElement>> = merkle_trees.iter().map(|x| x.to_vec()).collect();
 
         // fiat-shamir phase (get indices)
-        let top_level_indices = self.sample_indices(&proof_stream.prover_fiat_shamir());
+        let top_level_indices: Vec<usize> = self.sample_indices(&proof_stream.prover_fiat_shamir());
 
         // query phase
         let mut c_indices = top_level_indices.clone();
@@ -179,6 +148,7 @@ where
                 .iter()
                 .map(|x| x % (codewords[i].len() / 2))
                 .collect();
+
             self.query(
                 merkle_trees[i].clone(),
                 merkle_trees[i + 1].clone(),
@@ -192,21 +162,23 @@ where
 
     fn commit(
         &self,
-        codeword: &[PF],
-        proof_stream: &mut ProofStream,
-    ) -> Result<Vec<MerkleTree<PF, H>>, Box<dyn Error>> {
+        codeword: &[XFieldElement],
+        proof_stream: &mut StarkProofStream,
+    ) -> Result<Vec<MerkleTree<XFieldElement, H>>, Box<dyn Error>> {
         let mut generator = self.domain.omega;
         let mut offset = self.domain.offset;
         let mut codeword_local = codeword.to_vec();
 
-        let zero: PF = generator.ring_zero();
-        let one: PF = generator.ring_one();
-        let two: PF = one + one;
+        let zero: XFieldElement = generator.ring_zero();
+        let one: XFieldElement = generator.ring_one();
+        let two: XFieldElement = one + one;
         let two_inv = one / two;
 
         // Compute and send Merkle root
         let mut mt = MerkleTree::from_vec(&codeword_local, &zero);
-        proof_stream.enqueue_length_prepended(mt.get_root())?;
+        let mt_root: &<H as Hasher>::Digest = mt.get_root();
+        // proof_stream.enqueue_length_prepended(mt_root)?;
+        proof_stream.enqueue(&Item::MerkleRoot(mt_root.to_owned()));
         let mut merkle_trees = vec![mt];
 
         let (num_rounds, _) = self.num_rounds();
@@ -218,15 +190,16 @@ where
 
             // Get challenge, one just acts as *any* element in this field -- the field element
             // is completely determined from the byte stream.
-            let alpha: PF = one.from_vecu8(proof_stream.prover_fiat_shamir());
+            let _alpha: H::Digest = proof_stream.prover_fiat_shamir();
+            let alpha: XFieldElement = XFieldElement::new([_alpha[0], _alpha[1], _alpha[2]]);
 
-            let x_offset: Vec<PF> = generator
+            let x_offset: Vec<XFieldElement> = generator
                 .get_cyclic_group_elements(None)
                 .into_iter()
                 .map(|x| x * offset)
                 .collect();
 
-            let x_offset_inverses = PF::batch_inversion(x_offset);
+            let x_offset_inverses = XFieldElement::batch_inversion(x_offset);
             for i in 0..n / 2 {
                 codeword_local[i] = two_inv
                     * ((one + alpha * x_offset_inverses[i]) * codeword_local[i]
@@ -236,7 +209,9 @@ where
 
             // Compute and send Merkle root
             mt = MerkleTree::from_vec(&codeword_local, &zero);
-            proof_stream.enqueue_length_prepended(mt.get_root())?;
+            // proof_stream.enqueue_length_prepended(mt.get_root())?;
+            let mt_root: &H::Digest = mt.get_root();
+            proof_stream.enqueue(&Item::MerkleRoot(mt_root.to_owned()));
             merkle_trees.push(mt);
 
             // Update subgroup generator and offset
@@ -245,14 +220,17 @@ where
         }
 
         // Send the last codeword
-        let last_codeword = codeword_local;
-        proof_stream.enqueue_length_prepended(&last_codeword)?;
+        let last_codeword: Vec<XFieldElement> = codeword_local;
+        // proof_stream.enqueue_length_prepended(&last_codeword)?;
+        proof_stream.enqueue(&Item::FriCodeword(last_codeword));
 
         Ok(merkle_trees)
     }
 
     // Return the c-indices for the 1st round of FRI
-    fn sample_indices(&self, seed: &[u8]) -> Vec<usize> {
+    fn sample_indices(&self, seed: &H::Digest) -> Vec<usize> {
+        let mut hasher = H::new();
+
         // This algorithm starts with the inner-most indices to pick up
         // to `last_codeword_length` indices from the codeword in the last round.
         // It then calculates the indices in the subsequent rounds by choosing
@@ -265,14 +243,18 @@ where
             "Requested number of indices must not exceed length of last codeword"
         );
 
+        // TODO: FRI's sample_indices can be expressed using simple_hasher's get_n_hash_rounds(),
+        // since both use counter mode. But because FRI uses counter mode over two separate loops,
+        // enough hash rounds must be made for both loops.
+        let _total_hash_rounds = self.colinearity_checks_count * num_rounds as usize;
+
         let mut last_indices: Vec<usize> = vec![];
         let mut remaining_last_round_exponents: Vec<usize> = (0..last_codeword_length).collect();
         let mut counter = 0u32;
         for _ in 0..self.colinearity_checks_count {
-            let mut seed_local: Vec<u8> = seed.to_vec();
-            seed_local.append(&mut counter.to_be_bytes().into());
-            let hash = blake3_digest(&seed_local);
-            let index: usize = get_index_from_bytes(&hash, remaining_last_round_exponents.len());
+            let digest: H::Digest = hasher.hash_pair(seed, &(counter as u128).to_digest());
+            let index: usize =
+                hasher.sample_index_not_power_of_two(&digest, remaining_last_round_exponents.len());
             last_indices.push(remaining_last_round_exponents.remove(index));
             counter += 1;
         }
@@ -284,10 +266,8 @@ where
 
             let mut new_indices: Vec<usize> = vec![];
             for index in indices {
-                let mut seed_local: Vec<u8> = seed.to_vec();
-                seed_local.append(&mut counter.to_be_bytes().into());
-                let hash = blake3_digest(&seed_local);
-                let reduce_modulo: bool = get_index_from_bytes(&hash, 2) == 0;
+                let digest: H::Digest = hasher.hash_pair(seed, &(counter as u128).to_digest());
+                let reduce_modulo: bool = hasher.sample_index(&digest, 2) == 0;
                 let new_index = if reduce_modulo {
                     index + codeword_length / 2
                 } else {
@@ -306,10 +286,10 @@ where
 
     fn query(
         &self,
-        current_mt: MerkleTree<PF, H>,
-        next_mt: MerkleTree<PF, H>,
+        current_mt: MerkleTree<XFieldElement, H>,
+        next_mt: MerkleTree<XFieldElement, H>,
         c_indices: &[usize],
-        proof_stream: &mut ProofStream,
+        proof_stream: &mut StarkProofStream,
     ) -> Result<(), Box<dyn Error>> {
         let a_indices: Vec<usize> = c_indices.to_vec();
         let mut b_indices: Vec<usize> = c_indices
@@ -320,45 +300,49 @@ where
         ab_indices.append(&mut b_indices);
 
         // Reveal authentication paths
-        let current_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, PF)> =
+        let current_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, XFieldElement)> =
             current_mt.get_leafless_multi_proof_with_values(&ab_indices);
 
-        let next_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, PF)> =
+        let next_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, XFieldElement)> =
             next_mt.get_leafless_multi_proof_with_values(c_indices);
 
-        proof_stream.enqueue_length_prepended(&current_proof)?;
-        proof_stream.enqueue_length_prepended(&next_proof)?;
+        proof_stream.enqueue(&Item::FriProof(current_proof));
+        proof_stream.enqueue(&Item::FriProof(next_proof));
 
         Ok(())
     }
 
     pub fn verify(
         &self,
-        proof_stream: &mut ProofStream,
-    ) -> Result<Vec<CodewordEvaluation<PF>>, Box<dyn Error>> {
+        proof_stream: &mut StarkProofStream,
+    ) -> Result<Vec<CodewordEvaluation<XFieldElement>>, Box<dyn Error>> {
         let mut omega = self.domain.omega;
         let mut offset = self.domain.offset;
         let (num_rounds, degree_of_last_round) = self.num_rounds();
 
         // Extract all roots and calculate alpha, the challenges
         let mut roots: Vec<H::Digest> = vec![];
-        let mut alphas: Vec<PF> = vec![];
-        let first_root: H::Digest = proof_stream.dequeue_length_prepended::<H::Digest>()?;
+        let mut alphas: Vec<XFieldElement> = vec![];
+        // let first_root: H::Digest = proof_stream.dequeue_length_prepended::<H::Digest>()?;
+        let first_root: H::Digest = proof_stream.dequeue()?.as_merkle_root()?;
         roots.push(first_root);
 
         for _ in 0..num_rounds {
             // Get a challenge from the proof stream
-            let alpha: PF = omega.from_vecu8(proof_stream.verifier_fiat_shamir());
+            let _alpha: H::Digest = proof_stream.verifier_fiat_shamir();
+            let alpha: XFieldElement = XFieldElement::new([_alpha[0], _alpha[1], _alpha[2]]);
             alphas.push(alpha);
-            roots.push(proof_stream.dequeue_length_prepended::<H::Digest>()?);
+
+            let root: H::Digest = proof_stream.dequeue()?.as_merkle_root()?;
+            roots.push(root);
         }
 
         // Extract last codeword
-        let mut last_codeword: Vec<PF> = proof_stream.dequeue_length_prepended::<Vec<PF>>()?;
+        let mut last_codeword: Vec<XFieldElement> = proof_stream.dequeue()?.as_fri_codeword()?;
 
         // Check if last codeword matches the given root
         let zero = omega.ring_zero();
-        let last_codeword_mt = MerkleTree::<PF, H>::from_vec(&last_codeword, &zero);
+        let last_codeword_mt = MerkleTree::<XFieldElement, H>::from_vec(&last_codeword, &zero);
         let last_root = roots.last().unwrap();
         if last_root != last_codeword_mt.get_root() {
             return Err(Box::new(ValidationError::BadMerkleRootForLastCodeword));
@@ -377,8 +361,8 @@ where
         // trace subgroup since we only check its degree and don't use
         // it further.
         let log_2_of_n = log_2_floor(last_codeword.len() as u64) as u32;
-        intt::<PF>(&mut last_codeword, last_omega, log_2_of_n);
-        let last_poly_degree: isize = (Polynomial::<PF> {
+        intt::<XFieldElement>(&mut last_codeword, last_omega, log_2_of_n);
+        let last_poly_degree: isize = (Polynomial::<XFieldElement> {
             coefficients: last_codeword,
         })
         .degree();
@@ -386,10 +370,11 @@ where
             return Err(Box::new(ValidationError::LastIterationTooHighDegree));
         }
 
-        let top_level_indices = self.sample_indices(&proof_stream.verifier_fiat_shamir());
+        let seed: H::Digest = proof_stream.verifier_fiat_shamir();
+        let top_level_indices: Vec<usize> = self.sample_indices(&seed);
 
         // for every round, check consistency of subsequent layers
-        let mut codeword_evaluations: Vec<CodewordEvaluation<PF>> = vec![];
+        let mut codeword_evaluations: Vec<CodewordEvaluation<XFieldElement>> = vec![];
         for r in 0..num_rounds as usize {
             // Fold c indices
             let c_indices: Vec<usize> = top_level_indices
@@ -407,13 +392,13 @@ where
             ab_indices.append(&mut b_indices.clone());
 
             // Read values and check colinearity
-            let ab_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, PF)> =
-                proof_stream.dequeue_length_prepended()?;
-            let c_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, PF)> =
-                proof_stream.dequeue_length_prepended()?;
+            let ab_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, XFieldElement)> =
+                proof_stream.dequeue()?.as_fri_proof()?;
+            let c_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, XFieldElement)> =
+                proof_stream.dequeue()?.as_fri_proof()?;
 
             // verify Merkle authentication paths
-            if !MerkleTree::<PF, H>::verify_leafless_multi_proof(
+            if !MerkleTree::<XFieldElement, H>::verify_leafless_multi_proof(
                 roots[r].clone(),
                 &ab_indices,
                 &ab_proof,
@@ -421,7 +406,7 @@ where
                 return Err(Box::new(ValidationError::BadMerkleProof));
             }
 
-            if !MerkleTree::<PF, H>::verify_leafless_multi_proof(
+            if !MerkleTree::<XFieldElement, H>::verify_leafless_multi_proof(
                 roots[r + 1].clone(),
                 &c_indices,
                 &c_proof,
@@ -437,25 +422,29 @@ where
             }
 
             // Colinearity check
-            let axs: Vec<PF> = (0..self.colinearity_checks_count)
+            let axs: Vec<XFieldElement> = (0..self.colinearity_checks_count)
                 .map(|i| offset * omega.mod_pow_u32(a_indices[i] as u32))
                 .collect();
-            let bxs: Vec<PF> = (0..self.colinearity_checks_count)
+            let bxs: Vec<XFieldElement> = (0..self.colinearity_checks_count)
                 .map(|i| offset * omega.mod_pow_u32(b_indices[i] as u32))
                 .collect();
-            let cx: PF = alphas[r];
-            let ays: Vec<PF> = (0..self.colinearity_checks_count)
+            let cx: XFieldElement = alphas[r];
+            let ays: Vec<XFieldElement> = (0..self.colinearity_checks_count)
                 .map(|i| ab_proof[i].1)
                 .collect();
-            let bys: Vec<PF> = (0..self.colinearity_checks_count)
+            let bys: Vec<XFieldElement> = (0..self.colinearity_checks_count)
                 .map(|i| ab_proof[i + self.colinearity_checks_count].1)
                 .collect();
-            let cys: Vec<PF> = (0..self.colinearity_checks_count)
+            let cys: Vec<XFieldElement> = (0..self.colinearity_checks_count)
                 .map(|i| c_proof[i].1)
                 .collect();
 
             if (0..self.colinearity_checks_count).any(|i| {
-                !Polynomial::<PF>::are_colinear_3((axs[i], ays[i]), (bxs[i], bys[i]), (cx, cys[i]))
+                !Polynomial::<XFieldElement>::are_colinear_3(
+                    (axs[i], ays[i]),
+                    (bxs[i], bys[i]),
+                    (cx, cys[i]),
+                )
             }) {
                 return Err(Box::new(ValidationError::NotColinear(r)));
             }
@@ -475,7 +464,7 @@ where
         Ok(codeword_evaluations)
     }
 
-    pub fn get_evaluation_domain(&self) -> Vec<PF> {
+    pub fn get_evaluation_domain(&self) -> Vec<XFieldElement> {
         let omega_domain = self.domain.omega.get_cyclic_group_elements(None);
         omega_domain
             .into_iter()
@@ -570,26 +559,23 @@ mod fri_domain_tests {
 }
 
 #[cfg(test)]
-mod fri_tests {
+mod xfri_tests {
     use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use crate::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
-    use crate::shared_math::{
-        b_field_element::BFieldElement, traits::GetPrimitiveRootOfUnity,
-        x_field_element::XFieldElement,
-    };
+    use crate::shared_math::x_field_element::XFieldElement;
+    use crate::util_types::simple_hasher::{RescuePrimeProduction, ToDigest};
     use itertools::Itertools;
-    use serde::de::DeserializeOwned;
-    use serde::Serialize;
 
     #[test]
     fn get_rounds_count_test() {
-        type Digest = crate::util_types::blake3_wrapper::Blake3Hash;
-        type Hasher = blake3::Hasher;
+        type Hasher = RescuePrimeProduction;
 
         let subgroup_order = 512;
         let expansion_factor = 4;
-        let mut fri: Fri<XFieldElement, Hasher> =
-            get_x_field_fri_test_object::<Digest, Hasher>(subgroup_order, expansion_factor, 2);
+        let mut fri: Fri<Hasher> =
+            get_x_field_fri_test_object::<Hasher>(subgroup_order, expansion_factor, 2);
 
         assert_eq!((7, 0), fri.num_rounds());
         fri.colinearity_checks_count = 8;
@@ -646,30 +632,15 @@ mod fri_tests {
     }
 
     #[test]
-    fn fri_on_b_field_test() {
-        type Hasher = blake3::Hasher;
-
-        let fri: Fri<BFieldElement, Hasher> = get_b_field_fri_test_object();
-        let mut proof_stream: ProofStream = ProofStream::default();
-        let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
-
-        fri.prove(&subgroup, &mut proof_stream).unwrap();
-        let verify_result = fri.verify(&mut proof_stream);
-        assert!(verify_result.is_ok(), "FRI verification must succeed");
-
-        println!("{:?}", fri);
-    }
-
-    #[test]
     fn fri_on_x_field_test() {
-        type Hasher = blake3::Hasher;
+        type Hasher = RescuePrimeProduction;
 
         let subgroup_order = 1024;
         let expansion_factor = 4;
         let colinearity_check_count = 6;
-        let fri: Fri<XFieldElement, Hasher> =
+        let fri: Fri<Hasher> =
             get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
-        let mut proof_stream: ProofStream = ProofStream::default();
+        let mut proof_stream: StarkProofStream = StarkProofStream::default();
         let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
 
         fri.prove(&subgroup, &mut proof_stream).unwrap();
@@ -679,21 +650,21 @@ mod fri_tests {
 
     #[test]
     fn fri_x_field_limit_test() {
-        type Hasher = blake3::Hasher;
+        type Hasher = RescuePrimeProduction;
 
         let subgroup_order = 1024;
         let expansion_factor = 4;
         let colinearity_check_count = 6;
-        let fri: Fri<XFieldElement, Hasher> =
+        let fri: Fri<Hasher> =
             get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
         let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
 
         let mut points: Vec<XFieldElement>;
-        for n in &[1, 10, 50, 100, 255] {
-            points = subgroup.clone().iter().map(|p| p.mod_pow_u32(*n)).collect();
+        for n in [1, 10, 50, 100, 255] {
+            points = subgroup.clone().iter().map(|p| p.mod_pow_u32(n)).collect();
 
             // TODO: Test elsewhere that proof_stream can be re-used for multiple .prove().
-            let mut proof_stream: ProofStream = ProofStream::default();
+            let mut proof_stream: StarkProofStream = StarkProofStream::default();
             fri.prove(&points, &mut proof_stream).unwrap();
 
             let verify_result = fri.verify(&mut proof_stream);
@@ -713,45 +684,20 @@ mod fri_tests {
         // Negative test
         let too_high = subgroup_order as u32 / expansion_factor as u32;
         points = subgroup.iter().map(|p| p.mod_pow_u32(too_high)).collect();
-        let mut proof_stream: ProofStream = ProofStream::default();
+        let mut proof_stream: StarkProofStream = StarkProofStream::default();
         fri.prove(&points, &mut proof_stream).unwrap();
         let verify_result = fri.verify(&mut proof_stream);
         assert!(verify_result.is_err());
     }
 
-    fn get_b_field_fri_test_object<Digest, H>() -> Fri<BFieldElement, H>
-    where
-        Digest: ToDigest<Digest> + Clone + PartialEq + Serialize + DeserializeOwned,
-        H: Hasher<Digest = Digest> + Sized,
-        BFieldElement: ToDigest<Digest>,
-    {
-        let subgroup_order = 1024;
-        let (omega, _primes1) =
-            BFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
-        let (offset, _primes2) =
-            BFieldElement::ring_zero().get_primitive_root_of_unity(BFieldElement::QUOTIENT - 1);
-
-        let expansion_factor = 4;
-        let colinearity_checks = 6;
-
-        Fri::<BFieldElement, H>::new(
-            offset.unwrap(),
-            omega.unwrap(),
-            subgroup_order as usize,
-            expansion_factor,
-            colinearity_checks,
-        )
-    }
-
-    fn get_x_field_fri_test_object<Digest, H>(
+    fn get_x_field_fri_test_object<H>(
         subgroup_order: u128,
         expansion_factor: usize,
         colinearity_checks: usize,
-    ) -> Fri<XFieldElement, H>
+    ) -> Fri<H>
     where
-        Digest: ToDigest<Digest> + Clone + PartialEq + Serialize + DeserializeOwned,
-        H: Hasher<Digest = Digest> + Sized,
-        XFieldElement: ToDigest<Digest>,
+        H: Hasher<Digest = Vec<BFieldElement>> + Sized,
+        XFieldElement: ToDigest<H::Digest>,
     {
         let (omega, _primes1): (Option<XFieldElement>, Vec<u128>) =
             XFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
@@ -761,7 +707,7 @@ mod fri_tests {
         // we're not sure it needs to, Alan?
         let offset: Option<XFieldElement> = Some(XFieldElement::new_const(BFieldElement::new(7)));
 
-        let fri: Fri<XFieldElement, H> = Fri::new(
+        let fri: Fri<H> = Fri::new(
             offset.unwrap(),
             omega.unwrap(),
             subgroup_order as usize,
