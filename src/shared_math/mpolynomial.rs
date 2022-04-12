@@ -1212,6 +1212,7 @@ mod test_mpolynomials {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
+    use crate::shared_math::x_field_element::XFieldElement;
     use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
     use primitive_types::U256;
     use rand::RngCore;
