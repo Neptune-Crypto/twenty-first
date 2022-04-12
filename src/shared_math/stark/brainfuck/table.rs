@@ -438,6 +438,9 @@ pub trait TableTrait {
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
         let omicron_inverse = self.omicron().inverse();
+
+        // The zerofier for the terminal quotient has a root in the last
+        // value in the cyclical group generated from omicron.
         let zerofier_codeword: Vec<BFieldElement> = fri_domain
             .b_domain_values()
             .into_iter()

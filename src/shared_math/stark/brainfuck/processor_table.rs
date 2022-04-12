@@ -642,11 +642,11 @@ impl TableTrait for ProcessorTable {
             MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
 
         // FIXME: These anonymous constant offsets into `terminals` are not very clear!
-        let terminals_1 =
+        let processor_memory_permutation_terminal =
             MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
-        let terminals_2 =
+        let processor_input_terminal =
             MPolynomial::<XFieldElement>::from_constant(terminals[2], Self::FULL_WIDTH);
-        let terminals_3 =
+        let processor_output_terminal =
             MPolynomial::<XFieldElement>::from_constant(terminals[3], Self::FULL_WIDTH);
 
         let current_instruction = x[ProcessorTable::CURRENT_INSTRUCTION].clone();
@@ -660,10 +660,10 @@ impl TableTrait for ProcessorTable {
 
         vec![
             current_instruction,
-            terminals_1
+            processor_memory_permutation_terminal
                 - memory_permutation * (beta - d * cycle - e * memory_pointer - f * memory_value),
-            terminals_2 - input_evaluation,
-            terminals_3 - output_evaluation,
+            processor_input_terminal - input_evaluation,
+            processor_output_terminal - output_evaluation,
         ]
     }
 }

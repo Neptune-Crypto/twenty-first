@@ -316,7 +316,7 @@ impl TableTrait for MemoryTable {
             .try_into()
             .unwrap();
 
-        let permutation =
+        let processor_memory_permutation_terminal =
             MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
 
         let x =
@@ -329,7 +329,7 @@ impl TableTrait for MemoryTable {
         vec![
             x[Self::PERMUTATION].clone()
                 * (beta - d * cycle - e * memory_pointer - f * memory_value)
-                - permutation,
+                - processor_memory_permutation_terminal,
         ]
     }
 }

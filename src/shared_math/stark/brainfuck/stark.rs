@@ -384,6 +384,7 @@ impl Stark {
             .borrow()
             .all_quotient_degree_bounds(challenges, terminals);
 
+        // Prove equal initial values for the permutation-extension column pairs
         for pa in self.permutation_arguments.iter() {
             quotient_codewords.push(pa.quotient(&self.fri.domain));
             quotient_degree_bounds.push(pa.quotient_degree_bound());
