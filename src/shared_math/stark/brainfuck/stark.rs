@@ -11,8 +11,8 @@ use crate::shared_math::stark::brainfuck::io_table::IOTable;
 use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
 use crate::shared_math::stark::brainfuck::stark_proof_stream::Item;
-use crate::shared_math::stark::brainfuck::table;
 use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
+use crate::shared_math::stark::brainfuck::{table, vm};
 use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
 use crate::shared_math::traits::{GetRandomElements, Inverse, ModPowU32};
 use crate::shared_math::{
@@ -74,7 +74,7 @@ impl Stark {
 
     pub fn new(
         trace_length: usize,
-        program: Vec<BFieldElement>,
+        source_code: String,
         input_symbols: Vec<BFieldElement>,
         output_symbols: Vec<BFieldElement>,
     ) -> Self {
@@ -94,6 +94,12 @@ impl Stark {
             expansion_factor >= 4,
             "expansion factor must be at least 4."
         );
+
+        // Verify that program compiles
+        let program = match vm::compile(&source_code) {
+            None => panic!("Failed to compile program received. Got: {}", source_code),
+            Some(prog) => prog,
+        };
 
         let num_randomizers = 1;
         let order: usize = 1 << 32;
@@ -1206,13 +1212,14 @@ mod brainfuck_stark_tests {
         //    [0, 2] with cycle = 8
 
         // Run honest execution, verify that it succeeds in prover/verifier
-        let program: Vec<BFieldElement> = brainfuck::vm::compile("+>[++<-]").unwrap();
+        let source_code = "+>[++<-]".to_string();
+        let program: Vec<BFieldElement> = brainfuck::vm::compile(&source_code).unwrap();
         let input_symbols: Vec<BFieldElement> = vec![];
         let regular_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
         let mut regular_stark = Stark::new(
             regular_matrices.processor_matrix.len(),
-            program.clone(),
+            source_code.clone(),
             input_symbols.clone(),
             vec![],
         );
@@ -1225,7 +1232,7 @@ mod brainfuck_stark_tests {
         let mallorys_matrices: BaseMatrices = mallorys_simulate(&program, &input_symbols).unwrap();
         let mut mallorys_stark = Stark::new(
             mallorys_matrices.processor_matrix.len(),
-            program,
+            source_code,
             input_symbols,
             vec![],
         );
@@ -1256,7 +1263,12 @@ mod brainfuck_stark_tests {
         .unwrap();
         let base_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-        let mut stark = Stark::new(trace_length, program, input_symbols, output_symbols);
+        let mut stark = Stark::new(
+            trace_length,
+            brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT.to_string(),
+            input_symbols,
+            output_symbols,
+        );
 
         // TODO: If we set the `DEBUG` environment variable here, we *should* catch a lot of bugs.
         // Do we want to do that?
@@ -1275,7 +1287,12 @@ mod brainfuck_stark_tests {
             brainfuck::vm::run(&program, input.to_vec()).unwrap();
         let base_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-        let mut stark = Stark::new(trace_length, program, input_symbols, output_symbols);
+        let mut stark = Stark::new(
+            trace_length,
+            program_code.to_string(),
+            input_symbols,
+            output_symbols,
+        );
         let mut proof_stream = stark.prove(base_matrices).unwrap();
         let verifier_verdict = stark.verify(&mut proof_stream);
         match verifier_verdict {

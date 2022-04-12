@@ -9,7 +9,12 @@ fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
     let (trace_length, input_symbols, output_symbols) =
         brainfuck::vm::run(&program, input.to_vec()).unwrap();
     let base_matrices: BaseMatrices = brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-    let mut stark = Stark::new(trace_length, program, input_symbols, output_symbols);
+    let mut stark = Stark::new(
+        trace_length,
+        program_code.to_string(),
+        input_symbols,
+        output_symbols,
+    );
     let mut proof_stream = stark.prove(base_matrices).unwrap();
     let verifier_verdict = stark.verify(&mut proof_stream);
     match verifier_verdict {
