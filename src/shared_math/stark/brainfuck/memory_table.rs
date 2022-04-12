@@ -1,6 +1,7 @@
 use super::processor_table::ProcessorTable;
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use super::table::{Table, TableMoreTrait, TableTrait};
+use crate::shared_math::b_field_element as bfe;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::x_field_element::XFieldElement;
@@ -273,7 +274,7 @@ impl TableTrait for MemoryTable {
 
         let mut polynomials: Vec<MPolynomial<XFieldElement>> = b_field_polynomials
             .iter()
-            .map(|mpol| mpol.lift_coefficients_to_xfield())
+            .map(bfe::lift_coefficients_to_xfield)
             .collect();
 
         polynomials

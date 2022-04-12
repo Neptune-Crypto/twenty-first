@@ -1,12 +1,12 @@
-use std::convert::TryInto;
-
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
 use super::table::{Table, TableMoreTrait, TableTrait};
 use super::vm::{Register, INSTRUCTIONS};
+use crate::shared_math::b_field_element as bfe;
 use crate::shared_math::other;
 use crate::shared_math::traits::{IdentityValues, PrimeField};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
+use std::convert::TryInto;
 
 impl TableMoreTrait for ProcessorTableMore {
     fn new_more() -> Self {
@@ -473,7 +473,7 @@ impl TableTrait for ProcessorTable {
 
         let mut polynomials: Vec<MPolynomial<XFieldElement>> = b_field_polynomials
             .iter()
-            .map(|mpol| mpol.lift_coefficients_to_xfield())
+            .map(bfe::lift_coefficients_to_xfield)
             .collect();
 
         // extension AIR polynomials
