@@ -387,7 +387,7 @@ impl TableTrait for ProcessorTable {
                 .try_into()
                 .unwrap();
         let [
-        // row n+1
+        // row
         b_field_cycle,
         b_field_instruction_pointer,
         b_field_current_instruction,
