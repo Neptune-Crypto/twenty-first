@@ -225,19 +225,23 @@ impl fmt::Display for PrecalculationError {
 }
 
 impl<PFElem: PrimeField> Display for MPolynomial<PFElem> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let output = if self.is_zero() {
             "0".to_string()
         } else {
-            let mut term_strings = self
-                .coefficients
-                .iter()
-                .sorted_by_key(|x| x.0[0])
-                .map(|(k, v)| Self::term_print(k, v));
-            term_strings.join("\n+ ")
+            // Stable sort once per variable. This implementation is implicit “invlex” monomial
+            // order printed in reverse, i.e., constant term comes first, high-degree monomials are
+            // printed last.
+            let mut coefficients_iter = self.coefficients.iter().sorted_by_key(|x| x.0[0]);
+            for i in 1..self.variable_count {
+                coefficients_iter = coefficients_iter.sorted_by_key(|x| x.0[i]);
+            }
+            coefficients_iter
+                .map(|(k, v)| Self::term_print(k, v))
+                .join(" + ")
         };
 
-        write!(f, "\n  {}", output)
+        write!(f, "{}", output)
     }
 }
 
@@ -290,7 +294,7 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         }
 
         let mut str_elems: Vec<String> = vec![];
-        if !coefficient.is_one() {
+        if !coefficient.is_one() || exponents.iter().all(|&x| x.is_zero()) {
             str_elems.push(coefficient.to_string());
         }
 
@@ -2235,14 +2239,14 @@ mod test_mpolynomials {
     fn symbolic_degree_bound_prop_gen() {
         let variable_count = 4;
         let term_count = 5;
-        let exponenent_limit: u64 = 7;
+        let exponent_limit: u64 = 7;
         let coefficient_limit = 12;
 
         // Generate one MPoly.
         let mvpoly: MPolynomial<BFieldElement> = gen_mpolynomial(
             variable_count,
             term_count,
-            exponenent_limit as u128,
+            exponent_limit as u128,
             coefficient_limit,
         );
 
@@ -2278,5 +2282,41 @@ mod test_mpolynomials {
         for _ in 0..runs {
             symbolic_degree_bound_prop_gen();
         }
+    }
+
+    #[test]
+    fn print_display_bfield_test() {
+        let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
+
+        mcoef.insert(vec![0, 0], BFieldElement::new(1));
+        mcoef.insert(vec![0, 1], BFieldElement::new(5));
+        mcoef.insert(vec![2, 0], BFieldElement::new(6));
+        mcoef.insert(vec![3, 4], BFieldElement::new(7));
+
+        let mpoly = MPolynomial {
+            variable_count: 2,
+            coefficients: mcoef,
+        };
+
+        let expected = "1 + 6*x_0^2 + 5*x_1 + 7*x_0^3*x_1^4";
+        assert_eq!(expected, format!("{}", mpoly));
+    }
+
+    #[test]
+    fn print_display_xfield_test() {
+        let mut mcoef: MCoefficients<XFieldElement> = HashMap::new();
+
+        mcoef.insert(vec![0, 0], XFieldElement::new_u128([5, 6, 7]));
+        mcoef.insert(vec![0, 1], XFieldElement::new_u128([8, 9, 10]));
+        mcoef.insert(vec![2, 0], XFieldElement::new_u128([11, 12, 13]));
+        mcoef.insert(vec![3, 4], XFieldElement::new_u128([14, 15, 16]));
+
+        let mpoly = MPolynomial {
+            variable_count: 2,
+            coefficients: mcoef,
+        };
+
+        let expected = "(7x^2 + 6x + 5) + (13x^2 + 12x + 11)*x_0^2 + (10x^2 + 9x + 8)*x_1 + (16x^2 + 15x + 14)*x_0^3*x_1^4";
+        assert_eq!(expected, format!("{}", mpoly));
     }
 }
