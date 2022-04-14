@@ -9,8 +9,7 @@ use crate::shared_math::traits::{
 use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
 use phf::phf_map;
-use rand::prelude::ThreadRng;
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -176,7 +175,7 @@ impl CyclicGroupGenerator for BFieldElement {
 }
 
 impl GetRandomElements for BFieldElement {
-    fn random_elements(length: usize, prng: &mut ThreadRng) -> Vec<Self> {
+    fn random_elements<R: Rng>(length: usize, prng: &mut R) -> Vec<Self> {
         let mut values: Vec<BFieldElement> = Vec::with_capacity(length);
         let max = BFieldElement::MAX as u64;
 

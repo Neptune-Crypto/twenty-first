@@ -4,7 +4,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::error::vm_err;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues, Inverse};
-use rand::prelude::ThreadRng;
+use rand::Rng;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
@@ -71,9 +71,10 @@ impl<'pgm> VMState<'pgm> {
     /// it is included as an immutable reference that exceeds the lifetime
     /// of a single state.
     pub fn new(program: &'pgm [Instruction]) -> Self {
-        let mut initial_state = VMState::default();
-        initial_state.program = program;
-        initial_state
+        Self {
+            program,
+            ..VMState::default()
+        }
     }
 
     /// Determine if this is a final state.
@@ -81,8 +82,8 @@ impl<'pgm> VMState<'pgm> {
         self.instruction_pointer == self.program.len()
     }
 
-    /// Given a state, compute the next state.
-    pub fn step(&self, rng: &mut ThreadRng) -> Result<VMState<'pgm>, Box<dyn Error>> {
+    /// Given a state, compute the next state purely.
+    pub fn step<R: Rng>(&self, rng: &mut R) -> Result<VMState<'pgm>, Box<dyn Error>> {
         let mut next_state = self.clone();
         next_state.step_mut(rng)?;
         Ok(next_state)
@@ -91,7 +92,7 @@ impl<'pgm> VMState<'pgm> {
     /// Perform the state transition as a mutable operation on `self`.
     ///
     /// This function is called from `step`.
-    fn step_mut(&mut self, rng: &mut ThreadRng) -> Result<(), Box<dyn Error>> {
+    fn step_mut<R: Rng>(&mut self, rng: &mut R) -> Result<(), Box<dyn Error>> {
         // All instructions increase the cycle count
         self.cycle_count += 1;
 
@@ -395,7 +396,7 @@ impl<'pgm> VMState<'pgm> {
             .map(|&instruction| instruction)
     }
 
-    fn next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
+    fn _next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
         match self.current_instruction()? {
             // Skip next instruction if top of stack is zero.
             Skiz => todo!(),
@@ -422,14 +423,6 @@ impl<'pgm> VMState<'pgm> {
             .get(n)
             .copied()
             .ok_or_else(|| vm_fail(OpStackTooShallow))
-    }
-
-    fn assert_jump_stack_height(&self, n: usize) -> Result<(), Box<dyn Error>> {
-        if n > self.jump_stack.len() {
-            Err(vm_fail(JumpStackTooShallow))
-        } else {
-            Ok(())
-        }
     }
 
     fn jump_stack_pop(&mut self) -> Result<usize, Box<dyn Error>> {
