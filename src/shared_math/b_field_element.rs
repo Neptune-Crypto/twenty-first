@@ -14,6 +14,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::num::TryFromIntError;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
     fmt::{self},
@@ -127,6 +128,14 @@ impl fmt::Display for BFieldElement {
 impl From<u32> for BFieldElement {
     fn from(value: u32) -> Self {
         BFieldElement::new(value.into())
+    }
+}
+
+impl TryInto<u32> for BFieldElement {
+    type Error = TryFromIntError;
+
+    fn try_into(self) -> Result<u32, Self::Error> {
+        self.value().try_into()
     }
 }
 

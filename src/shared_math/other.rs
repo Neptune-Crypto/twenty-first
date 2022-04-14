@@ -61,6 +61,17 @@ pub fn mod_pow_raw(x: u128, exp: u64, quotient: u128) -> u128 {
     acc
 }
 
+/// Simultaneously perform division and remainder.
+///
+/// While there is apparently no built-in Rust function for this,
+/// the optimizer will still compile this to a single instruction
+/// on x86.
+pub fn div_rem<T: Div<Output = T> + Rem<Output = T> + Copy>(x: T, y: T) -> (T, T) {
+    let quot = x / y;
+    let rem = x % y;
+    (quot, rem)
+}
+
 // TODO: Abstract for multiple unsigned output types.
 pub fn primes_lt(bound: u128) -> Vec<u128> {
     let mut primes: Vec<bool> = (0..bound + 1).map(|num| num == 2 || num & 1 != 0).collect();

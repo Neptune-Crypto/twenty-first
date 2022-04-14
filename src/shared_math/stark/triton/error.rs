@@ -7,6 +7,9 @@ pub enum InstructionError {
     InstructionPointerOverflow,
     OpStackTooShallow,
     JumpStackTooShallow,
+    AssertionFailed,
+    MemoryAddressNotFound,
+    LnotNonBinaryInput,
 }
 
 impl Display for InstructionError {
@@ -22,6 +25,18 @@ impl Display for InstructionError {
 
             JumpStackTooShallow => {
                 write!(f, "Jump stack does not contain return address")
+            }
+
+            AssertionFailed => {
+                write!(f, "Assertion failed")
+            }
+
+            MemoryAddressNotFound => {
+                write!(f, "Memory address not found")
+            }
+
+            LnotNonBinaryInput => {
+                write!(f, "'lnot' requires 0 or 1 as input")
             }
         }
     }
