@@ -70,9 +70,6 @@ pub struct VMState<'pgm> {
     pub if_: [BWord; 10], // Instruction flags
     pub jsp: BWord,       // Jump stack pointer
     pub jsv: BWord,       // Return address
-    pub inv: BWord,       // Top of op-stack inverse, or 0
-    pub osp: BWord,       // Operational stack pointer
-    pub osv: BWord,       // Operational stack value
     pub hv: [BWord; 5],   // Helper variable registers
 
     pub ram_pointer: BWord,               // RAM pointer
