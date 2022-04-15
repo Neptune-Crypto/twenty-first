@@ -32,12 +32,13 @@ fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
 
     let verifier_verdict = stark.verify(&mut proof_stream);
     timer.elapsed("verify");
-    timer.finish();
+    let report = timer.finish();
 
     match verifier_verdict {
         Ok(_) => (),
         Err(err) => panic!("error in STARK verifier: {}", err),
     };
+    println!("{}", report);
 }
 
 fn two_by_two_then_output() {
@@ -51,7 +52,7 @@ fn stark_bf(c: &mut Criterion) {
 
     group.sample_size(10);
 
-    let two_by_two_then_output_id = BenchmarkId::new("two by two, then output", 42);
+    let two_by_two_then_output_id = BenchmarkId::new("TWO_BY_TWO_THEN_OUTPUT", 0);
     group.bench_function(two_by_two_then_output_id, |bencher| {
         bencher.iter(|| two_by_two_then_output());
     });
