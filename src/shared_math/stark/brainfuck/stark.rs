@@ -25,6 +25,8 @@ use crate::util_types::merkle_tree::MerkleTree;
 use crate::util_types::simple_hasher::{Hasher, RescuePrimeProduction, ToDigest};
 use itertools::Itertools;
 use rand::thread_rng;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -301,9 +303,11 @@ impl Stark {
         // rescue prime hash function. This is done by chopping the hash function input into
         // chunks of `max_length / 2` and calling `hash_many` on this input. Half the max
         // length is needed since the chunks are hashed two at a time.
-        let base_codeword_digests_by_index: Vec<Vec<BFieldElement>> = transposed_base_codewords
+        let mut base_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
+            Vec::with_capacity(transposed_base_codewords.len());
+        transposed_base_codewords
             .clone()
-            .into_iter()
+            .into_par_iter()
             .map(|values| {
                 let chunks: Vec<Vec<BFieldElement>> = values
                     .chunks(hasher.0.max_input_length / 2)
@@ -311,7 +315,7 @@ impl Stark {
                     .collect();
                 hasher.hash_many(&chunks)
             })
-            .collect();
+            .collect_into_vec(&mut base_codeword_digests_by_index);
         let base_merkle_tree = MerkleTree::<Vec<BFieldElement>, StarkHasher>::from_digests(
             &base_codeword_digests_by_index,
             &vec![BFieldElement::ring_zero()],
@@ -366,32 +370,35 @@ impl Stark {
                     .collect::<Vec<XFieldElement>>()
             })
             .collect();
-        let extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
-            transposed_extension_codewords
-                .clone()
-                .into_iter()
-                .map(|xvalues| {
-                    let bvalues: Vec<BFieldElement> = xvalues
-                        .into_iter()
-                        .map(|x| x.coefficients.clone().to_vec())
-                        .concat();
-                    assert_eq!(
-                        27,
-                        bvalues.len(),
-                        "9 X-field elements must become 27 B-field elements"
-                    );
-                    let chunks: Vec<Vec<BFieldElement>> = bvalues
-                        .chunks(hasher.0.max_input_length / 2)
-                        .map(|s| s.into())
-                        .collect();
-                    assert_eq!(
-                        6,
-                        chunks.len(),
-                        "27 B-field elements must be divided into 6 chunks for hashing"
-                    );
-                    hasher.hash_many(&chunks)
-                })
-                .collect();
+
+        let mut extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
+            Vec::with_capacity(transposed_extension_codewords.len());
+        transposed_extension_codewords
+            .clone()
+            .into_par_iter()
+            .map(|xvalues| {
+                let bvalues: Vec<BFieldElement> = xvalues
+                    .into_iter()
+                    .map(|x| x.coefficients.clone().to_vec())
+                    .concat();
+                assert_eq!(
+                    27,
+                    bvalues.len(),
+                    "9 X-field elements must become 27 B-field elements"
+                );
+                let chunks: Vec<Vec<BFieldElement>> = bvalues
+                    .chunks(hasher.0.max_input_length / 2)
+                    .map(|s| s.into())
+                    .collect();
+                assert_eq!(
+                    6,
+                    chunks.len(),
+                    "27 B-field elements must be divided into 6 chunks for hashing"
+                );
+                hasher.hash_many(&chunks)
+            })
+            .collect_into_vec(&mut extension_codeword_digests_by_index);
+
         let extension_tree = MerkleTree::<Vec<BFieldElement>, StarkHasher>::from_digests(
             &extension_codeword_digests_by_index,
             &vec![BFieldElement::ring_zero()],
@@ -593,14 +600,16 @@ impl Stark {
 
         timer.elapsed("combination_codeword");
 
-        let combination_codeword_digests: Vec<Vec<BFieldElement>> = combination_codeword
+        let mut combination_codeword_digests: Vec<Vec<BFieldElement>> =
+            Vec::with_capacity(combination_codeword.len());
+        combination_codeword
             .clone()
-            .into_iter()
+            .into_par_iter()
             .map(|xfe| {
                 let digest: Vec<BFieldElement> = xfe.to_digest();
                 hasher.hash(&digest)
             })
-            .collect();
+            .collect_into_vec(&mut combination_codeword_digests);
         let combination_tree = MerkleTree::<Vec<BFieldElement>, StarkHasher>::from_digests(
             &combination_codeword_digests,
             &vec![BFieldElement::ring_zero()],
