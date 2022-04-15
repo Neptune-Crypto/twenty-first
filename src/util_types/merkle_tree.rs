@@ -377,7 +377,7 @@ where
     // Compact Merkle Multiproof Generation
     //
     // Leafless (produce authentication paths, not Vec<Node<T>>s with leaf values in it).
-    fn get_leafless_multi_proof(
+    pub fn get_leafless_multi_proof(
         &self,
         indices: &[usize],
     ) -> Vec<LeaflessPartialAuthenticationPath<H::Digest>> {
