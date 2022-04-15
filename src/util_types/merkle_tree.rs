@@ -96,7 +96,7 @@ where
     ) -> bool {
         let mut mut_index = index + 2u64.pow(proof.len() as u32);
         let leaf_node = proof[0].clone();
-        let mut hasher = H::new();
+        let hasher = H::new();
 
         // We .skip(1) because proof contains both the leaf node and the authentication path nodes.
         let mut current_node = leaf_node;
@@ -155,7 +155,7 @@ where
             nodes[digests.len() + i].hash = digests[i].to_owned();
         }
 
-        let mut hasher = H::new();
+        let hasher = H::new();
         // loop from `len(L) - 1` to 1
         for i in (1..(nodes.len() / 2)).rev() {
             let left = nodes[i * 2].hash.clone();
@@ -183,7 +183,7 @@ where
         );
 
         // find all digests
-        let mut hasher = H::new();
+        let hasher = H::new();
         let digests: Vec<H::Digest> = values
             .iter()
             .map(|val| hasher.hash(&val.to_digest()))
@@ -250,7 +250,7 @@ where
         auth_path: Vec<H::Digest>,
     ) -> bool {
         let path_length = auth_path.len() as u32;
-        let mut hasher = H::new();
+        let hasher = H::new();
 
         // Initialize `acc_hash' as leaf_hash
         let mut acc_hash = leaf_hash;
@@ -282,7 +282,7 @@ where
         value: Value,
         auth_path: Vec<H::Digest>,
     ) -> bool {
-        let mut hasher = H::new();
+        let hasher = H::new();
         let value_hash = hasher.hash(&value);
 
         // Set `leaf_hash` to H(value)
@@ -444,7 +444,7 @@ where
         }
 
         let mut complete = false;
-        let mut hasher = H::new();
+        let hasher = H::new();
         while !complete {
             complete = true;
 
@@ -522,7 +522,7 @@ where
             return true;
         }
 
-        let mut hasher = H::new();
+        let hasher = H::new();
         let mut auth_paths: Vec<LeaflessPartialAuthenticationPath<H::Digest>> =
             Vec::with_capacity(proof.len());
         let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(proof.len());
@@ -581,7 +581,7 @@ where
             "Size of input for Merkle tree must be a power of 2"
         );
 
-        let mut hasher = H::new();
+        let hasher = H::new();
         let zero_hash = hasher.hash(zero);
         let mut nodes: Vec<Node<Value, H::Digest>> = vec![
             Node {
@@ -648,7 +648,7 @@ where
         auth_path: Vec<H::Digest>,
         salts_for_value: Vec<Value>,
     ) -> bool {
-        let mut hasher = H::new();
+        let hasher = H::new();
         let leaf_hash = hasher.hash_with_salts(value.to_digest(), &salts_for_value);
 
         // Set `leaf_hash` to H(value + salts[0..])
@@ -744,7 +744,7 @@ where
             return true;
         }
 
-        let mut hasher = H::new();
+        let hasher = H::new();
         let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(indices.len());
         for (value, proof) in izip!(values, proof) {
             let salts_for_leaf = proof.1.clone();

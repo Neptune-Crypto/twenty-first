@@ -59,7 +59,7 @@ pub struct Stark {
 
 impl Stark {
     fn sample_weights(
-        hasher: &mut StarkHasher,
+        hasher: &StarkHasher,
         seed: &StarkDigest,
         count: usize,
     ) -> Vec<XFieldElement> {
@@ -294,7 +294,7 @@ impl Stark {
 
         timer.elapsed("transposed_base_codewords");
 
-        let mut hasher = StarkHasher::new();
+        let hasher = StarkHasher::new();
 
         // Current length of each element in `transposed_base_codewords` is 18 which exceeds
         // max length of RP hash function. So we chop it into elements that will fit into the
@@ -330,7 +330,7 @@ impl Stark {
         // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
         // must not change though, it should remain `Vec<XFieldElement>`.
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
-            &mut hasher,
+            &hasher,
             &proof_stream.prover_fiat_shamir(),
             EXTENSION_CHALLENGE_COUNT,
         )
@@ -562,7 +562,7 @@ impl Stark {
         let weights_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
         let weights_count = num_randomizer_polynomials
             + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials);
-        let weights = Self::sample_weights(&mut hasher, &weights_seed, weights_count);
+        let weights = Self::sample_weights(&hasher, &weights_seed, weights_count);
 
         timer.elapsed("sample_weights");
 
@@ -693,7 +693,7 @@ impl Stark {
     }
 
     pub fn verify(&self, proof_stream_: &mut StarkProofStream) -> Result<bool, Box<dyn Error>> {
-        let mut hasher = StarkHasher::new();
+        let hasher = StarkHasher::new();
 
         // let base_merkle_tree_root: Vec<BFieldElement> =
         //     proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
@@ -702,7 +702,7 @@ impl Stark {
 
         // Get coefficients for table extension
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
-            &mut hasher,
+            &hasher,
             &proof_stream_.verifier_fiat_shamir(),
             EXTENSION_CHALLENGE_COUNT,
         )
@@ -765,7 +765,7 @@ impl Stark {
             + 2 * num_quotient_polynomials
             + 2 * num_difference_quotients;
         let weights: Vec<XFieldElement> =
-            Self::sample_weights(&mut hasher, &weights_seed, weights_count);
+            Self::sample_weights(&hasher, &weights_seed, weights_count);
 
         let combination_root: Vec<BFieldElement> = proof_stream_.dequeue()?.as_merkle_root()?;
 

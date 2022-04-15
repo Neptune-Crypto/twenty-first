@@ -79,12 +79,12 @@ where
     }
 
     pub fn prover_fiat_shamir(&self) -> H::Digest {
-        let mut hasher = H::new();
+        let hasher = H::new();
         hasher.fiat_shamir(&self.transcript)
     }
 
     pub fn verifier_fiat_shamir(&self) -> H::Digest {
-        let mut hasher = H::new();
+        let hasher = H::new();
         hasher.fiat_shamir(&self.transcript[0..self.transcript_index])
     }
 }
@@ -193,7 +193,7 @@ mod proof_stream_typed_tests {
         let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::default();
         let ps: &mut ProofStream<TestItem, RescuePrimeProduction> = &mut proof_stream;
 
-        let mut hasher = RescuePrimeProduction::new();
+        let hasher = RescuePrimeProduction::new();
         let digest_1 = hasher.hash(&BFieldElement::ring_one());
         ps.enqueue(&TestItem::ManyB(digest_1));
         let _result = ps.dequeue();

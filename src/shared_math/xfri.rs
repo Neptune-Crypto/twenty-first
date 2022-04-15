@@ -229,7 +229,7 @@ where
 
     // Return the c-indices for the 1st round of FRI
     fn sample_indices(&self, seed: &H::Digest) -> Vec<usize> {
-        let mut hasher = H::new();
+        let hasher = H::new();
 
         // This algorithm starts with the inner-most indices to pick up
         // to `last_codeword_length` indices from the codeword in the last round.
