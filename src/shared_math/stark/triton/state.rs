@@ -69,8 +69,6 @@ pub struct VMState<'pgm> {
     pub instruction_pointer: usize,
 
     pub if_: [BWord; 10], // Instruction flags
-    pub jsp: BWord,       // Jump stack pointer
-    pub jsv: BWord,       // Return address
     pub hv: [BWord; 5],   // Helper variable registers
 
     pub ram_pointer: BWord,               // RAM pointer
@@ -392,6 +390,24 @@ impl<'pgm> VMState<'pgm> {
         let bit_mask: u32 = 1 << bit_number;
 
         Ok((value & bit_mask).into())
+    }
+
+    /// Jump-stack pointer
+    pub fn jsp(&self) -> BWord {
+        let height = self.jump_stack.len();
+        if height == 0 {
+            0.into()
+        } else {
+            BWord::new((height - 1) as u128)
+        }
+    }
+
+    /// Jump-stack value
+    pub fn jsv(&self) -> BWord {
+        self.jump_stack
+            .last()
+            .map(|&v| BWord::new(v as u128))
+            .unwrap_or_else(|| 0.into())
     }
 
     /// Internal helper functions
