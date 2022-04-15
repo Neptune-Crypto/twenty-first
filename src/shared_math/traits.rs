@@ -73,6 +73,7 @@ pub trait New {
 
 pub trait FromVecu8 {
     #[must_use]
+    #[allow(clippy::wrong_self_convention)]
     fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
 }
 

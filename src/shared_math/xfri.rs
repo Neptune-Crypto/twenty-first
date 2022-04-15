@@ -135,8 +135,11 @@ where
         );
 
         // Commit phase
-        let values_and_merkle_trees: Vec<(Vec<XFieldElement>, MerkleTree<Vec<BFieldElement>, H>)> =
-            self.commit(codeword, proof_stream)?;
+        #[allow(clippy::type_complexity)]
+        let values_and_merkle_trees: Vec<(
+            Vec<XFieldElement>,
+            MerkleTree<Vec<BFieldElement>, H>,
+        )> = self.commit(codeword, proof_stream)?;
         let codewords: Vec<Vec<XFieldElement>> = values_and_merkle_trees
             .iter()
             .map(|x| x.0.clone())
@@ -165,6 +168,7 @@ where
         Ok(top_level_indices)
     }
 
+    #[allow(clippy::type_complexity)]
     fn commit(
         &self,
         codeword: &[XFieldElement],
