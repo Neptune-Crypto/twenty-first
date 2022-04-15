@@ -71,9 +71,6 @@ pub struct VMState<'pgm> {
     /// Instruction flags
     pub ifl: [BWord; 10],
 
-    /// Helper variable registers
-    pub hv: [BWord; 5],
-
     /// RAM pointer
     pub ramp: BWord,
 
