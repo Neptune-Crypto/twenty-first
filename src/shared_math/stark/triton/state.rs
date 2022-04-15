@@ -1,5 +1,6 @@
 use super::error::{vm_fail, InstructionError::*};
-use super::instruction::Instruction;
+use super::instruction::{Instruction, Instruction::*, Ord4::*};
+use super::op_stack::OpStack;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::error::vm_err;
@@ -8,11 +9,14 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
-use Instruction::*;
 
 type BWord = BFieldElement;
 
-#[derive(Debug, Default, Clone)]
+pub const AUX_REGISTER_COUNT: usize = 16;
+
+// `VMLiterally` describes the registers, but in a way that requires a lot of
+// manual updating.
+#[derive(Debug, Clone)]
 pub struct VMLiterally {
     // Registers
     pub clk: BWord, // Number of cycles the program has been running for
@@ -25,43 +29,55 @@ pub struct VMLiterally {
     pub jsp: BWord,       // Jump stack pointer
     pub jsv: BWord,       // Return address
     pub st: [BWord; 4],   // Operational stack registers
-    pub iszero: BWord,    // Top of stack zero indicator
+    pub inv: BWord,       // Top of op-stack inverse, or 0
     pub osp: BWord,       // Operational stack pointer
     pub osv: BWord,       // Operational stack value
     pub hv: [BWord; 5],   // Helper variable registers
     pub ramp: BWord,      // RAM pointer
     pub ramv: BWord,      // RAM value
     pub aux: [BWord; 16], // Auxiliary registers (for hashing)
-
-    // Stack, memory
-    pub stack: Vec<BWord>,
-    pub memory: Vec<BWord>,
 }
 
-// An experiment in expressing a reduced VM state (only fields that are not directly derived from others)
 #[derive(Debug, Default, Clone)]
 pub struct VMState<'pgm> {
+    ///
+    /// Triton VM's four kinds of memory:
+    ///
+    /// 1. **Program memory**, from which the VM reads instructions
     program: &'pgm [Instruction],
-    op_stack: Vec<BWord>,
+
+    /// 2. **Random-access memory**, to which the VM can read and write field elements
+    ram: HashMap<BWord, BWord>,
+
+    /// 3. **Op-stack memory**, which stores the part of the operational stack
+    ///    that is not represented explicitly by the operational stack registers
+    ///
+    ///    *(An implementation detail: We keep the entire stack in one `Vec<>`.)*
+    op_stack: OpStack,
+
+    /// 4. Jump-stack memory, which stores the entire jump stack
     jump_stack: Vec<usize>,
-    memory: HashMap<BWord, BWord>,
 
-    // Registers
-    pub cycle_count: u32, // Number of cycles the program has been running for
-    pub instruction_pointer: usize, // Current instruction's address in program memory
+    ///
+    /// Registers
+    ///
+    /// Number of cycles the program has been running for
+    pub cycle_count: u32,
 
-    pub ib: [BWord; 6],   // Contains the i'th bit of the instruction
+    /// Current instruction's address in program memory
+    pub instruction_pointer: usize,
+
     pub if_: [BWord; 10], // Instruction flags
     pub jsp: BWord,       // Jump stack pointer
     pub jsv: BWord,       // Return address
-    pub iszero: BWord,    // Top of stack zero indicator
+    pub inv: BWord,       // Top of op-stack inverse, or 0
     pub osp: BWord,       // Operational stack pointer
     pub osv: BWord,       // Operational stack value
     pub hv: [BWord; 5],   // Helper variable registers
 
-    pub ram_pointer: BWord, // RAM pointer
-    pub ram_value: BWord,   // RAM value
-    pub aux: [BWord; 16],   // Auxiliary registers (for hashing)
+    pub ram_pointer: BWord,               // RAM pointer
+    pub ram_value: BWord,                 // RAM value
+    pub aux: [BWord; AUX_REGISTER_COUNT], // Auxiliary registers (for hashing)
 }
 
 impl<'pgm> VMState<'pgm> {
@@ -99,7 +115,7 @@ impl<'pgm> VMState<'pgm> {
         let instruction = self.current_instruction()?;
         match instruction {
             Pop => {
-                self.op_stack_pop()?;
+                self.op_stack.pop()?;
                 self.instruction_pointer += 1;
             }
 
@@ -114,33 +130,30 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Dup(arg) => {
-                let n: usize = arg.into();
-                let elem = self.op_stack_peek(n)?;
+            Dup(n) => {
+                let elem = self.op_stack.safe_peek(n);
                 self.op_stack.push(elem);
                 self.instruction_pointer += 1;
             }
 
             Swap => {
-                self.assert_op_stack_height(2)?;
-                self.op_stack.swap(0, 1);
+                // a b -> b a
+                self.op_stack.safe_swap(N0, N1);
                 self.instruction_pointer += 1;
             }
 
             Pull2 => {
                 // a b c -> b a c -> b c a
-                self.assert_op_stack_height(3)?;
-                self.op_stack.swap(0, 1);
-                self.op_stack.swap(1, 2);
+                self.op_stack.safe_swap(N0, N1);
+                self.op_stack.safe_swap(N1, N2);
                 self.instruction_pointer += 1;
             }
 
             Pull3 => {
                 // a b c d -> b a c d -> b c a d -> b c d a
-                self.assert_op_stack_height(4)?;
-                self.op_stack.swap(0, 1);
-                self.op_stack.swap(1, 2);
-                self.op_stack.swap(2, 3);
+                self.op_stack.safe_swap(N0, N1);
+                self.op_stack.safe_swap(N1, N2);
+                self.op_stack.safe_swap(N2, N3);
                 self.instruction_pointer += 1;
             }
 
@@ -149,7 +162,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Skiz => {
-                let elem = self.op_stack_pop()?;
+                let elem = self.op_stack.pop()?;
                 self.instruction_pointer += if elem.is_zero() { 2 } else { 1 }
             }
 
@@ -169,10 +182,9 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Assert => {
-                self.assert_op_stack_height(1)?;
-                let elem = self.op_stack.pop().unwrap();
+                let elem = self.op_stack.pop()?;
                 if !elem.is_one() {
-                    return Err(vm_fail(AssertionFailed));
+                    return vm_err(AssertionFailed);
                 }
                 self.instruction_pointer += 1;
             }
@@ -216,7 +228,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             SetRamp => {
-                let new_ramp = self.op_stack_pop()?;
+                let new_ramp = self.op_stack.pop()?;
                 self.ram_pointer = new_ramp;
                 self.instruction_pointer += 1;
             }
@@ -231,7 +243,7 @@ impl<'pgm> VMState<'pgm> {
             Intt => todo!(),
 
             ClearAll => {
-                self.aux = [BWord::ring_zero(); 16];
+                self.aux.fill(0.into());
                 self.instruction_pointer += 1;
             }
 
@@ -243,7 +255,7 @@ impl<'pgm> VMState<'pgm> {
 
             Absorb(arg) => {
                 let n: usize = arg.into();
-                let elem = self.op_stack_pop()?;
+                let elem = self.op_stack.pop()?;
                 self.aux[n] = elem;
                 self.instruction_pointer += 1;
             }
@@ -261,33 +273,33 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Add => {
-                let a = self.op_stack_pop()?;
-                let b = self.op_stack_pop()?;
+                let a = self.op_stack.pop()?;
+                let b = self.op_stack.pop()?;
                 self.op_stack.push(a + b);
                 self.instruction_pointer += 1;
             }
 
             Neg => {
-                let elem = self.op_stack_pop()?;
+                let elem = self.op_stack.pop()?;
                 self.op_stack.push(-elem);
                 self.instruction_pointer += 1;
             }
 
             Mul => {
-                let a = self.op_stack_pop()?;
-                let b = self.op_stack_pop()?;
+                let a = self.op_stack.pop()?;
+                let b = self.op_stack.pop()?;
                 self.op_stack.push(a * b);
                 self.instruction_pointer += 1;
             }
 
             Inv => {
-                let elem = self.op_stack_pop()?;
+                let elem = self.op_stack.pop()?;
                 self.op_stack.push(elem.inverse());
                 self.instruction_pointer += 1;
             }
 
             Lnot => {
-                let elem = self.op_stack_pop()?;
+                let elem = self.op_stack.pop()?;
                 if elem.is_zero() {
                     self.op_stack.push(1.into());
                 } else if elem.is_one() {
@@ -299,7 +311,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Split => {
-                let elem = self.op_stack_pop()?;
+                let elem = self.op_stack.pop()?;
                 let n: u64 = elem.value();
                 let lo = n & 0xffff_ffff;
                 let hi = n >> 32;
@@ -309,8 +321,8 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Eq => {
-                let a = self.op_stack_pop()?;
-                let b = self.op_stack_pop()?;
+                let a = self.op_stack.pop()?;
+                let b = self.op_stack.pop()?;
                 if a == b {
                     self.op_stack.push(BWord::ring_one());
                 } else {
@@ -320,8 +332,8 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Lt => {
-                let a: u32 = self.op_stack_pop()?.try_into()?;
-                let b: u32 = self.op_stack_pop()?.try_into()?;
+                let a: u32 = self.op_stack.pop()?.try_into()?;
+                let b: u32 = self.op_stack.pop()?.try_into()?;
                 if a < b {
                     self.op_stack.push(BWord::ring_one());
                 } else {
@@ -331,35 +343,35 @@ impl<'pgm> VMState<'pgm> {
             }
 
             And => {
-                let a: u32 = self.op_stack_pop()?.try_into()?;
-                let b: u32 = self.op_stack_pop()?.try_into()?;
+                let a: u32 = self.op_stack.pop()?.try_into()?;
+                let b: u32 = self.op_stack.pop()?.try_into()?;
                 self.op_stack.push((a & b).into());
                 self.instruction_pointer += 1;
             }
 
             Or => {
-                let a: u32 = self.op_stack_pop()?.try_into()?;
-                let b: u32 = self.op_stack_pop()?.try_into()?;
+                let a: u32 = self.op_stack.pop()?.try_into()?;
+                let b: u32 = self.op_stack.pop()?.try_into()?;
                 self.op_stack.push((a | b).into());
                 self.instruction_pointer += 1;
             }
 
             Xor => {
-                let a: u32 = self.op_stack_pop()?.try_into()?;
-                let b: u32 = self.op_stack_pop()?.try_into()?;
+                let a: u32 = self.op_stack.pop()?.try_into()?;
+                let b: u32 = self.op_stack.pop()?.try_into()?;
                 self.op_stack.push((a ^ b).into());
                 self.instruction_pointer += 1;
             }
 
             Reverse => {
-                let elem: u32 = self.op_stack_pop()?.try_into()?;
+                let elem: u32 = self.op_stack.pop()?.try_into()?;
                 self.op_stack.push(elem.reverse_bits().into());
                 self.instruction_pointer += 1;
             }
 
             Div => {
-                let a: u32 = self.op_stack_pop()?.try_into()?;
-                let b: u32 = self.op_stack_pop()?.try_into()?;
+                let a: u32 = self.op_stack.pop()?.try_into()?;
+                let b: u32 = self.op_stack.pop()?.try_into()?;
                 let (quot, rem) = other::div_rem(a, b);
                 self.op_stack.push(quot.into());
                 self.op_stack.push(rem.into());
@@ -367,27 +379,39 @@ impl<'pgm> VMState<'pgm> {
             }
         }
 
+        if self.op_stack.is_too_shallow() {
+            return vm_err(OpStackTooShallow);
+        }
+
         Ok(())
     }
 
-    // Registers that really just wrap another part of the machine state
-    pub fn stack_0(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok(*self.op_stack.get(0).unwrap_or(&BFieldElement::ring_zero()))
+    /// Get the i'th instruction bit
+    pub fn ib0(&self) -> Result<BFieldElement, Box<dyn Error>> {
+        Ok((self.current_instruction()?.number() & 1).into())
     }
 
-    pub fn stack_1(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok(*self.op_stack.get(1).unwrap_or(&BFieldElement::ring_zero()))
+    pub fn ib1(&self) -> Result<BFieldElement, Box<dyn Error>> {
+        Ok((self.current_instruction()?.number() & 2).into())
     }
 
-    pub fn stack_2(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok(*self.op_stack.get(2).unwrap_or(&BFieldElement::ring_zero()))
+    pub fn ib2(&self) -> Result<BFieldElement, Box<dyn Error>> {
+        Ok((self.current_instruction()?.number() & 4).into())
     }
 
-    pub fn stack_3(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok(*self.op_stack.get(3).unwrap_or(&BFieldElement::ring_zero()))
+    pub fn ib3(&self) -> Result<BFieldElement, Box<dyn Error>> {
+        Ok((self.current_instruction()?.number() & 8).into())
     }
 
-    // Internal helper functions
+    pub fn ib4(&self) -> Result<BFieldElement, Box<dyn Error>> {
+        Ok((self.current_instruction()?.number() & 16).into())
+    }
+
+    pub fn ib5(&self) -> Result<BFieldElement, Box<dyn Error>> {
+        Ok((self.current_instruction()?.number() & 32).into())
+    }
+
+    /// Internal helper functions
 
     fn current_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
         self.program
@@ -404,27 +428,6 @@ impl<'pgm> VMState<'pgm> {
         }
     }
 
-    fn assert_op_stack_height(&self, n: usize) -> Result<(), Box<dyn Error>> {
-        if n > self.op_stack.len() {
-            Err(vm_fail(OpStackTooShallow))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn op_stack_pop(&mut self) -> Result<BFieldElement, Box<dyn Error>> {
-        self.op_stack
-            .pop()
-            .ok_or_else(|| vm_fail(OpStackTooShallow))
-    }
-
-    fn op_stack_peek(&mut self, n: usize) -> Result<BFieldElement, Box<dyn Error>> {
-        self.op_stack
-            .get(n)
-            .copied()
-            .ok_or_else(|| vm_fail(OpStackTooShallow))
-    }
-
     fn jump_stack_pop(&mut self) -> Result<usize, Box<dyn Error>> {
         self.jump_stack
             .pop()
@@ -439,23 +442,23 @@ impl<'pgm> VMState<'pgm> {
     }
 
     fn memory_get(&self, mem_addr: &BFieldElement) -> Result<BFieldElement, Box<dyn Error>> {
-        self.memory
+        self.ram
             .get(mem_addr)
             .copied()
             .ok_or_else(|| vm_fail(MemoryAddressNotFound))
     }
 
     fn load(&mut self) -> Result<(), Box<dyn Error>> {
-        let mem_addr = self.op_stack_peek(0)?;
+        let mem_addr = self.op_stack.safe_peek(N0);
         let mem_val = self.memory_get(&mem_addr)?;
         self.op_stack.push(mem_val);
         Ok(())
     }
 
     fn save(&mut self) -> Result<(), Box<dyn Error>> {
-        let mem_value = self.op_stack_pop()?;
-        let mem_addr = self.op_stack_peek(0)?;
-        self.memory.insert(mem_addr, mem_value);
+        let mem_value = self.op_stack.pop()?;
+        let mem_addr = self.op_stack.safe_peek(N0);
+        self.ram.insert(mem_addr, mem_value);
         Ok(())
     }
 }

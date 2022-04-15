@@ -11,8 +11,6 @@ type Word = BFieldElement;
 /// The ISA is defined at:
 ///
 /// https://neptune.builders/core-team/triton-vm/src/branch/master/specification/isa.md
-///
-/// TODO: Order these according to their "value" (Nop == 1) once value is known.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Instruction {
     // OpStack manipulation
@@ -69,26 +67,21 @@ pub fn push(value: u32) -> Instruction {
     Push(value.into())
 }
 
-pub const DUP0: Instruction = Dup(Ord4::D0);
-pub const DUP1: Instruction = Dup(Ord4::D1);
-pub const DUP2: Instruction = Dup(Ord4::D2);
-pub const DUP3: Instruction = Dup(Ord4::D3);
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Ord4 {
-    D0,
-    D1,
-    D2,
-    D3,
+    N0,
+    N1,
+    N2,
+    N3,
 }
 
 impl From<Ord4> for usize {
     fn from(n: Ord4) -> Self {
         match n {
-            D0 => 0,
-            D1 => 1,
-            D2 => 2,
-            D3 => 3,
+            N0 => 0,
+            N1 => 1,
+            N2 => 2,
+            N3 => 3,
         }
     }
 }
@@ -100,6 +93,7 @@ impl Display for Ord4 {
     }
 }
 
+/// `Ord16` represents numbers that are exactly 0--15.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Ord16 {
     A0,
@@ -196,6 +190,60 @@ impl Display for Instruction {
             Xor => write!(f, "xor"),
             Reverse => write!(f, "reverse"),
             Div => write!(f, "div"),
+        }
+    }
+}
+
+impl Instruction {
+    /// Assign a unique positive integer to each `Instruction`.
+    pub fn number(&self) -> u32 {
+        match self {
+            Pop => 0,
+            Push(_) => 1,
+            Pad => 2,
+            Dup(N0) => 3,
+            Dup(N1) => 4,
+            Dup(N2) => 5,
+            Dup(N3) => 6,
+            Swap => 7,
+            Pull2 => 8,
+            Pull3 => 9,
+            Nop => 10,
+            Skiz => 11,
+            Call(_) => 12,
+            Return => 13,
+            Recurse => 14,
+            Assert => 15,
+            Halt => 16,
+            Load => 17,
+            LoadInc => 18,
+            LoadDec => 19,
+            Save => 20,
+            SaveInc => 21,
+            SaveDec => 22,
+            SetRamp => 23,
+            GetRamp => 24,
+            Xlix => 25,
+            Ntt => 26,
+            Intt => 27,
+            ClearAll => 28,
+            Squeeze(_) => 29,
+            Absorb(_) => 30,
+            Clear(_) => 31,
+            Rotate(_) => 32,
+            Add => 33,
+            Neg => 34,
+            Mul => 35,
+            Inv => 36,
+            Lnot => 37,
+            Split => 38,
+            Eq => 39,
+            Lt => 40,
+            And => 41,
+            Or => 42,
+            Xor => 43,
+            Reverse => 44,
+            Div => 45,
         }
     }
 }
