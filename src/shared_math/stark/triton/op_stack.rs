@@ -1,5 +1,5 @@
 use super::error::{vm_fail, InstructionError::*};
-use super::instruction::{Ord4, Ord4::*};
+use super::ord_n::{Ord4, Ord4::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::traits::Inverse;
 use std::error::Error;
@@ -76,7 +76,7 @@ impl OpStack {
             0.into()
         } else {
             let n = self.stack.len() - OP_STACK_REG_COUNT;
-            self.stack.get(n).copied().unwrap_or(0.into())
+            self.stack.get(n).copied().unwrap_or_else(|| 0.into())
         }
     }
 

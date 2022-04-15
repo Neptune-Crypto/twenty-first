@@ -1,8 +1,8 @@
+use super::ord_n::Ord16;
+use super::ord_n::{Ord4, Ord4::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use std::fmt::Display;
 use Instruction::*;
-use Ord16::*;
-use Ord4::*;
 
 type Word = BFieldElement;
 
@@ -67,83 +67,6 @@ pub fn push(value: u32) -> Instruction {
     Push(value.into())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Ord4 {
-    N0,
-    N1,
-    N2,
-    N3,
-}
-
-impl From<Ord4> for usize {
-    fn from(n: Ord4) -> Self {
-        match n {
-            N0 => 0,
-            N1 => 1,
-            N2 => 2,
-            N3 => 3,
-        }
-    }
-}
-
-impl Display for Ord4 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let n: usize = (*self).into();
-        write!(f, "{}", n)
-    }
-}
-
-/// `Ord16` represents numbers that are exactly 0--15.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Ord16 {
-    A0,
-    A1,
-    A2,
-    A3,
-    A4,
-    A5,
-    A6,
-    A7,
-    A8,
-    A9,
-    A10,
-    A11,
-    A12,
-    A13,
-    A14,
-    A15,
-}
-
-impl From<Ord16> for usize {
-    fn from(n: Ord16) -> Self {
-        match n {
-            A0 => 0,
-            A1 => 1,
-            A2 => 2,
-            A3 => 3,
-            A4 => 4,
-            A5 => 5,
-            A6 => 6,
-            A7 => 7,
-            A8 => 8,
-            A9 => 9,
-            A10 => 10,
-            A11 => 11,
-            A12 => 12,
-            A13 => 13,
-            A14 => 14,
-            A15 => 15,
-        }
-    }
-}
-
-impl Display for Ord16 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let n: usize = (*self).into();
-        write!(f, "{}", n)
-    }
-}
-
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -196,7 +119,7 @@ impl Display for Instruction {
 
 impl Instruction {
     /// Assign a unique positive integer to each `Instruction`.
-    pub fn number(&self) -> u32 {
+    pub fn value(&self) -> u32 {
         match self {
             Pop => 0,
             Push(_) => 1,

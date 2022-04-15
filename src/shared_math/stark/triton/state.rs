@@ -1,6 +1,7 @@
 use super::error::{vm_fail, InstructionError::*};
-use super::instruction::{Instruction, Instruction::*, Ord4::*};
+use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
+use super::ord_n::{Ord4::*, Ord6};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::error::vm_err;
@@ -384,28 +385,13 @@ impl<'pgm> VMState<'pgm> {
     }
 
     /// Get the i'th instruction bit
-    pub fn ib0(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok((self.current_instruction()?.number() & 1).into())
-    }
+    pub fn ib(&self, arg: Ord6) -> Result<BFieldElement, Box<dyn Error>> {
+        let instruction = self.current_instruction()?;
+        let value = instruction.value();
+        let bit_number: usize = arg.into();
+        let bit_mask: u32 = 1 << bit_number;
 
-    pub fn ib1(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok((self.current_instruction()?.number() & 2).into())
-    }
-
-    pub fn ib2(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok((self.current_instruction()?.number() & 4).into())
-    }
-
-    pub fn ib3(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok((self.current_instruction()?.number() & 8).into())
-    }
-
-    pub fn ib4(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok((self.current_instruction()?.number() & 16).into())
-    }
-
-    pub fn ib5(&self) -> Result<BFieldElement, Box<dyn Error>> {
-        Ok((self.current_instruction()?.number() & 32).into())
+        Ok((value & bit_mask).into())
     }
 
     /// Internal helper functions
