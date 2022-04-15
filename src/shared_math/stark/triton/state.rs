@@ -68,12 +68,20 @@ pub struct VMState<'pgm> {
     /// Current instruction's address in program memory
     pub instruction_pointer: usize,
 
-    pub if_: [BWord; 10], // Instruction flags
-    pub hv: [BWord; 5],   // Helper variable registers
+    /// Instruction flags
+    pub ifl: [BWord; 10],
 
-    pub ram_pointer: BWord,               // RAM pointer
-    pub ram_value: BWord,                 // RAM value
-    pub aux: [BWord; AUX_REGISTER_COUNT], // Auxiliary registers (for hashing)
+    /// Helper variable registers
+    pub hv: [BWord; 5],
+
+    /// RAM pointer
+    pub ramp: BWord,
+
+    /// RAM value
+    pub ramv: BWord,
+
+    /// Auxiliary registers
+    pub aux: [BWord; AUX_REGISTER_COUNT],
 }
 
 impl<'pgm> VMState<'pgm> {
@@ -196,13 +204,13 @@ impl<'pgm> VMState<'pgm> {
 
             LoadInc => {
                 self.load()?;
-                self.ram_pointer.increment();
+                self.ramp.increment();
                 self.instruction_pointer += 1;
             }
 
             LoadDec => {
                 self.load()?;
-                self.ram_pointer.decrement();
+                self.ramp.decrement();
                 self.instruction_pointer += 1;
             }
 
@@ -213,24 +221,24 @@ impl<'pgm> VMState<'pgm> {
 
             SaveInc => {
                 self.save()?;
-                self.ram_pointer.increment();
+                self.ramp.increment();
                 self.instruction_pointer += 1;
             }
 
             SaveDec => {
                 self.save()?;
-                self.ram_pointer.decrement();
+                self.ramp.decrement();
                 self.instruction_pointer += 1;
             }
 
             SetRamp => {
                 let new_ramp = self.op_stack.pop()?;
-                self.ram_pointer = new_ramp;
+                self.ramp = new_ramp;
                 self.instruction_pointer += 1;
             }
 
             GetRamp => {
-                self.op_stack.push(self.ram_pointer);
+                self.op_stack.push(self.ramp);
                 self.instruction_pointer += 1;
             }
 
