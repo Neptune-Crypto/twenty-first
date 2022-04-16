@@ -696,7 +696,7 @@ mod xfri_tests {
     fn fri_x_field_limit_test() {
         type Hasher = RescuePrimeProduction;
 
-        let subgroup_order = 1024;
+        let subgroup_order = 128;
         let expansion_factor = 4;
         let colinearity_check_count = 6;
         let fri: Fri<Hasher> =
@@ -704,7 +704,7 @@ mod xfri_tests {
         let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
 
         let mut points: Vec<XFieldElement>;
-        for n in [1, 10, 50, 100, 255] {
+        for n in [1, 5, 20, 30, 31] {
             points = subgroup.clone().iter().map(|p| p.mod_pow_u32(n)).collect();
 
             // TODO: Test elsewhere that proof_stream can be re-used for multiple .prove().
@@ -714,7 +714,7 @@ mod xfri_tests {
             let verify_result = fri.verify(&mut proof_stream);
             if verify_result.is_err() {
                 println!(
-                    "There are {} points, |<1024>^{}| = {}, and verify_result = {:?}",
+                    "There are {} points, |<128>^{}| = {}, and verify_result = {:?}",
                     points.len(),
                     n,
                     points.iter().unique().count(),
@@ -723,9 +723,12 @@ mod xfri_tests {
             }
 
             assert!(verify_result.is_ok());
+
+            // TODO: Add negative test with bad Merkle authentication path
+            // This probably requires manipulating the proof stream somehow.
         }
 
-        // Negative test
+        // Negative test with too high degree
         let too_high = subgroup_order as u32 / expansion_factor as u32;
         points = subgroup.iter().map(|p| p.mod_pow_u32(too_high)).collect();
         let mut proof_stream: StarkProofStream = StarkProofStream::default();
