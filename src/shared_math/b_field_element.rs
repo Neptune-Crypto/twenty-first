@@ -9,11 +9,11 @@ use crate::shared_math::traits::{
 use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
 use phf::phf_map;
-use rand::prelude::ThreadRng;
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
+use std::num::TryFromIntError;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
     fmt::{self},
@@ -56,7 +56,7 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u128> = phf_map! {
 };
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize, Default)]
 pub struct BFieldElement(u128);
 
 impl BFieldElement {
@@ -124,6 +124,20 @@ impl fmt::Display for BFieldElement {
     }
 }
 
+impl From<u32> for BFieldElement {
+    fn from(value: u32) -> Self {
+        BFieldElement::new(value.into())
+    }
+}
+
+impl TryFrom<BFieldElement> for u32 {
+    type Error = TryFromIntError;
+
+    fn try_from(value: BFieldElement) -> Result<Self, Self::Error> {
+        u32::try_from(value.0)
+    }
+}
+
 impl Inverse for BFieldElement {
     #[must_use]
     fn inverse(&self) -> Self {
@@ -161,7 +175,7 @@ impl CyclicGroupGenerator for BFieldElement {
 }
 
 impl GetRandomElements for BFieldElement {
-    fn random_elements(length: usize, prng: &mut ThreadRng) -> Vec<Self> {
+    fn random_elements<R: Rng>(length: usize, prng: &mut R) -> Vec<Self> {
         let mut values: Vec<BFieldElement> = Vec::with_capacity(length);
         let max = BFieldElement::MAX as u64;
 

@@ -1,4 +1,4 @@
-use rand::prelude::ThreadRng;
+use rand::Rng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::{Debug, Display};
@@ -43,7 +43,7 @@ pub trait GetRandomElements
 where
     Self: Sized,
 {
-    fn random_elements(length: usize, rng: &mut ThreadRng) -> Vec<Self>;
+    fn random_elements<R: Rng>(length: usize, rng: &mut R) -> Vec<Self>;
 }
 
 // TODO: Remove in favor of CyclicGroupGenerator

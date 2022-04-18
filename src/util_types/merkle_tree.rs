@@ -768,6 +768,7 @@ where
 mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::util_types::simple_hasher::RescuePrimeProduction;
@@ -1988,5 +1989,20 @@ mod merkle_tree_test {
                 { leaf_idx }
             );
         })(test_leaf, &payload)
+    }
+
+    #[test]
+    fn merkly_merk_test() {
+        type RP = RescuePrimeProduction;
+        type RPXLIX = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
+
+        let mut rng = rand::thread_rng();
+        let elements = BFieldElement::random_elements(128, &mut rng);
+
+        let mt = MerkleTree::<BFieldElement, RP>::from_vec(&elements, &0.into());
+        let mt_xlix = MerkleTree::<BFieldElement, RPXLIX>::from_vec(&elements, &0.into());
+
+        println!("Merkle root (RP 1): {:?}", mt.get_root());
+        println!("Merkle root (RP 2): {:?}", mt_xlix.get_root());
     }
 }

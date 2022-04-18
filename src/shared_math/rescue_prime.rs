@@ -8,7 +8,6 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-// TODO: Make this work for XFieldElement via trait.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RescuePrime {
     pub m: usize,

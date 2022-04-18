@@ -1,5 +1,4 @@
-use rand::prelude::ThreadRng;
-use rand::RngCore;
+use rand::Rng;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Serialize};
 
@@ -57,7 +56,7 @@ pub fn hash(bytes: &[u8]) -> Blake3Hash {
 }
 
 impl GetRandomElements for Blake3Hash {
-    fn random_elements(length: usize, prng: &mut ThreadRng) -> Vec<Self> {
+    fn random_elements<R: Rng>(length: usize, prng: &mut R) -> Vec<Self> {
         let mut values: Vec<Blake3Hash> = Vec::with_capacity(length);
 
         while values.len() < length {

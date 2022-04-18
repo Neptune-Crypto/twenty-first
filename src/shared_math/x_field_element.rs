@@ -5,7 +5,7 @@ use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{
     CyclicGroupGenerator, IdentityValues, ModPowU32, ModPowU64, New, PrimeField,
 };
-use rand::prelude::ThreadRng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::{AddAssign, Div, MulAssign, SubAssign};
 use std::{
@@ -169,7 +169,7 @@ impl GetPrimitiveRootOfUnity for XFieldElement {
 }
 
 impl GetRandomElements for XFieldElement {
-    fn random_elements(length: usize, rng: &mut ThreadRng) -> Vec<Self> {
+    fn random_elements<R: Rng>(length: usize, rng: &mut R) -> Vec<Self> {
         let b_values: Vec<BFieldElement> = BFieldElement::random_elements(length * 3, rng);
 
         let mut values: Vec<XFieldElement> = Vec::with_capacity(length as usize);

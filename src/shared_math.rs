@@ -12,6 +12,7 @@ pub mod prime_field_element_flexible;
 pub mod rescue_prime;
 pub mod rescue_prime_params;
 pub mod rescue_prime_pfe_flexible;
+pub mod rescue_prime_xlix;
 pub mod stark;
 pub mod traits;
 pub mod vector;
