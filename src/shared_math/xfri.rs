@@ -90,8 +90,11 @@ impl FriDomain {
 
 #[derive(Debug, Clone)]
 pub struct Fri<H> {
-    pub expansion_factor: usize,         // = domain_length / trace_length
-    pub colinearity_checks_count: usize, // number of colinearity checks in each round
+    // In STARK, the expansion factor <FRI domain length> / max_degree, where
+    // `max_degree` is the max degree of any interpolation rounded up to the
+    // nearest power of 2.
+    pub expansion_factor: usize,
+    pub colinearity_checks_count: usize,
     pub domain: FriDomain,
     _hasher: PhantomData<H>,
 }
@@ -191,14 +194,14 @@ where
             .clone()
             .into_par_iter()
             .map(|xfe| {
-                let digest: Vec<BFieldElement> = xfe.coefficients.into();
-                hasher.hash(&digest)
+                let b_elements: Vec<BFieldElement> = xfe.coefficients.into();
+                hasher.hash(&b_elements)
             })
             .collect_into_vec(&mut digests);
         let mut mt: MerkleTree<Vec<BFieldElement>, H> =
             MerkleTree::from_digests(&digests, &mt_dummy_value);
         let mt_root: &<H as Hasher>::Digest = mt.get_root();
-        // proof_stream.enqueue_length_prepended(mt_root)?;
+
         proof_stream.enqueue(&Item::MerkleRoot(mt_root.to_owned()));
         let mut values_and_merkle_trees = vec![(codeword_local.clone(), mt)];
 
@@ -206,13 +209,9 @@ where
         for _ in 0..num_rounds {
             let n = codeword_local.len();
 
-            // Sanity check to verify that generator has the right order; requires ModPowU64
-            //assert!(generator.inv() == generator.mod_pow((n - 1).into())); // TODO: REMOVE
-
-            // Get challenge, one just acts as *any* element in this field -- the field element
-            // is completely determined from the byte stream.
-            let _alpha: H::Digest = proof_stream.prover_fiat_shamir();
-            let alpha: XFieldElement = XFieldElement::new([_alpha[0], _alpha[1], _alpha[2]]);
+            // Get challenge
+            let alpha_b: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
+            let alpha: XFieldElement = XFieldElement::new([alpha_b[0], alpha_b[1], alpha_b[2]]);
 
             let x_offset: Vec<XFieldElement> = generator
                 .get_cyclic_group_elements(None)
@@ -228,18 +227,18 @@ where
             }
             codeword_local.resize(n / 2, zero);
 
-            // Compute and send Merkle root
+            // Compute and send Merkle root. We have to do that within this loops, since
+            // the next round's alpha must be calculated from the previous round's Merkle root.
             codeword_local
                 .clone()
                 .into_par_iter()
                 .map(|xfe| {
-                    let digest: Vec<BFieldElement> = xfe.to_digest();
-                    hasher.hash(&digest)
+                    let b_elements: Vec<BFieldElement> = xfe.coefficients.into();
+                    hasher.hash(&b_elements)
                 })
                 .collect_into_vec(&mut digests);
 
             mt = MerkleTree::from_digests(&digests, &mt_dummy_value);
-            // proof_stream.enqueue_length_prepended(mt.get_root())?;
             let mt_root: &H::Digest = mt.get_root();
             proof_stream.enqueue(&Item::MerkleRoot(mt_root.to_owned()));
             values_and_merkle_trees.push((codeword_local.clone(), mt));
@@ -251,7 +250,6 @@ where
 
         // Send the last codeword
         let last_codeword: Vec<XFieldElement> = codeword_local;
-        // proof_stream.enqueue_length_prepended(&last_codeword)?;
         proof_stream.enqueue(&Item::FriCodeword(last_codeword));
 
         Ok(values_and_merkle_trees)
