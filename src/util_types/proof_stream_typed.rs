@@ -61,6 +61,10 @@ where
         self.items.len()
     }
 
+    pub fn transcript_length(&self) -> usize {
+        self.transcript.len()
+    }
+
     pub fn enqueue(&mut self, item: &Item) {
         let mut elems: Vec<BFieldElement> = item.clone().into_iter().collect();
         self.items.push((item.clone(), elems.len()));
