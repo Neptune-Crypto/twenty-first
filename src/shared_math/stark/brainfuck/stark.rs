@@ -697,11 +697,16 @@ impl Stark {
 
         let report = timer.finish();
         println!("{}", report);
+        println!(
+            "Created proof containing {} B-field elements",
+            proof_stream.transcript_length()
+        );
 
         Ok(proof_stream)
     }
 
     pub fn verify(&self, proof_stream_: &mut StarkProofStream) -> Result<bool, Box<dyn Error>> {
+        let mut timer = TimingReporter::start();
         let hasher = StarkHasher::new();
 
         // let base_merkle_tree_root: Vec<BFieldElement> =
@@ -723,17 +728,8 @@ impl Stark {
         let extension_tree_merkle_root: Vec<BFieldElement> =
             proof_stream_.dequeue()?.as_merkle_root()?;
 
-        // let processor_instruction_permutation_terminal: XFieldElement =
-        //     proof_stream.dequeue(3 * 128 / 8)?;
-        // let processor_memory_permutation_terminal: XFieldElement =
-        //     proof_stream.dequeue(3 * 128 / 8)?;
-        // let processor_input_evaluation_terminal: XFieldElement =
-        //     proof_stream.dequeue(3 * 128 / 8)?;
-        // let processor_output_evaluation_terminal: XFieldElement =
-        //     proof_stream.dequeue(3 * 128 / 8)?;
-        // let instruction_evaluation_terminal: XFieldElement = proof_stream.dequeue(3 * 128 / 8)?;
-
         let terminals = proof_stream_.dequeue()?.as_terminals()?;
+        timer.elapsed("Read from proof stream");
 
         let base_degree_bounds: Vec<Degree> = self
             .tables
@@ -741,6 +737,7 @@ impl Stark {
             .into_iter()
             .map(|table| vec![table.interpolant_degree(); table.base_width()])
             .concat();
+        timer.elapsed("Calculated base degree bounds");
 
         let extension_degree_bounds: Vec<Degree> = self
             .tables
@@ -748,6 +745,7 @@ impl Stark {
             .into_iter()
             .map(|table| vec![table.interpolant_degree(); table.full_width() - table.base_width()])
             .concat();
+        timer.elapsed("Calculated extension degree bounds");
 
         // get weights for nonlinear combination
         //  - 1 randomizer
@@ -766,6 +764,7 @@ impl Stark {
             })
             .sum();
         let num_difference_quotients = self.permutation_arguments.len();
+        timer.elapsed("Calculated quotient degree bounds");
 
         let weights_seed: Vec<BFieldElement> = proof_stream_.verifier_fiat_shamir();
         let weights_count = num_randomizer_polynomials
@@ -775,12 +774,14 @@ impl Stark {
             + 2 * num_difference_quotients;
         let weights: Vec<XFieldElement> =
             Self::sample_weights(&hasher, &weights_seed, weights_count);
+        timer.elapsed("Calculated weights");
 
         let combination_root: Vec<BFieldElement> = proof_stream_.dequeue()?.as_merkle_root()?;
 
         let indices_seed: Vec<BFieldElement> = proof_stream_.verifier_fiat_shamir();
         let indices =
             hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
+        timer.elapsed("Got indices");
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
         let mut unit_distances: Vec<usize> = self
@@ -792,6 +793,7 @@ impl Stark {
         unit_distances.push(0);
         unit_distances.sort_unstable();
         unit_distances.dedup();
+        timer.elapsed("Got unit distances");
 
         let mut tuples: HashMap<usize, Vec<XFieldElement>> = HashMap::new();
         // TODO: we can store the elements mushed into "tuples" separately, like in "points" below,
@@ -860,9 +862,13 @@ impl Stark {
                 tuples.insert(idx, vec![tuples[&idx].clone(), extension_elements].concat());
             }
         }
+        timer.elapsed(&format!(
+            "Verified authentication paths for {} indices",
+            indices.len()
+        ));
 
         // verify nonlinear combination
-        for index in indices {
+        for &index in indices.iter() {
             // collect terms: randomizer
             let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
                 .map(|i| tuples[&index][i])
@@ -1093,9 +1099,14 @@ impl Stark {
                 "The combination leaf must equal the inner product"
             );
         }
+        timer.elapsed(&format!(
+            "Verified {} non-linear combinations",
+            indices.len()
+        ));
 
         // Verify low degree of combination polynomial
         self.fri.verify(proof_stream_)?;
+        timer.elapsed("Verified FRI proof");
 
         // Verify external terminals
         for (i, iea) in self.io_evaluation_arguments.iter().enumerate() {
@@ -1111,6 +1122,10 @@ impl Stark {
         {
             return Err(Box::new(StarkVerifyError::ProgramEvaluationArgument));
         }
+        timer.elapsed("Verified terminals");
+
+        let report = timer.finish();
+        println!("{}", report);
 
         Ok(true)
     }
