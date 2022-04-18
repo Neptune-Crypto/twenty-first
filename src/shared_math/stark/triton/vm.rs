@@ -31,6 +31,6 @@ mod triton_vm_tests {
     #[test]
     fn vm_run_test() {
         let program = vec![push(2), push(2), Add];
-        let empty_run = run(&vec![]);
+        let _empty_run = run(&program);
     }
 }

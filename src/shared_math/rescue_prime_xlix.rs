@@ -40,7 +40,7 @@ impl<const M: usize> RescuePrimeXlix<M> {
 
     pub fn hash_padded(&self, input: &[BWord], output_len: usize) -> Vec<BFieldElement> {
         assert_eq!(0, input.len() % self.rate());
-        assert!(output_len < self.rate());
+        assert!(output_len <= self.rate());
 
         // Initialize state to all zeros
         let mut state: [BWord; M] = [0.into(); M];
@@ -120,10 +120,12 @@ impl<const M: usize> RescuePrimeXlix<M> {
     }
 }
 
-pub fn neptune_params() -> RescuePrimeXlix<16> {
+pub const RP_DEFAULT_WIDTH: usize = 16;
+
+pub fn neptune_params() -> RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     let params = rescue_prime_params::rescue_prime_params_bfield_0();
 
-    let capacity = 12;
+    let capacity = 4;
     let n = params.steps_count;
     let alpha = params.alpha;
     let alpha_inv = params.alpha_inv;

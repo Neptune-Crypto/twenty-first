@@ -1,8 +1,9 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 use crate::shared_math::rescue_prime::RescuePrime;
+use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
 use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::{other, rescue_prime_params};
+use crate::shared_math::{other, rescue_prime_params, rescue_prime_xlix};
 use crate::util_types::blake3_wrapper::Blake3Hash;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -249,7 +250,6 @@ impl Hasher for RescuePrimeProduction {
         self.0.hash(&input)
     }
 
-    // TODO: Rewrite this when exposing RescuePrime's sponge
     fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest {
         let mut acc = self.hash(&inputs[0]);
         for input in &inputs[1..] {
@@ -259,14 +259,39 @@ impl Hasher for RescuePrimeProduction {
     }
 }
 
+impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
+    type Digest = Vec<BFieldElement>;
+
+    fn new() -> Self {
+        rescue_prime_xlix::neptune_params()
+    }
+
+    fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
+        let elements_per_digest: usize = 5;
+        self.hash_wrapper(&input.to_digest(), elements_per_digest)
+    }
+
+    fn hash_pair(&mut self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
+        let elements_per_digest: usize = 5;
+        let input: Vec<BFieldElement> = left_input
+            .iter()
+            .chain(right_input.iter())
+            .copied()
+            .collect();
+        self.hash_wrapper(&input, 2 * elements_per_digest)
+    }
+
+    fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest {
+        let elements_per_digest: usize = 5;
+        self.hash_wrapper(&inputs.concat(), elements_per_digest)
+    }
+}
+
 #[cfg(test)]
 pub mod test_simple_hasher {
-
-    use rand::Rng;
-
-    use crate::shared_math::traits::GetRandomElements;
-
     use super::*;
+    use crate::shared_math::traits::GetRandomElements;
+    use rand::Rng;
 
     #[test]
     fn u128_to_digest_test() {
@@ -366,8 +391,6 @@ pub mod test_simple_hasher {
     #[test]
     fn random_index_test() {
         let mut hasher: RescuePrimeProduction = RescuePrimeProduction::new();
-
-        // TODO: Test that this is uniformly random by samling.
 
         let mut rng = rand::thread_rng();
         for element in BFieldElement::random_elements(100, &mut rng) {
