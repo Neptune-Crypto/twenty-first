@@ -7,10 +7,12 @@ use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
 use crate::shared_math::stark::triton::error::vm_err;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues, Inverse};
+use byteorder::{BigEndian, ReadBytesExt};
 use rand::Rng;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
+use std::io::{Stdin, Stdout, Write};
 
 type BWord = BFieldElement;
 
@@ -105,9 +107,11 @@ impl<'pgm> VMState<'pgm> {
         &self,
         rng: &mut R,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
+        stdin: &mut Stdin,
+        stdout: &mut Stdout,
     ) -> Result<VMState<'pgm>, Box<dyn Error>> {
         let mut next_state = self.clone();
-        next_state.step_mut(rng, rescue_prime)?;
+        next_state.step_mut(rng, rescue_prime, stdin, stdout)?;
         Ok(next_state)
     }
 
@@ -118,6 +122,8 @@ impl<'pgm> VMState<'pgm> {
         &mut self,
         rng: &mut R,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
+        stdin: &mut Stdin,
+        stdout: &mut Stdout,
     ) -> Result<(), Box<dyn Error>> {
         // All instructions increase the cycle count
         self.cycle_count += 1;
@@ -386,6 +392,19 @@ impl<'pgm> VMState<'pgm> {
                 let (quot, rem) = other::div_rem(a, b);
                 self.op_stack.push(quot.into());
                 self.op_stack.push(rem.into());
+                self.instruction_pointer += 1;
+            }
+
+            Print => {
+                let codepoint: u32 = self.op_stack.pop()?.try_into()?;
+                let out_char = codepoint.to_be_bytes();
+                let _written = stdout.write(&out_char)?;
+                self.instruction_pointer += 1;
+            }
+
+            Scan => {
+                let in_char: u32 = stdin.read_u32::<BigEndian>()?;
+                self.op_stack.push(in_char.into());
                 self.instruction_pointer += 1;
             }
         }

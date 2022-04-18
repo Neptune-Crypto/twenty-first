@@ -59,6 +59,9 @@ pub enum Instruction {
     Xor,
     Reverse,
     Div,
+    // Read/write
+    Print,
+    Scan,
 }
 
 pub fn push(value: u32) -> Instruction {
@@ -109,6 +112,8 @@ impl Display for Instruction {
             Xor => write!(f, "xor"),
             Reverse => write!(f, "reverse"),
             Div => write!(f, "div"),
+            Print => write!(f, "print"),
+            Scan => write!(f, "scan"),
         }
     }
 }
@@ -162,6 +167,8 @@ impl Instruction {
             Xor => 43,
             Reverse => 44,
             Div => 45,
+            Print => 46,
+            Scan => 47,
         }
     }
 }
