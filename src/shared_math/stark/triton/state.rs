@@ -253,9 +253,6 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Ntt => todo!(),
-            Intt => todo!(),
-
             ClearAll => {
                 self.aux.fill(0.into());
                 self.instruction_pointer += 1;

@@ -40,8 +40,6 @@ pub enum Instruction {
     GetRamp,
     // Auxiliary register instructions
     Xlix,
-    Ntt,
-    Intt,
     ClearAll,
     Squeeze(Ord16),
     Absorb(Ord16),
@@ -93,8 +91,6 @@ impl Display for Instruction {
             SetRamp => write!(f, "setramp"),
             GetRamp => write!(f, "getramp"),
             Xlix => write!(f, "xlix"),
-            Ntt => write!(f, "ntt"),
-            Intt => write!(f, "intt"),
             ClearAll => write!(f, "clearall"),
             Squeeze(arg) => write!(f, "squeeze {}", arg),
             Absorb(arg) => write!(f, "absorb {}", arg),
@@ -147,8 +143,7 @@ impl Instruction {
             SetRamp => 23,
             GetRamp => 24,
             Xlix => 25,
-            Ntt => 26,
-            Intt => 27,
+            // FIXME: Gap left by Ntt/Intt.
             ClearAll => 28,
             Squeeze(_) => 29,
             Absorb(_) => 30,
