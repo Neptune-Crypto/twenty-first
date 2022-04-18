@@ -3,6 +3,7 @@ use super::state::VMState;
 use crate::shared_math::rescue_prime_xlix;
 use std::error::Error;
 
+#[allow(clippy::needless_lifetimes)]
 pub fn run<'pgm>(program: &'pgm [Instruction]) -> Result<Vec<VMState<'pgm>>, Box<dyn Error>> {
     let mut rng = rand::thread_rng();
     let rescue_prime = rescue_prime_xlix::neptune_params();
