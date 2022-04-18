@@ -8,6 +8,7 @@ use super::traits::{CyclicGroupGenerator, ModPowU32};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::traits::{IdentityValues, PrimeField};
+use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::{LeaflessPartialAuthenticationPath, MerkleTree};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use std::error::Error;
@@ -138,6 +139,7 @@ where
         );
 
         // Commit phase
+        let mut timer = TimingReporter::start();
         #[allow(clippy::type_complexity)]
         let values_and_merkle_trees: Vec<(
             Vec<XFieldElement>,
@@ -147,9 +149,11 @@ where
             .iter()
             .map(|x| x.0.clone())
             .collect();
+        timer.elapsed("Commit phase");
 
         // fiat-shamir phase (get indices)
         let top_level_indices: Vec<usize> = self.sample_indices(&proof_stream.prover_fiat_shamir());
+        timer.elapsed("Sample indices");
 
         // query phase
         let mut c_indices = top_level_indices.clone();
@@ -166,7 +170,10 @@ where
                 &c_indices,
                 proof_stream,
             )?;
+            timer.elapsed(&format!("Query phase {}", i));
         }
+        let report = timer.finish();
+        println!("FRI-prover, timing report\n{}", report);
 
         Ok(top_level_indices)
     }
@@ -361,6 +368,7 @@ where
         let mut omega = self.domain.omega;
         let mut offset = self.domain.offset;
         let (num_rounds, degree_of_last_round) = self.num_rounds();
+        let mut timer = TimingReporter::start();
 
         // Extract all roots and calculate alpha, the challenges
         let mut roots: Vec<H::Digest> = vec![];
@@ -368,6 +376,7 @@ where
         // let first_root: H::Digest = proof_stream.dequeue_length_prepended::<H::Digest>()?;
         let first_root: H::Digest = proof_stream.dequeue()?.as_merkle_root()?;
         roots.push(first_root);
+        timer.elapsed("Init");
 
         for _ in 0..num_rounds {
             // Get a challenge from the proof stream
@@ -378,6 +387,7 @@ where
             let root: H::Digest = proof_stream.dequeue()?.as_merkle_root()?;
             roots.push(root);
         }
+        timer.elapsed("Roots and alpha");
 
         // Extract last codeword
         let mut last_codeword: Vec<XFieldElement> = proof_stream.dequeue()?.as_fri_codeword()?;
@@ -411,11 +421,13 @@ where
         if last_poly_degree > degree_of_last_round as isize {
             return Err(Box::new(ValidationError::LastIterationTooHighDegree));
         }
+        timer.elapsed("Verified last round");
 
         let seed: H::Digest = proof_stream.verifier_fiat_shamir();
         let top_level_indices: Vec<usize> = self.sample_indices(&seed);
 
         // for every round, check consistency of subsequent layers
+        timer.elapsed("Get seed and indices");
         let mut codeword_evaluations: Vec<CodewordEvaluation<XFieldElement>> = vec![];
         for r in 0..num_rounds as usize {
             // Fold c indices
@@ -432,12 +444,14 @@ where
                 .collect();
             let mut ab_indices: Vec<usize> = a_indices.clone();
             ab_indices.append(&mut b_indices.clone());
+            timer.elapsed(&format!("Get indices round {}", r));
 
             // Read values and check colinearity
             let ab_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, XFieldElement)> =
                 proof_stream.dequeue()?.as_fri_proof()?;
             let c_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, XFieldElement)> =
                 proof_stream.dequeue()?.as_fri_proof()?;
+            timer.elapsed(&format!("Read auth paths from proof stream {}", r));
 
             // verify Merkle authentication paths
             if !MerkleTree::<XFieldElement, H>::verify_leafless_multi_proof(
@@ -455,6 +469,7 @@ where
             ) {
                 return Err(Box::new(ValidationError::BadMerkleProof));
             }
+            timer.elapsed(&format!("Verify auth paths {}", r));
 
             // Verify that the expected number of samples are present
             if ab_proof.len() != 2 * self.colinearity_checks_count
@@ -490,6 +505,7 @@ where
             }) {
                 return Err(Box::new(ValidationError::NotColinear(r)));
             }
+            timer.elapsed(&format!("Colinearity checks {}", r));
             // Update subgroup generator and offset
             omega = omega * omega;
             offset = offset * offset;
@@ -502,6 +518,8 @@ where
                 }
             }
         }
+        let report = timer.finish();
+        println!("FRI-verifier Timing Report\n{}", report);
 
         Ok(codeword_evaluations)
     }
