@@ -12,7 +12,7 @@ use phf::phf_map;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::num::TryFromIntError;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
@@ -130,11 +130,11 @@ impl From<u32> for BFieldElement {
     }
 }
 
-impl TryInto<u32> for BFieldElement {
+impl TryFrom<BFieldElement> for u32 {
     type Error = TryFromIntError;
 
-    fn try_into(self) -> Result<u32, Self::Error> {
-        self.value().try_into()
+    fn try_from(value: BFieldElement) -> Result<Self, Self::Error> {
+        u32::try_from(value.0)
     }
 }
 
