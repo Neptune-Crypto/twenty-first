@@ -1,12 +1,14 @@
 use super::instruction::Instruction;
 use super::state::VMState;
+use crate::shared_math::rescue_prime_xlix;
 use std::error::Error;
 
 pub fn run<'pgm>(program: &'pgm [Instruction]) -> Result<Vec<VMState<'pgm>>, Box<dyn Error>> {
     let mut rng = rand::thread_rng();
+    let rescue_prime = rescue_prime_xlix::neptune_params();
     let mut trace = vec![VMState::new(program)];
     while !trace.last().unwrap().is_final() {
-        trace.push(trace.last().unwrap().step(&mut rng)?);
+        trace.push(trace.last().unwrap().step(&mut rng, &rescue_prime)?);
     }
 
     Ok(trace)

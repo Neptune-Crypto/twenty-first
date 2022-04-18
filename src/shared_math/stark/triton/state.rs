@@ -4,6 +4,7 @@ use super::op_stack::OpStack;
 use super::ord_n::{Ord4::*, Ord6};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
+use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
 use crate::shared_math::stark::triton::error::vm_err;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues, Inverse};
 use rand::Rng;
@@ -100,16 +101,24 @@ impl<'pgm> VMState<'pgm> {
     }
 
     /// Given a state, compute the next state purely.
-    pub fn step<R: Rng>(&self, rng: &mut R) -> Result<VMState<'pgm>, Box<dyn Error>> {
+    pub fn step<R: Rng>(
+        &self,
+        rng: &mut R,
+        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
+    ) -> Result<VMState<'pgm>, Box<dyn Error>> {
         let mut next_state = self.clone();
-        next_state.step_mut(rng)?;
+        next_state.step_mut(rng, rescue_prime)?;
         Ok(next_state)
     }
 
     /// Perform the state transition as a mutable operation on `self`.
     ///
     /// This function is called from `step`.
-    fn step_mut<R: Rng>(&mut self, rng: &mut R) -> Result<(), Box<dyn Error>> {
+    fn step_mut<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
+    ) -> Result<(), Box<dyn Error>> {
         // All instructions increase the cycle count
         self.cycle_count += 1;
 
@@ -239,7 +248,11 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Xlix => todo!(),
+            Xlix => {
+                rescue_prime.rescue_xlix_permutation(&mut self.aux);
+                self.instruction_pointer += 1;
+            }
+
             Ntt => todo!(),
             Intt => todo!(),
 
