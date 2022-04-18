@@ -3,11 +3,15 @@ use crate::shared_math::traits::GetRandomElements;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::izip;
 use rand::prelude::ThreadRng;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::marker::PhantomData;
+
+// TODO: Haphazardly chosen from a very small dataset
+const PARALLELLIZATION_THRESHOLD: usize = 16;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Node<Value, Digest> {
@@ -86,8 +90,14 @@ where
 /// These are exactly the arguments for the `verify_*` family of static methods.
 impl<Value, H> MerkleTree<Value, H>
 where
-    Value: Clone + Serialize + Debug + PartialEq + ToDigest<H::Digest>,
-    H: Hasher,
+    Value: Clone
+        + Serialize
+        + Debug
+        + PartialEq
+        + ToDigest<H::Digest>
+        + std::marker::Sync
+        + std::marker::Send,
+    H: Hasher + std::marker::Sync + std::marker::Send,
 {
     pub fn verify_proof(
         root_hash: H::Digest,
@@ -156,11 +166,27 @@ where
         }
 
         let hasher = H::new();
-        // loop from `len(L) - 1` to 1
-        for i in (1..(nodes.len() / 2)).rev() {
-            let left = nodes[i * 2].hash.clone();
-            let right = nodes[i * 2 + 1].hash.clone();
-            nodes[i].hash = hasher.hash_pair(&left.to_digest(), &right.to_digest());
+        let mut node_count_on_this_level: usize = digests.len() / 2;
+        let mut count_acc: usize = 0;
+        while node_count_on_this_level >= PARALLELLIZATION_THRESHOLD {
+            let mut local_digests: Vec<H::Digest> = Vec::with_capacity(node_count_on_this_level);
+            (0..node_count_on_this_level)
+                .into_par_iter()
+                .map(|i| {
+                    let j = node_count_on_this_level + i;
+                    hasher.hash_pair(&nodes[j * 2].hash, &nodes[j * 2 + 1].hash)
+                })
+                .collect_into_vec(&mut local_digests);
+            for i in 0..node_count_on_this_level {
+                // TODO: REMOVE THIS CLONE SOMEHOW
+                nodes[node_count_on_this_level + i].hash = local_digests[i].clone();
+            }
+            count_acc += node_count_on_this_level;
+            node_count_on_this_level /= 2;
+        }
+
+        for i in (1..(digests.len() - count_acc)).rev() {
+            nodes[i].hash = hasher.hash_pair(&nodes[i * 2].hash, &nodes[i * 2 + 1].hash);
         }
 
         // nodes[0] is never used for anything.
@@ -566,8 +592,15 @@ where
 
 impl<Value, H> SaltedMerkleTree<Value, H>
 where
-    Value: Clone + Serialize + Debug + PartialEq + ToDigest<H::Digest> + GetRandomElements,
-    H: Hasher,
+    Value: Clone
+        + Serialize
+        + Debug
+        + PartialEq
+        + ToDigest<H::Digest>
+        + GetRandomElements
+        + Sync
+        + Send,
+    H: Hasher + Sync + Send,
 {
     // Build a salted Merkle tree from a slice of serializable values
     pub fn from_vec(
