@@ -367,7 +367,7 @@ where
     pub fn verify(
         &self,
         proof_stream: &mut StarkProofStream,
-        combination_root: &H::Digest,
+        first_codeword_mt_root: &H::Digest,
     ) -> Result<Vec<CodewordEvaluation<XFieldElement>>, Box<dyn Error>> {
         let mut omega = self.domain.omega;
         let mut offset = self.domain.offset;
@@ -379,7 +379,7 @@ where
         let mut alphas: Vec<XFieldElement> = vec![];
 
         let first_root: H::Digest = proof_stream.dequeue()?.as_merkle_root()?;
-        if first_root != *combination_root {
+        if first_root != *first_codeword_mt_root {
             return Err(Box::new(ValidationError::BadMerkleRootForFirstCodeword));
         }
 

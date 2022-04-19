@@ -640,7 +640,7 @@ impl Stark {
         timer.elapsed("sample_indices");
 
         // prove low degree of combination polynomial
-        let (_indices, combination_root_verify) =
+        let (_fri_indices, combination_root_verify) =
             self.fri.prove(&combination_codeword, &mut proof_stream)?;
         timer.elapsed("fri.prove");
         assert_eq!(
