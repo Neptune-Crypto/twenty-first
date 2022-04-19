@@ -783,7 +783,7 @@ impl Stark {
         timer.elapsed("Got indices");
 
         // Verify low degree of combination polynomial
-        self.fri.verify(proof_stream_)?;
+        self.fri.verify(proof_stream_, &combination_root)?;
         timer.elapsed("Verified FRI proof");
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
