@@ -111,7 +111,7 @@ where
     /// will end up in a broken state.
     fn mutate_leaf(&mut self, old_membership_proof: &MembershipProof<H>, new_leaf: &H::Digest) {
         let node_index = data_index_to_node_index(old_membership_proof.data_index);
-        let mut hasher = H::new();
+        let hasher = H::new();
         let mut acc_hash: H::Digest = new_leaf.to_owned();
         let mut acc_index: u128 = node_index;
         for hash in old_membership_proof.authentication_path.iter() {

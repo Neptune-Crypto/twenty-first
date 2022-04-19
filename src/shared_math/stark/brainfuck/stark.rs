@@ -20,10 +20,13 @@ use crate::shared_math::{
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
     x_field_element::XFieldElement, xfri::Fri,
 };
+use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::MerkleTree;
 use crate::util_types::simple_hasher::{Hasher, RescuePrimeProduction, ToDigest};
 use itertools::Itertools;
 use rand::thread_rng;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -58,7 +61,7 @@ pub struct Stark {
 
 impl Stark {
     fn sample_weights(
-        hasher: &mut StarkHasher,
+        hasher: &StarkHasher,
         seed: &StarkDigest,
         count: usize,
     ) -> Vec<XFieldElement> {
@@ -221,6 +224,8 @@ impl Stark {
         &mut self,
         base_matrices: BaseMatrices,
     ) -> Result<StarkProofStream, Box<dyn Error>> {
+        let mut timer = TimingReporter::start();
+
         assert_eq!(self.trace_length, base_matrices.processor_matrix.len());
         assert_eq!(
             self.trace_length + self.program.len(),
@@ -235,12 +240,18 @@ impl Stark {
             base_matrices.output_matrix,
         );
 
+        timer.elapsed("assert, set_matrices");
+
         self.tables.borrow_mut().pad();
+
+        timer.elapsed("pad");
 
         // Instantiate the memory table object
         let processor_matrix_clone = self.tables.borrow().processor_table.0.matrix.clone();
         self.tables.borrow_mut().memory_table.0.matrix =
             MemoryTable::derive_matrix(processor_matrix_clone);
+
+        timer.elapsed("derive_matrix");
 
         // Generate randomizer codewords for zero-knowledge
         // This generates three B field randomizer codewords, each with the same length as the FRI domain
@@ -258,12 +269,16 @@ impl Stark {
             b_randomizer_codewords[2].push(x_elem.coefficients[2]);
         }
 
+        timer.elapsed("randomizer_codewords");
+
         let base_codewords: Vec<Vec<BFieldElement>> = self
             .tables
             .borrow_mut()
             .get_and_set_all_base_codewords(&self.fri.domain);
         let all_base_codewords =
             vec![b_randomizer_codewords.into(), base_codewords.clone()].concat();
+
+        timer.elapsed("get_and_set_all_base_codewords");
 
         // TODO: How do I make a single Merkle tree from many codewords?
         // If the Merkle trees are always opened for all base codewords for a single index, then
@@ -278,16 +293,21 @@ impl Stark {
                     .collect::<Vec<BFieldElement>>()
             })
             .collect();
-        let mut hasher = StarkHasher::new();
+
+        timer.elapsed("transposed_base_codewords");
+
+        let hasher = StarkHasher::new();
 
         // Current length of each element in `transposed_base_codewords` is 18 which exceeds
         // max length of RP hash function. So we chop it into elements that will fit into the
         // rescue prime hash function. This is done by chopping the hash function input into
         // chunks of `max_length / 2` and calling `hash_many` on this input. Half the max
         // length is needed since the chunks are hashed two at a time.
-        let base_codeword_digests_by_index: Vec<Vec<BFieldElement>> = transposed_base_codewords
+        let mut base_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
+            Vec::with_capacity(transposed_base_codewords.len());
+        transposed_base_codewords
             .clone()
-            .into_iter()
+            .into_par_iter()
             .map(|values| {
                 let chunks: Vec<Vec<BFieldElement>> = values
                     .chunks(hasher.0.max_input_length / 2)
@@ -295,39 +315,51 @@ impl Stark {
                     .collect();
                 hasher.hash_many(&chunks)
             })
-            .collect();
+            .collect_into_vec(&mut base_codeword_digests_by_index);
         let base_merkle_tree = MerkleTree::<Vec<BFieldElement>, StarkHasher>::from_digests(
             &base_codeword_digests_by_index,
             &vec![BFieldElement::ring_zero()],
         );
+
+        timer.elapsed("base_merkle_tree");
 
         // Commit to base codewords
         let mut proof_stream = StarkProofStream::default();
         let base_merkle_tree_root: &Vec<BFieldElement> = base_merkle_tree.get_root();
         proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root.to_owned()));
 
+        timer.elapsed("proof_stream.enqueue");
+
         // Get coefficients for table extension
         // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
         // must not change though, it should remain `Vec<XFieldElement>`.
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
-            &mut hasher,
+            &hasher,
             &proof_stream.prover_fiat_shamir(),
             EXTENSION_CHALLENGE_COUNT,
         )
         .try_into()
         .unwrap();
 
+        timer.elapsed("sample_weights");
+
         let initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT] =
             XFieldElement::random_elements(PERMUTATION_ARGUMENTS_COUNT, &mut rng)
                 .try_into()
                 .unwrap();
 
+        timer.elapsed("initials");
+
         self.tables.borrow_mut().extend(challenges, initials);
+
+        timer.elapsed("extend");
 
         let extension_codewords = self
             .tables
             .borrow_mut()
             .get_and_set_all_extension_codewords(&self.fri.domain);
+
+        timer.elapsed("get_and_set_all_extension_codewords");
 
         let transposed_extension_codewords: Vec<Vec<XFieldElement>> = (0..extension_codewords[0]
             .len())
@@ -338,51 +370,67 @@ impl Stark {
                     .collect::<Vec<XFieldElement>>()
             })
             .collect();
-        let extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
-            transposed_extension_codewords
-                .clone()
-                .into_iter()
-                .map(|xvalues| {
-                    let bvalues: Vec<BFieldElement> = xvalues
-                        .into_iter()
-                        .map(|x| x.coefficients.clone().to_vec())
-                        .concat();
-                    assert_eq!(
-                        27,
-                        bvalues.len(),
-                        "9 X-field elements must become 27 B-field elements"
-                    );
-                    let chunks: Vec<Vec<BFieldElement>> = bvalues
-                        .chunks(hasher.0.max_input_length / 2)
-                        .map(|s| s.into())
-                        .collect();
-                    assert_eq!(
-                        6,
-                        chunks.len(),
-                        "27 B-field elements must be divided into 6 chunks for hashing"
-                    );
-                    hasher.hash_many(&chunks)
-                })
-                .collect();
+
+        let mut extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
+            Vec::with_capacity(transposed_extension_codewords.len());
+        transposed_extension_codewords
+            .clone()
+            .into_par_iter()
+            .map(|xvalues| {
+                let bvalues: Vec<BFieldElement> = xvalues
+                    .into_iter()
+                    .map(|x| x.coefficients.clone().to_vec())
+                    .concat();
+                assert_eq!(
+                    27,
+                    bvalues.len(),
+                    "9 X-field elements must become 27 B-field elements"
+                );
+                let chunks: Vec<Vec<BFieldElement>> = bvalues
+                    .chunks(hasher.0.max_input_length / 2)
+                    .map(|s| s.into())
+                    .collect();
+                assert_eq!(
+                    6,
+                    chunks.len(),
+                    "27 B-field elements must be divided into 6 chunks for hashing"
+                );
+                hasher.hash_many(&chunks)
+            })
+            .collect_into_vec(&mut extension_codeword_digests_by_index);
+
         let extension_tree = MerkleTree::<Vec<BFieldElement>, StarkHasher>::from_digests(
             &extension_codeword_digests_by_index,
             &vec![BFieldElement::ring_zero()],
         );
         proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root().to_owned()));
 
+        timer.elapsed("extension_tree");
+
         let extension_degree_bounds: Vec<Degree> =
             self.tables.borrow().get_all_extension_degree_bounds();
 
+        timer.elapsed("get_all_extension_degree_bounds");
+
         let terminals: [XFieldElement; TERMINAL_COUNT] = self.tables.borrow().get_terminals();
+
+        timer.elapsed("get_terminals");
 
         let mut quotient_codewords =
             self.tables
                 .borrow()
                 .all_quotients(&self.fri.domain, challenges, terminals);
+
+        timer.elapsed("all_quotients");
+
         let mut quotient_degree_bounds = self
             .tables
             .borrow()
             .all_quotient_degree_bounds(challenges, terminals);
+
+        proof_stream.enqueue(&Item::Terminals(terminals));
+
+        timer.elapsed("all_quotient_degree_bounds");
 
         // Prove equal initial values for the permutation-extension column pairs
         for pa in self.permutation_arguments.iter() {
@@ -390,8 +438,7 @@ impl Stark {
             quotient_degree_bounds.push(pa.quotient_degree_bound());
         }
 
-        proof_stream.enqueue(&Item::Terminals(terminals));
-
+        // Calculate `num_base_polynomials` and `num_extension_polynomials` for asserting
         let num_base_polynomials: usize = self
             .tables
             .borrow()
@@ -404,13 +451,21 @@ impl Stark {
             .into_iter()
             .map(|table| table.full_width() - table.base_width())
             .sum();
+
+        timer.elapsed("num_(base+extension)_polynomials");
+
         let num_randomizer_polynomials: usize = 1;
         let num_quotient_polynomials: usize = quotient_degree_bounds.len();
         let base_degree_bounds = self.tables.borrow().get_all_base_degree_bounds();
 
+        timer.elapsed("get_all_base_degree_bounds");
+
         let mut terms: Vec<Vec<XFieldElement>> = vec![x_randomizer_codeword];
         assert_eq!(base_codewords.len(), num_base_polynomials);
         let fri_x_values: Vec<BFieldElement> = self.fri.domain.b_domain_values();
+
+        timer.elapsed("b_domain_values");
+
         for (i, (bc, bdb)) in base_codewords
             .iter()
             .zip(base_degree_bounds.iter())
@@ -439,6 +494,8 @@ impl Stark {
             }
         }
 
+        timer.elapsed("...shift and interpolate base codewords?");
+
         assert_eq!(extension_codewords.len(), num_extension_polynomials);
         for (i, (ec, edb)) in extension_codewords
             .iter()
@@ -466,6 +523,8 @@ impl Stark {
                 );
             }
         }
+
+        timer.elapsed("...shift and interpolate extension codewords?");
 
         assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
         for (_i, (qc, qdb)) in quotient_codewords
@@ -504,11 +563,15 @@ impl Stark {
             // }
         }
 
+        timer.elapsed("...shift (~and interpolate~) quotient codewords?");
+
         // Get weights for nonlinear combination
         let weights_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
         let weights_count = num_randomizer_polynomials
             + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials);
-        let weights = Self::sample_weights(&mut hasher, &weights_seed, weights_count);
+        let weights = Self::sample_weights(&hasher, &weights_seed, weights_count);
+
+        timer.elapsed("sample_weights");
 
         assert_eq!(
             terms.len(),
@@ -534,20 +597,27 @@ impl Stark {
                         .collect()
                 },
             );
-        let combination_codeword_digests: Vec<Vec<BFieldElement>> = combination_codeword
+
+        timer.elapsed("combination_codeword");
+
+        let mut combination_codeword_digests: Vec<Vec<BFieldElement>> =
+            Vec::with_capacity(combination_codeword.len());
+        combination_codeword
             .clone()
-            .into_iter()
+            .into_par_iter()
             .map(|xfe| {
                 let digest: Vec<BFieldElement> = xfe.to_digest();
                 hasher.hash(&digest)
             })
-            .collect();
+            .collect_into_vec(&mut combination_codeword_digests);
         let combination_tree = MerkleTree::<Vec<BFieldElement>, StarkHasher>::from_digests(
             &combination_codeword_digests,
             &vec![BFieldElement::ring_zero()],
         );
         let combination_root: &Vec<BFieldElement> = combination_tree.get_root();
         proof_stream.enqueue(&Item::MerkleRoot(combination_root.to_owned()));
+
+        timer.elapsed("combination_tree");
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in verifier
         let mut unit_distances: Vec<usize> = self
@@ -560,10 +630,14 @@ impl Stark {
         unit_distances.sort_unstable();
         unit_distances.dedup();
 
+        timer.elapsed("unit_distances");
+
         // Get indices of leafs to prove nonlinear combination
         let indices_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
         let indices: Vec<usize> =
             hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
+
+        timer.elapsed("sample_indices");
 
         // Open leafs of zipped codewords at indicated positions
         for index in indices.iter() {
@@ -593,6 +667,8 @@ impl Stark {
             }
         }
 
+        timer.elapsed("open leafs of zipped codewords");
+
         // open combination codeword at the same positions
         for index in indices {
             let revealed_combination_element = combination_codeword[index];
@@ -612,14 +688,26 @@ impl Stark {
             proof_stream.enqueue(&Item::AuthenticationPath(revealed_combination_auth_path));
         }
 
+        timer.elapsed("open combination codeword at same position");
+
         // prove low degree of combination polynomial, and collect indices
         let _indices = self.fri.prove(&combination_codeword, &mut proof_stream)?;
+
+        timer.elapsed("fri.prove");
+
+        let report = timer.finish();
+        println!("{}", report);
+        println!(
+            "Created proof containing {} B-field elements",
+            proof_stream.transcript_length()
+        );
 
         Ok(proof_stream)
     }
 
     pub fn verify(&self, proof_stream_: &mut StarkProofStream) -> Result<bool, Box<dyn Error>> {
-        let mut hasher = StarkHasher::new();
+        let mut timer = TimingReporter::start();
+        let hasher = StarkHasher::new();
 
         // let base_merkle_tree_root: Vec<BFieldElement> =
         //     proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
@@ -628,7 +716,7 @@ impl Stark {
 
         // Get coefficients for table extension
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
-            &mut hasher,
+            &hasher,
             &proof_stream_.verifier_fiat_shamir(),
             EXTENSION_CHALLENGE_COUNT,
         )
@@ -640,17 +728,8 @@ impl Stark {
         let extension_tree_merkle_root: Vec<BFieldElement> =
             proof_stream_.dequeue()?.as_merkle_root()?;
 
-        // let processor_instruction_permutation_terminal: XFieldElement =
-        //     proof_stream.dequeue(3 * 128 / 8)?;
-        // let processor_memory_permutation_terminal: XFieldElement =
-        //     proof_stream.dequeue(3 * 128 / 8)?;
-        // let processor_input_evaluation_terminal: XFieldElement =
-        //     proof_stream.dequeue(3 * 128 / 8)?;
-        // let processor_output_evaluation_terminal: XFieldElement =
-        //     proof_stream.dequeue(3 * 128 / 8)?;
-        // let instruction_evaluation_terminal: XFieldElement = proof_stream.dequeue(3 * 128 / 8)?;
-
         let terminals = proof_stream_.dequeue()?.as_terminals()?;
+        timer.elapsed("Read from proof stream");
 
         let base_degree_bounds: Vec<Degree> = self
             .tables
@@ -658,6 +737,7 @@ impl Stark {
             .into_iter()
             .map(|table| vec![table.interpolant_degree(); table.base_width()])
             .concat();
+        timer.elapsed("Calculated base degree bounds");
 
         let extension_degree_bounds: Vec<Degree> = self
             .tables
@@ -665,6 +745,7 @@ impl Stark {
             .into_iter()
             .map(|table| vec![table.interpolant_degree(); table.full_width() - table.base_width()])
             .concat();
+        timer.elapsed("Calculated extension degree bounds");
 
         // get weights for nonlinear combination
         //  - 1 randomizer
@@ -683,6 +764,7 @@ impl Stark {
             })
             .sum();
         let num_difference_quotients = self.permutation_arguments.len();
+        timer.elapsed("Calculated quotient degree bounds");
 
         let weights_seed: Vec<BFieldElement> = proof_stream_.verifier_fiat_shamir();
         let weights_count = num_randomizer_polynomials
@@ -691,13 +773,15 @@ impl Stark {
             + 2 * num_quotient_polynomials
             + 2 * num_difference_quotients;
         let weights: Vec<XFieldElement> =
-            Self::sample_weights(&mut hasher, &weights_seed, weights_count);
+            Self::sample_weights(&hasher, &weights_seed, weights_count);
+        timer.elapsed("Calculated weights");
 
         let combination_root: Vec<BFieldElement> = proof_stream_.dequeue()?.as_merkle_root()?;
 
         let indices_seed: Vec<BFieldElement> = proof_stream_.verifier_fiat_shamir();
         let indices =
             hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
+        timer.elapsed("Got indices");
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
         let mut unit_distances: Vec<usize> = self
@@ -709,6 +793,7 @@ impl Stark {
         unit_distances.push(0);
         unit_distances.sort_unstable();
         unit_distances.dedup();
+        timer.elapsed("Got unit distances");
 
         let mut tuples: HashMap<usize, Vec<XFieldElement>> = HashMap::new();
         // TODO: we can store the elements mushed into "tuples" separately, like in "points" below,
@@ -777,9 +862,13 @@ impl Stark {
                 tuples.insert(idx, vec![tuples[&idx].clone(), extension_elements].concat());
             }
         }
+        timer.elapsed(&format!(
+            "Verified authentication paths for {} indices",
+            indices.len()
+        ));
 
         // verify nonlinear combination
-        for index in indices {
+        for &index in indices.iter() {
             // collect terms: randomizer
             let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
                 .map(|i| tuples[&index][i])
@@ -1010,9 +1099,14 @@ impl Stark {
                 "The combination leaf must equal the inner product"
             );
         }
+        timer.elapsed(&format!(
+            "Verified {} non-linear combinations",
+            indices.len()
+        ));
 
         // Verify low degree of combination polynomial
         self.fri.verify(proof_stream_)?;
+        timer.elapsed("Verified FRI proof");
 
         // Verify external terminals
         for (i, iea) in self.io_evaluation_arguments.iter().enumerate() {
@@ -1028,6 +1122,10 @@ impl Stark {
         {
             return Err(Box::new(StarkVerifyError::ProgramEvaluationArgument));
         }
+        timer.elapsed("Verified terminals");
+
+        let report = timer.finish();
+        println!("{}", report);
 
         Ok(true)
     }

@@ -127,7 +127,7 @@ where
         // 2. Calculate hash changes for all parents
         let mut parent_index = parent(node_index);
         let mut acc_hash = new_leaf;
-        let mut hasher = H::new();
+        let hasher = H::new();
 
         // While parent exists in MMR, update parent
         while parent_index < self.digests.len() as u128 {
@@ -245,7 +245,7 @@ where
         if parent_needed {
             let left_sibling_hash =
                 self.digests[left_sibling(node_index, own_height) as usize].clone();
-            let mut hasher = H::new();
+            let hasher = H::new();
             let parent_hash: H::Digest = hasher.hash_pair(&left_sibling_hash, &new_leaf);
             self.append_raw(parent_hash);
         }
@@ -391,7 +391,7 @@ mod mmr_test {
         type Digest = Vec<BFieldElement>;
         type Hasher = RescuePrimeProduction;
 
-        let mut rp = RescuePrimeProduction::new();
+        let rp = RescuePrimeProduction::new();
         let leaf_hashes: Vec<Vec<BFieldElement>> = (14..17)
             .map(|x| rp.hash(&vec![BFieldElement::new(x)]))
             .collect();
@@ -636,7 +636,7 @@ mod mmr_test {
         type Hasher = RescuePrimeProduction;
 
         let element = vec![BFieldElement::new(14)];
-        let mut rp = RescuePrimeProduction::new();
+        let rp = RescuePrimeProduction::new();
         let input_hash = rp.hash(&element);
         let mut mmr = ArchivalMmr::<Hasher>::new(vec![input_hash.clone()]);
         assert_eq!(1, mmr.count_leaves());
@@ -699,7 +699,7 @@ mod mmr_test {
         type Hasher = RescuePrimeProduction;
 
         let values: Vec<Vec<BFieldElement>> = (0..2).map(|x| vec![BFieldElement::new(x)]).collect();
-        let mut rp = RescuePrimeProduction::new();
+        let rp = RescuePrimeProduction::new();
         let input_hashes: Vec<Vec<BFieldElement>> = values.iter().map(|x| rp.hash(x)).collect();
         let mut mmr = ArchivalMmr::<Hasher>::new(input_hashes.clone());
         assert_eq!(2, mmr.count_leaves());

@@ -280,7 +280,7 @@ pub fn calculate_new_peaks_from_append<H: Hasher>(
     let mut new_node_index = data_index_to_node_index(old_leaf_count);
     let (mut new_node_is_right_child, _height) = right_child_and_height(new_node_index);
     peaks.push(new_leaf);
-    let mut hasher = H::new();
+    let hasher = H::new();
     let mut membership_proof: MembershipProof<H> = MembershipProof {
         authentication_path: vec![],
         data_index: old_leaf_count,
@@ -317,7 +317,7 @@ where
     u128: ToDigest<H::Digest>,
 {
     let node_index = data_index_to_node_index(membership_proof.data_index);
-    let mut hasher = H::new();
+    let hasher = H::new();
     let mut acc_hash: H::Digest = new_leaf.to_owned();
     let mut acc_index: u128 = node_index;
     for hash in membership_proof.authentication_path.iter() {
@@ -364,7 +364,7 @@ where
     // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
     // to calculate a root from a list of peaks and the size of the MMR.
     let peaks_count: usize = peaks.len();
-    let mut hasher: H = H::new();
+    let hasher: H = H::new();
 
     if peaks_count == 0 {
         return hasher.hash(&0u128.to_digest());
@@ -661,7 +661,7 @@ mod mmr_test {
 
         // Verify that the helper function `calculate_new_peaks_from_leaf_mutation` does
         // not crash if called on an empty list of peaks
-        let mut rp = Hasher::new();
+        let rp = Hasher::new();
         let new_leaf = rp.hash(&vec![BFieldElement::new(10000)]);
         let acc = ArchivalMmr::<Hasher>::new(vec![new_leaf.clone()]);
         let mp = acc.prove_membership(0).0;

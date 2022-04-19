@@ -63,7 +63,7 @@ where
     {
         let node_index = data_index_to_node_index(self.data_index);
 
-        let mut hasher = H::new();
+        let hasher = H::new();
         let mut acc_hash: H::Digest = leaf_hash.to_owned();
         let mut acc_index: u128 = node_index;
         for hash in self.authentication_path.iter() {
@@ -194,7 +194,7 @@ where
         // break out of loop once *one* digest is found this way since that will
         // always suffice.
         let mut acc_hash = new_leaf.to_owned();
-        let mut hasher = H::new();
+        let hasher = H::new();
         for (node_index, old_peak_digest) in added_node_indices.iter().zip(old_peaks.iter().rev()) {
             known_digests.insert(*node_index, acc_hash.to_owned());
 
@@ -252,7 +252,7 @@ where
         // 2.b collect all node hash digests that are derivable from `new_leaf` and
         // `old_peaks`. These are the digests of `new_leaf`'s path to the root.
         let mut acc_hash = new_leaf.to_owned();
-        let mut hasher = H::new();
+        let hasher = H::new();
         for ((count, node_index), old_peak_digest) in added_node_indices
             .iter()
             .enumerate()
@@ -343,7 +343,7 @@ where
         let mut deducible_hashes: HashMap<u128, H::Digest> = HashMap::new();
         let mut node_index = data_index_to_node_index(leaf_mutation_membership_proof.data_index);
         deducible_hashes.insert(node_index, new_leaf.clone());
-        let mut hasher = H::new();
+        let hasher = H::new();
         let mut acc_hash: H::Digest = new_leaf.to_owned();
 
         // Calculate hashes from the bottom towards the peak. Break when
@@ -403,7 +403,7 @@ where
         let mut deducible_hashes: HashMap<u128, H::Digest> = HashMap::new();
         let mut node_index = data_index_to_node_index(leaf_mutation_membership_proof.data_index);
         deducible_hashes.insert(node_index, new_leaf.clone());
-        let mut hasher = H::new();
+        let hasher = H::new();
         let mut acc_hash: H::Digest = new_leaf.to_owned();
 
         // Calculate hashes from the bottom towards the peak. Break before we
@@ -888,7 +888,7 @@ mod mmr_membership_proof_test {
         // Build MMR from leaf count 0 to 9, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an
         // append update.
-        let mut rp = RescuePrimeProduction::new();
+        let rp = RescuePrimeProduction::new();
         for leaf_count in 0..9 {
             let leaf_hashes: Vec<Digest> = (1001..1001 + leaf_count)
                 .map(|x| rp.hash(&vec![BFieldElement::new(x)]))

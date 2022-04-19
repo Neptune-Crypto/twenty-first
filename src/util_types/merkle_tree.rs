@@ -3,11 +3,17 @@ use crate::shared_math::traits::GetRandomElements;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::izip;
 use rand::prelude::ThreadRng;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::marker::PhantomData;
+
+// Chosen from a very small number of benchmark runs, optimized for a slow
+// hash function (the original Rescue Prime implementation). It should probably
+// be a higher number than 16 when using a faster hash function.
+const PARALLELLIZATION_THRESHOLD: usize = 16;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Node<Value, Digest> {
@@ -86,8 +92,14 @@ where
 /// These are exactly the arguments for the `verify_*` family of static methods.
 impl<Value, H> MerkleTree<Value, H>
 where
-    Value: Clone + Serialize + Debug + PartialEq + ToDigest<H::Digest>,
-    H: Hasher,
+    Value: Clone
+        + Serialize
+        + Debug
+        + PartialEq
+        + ToDigest<H::Digest>
+        + std::marker::Sync
+        + std::marker::Send,
+    H: Hasher + std::marker::Sync + std::marker::Send,
 {
     pub fn verify_proof(
         root_hash: H::Digest,
@@ -96,7 +108,7 @@ where
     ) -> bool {
         let mut mut_index = index + 2u64.pow(proof.len() as u32);
         let leaf_node = proof[0].clone();
-        let mut hasher = H::new();
+        let hasher = H::new();
 
         // We .skip(1) because proof contains both the leaf node and the authentication path nodes.
         let mut current_node = leaf_node;
@@ -155,12 +167,28 @@ where
             nodes[digests.len() + i].hash = digests[i].to_owned();
         }
 
-        let mut hasher = H::new();
-        // loop from `len(L) - 1` to 1
-        for i in (1..(nodes.len() / 2)).rev() {
-            let left = nodes[i * 2].hash.clone();
-            let right = nodes[i * 2 + 1].hash.clone();
-            nodes[i].hash = hasher.hash_pair(&left.to_digest(), &right.to_digest());
+        let hasher = H::new();
+        let mut node_count_on_this_level: usize = digests.len() / 2;
+        let mut count_acc: usize = 0;
+        while node_count_on_this_level >= PARALLELLIZATION_THRESHOLD {
+            let mut local_digests: Vec<H::Digest> = Vec::with_capacity(node_count_on_this_level);
+            (0..node_count_on_this_level)
+                .into_par_iter()
+                .map(|i| {
+                    let j = node_count_on_this_level + i;
+                    hasher.hash_pair(&nodes[j * 2].hash, &nodes[j * 2 + 1].hash)
+                })
+                .collect_into_vec(&mut local_digests);
+            for i in 0..node_count_on_this_level {
+                // TODO: REMOVE THIS CLONE SOMEHOW
+                nodes[node_count_on_this_level + i].hash = local_digests[i].clone();
+            }
+            count_acc += node_count_on_this_level;
+            node_count_on_this_level /= 2;
+        }
+
+        for i in (1..(digests.len() - count_acc)).rev() {
+            nodes[i].hash = hasher.hash_pair(&nodes[i * 2].hash, &nodes[i * 2 + 1].hash);
         }
 
         // nodes[0] is never used for anything.
@@ -183,7 +211,7 @@ where
         );
 
         // find all digests
-        let mut hasher = H::new();
+        let hasher = H::new();
         let digests: Vec<H::Digest> = values
             .iter()
             .map(|val| hasher.hash(&val.to_digest()))
@@ -250,7 +278,7 @@ where
         auth_path: Vec<H::Digest>,
     ) -> bool {
         let path_length = auth_path.len() as u32;
-        let mut hasher = H::new();
+        let hasher = H::new();
 
         // Initialize `acc_hash' as leaf_hash
         let mut acc_hash = leaf_hash;
@@ -282,7 +310,7 @@ where
         value: Value,
         auth_path: Vec<H::Digest>,
     ) -> bool {
-        let mut hasher = H::new();
+        let hasher = H::new();
         let value_hash = hasher.hash(&value);
 
         // Set `leaf_hash` to H(value)
@@ -377,7 +405,7 @@ where
     // Compact Merkle Multiproof Generation
     //
     // Leafless (produce authentication paths, not Vec<Node<T>>s with leaf values in it).
-    fn get_leafless_multi_proof(
+    pub fn get_leafless_multi_proof(
         &self,
         indices: &[usize],
     ) -> Vec<LeaflessPartialAuthenticationPath<H::Digest>> {
@@ -444,7 +472,7 @@ where
         }
 
         let mut complete = false;
-        let mut hasher = H::new();
+        let hasher = H::new();
         while !complete {
             complete = true;
 
@@ -522,7 +550,7 @@ where
             return true;
         }
 
-        let mut hasher = H::new();
+        let hasher = H::new();
         let mut auth_paths: Vec<LeaflessPartialAuthenticationPath<H::Digest>> =
             Vec::with_capacity(proof.len());
         let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(proof.len());
@@ -566,8 +594,15 @@ where
 
 impl<Value, H> SaltedMerkleTree<Value, H>
 where
-    Value: Clone + Serialize + Debug + PartialEq + ToDigest<H::Digest> + GetRandomElements,
-    H: Hasher,
+    Value: Clone
+        + Serialize
+        + Debug
+        + PartialEq
+        + ToDigest<H::Digest>
+        + GetRandomElements
+        + Sync
+        + Send,
+    H: Hasher + Sync + Send,
 {
     // Build a salted Merkle tree from a slice of serializable values
     pub fn from_vec(
@@ -581,7 +616,7 @@ where
             "Size of input for Merkle tree must be a power of 2"
         );
 
-        let mut hasher = H::new();
+        let hasher = H::new();
         let zero_hash = hasher.hash(zero);
         let mut nodes: Vec<Node<Value, H::Digest>> = vec![
             Node {
@@ -648,7 +683,7 @@ where
         auth_path: Vec<H::Digest>,
         salts_for_value: Vec<Value>,
     ) -> bool {
-        let mut hasher = H::new();
+        let hasher = H::new();
         let leaf_hash = hasher.hash_with_salts(value.to_digest(), &salts_for_value);
 
         // Set `leaf_hash` to H(value + salts[0..])
@@ -744,7 +779,7 @@ where
             return true;
         }
 
-        let mut hasher = H::new();
+        let hasher = H::new();
         let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(indices.len());
         for (value, proof) in izip!(values, proof) {
             let salts_for_leaf = proof.1.clone();

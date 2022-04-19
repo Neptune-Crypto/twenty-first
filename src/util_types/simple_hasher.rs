@@ -12,21 +12,23 @@ use serde::{Deserialize, Serialize};
 /// The type of digest is determined by the `impl` of a given `Hasher`, and it requires that
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
-pub trait Hasher: Sized {
+pub trait Hasher: Sized + Send + Sync {
     type Digest: ToDigest<Self::Digest>
         + PartialEq
         + Clone
         + std::fmt::Debug
         + Serialize
         + DeserializeOwned
-        + Sized;
+        + Sized
+        + Sync
+        + Send;
 
     fn new() -> Self;
-    fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest;
-    fn hash_pair(&mut self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest;
-    fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest;
+    fn hash<Value: ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest;
+    fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest;
+    fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest;
     // TODO: Consider moving the 'Self::Digest: ToDigest<Self::Digest>' constraint up.
-    fn hash_with_salts<Value>(&mut self, mut digest: Self::Digest, salts: &[Value]) -> Self::Digest
+    fn hash_with_salts<Value>(&self, mut digest: Self::Digest, salts: &[Value]) -> Self::Digest
     where
         Value: ToDigest<Self::Digest>,
         Self::Digest: ToDigest<Self::Digest>,
@@ -39,7 +41,7 @@ pub trait Hasher: Sized {
     }
 
     // FIXME: Chunk these more efficiently by making it abstract and moving it into RescuePrimeProduction's impl.
-    fn fiat_shamir<Value: ToDigest<Self::Digest>>(&mut self, items: &[Value]) -> Self::Digest {
+    fn fiat_shamir<Value: ToDigest<Self::Digest>>(&self, items: &[Value]) -> Self::Digest {
         let digests: Vec<Self::Digest> = items.iter().map(|item| item.to_digest()).collect();
         self.hash_many(&digests)
     }
@@ -86,7 +88,7 @@ pub trait Hasher: Sized {
     /// - `count`: The number of sample indices
     /// - `seed`: A hash digest
     /// - `max`: The (non-inclusive) upper bound (a power of two)
-    fn sample_indices(&mut self, count: usize, seed: &Self::Digest, max: usize) -> Vec<usize>
+    fn sample_indices(&self, count: usize, seed: &Self::Digest, max: usize) -> Vec<usize>
     where
         u128: ToDigest<Self::Digest>,
     {
@@ -97,7 +99,7 @@ pub trait Hasher: Sized {
     }
 
     // FIXME: Consider not using u128 here; we just do it out of convenience because the trait impl existed already.
-    fn get_n_hash_rounds(&mut self, seed: &Self::Digest, count: usize) -> Vec<Self::Digest>
+    fn get_n_hash_rounds(&self, seed: &Self::Digest, count: usize) -> Vec<Self::Digest>
     where
         u128: ToDigest<Self::Digest>,
     {
@@ -200,31 +202,31 @@ impl Hasher for blake3::Hasher {
         blake3::Hasher::new()
     }
 
-    fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
+    fn hash<Value: ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
+        let mut hasher = Self::new();
         let Blake3Hash(digest) = input.to_digest();
-        self.reset();
-        self.update(digest.as_bytes());
-        Blake3Hash(self.finalize())
+        hasher.update(digest.as_bytes());
+        Blake3Hash(hasher.finalize())
     }
 
-    fn hash_pair(&mut self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
+    fn hash_pair(&self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
         let Blake3Hash(left_digest) = left;
         let Blake3Hash(right_digest) = right;
 
-        self.reset();
-        self.update(left_digest.as_bytes());
-        self.update(right_digest.as_bytes());
-        Blake3Hash(self.finalize())
+        let mut hasher = Self::new();
+        hasher.update(left_digest.as_bytes());
+        hasher.update(right_digest.as_bytes());
+        Blake3Hash(hasher.finalize())
     }
 
     // Uses blake3::Hasher's sponge
-    fn hash_many(&mut self, input: &[Self::Digest]) -> Self::Digest {
-        self.reset();
+    fn hash_many(&self, input: &[Self::Digest]) -> Self::Digest {
+        let mut hasher = Self::new();
         for digest in input {
             let Blake3Hash(digest) = digest;
-            self.update(digest.as_bytes());
+            hasher.update(digest.as_bytes());
         }
-        Blake3Hash(self.finalize())
+        Blake3Hash(hasher.finalize())
     }
 }
 
@@ -241,16 +243,17 @@ impl Hasher for RescuePrimeProduction {
         RescuePrimeProduction(rescue_prime_params::rescue_prime_params_bfield_0())
     }
 
-    fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
+    fn hash<Value: ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
         self.0.hash(&input.to_digest())
     }
 
-    fn hash_pair(&mut self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
+    fn hash_pair(&self, left: &Self::Digest, right: &Self::Digest) -> Self::Digest {
         let input: Vec<BFieldElement> = vec![left.to_owned(), right.to_owned()].concat();
         self.0.hash(&input)
     }
 
-    fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest {
+    // TODO: Rewrite this when exposing RescuePrime's sponge
+    fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
         let mut acc = self.hash(&inputs[0]);
         for input in &inputs[1..] {
             acc = self.hash_pair(&acc, input);
@@ -266,12 +269,12 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
         rescue_prime_xlix::neptune_params()
     }
 
-    fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
+    fn hash<Value: ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
         let elements_per_digest: usize = 5;
         self.hash_wrapper(&input.to_digest(), elements_per_digest)
     }
 
-    fn hash_pair(&mut self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
+    fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
         let elements_per_digest: usize = 5;
         let input: Vec<BFieldElement> = left_input
             .iter()
@@ -281,7 +284,7 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
         self.hash_wrapper(&input, 2 * elements_per_digest)
     }
 
-    fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest {
+    fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
         let elements_per_digest: usize = 5;
         self.hash_wrapper(&inputs.concat(), elements_per_digest)
     }
@@ -330,7 +333,7 @@ pub mod test_simple_hasher {
 
     #[test]
     fn rescue_prime_equivalence_test() {
-        let mut rpp: RescuePrimeProduction = RescuePrimeProduction::new();
+        let rpp: RescuePrimeProduction = RescuePrimeProduction::new();
 
         let input0: Vec<BFieldElement> = vec![1u128, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             .into_iter()
@@ -390,7 +393,7 @@ pub mod test_simple_hasher {
 
     #[test]
     fn random_index_test() {
-        let mut hasher: RescuePrimeProduction = RescuePrimeProduction::new();
+        let hasher: RescuePrimeProduction = RescuePrimeProduction::new();
 
         let mut rng = rand::thread_rng();
         for element in BFieldElement::random_elements(100, &mut rng) {
