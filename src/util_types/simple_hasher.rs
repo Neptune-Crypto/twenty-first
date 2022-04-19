@@ -269,12 +269,12 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
         rescue_prime_xlix::neptune_params()
     }
 
-    fn hash<Value: ToDigest<Self::Digest>>(&mut self, input: &Value) -> Self::Digest {
+    fn hash<Value: ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
         let elements_per_digest: usize = 5;
         self.hash_wrapper(&input.to_digest(), elements_per_digest)
     }
 
-    fn hash_pair(&mut self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
+    fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
         let elements_per_digest: usize = 5;
         let input: Vec<BFieldElement> = left_input
             .iter()
@@ -284,7 +284,7 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
         self.hash_wrapper(&input, 2 * elements_per_digest)
     }
 
-    fn hash_many(&mut self, inputs: &[Self::Digest]) -> Self::Digest {
+    fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
         let elements_per_digest: usize = 5;
         self.hash_wrapper(&inputs.concat(), elements_per_digest)
     }
