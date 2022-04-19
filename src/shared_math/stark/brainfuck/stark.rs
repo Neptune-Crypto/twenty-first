@@ -640,8 +640,13 @@ impl Stark {
         timer.elapsed("sample_indices");
 
         // prove low degree of combination polynomial
-        let _indices = self.fri.prove(&combination_codeword, &mut proof_stream)?;
+        let (_indices, combination_root_verify) =
+            self.fri.prove(&combination_codeword, &mut proof_stream)?;
         timer.elapsed("fri.prove");
+        assert_eq!(
+            *combination_root, combination_root_verify,
+            "Combination root from STARK and from FRI must agree"
+        );
 
         // Open leafs of zipped codewords at indicated positions
         for index in indices.iter() {
