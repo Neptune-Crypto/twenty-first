@@ -639,6 +639,10 @@ impl Stark {
 
         timer.elapsed("sample_indices");
 
+        // prove low degree of combination polynomial
+        let _indices = self.fri.prove(&combination_codeword, &mut proof_stream)?;
+        timer.elapsed("fri.prove");
+
         // Open leafs of zipped codewords at indicated positions
         for index in indices.iter() {
             for unit_distance in unit_distances.iter() {
@@ -689,11 +693,6 @@ impl Stark {
         }
 
         timer.elapsed("open combination codeword at same position");
-
-        // prove low degree of combination polynomial, and collect indices
-        let _indices = self.fri.prove(&combination_codeword, &mut proof_stream)?;
-
-        timer.elapsed("fri.prove");
 
         let report = timer.finish();
         println!("{}", report);
@@ -782,6 +781,10 @@ impl Stark {
         let indices =
             hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
         timer.elapsed("Got indices");
+
+        // Verify low degree of combination polynomial
+        self.fri.verify(proof_stream_)?;
+        timer.elapsed("Verified FRI proof");
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
         let mut unit_distances: Vec<usize> = self
@@ -1103,10 +1106,6 @@ impl Stark {
             "Verified {} non-linear combinations",
             indices.len()
         ));
-
-        // Verify low degree of combination polynomial
-        self.fri.verify(proof_stream_)?;
-        timer.elapsed("Verified FRI proof");
 
         // Verify external terminals
         for (i, iea) in self.io_evaluation_arguments.iter().enumerate() {
