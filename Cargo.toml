@@ -43,7 +43,7 @@ name = "polynomial_square"
 harness = false
 
 [[bench]]
-name = "rescue_prime_wat"
+name = "rescue_prime_xlix"
 harness = false
 
 [[bench]]

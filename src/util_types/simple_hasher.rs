@@ -252,7 +252,6 @@ impl Hasher for RescuePrimeProduction {
         self.0.hash(&input)
     }
 
-    // TODO: Rewrite this when exposing RescuePrime's sponge
     fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
         let mut acc = self.hash(&inputs[0]);
         for input in &inputs[1..] {
@@ -271,7 +270,7 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
 
     fn hash<Value: ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
         let elements_per_digest: usize = 5;
-        self.hash_wrapper(&input.to_digest(), elements_per_digest)
+        self.hash(&input.to_digest(), elements_per_digest)
     }
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
@@ -281,12 +280,12 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
             .chain(right_input.iter())
             .copied()
             .collect();
-        self.hash_wrapper(&input, 2 * elements_per_digest)
+        self.hash(&input, elements_per_digest)
     }
 
     fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
         let elements_per_digest: usize = 5;
-        self.hash_wrapper(&inputs.concat(), elements_per_digest)
+        self.hash(&inputs.concat(), elements_per_digest)
     }
 }
 
