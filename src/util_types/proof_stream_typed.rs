@@ -53,6 +53,13 @@ where
         }
     }
 
+    /// Reset the counter counting how many items were read. For testing purposes, so
+    /// we don't have to re-run tests needlessly.
+    pub fn reset_for_verifier(&mut self) {
+        self.items_index = 0;
+        self.transcript_index = 0;
+    }
+
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }

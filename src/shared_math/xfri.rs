@@ -30,6 +30,7 @@ pub enum ValidationError {
     NonPostiveRoundCount,
     NotColinear(usize),
     LastIterationTooHighDegree,
+    BadMerkleRootForFirstCodeword,
     BadMerkleRootForLastCodeword,
 }
 
@@ -127,11 +128,12 @@ where
         }
     }
 
+    /// Create a FRI proof and return chosen indices of round 0 and Merkle root of round 0 codeword
     pub fn prove(
         &self,
         codeword: &[XFieldElement],
         proof_stream: &mut StarkProofStream,
-    ) -> Result<Vec<usize>, Box<dyn Error>> {
+    ) -> Result<(Vec<usize>, H::Digest), Box<dyn Error>> {
         assert_eq!(
             self.domain.length,
             codeword.len(),
@@ -175,7 +177,8 @@ where
         let report = timer.finish();
         println!("FRI-prover, timing report\n{}", report);
 
-        Ok(top_level_indices)
+        let merkle_root_of_1st_round: &Vec<BFieldElement> = values_and_merkle_trees[0].1.get_root();
+        Ok((top_level_indices, merkle_root_of_1st_round.to_owned()))
     }
 
     #[allow(clippy::type_complexity)]
@@ -364,6 +367,7 @@ where
     pub fn verify(
         &self,
         proof_stream: &mut StarkProofStream,
+        first_codeword_mt_root: &H::Digest,
     ) -> Result<Vec<CodewordEvaluation<XFieldElement>>, Box<dyn Error>> {
         let mut omega = self.domain.omega;
         let mut offset = self.domain.offset;
@@ -373,8 +377,12 @@ where
         // Extract all roots and calculate alpha, the challenges
         let mut roots: Vec<H::Digest> = vec![];
         let mut alphas: Vec<XFieldElement> = vec![];
-        // let first_root: H::Digest = proof_stream.dequeue_length_prepended::<H::Digest>()?;
+
         let first_root: H::Digest = proof_stream.dequeue()?.as_merkle_root()?;
+        if first_root != *first_codeword_mt_root {
+            return Err(Box::new(ValidationError::BadMerkleRootForFirstCodeword));
+        }
+
         roots.push(first_root);
         timer.elapsed("Init");
 
@@ -703,8 +711,8 @@ mod xfri_tests {
         let mut proof_stream: StarkProofStream = StarkProofStream::default();
         let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
 
-        fri.prove(&subgroup, &mut proof_stream).unwrap();
-        let verify_result = fri.verify(&mut proof_stream);
+        let (_, merkle_root_of_round_0) = fri.prove(&subgroup, &mut proof_stream).unwrap();
+        let verify_result = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
         assert!(verify_result.is_ok());
     }
 
@@ -725,9 +733,9 @@ mod xfri_tests {
 
             // TODO: Test elsewhere that proof_stream can be re-used for multiple .prove().
             let mut proof_stream: StarkProofStream = StarkProofStream::default();
-            fri.prove(&points, &mut proof_stream).unwrap();
+            let (_, mut merkle_root_of_round_0) = fri.prove(&points, &mut proof_stream).unwrap();
 
-            let verify_result = fri.verify(&mut proof_stream);
+            let verify_result = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
             if verify_result.is_err() {
                 println!(
                     "There are {} points, |<128>^{}| = {}, and verify_result = {:?}",
@@ -740,6 +748,13 @@ mod xfri_tests {
 
             assert!(verify_result.is_ok());
 
+            // Manipulate Merkle root of 0 and verify failure with expected error message
+            proof_stream.reset_for_verifier();
+            merkle_root_of_round_0[0].increment();
+            let bad_verify_result = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
+            assert!(bad_verify_result.is_err());
+            println!("bad_verify_result = {:?}", bad_verify_result);
+
             // TODO: Add negative test with bad Merkle authentication path
             // This probably requires manipulating the proof stream somehow.
         }
@@ -748,8 +763,8 @@ mod xfri_tests {
         let too_high = subgroup_order as u32 / expansion_factor as u32;
         points = subgroup.iter().map(|p| p.mod_pow_u32(too_high)).collect();
         let mut proof_stream: StarkProofStream = StarkProofStream::default();
-        fri.prove(&points, &mut proof_stream).unwrap();
-        let verify_result = fri.verify(&mut proof_stream);
+        let (_, merkle_root_of_round_0) = fri.prove(&points, &mut proof_stream).unwrap();
+        let verify_result = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
         assert!(verify_result.is_err());
     }
 
