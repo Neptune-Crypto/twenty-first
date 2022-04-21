@@ -335,16 +335,17 @@ impl Stark {
 
         timer.elapsed("proof_stream.enqueue");
 
+        let seed = proof_stream.prover_fiat_shamir();
+
+        timer.elapsed("prover_fiat_shamir");
+
         // Get coefficients for table extension
         // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
         // must not change though, it should remain `Vec<XFieldElement>`.
-        let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
-            &hasher,
-            &proof_stream.prover_fiat_shamir(),
-            EXTENSION_CHALLENGE_COUNT,
-        )
-        .try_into()
-        .unwrap();
+        let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
+            Self::sample_weights(&hasher, &seed, EXTENSION_CHALLENGE_COUNT)
+                .try_into()
+                .unwrap();
 
         timer.elapsed("sample_weights");
 
@@ -572,6 +573,9 @@ impl Stark {
 
         // Get weights for nonlinear combination
         let weights_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
+
+        timer.elapsed("prover_fiat_shamir (again)");
+
         let weights_count = num_randomizer_polynomials
             + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials);
         let weights = Self::sample_weights(&hasher, &weights_seed, weights_count);
@@ -719,14 +723,14 @@ impl Stark {
         let base_merkle_tree_root: Vec<BFieldElement> =
             proof_stream_.dequeue()?.as_merkle_root()?;
 
+        let seed = proof_stream_.verifier_fiat_shamir();
+
+        timer.elapsed("verifier_fiat_shamir");
         // Get coefficients for table extension
-        let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = Self::sample_weights(
-            &hasher,
-            &proof_stream_.verifier_fiat_shamir(),
-            EXTENSION_CHALLENGE_COUNT,
-        )
-        .try_into()
-        .unwrap();
+        let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
+            Self::sample_weights(&hasher, &seed, EXTENSION_CHALLENGE_COUNT)
+                .try_into()
+                .unwrap();
 
         // let extension_tree_merkle_root: Vec<BFieldElement> =
         //     proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
@@ -772,6 +776,8 @@ impl Stark {
         timer.elapsed("Calculated quotient degree bounds");
 
         let weights_seed: Vec<BFieldElement> = proof_stream_.verifier_fiat_shamir();
+
+        timer.elapsed("verifier_fiat_shamir (again)");
         let weights_count = num_randomizer_polynomials
             + 2 * num_base_polynomials
             + 2 * num_extension_polynomials
