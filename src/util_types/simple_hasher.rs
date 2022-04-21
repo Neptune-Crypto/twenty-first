@@ -10,6 +10,8 @@ use crate::util_types::blake3_wrapper::Blake3Hash;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+use super::mutator_set::accumulation_scheme::Chunk;
 /// A simple `Hasher` trait that allows for hashing one, two or many values into one digest.
 ///
 /// The type of digest is determined by the `impl` of a given `Hasher`, and it requires that
@@ -152,6 +154,18 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
             BFieldElement::new(((self >> 63) % BFieldElement::MAX as u128) as u64),
             BFieldElement::new((self % BFieldElement::MAX as u128) as u64),
         ]
+    }
+}
+
+impl ToDigest<Blake3Hash> for Chunk<Blake3Hash> {
+    fn to_digest(&self) -> Blake3Hash {
+        todo!()
+    }
+}
+
+impl ToDigest<Vec<BFieldElement>> for Chunk<Vec<BFieldElement>> {
+    fn to_digest(&self) -> Vec<BFieldElement> {
+        todo!()
     }
 }
 
