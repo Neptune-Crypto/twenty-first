@@ -47,9 +47,21 @@ fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
     println!("{}", report);
 }
 
-fn two_by_two_then_output() {
+fn _two_by_two_then_output() {
     let program_code = brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT;
     let input = [97].map(BFieldElement::new).to_vec();
+    compile_simulate_prove_verify(program_code, &input);
+}
+
+fn _hello_world() {
+    let program_code = brainfuck::vm::sample_programs::HELLO_WORLD;
+    let input = [].map(BFieldElement::new).to_vec();
+    compile_simulate_prove_verify(program_code, &input);
+}
+
+fn _the_raven() {
+    let program_code = brainfuck::vm::sample_programs::THE_RAVEN;
+    let input = [].map(BFieldElement::new).to_vec();
     compile_simulate_prove_verify(program_code, &input);
 }
 
@@ -58,10 +70,20 @@ fn stark_bf(c: &mut Criterion) {
 
     group.sample_size(10);
 
-    let two_by_two_then_output_id = BenchmarkId::new("TWO_BY_TWO_THEN_OUTPUT", 0);
-    group.bench_function(two_by_two_then_output_id, |bencher| {
-        bencher.iter(|| two_by_two_then_output());
+    // let two_by_two_then_output_id = BenchmarkId::new("TWO_BY_TWO_THEN_OUTPUT", 0);
+    // group.bench_function(two_by_two_then_output_id, |bencher| {
+    //     bencher.iter(|| _two_by_two_then_output());
+    // });
+
+    let hello_world_id = BenchmarkId::new("HELLO_WORLD", 0);
+    group.bench_function(hello_world_id, |bencher| {
+        bencher.iter(|| _hello_world());
     });
+
+    // let the_raven_id = BenchmarkId::new("THE_RAVEN", 0);
+    // group.bench_function(the_raven_id, |bencher| {
+    //     bencher.iter(|| _the_raven());
+    // });
 
     group.finish();
 }

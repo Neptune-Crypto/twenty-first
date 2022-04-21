@@ -194,6 +194,8 @@ impl Stark {
         max_degree = roundup_npo2(max_degree) - 1;
         let fri_domain_length: u64 = (max_degree + 1) * expansion_factor;
 
+        println!("fri_domain_length = {}", fri_domain_length);
+
         // Instantiate FRI object
         let b_field_generator = BFieldElement::generator();
         let b_field_omega = BFieldElement::ring_zero()
