@@ -80,10 +80,15 @@ impl Stark {
         source_code: String,
         input_symbols: Vec<BFieldElement>,
         output_symbols: Vec<BFieldElement>,
+        log_expansion_factor: usize,
+        security_level: usize,
     ) -> Self {
-        let log_expansion_factor = 2; // TODO: For speed
+        assert_eq!(
+            0,
+            security_level % log_expansion_factor,
+            "security_level/log_expansion_factor must be a positive integer"
+        );
         let expansion_factor: u64 = 1 << log_expansion_factor;
-        let security_level = 2; // TODO: Consider increasing this
         let colinearity_checks_count = security_level / log_expansion_factor;
         assert!(
             colinearity_checks_count > 0,
@@ -1141,6 +1146,26 @@ mod brainfuck_stark_tests {
     };
     use crate::shared_math::traits::IdentityValues;
 
+    pub fn new_test_stark(
+        trace_length: usize,
+        source_code: String,
+        input_symbols: Vec<BFieldElement>,
+        output_symbols: Vec<BFieldElement>,
+    ) -> Stark {
+        // These parameters are too low for security, but work for testing correctness
+        let log_expansion_factor = 2;
+        let security_level = 2;
+
+        Stark::new(
+            trace_length,
+            source_code,
+            input_symbols,
+            output_symbols,
+            log_expansion_factor,
+            security_level,
+        )
+    }
+
     fn mallorys_simulate(
         program: &[BFieldElement],
         input_symbols: &[BFieldElement],
@@ -1316,7 +1341,7 @@ mod brainfuck_stark_tests {
         let input_symbols: Vec<BFieldElement> = vec![];
         let regular_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-        let mut regular_stark = Stark::new(
+        let mut regular_stark = new_test_stark(
             regular_matrices.processor_matrix.len(),
             source_code.clone(),
             input_symbols.clone(),
@@ -1329,7 +1354,7 @@ mod brainfuck_stark_tests {
 
         // Run attack, verify that it is caught by the verifier
         let mallorys_matrices: BaseMatrices = mallorys_simulate(&program, &input_symbols).unwrap();
-        let mut mallorys_stark = Stark::new(
+        let mut mallorys_stark = new_test_stark(
             mallorys_matrices.processor_matrix.len(),
             source_code,
             input_symbols,
@@ -1362,7 +1387,7 @@ mod brainfuck_stark_tests {
         .unwrap();
         let base_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-        let mut stark = Stark::new(
+        let mut stark = new_test_stark(
             trace_length,
             brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT.to_string(),
             input_symbols,
@@ -1386,7 +1411,7 @@ mod brainfuck_stark_tests {
             brainfuck::vm::run(&program, input.to_vec()).unwrap();
         let base_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-        let mut stark = Stark::new(
+        let mut stark = new_test_stark(
             trace_length,
             program_code.to_string(),
             input_symbols,

@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::rescue_prime_xlix::{neptune_params, RescuePrimeXlix};
 use twenty_first::shared_math::traits::GetRandomElements;
-use twenty_first::util_types::simple_hasher::{Hasher, RescuePrimeProduction, ToDigest};
+use twenty_first::util_types::simple_hasher::{Hasher, RescuePrimeProduction};
 
 fn bench_single_elements(c: &mut Criterion) {
     let mut group = c.benchmark_group("rescue_prime_single_elements");
