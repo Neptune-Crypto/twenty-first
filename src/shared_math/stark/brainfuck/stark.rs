@@ -639,6 +639,10 @@ impl Stark {
 
         timer.elapsed("sample_indices");
 
+        // TODO: I don't like that we're calling FRI right after getting the indices through
+        // the Fiat-Shamir public oracle above. The reason I don't like this is that it implies
+        // using Fiat-Shamir twice with somewhat similar proof stream content. A cryptographer
+        // or mathematician should take a look on this part of the code.
         // prove low degree of combination polynomial
         let (_fri_indices, combination_root_verify) =
             self.fri.prove(&combination_codeword, &mut proof_stream)?;
