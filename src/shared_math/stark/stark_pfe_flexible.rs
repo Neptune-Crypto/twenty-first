@@ -14,14 +14,6 @@ use std::fmt;
 use std::iter::zip;
 use std::{collections::HashMap, error::Error};
 
-fn lookup_multiple<T: Clone>(indices: &[usize], values: &[T]) -> Vec<T> {
-    let mut res = Vec::new();
-    for &i in indices {
-        res.push(values[i].clone());
-    }
-    res
-}
-
 use super::stark_constraints_pfe_flexible::BoundaryConstraint;
 use super::stark_verify_error::{MerkleProofError, StarkVerifyError};
 
@@ -577,8 +569,10 @@ impl StarkPrimeFieldElementFlexible {
         // Open indicated positions in the randomizer
         let randomizer_proof: Vec<PartialAuthenticationPath<StarkPfeDigest>> =
             randomizer_mt.get_multi_proof(&quadrupled_indices);
-        let randomizer_proof_values: Vec<PrimeFieldElementFlexible> =
-            lookup_multiple(&quadrupled_indices, &randomizer_codeword);
+        let randomizer_proof_values: Vec<PrimeFieldElementFlexible> = quadrupled_indices
+            .iter()
+            .map(|&i| randomizer_codeword[i])
+            .collect();
         proof_stream.enqueue_length_prepended(&randomizer_proof)?;
         proof_stream.enqueue_length_prepended(&randomizer_proof_values)?;
 

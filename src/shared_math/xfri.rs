@@ -176,7 +176,7 @@ where
         println!("FRI-prover, timing report\n{}", report);
 
         let merkle_root_of_1st_round: Vec<BFieldElement> = values_and_merkle_trees[0].1.get_root();
-        Ok((top_level_indices, merkle_root_of_1st_round.to_owned()))
+        Ok((top_level_indices, merkle_root_of_1st_round))
     }
 
     #[allow(clippy::type_complexity)]

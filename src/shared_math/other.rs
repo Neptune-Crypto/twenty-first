@@ -96,7 +96,7 @@ pub fn primes_lt(bound: u128) -> Vec<u128> {
         .collect::<Vec<u128>>()
 }
 
-/// Extended Euler's Algorithm.
+/// Extended Euclid's Algorithm.
 pub fn xgcd<
     T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,
 >(
@@ -129,14 +129,6 @@ pub fn xgcd<
 pub fn get_node_count_in_complete_binary_tree(leaf_count: usize) -> usize {
     assert!(is_power_of_two(leaf_count));
     2 * leaf_count - 1
-}
-
-/// Compute the number of leaves in a complete binary tree from the number of
-/// nodes (capacity).
-pub fn get_leaf_count_in_complete_binary_tree(nodes_count: usize) -> usize {
-    let leaf_count = (nodes_count + 1) / 2;
-    assert!(is_power_of_two(leaf_count));
-    leaf_count
 }
 
 pub fn get_height_of_complete_binary_tree(leaf_count: usize) -> usize {

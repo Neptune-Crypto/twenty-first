@@ -56,30 +56,6 @@ impl<H> MerkleTree<H>
 where
     H: Hasher + std::marker::Sync + std::marker::Send,
 {
-    #[deprecated(note = "Use verify_authentication_path_from_leaf_hash() instead.")]
-    pub fn verify_proof(root: H::Digest, index: u64, proof: Vec<H::Digest>) -> bool {
-        let mut mut_index = index + 2u64.pow(proof.len() as u32);
-
-        let leaf = proof[0].clone();
-        let hasher = H::new();
-
-        // We .skip(1) because proof contains both the leaf node and the authentication path nodes.
-        let mut current = leaf;
-        for sibling in proof.iter().skip(1) {
-            // Is `sibling_node` a left or a right child?
-            if mut_index % 2 == 0 {
-                // `sibling_node` is a right child
-                current = hasher.hash_pair(&current, sibling);
-            } else {
-                // `sibling_node` is a left child
-                current = hasher.hash_pair(sibling, &current);
-            }
-            mut_index /= 2;
-        }
-
-        current == root
-    }
-
     /// Takes an array of digests and builds a MerkleTree over them.
     /// The digests are used copied over as the leaves of the tree.
     pub fn from_digests(digests: &[H::Digest]) -> Self
@@ -129,19 +105,6 @@ where
         let _hasher = PhantomData;
 
         Self { nodes, _hasher }
-    }
-
-    //#[deprecated(note = "Use get_authentication_path() instead.")]
-    fn get_proof(&self, mut index: usize) -> Vec<H::Digest> {
-        let mut proof: Vec<H::Digest> = Vec::with_capacity(self.get_height());
-
-        index += self.nodes.len() / 2;
-        proof.push(self.nodes[index].clone());
-        while index > 1 {
-            proof.push(self.nodes[index ^ 1].clone());
-            index /= 2;
-        }
-        proof
     }
 
     // Similar to `get_proof', but instead of returning a `Vec<Node<T>>`, we only
@@ -214,8 +177,16 @@ where
         let mut output: Vec<PartialAuthenticationPath<H::Digest>> =
             Vec::with_capacity(indices.len());
         for i in indices.iter() {
+            /*
             let new_branch: PartialAuthenticationPath<H::Digest> =
                 PartialAuthenticationPath(self.get_proof(*i).into_iter().map(Some).collect());
+                */
+            let new_branch = PartialAuthenticationPath(
+                self.get_authentication_path(*i)
+                    .into_iter()
+                    .map(Some)
+                    .collect(),
+            );
             let mut index = self.nodes.len() / 2 + i;
             calculable_indices.insert(index);
             for _ in 1..new_branch.0.len() {
@@ -247,7 +218,7 @@ where
         for (i, b) in indices.iter().zip(output.iter_mut()) {
             let mut index: usize = self.nodes.len() / 2 + i;
             scanned.insert(index);
-            for elem in b.0.iter_mut().skip(1) {
+            for elem in b.0.iter_mut() {
                 if calculable_indices.contains(&((index ^ 1) * 2))
                     && calculable_indices.contains(&((index ^ 1) * 2 + 1))
                     || (index ^ 1) as i64 - self.nodes.len() as i64 / 2 > 0 // TODO: Maybe > 1 here?
@@ -267,22 +238,12 @@ where
     // Compact Merkle Multiproof Generation
     pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<PartialAuthenticationPath<H::Digest>> {
         self.get_multi_proof_non_pat(indices)
+        /*
+        self.get_multi_proof_non_pat(indices)
             .into_iter()
             .map(Self::convert_pat)
             .collect()
-    }
-
-    fn convert_pat(
-        auth_path_nodes: PartialAuthenticationPath<H::Digest>,
-    ) -> PartialAuthenticationPath<H::Digest> {
-        let auth_path_hashes: Vec<Option<H::Digest>> = auth_path_nodes
-            .0
-            .iter()
-            .skip(1) // drop leaf node from `get_multi_proof' output
-            .cloned()
-            .collect();
-
-        PartialAuthenticationPath(auth_path_hashes)
+            */
     }
 
     /// Verifies a list of leaf_indices and corresponding
@@ -590,23 +551,6 @@ where
         ret
     }
 
-    #[deprecated(note = "use `verify_multi_proof()` instead")]
-    pub fn verify_multi_proof_with_salts(
-        _root_hash: H::Digest,
-        _indices: &[usize],
-        _proof: &SaltedMultiProof<H::Digest>,
-    ) -> bool {
-        /*
-        This is wrapper no longer makes sense since values have been removed.
-        let values: Vec<H::Digest> = proof.iter().map(|x| x.2.clone()).collect();
-        let auth_paths_and_salts: SaltedMultiProof<H::Digest> =
-            proof.iter().map(|x| (x.0.clone(), x.1.clone())).collect();
-
-        Self::verify_multi_proof(root_hash, indices, &values, &proof)
-        */
-        false
-    }
-
     /// To use this function the user must provide the corresponding *UNSALTED* `leaves`.
     pub fn verify_multi_proof(
         root_hash: H::Digest,
@@ -732,7 +676,11 @@ mod merkle_tree_test {
 
             let last_index = bytes.len() - 1;
             // This tests are random and can fail due to overflow: attributes on expressions are experimental #[allow(arithmetic_overflow)]
-            bytes[last_index] += 1;
+            if bytes[last_index] == u8::MAX {
+                bytes[last_index] = 0;
+            } else {
+                bytes[last_index] += 1;
+            }
 
             *self = Blake3Hash(bytes.into());
             assert_ne!(
@@ -748,7 +696,11 @@ mod merkle_tree_test {
 
             let last_index = bytes.len() - 1;
             // This tests are random and can fail due to overflow: attributes on expressions are experimental #[allow(arithmetic_overflow)]
-            bytes[last_index] -= 1;
+            if bytes[last_index] == 0 {
+                bytes[last_index] = u8::MAX;
+            } else {
+                bytes[last_index] -= 1;
+            }
 
             *self = Blake3Hash(bytes.into());
             assert_ne!(
@@ -951,23 +903,7 @@ mod merkle_tree_test {
         let unsalted_salted_tree: SaltedMerkleTree<Hasher> =
             SaltedMerkleTree::from_digests(&selected_leaves.clone(), &salts);
 
-        /*
-                let salted_proof: Vec<(
-                    PartialAuthenticationPath<Digest>,
-                    Vec<BFieldElement>,
-                    BFieldElement,
-                )> = unsalted_salted_tree.get_leafless_multi_proof_with_salts_and_values(&selected_indices);
-        */
         let salted_proof = unsalted_salted_tree.get_multi_proof_and_salts(&selected_indices);
-
-        /*
-        let salted_leafless_proof: SaltedMerkleProof<Digest> =
-            salted_proof
-                .iter()
-                .map(|(auth_path, salts)| (auth_path.clone(), salts.clone()))
-                .collect();
-                */
-        //let values: Vec<BFieldElement> = salted_proof.iter().map(|(_, _, value)| *value).collect();
 
         let unsalted_salted_verify = SaltedMerkleTree::<Hasher>::verify_multi_proof(
             unsalted_salted_tree.get_root().clone(),
@@ -1047,17 +983,13 @@ mod merkle_tree_test {
                 assert!(!verified, "Should not verify against bad root hash.");
 
                 // Restore root
-                //tree.root_hash = orig_root_hash;
                 tree.set_root(orig_root_hash);
 
                 // Corrupt the proof and thus fail to verify against the (valid) tree.
                 let mut bad_proof = auth_pairs.clone();
-                // This has been observed throwing in the wild:
-                /*
-                thread 'util_types::merkle_tree::merkle_tree_test::merkle_tree_verify_leafless_multi_proof_test' panicked at 'index out of bounds: the len is 1 but the index is 1', `
-                */
-                let random_index = (prng.next_u64() % n_indices as u64 / 2) as usize;
-                bad_proof[random_index].1.toggle_corruption(); // = corrupt_blake3_hash(bad_proof[random_index].1);
+                let random_index =
+                    ((prng.next_u64() % n_indices as u64 / 2) as usize) % bad_proof.len();
+                bad_proof[random_index].1.toggle_corruption();
 
                 assert!(
                     !MerkleTree::<Hasher>::verify_multi_proof(
@@ -2119,5 +2051,20 @@ mod merkle_tree_test {
         println!("Merkle root (RP 1): {:?}", mt.get_root());
         println!("Merkle root (RP 2): {:?}", mt_xlix.get_root());
         assert!(true, "If we make it this far, we are good.")
+    }
+
+    #[test]
+    fn increment_overflow() {
+        let mut max_hash = Blake3Hash::from(u128::MAX);
+        max_hash.increment();
+        // Verifies that increment does not overflow.
+    }
+
+    #[test]
+    fn decrement_overflow() {
+        let minu128 = u128::MIN;
+        let mut zero_hash = Blake3Hash::from(minu128);
+        zero_hash.decrement();
+        // Verifies that decrement does not overflow.
     }
 }
