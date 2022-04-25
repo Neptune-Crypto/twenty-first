@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::shared_math::traits::GetRandomElements;
 
 /// A wrapper around `blake3::Hash` because it does not Serialize.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Blake3Hash(pub blake3::Hash);
 
 impl From<blake3::Hash> for Blake3Hash {

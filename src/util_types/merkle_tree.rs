@@ -1,8 +1,6 @@
-use crate::shared_math::other::{self, log_2_floor};
-use crate::shared_math::traits::GetRandomElements;
+use crate::shared_math::other::{self, get_height_of_complete_binary_tree, is_power_of_two};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::izip;
-use rand::prelude::ThreadRng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
@@ -15,159 +13,71 @@ use std::marker::PhantomData;
 // be a higher number than 16 when using a faster hash function.
 const PARALLELLIZATION_THRESHOLD: usize = 16;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Node<Value, Digest> {
-    pub value: Option<Value>,
-    pub hash: Digest,
-}
-
 #[derive(Debug)]
-pub struct MerkleTree<Value, H>
+pub struct MerkleTree<H>
 where
     H: Hasher,
 {
-    pub root_hash: H::Digest,
-    pub nodes: Vec<Node<Value, H::Digest>>,
-    pub height: u8,
+    pub nodes: Vec<H::Digest>,
     _hasher: PhantomData<H>,
 }
 
-impl<Value, H> Clone for MerkleTree<Value, H>
+impl<H> Clone for MerkleTree<H>
 where
-    Value: Clone,
     H: Hasher,
 {
     fn clone(&self) -> Self {
         Self {
-            root_hash: self.root_hash.clone(),
             nodes: self.nodes.clone(),
-            height: self.height,
             _hasher: PhantomData,
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct PartialAuthenticationPath<Value, Digest>(pub Vec<Option<Node<Value, Digest>>>)
-where
-    Value: Clone + Debug + PartialEq + Serialize;
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct LeaflessPartialAuthenticationPath<Digest>(pub Vec<Option<Digest>>);
-
-/// Method for extracting the value for which a compressed Merkle proof element is for.
-impl<Value, Digest> PartialAuthenticationPath<Value, Digest>
-where
-    Value: Clone + Debug + Serialize + PartialEq,
-{
-    /// Given a proof_element: CompressedAuthenticationPath<T>, this returns the value
-    /// `proof_element.0[0].clone().unwrap().value.unwrap();`
-    pub fn get_value(&self) -> Value {
-        match self.0.first() {
-            None => panic!("CompressedAuthenticationPath was empty"),
-            Some(option) => match option {
-                None => panic!("First element of CompressedAuthenticationPath was pruned"),
-                Some(node) => match &node.value {
-                    None => panic!("No value of first element of CompressedAuthenticationPath"),
-                    Some(val) => val.clone(),
-                },
-            },
-        }
-    }
-}
+pub struct PartialAuthenticationPath<Digest>(pub Vec<Option<Digest>>);
 
 /// # Design
 /// The following are implemented as static methods:
 ///
 /// - `verify_authentication_path`
 /// - `verify_authentication_path_from_leaf_hash`
-/// - `convert_pat_leafless`
-/// - `verify_leafless_multi_proof`
-/// - `verify_leafless_multi_proof_from_leaf_hashes`
-/// - `unwrap_leafless_partial_authentication_path`
+/// - `convert_pat`
+/// - `verify_multi_proof`
+/// - `verify_multi_proof_from_leaf_hashes`
+/// - `unwrap_partial_authentication_path`
 ///
 /// The reason being that they are called from the verifier, who does not have
 /// the original `MerkleTree` object, but only partial information from it,
-/// in the form of the quadrupples: `(root_hash, index, value, auth_path)`.
+/// in the form of the quadrupples: `(root_hash, index, digest, auth_path)`.
 /// These are exactly the arguments for the `verify_*` family of static methods.
-impl<Value, H> MerkleTree<Value, H>
+impl<H> MerkleTree<H>
 where
-    Value: Clone
-        + Serialize
-        + Debug
-        + PartialEq
-        + ToDigest<H::Digest>
-        + std::marker::Sync
-        + std::marker::Send,
     H: Hasher + std::marker::Sync + std::marker::Send,
 {
-    pub fn verify_proof(
-        root_hash: H::Digest,
-        index: u64,
-        proof: Vec<Node<Value, H::Digest>>,
-    ) -> bool {
-        let mut mut_index = index + 2u64.pow(proof.len() as u32);
-        let leaf_node = proof[0].clone();
-        let hasher = H::new();
+    /// Takes an array of digests and builds a MerkleTree over them.
+    /// The digests are used copied over as the leaves of the tree.
+    pub fn from_digests(digests: &[H::Digest]) -> Self
+    where
+        H::Digest: Clone,
+    {
+        let leaves_count = digests.len();
 
-        // We .skip(1) because proof contains both the leaf node and the authentication path nodes.
-        let mut current_node = leaf_node;
-        for sibling_node in proof.iter().skip(1) {
-            // Is `sibling_node` a left or a right child?
-            if mut_index % 2 == 0 {
-                // `sibling_node` is a right child
-                current_node.hash = hasher.hash_pair(&current_node.hash, &sibling_node.hash);
-            } else {
-                // `sibling_node` is a left child
-                current_node.hash = hasher.hash_pair(&sibling_node.hash, &current_node.hash);
-            }
-            mut_index /= 2;
-        }
-
-        let leaf_value = proof[0].value.as_ref().unwrap();
-        let expected_hash = hasher.hash(&leaf_value.to_digest());
-        current_node.hash == root_hash && expected_hash == proof[0].hash // FIXME: Remove '&& ...'
-    }
-
-    fn get_value_by_index(&self, index: usize) -> Value {
         assert!(
-            index < self.nodes.len() / 2,
-            "Out of bounds index requested"
-        );
-        self.nodes[self.nodes.len() / 2 + index]
-            .value
-            .clone()
-            .unwrap()
-    }
-
-    pub fn to_vec(&self) -> Vec<Value> {
-        self.nodes[self.nodes.len() / 2..self.nodes.len()]
-            .iter()
-            .map(|x| x.value.clone().unwrap())
-            .collect()
-    }
-
-    // TODO: Experiment, only been tested indirectly, through `from_vec` which calls
-    // this function
-    pub fn from_digests(digests: &[H::Digest], zero: &H::Digest) -> Self {
-        assert!(
-            other::is_power_of_two(digests.len()),
+            other::is_power_of_two(leaves_count),
             "Size of input for Merkle tree must be a power of 2"
         );
 
-        let mut nodes: Vec<Node<Value, H::Digest>> = vec![
-            Node {
-                value: None,
-                hash: zero.to_owned(),
-            };
-            2 * digests.len()
-        ];
+        let filler = digests[0].clone();
 
-        for i in 0..digests.len() {
-            nodes[digests.len() + i].hash = digests[i].to_owned();
-        }
+        // nodes[0] is never used for anything.
+        let mut nodes = vec![filler; 2 * leaves_count];
+        nodes[leaves_count..(leaves_count + leaves_count)]
+            .clone_from_slice(&digests[..leaves_count]);
 
         let hasher = H::new();
+
+        // Parallel implementation
         let mut node_count_on_this_level: usize = digests.len() / 2;
         let mut count_acc: usize = 0;
         while node_count_on_this_level >= PARALLELLIZATION_THRESHOLD {
@@ -176,66 +86,24 @@ where
                 .into_par_iter()
                 .map(|i| {
                     let j = node_count_on_this_level + i;
-                    hasher.hash_pair(&nodes[j * 2].hash, &nodes[j * 2 + 1].hash)
+                    let left_child = &nodes[j * 2];
+                    let right_child = &nodes[j * 2 + 1];
+                    hasher.hash_pair(left_child, right_child)
                 })
                 .collect_into_vec(&mut local_digests);
-            for i in 0..node_count_on_this_level {
-                // TODO: REMOVE THIS CLONE SOMEHOW
-                nodes[node_count_on_this_level + i].hash = local_digests[i].clone();
-            }
+            nodes[node_count_on_this_level..(node_count_on_this_level + node_count_on_this_level)]
+                .clone_from_slice(&local_digests[..node_count_on_this_level]);
             count_acc += node_count_on_this_level;
             node_count_on_this_level /= 2;
         }
 
         for i in (1..(digests.len() - count_acc)).rev() {
-            nodes[i].hash = hasher.hash_pair(&nodes[i * 2].hash, &nodes[i * 2 + 1].hash);
+            nodes[i] = hasher.hash_pair(&nodes[i * 2], &nodes[i * 2 + 1]);
         }
 
-        // nodes[0] is never used for anything.
-        let root_hash = nodes[1].hash.clone();
-        let height = log_2_floor(digests.len() as u64) as u8 + 1;
         let _hasher = PhantomData;
 
-        Self {
-            root_hash,
-            nodes,
-            height,
-            _hasher,
-        }
-    }
-
-    pub fn from_vec(values: &[Value], zero: &Value) -> Self {
-        assert!(
-            other::is_power_of_two(values.len()),
-            "Size of input for Merkle tree must be a power of 2"
-        );
-
-        // find all digests
-        let hasher = H::new();
-        let digests: Vec<H::Digest> = values
-            .iter()
-            .map(|val| hasher.hash(&val.to_digest()))
-            .collect();
-        let mut mt = Self::from_digests(&digests, &zero.to_digest());
-
-        // Populate the values since `from_digests` leaves the values as `None`
-        for i in 0..values.len() {
-            mt.nodes[values.len() + i].value = Some(values[i].clone());
-        }
-
-        mt
-    }
-
-    pub fn get_proof(&self, mut index: usize) -> Vec<Node<Value, H::Digest>> {
-        let mut proof: Vec<Node<Value, H::Digest>> = Vec::with_capacity(self.height as usize);
-
-        index += self.nodes.len() / 2;
-        proof.push(self.nodes[index].clone());
-        while index > 1 {
-            proof.push(self.nodes[index ^ 1].clone());
-            index /= 2;
-        }
-        proof
+        Self { nodes, _hasher }
     }
 
     // Similar to `get_proof', but instead of returning a `Vec<Node<T>>`, we only
@@ -254,26 +122,26 @@ where
     //
     // ... so a criss-cross of siblings upwards.
     pub fn get_authentication_path(&self, leaf_index: usize) -> Vec<H::Digest> {
-        let mut auth_path: Vec<H::Digest> = Vec::with_capacity(self.height as usize);
+        let height = self.get_height();
+        let mut auth_path: Vec<H::Digest> = Vec::with_capacity(height);
 
         let mut node_index = leaf_index + self.nodes.len() / 2;
         while node_index > 1 {
             // We get the sibling node by XOR'ing with 1.
             let sibling_i = node_index ^ 1;
-            auth_path.push(self.nodes[sibling_i].hash.clone());
+            auth_path.push(self.nodes[sibling_i].clone());
             node_index /= 2;
         }
 
         // We don't include the root hash in the authentication path
         // because it's implied in the context of use.
-        //auth_path.push(self.root_hash);
-
         auth_path
     }
 
+    // Consider renaming this `verify_leaf_with_authentication_path()`.
     pub fn verify_authentication_path_from_leaf_hash(
         root_hash: H::Digest,
-        index: u32,
+        leaf_index: u32,
         leaf_hash: H::Digest,
         auth_path: Vec<H::Digest>,
     ) -> bool {
@@ -282,7 +150,7 @@ where
 
         // Initialize `acc_hash' as leaf_hash
         let mut acc_hash = leaf_hash;
-        let mut i = index + 2u32.pow(path_length);
+        let mut i = leaf_index + 2u32.pow(path_length);
         for path_hash in auth_path.iter() {
             // Use Merkle tree index parity (odd/even) to determine which
             // order to concatenate the hashes before hashing them.
@@ -297,45 +165,18 @@ where
         acc_hash == root_hash
     }
 
-    /// Verify the `authentication path' of a `value' with an `index' from the
-    /// `root_hash' of a given Merkle tree. Similar to `verify_proof', but instead of
-    /// a `proof: Vec<Node<T>>` that contains [ValueNode, ...PathNodes..., RootNode],
-    /// we only pass an `auth_path: Vec<Blake3Hash>' with the hashes of the path nodes;
-    /// the `root_hash' is passed along separately, and the `value' hash is computed.
-    ///
-    /// The `index' is to know if a given path element is a left- or a right-sibling.
-    pub fn verify_authentication_path(
-        root_hash: H::Digest,
-        index: u32,
-        value: Value,
-        auth_path: Vec<H::Digest>,
-    ) -> bool {
-        let hasher = H::new();
-        let value_hash = hasher.hash(&value);
-
-        // Set `leaf_hash` to H(value)
-        Self::verify_authentication_path_from_leaf_hash(root_hash, index, value_hash, auth_path)
-    }
-
-    pub fn get_root(&self) -> &H::Digest {
-        &self.root_hash
-    }
-
-    pub fn get_number_of_leafs(&self) -> usize {
-        self.nodes.len() / 2
-    }
-
     // Compact Merkle Multiproof Generation
-    fn get_multi_proof(
-        &self,
-        indices: &[usize],
-    ) -> Vec<PartialAuthenticationPath<Value, H::Digest>> {
+    pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<PartialAuthenticationPath<H::Digest>> {
         let mut calculable_indices: HashSet<usize> = HashSet::new();
-        let mut output: Vec<PartialAuthenticationPath<Value, H::Digest>> =
+        let mut output: Vec<PartialAuthenticationPath<H::Digest>> =
             Vec::with_capacity(indices.len());
         for i in indices.iter() {
-            let new_branch: PartialAuthenticationPath<Value, H::Digest> =
-                PartialAuthenticationPath(self.get_proof(*i).into_iter().map(Some).collect());
+            let new_branch = PartialAuthenticationPath(
+                self.get_authentication_path(*i)
+                    .into_iter()
+                    .map(Some)
+                    .collect(),
+            );
             let mut index = self.nodes.len() / 2 + i;
             calculable_indices.insert(index);
             for _ in 1..new_branch.0.len() {
@@ -367,7 +208,7 @@ where
         for (i, b) in indices.iter().zip(output.iter_mut()) {
             let mut index: usize = self.nodes.len() / 2 + i;
             scanned.insert(index);
-            for elem in b.0.iter_mut().skip(1) {
+            for elem in b.0.iter_mut() {
                 if calculable_indices.contains(&((index ^ 1) * 2))
                     && calculable_indices.contains(&((index ^ 1) * 2 + 1))
                     || (index ^ 1) as i64 - self.nodes.len() as i64 / 2 > 0 // TODO: Maybe > 1 here?
@@ -384,66 +225,35 @@ where
         output
     }
 
-    // TODO: Rewrite this so it doesn't throw away the values before it fetches them again.
-    pub fn get_leafless_multi_proof_with_values(
-        &self,
-        indices: &[usize],
-    ) -> Vec<(LeaflessPartialAuthenticationPath<H::Digest>, Value)> {
-        // auth path and salts
-        let leafless_multi_proof: Vec<LeaflessPartialAuthenticationPath<H::Digest>> =
-            self.get_leafless_multi_proof(indices);
-        let mut ret: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, Value)> = vec![];
-
-        // Insert values in a for-loop
-        for (i, leafless_proof) in leafless_multi_proof.into_iter().enumerate() {
-            ret.push((leafless_proof, self.get_value_by_index(indices[i])));
-        }
-
-        ret
-    }
-
-    // Compact Merkle Multiproof Generation
-    //
-    // Leafless (produce authentication paths, not Vec<Node<T>>s with leaf values in it).
-    pub fn get_leafless_multi_proof(
-        &self,
-        indices: &[usize],
-    ) -> Vec<LeaflessPartialAuthenticationPath<H::Digest>> {
-        self.get_multi_proof(indices)
-            .into_iter()
-            .map(Self::convert_pat_leafless)
-            .collect()
-    }
-
-    fn convert_pat_leafless(
-        auth_path_nodes: PartialAuthenticationPath<Value, H::Digest>,
-    ) -> LeaflessPartialAuthenticationPath<H::Digest> {
-        let auth_path_hashes: Vec<Option<H::Digest>> = auth_path_nodes
-            .0
-            .iter()
-            .skip(1) // drop leaf node from `get_multi_proof' output
-            .map(|node_opt| node_opt.clone().map(|node| node.hash))
-            .collect();
-
-        LeaflessPartialAuthenticationPath(auth_path_hashes)
-    }
-
-    fn verify_leafless_multi_proof_from_leaf_hashes(
+    /// Verifies a list of leaf_indices and corresponding
+    /// auth_pairs
+    ///     ///  against a Merkle root.
+    ///
+    /// # Arguments
+    ///
+    /// * `root_hash` - The Merkle root
+    /// * `leaf_indices` - List of identifiers of the leaves to verify
+    /// * `leaf_digests` - List of the leaves' values (i.e. digests) to verify
+    /// * `auth_paths` - List of paths corresponding to the leaves.
+    pub fn verify_multi_proof_from_leaves(
         root_hash: H::Digest,
-        indices: &[usize],
-        leaf_hashes: &[H::Digest],
-        proof: &[LeaflessPartialAuthenticationPath<H::Digest>],
+        leaf_indices: &[usize],
+        leaf_digests: &[H::Digest],
+        auth_paths: &[PartialAuthenticationPath<H::Digest>],
     ) -> bool {
-        if indices.len() != proof.len() || indices.len() != leaf_hashes.len() {
+        if leaf_indices.len() != auth_paths.len() || leaf_indices.len() != leaf_digests.len() {
             return false;
         }
 
-        if indices.is_empty() {
+        if leaf_indices.is_empty() {
             return true;
         }
+        assert_eq!(leaf_indices.len(), leaf_digests.len());
+        assert_eq!(leaf_digests.len(), auth_paths.len());
+        assert_eq!(auth_paths.len(), leaf_indices.len());
 
-        let mut partial_auth_paths: Vec<LeaflessPartialAuthenticationPath<H::Digest>> =
-            proof.to_owned();
+        let mut partial_auth_paths: Vec<PartialAuthenticationPath<H::Digest>> =
+            auth_paths.to_owned();
         let mut partial_tree: HashMap<u64, H::Digest> = HashMap::new();
 
         // FIXME: We find the offset from which leaf nodes occur in the tree by looking at the
@@ -455,7 +265,7 @@ where
 
         // Bootstrap partial tree
         for (i, leaf_hash, partial_auth_path) in
-            izip!(indices, leaf_hashes, partial_auth_paths.clone())
+            izip!(leaf_indices, leaf_digests, partial_auth_paths.clone())
         {
             let mut index = half_tree_size + *i as u64;
 
@@ -499,7 +309,7 @@ where
 
         // Use partial tree to insert missing elements in partial authentication paths,
         // making them full authentication paths.
-        for (i, partial_auth_path) in indices.iter().zip(partial_auth_paths.iter_mut()) {
+        for (i, partial_auth_path) in leaf_indices.iter().zip(partial_auth_paths.iter_mut()) {
             let mut index = half_tree_size + *i as u64;
 
             for elem in partial_auth_path.0.iter_mut() {
@@ -525,9 +335,9 @@ where
         // Remove 'Some' constructors from partial auth paths
         let auth_paths = partial_auth_paths
             .iter()
-            .map(Self::unwrap_leafless_partial_authentication_path);
+            .map(Self::unwrap_partial_authentication_path);
 
-        izip!(indices, leaf_hashes, auth_paths).all(|(index, leaf_hash, auth_path)| {
+        izip!(leaf_indices, leaf_digests, auth_paths).all(|(index, leaf_hash, auth_path)| {
             Self::verify_authentication_path_from_leaf_hash(
                 root_hash.clone(),
                 *index as u32,
@@ -537,38 +347,29 @@ where
         })
     }
 
-    pub fn verify_leafless_multi_proof(
+    /// Verifies a list of leaf_indices and corresponding
+    /// auth_pairs (auth_path, leaf_digest) against a Merkle root.
+    pub fn verify_multi_proof(
         root_hash: H::Digest,
-        indices: &[usize],
-        proof: &[(LeaflessPartialAuthenticationPath<H::Digest>, Value)],
+        leaf_indices: &[usize],
+        auth_pairs: &[(PartialAuthenticationPath<H::Digest>, H::Digest)],
     ) -> bool {
-        if indices.len() != proof.len() {
+        if leaf_indices.len() != auth_pairs.len() {
             return false;
         }
 
-        if indices.is_empty() {
+        if leaf_indices.is_empty() {
             return true;
         }
+        assert_eq!(leaf_indices.len(), auth_pairs.len());
 
-        let hasher = H::new();
-        let mut auth_paths: Vec<LeaflessPartialAuthenticationPath<H::Digest>> =
-            Vec::with_capacity(proof.len());
-        let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(proof.len());
-        for (auth_path, value) in proof.iter() {
-            auth_paths.push(auth_path.clone());
-            leaf_hashes.push(hasher.hash(value));
-        }
+        let (auth_paths, leaves): (Vec<_>, Vec<_>) = auth_pairs.iter().cloned().unzip();
 
-        Self::verify_leafless_multi_proof_from_leaf_hashes(
-            root_hash,
-            indices,
-            &leaf_hashes,
-            &auth_paths,
-        )
+        Self::verify_multi_proof_from_leaves(root_hash, leaf_indices, &leaves, &auth_paths)
     }
 
-    fn unwrap_leafless_partial_authentication_path(
-        partial_auth_path: &LeaflessPartialAuthenticationPath<H::Digest>,
+    fn unwrap_partial_authentication_path(
+        partial_auth_path: &PartialAuthenticationPath<H::Digest>,
     ) -> Vec<H::Digest> {
         partial_auth_path
             .clone()
@@ -577,100 +378,117 @@ where
             .map(|hash| hash.unwrap())
             .collect()
     }
+
+    pub fn get_root(&self) -> H::Digest {
+        self.nodes[1].clone()
+    }
+
+    pub fn get_leaf_count(&self) -> usize {
+        let node_count = self.nodes.len();
+        assert!(is_power_of_two(node_count));
+        node_count / 2
+    }
+
+    pub fn get_height(&self) -> usize {
+        get_height_of_complete_binary_tree(self.get_leaf_count())
+    }
+
+    pub fn get_all_leaves(&self) -> Vec<H::Digest> {
+        let first_leaf = self.nodes.len() / 2;
+        self.nodes[first_leaf..].to_vec()
+    }
+
+    pub fn get_leaf_by_index(&self, index: usize) -> H::Digest {
+        let first_leaf_index = self.nodes.len() / 2;
+        let beyond_last_leaf_index = self.nodes.len();
+        assert!(
+            index < first_leaf_index || beyond_last_leaf_index <= index,
+            "Out of bounds index requested"
+        );
+        self.nodes[first_leaf_index + index].clone()
+    }
+
+    pub fn get_leaves_by_indices(&self, leaf_indices: &[usize]) -> Vec<H::Digest> {
+        let leaf_count = leaf_indices.len();
+
+        let mut result = Vec::with_capacity(leaf_count);
+
+        for index in leaf_indices {
+            result.push(self.get_leaf_by_index(*index));
+        }
+        result
+    }
 }
 
-type SaltedMultiProof<Value, Digest> =
-    [(LeaflessPartialAuthenticationPath<Digest>, Vec<Value>, Value)];
+pub type SaltedMultiProof<Digest> = Vec<(PartialAuthenticationPath<Digest>, Vec<Digest>)>;
 
 #[derive(Clone, Debug)]
-pub struct SaltedMerkleTree<Value, H>
+pub struct SaltedMerkleTree<H>
 where
     H: Hasher,
 {
-    internal_merkle_tree: MerkleTree<Value, H>,
-    salts: Vec<Value>,
-    salts_per_value: usize,
+    internal_merkle_tree: MerkleTree<H>,
+    salts: Vec<H::Digest>,
 }
 
-impl<Value, H> SaltedMerkleTree<Value, H>
+impl<H> SaltedMerkleTree<H>
 where
-    Value: Clone
-        + Serialize
-        + Debug
-        + PartialEq
-        + ToDigest<H::Digest>
-        + GetRandomElements
-        + Sync
-        + Send,
     H: Hasher + Sync + Send,
 {
+    fn salts_per_leaf(&self) -> usize {
+        let leaves_count = self.internal_merkle_tree.nodes.len() / 2;
+        self.salts.len() / leaves_count
+    }
+
     // Build a salted Merkle tree from a slice of serializable values
-    pub fn from_vec(
-        values: &[Value],
-        zero: &Value,
-        salts_per_element: usize,
-        rng: &mut ThreadRng,
-    ) -> Self {
+    pub fn from_digests(leaves: &[H::Digest], salts: &[H::Digest]) -> Self {
         assert!(
-            other::is_power_of_two(values.len()),
+            other::is_power_of_two(leaves.len()),
             "Size of input for Merkle tree must be a power of 2"
         );
 
-        let hasher = H::new();
-        let zero_hash = hasher.hash(zero);
-        let mut nodes: Vec<Node<Value, H::Digest>> = vec![
-            Node {
-                value: None,
-                hash: zero_hash,
-            };
-            2 * values.len()
-        ];
+        let salts_per_leaf = salts.len() / leaves.len();
 
-        let salts: Vec<Value> = Value::random_elements(salts_per_element * values.len(), rng);
-        for i in 0..values.len() {
-            let value = values[i].clone();
-            let salty_slice = &salts[salts_per_element * i..salts_per_element * (i + 1)];
+        let hasher = H::new();
+        let filler = leaves[0].clone();
+
+        // nodes[0] is never used for anything.
+        let mut nodes: Vec<H::Digest> = vec![filler; 2 * leaves.len()];
+
+        for i in 0..leaves.len() {
+            let value = leaves[i].clone();
+            let salty_slice = &salts[salts_per_leaf * i..salts_per_leaf * (i + 1)];
             let leaf_digest = hasher.hash_with_salts(value.to_digest(), salty_slice);
 
-            nodes[values.len() + i].hash = leaf_digest;
-            nodes[values.len() + i].value = Some(value);
+            nodes[leaves.len() + i] = leaf_digest;
         }
 
         // loop from `len(L) - 1` to 1
         for i in (1..(nodes.len() / 2)).rev() {
-            let left = nodes[i * 2].hash.clone();
-            let right = nodes[i * 2 + 1].hash.clone();
-            nodes[i].hash = hasher.hash_pair(&left.to_digest(), &right.to_digest());
+            let left = nodes[i * 2].clone();
+            let right = nodes[i * 2 + 1].clone();
+            nodes[i] = hasher.hash_pair(&left, &right);
         }
 
-        // nodes[0] is never used for anything.
-        let root_hash = nodes[1].hash.clone();
-        let height = log_2_floor(values.len() as u64) as u8 + 1;
         let _hasher = PhantomData;
 
-        let internal_merkle_tree = MerkleTree {
-            root_hash,
-            nodes,
-            height,
-            _hasher,
-        };
+        let internal_merkle_tree: MerkleTree<H> = MerkleTree { nodes, _hasher };
 
         Self {
             internal_merkle_tree,
-            salts_per_value: salts_per_element,
-            salts,
+            salts: salts.to_vec(),
         }
     }
 
-    pub fn to_vec(&self) -> Vec<Value> {
-        self.internal_merkle_tree.to_vec()
-    }
-
-    pub fn get_authentication_path(&self, index: usize) -> (Vec<H::Digest>, Vec<Value>) {
+    pub fn get_authentication_path_and_salts(
+        &self,
+        index: usize,
+    ) -> (Vec<H::Digest>, Vec<H::Digest>) {
         let authentication_path = self.internal_merkle_tree.get_authentication_path(index);
-        let mut salts = Vec::<Value>::with_capacity(self.salts_per_value);
-        for i in 0..self.salts_per_value {
-            salts.push(self.salts[index * self.salts_per_value + i].clone());
+        let spl = self.salts_per_leaf();
+        let mut salts = Vec::<H::Digest>::with_capacity(spl);
+        for i in 0..spl {
+            salts.push(self.salts[index * spl + i].clone());
         }
 
         (authentication_path, salts)
@@ -679,98 +497,48 @@ where
     pub fn verify_authentication_path(
         root_hash: H::Digest,
         index: u32,
-        value: Value,
+        leaf: H::Digest,
         auth_path: Vec<H::Digest>,
-        salts_for_value: Vec<Value>,
+        salts_for_leaf: Vec<H::Digest>,
     ) -> bool {
         let hasher = H::new();
-        let leaf_hash = hasher.hash_with_salts(value.to_digest(), &salts_for_value);
+        let leaf_hash = hasher.hash_with_salts(leaf, &salts_for_leaf);
 
         // Set `leaf_hash` to H(value + salts[0..])
-        MerkleTree::<Value, H>::verify_authentication_path_from_leaf_hash(
+        MerkleTree::<H>::verify_authentication_path_from_leaf_hash(
             root_hash, index, leaf_hash, auth_path,
         )
     }
 
-    pub fn get_root(&self) -> &H::Digest {
-        &self.internal_merkle_tree.root_hash
-    }
-
-    // Returns vectors of length `indices.len()` of triplets (auth path, salts, value)
-    pub fn get_leafless_multi_proof_with_salts_and_values(
-        &self,
-        indices: &[usize],
-    ) -> Vec<(
-        LeaflessPartialAuthenticationPath<H::Digest>,
-        Vec<Value>,
-        Value,
-    )> {
-        // auth path and salts
-        let leafless_multi_proof: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, Vec<Value>)> =
-            self.get_leafless_multi_proof_with_salts(indices);
-        let mut ret: Vec<(
-            LeaflessPartialAuthenticationPath<H::Digest>,
-            Vec<Value>,
-            Value,
-        )> = vec![];
-
-        // Insert values in a for-loop
-        for (i, leafless_proof) in leafless_multi_proof.into_iter().enumerate() {
-            ret.push((
-                leafless_proof.0,
-                leafless_proof.1,
-                self.internal_merkle_tree.get_value_by_index(indices[i]),
-            ));
-        }
-
-        ret
-    }
-
-    pub fn get_leafless_multi_proof_with_salts(
-        &self,
-        indices: &[usize],
-    ) -> Vec<(LeaflessPartialAuthenticationPath<H::Digest>, Vec<Value>)> {
+    pub fn get_multi_proof_and_salts(&self, indices: &[usize]) -> SaltedMultiProof<H::Digest> {
         // Get the partial authentication paths without salts
-        let leafless_partial_authentication_paths: Vec<
-            LeaflessPartialAuthenticationPath<H::Digest>,
-        > = self.internal_merkle_tree.get_leafless_multi_proof(indices);
+        let partial_authentication_paths: Vec<PartialAuthenticationPath<H::Digest>> =
+            self.internal_merkle_tree.get_multi_proof(indices);
 
         // Get the salts associated with the leafs
         // salts are random data, so they cannot be compressed
-        let mut ret: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, Vec<Value>)> =
-            Vec::with_capacity(indices.len());
+        let mut ret: SaltedMultiProof<H::Digest> = Vec::with_capacity(indices.len());
         for (i, index) in indices.iter().enumerate() {
             let mut salts = vec![];
-            for j in 0..self.salts_per_value {
-                salts.push(self.salts[index * self.salts_per_value + j].clone());
+            for j in 0..self.salts_per_leaf() {
+                salts.push(self.salts[index * self.salts_per_leaf() + j].clone());
             }
-            ret.push((leafless_partial_authentication_paths[i].clone(), salts));
+            ret.push((partial_authentication_paths[i].clone(), salts));
         }
 
         ret
     }
 
-    pub fn verify_leafless_multi_proof_with_salts_and_values(
+    /// To use this function the user must provide the corresponding *UNSALTED* `leaves`.
+    pub fn verify_multi_proof(
         root_hash: H::Digest,
         indices: &[usize],
-        proof: &SaltedMultiProof<Value, H::Digest>,
+        unsalted_leaves: &[H::Digest],
+        proof: &SaltedMultiProof<H::Digest>,
     ) -> bool {
-        let values: Vec<Value> = proof.iter().map(|x| x.2.clone()).collect();
-        let auth_paths_and_salts: Vec<(LeaflessPartialAuthenticationPath<H::Digest>, Vec<Value>)> =
-            proof.iter().map(|x| (x.0.clone(), x.1.clone())).collect();
-
-        Self::verify_leafless_multi_proof(root_hash, indices, &values, &auth_paths_and_salts)
-    }
-
-    pub fn verify_leafless_multi_proof(
-        root_hash: H::Digest,
-        indices: &[usize],
-        values: &[Value],
-        proof: &[(LeaflessPartialAuthenticationPath<H::Digest>, Vec<Value>)],
-    ) -> bool {
-        if indices.len() != proof.len() || indices.len() != values.len() {
+        if indices.len() != proof.len() || indices.len() != unsalted_leaves.len() {
             debug_assert!(indices.len() == proof.len());
-            debug_assert!(indices.len() == values.len());
+            debug_assert!(indices.len() == unsalted_leaves.len());
 
             return false;
         }
@@ -781,21 +549,64 @@ where
 
         let hasher = H::new();
         let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(indices.len());
-        for (value, proof) in izip!(values, proof) {
+        for (value, proof) in izip!(unsalted_leaves, proof) {
             let salts_for_leaf = proof.1.clone();
             let leaf_hash = hasher.hash_with_salts(value.to_digest(), &salts_for_leaf);
             leaf_hashes.push(leaf_hash);
         }
 
-        let saltless_proof: Vec<LeaflessPartialAuthenticationPath<H::Digest>> =
+        let saltless_proof: Vec<PartialAuthenticationPath<H::Digest>> =
             proof.iter().map(|x| x.0.clone()).collect();
 
-        MerkleTree::<Value, H>::verify_leafless_multi_proof_from_leaf_hashes(
+        MerkleTree::<H>::verify_multi_proof_from_leaves(
             root_hash,
             indices,
             &leaf_hashes,
             &saltless_proof,
         )
+    }
+
+    pub fn get_root(&self) -> H::Digest {
+        self.internal_merkle_tree.get_root()
+    }
+
+    pub fn get_leaf_count(&self) -> usize {
+        self.internal_merkle_tree.get_leaf_count()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_height(&self) -> usize {
+        self.internal_merkle_tree.get_height()
+    }
+
+    pub fn get_all_salted_leaves(&self) -> Vec<H::Digest> {
+        let first_leaf = self.internal_merkle_tree.nodes.len() / 2;
+        self.internal_merkle_tree.nodes[first_leaf..].to_vec()
+    }
+
+    pub fn get_salted_leaf_by_index(&self, index: usize) -> H::Digest {
+        let first_leaf_index = self.internal_merkle_tree.nodes.len() / 2;
+        let beyond_last_leaf_index = self.internal_merkle_tree.nodes.len();
+        assert!(
+            index < first_leaf_index || beyond_last_leaf_index <= index,
+            "Out of bounds index requested"
+        );
+        self.internal_merkle_tree.nodes[first_leaf_index + index].clone()
+    }
+
+    pub fn get_salted_leaves_by_indices(&self, leaf_indices: &[usize]) -> Vec<H::Digest> {
+        let leaf_count = leaf_indices.len();
+
+        let mut result = Vec::with_capacity(leaf_count);
+
+        for index in leaf_indices {
+            result.push(self.get_salted_leaf_by_index(*index));
+        }
+        result
+    }
+
+    pub fn get_salts(&self) -> &[H::Digest] {
+        &self.salts
     }
 }
 
@@ -804,27 +615,101 @@ mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
+    use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::util_types::simple_hasher::RescuePrimeProduction;
     use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
-    use itertools::Itertools;
+    use itertools::{zip, Itertools};
     use rand::RngCore;
 
-    fn count_hashes<Digest>(
-        proof: &[(
-            LeaflessPartialAuthenticationPath<Digest>,
-            Vec<BFieldElement>,
-        )],
-    ) -> usize {
+    fn count_hashes<Digest>(proof: &SaltedMultiProof<Digest>) -> usize {
         proof.iter().map(|y| y.0 .0.iter().flatten().count()).sum()
     }
 
-    fn bad_blake3_hash(orig: Blake3Hash) -> Blake3Hash {
-        let Blake3Hash(orig) = orig;
-        let mut bytes = orig.as_bytes().clone();
-        bytes[5] ^= 1;
-        Blake3Hash(bytes.into())
+    impl Blake3Hash {
+        /// Corrupts a hash by flipping all bits.
+        /// Run this twice to restore the original.
+        fn toggle_corruption(&mut self) {
+            let original = self.clone();
+            let Blake3Hash(orig) = self;
+            let mut bytes: [u8; 32] = orig.as_bytes().clone();
+
+            for i in 0..bytes.len() {
+                bytes[i] ^= 1;
+            }
+
+            *self = Blake3Hash(bytes.into());
+            assert_ne!(
+                original, *self,
+                "The digest should always differ after being corrupted."
+            )
+        }
+
+        /// Change a Blake3 hash value. Only used for negative tests.
+        fn increment(&mut self) {
+            let original = self.clone();
+            let Blake3Hash(orig) = self;
+            let mut bytes: [u8; 32] = orig.as_bytes().clone();
+
+            let last_index = bytes.len() - 1;
+
+            // Account for potential overflow
+            if bytes[last_index] == u8::MAX {
+                bytes[last_index] = 0;
+            } else {
+                bytes[last_index] += 1;
+            }
+
+            *self = Blake3Hash(bytes.into());
+            assert_ne!(
+                original, *self,
+                "The digest should always differ after being incremented."
+            )
+        }
+
+        /// Change a Blake3 hash value. Only used for negative tests.
+        fn decrement(&mut self) {
+            let original = self.clone();
+            let Blake3Hash(orig) = self;
+            let mut bytes: [u8; 32] = orig.as_bytes().clone();
+
+            let last_index = bytes.len() - 1;
+
+            // Account for potential overflow
+            if bytes[last_index] == 0 {
+                bytes[last_index] = u8::MAX;
+            } else {
+                bytes[last_index] -= 1;
+            }
+
+            *self = Blake3Hash(bytes.into());
+            assert_ne!(
+                original, *self,
+                "The digest should always differ after being decremented."
+            )
+        }
+    }
+
+    impl<H> MerkleTree<H>
+    where
+        H: Hasher,
+    {
+        /// For writing negative tests only.
+        fn set_root(&mut self, new_root: H::Digest) {
+            self.nodes[1] = new_root
+        }
+    }
+
+    impl<H> SaltedMerkleTree<H>
+    where
+        H: Hasher,
+    {
+        /// For writing negative tests only.
+        #[allow(dead_code)]
+        fn set_root(&mut self, new_root: H::Digest) {
+            self.internal_merkle_tree.set_root(new_root)
+        }
     }
 
     #[test]
@@ -833,10 +718,12 @@ mod merkle_tree_test {
         type Hasher = blake3::Hasher;
 
         let mut rng = rand::thread_rng();
-        let elements: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
-        let zero = BFieldElement::ring_zero();
-        let mut mt_32: MerkleTree<BFieldElement, Hasher> = MerkleTree::from_vec(&elements, &zero);
-        let mt_32_orig_root_hash = mt_32.root_hash;
+        let values: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
+        let hasher = Hasher::new();
+
+        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+        let mut mt_32: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
+        let mt_32_orig_root_hash = mt_32.get_root();
 
         for _ in 0..2 {
             for i in 0..20 {
@@ -850,77 +737,70 @@ mod merkle_tree_test {
                     indices_usize.push(*elem as usize);
                 }
 
-                let proof: Vec<(LeaflessPartialAuthenticationPath<Digest>, BFieldElement)> =
-                    mt_32.get_leafless_multi_proof_with_values(&indices_usize);
-                assert!(
-                    MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                        mt_32.get_root().clone(),
-                        &indices_usize,
-                        &proof
-                    )
-                );
+                let selected_leaves: Vec<Digest> = mt_32.get_leaves_by_indices(&indices_usize);
+                let partial_auth_paths: Vec<PartialAuthenticationPath<Digest>> =
+                    mt_32.get_multi_proof(&indices_usize);
+                let proof: Vec<(PartialAuthenticationPath<Digest>, Digest)> =
+                    zip(partial_auth_paths, selected_leaves.clone()).collect();
+
+                assert!(MerkleTree::<Hasher>::verify_multi_proof(
+                    mt_32_orig_root_hash,
+                    &indices_usize,
+                    &proof
+                ));
 
                 // Verify that `get_value` returns the value for this proof
                 assert!(proof
                     .iter()
                     .enumerate()
-                    .all(|(i, (_auth_path, value))| *value == elements[indices_usize[i]]));
+                    .all(|(i, (_auth_path, digest))| *digest == leaves[indices_usize[i]]));
 
                 // manipulate Merkle root and verify failure
-                let bad_root_hash = bad_blake3_hash(mt_32_orig_root_hash);
+                let mut bad_root_hash = mt_32_orig_root_hash;
+                bad_root_hash.toggle_corruption();
 
-                assert!(
-                    !MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                        bad_root_hash,
-                        &indices_usize,
-                        &proof
-                    )
-                );
+                assert!(!MerkleTree::<Hasher>::verify_multi_proof(
+                    bad_root_hash,
+                    &indices_usize,
+                    &proof
+                ));
 
                 // Restore root and verify success
-                mt_32.root_hash = mt_32_orig_root_hash;
-                assert!(
-                    MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                        mt_32.get_root().clone(),
-                        &indices_usize,
-                        &proof
-                    )
-                );
+                mt_32.set_root(mt_32_orig_root_hash);
+                assert!(MerkleTree::<Hasher>::verify_multi_proof(
+                    mt_32.get_root().clone(),
+                    &indices_usize,
+                    &proof
+                ));
 
                 // Request an additional index and verify failure
                 // (indices length does not match proof length)
                 indices_usize.insert(0, indices_i128[0] as usize);
-                assert!(
-                    !MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                        mt_32.get_root().clone(),
-                        &indices_usize,
-                        &proof
-                    )
-                );
+                assert!(!MerkleTree::<Hasher>::verify_multi_proof(
+                    mt_32.get_root().clone(),
+                    &indices_usize,
+                    &proof
+                ));
 
                 // Request a non-existant index and verify failure
                 // (indices length does match proof length)
                 indices_usize.remove(0);
                 indices_usize[0] = indices_i128[0] as usize;
-                assert!(
-                    !MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                        mt_32.get_root().clone(),
-                        &indices_usize,
-                        &proof
-                    )
-                );
+                assert!(!MerkleTree::<Hasher>::verify_multi_proof(
+                    mt_32.get_root().clone(),
+                    &indices_usize,
+                    &proof
+                ));
 
                 // Remove an element from the indices vector
                 // and verify failure since the indices and proof
                 // vectors do not match
                 indices_usize.remove(0);
-                assert!(
-                    !MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                        mt_32.get_root().clone(),
-                        &indices_usize,
-                        &proof
-                    )
-                );
+                assert!(!MerkleTree::<Hasher>::verify_multi_proof(
+                    mt_32.get_root().clone(),
+                    &indices_usize,
+                    &proof
+                ));
             }
         }
     }
@@ -928,22 +808,26 @@ mod merkle_tree_test {
     #[test]
     fn merkle_tree_verify_multi_proof_degenerate_test() {
         type Hasher = blake3::Hasher;
+        type Digest = Blake3Hash;
+
         let mut rng = rand::thread_rng();
 
         // Number of Merkle tree leaves
-        let elements: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
-        let zero = BFieldElement::ring_zero();
-        let tree = MerkleTree::<BFieldElement, Hasher>::from_vec(&elements, &zero);
+        let values: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
+        let hasher = Hasher::new();
+        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+
+        let tree = MerkleTree::<Hasher>::from_digests(&leaves);
 
         // Degenerate example
-        let empty_leafless_proof = tree.get_leafless_multi_proof_with_values(&[]);
-        assert!(
-            MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                tree.root_hash,
-                &[],
-                &empty_leafless_proof,
-            )
-        );
+        let empty_proof: Vec<PartialAuthenticationPath<Digest>> = tree.get_multi_proof(&[]);
+        let auth_pairs: Vec<(PartialAuthenticationPath<Digest>, Digest)> =
+            zip(empty_proof, leaves).collect();
+        assert!(MerkleTree::<Hasher>::verify_multi_proof(
+            tree.get_root(),
+            &[],
+            &auth_pairs,
+        ));
     }
 
     #[test]
@@ -957,60 +841,61 @@ mod merkle_tree_test {
         // Number of Merkle tree leaves
         let n_values = 8;
         let expected_path_length = 3; // log2(128), root node not included
-        let elements: Vec<BFieldElement> = BFieldElement::random_elements(n_values, &mut rng);
-        let zero = BFieldElement::ring_zero();
-        let regular_tree = MerkleTree::<BFieldElement, Hasher>::from_vec(&elements, &zero);
+        let values: Vec<BFieldElement> = BFieldElement::random_elements(n_values, &mut rng);
 
-        let some_indices: Vec<usize> = vec![0, 1];
-        let some_leafless_proof: Vec<(LeaflessPartialAuthenticationPath<Digest>, BFieldElement)> =
-            regular_tree.get_leafless_multi_proof_with_values(&some_indices);
+        let hasher = Hasher::new();
+        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+        let regular_tree = MerkleTree::<Hasher>::from_digests(&leaves);
 
-        for (partial_auth_path, _value) in some_leafless_proof.clone() {
+        let selected_indices: Vec<usize> = vec![0, 1];
+        let selected_leaves = regular_tree.get_leaves_by_indices(&selected_indices);
+        let selected_auth_paths = regular_tree.get_multi_proof(&selected_indices);
+        let auth_pairs: Vec<(PartialAuthenticationPath<Digest>, Digest)> =
+            zip(selected_auth_paths, selected_leaves.clone()).collect();
+
+        for (partial_auth_path, _digest) in auth_pairs.clone() {
             assert_eq!(
-                expected_path_length,
-                partial_auth_path.0.len(),
-                "A generated authentication path must have length the height of the tree (not counting the root)"
-            );
+                  expected_path_length,
+                  partial_auth_path.0.len(),
+                  "A generated authentication path must have length the height of the tree (not counting the root)"
+              );
         }
 
-        let regular_verify = MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
+        let regular_verify = MerkleTree::<Hasher>::verify_multi_proof(
             regular_tree.get_root().clone(),
-            &some_indices,
-            &some_leafless_proof,
+            &selected_indices,
+            &auth_pairs,
         );
 
         let how_many_salts_again = 0;
-        let unsalted_salted_tree: SaltedMerkleTree<BFieldElement, Hasher> =
-            SaltedMerkleTree::from_vec(&elements, &zero, how_many_salts_again, &mut rng);
 
-        let salted_proof: Vec<(
-            LeaflessPartialAuthenticationPath<Digest>,
-            Vec<BFieldElement>,
-            BFieldElement,
-        )> = unsalted_salted_tree.get_leafless_multi_proof_with_salts_and_values(&some_indices);
-
-        let salted_leafless_proof: Vec<(
-            LeaflessPartialAuthenticationPath<Digest>,
-            Vec<BFieldElement>,
-        )> = salted_proof
+        let salts_per_element = 5;
+        let salts_preimage: Vec<BFieldElement> =
+            BFieldElement::random_elements(salts_per_element * leaves.len(), &mut rng);
+        let salts: Vec<Digest> = salts_preimage
             .iter()
-            .map(|(auth_path, salts, _)| (auth_path.clone(), salts.clone()))
+            .map(|x| hasher.hash(x))
+            .take(how_many_salts_again)
             .collect();
-        let values: Vec<BFieldElement> = salted_proof.iter().map(|(_, _, value)| *value).collect();
 
-        let unsalted_salted_verify =
-            SaltedMerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                unsalted_salted_tree.get_root().clone(),
-                &some_indices,
-                &values,
-                &salted_leafless_proof,
-            );
+        let unsalted_salted_tree: SaltedMerkleTree<Hasher> =
+            SaltedMerkleTree::from_digests(&selected_leaves.clone(), &salts);
+
+        let salted_proof = unsalted_salted_tree.get_multi_proof_and_salts(&selected_indices);
+
+        let unsalted_salted_verify = SaltedMerkleTree::<Hasher>::verify_multi_proof(
+            unsalted_salted_tree.get_root().clone(),
+            &selected_indices,
+            &selected_leaves,
+            &salted_proof,
+        );
 
         assert_eq!(regular_verify, unsalted_salted_verify);
     }
 
     #[test]
-    fn merkle_tree_verify_leafless_multi_proof_test() {
+    fn merkle_tree_verify_multi_proof_test() {
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
         let mut prng = rand::thread_rng();
@@ -1019,42 +904,42 @@ mod merkle_tree_test {
         let n_valuess = &[2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
         let expected_path_lengths = &[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
         for (n_values, expected_path_length) in izip!(n_valuess, expected_path_lengths) {
-            let elements: Vec<BFieldElement> =
+            let values: Vec<BFieldElement> =
                 generate_random_numbers_u128(*n_values, Some(1u128 << 63))
                     .iter()
                     .map(|x| BFieldElement::new(*x))
                     .collect();
-            let mut tree: MerkleTree<BFieldElement, Hasher> =
-                MerkleTree::<BFieldElement, Hasher>::from_vec(
-                    &elements,
-                    &BFieldElement::ring_zero(),
-                );
+
+            let hasher = Hasher::new();
+            let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+            let mut tree: MerkleTree<Hasher> = MerkleTree::<Hasher>::from_digests(&leaves);
 
             for _ in 0..3 {
                 // Ask for an arbitrary amount of indices less than the total
-                let mut n_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
+                let n_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
 
                 // Generate that amount of indices in the valid index range [0,128)
-                let indices: Vec<usize> =
+                let selected_indices: Vec<usize> =
                     generate_random_numbers_u128(n_indices, Some(*n_values as u128))
                         .iter()
                         .map(|x| *x as usize)
                         .unique()
                         .collect();
 
-                // Prevent out of bounds later in case a duplicate index was removed.
-                n_indices = indices.len();
+                let selected_leaves = tree.get_leaves_by_indices(&selected_indices);
+                let selected_auth_paths = tree.get_multi_proof(&selected_indices);
 
-                let proof = tree.get_leafless_multi_proof_with_values(&indices);
-
-                for (auth_path, _value) in proof.iter() {
+                for auth_path in selected_auth_paths.iter() {
                     assert_eq!(*expected_path_length, auth_path.0.len());
                 }
 
-                let good_tree = MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                    tree.root_hash,
-                    &indices,
-                    &proof,
+                let auth_pairs: Vec<(PartialAuthenticationPath<Digest>, Digest)> =
+                    zip(selected_auth_paths, selected_leaves.clone()).collect();
+
+                let good_tree = MerkleTree::<Hasher>::verify_multi_proof(
+                    tree.get_root(),
+                    &selected_indices,
+                    &auth_pairs,
                 );
                 assert!(
                     good_tree,
@@ -1064,26 +949,29 @@ mod merkle_tree_test {
                 // Begin negative tests
 
                 // Corrupt the root and thereby the tree
-                let orig_root_hash = tree.root_hash;
-                let bad_root_hash = bad_blake3_hash(tree.root_hash);
-                let verified = MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
+                let orig_root_hash = tree.get_root();
+                let mut bad_root_hash = tree.get_root();
+                bad_root_hash.toggle_corruption();
+                let verified = MerkleTree::<Hasher>::verify_multi_proof(
                     bad_root_hash,
-                    &indices,
-                    &proof,
+                    &selected_indices,
+                    &auth_pairs,
                 );
                 assert!(!verified, "Should not verify against bad root hash.");
 
                 // Restore root
-                tree.root_hash = orig_root_hash;
+                tree.set_root(orig_root_hash);
 
                 // Corrupt the proof and thus fail to verify against the (valid) tree.
-                let mut bad_proof = proof.clone();
-                let random_index = (prng.next_u64() % n_indices as u64 / 2) as usize;
-                bad_proof[random_index].1.decrement();
+                let mut bad_proof = auth_pairs.clone();
+                let random_index =
+                    ((prng.next_u64() % n_indices as u64 / 2) as usize) % bad_proof.len();
+                bad_proof[random_index].1.toggle_corruption();
+
                 assert!(
-                    !MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                        tree.root_hash,
-                        &indices,
+                    !MerkleTree::<Hasher>::verify_multi_proof(
+                        tree.get_root(),
+                        &selected_indices,
                         &bad_proof,
                     ),
                     "Should not verify with corrupted proof."
@@ -1101,174 +989,193 @@ mod merkle_tree_test {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
-        let zero = BFieldElement::ring_zero();
         let one = BFieldElement::ring_one();
         let two = BFieldElement::new(2);
         let three = BFieldElement::new(3);
         let four = BFieldElement::new(4);
 
-        let single_mt_one: MerkleTree<BFieldElement, Hasher> =
-            MerkleTree::from_vec(&[BFieldElement::new(1)], &zero);
+        let hasher = Hasher::new();
+        let values = vec![BFieldElement::new(1)];
+        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
 
+        let single_mt_one: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
         let expected_root_hash: Digest =
             b3h("331712cd28cd648eb4af74e03f89306735d56254393e4d958b4cc126ee256203");
-        assert_eq!(expected_root_hash, single_mt_one.root_hash);
-        assert_eq!(1, single_mt_one.height);
-        let single_mt_two: MerkleTree<BFieldElement, Hasher> = MerkleTree::from_vec(&[two], &zero);
+        assert_eq!(expected_root_hash, single_mt_one.get_root());
+        assert_eq!(0, single_mt_one.get_height());
 
+        let single_mt_two: MerkleTree<Hasher> = MerkleTree::from_digests(&[hasher.hash(&two)]);
         let expected_root_hash_2: Digest =
             b3h("51f6f488327b9541d3f455aeef239ad633b50d6ce2c92c27500dfa757d6320a1");
-        assert_eq!(expected_root_hash_2, single_mt_two.root_hash);
-        assert_eq!(1, single_mt_two.height);
+        assert_eq!(expected_root_hash_2, single_mt_two.get_root());
+        assert_eq!(0, single_mt_two.get_height());
 
-        let mt: MerkleTree<BFieldElement, Hasher> = MerkleTree::from_vec(&[one, two], &zero);
+        let mt: MerkleTree<Hasher> =
+            MerkleTree::from_digests(&[hasher.hash(&one), hasher.hash(&two)]);
         let expected_root_hash_3 =
             b3h("b53b546e7c34ddff320bccf9f900dcc8abf8f0c073e4f140230d45e7dce6f439");
-        assert_eq!(expected_root_hash_3, mt.root_hash);
-        assert_eq!(2, mt.height);
+        assert_eq!(expected_root_hash_3, mt.get_root());
+        assert_eq!(1, mt.get_height());
 
         let leaf_index = 1;
-        let mut proof: Vec<Node<BFieldElement, Digest>> = mt.get_proof(leaf_index);
+        let mut auth_path: Vec<Digest> = mt.get_authentication_path(leaf_index);
 
-        let hm = MerkleTree::<BFieldElement, Hasher>::verify_proof(mt.root_hash, 1, proof.clone());
-        assert!(hm);
+        let success = MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
+            mt.get_root(),
+            1,
+            hasher.hash(&two),
+            auth_path.clone(),
+        );
+        assert!(success);
         assert_eq!(
-            Some(two),
-            proof[0].value,
-            "First element of proof is the leaf node"
+            hasher.hash(&one),
+            auth_path[0],
+            "First element of authentication path is the leaf node"
         );
 
         let leaf_index = 0;
-        proof = mt.get_proof(leaf_index);
-        assert!(MerkleTree::<BFieldElement, Hasher>::verify_proof(
-            mt.root_hash,
-            0,
-            proof.clone()
-        ));
-        assert_eq!(Some(one), proof[0].value);
-        assert_eq!(2usize, proof.len());
+        auth_path = mt.get_authentication_path(leaf_index);
+        assert!(
+            MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
+                mt.get_root(),
+                leaf_index as u32,
+                hasher.hash(&one),
+                auth_path.clone()
+            )
+        );
+        assert_eq!(hasher.hash(&two), auth_path[0]);
+        assert_eq!(1, auth_path.len());
 
-        let mt_reverse: MerkleTree<BFieldElement, Hasher> =
-            MerkleTree::from_vec(&[two, one], &zero);
+        let mt_reverse: MerkleTree<Hasher> =
+            MerkleTree::from_digests(&[hasher.hash(&two), hasher.hash(&one)]);
         let expected_root_hash_4 =
             b3h("8d10946b4b745dde4b3a7d2530c0c5990e34239dd30eb3d90fbc654d12ade5f8");
-        assert_eq!(expected_root_hash_4, mt_reverse.root_hash);
-        assert_eq!(2u8, mt_reverse.height);
+        assert_eq!(expected_root_hash_4, mt_reverse.get_root());
+        assert_eq!(1, mt_reverse.get_height());
 
-        let mut mt_four: MerkleTree<BFieldElement, Hasher> =
-            MerkleTree::from_vec(&[one, two, three, four], &zero);
+        let leaves: Vec<Digest> = [one, two, three, four]
+            .iter()
+            .map(|x| hasher.hash(x))
+            .collect();
+        let mt_four: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
         let expected_root_hash_5 =
             b3h("c9a28853123953bd3fbc45bd818a809a4647094b1cae07853e5c1bfe6f650c05");
-        assert_eq!(expected_root_hash_5, mt_four.root_hash);
-        assert_ne!(mt.root_hash, mt_reverse.root_hash);
-        assert_eq!(3, mt_four.height);
-        proof = mt_four.get_proof(1);
-        assert_eq!(3, proof.len());
-        assert!(MerkleTree::<BFieldElement, Hasher>::verify_proof(
-            mt_four.root_hash,
-            1,
-            proof.clone()
-        ));
-        assert_eq!(Some(two), proof[0].value);
-
-        proof[0].value = Some(three);
-        assert!(!MerkleTree::<BFieldElement, Hasher>::verify_proof(
-            mt_four.root_hash,
-            1,
-            proof.clone()
-        ));
-        proof[0].value = Some(two);
-        proof[0].hash = [0; 32].into();
-        assert!(!MerkleTree::<BFieldElement, Hasher>::verify_proof(
-            mt_four.root_hash,
-            1,
-            proof.clone()
-        ));
-
-        proof = mt_four.get_proof(1);
-        assert!(MerkleTree::<BFieldElement, Hasher>::verify_proof(
-            mt_four.root_hash,
-            1,
-            proof.clone()
-        ));
-        let original_root = mt_four.get_root();
-        let fake_root = [0; 32].into();
-        assert!(!MerkleTree::<BFieldElement, Hasher>::verify_proof(
-            fake_root,
-            1,
-            proof.clone()
-        ));
-        println!("get_proof(mt_four) = {:x?}", proof);
-
-        mt_four.root_hash = *original_root;
-
-        println!("root_hash = {:?}", mt_four.root_hash);
-        proof = mt_four.get_proof(0);
-        println!("root_hash = {:?}", mt_four.root_hash);
-        println!("\n\n\n\n proof(0) = {:?} \n\n\n\n", proof);
-        assert!(MerkleTree::<BFieldElement, Hasher>::verify_proof(
-            mt_four.root_hash,
-            0,
-            proof
-        ));
-        let mut compressed_proof: Vec<(LeaflessPartialAuthenticationPath<Digest>, BFieldElement)> =
-            mt_four.get_leafless_multi_proof_with_values(&[0]);
-        assert_eq!(one, compressed_proof[0].1);
+        assert_eq!(expected_root_hash_5, mt_four.get_root());
+        assert_ne!(mt.get_root(), mt_reverse.get_root());
+        assert_eq!(2, mt_four.get_height());
+        auth_path = mt_four.get_authentication_path(1);
+        assert_eq!(2, auth_path.len());
         assert!(
-            MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                mt_four.root_hash,
-                &[0],
-                &compressed_proof
+            MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
+                mt_four.get_root(),
+                1,
+                hasher.hash(&two),
+                auth_path.clone()
             )
         );
-        proof = mt_four.get_proof(0);
+        assert_eq!(hasher.hash(&one), auth_path[0]);
+
+        auth_path[0] = hasher.hash(&three);
+        assert!(
+            !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
+                mt_four.get_root(),
+                1,
+                hasher.hash(&two),
+                auth_path.clone()
+            ),
+            "Merkle tree auth path verification must fail when authentication path is wrong"
+        );
+
+        auth_path[0] = hasher.hash(&one);
+        assert!(
+            MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
+                mt_four.get_root(),
+                1,
+                hasher.hash(&two),
+                auth_path.clone()
+            ),
+            "MT AP must succeed with valid parameters"
+        );
+        assert!(
+            !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
+                mt_four.get_root(),
+                1,
+                hasher.hash(&four),
+                auth_path.clone()
+            ),
+            "Merkle tree authentication path must fail when leaf digest is wrong"
+        );
+        assert!(
+            !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
+                mt_reverse.get_root(),
+                1,
+                hasher.hash(&two),
+                auth_path.clone()
+            ),
+            "Merkle tree authentication path must fail when root is changed"
+        );
+        assert!(
+            !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
+                mt_four.get_root(),
+                2,
+                hasher.hash(&two),
+                auth_path.clone()
+            ),
+            "Merkle tree authentication path must fail when index is changed"
+        );
+
+        let auth_paths: Vec<PartialAuthenticationPath<Digest>> = mt_four.get_multi_proof(&[0]);
+        assert!(MerkleTree::<Hasher>::verify_multi_proof_from_leaves(
+            mt_four.get_root(),
+            &[0],
+            &mt_four.get_leaves_by_indices(&[0])[..],
+            &auth_paths
+        ));
+        auth_path = mt_four.get_authentication_path(0);
 
         assert_eq!(
-            proof.len() - 1,
-            compressed_proof[0].0 .0.len(),
-            "get_proof() produces one more Node<T> (with the value in) than is contained in a leafless proof"
+            auth_path.len(),
+            auth_paths[0].0 .len(),
+            "Methods `get_multi_proof` and `get_authentication_path()` should obtain the same authentication path for leaf at index 0."
         );
 
-        compressed_proof = mt_four.get_leafless_multi_proof_with_values(&[0, 1]);
-        assert_eq!(one, compressed_proof[0].1);
-        assert_eq!(two, compressed_proof[1].1);
-        println!("{:?}", compressed_proof);
-        assert!(
-            MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                mt_four.root_hash,
-                &[0, 1],
-                &compressed_proof
-            )
-        );
+        let selected_indices_2 = [0, 1];
+        let auth_paths_2 = mt_four.get_multi_proof(&selected_indices_2);
+        assert!(MerkleTree::<Hasher>::verify_multi_proof_from_leaves(
+            mt_four.get_root(),
+            &selected_indices_2,
+            &leaves[selected_indices_2[0]..=selected_indices_2[1]],
+            &auth_paths_2
+        ));
 
-        compressed_proof = mt_four.get_leafless_multi_proof_with_values(&[0, 1, 2]);
-        assert_eq!(one, compressed_proof[0].1);
-        assert_eq!(two, compressed_proof[1].1);
-        assert_eq!(three, compressed_proof[2].1);
-        println!("{:?}", compressed_proof);
-        assert!(
-            MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                mt_four.root_hash,
-                &[0, 1, 2],
-                &compressed_proof
-            )
-        );
+        let selected_indices_3 = [0, 1, 2];
+        let auth_paths_3 = mt_four.get_multi_proof(&selected_indices_3);
+        assert!(MerkleTree::<Hasher>::verify_multi_proof_from_leaves(
+            mt_four.get_root(),
+            &selected_indices_3,
+            &leaves[selected_indices_3[0]..selected_indices_3.len()],
+            &auth_paths_3
+        ));
 
         // Verify that verification of multi-proof where the tree or the proof
         // does not have the indices requested leads to a false return value,
         // and not to a run-time panic.
-        assert!(
-            !MerkleTree::<BFieldElement, Hasher>::verify_leafless_multi_proof(
-                mt_four.root_hash,
-                &[2, 3],
-                &compressed_proof
-            )
-        );
+        let out_of_bounds_index = 42;
+        let selected_indices_4 = [0, 1, out_of_bounds_index];
+        assert!(!MerkleTree::<Hasher>::verify_multi_proof_from_leaves(
+            mt_four.get_root(),
+            &selected_indices_4,
+            &leaves[selected_indices_4[0]..selected_indices_4.len()],
+            &auth_paths_3
+        ));
     }
 
     #[test]
     fn merkle_tree_get_authentication_path_test() {
+        type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
+
+        let hasher = Hasher::new();
 
         // 1: Create Merkle tree
         //
@@ -1281,8 +1188,8 @@ mod merkle_tree_test {
             .into_iter()
             .map(BFieldElement::new)
             .collect();
-        let zero = BFieldElement::ring_zero();
-        let tree_a = MerkleTree::<BFieldElement, Hasher>::from_vec(&values_a, &zero);
+        let leaves_a: Vec<Digest> = values_a.iter().map(|x| hasher.hash(x)).collect();
+        let tree_a = MerkleTree::<Hasher>::from_digests(&leaves_a);
 
         // 2: Get the path for value '9' (index: 2)
         let auth_path_a = tree_a.get_authentication_path(2);
@@ -1292,8 +1199,8 @@ mod merkle_tree_test {
             auth_path_a.len(),
             "authentication path a has right length"
         );
-        assert_eq!(tree_a.nodes[2].hash, auth_path_a[1], "sibling x");
-        assert_eq!(tree_a.nodes[7].hash, auth_path_a[0], "sibling 12");
+        assert_eq!(tree_a.nodes[2], auth_path_a[1], "sibling x");
+        assert_eq!(tree_a.nodes[7], auth_path_a[0], "sibling 12");
 
         //        ___root___
         //       /          \
@@ -1306,7 +1213,8 @@ mod merkle_tree_test {
             .into_iter()
             .map(BFieldElement::new)
             .collect();
-        let tree_b = MerkleTree::<BFieldElement, Hasher>::from_vec(&values_b, &zero);
+        let leaves_b: Vec<Digest> = values_b.iter().map(|x| hasher.hash(x)).collect();
+        let tree_b = MerkleTree::<Hasher>::from_digests(&leaves_b);
 
         // merkle leaf index: 5
         // merkle leaf value: 9
@@ -1314,17 +1222,18 @@ mod merkle_tree_test {
         let auth_path_b = tree_b.get_authentication_path(5);
 
         assert_eq!(3, auth_path_b.len());
-        assert_eq!(tree_b.nodes[12].hash, auth_path_b[0], "sibling 5");
-        assert_eq!(tree_b.nodes[7].hash, auth_path_b[1], "sibling d");
-        assert_eq!(tree_b.nodes[2].hash, auth_path_b[2], "sibling e");
+        assert_eq!(tree_b.nodes[12], auth_path_b[0], "sibling 5");
+        assert_eq!(tree_b.nodes[7], auth_path_b[1], "sibling d");
+        assert_eq!(tree_b.nodes[2], auth_path_b[2], "sibling e");
     }
 
+    // EINAR-DOES
     // Test of salted Merkle trees
     #[test]
     fn salted_merkle_tree_get_authentication_path_test() {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
-        type Smt = SaltedMerkleTree<BFieldElement, Hasher>;
+        type SMT = SaltedMerkleTree<Hasher>;
 
         // 1: Create Merkle tree
         //
@@ -1333,38 +1242,39 @@ mod merkle_tree_test {
         //   x      y
         //  / \    / \
         // 3   6  9   12
+        let hasher = Hasher::new();
+        let values_a = [
+            BFieldElement::new(3),
+            BFieldElement::new(1),
+            BFieldElement::new(4),
+            BFieldElement::new(5),
+        ];
+        let salts_per_leaf = 3;
+
         let mut rng = rand::thread_rng();
-        let zero = BFieldElement::ring_zero();
-        let tree_a = Smt::from_vec(
-            &[
-                BFieldElement::new(3),
-                BFieldElement::new(1),
-                BFieldElement::new(4),
-                BFieldElement::new(5),
-            ],
-            &zero,
-            3,
-            &mut rng,
-        );
-        assert_eq!(3, tree_a.salts_per_value);
-        assert_eq!(3 * 4, tree_a.salts.len());
+        let salts_a_preimage: Vec<BFieldElement> =
+            BFieldElement::random_elements(values_a.len() * salts_per_leaf, &mut rng);
+        let salts_a: Vec<_> = salts_a_preimage.iter().map(|x| hasher.hash(x)).collect();
+        let leaves_a: Vec<Digest> = values_a.iter().map(|x| hasher.hash(x)).collect();
+        let tree_a = SMT::from_digests(&leaves_a, &salts_a);
+        assert_eq!(tree_a.get_leaf_count() * salts_per_leaf, tree_a.salts.len());
 
         // 2: Get the path for value '4' (index: 2)
-        let auth_path_a_and_salt = tree_a.get_authentication_path(2);
+        let leaf_a_idx = 2;
+        let leaf_a_digest = leaves_a[leaf_a_idx];
+        let auth_path_a_and_salt = tree_a.get_authentication_path_and_salts(leaf_a_idx);
 
         // 3: Verify that the proof, along with the salt, works
-        let root_hash_a = tree_a.get_root();
-        let mut value = BFieldElement::new(4);
-        assert!(Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        assert!(SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            leaf_a_digest, // Must be unsalted
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
 
         assert_eq!(
-            2,
+            leaf_a_idx,
             auth_path_a_and_salt.0.len(),
             "authentication path a has right length"
         );
@@ -1374,87 +1284,88 @@ mod merkle_tree_test {
             "Proof contains expected number of salts"
         );
         assert_eq!(
-            tree_a.internal_merkle_tree.nodes[2].hash, auth_path_a_and_salt.0[1],
+            tree_a.internal_merkle_tree.nodes[2], auth_path_a_and_salt.0[1],
             "sibling x"
         );
         assert_eq!(
-            tree_a.internal_merkle_tree.nodes[7].hash, auth_path_a_and_salt.0[0],
+            tree_a.internal_merkle_tree.nodes[7], auth_path_a_and_salt.0[0],
             "sibling 12"
         );
 
         // 4: Change salt and verify that the proof does not work
-        let mut auth_path_a_and_salt_bad_salt = tree_a.get_authentication_path(2);
+        let mut auth_path_a_and_salt_bad_salt = tree_a.get_authentication_path_and_salts(2);
         auth_path_a_and_salt_bad_salt.1[0].increment();
-        assert!(!Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        assert!(!SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            leaf_a_digest,
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
         auth_path_a_and_salt_bad_salt.1[0].decrement();
-        assert!(Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        assert!(SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            leaf_a_digest,
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
         auth_path_a_and_salt_bad_salt.1[1].increment();
-        assert!(!Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        assert!(!SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            leaf_a_digest,
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
         auth_path_a_and_salt_bad_salt.1[1].decrement();
-        assert!(Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        assert!(SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            leaf_a_digest,
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
         auth_path_a_and_salt_bad_salt.1[2].decrement();
-        assert!(!Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        assert!(!SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            leaf_a_digest,
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
         auth_path_a_and_salt_bad_salt.1[2].increment();
-        assert!(Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        assert!(SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            leaf_a_digest,
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
 
         // 5: Change the value and verify that the proof does not work
-        value.increment();
-        assert!(!Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        let mut corrupt_leaf_a_digest = leaf_a_digest;
+        corrupt_leaf_a_digest.increment();
+        assert!(!SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            corrupt_leaf_a_digest,
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
-        value.decrement();
-        assert!(Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        corrupt_leaf_a_digest.decrement();
+        assert!(SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            corrupt_leaf_a_digest,
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
-        value.decrement();
-        assert!(!Smt::verify_authentication_path(
-            *root_hash_a,
-            2,
-            value,
+        corrupt_leaf_a_digest.decrement();
+        assert!(!SMT::verify_authentication_path(
+            tree_a.get_root(),
+            leaf_a_idx as u32,
+            corrupt_leaf_a_digest,
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
@@ -1466,126 +1377,152 @@ mod merkle_tree_test {
         //   a     b      c     d
         //  / \   / \    / \   / \
         // 3   1 4   1  5   9 8   6
+
         let mut rng = rand::thread_rng();
-        let tree_b = Smt::from_vec(
-            &[3, 1, 4, 1, 5, 9, 8, 6].map(BFieldElement::new),
-            &zero,
-            4,
-            &mut rng,
-        );
+        let values_b = &[3, 1, 4, 1, 5, 9, 8, 6].map(BFieldElement::new);
+        let leaves_b: Vec<Digest> = values_b.iter().map(|x| hasher.hash(x)).collect();
+        let salts_per_leaf = 4;
+        let salts_b_preimage: Vec<BFieldElement> =
+            BFieldElement::random_elements(values_b.len() * salts_per_leaf, &mut rng);
+        let salts_b: Vec<_> = salts_b_preimage.iter().map(|x| hasher.hash(x)).collect();
+        let tree_b = SMT::from_digests(&leaves_b, &salts_b);
 
         // auth path: 8 ~> c ~> e
-        let mut auth_path_b = tree_b.get_authentication_path(6);
-        let mut value_b = BFieldElement::new(8);
+        let mut auth_path_and_salts_b = tree_b.get_authentication_path_and_salts(6);
 
-        assert_eq!(3, auth_path_b.0.len());
-        assert_eq!(8 * 4, tree_b.salts.len());
+        assert_eq!(3, auth_path_and_salts_b.0.len());
+        assert_eq!(8 * salts_per_leaf, tree_b.get_salts().len());
 
-        // 6: Ensure that all salts are unique (statistically, they should be)
+        // 6: Ensure that all salts are unique (statistically, they should
+        // be)
+        // Just how likely is this when taking the Birthday Paradox into account and noticing we
+        // have 8x3 salts.
         assert_eq!(
-            tree_b.salts.len(),
-            tree_b.salts.clone().into_iter().unique().count()
+            tree_b.get_salts().len(),
+            tree_b
+                .get_salts()
+                .to_vec()
+                .clone()
+                .into_iter()
+                .unique()
+                .count(),
+            "This can fail with nonzero probability.  In this case try run the test again."
         );
         assert_eq!(
-            tree_b.internal_merkle_tree.nodes[15].hash, auth_path_b.0[0],
+            tree_b.internal_merkle_tree.nodes[15], auth_path_and_salts_b.0[0],
             "sibling 6"
         );
         assert_eq!(
-            tree_b.internal_merkle_tree.nodes[6].hash, auth_path_b.0[1],
+            tree_b.internal_merkle_tree.nodes[6], auth_path_and_salts_b.0[1],
             "sibling c"
         );
         assert_eq!(
-            tree_b.internal_merkle_tree.nodes[2].hash, auth_path_b.0[2],
+            tree_b.internal_merkle_tree.nodes[2], auth_path_and_salts_b.0[2],
             "sibling e"
         );
 
-        let root_hash_b = tree_b.get_root();
-        assert!(Smt::verify_authentication_path(
+        let mut value_b = hasher.hash(&BFieldElement::new(8));
+
+        let root_hash_b = &tree_b.get_root();
+        assert!(SMT::verify_authentication_path(
             *root_hash_b,
             6,
             value_b,
-            auth_path_b.0.clone(),
-            auth_path_b.1.clone(),
+            auth_path_and_salts_b.0.clone(),
+            auth_path_and_salts_b.1.clone(),
         ));
 
         // 7: Change the value and verify that it fails
         value_b.decrement();
-        assert!(!Smt::verify_authentication_path(
+        assert!(!SMT::verify_authentication_path(
             *root_hash_b,
             6,
             value_b,
-            auth_path_b.0.clone(),
-            auth_path_b.1.clone(),
+            auth_path_and_salts_b.0.clone(),
+            auth_path_and_salts_b.1.clone(),
         ));
         value_b.increment();
 
         // 8: Change salt and verify that verification fails
-        auth_path_b.1[3].decrement();
-        assert!(!Smt::verify_authentication_path(
+        auth_path_and_salts_b.1[3].decrement();
+        assert!(!SMT::verify_authentication_path(
             *root_hash_b,
             6,
             value_b,
-            auth_path_b.0.clone(),
-            auth_path_b.1.clone(),
+            auth_path_and_salts_b.0.clone(),
+            auth_path_and_salts_b.1.clone(),
         ));
-        auth_path_b.1[3].increment();
-        assert!(Smt::verify_authentication_path(
+        auth_path_and_salts_b.1[3].increment();
+        assert!(SMT::verify_authentication_path(
             *root_hash_b,
             6,
             value_b,
-            auth_path_b.0.clone(),
-            auth_path_b.1.clone(),
+            auth_path_and_salts_b.0.clone(),
+            auth_path_and_salts_b.1.clone(),
         ));
 
         // 9: Verify that simple multipath authentication paths work
-        let auth_path_b_multi_0: Vec<(
-            LeaflessPartialAuthenticationPath<Digest>,
-            Vec<BFieldElement>,
-        )> = tree_b.get_leafless_multi_proof_with_salts(&[0, 1]);
+        let auth_path_and_salts_b_multi_0: SaltedMultiProof<Digest> =
+            tree_b.get_multi_proof_and_salts(&[0, 1]);
         let multi_values_0 = vec![BFieldElement::new(3), BFieldElement::new(1)];
-        assert!(Smt::verify_leafless_multi_proof(
+        let multi_digests_0: Vec<Digest> = multi_values_0.iter().map(|x| hasher.hash(x)).collect();
+        assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1],
-            &multi_values_0,
-            &auth_path_b_multi_0
+            &multi_digests_0,
+            &auth_path_and_salts_b_multi_0
         ));
         assert_eq!(
             2,
-            count_hashes(&auth_path_b_multi_0),
+            count_hashes(&auth_path_and_salts_b_multi_0),
             "paths [0,1] need two hashes"
         );
 
         // Verify that we get values
-        let auth_paths_salts_values =
-            tree_b.get_leafless_multi_proof_with_salts_and_values(&[0, 1]);
-        assert_eq!(2, auth_paths_salts_values.len());
-        assert_eq!(auth_path_b_multi_0[0].0, auth_paths_salts_values[0].0);
-        assert_eq!(auth_path_b_multi_0[0].1, auth_paths_salts_values[0].1);
-        assert_eq!(auth_path_b_multi_0[1].0, auth_paths_salts_values[1].0);
-        assert_eq!(auth_path_b_multi_0[1].1, auth_paths_salts_values[1].1);
-        assert_eq!(BFieldElement::new(3), auth_paths_salts_values[0].2);
-        assert_eq!(BFieldElement::new(1), auth_paths_salts_values[1].2);
+        let auth_paths_and_salts = tree_b.get_multi_proof_and_salts(&[0, 1]);
+        assert_eq!(2, auth_paths_and_salts.len());
+        assert_eq!(
+            auth_path_and_salts_b_multi_0[0].0,
+            auth_paths_and_salts[0].0
+        );
+        assert_eq!(
+            auth_path_and_salts_b_multi_0[0].1,
+            auth_paths_and_salts[0].1
+        );
+        assert_eq!(
+            auth_path_and_salts_b_multi_0[1].0,
+            auth_paths_and_salts[1].0
+        );
+        assert_eq!(
+            auth_path_and_salts_b_multi_0[1].1,
+            auth_paths_and_salts[1].1
+        );
 
         // Verify that the composite verification works
-        assert!(Smt::verify_leafless_multi_proof_with_salts_and_values(
+        assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1],
-            &auth_paths_salts_values
+            &multi_digests_0,
+            &auth_paths_and_salts
         ));
 
-        let bad_root_hash_b = bad_blake3_hash(*root_hash_b);
-        assert!(!Smt::verify_leafless_multi_proof_with_salts_and_values(
-            bad_root_hash_b.into(),
+        let mut bad_root_hash_b = tree_b.get_root();
+        bad_root_hash_b.toggle_corruption();
+
+        assert!(!SMT::verify_multi_proof(
+            bad_root_hash_b,
             &[0, 1],
-            &auth_paths_salts_values
+            &multi_digests_0,
+            &auth_paths_and_salts
         ));
 
-        let auth_path_b_multi_1 = tree_b.get_leafless_multi_proof_with_salts(&[1]);
+        let auth_path_b_multi_1 = tree_b.get_multi_proof_and_salts(&[1]);
         let multi_values_1 = vec![BFieldElement::new(1)];
-        assert!(Smt::verify_leafless_multi_proof(
+        let multi_digests_1: Vec<Digest> = multi_values_1.iter().map(|x| hasher.hash(x)).collect();
+        assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[1],
-            &multi_values_1,
+            &multi_digests_1,
             &auth_path_b_multi_1
         ));
         assert_eq!(
@@ -1594,16 +1531,17 @@ mod merkle_tree_test {
             "paths [1] need two hashes"
         );
 
-        let auth_path_b_multi_2 = tree_b.get_leafless_multi_proof_with_salts(&[1, 0]);
+        let auth_path_b_multi_2 = tree_b.get_multi_proof_and_salts(&[1, 0]);
         let multi_values_2 = vec![BFieldElement::new(1), BFieldElement::new(3)];
-        assert!(Smt::verify_leafless_multi_proof(
+        let multi_digests_2: Vec<Digest> = multi_values_2.iter().map(|x| hasher.hash(x)).collect();
+        assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[1, 0],
-            &multi_values_2,
+            &multi_digests_2,
             &auth_path_b_multi_2
         ));
 
-        let mut auth_path_b_multi_3 = tree_b.get_leafless_multi_proof_with_salts(&[0, 1, 2, 4, 7]);
+        let mut auth_path_b_multi_3 = tree_b.get_multi_proof_and_salts(&[0, 1, 2, 4, 7]);
         let mut multi_values_3 = vec![
             BFieldElement::new(3),
             BFieldElement::new(1),
@@ -1611,14 +1549,23 @@ mod merkle_tree_test {
             BFieldElement::new(5),
             BFieldElement::new(6),
         ];
-        assert!(Smt::verify_leafless_multi_proof(
+        let multi_digests_3: Vec<Digest> = multi_values_3.iter().map(|x| hasher.hash(x)).collect();
+        assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1, 2, 4, 7],
-            &multi_values_3,
+            &multi_digests_3,
             &auth_path_b_multi_3
         ));
 
-        let temp = tree_b.get_leafless_multi_proof_with_salts(&[0, 1, 2, 4, 7]);
+        let multi_digests_3b = [
+            leaves_b[0],
+            leaves_b[1],
+            leaves_b[2],
+            leaves_b[4],
+            leaves_b[7],
+        ];
+
+        let temp = tree_b.get_multi_proof_and_salts(&[0, 1, 2, 4, 7]);
         assert_eq!(
             3,
             count_hashes(&temp),
@@ -1627,44 +1574,45 @@ mod merkle_tree_test {
 
         // 10: change a hash, verify failure
         auth_path_b_multi_3[1].1[0].increment();
-        assert!(!Smt::verify_leafless_multi_proof(
+        assert!(!SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1, 2, 4, 7],
-            &multi_values_3,
+            &multi_digests_3b,
             &auth_path_b_multi_3
         ));
 
         auth_path_b_multi_3[1].1[0].decrement();
-        assert!(Smt::verify_leafless_multi_proof(
+        assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1, 2, 4, 7],
-            &multi_values_3,
+            &multi_digests_3b,
             &auth_path_b_multi_3
         ));
 
         // 11: change a value, verify failure
         multi_values_3[0].increment();
-        assert!(!Smt::verify_leafless_multi_proof(
+        assert!(!SMT::verify_multi_proof(
             *root_hash_b,
             &[1, 0, 4, 7, 2],
-            &multi_values_3,
+            &multi_digests_3b,
             &auth_path_b_multi_3
         ));
 
         multi_values_3[0].decrement();
-        assert!(Smt::verify_leafless_multi_proof(
+        assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1, 2, 4, 7],
-            &multi_values_3,
+            &multi_digests_3b,
             &auth_path_b_multi_3
         ));
 
         // Change root hash again, verify failue
-        let another_bad_root_hash_b = bad_blake3_hash(*root_hash_b);
-        assert!(!Smt::verify_leafless_multi_proof(
+        let mut another_bad_root_hash_b = *root_hash_b;
+        another_bad_root_hash_b.toggle_corruption();
+        assert!(!SMT::verify_multi_proof(
             another_bad_root_hash_b.into(),
             &[0, 1, 2, 4, 7],
-            &multi_values_3,
+            &multi_digests_3b,
             &auth_path_b_multi_3
         ));
     }
@@ -1672,7 +1620,8 @@ mod merkle_tree_test {
     #[test]
     fn salted_merkle_tree_get_authentication_path_xfields_test() {
         type Hasher = blake3::Hasher;
-        type SMT = SaltedMerkleTree<XFieldElement, Hasher>;
+        type SMT = SaltedMerkleTree<Hasher>;
+        type Digest = Blake3Hash;
 
         // 1: Create Merkle tree
         //
@@ -1682,99 +1631,103 @@ mod merkle_tree_test {
         //  / \    / \
         // 3   6  9   12
         let mut rng = rand::thread_rng();
-        let zero = XFieldElement::ring_zero();
-        let tree_a = SMT::from_vec(
-            &[
-                XFieldElement::new([3, 3, 3].map(BFieldElement::new)),
-                XFieldElement::new([1, 1, 1].map(BFieldElement::new)),
-                XFieldElement::new([4, 4, 4].map(BFieldElement::new)),
-                XFieldElement::new([5, 5, 5].map(BFieldElement::new)),
-            ],
-            &zero,
-            3,
-            &mut rng,
-        );
-        assert_eq!(3, tree_a.salts_per_value);
+        let hasher = Hasher::new();
+
+        let values_a = &[
+            XFieldElement::new([3, 3, 3].map(BFieldElement::new)),
+            XFieldElement::new([1, 1, 1].map(BFieldElement::new)),
+            XFieldElement::new([4, 4, 4].map(BFieldElement::new)),
+            XFieldElement::new([5, 5, 5].map(BFieldElement::new)),
+        ];
+        let leaves_a: Vec<Digest> = values_a.iter().map(|x| hasher.hash(x)).collect();
+        let salts_per_leaf = 3;
+        let salts_a_preimage: Vec<BFieldElement> =
+            BFieldElement::random_elements(values_a.len() * salts_per_leaf, &mut rng);
+        let salts_a: Vec<_> = salts_a_preimage.iter().map(|x| hasher.hash(x)).collect();
+        let tree_a = SMT::from_digests(&leaves_a, &salts_a);
+
+        assert_eq!(3, salts_per_leaf);
         assert_eq!(3 * 4, tree_a.salts.len());
 
         // 2: Get the path for value '4' (index: 2)
-        let mut auth_path_a_and_salt = tree_a.get_authentication_path(2);
+        let mut auth_path_a_and_salt = tree_a.get_authentication_path_and_salts(2);
 
         // 3: Verify that the proof, along with the salt, works
         let root_hash_a = tree_a.get_root();
-        let mut value = XFieldElement::new([4, 4, 4].map(BFieldElement::new));
+        let value = XFieldElement::new([4, 4, 4].map(BFieldElement::new));
+        let mut leaf = hasher.hash(&value);
         assert!(SMT::verify_authentication_path(
-            *root_hash_a,
+            root_hash_a,
             2,
-            value,
+            leaf,
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
 
         // 4: Change value and verify that it fails
-        value.incr(1);
+        leaf.increment();
         assert!(!SMT::verify_authentication_path(
-            *root_hash_a,
+            root_hash_a,
             2,
-            value,
+            leaf,
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
-        value.decr(1);
+        leaf.decrement();
         assert!(SMT::verify_authentication_path(
-            *root_hash_a,
+            root_hash_a,
             2,
-            value,
+            leaf,
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
-        value.decr(2);
+        leaf.decrement();
         assert!(!SMT::verify_authentication_path(
-            *root_hash_a,
+            root_hash_a,
             2,
-            value,
+            leaf,
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
-        value.incr(2);
+        leaf.increment();
         assert!(SMT::verify_authentication_path(
-            *root_hash_a,
+            root_hash_a,
             2,
-            value,
+            leaf,
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
-        value.incr(0);
+        leaf.increment();
         assert!(!SMT::verify_authentication_path(
-            *root_hash_a,
+            root_hash_a,
             2,
-            value,
+            leaf,
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
-        value.decr(0);
+        leaf.decrement();
         assert!(SMT::verify_authentication_path(
-            *root_hash_a,
+            root_hash_a,
             2,
-            value,
+            leaf,
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
 
         // 5: Change salt and verify that it fails
-        auth_path_a_and_salt.1[0].decr(1);
+        auth_path_a_and_salt.1[0].decrement();
         assert!(!SMT::verify_authentication_path(
-            *root_hash_a,
+            root_hash_a,
             2,
-            value,
+            leaf,
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
-        auth_path_a_and_salt.1[0].incr(1);
+        auth_path_a_and_salt.1[0].increment();
         assert!(SMT::verify_authentication_path(
-            *root_hash_a,
+            root_hash_a,
             2,
-            value,
+            leaf,
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
@@ -1783,7 +1736,10 @@ mod merkle_tree_test {
     #[test]
     fn salted_merkle_tree_regression_test_0() {
         type Hasher = blake3::Hasher;
-        type SMT = SaltedMerkleTree<BFieldElement, Hasher>;
+        type SMT = SaltedMerkleTree<Hasher>;
+        type Digest = Blake3Hash;
+
+        let hasher = Hasher::new();
 
         // This test was used to catch a bug in the implementation of
         // `SaltedMerkleTree::get_leafless_multi_proof_with_salts_and_values`
@@ -1794,61 +1750,67 @@ mod merkle_tree_test {
         // `451282252958277131` and `3796554602848593414` as this is where the error was
         // first caught.
         let mut rng = rand::thread_rng();
-        let zero = BFieldElement::ring_zero();
-        let tree = SMT::from_vec(
-            &vec![
-                BFieldElement::new(451282252958277131),
-                BFieldElement::new(3796554602848593414),
-            ],
-            &zero,
-            3,
-            &mut rng,
-        );
-        let proof_1 = tree.get_leafless_multi_proof_with_salts_and_values(&[1]);
 
-        // Let's first verify the value returned in the proof as this was where the bug was
-        assert_eq!(
+        let values_reg0 = vec![
+            BFieldElement::new(451282252958277131),
             BFieldElement::new(3796554602848593414),
-            proof_1[0].2,
-            "Value returned in proof must match what we put into the SMT"
-        );
-        assert!(SMT::verify_leafless_multi_proof_with_salts_and_values(
-            *tree.get_root(),
-            &[1],
-            &proof_1,
+        ];
+        let leaves_reg0: Vec<Digest> = values_reg0.iter().map(|x| hasher.hash(x)).collect();
+        let salts_per_leaf = 3;
+        let salts_reg0_preimage: Vec<BFieldElement> =
+            BFieldElement::random_elements(values_reg0.len() * salts_per_leaf, &mut rng);
+        let salts_reg0: Vec<_> = salts_reg0_preimage.iter().map(|x| hasher.hash(x)).collect();
+        let tree_reg0 = SMT::from_digests(&leaves_reg0, &salts_reg0);
+
+        let selected_leaf_indices_reg0 = [0];
+        let selected_leaves_reg0 = leaves_reg0[0]; // tree_reg0.get_salted_leaves_by_indices(&selected_leaf_indices_reg0);
+        let proof_reg0 = tree_reg0.get_multi_proof_and_salts(&selected_leaf_indices_reg0);
+
+        assert!(SMT::verify_multi_proof(
+            tree_reg0.get_root(),
+            &selected_leaf_indices_reg0,
+            &[selected_leaves_reg0],
+            &proof_reg0,
         ));
 
-        let proof_0 = tree.get_leafless_multi_proof_with_salts_and_values(&[0]);
-        assert_eq!(
-            BFieldElement::new(451282252958277131),
-            proof_0[0].2,
-            "Value returned in proof must match what we put into the SMT"
-        );
-        assert!(SMT::verify_leafless_multi_proof_with_salts_and_values(
-            *tree.get_root(),
-            &[0],
-            &proof_0,
+        let selected_leaf_indices_reg1 = vec![1];
+        let selected_leaves_reg1 = leaves_reg0[1];
+        let proof_reg1 = tree_reg0.get_multi_proof_and_salts(&selected_leaf_indices_reg1);
+
+        assert!(SMT::verify_multi_proof(
+            tree_reg0.get_root(),
+            &selected_leaf_indices_reg1,
+            &[selected_leaves_reg1],
+            &proof_reg1,
         ));
     }
 
     #[test]
-    fn salted_merkle_tree_verify_leafless_multi_proof_test() {
+    fn salted_merkle_tree_verify_multi_proof_test() {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
-        type SMT = SaltedMerkleTree<BFieldElement, Hasher>;
+        type SMT = SaltedMerkleTree<Hasher>;
+
+        let hasher = Hasher::new();
+        let mut prng = rand::thread_rng();
 
         // Number of Merkle tree leaves
         let n_valuess = &[2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
         let expected_path_lengths = &[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
-        let mut prng = rand::thread_rng();
-        let zero = BFieldElement::ring_zero();
+
         for (n_values, expected_path_length) in izip!(n_valuess, expected_path_lengths) {
-            let elements: Vec<BFieldElement> =
+            let values: Vec<BFieldElement> =
                 generate_random_numbers_u128(*n_values, Some(1u128 << 63))
                     .iter()
                     .map(|x| BFieldElement::new(*x))
                     .collect();
-            let tree = SMT::from_vec(&elements, &zero, 3, &mut prng);
+
+            let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+            let salts_per_leaf = 3;
+            let salts_preimage: Vec<BFieldElement> =
+                BFieldElement::random_elements(values.len() * salts_per_leaf, &mut prng);
+            let salts: Vec<_> = salts_preimage.iter().map(|x| hasher.hash(x)).collect();
+            let tree = SMT::from_digests(&leaves, &salts);
 
             for _ in 0..3 {
                 // Ask for an arbitrary amount of indices less than the total
@@ -1863,51 +1825,58 @@ mod merkle_tree_test {
                         .collect();
                 let actual_number_of_indices = indices.len();
 
-                let values: Vec<BFieldElement> = indices.iter().map(|i| elements[*i]).collect();
-                let mut proof: Vec<(
-                    LeaflessPartialAuthenticationPath<Digest>,
-                    Vec<BFieldElement>,
-                    BFieldElement,
-                )> = tree.get_leafless_multi_proof_with_salts_and_values(&indices);
+                let selected_leaves: Vec<_> = indices.iter().map(|i| leaves[*i]).collect();
+                let mut proof: SaltedMultiProof<Digest> = tree.get_multi_proof_and_salts(&indices);
 
-                for (i, path) in proof.iter().enumerate() {
+                for path in proof.iter() {
                     assert_eq!(*expected_path_length, path.0 .0.len());
-                    assert_eq!(values[i], path.2);
                 }
 
-                assert!(SMT::verify_leafless_multi_proof_with_salts_and_values(
-                    *tree.get_root(),
+                assert!(SMT::verify_multi_proof(
+                    tree.get_root(),
                     &indices,
+                    &selected_leaves,
                     &proof,
                 ));
-                let bad_root_hash = bad_blake3_hash(*tree.get_root());
-                assert!(!SMT::verify_leafless_multi_proof_with_salts_and_values(
-                    bad_root_hash.into(),
+                let mut bad_root_hash = tree.get_root();
+                bad_root_hash.toggle_corruption();
+                assert!(!SMT::verify_multi_proof(
+                    bad_root_hash,
                     &indices,
+                    &selected_leaves,
                     &proof,
                 ));
 
-                // Verify that an invalid value fails verification
+                // Verify that an invalid leaf fails verification
+
                 let pick = (prng.next_u64() % actual_number_of_indices as u64) as usize;
-                proof[pick].2.increment();
-                assert!(!SMT::verify_leafless_multi_proof_with_salts_and_values(
-                    *tree.get_root(),
+
+                let rnd_leaf_idx = (prng.next_u64() % selected_leaves.len() as u64) as usize;
+                let mut corrupted_leaves = selected_leaves.clone();
+                corrupted_leaves[rnd_leaf_idx].increment();
+                assert!(!SMT::verify_multi_proof(
+                    tree.get_root(),
                     &indices,
+                    &corrupted_leaves,
                     &proof,
                 ));
 
-                proof[pick].2.decrement();
-                assert!(SMT::verify_leafless_multi_proof_with_salts_and_values(
-                    *tree.get_root(),
+                corrupted_leaves[rnd_leaf_idx].decrement();
+                assert!(SMT::verify_multi_proof(
+                    tree.get_root(),
                     &indices,
+                    &corrupted_leaves,
                     &proof,
                 ));
 
                 // Verify that an invalid salt fails verification
                 proof[(pick + 1) % actual_number_of_indices].1[1].decrement();
-                assert!(!SMT::verify_leafless_multi_proof_with_salts_and_values(
-                    *tree.get_root(),
+                let mut corrupted_leaves = selected_leaves.clone();
+                corrupted_leaves[rnd_leaf_idx].increment();
+                assert!(!SMT::verify_multi_proof(
+                    tree.get_root(),
                     &indices,
+                    &selected_leaves,
                     &proof,
                 ));
             }
@@ -1920,7 +1889,7 @@ mod merkle_tree_test {
         Essentially this:
 
         ```
-        from_vec
+        from_digests
 
         for each leaf:
             get ap
@@ -1928,11 +1897,11 @@ mod merkle_tree_test {
         ```
         */
 
-        type Value = BFieldElement;
         type Hasher = RescuePrimeProduction;
-        type MT = MerkleTree<Value, Hasher>;
+        type MT = MerkleTree<Hasher>;
+        type Digest = Vec<BFieldElement>;
 
-        let zero = BFieldElement::ring_zero();
+        let hasher = Hasher::new();
 
         let exponent = 6;
         let num_leaves = usize::pow(2, exponent);
@@ -1943,14 +1912,16 @@ mod merkle_tree_test {
 
         let offset = 17;
 
-        let leaves: Vec<BFieldElement> = (offset..num_leaves as u128 + offset)
+        let values: Vec<BFieldElement> = (offset..num_leaves as u128 + offset)
             .map(|i| BFieldElement::new(i))
             .collect();
 
-        let tree = MT::from_vec(&leaves[..], &zero);
+        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+
+        let tree = MT::from_digests(&leaves);
 
         assert_eq!(
-            tree.get_number_of_leafs(),
+            tree.get_leaf_count(),
             num_leaves,
             "All leaves should have been added to the Merkle tree."
         );
@@ -1959,8 +1930,12 @@ mod merkle_tree_test {
 
         for (leaf_idx, leaf) in leaves.iter().enumerate() {
             let ap = tree.get_authentication_path(leaf_idx);
-            let verdict =
-                MT::verify_authentication_path(root_hash.clone(), leaf_idx as u32, *leaf, ap);
+            let verdict = MT::verify_authentication_path_from_leaf_hash(
+                root_hash.clone(),
+                leaf_idx as u32,
+                (*leaf).clone(),
+                ap,
+            );
             assert!(
                 verdict,
                 "Rejected: `leaf: {:?}` at `leaf_idx: {:?}` failed to verify.",
@@ -1975,11 +1950,11 @@ mod merkle_tree_test {
         /// This tests that we do not confuse indices and payloads in the
         /// test `verify_all_leaves_individually`.
 
-        type Value = BFieldElement;
         type Hasher = RescuePrimeProduction;
-        type MT = MerkleTree<Value, Hasher>;
+        type MT = MerkleTree<Hasher>;
+        type Digest = Vec<BFieldElement>;
 
-        let zero = BFieldElement::ring_zero();
+        let hasher = Hasher::new();
 
         let exponent = 6;
         let num_leaves = usize::pow(2, exponent);
@@ -1990,9 +1965,11 @@ mod merkle_tree_test {
 
         let offset = 17 * 17;
 
-        let mut leaves: Vec<BFieldElement> = (offset..num_leaves as u128 + offset)
+        let values: Vec<BFieldElement> = (offset..num_leaves as u128 + offset)
             .map(|i| BFieldElement::new(i))
             .collect();
+
+        let mut leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
 
         // A payload integrity test
         let test_leaf = 42;
@@ -2000,12 +1977,12 @@ mod merkle_tree_test {
         let payload = BFieldElement::new((test_leaf + payload_offset) as u128);
 
         // Embed
-        leaves[test_leaf] = payload;
+        leaves[test_leaf] = hasher.hash(&payload);
 
-        let tree = MT::from_vec(&leaves[..], &zero);
+        let tree = MT::from_digests(&leaves[..]);
 
         assert_eq!(
-            tree.get_number_of_leafs(),
+            tree.get_leaf_count(),
             num_leaves,
             "All leaves should have been added to the Merkle tree."
         );
@@ -2014,9 +1991,13 @@ mod merkle_tree_test {
 
         (|leaf_idx: usize, leaf: &BFieldElement| {
             let ap = tree.get_authentication_path(leaf_idx);
-            let verdict =
-                MT::verify_authentication_path(root_hash.clone(), leaf_idx as u32, *leaf, ap);
-            assert_eq!(tree.get_value_by_index(test_leaf), payload);
+            let verdict = MT::verify_authentication_path_from_leaf_hash(
+                root_hash.clone(),
+                leaf_idx as u32,
+                hasher.hash(leaf),
+                ap,
+            );
+            assert_eq!(tree.get_leaf_by_index(test_leaf), hasher.hash(&payload));
             assert!(
                 verdict,
                 "Rejected: `leaf: {:?}` at `leaf_idx: {:?}` failed to verify.",
@@ -2027,17 +2008,40 @@ mod merkle_tree_test {
     }
 
     #[test]
-    fn merkly_merk_test() {
+    fn build_xlix_merkle_tree() {
         type RP = RescuePrimeProduction;
         type RPXLIX = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
+        type Hasher = RPXLIX;
 
         let mut rng = rand::thread_rng();
+        let hasher = Hasher::new();
         let elements = BFieldElement::random_elements(128, &mut rng);
+        let max_length = 5;
+        let leaves: Vec<_> = elements
+            .iter()
+            .map(|x| hasher.hash(&[*x], max_length))
+            .collect();
 
-        let mt = MerkleTree::<BFieldElement, RP>::from_vec(&elements, &0.into());
-        let mt_xlix = MerkleTree::<BFieldElement, RPXLIX>::from_vec(&elements, &0.into());
+        let mt = MerkleTree::<RP>::from_digests(&leaves);
+        let mt_xlix = MerkleTree::<RPXLIX>::from_digests(&leaves);
 
         println!("Merkle root (RP 1): {:?}", mt.get_root());
         println!("Merkle root (RP 2): {:?}", mt_xlix.get_root());
+        assert!(true, "If we make it this far, we are good.")
+    }
+
+    #[test]
+    fn increment_overflow() {
+        let mut max_hash = Blake3Hash::from(u128::MAX);
+        max_hash.increment();
+        // Verifies that increment does not overflow.
+    }
+
+    #[test]
+    fn decrement_overflow() {
+        let minu128 = u128::MIN;
+        let mut zero_hash = Blake3Hash::from(minu128);
+        zero_hash.decrement();
+        // Verifies that decrement does not overflow.
     }
 }
