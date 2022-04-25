@@ -5,6 +5,7 @@ use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{other, rescue_prime_params, rescue_prime_xlix};
 use crate::util_types::blake3_wrapper::Blake3Hash;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 /// A simple `Hasher` trait that allows for hashing one, two or many values into one digest.
@@ -104,10 +105,11 @@ pub trait Hasher: Sized + Send + Sync {
         u128: ToDigest<Self::Digest>,
     {
         let mut digests = Vec::with_capacity(count);
-        for i in 0..count {
-            let digest = self.hash_pair(seed, &(i as u128).to_digest());
-            digests.push(digest);
-        }
+        (0..count)
+            .into_par_iter()
+            .map(|i| self.hash_pair(seed, &(i as u128).to_digest()))
+            .collect_into_vec(&mut digests);
+
         digests
     }
 }
