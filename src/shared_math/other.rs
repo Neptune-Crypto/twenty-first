@@ -98,6 +98,7 @@ pub fn primes_lt(bound: u128) -> Vec<u128> {
         .collect::<Vec<u128>>()
 }
 
+#[inline]
 /// Extended Euclid's Algorithm.
 pub fn xgcd<
     T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,

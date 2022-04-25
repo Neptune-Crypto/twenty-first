@@ -65,10 +65,12 @@ impl BFieldElement {
     pub const MAX: u128 = Self::QUOTIENT - 1;
     const LOWER_MASK: u64 = 0xFFFFFFFF;
 
+    #[inline]
     pub fn new(value: u128) -> Self {
         Self(value % Self::QUOTIENT)
     }
 
+    #[inline]
     pub fn value(&self) -> u64 {
         self.0 as u64
     }
@@ -78,14 +80,17 @@ impl BFieldElement {
         BFieldElement::new(7)
     }
 
+    #[inline]
     pub fn lift(&self) -> XFieldElement {
         XFieldElement::new_const(*self)
     }
 
+    // You should probably only use `increment` and `decrement` for testing purposes
     pub fn increment(&mut self) {
         self.0 = (self.0 + 1) % Self::QUOTIENT;
     }
 
+    // You should probably only use `increment` and `decrement` for testing purposes
     pub fn decrement(&mut self) {
         self.0 = (Self::MAX + self.0) % Self::QUOTIENT
     }
@@ -93,10 +98,12 @@ impl BFieldElement {
     // TODO: Currently, IdentityValues has &self as part of its signature, so we hotfix
     // being able to refer to a zero/one element without having an element at hand. This
     // will go away when moving to Zero/One traits.
+    #[inline]
     pub fn ring_zero() -> Self {
         Self(0)
     }
 
+    #[inline]
     pub fn ring_one() -> Self {
         Self(1)
     }
@@ -182,6 +189,7 @@ impl TryFrom<BFieldElement> for u32 {
 
 impl Inverse for BFieldElement {
     #[must_use]
+    #[inline]
     fn inverse(&self) -> Self {
         let (_, _, a) = other::xgcd(Self::QUOTIENT as i128, self.0 as i128);
 
@@ -193,6 +201,7 @@ impl Inverse for BFieldElement {
 }
 
 impl ModPowU32 for BFieldElement {
+    #[inline]
     fn mod_pow_u32(&self, exp: u32) -> Self {
         // TODO: This can be sped up by a factor 2 by implementing
         // it for u32 and not using the 64-bit version
@@ -280,18 +289,22 @@ impl PrimeField for BFieldElement {}
 // }
 
 impl IdentityValues for BFieldElement {
+    #[inline]
     fn is_zero(&self) -> bool {
         self.0 == 0
     }
 
+    #[inline]
     fn is_one(&self) -> bool {
         self.0 == 1
     }
 
+    #[inline]
     fn ring_zero(&self) -> Self {
         BFieldElement(0)
     }
 
+    #[inline]
     fn ring_one(&self) -> Self {
         BFieldElement(1)
     }

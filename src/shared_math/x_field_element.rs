@@ -43,6 +43,7 @@ impl From<Polynomial<BFieldElement>> for XFieldElement {
 }
 
 impl XFieldElement {
+    #[inline]
     pub fn shah_polynomial() -> Polynomial<BFieldElement> {
         Polynomial::new(vec![
             BFieldElement::ring_one(),
@@ -52,10 +53,12 @@ impl XFieldElement {
         ])
     }
 
+    #[inline]
     pub fn new(coefficients: [BFieldElement; 3]) -> Self {
         Self { coefficients }
     }
 
+    #[inline]
     pub fn new_u128(coeffs: [u128; 3]) -> Self {
         Self {
             coefficients: [
@@ -66,6 +69,7 @@ impl XFieldElement {
         }
     }
 
+    #[inline]
     pub fn new_const(element: BFieldElement) -> Self {
         let zero = BFieldElement::ring_zero();
 
@@ -82,6 +86,7 @@ impl XFieldElement {
         }
     }
 
+    #[inline]
     pub fn ring_zero() -> Self {
         Self {
             coefficients: [0, 0, 0].map(BFieldElement::new),
@@ -89,6 +94,7 @@ impl XFieldElement {
     }
 
     // 0x^2 + 0x + 1
+    #[inline]
     pub fn ring_one() -> Self {
         Self {
             coefficients: [1, 0, 0].map(BFieldElement::new),
@@ -229,18 +235,22 @@ impl FromVecu8 for XFieldElement {
 impl PrimeField for XFieldElement {}
 
 impl IdentityValues for XFieldElement {
+    #[inline]
     fn is_zero(&self) -> bool {
         self == &Self::ring_zero()
     }
 
+    #[inline]
     fn is_one(&self) -> bool {
         self == &Self::ring_one()
     }
 
+    #[inline]
     fn ring_zero(&self) -> Self {
         Self::ring_zero()
     }
 
+    #[inline]
     fn ring_one(&self) -> Self {
         Self::ring_one()
     }
@@ -420,6 +430,7 @@ impl Div for XFieldElement {
 }
 
 impl ModPowU64 for XFieldElement {
+    #[inline]
     fn mod_pow_u64(&self, exponent: u64) -> Self {
         // Special case for handling 0^0 = 1
         if exponent == 0 {
@@ -444,6 +455,7 @@ impl ModPowU64 for XFieldElement {
 }
 
 impl ModPowU32 for XFieldElement {
+    #[inline]
     fn mod_pow_u32(&self, exp: u32) -> Self {
         // TODO: This can be sped up by a factor 2 by implementing
         // it for u32 and not using the 64-bit version
