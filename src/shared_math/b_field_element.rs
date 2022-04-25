@@ -287,14 +287,24 @@ impl Add for BFieldElement {
 
     #[inline]
     fn add(self, other: Self) -> Self {
-        Self((self.0 + other.0) % Self::QUOTIENT)
+        let mut val = self.0 + other.0;
+        if val > Self::MAX {
+            val -= Self::QUOTIENT;
+        }
+
+        Self(val)
     }
 }
 
 impl AddAssign for BFieldElement {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
-        self.0 = (self.0 + rhs.0) % Self::QUOTIENT;
+        let mut val = self.0 + rhs.0;
+        if val > Self::MAX {
+            val -= Self::QUOTIENT;
+        }
+
+        self.0 = val;
     }
 }
 
