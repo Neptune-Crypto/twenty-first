@@ -948,6 +948,7 @@ impl Stark {
 
         // verify nonlinear combination
         for (i, &index) in indices.iter().enumerate() {
+            let b_domain_value = self.fri.domain.b_domain_value(index as u32);
             // collect terms: randomizer
             let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
                 .map(|i| tuples[&index][i])
@@ -959,15 +960,7 @@ impl Stark {
                 let shift: u32 = (self.max_degree as i64
                     - base_degree_bounds[i - num_randomizer_polynomials])
                     as u32;
-                terms.push(
-                    tuples[&index][i]
-                        * self
-                            .fri
-                            .domain
-                            .b_domain_value(index as u32)
-                            .mod_pow_u32(shift)
-                            .lift(),
-                );
+                terms.push(tuples[&index][i] * b_domain_value.mod_pow_u32(shift).lift());
             }
 
             // collect terms: extension
@@ -985,15 +978,7 @@ impl Stark {
                 let extension_element: XFieldElement = tuples[&index][extension_offset + i];
                 terms.push(extension_element);
                 let shift = (self.max_degree as i64 - edb) as u32;
-                terms.push(
-                    extension_element
-                        * self
-                            .fri
-                            .domain
-                            .b_domain_value(index as u32)
-                            .mod_pow_u32(shift)
-                            .lift(),
-                )
+                terms.push(extension_element * b_domain_value.mod_pow_u32(shift).lift())
             }
 
             // collect terms: quotients, quotients need to be computed
@@ -1032,20 +1017,10 @@ impl Stark {
                     .zip(table.boundary_quotient_degree_bounds(challenges).iter())
                 {
                     let eval = constraint.evaluate(point);
-                    let quotient = eval
-                        / (self.fri.domain.b_domain_value(index as u32).lift()
-                            - XFieldElement::ring_one());
+                    let quotient = eval / (b_domain_value.lift() - XFieldElement::ring_one());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(
-                        quotient
-                            * self
-                                .fri
-                                .domain
-                                .b_domain_value(index as u32)
-                                .mod_pow_u32(shift)
-                                .lift(),
-                    );
+                    terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
                 }
 
                 // transition
@@ -1073,29 +1048,14 @@ impl Stark {
                     let quotient = if table.height() == 0 {
                         XFieldElement::ring_zero()
                     } else {
-                        let num = (self.fri.domain.b_domain_value(index as u32)
-                            - table.omicron().inverse())
-                        .lift();
-                        let denom = self
-                            .fri
-                            .domain
-                            .b_domain_value(index as u32)
-                            .mod_pow_u32(table.height() as u32)
-                            .lift()
+                        let num = (b_domain_value - table.omicron().inverse()).lift();
+                        let denom = b_domain_value.mod_pow_u32(table.height() as u32).lift()
                             - XFieldElement::ring_one();
                         eval * num / denom
                     };
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(
-                        quotient
-                            * self
-                                .fri
-                                .domain
-                                .b_domain_value(index as u32)
-                                .mod_pow_u32(shift)
-                                .lift(),
-                    );
+                    terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
                 }
 
                 // terminal
@@ -1109,39 +1069,21 @@ impl Stark {
                     )
                 {
                     let eval = constraint.evaluate(point);
-                    let quotient = eval
-                        / (self.fri.domain.b_domain_value(index as u32).lift()
-                            - table.omicron().inverse().lift());
+                    let quotient =
+                        eval / (b_domain_value.lift() - table.omicron().inverse().lift());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(
-                        quotient
-                            * self
-                                .fri
-                                .domain
-                                .b_domain_value(index as u32)
-                                .mod_pow_u32(shift)
-                                .lift(),
-                    )
+                    terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift())
                 }
             }
 
             for arg in self.permutation_arguments.iter() {
                 let quotient = arg.evaluate_difference(&points)
-                    / (self.fri.domain.b_domain_value(index as u32).lift()
-                        - XFieldElement::ring_one());
+                    / (b_domain_value.lift() - XFieldElement::ring_one());
                 terms.push(quotient);
                 let degree_bound = arg.quotient_degree_bound();
                 let shift = (self.max_degree as i64 - degree_bound) as u32;
-                terms.push(
-                    quotient
-                        * self
-                            .fri
-                            .domain
-                            .b_domain_value(index as u32)
-                            .mod_pow_u32(shift)
-                            .lift(),
-                );
+                terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
             }
 
             assert_eq!(
@@ -1153,10 +1095,10 @@ impl Stark {
             // compute inner product of weights and terms
             // Todo: implement `sum` on XFieldElements
             let inner_product = weights
-                .iter()
-                .zip(terms.into_iter())
-                .map(|(w, t)| *w * t)
-                .fold(XFieldElement::ring_zero(), |x, y| x + y);
+                .par_iter()
+                .zip(terms.par_iter())
+                .map(|(w, t)| *w * *t)
+                .reduce(|| XFieldElement::ring_zero(), |x, y| x + y);
 
             assert_eq!(
                 revealed_combination_elements[i], inner_product,
