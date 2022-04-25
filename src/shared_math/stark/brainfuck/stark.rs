@@ -688,27 +688,19 @@ impl Stark {
         timer.elapsed("open leafs of zipped codewords");
 
         // open combination codeword at the same positions
-        for index in indices {
-            let revealed_combination_element = combination_codeword[index];
-            let revealed_combination_auth_path = combination_tree.get_authentication_path(index);
+        // Notice that we need to loop over `indices` here, not `revealed_indices`
+        // as the latter includes adjacent table rows relative to the values in `indices`
+        let revealed_combination_elements: Vec<XFieldElement> =
+            indices.iter().map(|i| combination_codeword[*i]).collect();
+        let revealed_combination_auth_paths = combination_tree.get_multi_proof(&indices);
+        proof_stream.enqueue(&Item::RevealedCombinationElements(
+            revealed_combination_elements,
+        ));
+        proof_stream.enqueue(&Item::CompressedAuthenticationPaths(
+            revealed_combination_auth_paths,
+        ));
 
-            debug_assert!(
-                MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
-                    combination_tree.get_root(),
-                    index as u32,
-                    combination_codeword_digests[index].clone(),
-                    revealed_combination_auth_path.clone(),
-                ),
-                "Combination Merkle Tree authentication path must verify"
-            );
-
-            proof_stream.enqueue(&Item::RevealedCombinationElement(
-                revealed_combination_element,
-            ));
-            proof_stream.enqueue(&Item::AuthenticationPath(revealed_combination_auth_path));
-        }
-
-        timer.elapsed("open combination codeword at same position");
+        timer.elapsed("open combination codeword at same positions");
 
         let report = timer.finish();
         println!("{}", report);
@@ -922,8 +914,40 @@ impl Stark {
             indices.len()
         ));
 
+        // Verify Merkle authentication path for combination elements
+        let revealed_combination_elements: Vec<XFieldElement> = proof_stream_
+            .dequeue()?
+            .as_revealed_combination_elements()?;
+        let revealed_combination_digests: Vec<Vec<BFieldElement>> = revealed_combination_elements
+            .clone()
+            .into_par_iter()
+            .map(|xfe| {
+                let b_elements: Vec<BFieldElement> = xfe.to_digest();
+                hasher.hash(&b_elements, RP_DEFAULT_OUTPUT_SIZE)
+            })
+            .collect();
+        let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<Vec<BFieldElement>>> =
+            proof_stream_
+                .dequeue()?
+                .as_compressed_authentication_paths()?;
+        let mt_combination_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
+            combination_root.clone(),
+            &indices,
+            &revealed_combination_digests,
+            &revealed_combination_auth_paths,
+        );
+        if !mt_combination_success {
+            // TODO: Replace this by a specific error type, or just return `Ok(false)`
+            panic!("Failed to verify authentication path for combination codeword");
+            // return Ok(false);
+        }
+        timer.elapsed(&format!(
+            "Verified combination authentication paths for {} indices",
+            indices.len()
+        ));
+
         // verify nonlinear combination
-        for &index in indices.iter() {
+        for (i, &index) in indices.iter().enumerate() {
             // collect terms: randomizer
             let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
                 .map(|i| tuples[&index][i])
@@ -1134,27 +1158,8 @@ impl Stark {
                 .map(|(w, t)| *w * t)
                 .fold(XFieldElement::ring_zero(), |x, y| x + y);
 
-            // get value of the combination codeword to test the inner product against
-            let combination_leaf: XFieldElement =
-                proof_stream_.dequeue()?.as_revealed_combination_element()?;
-            let combination_path: Vec<Vec<BFieldElement>> =
-                proof_stream_.dequeue()?.as_authentication_path()?;
-
-            assert!(
-                MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
-                    combination_root.clone(),
-                    index as u32,
-                    hasher.hash(
-                        combination_leaf.coefficients.as_ref(),
-                        RP_DEFAULT_OUTPUT_SIZE
-                    ),
-                    combination_path,
-                ),
-                "The combination root must match with the combination authentication path"
-            );
-
             assert_eq!(
-                combination_leaf, inner_product,
+                revealed_combination_elements[i], inner_product,
                 "The combination leaf must equal the inner product"
             );
         }

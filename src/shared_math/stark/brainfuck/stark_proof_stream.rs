@@ -22,6 +22,7 @@ pub enum Item {
     TransposedExtensionElements(Vec<XFieldElement>),
     AuthenticationPath(Vec<Vec<BFieldElement>>),
     RevealedCombinationElement(XFieldElement),
+    RevealedCombinationElements(Vec<XFieldElement>),
     FriCodeword(Vec<XFieldElement>),
     FriProof(FriProof),
 }
@@ -124,6 +125,17 @@ impl Item {
         }
     }
 
+    pub fn as_revealed_combination_elements(
+        &self,
+    ) -> Result<Vec<XFieldElement>, Box<dyn std::error::Error>> {
+        match self {
+            Self::RevealedCombinationElements(xs) => Ok(xs.to_owned()),
+            _ => Err(ProofStreamError::boxed(
+                "expected revealed combination elements, but got something else",
+            )),
+        }
+    }
+
     pub fn as_fri_codeword(&self) -> Result<Vec<XFieldElement>, Box<dyn std::error::Error>> {
         match self {
             Self::FriCodeword(xs) => Ok(xs.to_owned()),
@@ -157,6 +169,7 @@ impl IntoIterator for Item {
             Item::AuthenticationPath(bss) => bss.concat().into_iter(),
             Item::RevealedCombinationElement(x) => xs_to_bs(&[x]),
             Item::FriCodeword(xs) => xs_to_bs(&xs),
+            Item::RevealedCombinationElements(xs) => xs_to_bs(&xs),
             Item::FriProof(fri_proof) => {
                 // FIXME: An iterator can be derived without re-creating a &mut Vec<BFieldElement>.
                 let mut bs: Vec<BFieldElement> = vec![];
