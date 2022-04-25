@@ -92,7 +92,7 @@ fn bench_pairs(c: &mut Criterion) {
     // Hashing pairs
 
     group.bench_function(BenchmarkId::new("RescuePrime-hash_pair", size), |bencher| {
-        let chunks: Vec<_> = elements.chunks(10).collect();
+        let chunks: Vec<_> = elements.chunks_exact(10).collect();
         bencher.iter(|| {
             for chunk in chunks.iter() {
                 let chunk_a = &chunk[0..5].to_vec();
@@ -105,7 +105,7 @@ fn bench_pairs(c: &mut Criterion) {
     group.bench_function(
         BenchmarkId::new("RescuePrimeXlix-hash_pair", size),
         |bencher| {
-            let chunks: Vec<_> = elements.chunks(10).collect();
+            let chunks: Vec<_> = elements.chunks_exact(10).collect();
             bencher.iter(|| {
                 for chunk in chunks.iter() {
                     let chunk_a = &chunk[0..5].to_vec();
