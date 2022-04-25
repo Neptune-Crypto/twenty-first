@@ -190,7 +190,6 @@ where
         let mut codeword_local = codeword.to_vec();
 
         let zero: XFieldElement = generator.ring_zero();
-        //let mt_dummy_value: Vec<BFieldElement> = vec![BFieldElement::ring_zero()];
         let one: XFieldElement = generator.ring_one();
         let two: XFieldElement = one + one;
         let two_inv = one / two;

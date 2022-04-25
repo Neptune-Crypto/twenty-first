@@ -1,7 +1,6 @@
 use crate::shared_math::other::{self, get_height_of_complete_binary_tree, is_power_of_two};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::izip;
-//use rand::prelude::ThreadRng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
@@ -136,8 +135,6 @@ where
 
         // We don't include the root hash in the authentication path
         // because it's implied in the context of use.
-        //auth_path.push(self.root_hash);
-
         auth_path
     }
 
@@ -169,18 +166,11 @@ where
     }
 
     // Compact Merkle Multiproof Generation
-    fn get_multi_proof_non_pat(
-        &self,
-        indices: &[usize],
-    ) -> Vec<PartialAuthenticationPath<H::Digest>> {
+    pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<PartialAuthenticationPath<H::Digest>> {
         let mut calculable_indices: HashSet<usize> = HashSet::new();
         let mut output: Vec<PartialAuthenticationPath<H::Digest>> =
             Vec::with_capacity(indices.len());
         for i in indices.iter() {
-            /*
-            let new_branch: PartialAuthenticationPath<H::Digest> =
-                PartialAuthenticationPath(self.get_proof(*i).into_iter().map(Some).collect());
-                */
             let new_branch = PartialAuthenticationPath(
                 self.get_authentication_path(*i)
                     .into_iter()
@@ -233,17 +223,6 @@ where
         }
 
         output
-    }
-
-    // Compact Merkle Multiproof Generation
-    pub fn get_multi_proof(&self, indices: &[usize]) -> Vec<PartialAuthenticationPath<H::Digest>> {
-        self.get_multi_proof_non_pat(indices)
-        /*
-        self.get_multi_proof_non_pat(indices)
-            .into_iter()
-            .map(Self::convert_pat)
-            .collect()
-            */
     }
 
     /// Verifies a list of leaf_indices and corresponding
@@ -435,7 +414,6 @@ where
         let mut result = Vec::with_capacity(leaf_count);
 
         for index in leaf_indices {
-            //res.push(self.nodes[first_leaf_index + i].clone());
             result.push(self.get_leaf_by_index(*index));
         }
         result
@@ -622,7 +600,6 @@ where
         let mut result = Vec::with_capacity(leaf_count);
 
         for index in leaf_indices {
-            //res.push(self.nodes[first_leaf_index + i].clone());
             result.push(self.get_salted_leaf_by_index(*index));
         }
         result
@@ -669,13 +646,15 @@ mod merkle_tree_test {
             )
         }
 
+        /// Change a Blake3 hash value. Only used for negative tests.
         fn increment(&mut self) {
             let original = self.clone();
             let Blake3Hash(orig) = self;
             let mut bytes: [u8; 32] = orig.as_bytes().clone();
 
             let last_index = bytes.len() - 1;
-            // This tests are random and can fail due to overflow: attributes on expressions are experimental #[allow(arithmetic_overflow)]
+
+            // Account for potential overflow
             if bytes[last_index] == u8::MAX {
                 bytes[last_index] = 0;
             } else {
@@ -689,13 +668,15 @@ mod merkle_tree_test {
             )
         }
 
+        /// Change a Blake3 hash value. Only used for negative tests.
         fn decrement(&mut self) {
             let original = self.clone();
             let Blake3Hash(orig) = self;
             let mut bytes: [u8; 32] = orig.as_bytes().clone();
 
             let last_index = bytes.len() - 1;
-            // This tests are random and can fail due to overflow: attributes on expressions are experimental #[allow(arithmetic_overflow)]
+
+            // Account for potential overflow
             if bytes[last_index] == 0 {
                 bytes[last_index] = u8::MAX;
             } else {
@@ -738,10 +719,8 @@ mod merkle_tree_test {
 
         let mut rng = rand::thread_rng();
         let values: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
-        //let zero = BFieldElement::ring_zero();
         let hasher = Hasher::new();
 
-        //let zero_digest = hasher.hash(&zero);
         let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
         let mut mt_32: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
         let mt_32_orig_root_hash = mt_32.get_root();
@@ -767,7 +746,6 @@ mod merkle_tree_test {
                 assert!(MerkleTree::<Hasher>::verify_multi_proof(
                     mt_32_orig_root_hash,
                     &indices_usize,
-                    //&selected_leaves,
                     &proof
                 ));
 
@@ -917,7 +895,6 @@ mod merkle_tree_test {
 
     #[test]
     fn merkle_tree_verify_multi_proof_test() {
-        // This
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 

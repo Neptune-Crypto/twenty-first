@@ -703,14 +703,6 @@ impl StarkRp {
 
         // Insert randomizer values in HashMap
         let mut randomizer_values: HashMap<usize, XFieldElement> = HashMap::new();
-        /*
-        duplicated_indices
-            .iter()
-            .zip(randomizer_auth_paths.iter())
-            .for_each(|(index, (_auth_path, value))| {
-                randomizer_values.insert(*index, *value);
-            });
-        */
         for (index, value) in zip(duplicated_indices, revealed_randomizer_values) {
             randomizer_values.insert(index, value);
         }
