@@ -653,14 +653,15 @@ impl Stark {
                 let auth_path: Vec<Vec<BFieldElement>> =
                     base_merkle_tree.get_authentication_path(idx);
 
-                let leaf_digest = base_codeword_digests_by_index[idx].clone();
-                let success = MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
-                    base_merkle_tree.get_root(),
-                    idx as u32,
-                    leaf_digest,
-                    auth_path.clone(),
+                debug_assert!(
+                    MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
+                        base_merkle_tree.get_root(),
+                        idx as u32,
+                        base_codeword_digests_by_index[idx].clone(),
+                        auth_path.clone(),
+                    ),
+                    "authentication path for base tree must be valid"
                 );
-                assert!(success, "authentication path for base tree must be valid");
 
                 proof_stream.enqueue(&Item::TransposedBaseElements(elements));
                 proof_stream.enqueue(&Item::AuthenticationPath(auth_path));
@@ -683,7 +684,7 @@ impl Stark {
             let revealed_combination_element = combination_codeword[index];
             let revealed_combination_auth_path = combination_tree.get_authentication_path(index);
 
-            assert!(
+            debug_assert!(
                 MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
                     combination_tree.get_root(),
                     index as u32,
