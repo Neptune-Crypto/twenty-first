@@ -102,8 +102,23 @@ impl BFieldElement {
     }
 
     #[must_use]
+    #[inline]
     pub fn mod_pow(&self, exp: u64) -> Self {
-        Self(other::mod_pow_raw(self.0, exp, Self::QUOTIENT))
+        // Special case for handling 0^0 = 1
+        if exp == 0 {
+            return BFieldElement::ring_one();
+        }
+
+        let mut acc = BFieldElement::ring_one();
+        let bit_length = other::count_bits(exp);
+        for i in 0..bit_length {
+            acc = acc * acc;
+            if exp & (1 << (bit_length - 1 - i)) != 0 {
+                acc *= *self;
+            }
+        }
+
+        acc
     }
 
     pub fn legendre_symbol(&self) -> i8 {
@@ -375,6 +390,7 @@ impl Div for BFieldElement {
 
 // TODO: We probably wanna make use of Rust's Pow, but for now we copy from ...big:
 impl ModPowU64 for BFieldElement {
+    #[inline]
     fn mod_pow_u64(&self, pow: u64) -> Self {
         self.mod_pow(pow)
     }

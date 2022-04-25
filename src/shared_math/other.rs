@@ -45,6 +45,7 @@ pub fn roundup_npo2(x: u64) -> u64 {
     1 << log_2_ceil(x)
 }
 
+#[inline]
 pub fn mod_pow_raw(x: u128, exp: u64, quotient: u128) -> u128 {
     // Special case for handling 0^0 = 1
     if exp == 0 {
@@ -53,9 +54,10 @@ pub fn mod_pow_raw(x: u128, exp: u64, quotient: u128) -> u128 {
 
     let mut acc = 1;
 
-    for i in 0..64 {
+    let bit_length = count_bits(exp);
+    for i in 0..bit_length {
         acc = (acc * acc) % quotient;
-        if exp & (1 << (64 - 1 - i)) != 0 {
+        if exp & (1 << (bit_length - 1 - i)) != 0 {
             acc = (acc * x) % quotient;
         }
     }
@@ -135,6 +137,13 @@ pub fn get_height_of_complete_binary_tree(leaf_count: usize) -> usize {
     assert!(is_power_of_two(leaf_count));
     // nightly: leaves_count.log2() + 1
     log_2_floor(leaf_count as u64) as usize
+}
+
+/// Count bits required to represent an unsigned number. Inspired by and similar to
+/// BigInteger's `bits()` method.
+#[inline]
+pub fn count_bits(input: u64) -> u32 {
+    64 - input.leading_zeros()
 }
 
 #[cfg(test)]
@@ -258,5 +267,22 @@ mod test_other {
             node_count4, 7,
             "The root, its two children and the four leaves."
         );
+    }
+
+    #[test]
+    fn count_bits_test() {
+        assert_eq!(0, count_bits(0));
+        assert_eq!(1, count_bits(1));
+        assert_eq!(2, count_bits(2));
+        assert_eq!(2, count_bits(3));
+        assert_eq!(3, count_bits(4));
+        assert_eq!(3, count_bits(5));
+        assert_eq!(3, count_bits(6));
+        assert_eq!(3, count_bits(7));
+        assert_eq!(4, count_bits(8));
+        assert_eq!(4, count_bits(9));
+        assert_eq!(4, count_bits(10));
+        assert_eq!(10, count_bits(1023));
+        assert_eq!(11, count_bits(1024));
     }
 }
