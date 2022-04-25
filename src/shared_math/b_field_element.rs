@@ -63,6 +63,7 @@ pub struct BFieldElement(u128);
 impl BFieldElement {
     pub const QUOTIENT: u128 = 0xffff_ffff_0000_0001u128; // 2^64 - 2^32 + 1
     pub const MAX: u128 = Self::QUOTIENT - 1;
+    const LOWER_MASK: u64 = 0xFFFFFFFF;
 
     pub fn new(value: u128) -> Self {
         Self(value % Self::QUOTIENT)
@@ -116,6 +117,31 @@ impl BFieldElement {
         } else {
             1
         }
+    }
+
+    #[inline(always)]
+    fn mod_reduce(x: u128) -> u64 {
+        // Copied from (MIT licensed):
+        // https://github.com/anonauthorsub/asiaccs_2021_440/blob/5141f349e5915ab750208c0ab1b5f7be95adaeac/math/src/field/f64/mod.rs#L551
+        // assume x consists of four 32-bit values: a, b, c, d such that a contains 32 least
+        // significant bits and d contains 32 most significant bits. we break x into corresponding
+        // values as shown below
+        let ab = x as u64;
+        let cd = (x >> 64) as u64;
+        let c = (cd as u32) as u64;
+        let d = cd >> 32;
+
+        // compute ab - d; because d may be greater than ab we need to handle potential underflow
+        let (tmp0, under) = ab.overflowing_sub(d);
+        let tmp0 = tmp0.wrapping_sub(Self::LOWER_MASK * (under as u64));
+
+        // compute c * 2^32 - c; this is guaranteed not to underflow
+        let tmp1 = (c << 32) - c;
+
+        // add temp values and return the result; because each of the temp may be up to 64 bits,
+        // we need to handle potential overflow
+        let (result, over) = tmp0.overflowing_add(tmp1);
+        result.wrapping_add(Self::LOWER_MASK * (over as u64))
     }
 }
 
@@ -282,7 +308,11 @@ impl SubAssign for BFieldElement {
 impl MulAssign for BFieldElement {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
-        self.0 = (self.0 * rhs.0) % Self::QUOTIENT;
+        let mut val: u128 = Self::mod_reduce(self.0 * rhs.0) as u128;
+        if val > Self::MAX {
+            val -= Self::QUOTIENT;
+        }
+        self.0 = val;
     }
 }
 
@@ -291,7 +321,11 @@ impl Mul for BFieldElement {
 
     #[inline]
     fn mul(self, other: Self) -> Self {
-        Self((self.0 * other.0) % Self::QUOTIENT)
+        let mut val: u128 = Self::mod_reduce(self.0 * other.0) as u128;
+        if val > Self::MAX {
+            val -= Self::QUOTIENT;
+        }
+        Self(Self::mod_reduce(val) as u128)
     }
 }
 
