@@ -4,6 +4,7 @@ use crate::shared_math::traits::ModPowU64;
 
 type Word = BFieldElement;
 
+pub const RP_DEFAULT_OUTPUT_SIZE: usize = 5;
 pub const RP_DEFAULT_WIDTH: usize = 16;
 
 #[derive(Debug, Clone)]
@@ -78,7 +79,7 @@ impl<const M: usize> RescuePrimeXlix<M> {
     fn rescue_xlix_round(&self, i: usize, state: &mut [Word]) {
         // S-box
         for j in 0..M {
-            state[j] = state[j].mod_pow_u64(self.alpha);
+            state[j] = state[j].mod_pow(self.alpha);
         }
 
         // MDS

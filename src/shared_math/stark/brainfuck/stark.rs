@@ -3,6 +3,9 @@ use super::vm::BaseMatrices;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::rescue_prime_xlix::{
+    neptune_params, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
+};
 use crate::shared_math::stark::brainfuck::evaluation_argument::{
     EvaluationArgument, ProgramEvaluationArgument, PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT,
 };
@@ -22,10 +25,10 @@ use crate::shared_math::{
 };
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::MerkleTree;
-use crate::util_types::simple_hasher::{Hasher, RescuePrimeProduction, ToDigest};
+use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::Itertools;
 use rand::thread_rng;
-use rayon::iter::IndexedParallelIterator;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -37,7 +40,7 @@ pub const EXTENSION_CHALLENGE_COUNT: usize = 11;
 pub const PERMUTATION_ARGUMENTS_COUNT: usize = 2;
 pub const TERMINAL_COUNT: usize = 5;
 
-type StarkHasher = RescuePrimeProduction;
+type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
 type StarkDigest = Vec<BFieldElement>;
 
 pub struct Stark {
@@ -303,7 +306,7 @@ impl Stark {
 
         timer.elapsed("transposed_base_codewords");
 
-        let hasher = StarkHasher::new();
+        let hasher = neptune_params();
 
         // Current length of each element in `transposed_base_codewords` is 18 which exceeds
         // max length of RP hash function. So we chop it into elements that will fit into the
@@ -313,15 +316,8 @@ impl Stark {
         let mut base_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
             Vec::with_capacity(transposed_base_codewords.len());
         transposed_base_codewords
-            .clone()
-            .into_par_iter()
-            .map(|values| {
-                let chunks: Vec<Vec<BFieldElement>> = values
-                    .chunks(hasher.0.max_input_length / 2)
-                    .map(|s| s.to_vec())
-                    .collect();
-                hasher.hash_many(&chunks)
-            })
+            .par_iter()
+            .map(|values| hasher.hash(values, RP_DEFAULT_OUTPUT_SIZE))
             .collect_into_vec(&mut base_codeword_digests_by_index);
         let base_merkle_tree =
             MerkleTree::<StarkHasher>::from_digests(&base_codeword_digests_by_index);
@@ -392,16 +388,7 @@ impl Stark {
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
                 );
-                let chunks: Vec<Vec<BFieldElement>> = bvalues
-                    .chunks(hasher.0.max_input_length / 2)
-                    .map(|s| s.into())
-                    .collect();
-                assert_eq!(
-                    6,
-                    chunks.len(),
-                    "27 B-field elements must be divided into 6 chunks for hashing"
-                );
-                hasher.hash_many(&chunks)
+                hasher.hash(&bvalues, RP_DEFAULT_OUTPUT_SIZE)
             })
             .collect_into_vec(&mut extension_codeword_digests_by_index);
 
@@ -587,16 +574,17 @@ impl Stark {
         );
 
         // Take weighted sum
+        // TODO: Consider if this would go faster with some form of memoization
         let combination_codeword: Vec<XFieldElement> = weights
-            .iter()
-            .zip(terms.iter())
+            .par_iter()
+            .zip(terms.par_iter())
             .map(|(w, t)| {
                 (0..self.fri.domain.length)
                     .map(|i| *w * t[i])
                     .collect::<Vec<XFieldElement>>()
             })
-            .fold(
-                vec![XFieldElement::ring_zero(); self.fri.domain.length],
+            .reduce(
+                || vec![XFieldElement::ring_zero(); self.fri.domain.length],
                 |acc, weighted_terms| {
                     acc.iter()
                         .zip(weighted_terms.iter())
@@ -606,7 +594,6 @@ impl Stark {
             );
 
         timer.elapsed("combination_codeword");
-
         let mut combination_codeword_digests: Vec<Vec<BFieldElement>> =
             Vec::with_capacity(combination_codeword.len());
         combination_codeword
@@ -614,7 +601,7 @@ impl Stark {
             .into_par_iter()
             .map(|xfe| {
                 let digest: Vec<BFieldElement> = xfe.to_digest();
-                hasher.hash(&digest)
+                hasher.hash(&digest, RP_DEFAULT_OUTPUT_SIZE)
             })
             .collect_into_vec(&mut combination_codeword_digests);
         let combination_tree =
@@ -831,11 +818,7 @@ impl Stark {
                 let auth_path: Vec<Vec<BFieldElement>> =
                     proof_stream_.dequeue()?.as_authentication_path()?;
 
-                let hash_input: Vec<Vec<BFieldElement>> = elements
-                    .chunks(hasher.0.max_input_length / 2)
-                    .map(|s| s.to_vec())
-                    .collect();
-                let leaf_hash: Vec<BFieldElement> = hasher.hash_many(&hash_input);
+                let leaf_hash: Vec<BFieldElement> = hasher.hash(&elements, RP_DEFAULT_OUTPUT_SIZE);
                 let mt_base_success =
                     MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
                         base_merkle_tree_root.clone(),
@@ -870,16 +853,17 @@ impl Stark {
                     .as_transposed_extension_elements()?;
                 let extension_auth_path: Vec<Vec<BFieldElement>> =
                     proof_stream_.dequeue()?.as_authentication_path()?;
-
-                let extension_element_chunked: Vec<Vec<BFieldElement>> = extension_elements
-                    .clone()
-                    .into_iter()
-                    .map(|xfe| xfe.coefficients.clone().to_vec())
-                    .concat()
-                    .chunks(hasher.0.max_input_length / 2)
-                    .map(|s| s.to_vec())
-                    .collect();
-                let ext_leaf_hash = hasher.hash_many(&extension_element_chunked);
+                let extension_elements_as_bfes: Vec<BFieldElement> = extension_elements
+                    .iter()
+                    .map(|x| x.coefficients.clone().to_vec())
+                    .concat();
+                assert_eq!(
+                    27,
+                    extension_elements_as_bfes.len(),
+                    "9 X-field elements must become 27 B field elements"
+                );
+                let ext_leaf_hash =
+                    hasher.hash(&extension_elements_as_bfes, RP_DEFAULT_OUTPUT_SIZE);
 
                 let mt_ext_success =
                     MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
@@ -1124,7 +1108,10 @@ impl Stark {
                 MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
                     combination_root.clone(),
                     index as u32,
-                    hasher.hash(&combination_leaf.coefficients.to_vec()),
+                    hasher.hash(
+                        combination_leaf.coefficients.as_ref(),
+                        RP_DEFAULT_OUTPUT_SIZE
+                    ),
                     combination_path,
                 ),
                 "The combination root must match with the combination authentication path"

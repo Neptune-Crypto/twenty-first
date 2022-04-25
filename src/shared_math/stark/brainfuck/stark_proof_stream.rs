@@ -1,12 +1,12 @@
 use super::stark::TERMINAL_COUNT;
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::util_types::merkle_tree::PartialAuthenticationPath;
 use crate::util_types::proof_stream_typed::{ProofStream, ProofStreamError};
-use crate::util_types::simple_hasher::RescuePrimeProduction;
 use itertools::Itertools;
 
-pub type StarkProofStream = ProofStream<Item, RescuePrimeProduction>;
+pub type StarkProofStream = ProofStream<Item, RescuePrimeXlix<RP_DEFAULT_WIDTH>>;
 
 type FriProof = Vec<(PartialAuthenticationPath<Vec<BFieldElement>>, XFieldElement)>;
 
