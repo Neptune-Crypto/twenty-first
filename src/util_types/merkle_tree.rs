@@ -1,7 +1,9 @@
 use crate::shared_math::other::{self, get_height_of_complete_binary_tree, is_power_of_two};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::izip;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
@@ -335,16 +337,21 @@ where
         // Remove 'Some' constructors from partial auth paths
         let auth_paths = partial_auth_paths
             .iter()
-            .map(Self::unwrap_partial_authentication_path);
+            .map(Self::unwrap_partial_authentication_path)
+            .collect::<Vec<_>>();
 
-        izip!(leaf_indices, leaf_digests, auth_paths).all(|(index, leaf_hash, auth_path)| {
-            Self::verify_authentication_path_from_leaf_hash(
-                root_hash.clone(),
-                *index as u32,
-                leaf_hash.clone(),
-                auth_path,
-            )
-        })
+        leaf_indices
+            .par_iter()
+            .zip(leaf_digests.par_iter())
+            .zip(auth_paths.par_iter())
+            .all(|((index, leaf_hash), auth_path)| {
+                Self::verify_authentication_path_from_leaf_hash(
+                    root_hash.clone(),
+                    *index as u32,
+                    leaf_hash.clone(),
+                    auth_path.to_vec(),
+                )
+            })
     }
 
     /// Verifies a list of leaf_indices and corresponding
