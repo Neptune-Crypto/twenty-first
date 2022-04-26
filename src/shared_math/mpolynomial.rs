@@ -1028,6 +1028,19 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         res.unwrap()
     }
 
+    /// Removes exponents whose coefficients are 0.
+    pub fn normalize(&mut self) {
+        let mut spurious_exponents: Vec<Vec<u64>> = vec![];
+        for (exponent, coefficient) in self.coefficients.iter() {
+            if coefficient.is_zero() {
+                spurious_exponents.push(exponent.to_owned());
+            }
+        }
+        for se in spurious_exponents {
+            self.coefficients.remove(&se);
+        }
+    }
+
     /// During symbolic evaluation, i.e., when substituting a univariate polynomial for one of the
     /// variables, the total degree of the resulting polynomial can be upper bounded.  This bound
     /// is the `total_degree_bound`, and can be calculated across all terms.  Only the constant
