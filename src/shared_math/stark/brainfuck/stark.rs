@@ -1098,7 +1098,7 @@ impl Stark {
                 .par_iter()
                 .zip(terms.par_iter())
                 .map(|(w, t)| *w * *t)
-                .reduce(|| XFieldElement::ring_zero(), |x, y| x + y);
+                .reduce(XFieldElement::ring_zero, |x, y| x + y);
 
             assert_eq!(
                 revealed_combination_elements[i], inner_product,
