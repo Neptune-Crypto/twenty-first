@@ -538,13 +538,13 @@ impl Stark {
             if std::env::var("DEBUG").is_ok() {
                 let interpolated = self.fri.domain.x_interpolate(&ec_shifted);
                 assert!(
-                        interpolated.degree() == -1
-                            || interpolated.degree() == self.max_degree as isize,
-                        "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
-                        i,
-                        self.max_degree,
-                        interpolated.degree()
-                    );
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
+                    i,
+                    self.max_degree,
+                    interpolated.degree()
+                );
             }
 
             combination_codeword = combination_codeword
@@ -577,25 +577,19 @@ impl Stark {
                 .collect();
 
             // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
-            // if std::env::var("DEBUG").is_ok() {
-            //     let interpolated = self.fri.domain.x_interpolate(&qc_shifted);
-            //     let unshifted_degree = self
-            //         .fri
-            //         .domain
-            //         .x_interpolate(&terms[terms.len() - 2])
-            //         .degree();
-            //     assert!(
-            //         interpolated.degree() == -1
-            //             || interpolated.degree() == self.max_degree as isize,
-            //         "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. Actual degree of unshifted codeword: {}. Shift = {}",
-            //         _i,
-            //         self.max_degree,
-            //         interpolated.degree(),
-            //         qdb,
-            //         unshifted_degree,
-            //         shift
-            //     );
-            // }
+            if std::env::var("DEBUG").is_ok() {
+                let interpolated = self.fri.domain.x_interpolate(&qc_shifted);
+                assert!(
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. . Shift = {}",
+                    _i,
+                    self.max_degree,
+                    interpolated.degree(),
+                    qdb,
+                    shift
+                );
+            }
 
             combination_codeword = combination_codeword
                 .into_par_iter()
