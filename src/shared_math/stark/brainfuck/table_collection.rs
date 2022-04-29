@@ -108,11 +108,11 @@ impl TableCollection {
         fri_domain: &FriDomain,
     ) -> Vec<Vec<BFieldElement>> {
         [
-            self.processor_table.0.lde(fri_domain),
-            self.instruction_table.0.lde(fri_domain),
-            self.memory_table.0.lde(fri_domain),
-            self.input_table.0.lde(fri_domain),
-            self.output_table.0.lde(fri_domain),
+            self.processor_table.0.lde(fri_domain).0,
+            self.instruction_table.0.lde(fri_domain).0,
+            self.memory_table.0.lde(fri_domain).0,
+            self.input_table.0.lde(fri_domain).0,
+            self.output_table.0.lde(fri_domain).0,
         ]
         .concat()
     }
@@ -122,11 +122,11 @@ impl TableCollection {
         fri_domain: &FriDomain,
     ) -> Vec<Vec<XFieldElement>> {
         [
-            self.processor_table.0.ldex(fri_domain),
-            self.instruction_table.0.ldex(fri_domain),
-            self.memory_table.0.ldex(fri_domain),
-            self.input_table.0.ldex(fri_domain),
-            self.output_table.0.ldex(fri_domain),
+            self.processor_table.0.ldex(fri_domain).0,
+            self.instruction_table.0.ldex(fri_domain).0,
+            self.memory_table.0.ldex(fri_domain).0,
+            self.input_table.0.ldex(fri_domain).0,
+            self.output_table.0.ldex(fri_domain).0,
         ]
         .concat()
     }

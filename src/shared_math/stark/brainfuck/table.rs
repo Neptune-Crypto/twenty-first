@@ -216,7 +216,10 @@ impl<T: TableMoreTrait> Table<T> {
     }
 
     /// Evaluate the base table
-    pub fn lde(&mut self, domain: &FriDomain) -> Vec<Vec<BFieldElement>> {
+    pub fn lde(
+        &mut self,
+        domain: &FriDomain,
+    ) -> (Vec<Vec<BFieldElement>>, Vec<Polynomial<BFieldElement>>) {
         let polynomials: Vec<Polynomial<BFieldElement>> = self.b_interpolate_columns(
             domain.omega.unlift().unwrap(),
             domain.length,
@@ -226,10 +229,13 @@ impl<T: TableMoreTrait> Table<T> {
             .par_iter()
             .map(|p| domain.b_evaluate(p, BFieldElement::ring_zero()))
             .collect();
-        self.codewords.clone()
+        (self.codewords.clone(), polynomials)
     }
 
-    pub fn ldex(&mut self, domain: &FriDomain) -> Vec<Vec<XFieldElement>> {
+    pub fn ldex(
+        &mut self,
+        domain: &FriDomain,
+    ) -> (Vec<Vec<XFieldElement>>, Vec<Polynomial<XFieldElement>>) {
         let polynomials = self.x_interpolate_columns(
             domain.omega,
             domain.length,
@@ -249,7 +255,7 @@ impl<T: TableMoreTrait> Table<T> {
         ]
         .concat();
 
-        extended_codewords
+        (extended_codewords, polynomials)
     }
 }
 
