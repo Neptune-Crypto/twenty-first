@@ -112,7 +112,7 @@ impl Stark {
             Some(prog) => prog,
         };
 
-        let num_randomizers = 1;
+        let num_randomizers = 2;
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(order as u64)
