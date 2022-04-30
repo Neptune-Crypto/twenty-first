@@ -871,7 +871,7 @@ impl Stark {
                     .into_iter()
                     .map(|x| x.coefficients.clone().to_vec())
                     .concat();
-                assert_eq!(
+                debug_assert_eq!(
                     27,
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
