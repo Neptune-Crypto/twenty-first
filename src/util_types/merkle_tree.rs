@@ -1,7 +1,9 @@
 use crate::shared_math::other::{self, get_height_of_complete_binary_tree, is_power_of_two};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::izip;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
@@ -248,9 +250,9 @@ where
         if leaf_indices.is_empty() {
             return true;
         }
-        assert_eq!(leaf_indices.len(), leaf_digests.len());
-        assert_eq!(leaf_digests.len(), auth_paths.len());
-        assert_eq!(auth_paths.len(), leaf_indices.len());
+        debug_assert_eq!(leaf_indices.len(), leaf_digests.len());
+        debug_assert_eq!(leaf_digests.len(), auth_paths.len());
+        debug_assert_eq!(auth_paths.len(), leaf_indices.len());
 
         let mut partial_auth_paths: Vec<PartialAuthenticationPath<H::Digest>> =
             auth_paths.to_owned();
@@ -284,26 +286,49 @@ where
         let mut complete = false;
         let hasher = H::new();
         while !complete {
-            complete = true;
+            let mut parent_keys_mut: Vec<u64> =
+                partial_tree.keys().copied().map(|x| x / 2).collect();
+            parent_keys_mut.sort_by_key(|w| Reverse(*w));
+            let parent_keys = parent_keys_mut.clone();
+            let partial_tree_immut = partial_tree.clone();
 
-            let mut parent_keys: Vec<u64> = partial_tree.keys().copied().map(|x| x / 2).collect();
-            parent_keys.sort_by_key(|w| Reverse(*w));
-
+            // Calculate indices for derivable hashes
+            let mut new_derivable_digests_indices: Vec<(u64, u64, u64)> = vec![];
             for parent_key in parent_keys {
                 let left_child_key = parent_key * 2;
                 let right_child_key = parent_key * 2 + 1;
 
-                // Populate partial tree with parent key/hashes for known children
                 if partial_tree.contains_key(&left_child_key)
                     && partial_tree.contains_key(&right_child_key)
                     && !partial_tree.contains_key(&parent_key)
                 {
-                    let left_child = &partial_tree[&(parent_key * 2)];
-                    let right_child = &partial_tree[&(parent_key * 2 + 1)];
-                    let digest = hasher.hash_pair(left_child, right_child);
-                    partial_tree.insert(parent_key, digest);
-                    complete = false;
+                    new_derivable_digests_indices.push((
+                        parent_key,
+                        left_child_key,
+                        right_child_key,
+                    ));
                 }
+            }
+
+            complete = new_derivable_digests_indices.is_empty();
+
+            // Calculate derivable digests in parallel
+            let mut new_digests: Vec<(u64, H::Digest)> =
+                Vec::with_capacity(new_derivable_digests_indices.len());
+            new_derivable_digests_indices
+                .par_iter()
+                .map(|(parent_key, left_child_key, right_child_key)| {
+                    (
+                        *parent_key,
+                        hasher.hash_pair(
+                            &partial_tree_immut[left_child_key],
+                            &partial_tree_immut[right_child_key],
+                        ),
+                    )
+                })
+                .collect_into_vec(&mut new_digests);
+            for (parent_key, digest) in new_digests.into_iter() {
+                partial_tree.insert(parent_key, digest);
             }
         }
 
@@ -335,16 +360,21 @@ where
         // Remove 'Some' constructors from partial auth paths
         let auth_paths = partial_auth_paths
             .iter()
-            .map(Self::unwrap_partial_authentication_path);
+            .map(Self::unwrap_partial_authentication_path)
+            .collect::<Vec<_>>();
 
-        izip!(leaf_indices, leaf_digests, auth_paths).all(|(index, leaf_hash, auth_path)| {
-            Self::verify_authentication_path_from_leaf_hash(
-                root_hash.clone(),
-                *index as u32,
-                leaf_hash.clone(),
-                auth_path,
-            )
-        })
+        leaf_indices
+            .par_iter()
+            .zip(leaf_digests.par_iter())
+            .zip(auth_paths.par_iter())
+            .all(|((index, leaf_hash), auth_path)| {
+                Self::verify_authentication_path_from_leaf_hash(
+                    root_hash.clone(),
+                    *index as u32,
+                    leaf_hash.clone(),
+                    auth_path.to_vec(),
+                )
+            })
     }
 
     /// Verifies a list of leaf_indices and corresponding

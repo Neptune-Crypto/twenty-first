@@ -24,7 +24,7 @@ use crate::shared_math::{
     x_field_element::XFieldElement, xfri::Fri,
 };
 use crate::timing_reporter::TimingReporter;
-use crate::util_types::merkle_tree::MerkleTree;
+use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::Itertools;
 use rand::thread_rng;
@@ -73,7 +73,7 @@ impl Stark {
         // FIXME: When digests get a length of 6, produce half as many digests as XFieldElements.
         hasher
             .get_n_hash_rounds(seed, count)
-            .iter()
+            .par_iter()
             .map(|digest| XFieldElement::new([digest[0], digest[1], digest[2]]))
             .collect()
     }
@@ -645,62 +645,62 @@ impl Stark {
         );
 
         // Open leafs of zipped codewords at indicated positions
+        let mut revealed_indices: Vec<usize> = vec![];
         for index in indices.iter() {
             for unit_distance in unit_distances.iter() {
                 let idx: usize = (index + unit_distance) % self.fri.domain.length;
-
-                let elements: Vec<BFieldElement> = transposed_base_codewords[idx].clone();
-                let auth_path: Vec<Vec<BFieldElement>> =
-                    base_merkle_tree.get_authentication_path(idx);
-
-                debug_assert!(
-                    MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
-                        base_merkle_tree.get_root(),
-                        idx as u32,
-                        base_codeword_digests_by_index[idx].clone(),
-                        auth_path.clone(),
-                    ),
-                    "authentication path for base tree must be valid"
-                );
-
-                proof_stream.enqueue(&Item::TransposedBaseElements(elements));
-                proof_stream.enqueue(&Item::AuthenticationPath(auth_path));
-
-                let extension_elements: Vec<XFieldElement> =
-                    transposed_extension_codewords[idx].clone();
-                let extension_path: Vec<Vec<BFieldElement>> =
-                    extension_tree.get_authentication_path(idx);
-                proof_stream.enqueue(&Item::TransposedExtensionElements(
-                    extension_elements.to_owned(),
-                ));
-                proof_stream.enqueue(&Item::AuthenticationPath(extension_path));
+                revealed_indices.push(idx);
             }
         }
+        revealed_indices.sort_unstable();
+        revealed_indices.dedup();
+
+        let revealed_elements: Vec<Vec<BFieldElement>> = revealed_indices
+            .iter()
+            .map(|idx| transposed_base_codewords[*idx].clone())
+            .collect();
+        let auth_paths: Vec<PartialAuthenticationPath<Vec<BFieldElement>>> =
+            base_merkle_tree.get_multi_proof(&revealed_indices);
+
+        proof_stream.enqueue(&Item::TransposedBaseElementVectors(revealed_elements));
+        proof_stream.enqueue(&Item::CompressedAuthenticationPaths(auth_paths));
+
+        let revealed_extension_elements: Vec<Vec<XFieldElement>> = revealed_indices
+            .iter()
+            .map(|idx| transposed_extension_codewords[*idx].clone())
+            .collect();
+        let extension_auth_paths = extension_tree.get_multi_proof(&revealed_indices);
+        proof_stream.enqueue(&Item::TransposedExtensionElementVectors(
+            revealed_extension_elements,
+        ));
+        proof_stream.enqueue(&Item::CompressedAuthenticationPaths(extension_auth_paths));
+
+        // debug_assert!(
+        //     MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
+        //         base_merkle_tree.get_root(),
+        //         &revealed_indices,
+        //         revealed_indices.iter().map()base_codeword_digests_by_index[idx].clone(),
+        //         auth_path.clone(),
+        //     ),
+        //     "authentication path for base tree must be valid"
+        // );
 
         timer.elapsed("open leafs of zipped codewords");
 
         // open combination codeword at the same positions
-        for index in indices {
-            let revealed_combination_element = combination_codeword[index];
-            let revealed_combination_auth_path = combination_tree.get_authentication_path(index);
+        // Notice that we need to loop over `indices` here, not `revealed_indices`
+        // as the latter includes adjacent table rows relative to the values in `indices`
+        let revealed_combination_elements: Vec<XFieldElement> =
+            indices.iter().map(|i| combination_codeword[*i]).collect();
+        let revealed_combination_auth_paths = combination_tree.get_multi_proof(&indices);
+        proof_stream.enqueue(&Item::RevealedCombinationElements(
+            revealed_combination_elements,
+        ));
+        proof_stream.enqueue(&Item::CompressedAuthenticationPaths(
+            revealed_combination_auth_paths,
+        ));
 
-            debug_assert!(
-                MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
-                    combination_tree.get_root(),
-                    index as u32,
-                    combination_codeword_digests[index].clone(),
-                    revealed_combination_auth_path.clone(),
-                ),
-                "Combination Merkle Tree authentication path must verify"
-            );
-
-            proof_stream.enqueue(&Item::RevealedCombinationElement(
-                revealed_combination_element,
-            ));
-            proof_stream.enqueue(&Item::AuthenticationPath(revealed_combination_auth_path));
-        }
-
-        timer.elapsed("open combination codeword at same position");
+        timer.elapsed("open combination codeword at same positions");
 
         let report = timer.finish();
         println!("{}", report);
@@ -811,84 +811,159 @@ impl Stark {
         let mut tuples: HashMap<usize, Vec<XFieldElement>> = HashMap::new();
         // TODO: we can store the elements mushed into "tuples" separately, like in "points" below,
         // to avoid unmushing later
-        for index in indices.clone() {
+
+        // Open leafs of zipped codewords at indicated positions
+        let mut revealed_indices: Vec<usize> = vec![];
+        for index in indices.iter() {
             for unit_distance in unit_distances.iter() {
-                let idx = (index + unit_distance) % self.fri.domain.length;
-                let elements: Vec<BFieldElement> =
-                    proof_stream_.dequeue()?.as_transposed_base_elements()?;
-                let auth_path: Vec<Vec<BFieldElement>> =
-                    proof_stream_.dequeue()?.as_authentication_path()?;
-
-                let leaf_hash: Vec<BFieldElement> = hasher.hash(&elements, RP_DEFAULT_OUTPUT_SIZE);
-                let mt_base_success =
-                    MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
-                        base_merkle_tree_root.clone(),
-                        idx as u32,
-                        leaf_hash,
-                        auth_path,
-                    );
-                if !mt_base_success {
-                    // TODO: Replace this by a specific error type, or just return `Ok(false)`
-                    panic!("Failed to verify authentication path for base codeword");
-                    // return Ok(false);
-                }
-
-                let randomizer: XFieldElement =
-                    XFieldElement::new([elements[0], elements[1], elements[2]]);
-                assert_eq!(
-                    1, num_randomizer_polynomials,
-                    "For now number of randomizers must be 1"
-                );
-                let mut values: Vec<XFieldElement> = vec![randomizer];
-                values.extend_from_slice(
-                    &elements
-                        .iter()
-                        .skip(3 * num_randomizer_polynomials)
-                        .map(|bfe| bfe.lift())
-                        .collect::<Vec<XFieldElement>>(),
-                );
-                tuples.insert(idx, values);
-
-                let extension_elements: Vec<XFieldElement> = proof_stream_
-                    .dequeue()?
-                    .as_transposed_extension_elements()?;
-                let extension_auth_path: Vec<Vec<BFieldElement>> =
-                    proof_stream_.dequeue()?.as_authentication_path()?;
-                let extension_elements_as_bfes: Vec<BFieldElement> = extension_elements
-                    .iter()
-                    .map(|x| x.coefficients.clone().to_vec())
-                    .concat();
-                assert_eq!(
-                    27,
-                    extension_elements_as_bfes.len(),
-                    "9 X-field elements must become 27 B field elements"
-                );
-                let ext_leaf_hash =
-                    hasher.hash(&extension_elements_as_bfes, RP_DEFAULT_OUTPUT_SIZE);
-
-                let mt_ext_success =
-                    MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
-                        extension_tree_merkle_root.clone(),
-                        idx as u32,
-                        ext_leaf_hash,
-                        extension_auth_path,
-                    );
-                if !mt_ext_success {
-                    // TODO: Replace this by a specific error type, or just return `Ok(false)`
-                    panic!("Failed to verify authentication path for extended codeword");
-                    // return Ok(false);
-                }
-
-                tuples.insert(idx, vec![tuples[&idx].clone(), extension_elements].concat());
+                let idx: usize = (index + unit_distance) % self.fri.domain.length;
+                revealed_indices.push(idx);
             }
         }
+        revealed_indices.sort_unstable();
+        revealed_indices.dedup();
+        timer.elapsed("Calculated revealed indices");
+
+        let revealed_base_elements: Vec<Vec<BFieldElement>> = proof_stream_
+            .dequeue()?
+            .as_transposed_base_element_vectors()?;
+        let auth_paths: Vec<PartialAuthenticationPath<Vec<BFieldElement>>> = proof_stream_
+            .dequeue()?
+            .as_compressed_authentication_paths()?;
+        timer.elapsed("Read base elements and auth paths from proof stream");
+        let leaf_digests: Vec<Vec<BFieldElement>> = revealed_base_elements
+            .par_iter()
+            .map(|re| hasher.hash(re, RP_DEFAULT_OUTPUT_SIZE))
+            .collect();
         timer.elapsed(&format!(
-            "Verified authentication paths for {} indices",
+            "Calculated {} leaf digests for base elements",
+            indices.len()
+        ));
+        let mt_base_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
+            base_merkle_tree_root,
+            &revealed_indices,
+            &leaf_digests,
+            &auth_paths,
+        );
+        if !mt_base_success {
+            // TODO: Replace this by a specific error type, or just return `Ok(false)`
+            panic!("Failed to verify authentication path for base codeword");
+            // return Ok(false);
+        }
+        timer.elapsed(&format!(
+            "Verified authentication paths for {} base elements",
+            indices.len()
+        ));
+
+        // Get extension elements
+        let revealed_extension_elements: Vec<Vec<XFieldElement>> = proof_stream_
+            .dequeue()?
+            .as_transposed_extension_element_vectors()?;
+        let extension_auth_paths = proof_stream_
+            .dequeue()?
+            .as_compressed_authentication_paths()?;
+        timer.elapsed("Read extension elements and auth paths from proof stream");
+        let extension_leaf_digests: Vec<Vec<BFieldElement>> = revealed_extension_elements
+            .clone()
+            .into_par_iter()
+            .map(|xvalues| {
+                let bvalues: Vec<BFieldElement> = xvalues
+                    .into_iter()
+                    .map(|x| x.coefficients.clone().to_vec())
+                    .concat();
+                debug_assert_eq!(
+                    27,
+                    bvalues.len(),
+                    "9 X-field elements must become 27 B-field elements"
+                );
+                hasher.hash(&bvalues, RP_DEFAULT_OUTPUT_SIZE)
+            })
+            .collect();
+        timer.elapsed(&format!(
+            "Calculated {} leaf digests for extension elements",
+            indices.len()
+        ));
+        let mt_extension_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
+            extension_tree_merkle_root,
+            &revealed_indices,
+            &extension_leaf_digests,
+            &extension_auth_paths,
+        );
+        if !mt_extension_success {
+            // TODO: Replace this by a specific error type, or just return `Ok(false)`
+            panic!("Failed to verify authentication path for extension codeword");
+            // return Ok(false);
+        }
+        timer.elapsed(&format!(
+            "Verified authentication paths for {} extension elements",
+            indices.len()
+        ));
+
+        // Collect values in a hash map
+        for (i, &idx) in revealed_indices.iter().enumerate() {
+            let randomizer: XFieldElement = XFieldElement::new([
+                revealed_base_elements[i][0],
+                revealed_base_elements[i][1],
+                revealed_base_elements[i][2],
+            ]);
+            debug_assert_eq!(
+                1, num_randomizer_polynomials,
+                "For now number of randomizers must be 1"
+            );
+            let mut values: Vec<XFieldElement> = vec![randomizer];
+            values.extend_from_slice(
+                &revealed_base_elements[i]
+                    .iter()
+                    .skip(3 * num_randomizer_polynomials)
+                    .map(|bfe| bfe.lift())
+                    .collect::<Vec<XFieldElement>>(),
+            );
+            tuples.insert(idx, values);
+            tuples.insert(
+                idx,
+                vec![tuples[&idx].clone(), revealed_extension_elements[i].clone()].concat(),
+            );
+        }
+        timer.elapsed(&format!(
+            "Collected {} values into a hash map",
+            indices.len()
+        ));
+
+        // Verify Merkle authentication path for combination elements
+        let revealed_combination_elements: Vec<XFieldElement> = proof_stream_
+            .dequeue()?
+            .as_revealed_combination_elements()?;
+        let revealed_combination_digests: Vec<Vec<BFieldElement>> = revealed_combination_elements
+            .clone()
+            .into_par_iter()
+            .map(|xfe| {
+                let b_elements: Vec<BFieldElement> = xfe.to_digest();
+                hasher.hash(&b_elements, RP_DEFAULT_OUTPUT_SIZE)
+            })
+            .collect();
+        let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<Vec<BFieldElement>>> =
+            proof_stream_
+                .dequeue()?
+                .as_compressed_authentication_paths()?;
+        let mt_combination_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
+            combination_root.clone(),
+            &indices,
+            &revealed_combination_digests,
+            &revealed_combination_auth_paths,
+        );
+        if !mt_combination_success {
+            // TODO: Replace this by a specific error type, or just return `Ok(false)`
+            panic!("Failed to verify authentication path for combination codeword");
+            // return Ok(false);
+        }
+        timer.elapsed(&format!(
+            "Verified combination authentication paths for {} indices",
             indices.len()
         ));
 
         // verify nonlinear combination
-        for &index in indices.iter() {
+        for (i, &index) in indices.iter().enumerate() {
+            let b_domain_value = self.fri.domain.b_domain_value(index as u32);
             // collect terms: randomizer
             let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
                 .map(|i| tuples[&index][i])
@@ -900,15 +975,7 @@ impl Stark {
                 let shift: u32 = (self.max_degree as i64
                     - base_degree_bounds[i - num_randomizer_polynomials])
                     as u32;
-                terms.push(
-                    tuples[&index][i]
-                        * self
-                            .fri
-                            .domain
-                            .b_domain_value(index as u32)
-                            .mod_pow_u32(shift)
-                            .lift(),
-                );
+                terms.push(tuples[&index][i] * b_domain_value.mod_pow_u32(shift).lift());
             }
 
             // collect terms: extension
@@ -926,15 +993,7 @@ impl Stark {
                 let extension_element: XFieldElement = tuples[&index][extension_offset + i];
                 terms.push(extension_element);
                 let shift = (self.max_degree as i64 - edb) as u32;
-                terms.push(
-                    extension_element
-                        * self
-                            .fri
-                            .domain
-                            .b_domain_value(index as u32)
-                            .mod_pow_u32(shift)
-                            .lift(),
-                )
+                terms.push(extension_element * b_domain_value.mod_pow_u32(shift).lift())
             }
 
             // collect terms: quotients, quotients need to be computed
@@ -973,20 +1032,10 @@ impl Stark {
                     .zip(table.boundary_quotient_degree_bounds(challenges).iter())
                 {
                     let eval = constraint.evaluate(point);
-                    let quotient = eval
-                        / (self.fri.domain.b_domain_value(index as u32).lift()
-                            - XFieldElement::ring_one());
+                    let quotient = eval / (b_domain_value.lift() - XFieldElement::ring_one());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(
-                        quotient
-                            * self
-                                .fri
-                                .domain
-                                .b_domain_value(index as u32)
-                                .mod_pow_u32(shift)
-                                .lift(),
-                    );
+                    terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
                 }
 
                 // transition
@@ -1014,29 +1063,14 @@ impl Stark {
                     let quotient = if table.height() == 0 {
                         XFieldElement::ring_zero()
                     } else {
-                        let num = (self.fri.domain.b_domain_value(index as u32)
-                            - table.omicron().inverse())
-                        .lift();
-                        let denom = self
-                            .fri
-                            .domain
-                            .b_domain_value(index as u32)
-                            .mod_pow_u32(table.height() as u32)
-                            .lift()
+                        let num = (b_domain_value - table.omicron().inverse()).lift();
+                        let denom = b_domain_value.mod_pow_u32(table.height() as u32).lift()
                             - XFieldElement::ring_one();
                         eval * num / denom
                     };
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(
-                        quotient
-                            * self
-                                .fri
-                                .domain
-                                .b_domain_value(index as u32)
-                                .mod_pow_u32(shift)
-                                .lift(),
-                    );
+                    terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
                 }
 
                 // terminal
@@ -1050,39 +1084,21 @@ impl Stark {
                     )
                 {
                     let eval = constraint.evaluate(point);
-                    let quotient = eval
-                        / (self.fri.domain.b_domain_value(index as u32).lift()
-                            - table.omicron().inverse().lift());
+                    let quotient =
+                        eval / (b_domain_value.lift() - table.omicron().inverse().lift());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(
-                        quotient
-                            * self
-                                .fri
-                                .domain
-                                .b_domain_value(index as u32)
-                                .mod_pow_u32(shift)
-                                .lift(),
-                    )
+                    terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift())
                 }
             }
 
             for arg in self.permutation_arguments.iter() {
                 let quotient = arg.evaluate_difference(&points)
-                    / (self.fri.domain.b_domain_value(index as u32).lift()
-                        - XFieldElement::ring_one());
+                    / (b_domain_value.lift() - XFieldElement::ring_one());
                 terms.push(quotient);
                 let degree_bound = arg.quotient_degree_bound();
                 let shift = (self.max_degree as i64 - degree_bound) as u32;
-                terms.push(
-                    quotient
-                        * self
-                            .fri
-                            .domain
-                            .b_domain_value(index as u32)
-                            .mod_pow_u32(shift)
-                            .lift(),
-                );
+                terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
             }
 
             assert_eq!(
@@ -1094,32 +1110,13 @@ impl Stark {
             // compute inner product of weights and terms
             // Todo: implement `sum` on XFieldElements
             let inner_product = weights
-                .iter()
-                .zip(terms.into_iter())
-                .map(|(w, t)| *w * t)
-                .fold(XFieldElement::ring_zero(), |x, y| x + y);
-
-            // get value of the combination codeword to test the inner product against
-            let combination_leaf: XFieldElement =
-                proof_stream_.dequeue()?.as_revealed_combination_element()?;
-            let combination_path: Vec<Vec<BFieldElement>> =
-                proof_stream_.dequeue()?.as_authentication_path()?;
-
-            assert!(
-                MerkleTree::<StarkHasher>::verify_authentication_path_from_leaf_hash(
-                    combination_root.clone(),
-                    index as u32,
-                    hasher.hash(
-                        combination_leaf.coefficients.as_ref(),
-                        RP_DEFAULT_OUTPUT_SIZE
-                    ),
-                    combination_path,
-                ),
-                "The combination root must match with the combination authentication path"
-            );
+                .par_iter()
+                .zip(terms.par_iter())
+                .map(|(w, t)| *w * *t)
+                .reduce(XFieldElement::ring_zero, |x, y| x + y);
 
             assert_eq!(
-                combination_leaf, inner_product,
+                revealed_combination_elements[i], inner_product,
                 "The combination leaf must equal the inner product"
             );
         }

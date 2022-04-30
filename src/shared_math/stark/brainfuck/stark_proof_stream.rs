@@ -9,20 +9,58 @@ use itertools::Itertools;
 pub type StarkProofStream = ProofStream<Item, RescuePrimeXlix<RP_DEFAULT_WIDTH>>;
 
 type FriProof = Vec<(PartialAuthenticationPath<Vec<BFieldElement>>, XFieldElement)>;
+type CompressedAuthenticationPaths = Vec<PartialAuthenticationPath<Vec<BFieldElement>>>;
 
 #[derive(Debug, Clone)]
 pub enum Item {
+    CompressedAuthenticationPaths(CompressedAuthenticationPaths),
+    TransposedBaseElementVectors(Vec<Vec<BFieldElement>>),
+    TransposedExtensionElementVectors(Vec<Vec<XFieldElement>>),
     MerkleRoot(Vec<BFieldElement>),
     Terminals([XFieldElement; TERMINAL_COUNT]),
     TransposedBaseElements(Vec<BFieldElement>),
     TransposedExtensionElements(Vec<XFieldElement>),
     AuthenticationPath(Vec<Vec<BFieldElement>>),
     RevealedCombinationElement(XFieldElement),
+    RevealedCombinationElements(Vec<XFieldElement>),
     FriCodeword(Vec<XFieldElement>),
     FriProof(FriProof),
 }
 
 impl Item {
+    pub fn as_compressed_authentication_paths(
+        &self,
+    ) -> Result<CompressedAuthenticationPaths, Box<dyn std::error::Error>> {
+        match self {
+            Self::CompressedAuthenticationPaths(caps) => Ok(caps.to_owned()),
+            _ => Err(ProofStreamError::boxed(
+                "expected compressed authentication paths, but got something else",
+            )),
+        }
+    }
+
+    pub fn as_transposed_base_element_vectors(
+        &self,
+    ) -> Result<Vec<Vec<BFieldElement>>, Box<dyn std::error::Error>> {
+        match self {
+            Self::TransposedBaseElementVectors(bss) => Ok(bss.to_owned()),
+            _ => Err(ProofStreamError::boxed(
+                "expected transposed base element vectors, but got something else",
+            )),
+        }
+    }
+
+    pub fn as_transposed_extension_element_vectors(
+        &self,
+    ) -> Result<Vec<Vec<XFieldElement>>, Box<dyn std::error::Error>> {
+        match self {
+            Self::TransposedExtensionElementVectors(xss) => Ok(xss.to_owned()),
+            _ => Err(ProofStreamError::boxed(
+                "expected transposed extension element vectors, but got something else",
+            )),
+        }
+    }
+
     pub fn as_merkle_root(&self) -> Result<Vec<BFieldElement>, Box<dyn std::error::Error>> {
         match self {
             Self::MerkleRoot(bs) => Ok(bs.clone()),
@@ -87,6 +125,17 @@ impl Item {
         }
     }
 
+    pub fn as_revealed_combination_elements(
+        &self,
+    ) -> Result<Vec<XFieldElement>, Box<dyn std::error::Error>> {
+        match self {
+            Self::RevealedCombinationElements(xs) => Ok(xs.to_owned()),
+            _ => Err(ProofStreamError::boxed(
+                "expected revealed combination elements, but got something else",
+            )),
+        }
+    }
+
     pub fn as_fri_codeword(&self) -> Result<Vec<XFieldElement>, Box<dyn std::error::Error>> {
         match self {
             Self::FriCodeword(xs) => Ok(xs.to_owned()),
@@ -120,6 +169,7 @@ impl IntoIterator for Item {
             Item::AuthenticationPath(bss) => bss.concat().into_iter(),
             Item::RevealedCombinationElement(x) => xs_to_bs(&[x]),
             Item::FriCodeword(xs) => xs_to_bs(&xs),
+            Item::RevealedCombinationElements(xs) => xs_to_bs(&xs),
             Item::FriProof(fri_proof) => {
                 // FIXME: An iterator can be derived without re-creating a &mut Vec<BFieldElement>.
                 let mut bs: Vec<BFieldElement> = vec![];
@@ -133,6 +183,24 @@ impl IntoIterator for Item {
 
                 bs.into_iter()
             }
+            Item::CompressedAuthenticationPaths(partial_auth_paths) => {
+                // TODO: An iterator can be derived without re-creating a &mut Vec<BFieldElement>.
+                let mut bs: Vec<BFieldElement> = vec![];
+
+                for partial_auth_path in partial_auth_paths.iter() {
+                    for bs_in_partial_auth_path in partial_auth_path.0.iter().flatten() {
+                        bs.append(&mut bs_in_partial_auth_path.clone());
+                    }
+                }
+
+                bs.into_iter()
+            }
+            Item::TransposedBaseElementVectors(bss) => bss.concat().into_iter(),
+            Item::TransposedExtensionElementVectors(xss) => xss
+                .into_iter()
+                .map(|xs| xs_to_bs(&xs).collect::<Vec<_>>())
+                .concat()
+                .into_iter(),
         }
     }
 }
