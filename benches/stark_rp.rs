@@ -8,34 +8,36 @@ use twenty_first::timing_reporter::TimingReporter;
 use twenty_first::util_types::proof_stream::ProofStream;
 
 fn stark_medium(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("stark_rp");
+
     let rp: RescuePrime = params::rescue_prime_params_bfield_0();
     let benchmark_id = BenchmarkId::new("large", 7);
     // let rp: RescuePrime = params::rescue_prime_medium_test_params();
     // let benchmark_id = BenchmarkId::new("medium", 5);
-    let stark: StarkRp = StarkRp::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-    let mut timer = TimingReporter::start();
-
-    let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
-    input[0] = BFieldElement::ring_one();
-    let (output, trace) = rp.eval_and_trace(&input);
-    timer.elapsed("rp.eval_and_trace(...)");
-    let omicron = BFieldElement::ring_zero()
-        .get_primitive_root_of_unity(16)
-        .0
-        .unwrap();
-    timer.elapsed("BFieldElement::get_primitive_root_of_unity(16)");
-    let air_constraints = rp.get_air_constraints(omicron);
-    timer.elapsed("rp.get_air_constraints(omicron)");
-    let boundary_constraints = rp.get_boundary_constraints(&output);
-    timer.elapsed("rp.get_boundary_constraints(...)");
-
-    let report = timer.finish();
-    println!("{}", report);
-
-    let mut group = criterion.benchmark_group("stark_rp");
     group.sample_size(10);
     group.bench_function(benchmark_id, |bencher| {
+        let stark: StarkRp = StarkRp::new(16, 2, rp.m as u32, BFieldElement::new(7));
+
+        let mut timer = TimingReporter::start();
+
+        let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
+        input[0] = BFieldElement::ring_one();
+        let (output, trace) = rp.eval_and_trace(&input);
+        timer.elapsed("rp.eval_and_trace(...)");
+        let omicron = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(16)
+            .0
+            .unwrap();
+        timer.elapsed("BFieldElement::get_primitive_root_of_unity(16)");
+        let air_constraints = rp.get_air_constraints(omicron);
+        timer.elapsed("rp.get_air_constraints(omicron)");
+        let boundary_constraints = rp.get_boundary_constraints(&output);
+        timer.elapsed("rp.get_boundary_constraints(...)");
+
+        let report = timer.finish();
+        println!("{}", report);
+
         bencher.iter(|| {
             let mut proof_stream = ProofStream::default();
 
