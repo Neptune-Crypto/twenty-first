@@ -822,6 +822,7 @@ impl Stark {
         }
         revealed_indices.sort_unstable();
         revealed_indices.dedup();
+        timer.elapsed("Calculated revealed indices");
 
         let revealed_base_elements: Vec<Vec<BFieldElement>> = proof_stream_
             .dequeue()?
@@ -829,10 +830,15 @@ impl Stark {
         let auth_paths: Vec<PartialAuthenticationPath<Vec<BFieldElement>>> = proof_stream_
             .dequeue()?
             .as_compressed_authentication_paths()?;
+        timer.elapsed("Read base elements and auth paths from proof stream");
         let leaf_digests: Vec<Vec<BFieldElement>> = revealed_base_elements
             .par_iter()
             .map(|re| hasher.hash(re, RP_DEFAULT_OUTPUT_SIZE))
             .collect();
+        timer.elapsed(&format!(
+            "Calculated {} leaf digests for base elements",
+            indices.len()
+        ));
         let mt_base_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
             base_merkle_tree_root,
             &revealed_indices,
@@ -844,6 +850,10 @@ impl Stark {
             panic!("Failed to verify authentication path for base codeword");
             // return Ok(false);
         }
+        timer.elapsed(&format!(
+            "Verified authentication paths for {} base elements",
+            indices.len()
+        ));
 
         // Get extension elements
         let revealed_extension_elements: Vec<Vec<XFieldElement>> = proof_stream_
@@ -852,6 +862,7 @@ impl Stark {
         let extension_auth_paths = proof_stream_
             .dequeue()?
             .as_compressed_authentication_paths()?;
+        timer.elapsed("Read extension elements and auth paths from proof stream");
         let extension_leaf_digests: Vec<Vec<BFieldElement>> = revealed_extension_elements
             .clone()
             .into_par_iter()
@@ -868,6 +879,10 @@ impl Stark {
                 hasher.hash(&bvalues, RP_DEFAULT_OUTPUT_SIZE)
             })
             .collect();
+        timer.elapsed(&format!(
+            "Calculated {} leaf digests for extension elements",
+            indices.len()
+        ));
         let mt_extension_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
             extension_tree_merkle_root,
             &revealed_indices,
@@ -880,7 +895,7 @@ impl Stark {
             // return Ok(false);
         }
         timer.elapsed(&format!(
-            "Verified authentication paths for {} indices",
+            "Verified authentication paths for {} extension elements",
             indices.len()
         ));
 
