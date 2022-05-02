@@ -590,7 +590,7 @@ pub fn rescue_prime_params_bfield_0() -> RescuePrime {
     // `2 * round_number * register_counter + register_index`
     // `snd_rc` values are indexed in the below array as:
     // `2 * round_number * register_counter + register_index + 1`
-    let round_constants_u128: Vec<u128> = vec![
+    let round_constants_u64: Vec<u64> = vec![
         15139912583685767368,
         8372387753867525709,
         2183680717104184380,
@@ -848,7 +848,7 @@ pub fn rescue_prime_params_bfield_0() -> RescuePrime {
         3646572817684127401,
         2916928929409428212,
     ];
-    let round_constants: Vec<BFieldElement> = round_constants_u128
+    let round_constants: Vec<BFieldElement> = round_constants_u64
         .iter()
         .map(|elem| BFieldElement::new(*elem))
         .collect();
@@ -1170,7 +1170,7 @@ pub fn rescue_prime_small_test_params() -> RescuePrime {
     }
 }
 
-fn to_matrix(entries: Vec<Vec<u128>>) -> Vec<Vec<BFieldElement>> {
+fn to_matrix(entries: Vec<Vec<u64>>) -> Vec<Vec<BFieldElement>> {
     entries
         .iter()
         .map(|row| row.iter().map(|elem| BFieldElement::new(*elem)).collect())

@@ -180,7 +180,7 @@ pub mod test_proof_stream {
     fn ps_enqueue_then_dequeue() {
         let mut ps = ProofStream::default();
 
-        let bfe_before = BFieldElement::new(213 as u128);
+        let bfe_before = BFieldElement::new(213);
         assert!(ps.enqueue_length_prepended(&bfe_before).is_ok());
         let bfe_after = ps.dequeue_length_prepended().unwrap();
 
@@ -199,8 +199,8 @@ pub mod test_proof_stream {
 
     #[test]
     fn ps_enq_deq_enq_deq() {
-        let bfe1_before = BFieldElement::new(213 as u128);
-        let bfe2_before = BFieldElement::new(783 as u128);
+        let bfe1_before = BFieldElement::new(213);
+        let bfe2_before = BFieldElement::new(783);
 
         let mut ps = ProofStream::default();
         assert!(ps.enqueue_length_prepended(&bfe1_before).is_ok());
@@ -222,8 +222,8 @@ pub mod test_proof_stream {
 
     #[test]
     fn ps_is_fifo_no_lifo() {
-        let bfe1_before = BFieldElement::new(213 as u128);
-        let bfe2_before = BFieldElement::new(783 as u128);
+        let bfe1_before = BFieldElement::new(213);
+        let bfe2_before = BFieldElement::new(783);
 
         let mut ps = ProofStream::default();
         assert!(ps.enqueue_length_prepended(&bfe1_before).is_ok());

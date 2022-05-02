@@ -128,7 +128,7 @@ mod fast_ntt_attempt_tests {
                 let mut values = BFieldElement::random_elements(n, &mut rng);
                 let original_values = values.clone();
                 let omega = BFieldElement::ring_one()
-                    .get_primitive_root_of_unity(n as u128)
+                    .get_primitive_root_of_unity(n as u64)
                     .0
                     .unwrap();
                 ntt::<BFieldElement>(&mut values, omega, log_2_n);
@@ -155,7 +155,7 @@ mod fast_ntt_attempt_tests {
                 let mut values = XFieldElement::random_elements(n, &mut rng);
                 let original_values = values.clone();
                 let omega = XFieldElement::ring_one()
-                    .get_primitive_root_of_unity(n as u128)
+                    .get_primitive_root_of_unity(n as u64)
                     .0
                     .unwrap();
                 ntt::<XFieldElement>(&mut values, omega, log_2_n);

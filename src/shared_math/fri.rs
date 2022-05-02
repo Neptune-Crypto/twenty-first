@@ -736,7 +736,7 @@ mod fri_tests {
     }
 
     fn get_x_field_fri_test_object<Digest, H>(
-        subgroup_order: u128,
+        subgroup_order: u64,
         expansion_factor: usize,
         colinearity_checks: usize,
     ) -> Fri<XFieldElement, H>
@@ -745,7 +745,7 @@ mod fri_tests {
         H: Hasher<Digest = Digest> + Sized,
         XFieldElement: ToDigest<Digest>,
     {
-        let (omega, _primes1): (Option<XFieldElement>, Vec<u128>) =
+        let (omega, _primes1): (Option<XFieldElement>, Vec<u64>) =
             XFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
 
         // The following offset was picked arbitrarily by copying the one found in

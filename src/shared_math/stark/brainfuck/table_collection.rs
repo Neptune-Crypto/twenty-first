@@ -372,7 +372,7 @@ mod brainfuck_table_collection_tests {
             length: mock_fri_domain_length,
             offset: BFieldElement::new(7).lift(),
             omega: XFieldElement::ring_zero()
-                .get_primitive_root_of_unity(mock_fri_domain_length as u128)
+                .get_primitive_root_of_unity(mock_fri_domain_length as u64)
                 .0
                 .unwrap(),
         };

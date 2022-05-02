@@ -564,7 +564,7 @@ impl TableTrait for ProcessorTable {
 
             // 3. evaluation for input
             extended_matrix[i].push(input_evaluation_running_evaluation);
-            if row[Self::CURRENT_INSTRUCTION] == BFieldElement::new(',' as u128) {
+            if row[Self::CURRENT_INSTRUCTION] == BFieldElement::new(',' as u64) {
                 input_evaluation_running_evaluation = input_evaluation_running_evaluation * gamma
                     + self.0.matrix[i + 1][Self::MEMORY_VALUE].lift();
                 // the memory-value register only assumes the input value after the instruction has been performed
@@ -573,7 +573,7 @@ impl TableTrait for ProcessorTable {
 
             // 4. evaluation for output
             extended_matrix[i].push(output_evaluation_running_evaluation);
-            if row[Self::CURRENT_INSTRUCTION] == BFieldElement::new('.' as u128) {
+            if row[Self::CURRENT_INSTRUCTION] == BFieldElement::new('.' as u64) {
                 output_evaluation_running_evaluation = output_evaluation_running_evaluation * delta
                     + extended_matrix[i][Self::MEMORY_VALUE];
             }

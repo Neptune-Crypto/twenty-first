@@ -155,7 +155,7 @@ impl StarkRp {
 
         // compute generators
         let omega = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(fri_domain_length as u128)
+            .get_primitive_root_of_unity(fri_domain_length as u64)
             .0
             .unwrap();
 
@@ -163,7 +163,7 @@ impl StarkRp {
 
         let omicron_domain_length = rounded_trace_length;
         let omicron = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(omicron_domain_length as u128)
+            .get_primitive_root_of_unity(omicron_domain_length)
             .0
             .unwrap();
 
@@ -708,7 +708,7 @@ impl StarkRp {
         }
 
         let omicron = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(omicron_domain_length as u128)
+            .get_primitive_root_of_unity(omicron_domain_length as u64)
             .0
             .unwrap();
         timer.elapsed("Insert randomizer values in HashMap");

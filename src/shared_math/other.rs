@@ -77,10 +77,10 @@ pub fn div_rem<T: Div<Output = T> + Rem<Output = T> + Copy>(x: T, y: T) -> (T, T
 }
 
 // TODO: Abstract for multiple unsigned output types.
-pub fn primes_lt(bound: u128) -> Vec<u128> {
+pub fn primes_lt(bound: u64) -> Vec<u64> {
     let mut primes: Vec<bool> = (0..bound + 1).map(|num| num == 2 || num & 1 != 0).collect();
 
-    let mut num = 3u128;
+    let mut num = 3u64;
     while num * num <= bound {
         let mut j = num * num;
         while j <= bound {
@@ -94,8 +94,8 @@ pub fn primes_lt(bound: u128) -> Vec<u128> {
         .into_iter()
         .enumerate()
         .skip(2)
-        .filter_map(|(i, p)| if p { Some(i as u128) } else { None })
-        .collect::<Vec<u128>>()
+        .filter_map(|(i, p)| if p { Some(i as u64) } else { None })
+        .collect::<Vec<u64>>()
 }
 
 #[inline]

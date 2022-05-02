@@ -8,6 +8,7 @@ use crate::shared_math::traits::{
 };
 use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
+use std::hash::{Hash, Hasher};
 
 use phf::phf_map;
 use rand::Rng;
@@ -21,7 +22,7 @@ use std::{
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
-static PRIMITIVE_ROOTS: phf::Map<u64, u128> = phf_map! {
+static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
     2u64 => 18446744069414584320,
     4u64 => 281474976710656,
     8u64 => 18446744069397807105,
@@ -57,22 +58,38 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u128> = phf_map! {
 };
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize, Default)]
-pub struct BFieldElement(u128);
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
+pub struct BFieldElement(u64);
+
+impl PartialEq for BFieldElement {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+            || Self::canonical_representation(self) == Self::canonical_representation(other)
+    }
+}
+
+impl Eq for BFieldElement {}
+
+impl Hash for BFieldElement {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.canonical_representation().hash(state);
+    }
+}
 
 impl BFieldElement {
-    pub const QUOTIENT: u128 = 0xffff_ffff_0000_0001u128; // 2^64 - 2^32 + 1
-    pub const MAX: u128 = Self::QUOTIENT - 1;
+    // 2^64 - 2^32 + 1
+    pub const QUOTIENT: u64 = 0xffff_ffff_0000_0001u64;
+    pub const MAX: u64 = Self::QUOTIENT - 1;
     const LOWER_MASK: u64 = 0xFFFFFFFF;
 
     #[inline]
-    pub fn new(value: u128) -> Self {
+    pub fn new(value: u64) -> Self {
         Self(value % Self::QUOTIENT)
     }
 
     #[inline]
     pub fn value(&self) -> u64 {
-        self.0 as u64
+        self.canonical_representation()
     }
 
     /// Get a generator for the entire field
@@ -85,14 +102,14 @@ impl BFieldElement {
         XFieldElement::new_const(*self)
     }
 
-    // You should probably only use `increment` and `decrement` for testing purposes
-    pub fn increment(&mut self) {
-        self.0 = (self.0 + 1) % Self::QUOTIENT;
+    // You should probably only use `next` and `previous` for testing purposes
+    pub fn next(&mut self) {
+        self.0 = Self::canonical_representation(&(*self + Self::ring_one()));
     }
 
-    // You should probably only use `increment` and `decrement` for testing purposes
-    pub fn decrement(&mut self) {
-        self.0 = (Self::MAX + self.0) % Self::QUOTIENT
+    // You should probably only use `next` and `previous` for testing purposes
+    pub fn previous(&mut self) {
+        self.0 = Self::canonical_representation(&(*self - Self::ring_one()));
     }
 
     // TODO: Currently, IdentityValues has &self as part of its signature, so we hotfix
@@ -106,6 +123,15 @@ impl BFieldElement {
     #[inline]
     pub fn ring_one() -> Self {
         Self(1)
+    }
+
+    #[inline]
+    fn canonical_representation(&self) -> u64 {
+        if self.0 > Self::MAX {
+            self.0 - Self::QUOTIENT
+        } else {
+            self.0
+        }
     }
 
     #[must_use]
@@ -194,8 +220,7 @@ impl Inverse for BFieldElement {
         let (_, _, a) = other::xgcd(Self::QUOTIENT as i128, self.0 as i128);
 
         Self(
-            ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128)
-                as u128,
+            ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128) as u64,
         )
     }
 }
@@ -203,8 +228,6 @@ impl Inverse for BFieldElement {
 impl ModPowU32 for BFieldElement {
     #[inline]
     fn mod_pow_u32(&self, exp: u32) -> Self {
-        // TODO: This can be sped up by a factor 2 by implementing
-        // it for u32 and not using the 64-bit version
         self.mod_pow(exp as u64)
     }
 }
@@ -237,7 +260,7 @@ impl GetRandomElements for BFieldElement {
                 continue;
             }
 
-            values.push(BFieldElement::new(n as u128));
+            values.push(BFieldElement::new(n));
         }
 
         values
@@ -246,7 +269,7 @@ impl GetRandomElements for BFieldElement {
 
 impl New for BFieldElement {
     fn new_from_usize(&self, value: usize) -> Self {
-        Self::new(value as u128)
+        Self::new(value as u64)
     }
 }
 
@@ -261,7 +284,7 @@ impl FromVecu8 for BFieldElement {
         let (eight_bytes, _rest) = bytes.as_slice().split_at(std::mem::size_of::<u64>());
         let coerced: [u8; 8] = eight_bytes.try_into().unwrap();
         let n: u64 = u64::from_ne_bytes(coerced);
-        BFieldElement::new(n as u128)
+        BFieldElement::new(n)
     }
 }
 
@@ -291,12 +314,12 @@ impl PrimeField for BFieldElement {}
 impl IdentityValues for BFieldElement {
     #[inline]
     fn is_zero(&self) -> bool {
-        self.0 == 0
+        self.canonical_representation() == 0
     }
 
     #[inline]
     fn is_one(&self) -> bool {
-        self.0 == 1
+        self.canonical_representation() == 1
     }
 
     #[inline]
@@ -313,44 +336,32 @@ impl IdentityValues for BFieldElement {
 impl Add for BFieldElement {
     type Output = Self;
 
-    #[inline]
+    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[inline(always)]
     fn add(self, other: Self) -> Self {
-        let mut val = self.0 + other.0;
-        if val > Self::MAX {
-            val -= Self::QUOTIENT;
-        }
-
-        Self(val)
+        let (result, over) = self.0.overflowing_add(other.canonical_representation());
+        Self(result.wrapping_sub(Self::QUOTIENT * (over as u64)))
     }
 }
 
 impl AddAssign for BFieldElement {
-    #[inline]
+    #[inline(always)]
     fn add_assign(&mut self, rhs: Self) {
-        let mut val = self.0 + rhs.0;
-        if val > Self::MAX {
-            val -= Self::QUOTIENT;
-        }
-
-        self.0 = val;
+        *self = *self + rhs
     }
 }
 
 impl SubAssign for BFieldElement {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        self.0 = (Self::QUOTIENT - rhs.0 + self.0) % Self::QUOTIENT;
+        *self = *self - rhs
     }
 }
 
 impl MulAssign for BFieldElement {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
-        let mut val: u128 = Self::mod_reduce(self.0 * rhs.0) as u128;
-        if val > Self::MAX {
-            val -= Self::QUOTIENT;
-        }
-        self.0 = val;
+        *self = *self * rhs;
     }
 }
 
@@ -359,11 +370,8 @@ impl Mul for BFieldElement {
 
     #[inline]
     fn mul(self, other: Self) -> Self {
-        let mut val: u128 = Self::mod_reduce(self.0 * other.0) as u128;
-        if val > Self::MAX {
-            val -= Self::QUOTIENT;
-        }
-        Self(Self::mod_reduce(val) as u128)
+        let val: u64 = Self::mod_reduce(self.0 as u128 * other.0 as u128);
+        Self(val)
     }
 }
 
@@ -372,7 +380,7 @@ impl Neg for BFieldElement {
 
     #[inline]
     fn neg(self) -> Self {
-        Self(Self::QUOTIENT - self.0)
+        Self(Self::QUOTIENT - self.canonical_representation())
     }
 }
 
@@ -387,17 +395,20 @@ impl Rem for BFieldElement {
 impl Sub for BFieldElement {
     type Output = Self;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     #[inline]
     fn sub(self, other: Self) -> Self {
-        -other + self
+        let (result, overflow) = self.0.overflowing_sub(other.canonical_representation());
+        Self(result.wrapping_add(Self::QUOTIENT * (overflow as u64)))
     }
 }
 
 impl Div for BFieldElement {
     type Output = Self;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, other: Self) -> Self {
-        Self((other.inverse().0 * self.0) % Self::QUOTIENT)
+        other.inverse() * self
     }
 }
 
@@ -410,7 +421,7 @@ impl ModPowU64 for BFieldElement {
 }
 
 impl GetPrimitiveRootOfUnity for BFieldElement {
-    fn get_primitive_root_of_unity(&self, n: u128) -> (Option<BFieldElement>, Vec<u128>) {
+    fn get_primitive_root_of_unity(&self, n: u64) -> (Option<BFieldElement>, Vec<u64>) {
         // Check if n is one of the values for which we have pre-calculated roots
         if PRIMITIVE_ROOTS.contains_key(&(n as u64)) {
             return (
@@ -419,7 +430,7 @@ impl GetPrimitiveRootOfUnity for BFieldElement {
             );
         }
 
-        let mut primes: Vec<u128> = vec![];
+        let mut primes: Vec<u64> = vec![];
 
         if n <= 1 {
             return (Some(BFieldElement::ring_one()), primes);
@@ -431,7 +442,7 @@ impl GetPrimitiveRootOfUnity for BFieldElement {
             primes = vec![2];
         } else {
             let mut m = n;
-            for prime in FIRST_THOUSAND_PRIMES.iter().map(|&p| p as u128) {
+            for prime in FIRST_THOUSAND_PRIMES.iter().map(|&p| p as u64) {
                 if m == 1 {
                     break;
                 }
@@ -453,7 +464,7 @@ impl GetPrimitiveRootOfUnity for BFieldElement {
         };
 
         // N must divide the field prime minus one for a primitive nth root of unity to exist
-        if !((Self::QUOTIENT - 1) % n).is_zero() {
+        if !((Self::QUOTIENT - 1) % n as u64).is_zero() {
             return (None, primes);
         }
 
@@ -465,14 +476,14 @@ impl GetPrimitiveRootOfUnity for BFieldElement {
             if (-candidate.legendre_symbol()).is_one()
                 && primes.iter().filter(|&x| n % x == 0).all(|x| {
                     !other::mod_pow_raw(
-                        candidate.0,
-                        ((Self::QUOTIENT - 1) / x) as u64,
-                        Self::QUOTIENT,
+                        candidate.0 as u128,
+                        ((Self::QUOTIENT - 1) / *x as u64) as u64,
+                        Self::QUOTIENT as u128,
                     )
                     .is_one()
                 })
             {
-                primitive_root = Some(candidate.mod_pow(((Self::QUOTIENT - 1) / n) as u64));
+                primitive_root = Some(candidate.mod_pow(((Self::QUOTIENT - 1) / n as u64) as u64));
             }
 
             candidate.0 += 1;
@@ -500,6 +511,8 @@ pub fn lift_coefficients_to_xfield(
 
 #[cfg(test)]
 mod b_prime_field_element_test {
+    use std::collections::hash_map::DefaultHasher;
+
     use crate::utils::generate_random_numbers_u128;
     use crate::{
         shared_math::{b_field_element::*, polynomial::Polynomial},
@@ -575,36 +588,36 @@ mod b_prime_field_element_test {
     }
 
     #[test]
-    fn increment_and_decrement_test() {
+    fn next_and_previous_test() {
         let mut val_a = bfield_elem!(0);
         let mut val_b = bfield_elem!(1);
         let mut val_c = bfield_elem!(BFieldElement::MAX - 1);
         let max = BFieldElement::new(BFieldElement::MAX);
-        val_a.increment();
+        val_a.next();
         assert!(val_a.is_one());
-        val_b.increment();
+        val_b.next();
         assert!(!val_b.is_one());
         assert_eq!(BFieldElement::new(2), val_b);
-        val_b.increment();
+        val_b.next();
         assert_eq!(BFieldElement::new(3), val_b);
         assert_ne!(max, val_c);
-        val_c.increment();
+        val_c.next();
         assert_eq!(max, val_c);
-        val_c.increment();
+        val_c.next();
         assert!(val_c.is_zero());
-        val_c.increment();
+        val_c.next();
         assert!(val_c.is_one());
-        val_c.decrement();
+        val_c.previous();
         assert!(val_c.is_zero());
-        val_c.decrement();
+        val_c.previous();
         assert_eq!(max, val_c);
-        val_c.decrement();
+        val_c.previous();
         assert_eq!(bfield_elem!(BFieldElement::MAX - 1), val_c);
     }
 
     proptest! {
         #[test]
-        fn identity_tests(n in 0u128..BFieldElement::MAX) {
+        fn identity_tests(n in 0u64..BFieldElement::MAX) {
             let zero = bfield_elem!(0);
             let one = bfield_elem!(1);
             let other = bfield_elem!(n);
@@ -697,7 +710,7 @@ mod b_prime_field_element_test {
     fn inversion_property_based_test() {
         let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::MAX as i128);
         for rand in rands {
-            assert!((bfield_elem!(rand as u128).inverse() * bfield_elem!(rand as u128)).is_one());
+            assert!((bfield_elem!(rand as u64).inverse() * bfield_elem!(rand as u64)).is_one());
         }
     }
 
@@ -713,18 +726,18 @@ mod b_prime_field_element_test {
                 assert!((rand * rand_inv).is_one());
                 assert!((rand_inv * rand).is_one());
                 assert_eq!(rand.inverse(), rand_inv);
-                rand.increment();
+                rand.next();
                 assert!(!(rand * rand_inv).is_one());
             }
         }
     }
 
     #[test]
-    fn mul_div_plus_minus_property_based_test() {
+    fn mul_div_plus_minus_neg_property_based_test() {
         let rands: Vec<i128> = generate_random_numbers(300, BFieldElement::QUOTIENT as i128);
         for i in 1..rands.len() {
-            let a = bfield_elem!(rands[i - 1] as u128);
-            let b = bfield_elem!(rands[i] as u128);
+            let a = bfield_elem!(rands[i - 1] as u64);
+            let b = bfield_elem!(rands[i] as u64);
             let ab = a * b;
             let a_o_b = a / b;
             let b_o_a = b / a;
@@ -750,7 +763,62 @@ mod b_prime_field_element_test {
             let mut a_mul_b = a;
             a_mul_b *= b;
             assert_eq!(a * b, a_mul_b);
+            assert_eq!(b * a, a_mul_b);
+
+            // Test neg
+            assert!((-a + a).is_zero());
+            assert!((-b + b).is_zero());
+            assert!((-ab + ab).is_zero());
+            assert!((-a_o_b + a_o_b).is_zero());
+            assert!((-b_o_a + b_o_a).is_zero());
+            assert!((-a_minus_b + a_minus_b).is_zero());
+            assert!((-a_plus_b + a_plus_b).is_zero());
+            assert!((-a_mul_b + a_mul_b).is_zero());
         }
+    }
+
+    #[test]
+    fn neg_test() {
+        assert_eq!(-BFieldElement::ring_zero(), BFieldElement::ring_zero());
+        assert_eq!((-BFieldElement::ring_one()).0, BFieldElement::MAX);
+        let max = BFieldElement::new(BFieldElement::MAX);
+        let max_plus_one = max + BFieldElement::ring_one();
+        let max_plus_two = max_plus_one + BFieldElement::ring_one();
+        assert_eq!(BFieldElement::ring_zero(), -max_plus_one);
+        assert_eq!(max, -max_plus_two);
+    }
+
+    #[test]
+    fn equality_and_hash_test() {
+        assert_eq!(BFieldElement::ring_zero(), BFieldElement::ring_zero());
+        assert_eq!(BFieldElement::ring_one(), BFieldElement::ring_one());
+        assert_ne!(BFieldElement::ring_one(), BFieldElement::ring_zero());
+        assert_eq!(BFieldElement::new(42), BFieldElement::new(42));
+        assert_ne!(BFieldElement::new(42), BFieldElement::new(43));
+
+        assert_eq!(
+            BFieldElement::new(102),
+            BFieldElement::new(BFieldElement::MAX) + BFieldElement::new(103)
+        );
+        assert_ne!(
+            BFieldElement::new(103),
+            BFieldElement::new(BFieldElement::MAX) + BFieldElement::new(103)
+        );
+
+        // Verify that hashing works for canonical representations
+        let mut hasher_a = DefaultHasher::new();
+        let mut hasher_b = DefaultHasher::new();
+
+        BFieldElement::new(42).hash(&mut hasher_a);
+        BFieldElement::new(42).hash(&mut hasher_b);
+        assert_eq!(hasher_a.finish(), hasher_b.finish());
+
+        // Verify that hashing works for non-canonical representations
+        hasher_a = DefaultHasher::new();
+        hasher_b = DefaultHasher::new();
+        (BFieldElement::new(BFieldElement::MAX) + BFieldElement::new(103)).hash(&mut hasher_a);
+        BFieldElement::new(102).hash(&mut hasher_b);
+        assert_eq!(hasher_a.finish(), hasher_b.finish());
     }
 
     #[test]
@@ -761,7 +829,7 @@ mod b_prime_field_element_test {
         let b: Polynomial<BFieldElement> = Polynomial::new(vec![
             bfield_elem!(2),
             bfield_elem!(5),
-            bfield_elem!(BFieldElement::MAX),
+            bfield_elem!(BFieldElement::MAX as u64),
         ]);
 
         let expected: Polynomial<BFieldElement> =
@@ -809,25 +877,25 @@ mod b_prime_field_element_test {
                 .is_some());
         }
         assert!(BFieldElement::ring_one()
-            .get_primitive_root_of_unity(2u128.pow(32) * 65537u128)
+            .get_primitive_root_of_unity(2u64.pow(32) * 65537u64)
             .0
             .is_some());
         assert!(BFieldElement::ring_one()
-            .get_primitive_root_of_unity(2u128.pow(32) * 65537u128 * 257)
+            .get_primitive_root_of_unity(2u64.pow(32) * 65537u64 * 257)
             .0
             .is_some());
         assert!(BFieldElement::ring_one()
-            .get_primitive_root_of_unity(2u128.pow(32) * 65537u128 * 257 * 17)
+            .get_primitive_root_of_unity(2u64.pow(32) * 65537u64 * 257 * 17)
             .0
             .is_some());
         assert!(BFieldElement::ring_one()
-            .get_primitive_root_of_unity(2u128.pow(32) * 65537u128 * 257 * 17 * 5)
+            .get_primitive_root_of_unity(2u64.pow(32) * 65537u64 * 257 * 17 * 5)
             .0
             .is_some());
 
         // Largest subgroup of the multiplicative group of the B field
         assert!(BFieldElement::ring_one()
-            .get_primitive_root_of_unity(2u128.pow(31) * 65537u128 * 257 * 17 * 5 * 3)
+            .get_primitive_root_of_unity(2u64.pow(31) * 65537u64 * 257 * 17 * 5 * 3)
             .0
             .is_some());
 
@@ -897,6 +965,6 @@ mod b_prime_field_element_test {
 
         // adding 1 prevents us from building multivariate polynomial containing zero-coefficients
         let elem = rng.next_u64() % limit + 1;
-        BFieldElement::new(elem as u128)
+        BFieldElement::new(elem as u64)
     }
 }

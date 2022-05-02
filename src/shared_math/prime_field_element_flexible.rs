@@ -13,14 +13,11 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 use super::traits::Inverse;
 
 pub fn get_prime_with_primitive_root_of_unity(
-    n: u128,
-    min_value: u128,
+    n: u64,
+    min_value: u64,
 ) -> Option<PrimeFieldElementFlexible> {
-    for prime in FIRST_TEN_THOUSAND_PRIMES
-        .iter()
-        .filter(|&x| *x as u128 > min_value)
-    {
-        let field_element = PrimeFieldElementFlexible::new(1.into(), (*prime).into());
+    for prime in FIRST_TEN_THOUSAND_PRIMES.iter().filter(|&x| *x > min_value) {
+        let field_element = PrimeFieldElementFlexible::new(1u32.into(), (*prime).into());
         if let (Some(j), _) = field_element.get_primitive_root_of_unity(n) {
             return Some(j);
         }
@@ -188,10 +185,9 @@ impl PrimeFieldElementFlexible {
         panic!("too few primes")
     }
 
-    // Not converted to BigInt since it is infeasible to find all primes below i128.max
-    fn primes_lt(bound: u128) -> Vec<u128> {
+    fn primes_lt(bound: u64) -> Vec<u64> {
         let mut primes: Vec<bool> = (0..bound + 1).map(|num| num == 2 || num & 1 != 0).collect();
-        let mut num = 3u128;
+        let mut num = 3u64;
         while num * num <= bound {
             let mut j = num * num;
             while j <= bound {
@@ -204,8 +200,8 @@ impl PrimeFieldElementFlexible {
             .into_iter()
             .enumerate()
             .skip(2)
-            .filter_map(|(i, p)| if p { Some(i as u128) } else { None })
-            .collect::<Vec<u128>>()
+            .filter_map(|(i, p)| if p { Some(i as u64) } else { None })
+            .collect::<Vec<u64>>()
     }
 
     fn legendre_symbol(&self) -> BigInt {
@@ -379,8 +375,8 @@ impl IdentityValues for PrimeFieldElementFlexible {
 }
 
 impl GetPrimitiveRootOfUnity for PrimeFieldElementFlexible {
-    fn get_primitive_root_of_unity(&self, n: u128) -> (Option<Self>, Vec<u128>) {
-        let mut primes: Vec<u128> = vec![];
+    fn get_primitive_root_of_unity(&self, n: u64) -> (Option<Self>, Vec<u64>) {
+        let mut primes: Vec<u64> = vec![];
         // let q_u256: U256 = From::<U256>::from(self.q);
         // let q_as_u256: U256 = self.q.into();
 
@@ -394,12 +390,12 @@ impl GetPrimitiveRootOfUnity for PrimeFieldElementFlexible {
             primes = vec![2];
         } else {
             let mut m = n;
-            for prime in FIRST_TEN_THOUSAND_PRIMES.iter().map(|&p| p as u128) {
+            for prime in FIRST_TEN_THOUSAND_PRIMES.iter() {
                 if m == 1 {
                     break;
                 }
                 if m % prime == 0 {
-                    primes.push(prime);
+                    primes.push(*prime);
                     while m % prime == 0 {
                         m /= prime;
                     }
@@ -463,7 +459,7 @@ mod test_modular_arithmetic_flexible {
             .collect()
     }
 
-    fn big_integers(xs: Vec<u128>) -> Vec<BigInt> {
+    fn big_integers(xs: Vec<u64>) -> Vec<BigInt> {
         xs.iter()
             .map(|x| Into::<BigInt>::into(*x))
             .collect::<Vec<BigInt>>()
@@ -595,7 +591,7 @@ mod test_modular_arithmetic_flexible {
     #[test]
     fn sieve_of_eratosthenes() {
         // Find primes below 100
-        let expected: Vec<u128> = vec![
+        let expected: Vec<u64> = vec![
             2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83,
             89, 97,
         ];
@@ -699,20 +695,20 @@ mod test_modular_arithmetic_flexible {
             // println!("Testing prime {}", prime);
             let rands: Vec<i128> =
                 generate_random_numbers(30, if prime > 1000000 { 1000000 } else { prime });
-            let one = PrimeFieldElementFlexible::new(1.into(), prime.into());
+            let one = PrimeFieldElementFlexible::new(1u32.into(), prime.into());
             for elem in rands.iter() {
-                let (root, prime_factors): (Option<PrimeFieldElementFlexible>, Vec<u128>) =
-                    one.get_primitive_root_of_unity(*elem as u128);
+                let (root, prime_factors): (Option<PrimeFieldElementFlexible>, Vec<u64>) =
+                    one.get_primitive_root_of_unity(*elem as u64);
                 assert!(prime_factors
                     .clone()
                     .into_iter()
-                    .all(|x| (*elem as u128 % x).is_zero()));
+                    .all(|x| (*elem as u64 % x).is_zero()));
                 if *elem == 0 {
                     continue;
                 }
 
                 // verify that we can build *elem from prime_factors
-                let mut m: u128 = *elem as u128;
+                let mut m: u64 = *elem as u64;
                 for prime in prime_factors.iter() {
                     while m % prime == 0 {
                         m /= prime;

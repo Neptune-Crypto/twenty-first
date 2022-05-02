@@ -67,7 +67,7 @@ impl<'a> StarkPrimeFieldElementFlexible {
             1usize << log_2_ceil((randomized_trace_length * transition_constraints_degree) as u64);
         let fri_domain_length = omicron_domain_length * expansion_factor;
         let omega = generator
-            .get_primitive_root_of_unity(fri_domain_length as u128)
+            .get_primitive_root_of_unity(fri_domain_length as u64)
             .0
             .unwrap();
         let omicron = omega.mod_pow(expansion_factor.into());

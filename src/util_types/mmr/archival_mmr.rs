@@ -751,7 +751,7 @@ mod mmr_test {
             izip!((1u128..34).collect::<Vec<u128>>(), node_counts, peak_counts)
         {
             let input_prehashes: Vec<Vec<BFieldElement>> = (0..data_size)
-                .map(|x| vec![BFieldElement::new(x as u128 + 14)])
+                .map(|x| vec![BFieldElement::new(x as u64 + 14)])
                 .collect();
             let rp: RescuePrime = rescue_prime_params::rescue_prime_params_bfield_0();
             let input_hashes: Vec<Vec<BFieldElement>> =

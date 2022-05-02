@@ -100,15 +100,15 @@ pub fn compile(source_code: &str) -> Option<Vec<BFieldElement>> {
 
     let trimmed_source_code = &source_code.replace(&[' ', '\r', '\n', '\t'], "");
     for symbol in trimmed_source_code.chars() {
-        program.push(BFieldElement::new(symbol as u128));
+        program.push(BFieldElement::new(symbol as u64));
         if symbol == '[' {
             program.push(BFieldElement::ring_zero());
             stack.push(program.len() - 1);
         }
         if symbol == ']' {
             let bracket_index: usize = stack.pop()?;
-            program.push(BFieldElement::new((bracket_index + 1) as u128));
-            program[bracket_index] = BFieldElement::new(program.len() as u128);
+            program.push(BFieldElement::new((bracket_index + 1) as u64));
+            program[bracket_index] = BFieldElement::new(program.len() as u64);
         }
     }
 
@@ -137,46 +137,46 @@ pub fn run(
     let mut trace_length = 1;
     while instruction_pointer < program.len() {
         let instruction = program[instruction_pointer];
-        if instruction == BFieldElement::new('[' as u128) {
+        if instruction == BFieldElement::new('[' as u64) {
             if memory.get(&memory_pointer)?.is_zero() {
                 instruction_pointer = program[instruction_pointer + 1].value() as usize;
             } else {
                 instruction_pointer += 2;
             }
-        } else if instruction == BFieldElement::new(']' as u128) {
+        } else if instruction == BFieldElement::new(']' as u64) {
             if *memory.get(&memory_pointer).unwrap_or(&zero) != zero {
                 instruction_pointer = program[instruction_pointer + 1].value() as usize;
             } else {
                 instruction_pointer += 2;
             }
-        } else if program[instruction_pointer] == BFieldElement::new('<' as u128) {
+        } else if program[instruction_pointer] == BFieldElement::new('<' as u64) {
             instruction_pointer += 1;
-            memory_pointer.decrement();
-        } else if program[instruction_pointer] == BFieldElement::new('>' as u128) {
+            memory_pointer.previous();
+        } else if program[instruction_pointer] == BFieldElement::new('>' as u64) {
             instruction_pointer += 1;
-            memory_pointer.increment();
-        } else if program[instruction_pointer] == BFieldElement::new('+' as u128) {
+            memory_pointer.next();
+        } else if program[instruction_pointer] == BFieldElement::new('+' as u64) {
             instruction_pointer += 1;
             memory.insert(
                 memory_pointer,
                 *memory.get(&memory_pointer).unwrap_or(&zero) + one,
             );
-        } else if program[instruction_pointer] == BFieldElement::new('-' as u128) {
+        } else if program[instruction_pointer] == BFieldElement::new('-' as u64) {
             instruction_pointer += 1;
             memory.insert(
                 memory_pointer,
                 *memory.get(&memory_pointer).unwrap_or(&zero) - one,
             );
-        } else if program[instruction_pointer] == BFieldElement::new('.' as u128) {
+        } else if program[instruction_pointer] == BFieldElement::new('.' as u64) {
             instruction_pointer += 1;
             output_data.push(*memory.get(&memory_pointer).unwrap_or(&zero));
-        } else if program[instruction_pointer] == BFieldElement::new(',' as u128) {
+        } else if program[instruction_pointer] == BFieldElement::new(',' as u64) {
             instruction_pointer += 1;
             let char: BFieldElement;
             if input_counter < input_data_mut.len() {
                 char = input_data_mut[input_counter];
             } else {
-                char = BFieldElement::new(term.read_char().unwrap() as u128);
+                char = BFieldElement::new(term.read_char().unwrap() as u64);
                 input_data_mut.push(char);
             }
             input_counter += 1;
@@ -220,7 +220,7 @@ pub fn simulate(
         base_matrices
             .instruction_matrix
             .push(InstructionMatrixBaseRow {
-                instruction_pointer: BFieldElement::new(i as u128),
+                instruction_pointer: BFieldElement::new(i as u64),
                 current_instruction: program[i],
                 next_instruction: program[i + 1],
             });
@@ -228,7 +228,7 @@ pub fn simulate(
     base_matrices
         .instruction_matrix
         .push(InstructionMatrixBaseRow {
-            instruction_pointer: BFieldElement::new((program.len() - 1) as u128),
+            instruction_pointer: BFieldElement::new((program.len() - 1) as u64),
             current_instruction: *program.last().unwrap(),
             next_instruction: zero,
         });
@@ -246,44 +246,44 @@ pub fn simulate(
             });
 
         // update pointer registers according to instruction
-        if register.current_instruction == BFieldElement::new('[' as u128) {
+        if register.current_instruction == BFieldElement::new('[' as u64) {
             if register.memory_value.is_zero() {
                 register.instruction_pointer =
                     program[register.instruction_pointer.value() as usize + 1];
             } else {
                 register.instruction_pointer += two;
             }
-        } else if register.current_instruction == BFieldElement::new(']' as u128) {
+        } else if register.current_instruction == BFieldElement::new(']' as u64) {
             if !register.memory_value.is_zero() {
                 register.instruction_pointer =
                     program[register.instruction_pointer.value() as usize + 1];
             } else {
                 register.instruction_pointer += two;
             }
-        } else if register.current_instruction == BFieldElement::new('<' as u128) {
+        } else if register.current_instruction == BFieldElement::new('<' as u64) {
             register.instruction_pointer += one;
             register.memory_pointer -= one;
-        } else if register.current_instruction == BFieldElement::new('>' as u128) {
+        } else if register.current_instruction == BFieldElement::new('>' as u64) {
             register.instruction_pointer += one;
             register.memory_pointer += one;
-        } else if register.current_instruction == BFieldElement::new('+' as u128) {
+        } else if register.current_instruction == BFieldElement::new('+' as u64) {
             register.instruction_pointer += one;
             memory.insert(
                 register.memory_pointer,
                 *memory.get(&register.memory_pointer).unwrap_or(&zero) + one,
             );
-        } else if register.current_instruction == BFieldElement::new('-' as u128) {
+        } else if register.current_instruction == BFieldElement::new('-' as u64) {
             register.instruction_pointer += one;
             memory.insert(
                 register.memory_pointer,
                 *memory.get(&register.memory_pointer).unwrap_or(&zero) - one,
             );
-        } else if register.current_instruction == BFieldElement::new('.' as u128) {
+        } else if register.current_instruction == BFieldElement::new('.' as u64) {
             register.instruction_pointer += one;
             base_matrices
                 .output_matrix
                 .push(*memory.get(&register.memory_pointer).unwrap_or(&zero));
-        } else if register.current_instruction == BFieldElement::new(',' as u128) {
+        } else if register.current_instruction == BFieldElement::new(',' as u64) {
             register.instruction_pointer += one;
             let input_char = input_symbols[input_counter];
             input_counter += 1;

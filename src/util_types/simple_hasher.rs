@@ -144,8 +144,8 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
         // Only shifting with 63 *should* prevent collissions for all
         // numbers below u64::MAX
         vec![
-            BFieldElement::new((self >> 63) % u64::MAX as u128),
-            BFieldElement::new(self % BFieldElement::MAX),
+            BFieldElement::new(((self >> 63) % u64::MAX as u128) as u64),
+            BFieldElement::new((self % BFieldElement::MAX as u128) as u64),
         ]
     }
 }
@@ -309,13 +309,13 @@ pub mod test_simple_hasher {
         let bfields: Vec<BFieldElement> = beyond_bfield0.to_digest();
         assert_eq!(2, bfields.len());
         assert_eq!(BFieldElement::ring_one(), bfields[0]);
-        assert_eq!(BFieldElement::new(4294967295u128), bfields[1]);
+        assert_eq!(BFieldElement::new(4294967295u64), bfields[1]);
 
-        let beyond_bfield1 = BFieldElement::MAX + 1;
+        let beyond_bfield1 = BFieldElement::MAX as u128 + 1;
         let bfields: Vec<BFieldElement> = beyond_bfield1.to_digest();
         assert_eq!(2, bfields.len());
         assert_eq!(BFieldElement::ring_one(), bfields[0]);
-        assert_eq!(BFieldElement::new(1u128), bfields[1]);
+        assert_eq!(BFieldElement::new(1u64), bfields[1]);
     }
 
     #[test]
@@ -336,7 +336,7 @@ pub mod test_simple_hasher {
     fn rescue_prime_equivalence_test() {
         let rpp: RescuePrimeProduction = RescuePrimeProduction::new();
 
-        let input0: Vec<BFieldElement> = vec![1u128, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        let input0: Vec<BFieldElement> = vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             .into_iter()
             .map(BFieldElement::new)
             .collect();

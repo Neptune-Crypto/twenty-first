@@ -749,7 +749,7 @@ mod xfri_tests {
 
             // Manipulate Merkle root of 0 and verify failure with expected error message
             proof_stream.reset_for_verifier();
-            merkle_root_of_round_0[0].increment();
+            merkle_root_of_round_0[0].next();
             let bad_verify_result = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
             assert!(bad_verify_result.is_err());
             println!("bad_verify_result = {:?}", bad_verify_result);
@@ -768,7 +768,7 @@ mod xfri_tests {
     }
 
     fn get_x_field_fri_test_object<H>(
-        subgroup_order: u128,
+        subgroup_order: u64,
         expansion_factor: usize,
         colinearity_checks: usize,
     ) -> Fri<H>
@@ -776,7 +776,7 @@ mod xfri_tests {
         H: Hasher<Digest = Vec<BFieldElement>> + Sized + std::marker::Sync,
         XFieldElement: ToDigest<H::Digest>,
     {
-        let (omega, _primes1): (Option<XFieldElement>, Vec<u128>) =
+        let (omega, _primes1): (Option<XFieldElement>, Vec<u64>) =
             XFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
 
         // The following offset was picked arbitrarily by copying the one found in
