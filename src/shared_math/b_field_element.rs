@@ -92,6 +92,20 @@ impl BFieldElement {
         self.canonical_representation()
     }
 
+    #[inline]
+    /// Square the base M times and multiply the result by the tail value
+    pub fn power_accumulator<const N: usize, const M: usize>(
+        base: [Self; N],
+        tail: [Self; N],
+    ) -> [Self; N] {
+        let mut result = base;
+        for _ in 0..M {
+            result.iter_mut().for_each(|r| *r *= *r);
+        }
+        result.iter_mut().zip(tail).for_each(|(r, t)| *r *= t);
+        result
+    }
+
     /// Get a generator for the entire field
     pub fn generator() -> Self {
         BFieldElement::new(7)
@@ -733,8 +747,30 @@ mod b_prime_field_element_test {
     }
 
     #[test]
+    fn power_accumulator_simple_test() {
+        let input_a = [
+            BFieldElement::new(10),
+            BFieldElement::new(100),
+            BFieldElement::new(1000),
+            BFieldElement::new(1),
+        ];
+        let input_b = [
+            BFieldElement::new(5),
+            BFieldElement::new(6),
+            BFieldElement::new(7),
+            BFieldElement::new(8),
+        ];
+        let powers: [BFieldElement; 4] = BFieldElement::power_accumulator::<4, 2>(input_a, input_b);
+        assert_eq!(BFieldElement::new(50000), powers[0]);
+        assert_eq!(BFieldElement::new(600000000), powers[1]);
+        assert_eq!(BFieldElement::new(7000000000000), powers[2]);
+        assert_eq!(BFieldElement::new(8), powers[3]);
+    }
+
+    #[test]
     fn mul_div_plus_minus_neg_property_based_test() {
         let rands: Vec<i128> = generate_random_numbers(300, BFieldElement::QUOTIENT as i128);
+        let power_inputs_b: Vec<i128> = generate_random_numbers(6, BFieldElement::QUOTIENT as i128);
         for i in 1..rands.len() {
             let a = bfield_elem!(rands[i - 1] as u64);
             let b = bfield_elem!(rands[i] as u64);
@@ -745,6 +781,7 @@ mod b_prime_field_element_test {
             assert_eq!(b, ab / a);
             assert_eq!(a, a_o_b * b);
             assert_eq!(b, b_o_a * a);
+            assert!((a_o_b * b_o_a).is_one());
             assert_eq!(a * a, a.square());
 
             assert_eq!(a - b + b, a);
@@ -766,7 +803,7 @@ mod b_prime_field_element_test {
             assert_eq!(a * b, a_mul_b);
             assert_eq!(b * a, a_mul_b);
 
-            // Test neg
+            // Test negation
             assert!((-a + a).is_zero());
             assert!((-b + b).is_zero());
             assert!((-ab + ab).is_zero());
@@ -775,6 +812,25 @@ mod b_prime_field_element_test {
             assert!((-a_minus_b + a_minus_b).is_zero());
             assert!((-a_plus_b + a_plus_b).is_zero());
             assert!((-a_mul_b + a_mul_b).is_zero());
+
+            // Test power_accumulator
+            let power_input_a = [a, b, ab, a_o_b, b_o_a, a_minus_b];
+            let power_input_b = [
+                bfield_elem!(power_inputs_b[0] as u64),
+                bfield_elem!(power_inputs_b[1] as u64),
+                bfield_elem!(power_inputs_b[2] as u64),
+                bfield_elem!(power_inputs_b[3] as u64),
+                bfield_elem!(power_inputs_b[4] as u64),
+                bfield_elem!(power_inputs_b[5] as u64),
+            ];
+            let powers = BFieldElement::power_accumulator::<6, 4>(power_input_a, power_input_b);
+            for ((result_element, input_a), input_b) in powers
+                .iter()
+                .zip(power_input_a.iter())
+                .zip(power_input_b.iter())
+            {
+                assert_eq!(input_a.mod_pow(16) * *input_b, *result_element);
+            }
         }
     }
 
