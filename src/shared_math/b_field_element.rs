@@ -83,7 +83,7 @@ impl BFieldElement {
     const LOWER_MASK: u64 = 0xFFFFFFFF;
 
     #[inline]
-    pub fn new(value: u64) -> Self {
+    pub const fn new(value: u64) -> Self {
         Self(value % Self::QUOTIENT)
     }
 
@@ -130,12 +130,12 @@ impl BFieldElement {
     // being able to refer to a zero/one element without having an element at hand. This
     // will go away when moving to Zero/One traits.
     #[inline]
-    pub fn ring_zero() -> Self {
+    pub const fn ring_zero() -> Self {
         Self(0)
     }
 
     #[inline]
-    pub fn ring_one() -> Self {
+    pub const fn ring_one() -> Self {
         Self(1)
     }
 
