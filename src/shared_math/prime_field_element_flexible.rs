@@ -689,6 +689,14 @@ mod test_modular_arithmetic_flexible {
     }
 
     #[test]
+    fn square_test() {
+        let values = values(101, &[2, 3, 4, 5, 6, 7, 42, 99, 100]);
+        for a in values {
+            assert_eq!(a * a, a.square());
+        }
+    }
+
+    #[test]
     fn primitive_root_property_based_test() {
         let primes = vec![773i128, 13367, 223, 379, 41];
         for prime in primes {

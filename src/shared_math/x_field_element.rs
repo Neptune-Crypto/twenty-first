@@ -877,6 +877,7 @@ mod x_field_element_test {
             assert_eq!(ab, ba);
             assert_eq!(ab / b, a);
             assert_eq!(ab / a, b);
+            assert_eq!(a * a, a.square());
 
             // Test the add/sub/mul assign operators
             let mut a_minus_b = a;

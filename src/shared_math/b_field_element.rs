@@ -745,6 +745,7 @@ mod b_prime_field_element_test {
             assert_eq!(b, ab / a);
             assert_eq!(a, a_o_b * b);
             assert_eq!(b, b_o_a * a);
+            assert_eq!(a * a, a.square());
 
             assert_eq!(a - b + b, a);
             assert_eq!(b - a + a, b);
