@@ -1,6 +1,6 @@
 use super::b_field_element::BFieldElement;
 use super::rescue_prime_params;
-use crate::shared_math::traits::ModPowU64;
+use super::traits::PrimeField;
 
 type Word = BFieldElement;
 
@@ -67,7 +67,7 @@ impl<const M: usize> RescuePrimeXlix<M> {
     }
 
     /// The Rescue-XLIX permutation
-    pub fn rescue_xlix_permutation(&self, state: &mut [Word]) {
+    pub fn rescue_xlix_permutation(&self, state: &mut [Word; M]) {
         debug_assert_eq!(M, state.len());
 
         for round in 0..self.n {
@@ -75,8 +75,45 @@ impl<const M: usize> RescuePrimeXlix<M> {
         }
     }
 
+    #[inline(always)]
+    fn apply_inverse_sbox(state: &mut [Word; M]) {
+        // Adapted from (MIT Licensed) https://github.com/novifinancial/winterfell/blob/main/math/src/field/f64/mod.rs#L40
+        // compute base^10540996611094048183 using 72 multiplications per array element
+        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        // compute base^10
+        let mut pow_1 = *state;
+        pow_1.iter_mut().for_each(|p| *p *= *p);
+
+        // compute base^100
+        let mut pow_2 = pow_1;
+        pow_2.iter_mut().for_each(|p| *p *= *p);
+
+        // compute base^100100
+        let pow_3 = BFieldElement::power_accumulator::<M, 3>(pow_2, pow_2);
+
+        // compute base^100100100100
+        let pow_4 = BFieldElement::power_accumulator::<M, 6>(pow_3, pow_3);
+
+        // compute base^100100100100100100100100
+        let pow_5 = BFieldElement::power_accumulator::<M, 12>(pow_4, pow_4);
+
+        // compute base^100100100100100100100100100100
+        let pow_6 = BFieldElement::power_accumulator::<M, 6>(pow_5, pow_5);
+
+        // compute base^1001001001001001001001001001000100100100100100100100100100100
+        let pow_7 = BFieldElement::power_accumulator::<M, 31>(pow_6, pow_6);
+
+        // compute base^1001001001001001001001001001000110110110110110110110110110110111
+        for (i, s) in state.iter_mut().enumerate() {
+            let a = (pow_7[i].square() * pow_6[i]).square().square();
+            let b = pow_1[i] * pow_2[i] * *s;
+            *s = a * b;
+        }
+    }
+
     #[inline]
-    fn rescue_xlix_round(&self, i: usize, state: &mut [Word]) {
+    fn rescue_xlix_round(&self, i: usize, state: &mut [Word; M]) {
         // S-box
         for j in 0..M {
             state[j] = state[j].mod_pow(self.alpha);
@@ -95,9 +132,7 @@ impl<const M: usize> RescuePrimeXlix<M> {
         }
 
         // Inverse S-box
-        for j in 0..M {
-            state[j] = state[j].mod_pow_u64(self.alpha_inv);
-        }
+        Self::apply_inverse_sbox(state);
 
         // MDS
         for i in 0..M {
