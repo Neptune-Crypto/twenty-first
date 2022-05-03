@@ -1,7 +1,9 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 use crate::shared_math::rescue_prime::RescuePrime;
-use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
+use crate::shared_math::rescue_prime_xlix::{
+    RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
+};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{other, rescue_prime_params, rescue_prime_xlix};
 use crate::util_types::blake3_wrapper::Blake3Hash;
@@ -144,7 +146,10 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
         // Only shifting with 63 *should* prevent collissions for all
         // numbers below u64::MAX
         vec![
-            BFieldElement::new(((self >> 63) % u64::MAX as u128) as u64),
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
+            BFieldElement::new((self >> 126) as u64),
+            BFieldElement::new(((self >> 63) % BFieldElement::MAX as u128) as u64),
             BFieldElement::new((self % BFieldElement::MAX as u128) as u64),
         ]
     }
@@ -276,13 +281,11 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     }
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
-        let elements_per_digest: usize = 5;
-        let input: Vec<BFieldElement> = left_input
-            .iter()
-            .chain(right_input.iter())
-            .copied()
-            .collect();
-        self.hash(&input, elements_per_digest)
+        let mut state = [BFieldElement::ring_zero(); RP_DEFAULT_WIDTH];
+        state[0..RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(left_input);
+        state[RP_DEFAULT_OUTPUT_SIZE..2 * RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(right_input);
+        self.rescue_xlix_permutation(&mut state);
+        state[0..RP_DEFAULT_OUTPUT_SIZE].to_vec()
     }
 
     fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
@@ -301,21 +304,41 @@ pub mod test_simple_hasher {
     fn u128_to_digest_test() {
         let one = 1u128;
         let bfields_one: Vec<BFieldElement> = one.to_digest();
-        assert_eq!(2, bfields_one.len());
+        assert_eq!(5, bfields_one.len());
         assert_eq!(BFieldElement::ring_zero(), bfields_one[0]);
-        assert_eq!(BFieldElement::ring_one(), bfields_one[1]);
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[1]);
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[2]);
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[3]);
+        assert_eq!(BFieldElement::ring_one(), bfields_one[4]);
 
         let beyond_bfield0 = u64::MAX as u128;
         let bfields: Vec<BFieldElement> = beyond_bfield0.to_digest();
-        assert_eq!(2, bfields.len());
-        assert_eq!(BFieldElement::ring_one(), bfields[0]);
-        assert_eq!(BFieldElement::new(4294967295u64), bfields[1]);
+        assert_eq!(5, bfields.len());
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[0]);
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[1]);
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[2]);
+        assert_eq!(BFieldElement::ring_one(), bfields[3]);
+        assert_eq!(BFieldElement::new(4294967295u64), bfields[4]);
 
         let beyond_bfield1 = BFieldElement::MAX as u128 + 1;
         let bfields: Vec<BFieldElement> = beyond_bfield1.to_digest();
-        assert_eq!(2, bfields.len());
-        assert_eq!(BFieldElement::ring_one(), bfields[0]);
-        assert_eq!(BFieldElement::new(1u64), bfields[1]);
+        assert_eq!(5, bfields.len());
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[0]);
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[1]);
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[2]);
+        assert_eq!(BFieldElement::ring_one(), bfields[3]);
+        assert_eq!(BFieldElement::ring_one(), bfields[4]);
+
+        let big_value = u128::MAX;
+        let bfields: Vec<BFieldElement> = big_value.to_digest();
+        for i in 1..128 {
+            let other_digest: Vec<BFieldElement> = (big_value >> i).to_digest();
+            assert_ne!(
+                bfields, other_digest,
+                "No digest collission allowed. i = {}",
+                i
+            );
+        }
     }
 
     #[test]
