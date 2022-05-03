@@ -245,7 +245,7 @@ mod brainfuck_table_collection_tests {
         let actual_program =
             brainfuck::vm::compile(sample_programs::PRINT_EXCLAMATION_MARKS).unwrap();
         let input_data = vec![];
-        let table_collection = create_table_collection(&actual_program, &input_data);
+        let table_collection = create_table_collection(&actual_program, &input_data, 1);
 
         // 1281 is derived from running Python Brainfuck Stark
         assert_eq!(1281, table_collection.get_max_degree());
@@ -322,6 +322,7 @@ mod brainfuck_table_collection_tests {
                     BFieldElement::new(34),
                     BFieldElement::new(35),
                 ],
+                1,
             );
             assert_eq!(
                 expected_base_bounds,
@@ -352,7 +353,7 @@ mod brainfuck_table_collection_tests {
     fn get_and_set_all_codewords_test() {
         let program_small = brainfuck::vm::compile(sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
         let matrices: BaseMatrices = brainfuck::vm::simulate(&program_small, &[]).unwrap();
-        let table_collection: TableCollection = create_table_collection(&program_small, &[]);
+        let table_collection: TableCollection = create_table_collection(&program_small, &[], 1);
         let tc_ref = Rc::new(RefCell::new(table_collection));
         tc_ref.borrow_mut().set_matrices(
             matrices.processor_matrix.clone(),
@@ -481,9 +482,9 @@ mod brainfuck_table_collection_tests {
     fn create_table_collection(
         program: &[BFieldElement],
         input_data: &[BFieldElement],
+        number_of_randomizers: usize,
     ) -> TableCollection {
         let base_matrices: BaseMatrices = brainfuck::vm::simulate(program, input_data).unwrap();
-        let number_of_randomizers = 1;
         let order = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(order)
