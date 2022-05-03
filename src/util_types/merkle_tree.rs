@@ -1620,7 +1620,7 @@ mod merkle_tree_test {
         ));
 
         // 11: change a value, verify failure
-        multi_values_3[0].next();
+        multi_values_3[0].increment();
         assert!(!SMT::verify_multi_proof(
             *root_hash_b,
             &[1, 0, 4, 7, 2],
@@ -1628,7 +1628,7 @@ mod merkle_tree_test {
             &auth_path_b_multi_3
         ));
 
-        multi_values_3[0].previous();
+        multi_values_3[0].decrement();
         assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1, 2, 4, 7],

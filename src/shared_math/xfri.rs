@@ -749,7 +749,7 @@ mod xfri_tests {
 
             // Manipulate Merkle root of 0 and verify failure with expected error message
             proof_stream.reset_for_verifier();
-            merkle_root_of_round_0[0].next();
+            merkle_root_of_round_0[0].increment();
             let bad_verify_result = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
             assert!(bad_verify_result.is_err());
             println!("bad_verify_result = {:?}", bad_verify_result);

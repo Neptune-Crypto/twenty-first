@@ -116,13 +116,13 @@ impl BFieldElement {
         XFieldElement::new_const(*self)
     }
 
-    // You should probably only use `next` and `previous` for testing purposes
-    pub fn next(&mut self) {
+    // You should probably only use `increment` and `decrement` for testing purposes
+    pub fn increment(&mut self) {
         self.0 = Self::canonical_representation(&(*self + Self::ring_one()));
     }
 
-    // You should probably only use `next` and `previous` for testing purposes
-    pub fn previous(&mut self) {
+    // You should probably only use `increment` and `decrement` for testing purposes
+    pub fn decrement(&mut self) {
         self.0 = Self::canonical_representation(&(*self - Self::ring_one()));
     }
 
@@ -617,25 +617,25 @@ mod b_prime_field_element_test {
         let mut val_b = bfield_elem!(1);
         let mut val_c = bfield_elem!(BFieldElement::MAX - 1);
         let max = BFieldElement::new(BFieldElement::MAX);
-        val_a.next();
+        val_a.increment();
         assert!(val_a.is_one());
-        val_b.next();
+        val_b.increment();
         assert!(!val_b.is_one());
         assert_eq!(BFieldElement::new(2), val_b);
-        val_b.next();
+        val_b.increment();
         assert_eq!(BFieldElement::new(3), val_b);
         assert_ne!(max, val_c);
-        val_c.next();
+        val_c.increment();
         assert_eq!(max, val_c);
-        val_c.next();
+        val_c.increment();
         assert!(val_c.is_zero());
-        val_c.next();
+        val_c.increment();
         assert!(val_c.is_one());
-        val_c.previous();
+        val_c.decrement();
         assert!(val_c.is_zero());
-        val_c.previous();
+        val_c.decrement();
         assert_eq!(max, val_c);
-        val_c.previous();
+        val_c.decrement();
         assert_eq!(bfield_elem!(BFieldElement::MAX - 1), val_c);
     }
 
@@ -750,7 +750,7 @@ mod b_prime_field_element_test {
                 assert!((rand * rand_inv).is_one());
                 assert!((rand_inv * rand).is_one());
                 assert_eq!(rand.inverse(), rand_inv);
-                rand.next();
+                rand.increment();
                 assert!(!(rand * rand_inv).is_one());
             }
         }

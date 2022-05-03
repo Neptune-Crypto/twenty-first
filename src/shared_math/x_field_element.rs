@@ -144,13 +144,13 @@ impl XFieldElement {
         )
     }
 
-    // `next` and `previous` are mainly used for testing purposes
-    pub fn next(&mut self, index: usize) {
-        self.coefficients[index].next();
+    // `increment` and `decrement` are mainly used for testing purposes
+    pub fn increment(&mut self, index: usize) {
+        self.coefficients[index].increment();
     }
 
-    pub fn previous(&mut self, index: usize) {
-        self.coefficients[index].previous();
+    pub fn decrement(&mut self, index: usize) {
+        self.coefficients[index].decrement();
     }
 }
 
@@ -530,52 +530,52 @@ mod x_field_element_test {
         let max_x = XFieldElement::new([0, BFieldElement::MAX, 0].map(BFieldElement::new));
         let max_x_squared = XFieldElement::new([0, 0, BFieldElement::MAX].map(BFieldElement::new));
         let mut val = XFieldElement::ring_zero();
-        val.next(0);
+        val.increment(0);
         assert!(val.is_one());
-        val.next(0);
+        val.increment(0);
         assert_eq!(two_const, val);
-        val.previous(0);
+        val.decrement(0);
         assert!(val.is_one());
-        val.previous(0);
+        val.decrement(0);
         assert!(val.is_zero());
-        val.previous(0);
+        val.decrement(0);
         assert_eq!(max_const, val);
-        val.previous(0);
+        val.decrement(0);
         assert_eq!(max_const - XFieldElement::ring_one(), val);
-        val.previous(0);
+        val.decrement(0);
         assert_eq!(
             max_const - XFieldElement::ring_one() - XFieldElement::ring_one(),
             val
         );
-        val.next(0);
-        val.next(0);
-        val.next(0);
+        val.increment(0);
+        val.increment(0);
+        val.increment(0);
         assert!(val.is_zero());
-        val.next(1);
+        val.increment(1);
         assert_eq!(one_x, val);
-        val.next(1);
+        val.increment(1);
         assert_eq!(two_x, val);
-        val.previous(1);
-        val.previous(1);
+        val.decrement(1);
+        val.decrement(1);
         assert!(val.is_zero());
-        val.previous(1);
+        val.decrement(1);
         assert_eq!(max_x, val);
-        val.next(1);
-        val.next(2);
+        val.increment(1);
+        val.increment(2);
         assert_eq!(one_x_squared, val);
-        val.next(2);
+        val.increment(2);
         assert_eq!(two_x_squared, val);
-        val.previous(2);
-        val.previous(2);
+        val.decrement(2);
+        val.decrement(2);
         assert!(val.is_zero());
-        val.previous(2);
+        val.decrement(2);
         assert_eq!(max_x_squared, val);
-        val.previous(1);
-        val.previous(0);
+        val.decrement(1);
+        val.decrement(0);
         assert_eq!(max_x_squared + max_x + max_const, val);
-        val.previous(2);
-        val.previous(1);
-        val.previous(0);
+        val.decrement(2);
+        val.decrement(1);
+        val.decrement(0);
         assert_eq!(
             max_x_squared + max_x + max_const - one_const - one_x - one_x_squared,
             val
@@ -836,21 +836,21 @@ mod x_field_element_test {
 
             // Negative test, verify that when decrementing and incrementing
             // by one in the different indices, we get something
-            rand.next(0);
+            rand.increment(0);
             assert!((rand * rand.inverse()).is_one());
             assert!((rand.inverse() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());
             assert!(!(rand_inv_original * rand).is_one());
-            rand.previous(0);
+            rand.decrement(0);
 
-            rand.next(1);
+            rand.increment(1);
             assert!((rand * rand.inverse()).is_one());
             assert!((rand.inverse() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());
             assert!(!(rand_inv_original * rand).is_one());
-            rand.previous(1);
+            rand.decrement(1);
 
-            rand.next(2);
+            rand.increment(2);
             assert!((rand * rand.inverse()).is_one());
             assert!((rand.inverse() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());

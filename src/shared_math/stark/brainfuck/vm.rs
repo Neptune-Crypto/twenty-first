@@ -151,10 +151,10 @@ pub fn run(
             }
         } else if program[instruction_pointer] == BFieldElement::new('<' as u64) {
             instruction_pointer += 1;
-            memory_pointer.previous();
+            memory_pointer.decrement();
         } else if program[instruction_pointer] == BFieldElement::new('>' as u64) {
             instruction_pointer += 1;
-            memory_pointer.next();
+            memory_pointer.increment();
         } else if program[instruction_pointer] == BFieldElement::new('+' as u64) {
             instruction_pointer += 1;
             memory.insert(

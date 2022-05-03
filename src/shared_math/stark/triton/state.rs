@@ -216,13 +216,13 @@ impl<'pgm> VMState<'pgm> {
 
             LoadInc => {
                 self.load()?;
-                self.ramp.next();
+                self.ramp.increment();
                 self.instruction_pointer += 1;
             }
 
             LoadDec => {
                 self.load()?;
-                self.ramp.previous();
+                self.ramp.decrement();
                 self.instruction_pointer += 1;
             }
 
@@ -233,13 +233,13 @@ impl<'pgm> VMState<'pgm> {
 
             SaveInc => {
                 self.save()?;
-                self.ramp.next();
+                self.ramp.increment();
                 self.instruction_pointer += 1;
             }
 
             SaveDec => {
                 self.save()?;
-                self.ramp.previous();
+                self.ramp.decrement();
                 self.instruction_pointer += 1;
             }
 
