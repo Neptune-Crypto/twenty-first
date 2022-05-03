@@ -56,8 +56,8 @@ impl<const M: usize> RescuePrimeXlix<M> {
             state[0..last_iteration_elements].copy_from_slice(input_slice);
 
             // Padding
-            state[last_iteration_elements] = 1.into();
-            state[last_iteration_elements + 1..rate].fill(0.into());
+            state[last_iteration_elements] = BFieldElement::ring_one();
+            state[last_iteration_elements + 1..rate].fill(BFieldElement::ring_zero());
 
             self.rescue_xlix_permutation(&mut state);
         }
