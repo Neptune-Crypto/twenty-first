@@ -353,8 +353,18 @@ impl Add for BFieldElement {
     #[allow(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
     fn add(self, other: Self) -> Self {
-        let (result, over) = self.0.overflowing_add(other.canonical_representation());
-        Self(result.wrapping_sub(Self::QUOTIENT * (over as u64)))
+        let (result, overflow) = self.0.overflowing_add(other.0);
+        let mut val = result.wrapping_sub(Self::QUOTIENT * (overflow as u64));
+
+        // For some reason, this `if` codeblock improves NTT runtime by ~10 % and
+        // Rescue prime calculations with up to 45 % for `hash_pair`. I think it has
+        // something to do with a compiler optimization but I actually don't
+        // understand why this speedup occurs.
+        if val > Self::MAX {
+            val -= Self::QUOTIENT;
+        }
+
+        Self(val)
     }
 }
 
