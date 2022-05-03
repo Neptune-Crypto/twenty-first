@@ -282,8 +282,15 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
         let mut state = [BFieldElement::ring_zero(); RP_DEFAULT_WIDTH];
+
+        // Set padding
+        state[2 * RP_DEFAULT_OUTPUT_SIZE] = BFieldElement::ring_one();
+
+        // Copy over left and right into state for hasher
         state[0..RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(left_input);
         state[RP_DEFAULT_OUTPUT_SIZE..2 * RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(right_input);
+
+        // Apply permutation and return
         self.rescue_xlix_permutation(&mut state);
         state[0..RP_DEFAULT_OUTPUT_SIZE].to_vec()
     }
@@ -353,6 +360,20 @@ pub mod test_simple_hasher {
             ],
             inner.as_bytes()
         );
+    }
+
+    #[test]
+    fn rescue_prime_pair_many_equivalence_test() {
+        let rpp: RescuePrimeXlix<16> = RescuePrimeXlix::new();
+        let digest1: Vec<BFieldElement> = 42.to_digest();
+        let digest2: Vec<BFieldElement> = (1 << 70 + 42).to_digest();
+        let digests: Vec<BFieldElement> = vec![digest1.clone(), digest2.clone()].concat();
+        let hash_digest = rpp.hash(&digests, 5);
+        let hash_pair_digest = rpp.hash_pair(&digest1, &digest2);
+        let hash_many_digest = rpp.hash_many(&[digest1, digest2]);
+        assert_eq!(hash_digest, hash_pair_digest);
+        assert_eq!(hash_digest, hash_many_digest);
+        println!("hash_digest = {:?}", hash_digest);
     }
 
     #[test]
