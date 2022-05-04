@@ -17,7 +17,7 @@ use super::mutator_set::accumulation_scheme::Chunk;
 /// The type of digest is determined by the `impl` of a given `Hasher`, and it requires that
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
-pub trait Hasher: Sized + Send + Sync {
+pub trait Hasher: Sized + Send + Sync + Clone {
     type Digest: ToDigest<Self::Digest>
         + PartialEq
         + Clone

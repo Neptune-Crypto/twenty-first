@@ -21,7 +21,7 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-pub struct MmrAccumulator<H>
+pub struct MmrAccumulator<H: Hasher>
 where
     H: Hasher,
 {
