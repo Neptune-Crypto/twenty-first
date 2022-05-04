@@ -1386,35 +1386,40 @@ mod brainfuck_stark_tests {
 
     #[test]
     fn prove_verify_test() {
-        let program: Vec<BFieldElement> =
-            brainfuck::vm::compile(brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT).unwrap();
-        let (trace_length, input_symbols, output_symbols) = brainfuck::vm::run(
-            &program,
-            vec![
-                BFieldElement::new(97),
-                BFieldElement::new(98),
-                BFieldElement::new(99),
-            ],
-        )
-        .unwrap();
-        let base_matrices: BaseMatrices =
-            brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-        let mut stark = new_test_stark(
-            trace_length,
-            brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT.to_string(),
-            input_symbols,
-            output_symbols,
-        );
+        for source_code in [
+            brainfuck::vm::sample_programs::VERY_SIMPLE_PROGRAM,
+            brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT,
+            brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT,
+        ] {
+            let program: Vec<BFieldElement> = brainfuck::vm::compile(source_code).unwrap();
+            let (trace_length, input_symbols, output_symbols) = brainfuck::vm::run(
+                &program,
+                vec![
+                    BFieldElement::new(97),
+                    BFieldElement::new(98),
+                    BFieldElement::new(99),
+                ],
+            )
+            .unwrap();
+            let base_matrices: BaseMatrices =
+                brainfuck::vm::simulate(&program, &input_symbols).unwrap();
+            let mut stark = new_test_stark(
+                trace_length,
+                source_code.to_string(),
+                input_symbols,
+                output_symbols,
+            );
 
-        // TODO: If we set the `DEBUG` environment variable here, we *should* catch a lot of bugs.
-        // Do we want to do that?
-        let mut proof_stream = stark.prove(base_matrices).unwrap();
+            // TODO: If we set the `DEBUG` environment variable here, we *should* catch a lot of bugs.
+            // Do we want to do that?
+            let mut proof_stream = stark.prove(base_matrices).unwrap();
 
-        let verifier_verdict: Result<bool, Box<dyn Error>> = stark.verify(&mut proof_stream);
-        match verifier_verdict {
-            Ok(_) => (),
-            Err(err) => panic!("error in STARK verifier: {}", err),
-        };
+            let verifier_verdict: Result<bool, Box<dyn Error>> = stark.verify(&mut proof_stream);
+            match verifier_verdict {
+                Ok(_) => (),
+                Err(err) => panic!("error in STARK verifier: {}", err),
+            };
+        }
     }
 
     fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
