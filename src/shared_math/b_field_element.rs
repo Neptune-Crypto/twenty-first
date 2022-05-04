@@ -845,6 +845,19 @@ mod b_prime_field_element_test {
     }
 
     #[test]
+    fn add_sub_wrap_around_test() {
+        // Ensure that something that exceeds P but is smaller than $2^64$
+        // is still the correct field element. The property-based test is unlikely
+        // to hit such an element as the chances of doing so are about 2^(-32) for
+        // random uniform numbers. So we test this in a separate test
+        let element = BFieldElement::new(4);
+        let sum = BFieldElement::new(BFieldElement::MAX) + element;
+        assert_eq!(BFieldElement::new(3), sum);
+        let diff = sum - element;
+        assert_eq!(BFieldElement::new(BFieldElement::MAX), diff);
+    }
+
+    #[test]
     fn neg_test() {
         assert_eq!(-BFieldElement::ring_zero(), BFieldElement::ring_zero());
         assert_eq!((-BFieldElement::ring_one()).0, BFieldElement::MAX);
