@@ -350,6 +350,137 @@ mod brainfuck_table_collection_tests {
     }
 
     #[test]
+    fn invariance_of_interpolation_polynomials_argument_multiplied_by_omicron_test() {
+        let program = brainfuck::vm::compile(sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
+
+        // create table collections with different number of randomizers
+        let matrices: BaseMatrices = brainfuck::vm::simulate(&program, &[]).unwrap();
+        let mut t_collect_0_rand: TableCollection = create_table_collection(&program, &[], 0);
+        let mut t_collect_1_rand: TableCollection = create_table_collection(&program, &[], 1);
+        let mut t_collect_2_rand: TableCollection = create_table_collection(&program, &[], 2);
+        t_collect_0_rand.set_matrices(
+            matrices.processor_matrix.clone(),
+            matrices.instruction_matrix.clone(),
+            matrices.input_matrix.clone(),
+            matrices.output_matrix.clone(),
+        );
+        t_collect_1_rand.set_matrices(
+            matrices.processor_matrix.clone(),
+            matrices.instruction_matrix.clone(),
+            matrices.input_matrix.clone(),
+            matrices.output_matrix.clone(),
+        );
+        t_collect_2_rand.set_matrices(
+            matrices.processor_matrix.clone(),
+            matrices.instruction_matrix,
+            matrices.input_matrix,
+            matrices.output_matrix,
+        );
+        t_collect_0_rand.pad();
+        t_collect_1_rand.pad();
+        t_collect_2_rand.pad();
+        t_collect_0_rand.memory_table.0.matrix =
+            MemoryTable::derive_matrix(t_collect_0_rand.processor_table.0.matrix.clone());
+        t_collect_1_rand.memory_table.0.matrix =
+            MemoryTable::derive_matrix(t_collect_1_rand.processor_table.0.matrix.clone());
+        t_collect_2_rand.memory_table.0.matrix =
+            MemoryTable::derive_matrix(t_collect_2_rand.processor_table.0.matrix.clone());
+
+        // set up FRI domain
+        let mock_fri_domain_length = 512;
+        let fri_domain = FriDomain {
+            length: mock_fri_domain_length,
+            offset: BFieldElement::new(7).lift(),
+            omega: XFieldElement::ring_zero()
+                .get_primitive_root_of_unity(mock_fri_domain_length as u64)
+                .0
+                .unwrap(),
+        };
+
+        // get all interpolation polynomials `ip_x` with different number of randomizers
+        let ip_0s = [
+            t_collect_0_rand.processor_table.0.lde(&fri_domain).1,
+            t_collect_0_rand.instruction_table.0.lde(&fri_domain).1,
+            t_collect_0_rand.memory_table.0.lde(&fri_domain).1,
+            t_collect_0_rand.input_table.0.lde(&fri_domain).1,
+            t_collect_0_rand.output_table.0.lde(&fri_domain).1,
+        ]
+        .concat();
+        println!("Successfully interpolated table collection with 0 random values");
+        let ip_1s = [
+            t_collect_1_rand.processor_table.0.lde(&fri_domain).1,
+            t_collect_1_rand.instruction_table.0.lde(&fri_domain).1,
+            t_collect_1_rand.memory_table.0.lde(&fri_domain).1,
+            t_collect_1_rand.input_table.0.lde(&fri_domain).1,
+            t_collect_1_rand.output_table.0.lde(&fri_domain).1,
+        ]
+        .concat();
+        println!("Successfully interpolated table collection with 1 random value");
+        let ip_2s = [
+            t_collect_2_rand.processor_table.0.lde(&fri_domain).1,
+            t_collect_2_rand.instruction_table.0.lde(&fri_domain).1,
+            t_collect_2_rand.memory_table.0.lde(&fri_domain).1,
+            t_collect_2_rand.input_table.0.lde(&fri_domain).1,
+            t_collect_2_rand.output_table.0.lde(&fri_domain).1,
+        ]
+        .concat();
+        println!("Successfully interpolated table collection with 2 random values");
+
+        // get random parts r_1 = ip_1 - ip_0 and r_2 = ip_2 - ip_0
+        let r_1s = ip_1s
+            .into_iter()
+            .zip(ip_0s.clone())
+            .map(|(p_1, p_0)| p_1 - p_0)
+            .collect::<Vec<_>>();
+        println!("The r_1 for the very first column is: {}", r_1s[0]);
+        let r_2s = ip_2s
+            .clone()
+            .into_iter()
+            .zip(ip_0s)
+            .map(|(p_2, p_0)| p_2 - p_0)
+            .collect::<Vec<_>>();
+        println!("The r_2 for the very first column is: {}", r_2s[0]);
+
+        // sample random evaluation points. They are re-used across property tests for r_0 and r_1
+        let omicron: BFieldElement = t_collect_0_rand.processor_table.omicron();
+        println!("omicron = {}", omicron);
+        let mut rng = rand::thread_rng();
+        let eval_points = &BFieldElement::random_elements(r_1s.len(), &mut rng);
+
+        // check the expected invariants
+        for (r, x) in r_1s.iter().zip(eval_points) {
+            assert_eq!(
+                r.evaluate(x),
+                r.evaluate(&(omicron * *x)),
+                "polynomial r_1 must be invariant to its argument being multiplied by ο.
+                r_1 was sampled in {} and {}",
+                x,
+                omicron * *x
+            );
+        }
+        for ((r, x), ip_2) in r_2s.iter().zip(eval_points).zip(ip_2s) {
+            if r.is_zero() {
+                assert!(
+                    ip_2.is_zero(),
+                    "r_2 was zero but ip_2 was not: ip_2 = {}",
+                    ip_2
+                );
+            } else {
+                assert_ne!(
+                    r.evaluate(x),
+                    r.evaluate(&(omicron * *x)),
+                    "polynomial r_2 must not be invariant to its argument being multiplied by ο.
+                    r_2 = {}
+                    r_2 was sampled in {} and {}",
+                    r,
+                    x,
+                    omicron * *x
+                );
+            }
+        }
+    }
+
+    #[test]
     fn get_and_set_all_codewords_test() {
         let program_small = brainfuck::vm::compile(sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
         let matrices: BaseMatrices = brainfuck::vm::simulate(&program_small, &[]).unwrap();
