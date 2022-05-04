@@ -157,18 +157,6 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
     }
 }
 
-impl ToDigest<Blake3Hash> for Chunk<Blake3Hash> {
-    fn to_digest(&self) -> Blake3Hash {
-        todo!()
-    }
-}
-
-impl ToDigest<Vec<BFieldElement>> for Chunk<Vec<BFieldElement>> {
-    fn to_digest(&self) -> Vec<BFieldElement> {
-        todo!()
-    }
-}
-
 impl ToDigest<Blake3Hash> for Blake3Hash {
     fn to_digest(&self) -> Blake3Hash {
         *self
