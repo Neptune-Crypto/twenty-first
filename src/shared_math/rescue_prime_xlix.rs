@@ -99,7 +99,7 @@ impl<const M: usize> RescuePrimeXlix<M> {
         let pow_5 = BFieldElement::power_accumulator::<M, 12>(pow_4, pow_4);
 
         // compute base^100100100100100100100100100100
-        let pow_6 = BFieldElement::power_accumulator::<M, 6>(pow_5, pow_5);
+        let pow_6 = BFieldElement::power_accumulator::<M, 6>(pow_5, pow_3);
 
         // compute base^1001001001001001001001001001000100100100100100100100100100100
         let pow_7 = BFieldElement::power_accumulator::<M, 31>(pow_6, pow_6);
