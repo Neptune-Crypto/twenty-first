@@ -101,7 +101,8 @@ impl<T: TableMoreTrait> Table<T> {
         assert_eq!(
             self.height,
             self.matrix.len(),
-            "Table matrix must be set and padded before interpolation"
+            "{}: Table matrix must be set and padded before interpolation",
+            self.name
         );
 
         assert!(

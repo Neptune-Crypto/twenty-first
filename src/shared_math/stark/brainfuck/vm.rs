@@ -188,7 +188,11 @@ pub fn run(
         trace_length += 1;
     }
 
-    Some((trace_length, input_data_mut, output_data))
+    Some((
+        trace_length,
+        input_data_mut[0..input_counter].to_vec(),
+        output_data,
+    ))
 }
 
 pub fn simulate(
