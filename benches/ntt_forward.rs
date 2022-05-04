@@ -10,7 +10,7 @@ use twenty_first::shared_math::x_field_element::XFieldElement;
 fn chu_ntt_forward(c: &mut Criterion) {
     let mut group = c.benchmark_group("chu_ntt_forward");
 
-    let log2_of_sizes: Vec<usize> = vec![3, 5, 7, 12, 13, 16, 18];
+    let log2_of_sizes: Vec<usize> = vec![3, 4, 7, 12, 16, 18, 23];
 
     // Benchmarking forward ntt on BFieldElements
     for &log2_of_size in log2_of_sizes.iter() {
