@@ -937,7 +937,7 @@ mod merkle_tree_test {
             let values: Vec<BFieldElement> =
                 generate_random_numbers_u128(*n_values, Some(1u128 << 63))
                     .iter()
-                    .map(|x| BFieldElement::new(*x))
+                    .map(|x| BFieldElement::new(*x as u64))
                     .collect();
 
             let hasher = Hasher::new();
@@ -1030,20 +1030,20 @@ mod merkle_tree_test {
 
         let single_mt_one: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
         let expected_root_hash: Digest =
-            b3h("331712cd28cd648eb4af74e03f89306735d56254393e4d958b4cc126ee256203");
+            b3h("216eb5cf8e60e66db5dc53e5db5ded0a7c038a00b3bcbebb08b4556c830621a1");
         assert_eq!(expected_root_hash, single_mt_one.get_root());
         assert_eq!(0, single_mt_one.get_height());
 
         let single_mt_two: MerkleTree<Hasher> = MerkleTree::from_digests(&[hasher.hash(&two)]);
         let expected_root_hash_2: Digest =
-            b3h("51f6f488327b9541d3f455aeef239ad633b50d6ce2c92c27500dfa757d6320a1");
+            b3h("abb1f67fe5cf64ed79df481ffe011c541028decd98ad105afe1656aca29e5d14");
         assert_eq!(expected_root_hash_2, single_mt_two.get_root());
         assert_eq!(0, single_mt_two.get_height());
 
         let mt: MerkleTree<Hasher> =
             MerkleTree::from_digests(&[hasher.hash(&one), hasher.hash(&two)]);
         let expected_root_hash_3 =
-            b3h("b53b546e7c34ddff320bccf9f900dcc8abf8f0c073e4f140230d45e7dce6f439");
+            b3h("0d5c81b4ed156d9838b3be9e90e5c92ceabd10f40bfdef5c4adf93212d392b24");
         assert_eq!(expected_root_hash_3, mt.get_root());
         assert_eq!(1, mt.get_height());
 
@@ -1079,7 +1079,7 @@ mod merkle_tree_test {
         let mt_reverse: MerkleTree<Hasher> =
             MerkleTree::from_digests(&[hasher.hash(&two), hasher.hash(&one)]);
         let expected_root_hash_4 =
-            b3h("8d10946b4b745dde4b3a7d2530c0c5990e34239dd30eb3d90fbc654d12ade5f8");
+            b3h("1fe7c02631dcf1e025ff34d82e3f164bc5839e8bca91814adf3c25440d9eac48");
         assert_eq!(expected_root_hash_4, mt_reverse.get_root());
         assert_eq!(1, mt_reverse.get_height());
 
@@ -1089,7 +1089,7 @@ mod merkle_tree_test {
             .collect();
         let mt_four: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
         let expected_root_hash_5 =
-            b3h("c9a28853123953bd3fbc45bd818a809a4647094b1cae07853e5c1bfe6f650c05");
+            b3h("7b1084a91bbc707f367a24bf7fab7599fae17d34bd735dd80c671f54d08585ae");
         assert_eq!(expected_root_hash_5, mt_four.get_root());
         assert_ne!(mt.get_root(), mt_reverse.get_root());
         assert_eq!(2, mt_four.get_height());
@@ -1832,7 +1832,7 @@ mod merkle_tree_test {
             let values: Vec<BFieldElement> =
                 generate_random_numbers_u128(*n_values, Some(1u128 << 63))
                     .iter()
-                    .map(|x| BFieldElement::new(*x))
+                    .map(|x| BFieldElement::new(*x as u64))
                     .collect();
 
             let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
@@ -1942,8 +1942,8 @@ mod merkle_tree_test {
 
         let offset = 17;
 
-        let values: Vec<BFieldElement> = (offset..num_leaves as u128 + offset)
-            .map(|i| BFieldElement::new(i))
+        let values: Vec<BFieldElement> = (offset..num_leaves + offset)
+            .map(|i| BFieldElement::new(i as u64))
             .collect();
 
         let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
@@ -1995,7 +1995,7 @@ mod merkle_tree_test {
 
         let offset = 17 * 17;
 
-        let values: Vec<BFieldElement> = (offset..num_leaves as u128 + offset)
+        let values: Vec<BFieldElement> = (offset..num_leaves as u64 + offset)
             .map(|i| BFieldElement::new(i))
             .collect();
 
@@ -2004,7 +2004,7 @@ mod merkle_tree_test {
         // A payload integrity test
         let test_leaf = 42;
         let payload_offset = 317;
-        let payload = BFieldElement::new((test_leaf + payload_offset) as u128);
+        let payload = BFieldElement::new((test_leaf + payload_offset) as u64);
 
         // Embed
         leaves[test_leaf] = hasher.hash(&payload);

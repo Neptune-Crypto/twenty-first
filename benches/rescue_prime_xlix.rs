@@ -80,27 +80,15 @@ fn rescue_prime_16384_rate_12_15(c: &mut Criterion) {
 fn bench_pairs(c: &mut Criterion) {
     let mut group = c.benchmark_group("rescue_prime_pairs");
 
-    let size = 8_192;
-    group.sample_size(50);
+    let size = 16_384 * 10; // 16_384 is the FRI domain length for a STARK BF benchmark
+    group.sample_size(40);
 
-    let hasher_rp = RescuePrimeProduction::new();
     let hasher_rp_xlix = neptune_params();
 
     let mut rng = rand::thread_rng();
     let elements = BFieldElement::random_elements(size, &mut rng);
 
     // Hashing pairs
-
-    group.bench_function(BenchmarkId::new("RescuePrime-hash_pair", size), |bencher| {
-        let chunks: Vec<_> = elements.chunks_exact(10).collect();
-        bencher.iter(|| {
-            for chunk in chunks.iter() {
-                let chunk_a = &chunk[0..5].to_vec();
-                let chunk_b = &chunk[5..10].to_vec();
-                hasher_rp.hash_pair(chunk_a, chunk_b);
-            }
-        });
-    });
 
     group.bench_function(
         BenchmarkId::new("RescuePrimeXlix-hash_pair", size),

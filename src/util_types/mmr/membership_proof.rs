@@ -889,9 +889,9 @@ mod mmr_membership_proof_test {
         // leaf index for MMR, modifying its membership proof with an
         // append update.
         let rp = RescuePrimeProduction::new();
-        for leaf_count in 0..9 {
+        for leaf_count in 0..9u128 {
             let leaf_hashes: Vec<Digest> = (1001..1001 + leaf_count)
-                .map(|x| rp.hash(&vec![BFieldElement::new(x)]))
+                .map(|x| rp.hash(&vec![BFieldElement::new(x as u64)]))
                 .collect();
             let archival_mmr = ArchivalMmr::<RescuePrimeProduction>::new(leaf_hashes.clone());
             let new_leaf = rp.hash(&vec![BFieldElement::new(13333337)]);

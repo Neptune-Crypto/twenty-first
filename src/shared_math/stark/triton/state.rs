@@ -332,8 +332,8 @@ impl<'pgm> VMState<'pgm> {
                 let n: u64 = elem.value();
                 let lo = n & 0xffff_ffff;
                 let hi = n >> 32;
-                self.op_stack.push(BWord::new(lo as u128));
-                self.op_stack.push(BWord::new(hi as u128));
+                self.op_stack.push(BWord::new(lo as u64));
+                self.op_stack.push(BWord::new(hi as u64));
                 self.instruction_pointer += 1;
             }
 
@@ -432,7 +432,7 @@ impl<'pgm> VMState<'pgm> {
         if height == 0 {
             0.into()
         } else {
-            BWord::new((height - 1) as u128)
+            BWord::new((height - 1) as u64)
         }
     }
 
@@ -440,7 +440,7 @@ impl<'pgm> VMState<'pgm> {
     pub fn jsv(&self) -> BWord {
         self.jump_stack
             .last()
-            .map(|&v| BWord::new(v as u128))
+            .map(|&v| BWord::new(v as u64))
             .unwrap_or_else(|| 0.into())
     }
 

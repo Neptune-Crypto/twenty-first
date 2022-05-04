@@ -83,7 +83,7 @@ impl<T: TableMoreTrait> Table<T> {
         }
 
         BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(height as u128)
+            .get_primitive_root_of_unity(height as u64)
             .0
             .unwrap()
     }
@@ -547,7 +547,7 @@ mod table_tests {
     fn table_matrix_interpolate_simple_test() {
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(order as u128)
+            .get_primitive_root_of_unity(order as u64)
             .0
             .unwrap();
         let omega = BFieldElement::ring_zero()
@@ -573,7 +573,7 @@ mod table_tests {
             vec![
                 BFieldElement::new(55500),
                 BFieldElement::new(5550055500),
-                BFieldElement::new(55500555005550055500),
+                BFieldElement::new(5550055500555005550),
             ],
             vec![
                 BFieldElement::new(8989),
@@ -639,7 +639,7 @@ mod table_tests {
             interpolants[1].evaluate(&omicron.mod_pow(2))
         );
         assert_eq!(
-            BFieldElement::new(55500555005550055500),
+            BFieldElement::new(5550055500555005550),
             interpolants[2].evaluate(&omicron.mod_pow(2))
         );
         assert_eq!(

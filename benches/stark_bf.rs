@@ -70,15 +70,15 @@ fn stark_bf(c: &mut Criterion) {
 
     group.sample_size(10);
 
-    // let two_by_two_then_output_id = BenchmarkId::new("TWO_BY_TWO_THEN_OUTPUT", 0);
-    // group.bench_function(two_by_two_then_output_id, |bencher| {
-    //     bencher.iter(|| _two_by_two_then_output());
-    // });
-
-    let hello_world_id = BenchmarkId::new("HELLO_WORLD", 0);
-    group.bench_function(hello_world_id, |bencher| {
-        bencher.iter(|| _hello_world());
+    let two_by_two_then_output_id = BenchmarkId::new("TWO_BY_TWO_THEN_OUTPUT", 0);
+    group.bench_function(two_by_two_then_output_id, |bencher| {
+        bencher.iter(|| _two_by_two_then_output());
     });
+
+    // let hello_world_id = BenchmarkId::new("HELLO_WORLD", 0);
+    // group.bench_function(hello_world_id, |bencher| {
+    //     bencher.iter(|| _hello_world());
+    // });
 
     // let the_raven_id = BenchmarkId::new("THE_RAVEN", 0);
     // group.bench_function(the_raven_id, |bencher| {

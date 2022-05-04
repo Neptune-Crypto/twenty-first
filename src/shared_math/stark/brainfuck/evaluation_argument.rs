@@ -78,7 +78,7 @@ impl ProgramEvaluationArgument {
             self.program.iter().map(|p| p.lift()).collect();
         padded_program.push(XFieldElement::ring_zero());
         for i in 0..padded_program.len() - 1 {
-            let address: XFieldElement = BFieldElement::new(i as u128).lift();
+            let address: XFieldElement = BFieldElement::new(i as u64).lift();
             let current_instruction = padded_program[i];
             let next_instruction = padded_program[i + 1];
             if previous_address != address {
@@ -91,7 +91,7 @@ impl ProgramEvaluationArgument {
         }
 
         let index = padded_program.len() - 1;
-        let address: XFieldElement = BFieldElement::new(index as u128).lift();
+        let address: XFieldElement = BFieldElement::new(index as u64).lift();
         let current_instruction = padded_program[index];
         let next_instruction = XFieldElement::ring_zero();
 

@@ -35,7 +35,7 @@ pub trait GetPrimitiveRootOfUnity
 where
     Self: Sized,
 {
-    fn get_primitive_root_of_unity(&self, n: u128) -> (Option<Self>, Vec<u128>);
+    fn get_primitive_root_of_unity(&self, n: u64) -> (Option<Self>, Vec<u64>);
 }
 
 // Used for testing.
@@ -135,5 +135,9 @@ pub trait PrimeField:
         }
 
         res
+    }
+
+    fn square(self) -> Self {
+        self * self
     }
 }

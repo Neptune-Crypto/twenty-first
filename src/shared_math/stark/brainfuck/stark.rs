@@ -115,7 +115,7 @@ impl Stark {
         let num_randomizers = 1;
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(order as u128)
+            .get_primitive_root_of_unity(order as u64)
             .0
             .unwrap();
 
@@ -202,7 +202,7 @@ impl Stark {
         // Instantiate FRI object
         let b_field_generator = BFieldElement::generator();
         let b_field_omega = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(fri_domain_length as u128)
+            .get_primitive_root_of_unity(fri_domain_length as u64)
             .0
             .unwrap();
         let fri: Fri<StarkHasher> = Fri::new(
@@ -1207,7 +1207,7 @@ mod brainfuck_stark_tests {
             base_matrices
                 .instruction_matrix
                 .push(InstructionMatrixBaseRow {
-                    instruction_pointer: BFieldElement::new(i as u128),
+                    instruction_pointer: BFieldElement::new(i as u64),
                     current_instruction: program[i],
                     next_instruction: program[i + 1],
                 });
@@ -1215,7 +1215,7 @@ mod brainfuck_stark_tests {
         base_matrices
             .instruction_matrix
             .push(InstructionMatrixBaseRow {
-                instruction_pointer: BFieldElement::new((program.len() - 1) as u128),
+                instruction_pointer: BFieldElement::new((program.len() - 1) as u64),
                 current_instruction: *program.last().unwrap(),
                 next_instruction: zero,
             });
@@ -1233,7 +1233,7 @@ mod brainfuck_stark_tests {
                 });
 
             // update pointer registers according to instruction
-            if register.current_instruction == BFieldElement::new('[' as u128) {
+            if register.current_instruction == BFieldElement::new('[' as u64) {
                 // This is the 1st part of the attack, a loop is *always* entered
                 register.instruction_pointer += two;
 
@@ -1244,37 +1244,37 @@ mod brainfuck_stark_tests {
                 // } else {
                 //     register.instruction_pointer += two;
                 // }
-            } else if register.current_instruction == BFieldElement::new(']' as u128) {
+            } else if register.current_instruction == BFieldElement::new(']' as u64) {
                 if !register.memory_value.is_zero() {
                     register.instruction_pointer =
                         program[register.instruction_pointer.value() as usize + 1];
                 } else {
                     register.instruction_pointer += two;
                 }
-            } else if register.current_instruction == BFieldElement::new('<' as u128) {
+            } else if register.current_instruction == BFieldElement::new('<' as u64) {
                 register.instruction_pointer += one;
                 register.memory_pointer -= one;
-            } else if register.current_instruction == BFieldElement::new('>' as u128) {
+            } else if register.current_instruction == BFieldElement::new('>' as u64) {
                 register.instruction_pointer += one;
                 register.memory_pointer += one;
-            } else if register.current_instruction == BFieldElement::new('+' as u128) {
+            } else if register.current_instruction == BFieldElement::new('+' as u64) {
                 register.instruction_pointer += one;
                 memory.insert(
                     register.memory_pointer,
                     *memory.get(&register.memory_pointer).unwrap_or(&zero) + one,
                 );
-            } else if register.current_instruction == BFieldElement::new('-' as u128) {
+            } else if register.current_instruction == BFieldElement::new('-' as u64) {
                 register.instruction_pointer += one;
                 memory.insert(
                     register.memory_pointer,
                     *memory.get(&register.memory_pointer).unwrap_or(&zero) - one,
                 );
-            } else if register.current_instruction == BFieldElement::new('.' as u128) {
+            } else if register.current_instruction == BFieldElement::new('.' as u64) {
                 register.instruction_pointer += one;
                 base_matrices
                     .output_matrix
                     .push(*memory.get(&register.memory_pointer).unwrap_or(&zero));
-            } else if register.current_instruction == BFieldElement::new(',' as u128) {
+            } else if register.current_instruction == BFieldElement::new(',' as u64) {
                 register.instruction_pointer += one;
                 let input_char = input_symbols[input_counter];
                 input_counter += 1;
@@ -1309,7 +1309,7 @@ mod brainfuck_stark_tests {
             };
 
             // This is the 2nd part of the attack
-            if register.current_instruction == BFieldElement::new('[' as u128) {
+            if register.current_instruction == BFieldElement::new('[' as u64) {
                 register.memory_value_inverse = BFieldElement::new(42);
             }
         }

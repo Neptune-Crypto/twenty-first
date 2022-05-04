@@ -456,7 +456,7 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
 
         let result_degree: u64 = 2 * self.degree() as u64;
         let order = roundup_npo2(result_degree + 1);
-        let (root_res, _) = self.coefficients[0].get_primitive_root_of_unity(order as u128);
+        let (root_res, _) = self.coefficients[0].get_primitive_root_of_unity(order);
         let root = match root_res {
             Some(n) => n,
             None => panic!("Failed to find primitive root for order = {}", order),

@@ -64,7 +64,7 @@ impl OpStack {
         } else {
             let offset = OP_STACK_REG_COUNT + 1;
             let n = self.stack.len() - offset;
-            BWord::new(n as u128)
+            BWord::new(n as u64)
         }
     }
 

@@ -59,7 +59,7 @@ impl XFieldElement {
     }
 
     #[inline]
-    pub fn new_u128(coeffs: [u128; 3]) -> Self {
+    pub fn new_u64(coeffs: [u64; 3]) -> Self {
         Self {
             coefficients: [
                 BFieldElement::new(coeffs[0]),
@@ -144,16 +144,14 @@ impl XFieldElement {
         )
     }
 
-    // `incr` and `decr` are mainly used for testing purposes
-    pub fn incr(&mut self, index: usize) {
+    // `increment` and `decrement` are mainly used for testing purposes
+    pub fn increment(&mut self, index: usize) {
         self.coefficients[index].increment();
     }
 
-    pub fn decr(&mut self, index: usize) {
+    pub fn decrement(&mut self, index: usize) {
         self.coefficients[index].decrement();
     }
-
-    // TODO: legendre_symbol
 }
 
 impl Inverse for XFieldElement {
@@ -166,7 +164,7 @@ impl Inverse for XFieldElement {
 }
 
 impl GetPrimitiveRootOfUnity for XFieldElement {
-    fn get_primitive_root_of_unity(&self, n: u128) -> (Option<XFieldElement>, Vec<u128>) {
+    fn get_primitive_root_of_unity(&self, n: u64) -> (Option<XFieldElement>, Vec<u64>) {
         let (b_root, primes) = self.coefficients[0].get_primitive_root_of_unity(n);
         let x_root = b_root.map(XFieldElement::new_const);
 
@@ -260,7 +258,7 @@ impl IdentityValues for XFieldElement {
 // This trait is used by INTT
 impl New for XFieldElement {
     fn new_from_usize(&self, value: usize) -> Self {
-        Self::new_const(BFieldElement::new(value as u128))
+        Self::new_const(BFieldElement::new(value as u64))
     }
 }
 
@@ -532,52 +530,52 @@ mod x_field_element_test {
         let max_x = XFieldElement::new([0, BFieldElement::MAX, 0].map(BFieldElement::new));
         let max_x_squared = XFieldElement::new([0, 0, BFieldElement::MAX].map(BFieldElement::new));
         let mut val = XFieldElement::ring_zero();
-        val.incr(0);
+        val.increment(0);
         assert!(val.is_one());
-        val.incr(0);
+        val.increment(0);
         assert_eq!(two_const, val);
-        val.decr(0);
+        val.decrement(0);
         assert!(val.is_one());
-        val.decr(0);
+        val.decrement(0);
         assert!(val.is_zero());
-        val.decr(0);
+        val.decrement(0);
         assert_eq!(max_const, val);
-        val.decr(0);
+        val.decrement(0);
         assert_eq!(max_const - XFieldElement::ring_one(), val);
-        val.decr(0);
+        val.decrement(0);
         assert_eq!(
             max_const - XFieldElement::ring_one() - XFieldElement::ring_one(),
             val
         );
-        val.incr(0);
-        val.incr(0);
-        val.incr(0);
+        val.increment(0);
+        val.increment(0);
+        val.increment(0);
         assert!(val.is_zero());
-        val.incr(1);
+        val.increment(1);
         assert_eq!(one_x, val);
-        val.incr(1);
+        val.increment(1);
         assert_eq!(two_x, val);
-        val.decr(1);
-        val.decr(1);
+        val.decrement(1);
+        val.decrement(1);
         assert!(val.is_zero());
-        val.decr(1);
+        val.decrement(1);
         assert_eq!(max_x, val);
-        val.incr(1);
-        val.incr(2);
+        val.increment(1);
+        val.increment(2);
         assert_eq!(one_x_squared, val);
-        val.incr(2);
+        val.increment(2);
         assert_eq!(two_x_squared, val);
-        val.decr(2);
-        val.decr(2);
+        val.decrement(2);
+        val.decrement(2);
         assert!(val.is_zero());
-        val.decr(2);
+        val.decrement(2);
         assert_eq!(max_x_squared, val);
-        val.decr(1);
-        val.decr(0);
+        val.decrement(1);
+        val.decrement(0);
         assert_eq!(max_x_squared + max_x + max_const, val);
-        val.decr(2);
-        val.decr(1);
-        val.decr(0);
+        val.decrement(2);
+        val.decrement(1);
+        val.decrement(0);
         assert_eq!(
             max_x_squared + max_x + max_const - one_const - one_x - one_x_squared,
             val
@@ -838,21 +836,21 @@ mod x_field_element_test {
 
             // Negative test, verify that when decrementing and incrementing
             // by one in the different indices, we get something
-            rand.incr(0);
+            rand.increment(0);
             assert!((rand * rand.inverse()).is_one());
             assert!((rand.inverse() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());
             assert!(!(rand_inv_original * rand).is_one());
-            rand.decr(0);
+            rand.decrement(0);
 
-            rand.incr(1);
+            rand.increment(1);
             assert!((rand * rand.inverse()).is_one());
             assert!((rand.inverse() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());
             assert!(!(rand_inv_original * rand).is_one());
-            rand.decr(1);
+            rand.decrement(1);
 
-            rand.incr(2);
+            rand.increment(2);
             assert!((rand * rand.inverse()).is_one());
             assert!((rand.inverse() * rand).is_one());
             assert!(!(rand * rand_inv_original).is_one());
@@ -879,6 +877,7 @@ mod x_field_element_test {
             assert_eq!(ab, ba);
             assert_eq!(ab / b, a);
             assert_eq!(ab / a, b);
+            assert_eq!(a * a, a.square());
 
             // Test the add/sub/mul assign operators
             let mut a_minus_b = a;
@@ -909,7 +908,7 @@ mod x_field_element_test {
 
         let expecteds = [1u64, 3, 9, 27, 81, 243].iter().map(|&x| {
             XFieldElement::new([
-                BFieldElement::new(x as u128),
+                BFieldElement::new(x as u64),
                 BFieldElement::ring_zero(),
                 BFieldElement::ring_zero(),
             ])
@@ -929,8 +928,8 @@ mod x_field_element_test {
         for i in [2, 4, 8, 16, 32] {
             // Verify that NTT and INTT are each other's inverses,
             // and that NTT corresponds to polynomial evaluation
-            let inputs_u128: Vec<u128> = (0..i).collect();
-            let inputs: Vec<XFieldElement> = inputs_u128
+            let inputs_u64: Vec<u64> = (0..i).collect();
+            let inputs: Vec<XFieldElement> = inputs_u64
                 .iter()
                 .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
                 .collect();

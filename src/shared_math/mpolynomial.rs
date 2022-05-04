@@ -1248,9 +1248,9 @@ mod test_mpolynomials {
     // This function does what `pfb` used to do.
     fn pfb_orthodox(n: i128) -> BFieldElement {
         if n < 0 {
-            -BFieldElement::new((-n) as u128)
+            -BFieldElement::new((-n) as u64)
         } else {
-            BFieldElement::new(n as u128)
+            BFieldElement::new(n as u64)
         }
     }
 
@@ -2058,13 +2058,13 @@ mod test_mpolynomials {
     fn gen_upolynomials(
         degree: usize,
         count: usize,
-        coefficient_limit: u128,
+        coefficient_limit: u64,
     ) -> Vec<Polynomial<BFieldElement>> {
         let mut ret: Vec<Polynomial<BFieldElement>> = vec![];
         for _ in 0..count {
             let coefficients: Vec<BFieldElement> = generate_random_numbers_u128(degree + 1, None)
                 .into_iter()
-                .map(|x| BFieldElement::new(x % coefficient_limit + 1))
+                .map(|x| BFieldElement::new((x % coefficient_limit as u128 + 1) as u64))
                 .collect();
             ret.push(Polynomial { coefficients });
         }
@@ -2100,7 +2100,7 @@ mod test_mpolynomials {
 
         // adding 1 prevents us from building multivariate polynomial containing zero-coefficients
         let elem = rng.next_u64() % limit + 1;
-        BFieldElement::new(elem as u128)
+        BFieldElement::new(elem)
     }
 
     #[test]
@@ -2320,10 +2320,10 @@ mod test_mpolynomials {
     fn print_display_xfield_test() {
         let mut mcoef: MCoefficients<XFieldElement> = HashMap::new();
 
-        mcoef.insert(vec![0, 0], XFieldElement::new_u128([5, 6, 7]));
-        mcoef.insert(vec![0, 1], XFieldElement::new_u128([8, 9, 10]));
-        mcoef.insert(vec![2, 0], XFieldElement::new_u128([11, 12, 13]));
-        mcoef.insert(vec![3, 4], XFieldElement::new_u128([14, 15, 16]));
+        mcoef.insert(vec![0, 0], XFieldElement::new_u64([5, 6, 7]));
+        mcoef.insert(vec![0, 1], XFieldElement::new_u64([8, 9, 10]));
+        mcoef.insert(vec![2, 0], XFieldElement::new_u64([11, 12, 13]));
+        mcoef.insert(vec![3, 4], XFieldElement::new_u64([14, 15, 16]));
 
         let mpoly = MPolynomial {
             variable_count: 2,
