@@ -172,8 +172,78 @@ pub fn neptune_params() -> RescuePrimeXlix<RP_DEFAULT_WIDTH> {
 
 #[cfg(test)]
 mod rescue_prime_xlix_tests {
-    // use super::*;
-    // use crate::shared_math::traits::GetRandomElements;
+    use super::*;
+
+    #[test]
+    fn test_vector_0() {
+        let rp = neptune_params();
+        let input: Vec<BFieldElement> = vec![BFieldElement::ring_one()];
+        let expected = vec![
+            BFieldElement::new(15634820042269645118),
+            BFieldElement::new(615341424773519402),
+            BFieldElement::new(7368749134254585916),
+            BFieldElement::new(6434330208930178748),
+            BFieldElement::new(7150561627751137065),
+        ];
+        assert_eq!(expected, rp.hash(&input, 5));
+    }
+
+    #[test]
+    fn test_vector_1() {
+        let rp = neptune_params();
+        let start_value = 74620000171;
+        let width = 10;
+        let input: Vec<BFieldElement> = (start_value..start_value + width)
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect::<Vec<_>>();
+        let expected = vec![
+            BFieldElement::new(18207611346694155661),
+            BFieldElement::new(5358489668086158029),
+            BFieldElement::new(15218675170619297004),
+            BFieldElement::new(12919464649779078983),
+            BFieldElement::new(9284515517624112714),
+        ];
+        assert_eq!(expected, rp.hash(&input, 5));
+    }
+
+    #[test]
+    fn test_vector_2() {
+        let rp = neptune_params();
+        let start_value = 52;
+        let width = 12;
+        let input: Vec<BFieldElement> = (start_value..start_value + width)
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect::<Vec<_>>();
+        let expected = vec![
+            BFieldElement::new(15553216544334069563),
+            BFieldElement::new(4073764666052098467),
+            BFieldElement::new(859354448687586835),
+            BFieldElement::new(1073582295778570986),
+            BFieldElement::new(11270468737577744401),
+        ];
+        assert_eq!(expected, rp.hash(&input, 5));
+    }
+
+    #[test]
+    fn test_vector_3() {
+        let rp = neptune_params();
+        let start_value = 1000;
+        let width = 37;
+        let input: Vec<BFieldElement> = (start_value..start_value + width)
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect::<Vec<_>>();
+        let expected = vec![
+            BFieldElement::new(6860796620242995210),
+            BFieldElement::new(5250556310206967797),
+            BFieldElement::new(15566964441017148761),
+            BFieldElement::new(7948069663969379846),
+            BFieldElement::new(10491176845836052780),
+        ];
+        assert_eq!(expected, rp.hash(&input, 5));
+    }
 }
 
 const MDS: [[BFieldElement; RP_DEFAULT_WIDTH]; RP_DEFAULT_WIDTH] = [
