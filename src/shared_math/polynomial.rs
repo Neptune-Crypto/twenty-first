@@ -618,10 +618,17 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         }
     }
 
-    // domain: polynomium roots
+    // domain: polynomial roots
     pub fn fast_zerofier(domain: &[PFElem], primitive_root: &PFElem, root_order: usize) -> Self {
-        // assert(primitive_root^root_order == primitive_root.field.one()), "supplied root does not have supplied order"
-        // assert(primitive_root^(root_order//2) != primitive_root.field.one()), "supplied root is not primitive root of supplied order"
+        debug_assert_eq!(
+            primitive_root.mod_pow_u32(root_order as u32),
+            primitive_root.ring_one(),
+            "Supplied element “primitive_root” must have supplied order.\
+            Supplied element was: {:?}\
+            Supplied order was: {:?}",
+            primitive_root,
+            root_order
+        );
 
         if domain.is_empty() {
             return Self::ring_zero();
@@ -632,6 +639,19 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
                 coefficients: vec![-domain[0], primitive_root.ring_one()],
             };
         }
+
+        // This assertion must come after above recursion-ending cases have been dealt with.
+        // Otherwise, the supplied primitive_root will (at some point) equal 1 with correct
+        // root_order = 1, incorrectly failing the assertion.
+        debug_assert_ne!(
+            primitive_root.mod_pow_u32((root_order / 2) as u32),
+            primitive_root.ring_one(),
+            "Supplied element “primitive_root” must be primitive root of supplied order.\
+            Supplied element was: {:?}\
+            Supplied order was: {:?}",
+            primitive_root,
+            root_order
+        );
 
         let half = domain.len() / 2;
 
@@ -685,7 +705,15 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             values.len(),
             "Domain and values lengths must match"
         );
-        assert!(primitive_root.mod_pow_u32(root_order as u32).is_one());
+        debug_assert_eq!(
+            primitive_root.mod_pow_u32(root_order as u32),
+            primitive_root.ring_one(),
+            "Supplied element “primitive_root” must have supplied order.\
+            Supplied element was: {:?}\
+            Supplied order was: {:?}",
+            primitive_root,
+            root_order
+        );
 
         if domain.is_empty() {
             return Self::ring_zero();
@@ -697,7 +725,15 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             };
         }
 
-        assert!(!primitive_root.mod_pow_u32(root_order as u32 / 2).is_one());
+        debug_assert_ne!(
+            primitive_root.mod_pow_u32((root_order / 2) as u32),
+            primitive_root.ring_one(),
+            "Supplied element “primitive_root” must be primitive root of supplied order.\
+            Supplied element was: {:?}\
+            Supplied order was: {:?}",
+            primitive_root,
+            root_order
+        );
 
         let half = domain.len() / 2;
         let primitive_root_squared = primitive_root.to_owned() * primitive_root.to_owned();
