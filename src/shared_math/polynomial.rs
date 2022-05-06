@@ -217,17 +217,21 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         if p0.0 == p1.0 || p1.0 == p2.0 || p2.0 == p0.0 {
             return false;
         }
-        p2.1 == Self::get_point_on_line(p0, p1, p2.0)
+
+        let dy = p0.1 - p1.1;
+        let dx = p0.0 - p1.0;
+
+        dx * (p2.1 - p0.1) == dy * (p2.0 - p0.0)
     }
 
-    pub fn get_point_on_line(p0: (PFElem, PFElem), p1: (PFElem, PFElem), p2_x: PFElem) -> PFElem {
+    pub fn get_colinear_y(p0: (PFElem, PFElem), p1: (PFElem, PFElem), p2_x: PFElem) -> PFElem {
         debug_assert_ne!(p0.0, p1.0, "Line must not be parallel to y-axis");
         let dy = p0.1 - p1.1;
         let dx = p0.0 - p1.0;
+        let p2_y_times_dx = dy * (p2_x - p0.0) + dx * p0.1;
+
         // Can we implement this without division?
-        let a = dy / dx;
-        let b = p0.1 - a * p0.0;
-        a * p2_x + b
+        p2_y_times_dx / dx
     }
 
     // Calculates a reversed representation of the coefficients of
@@ -2909,7 +2913,7 @@ mod test_polynomials {
         let p_1 = (three, three);
         assert_eq!(
             two,
-            Polynomial::<BFieldElement>::get_point_on_line(p_0, p_1, two)
+            Polynomial::<BFieldElement>::get_colinear_y(p_0, p_1, two)
         );
         let one = XFieldElement::ring_one();
         let two = one + one;
@@ -2918,7 +2922,7 @@ mod test_polynomials {
         let p_1 = (three, three);
         assert_eq!(
             two,
-            Polynomial::<XFieldElement>::get_point_on_line(p_0, p_1, two)
+            Polynomial::<XFieldElement>::get_colinear_y(p_0, p_1, two)
         );
     }
 
