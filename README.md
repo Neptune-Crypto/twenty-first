@@ -1,6 +1,7 @@
 # twenty-first
 
 A collection of cryptography functions written in Rust.
+[![Build Status](https://drone.neptune.builders/api/badges/core-team/twenty-first/status.svg)](https://drone.neptune.builders/core-team/twenty-first)
 
 ## Setup
 
