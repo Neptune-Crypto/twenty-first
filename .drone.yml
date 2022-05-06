@@ -4,14 +4,26 @@ type: docker
 name: default
 
 steps:
-  - name: MainPipeline
+  - name: Check
     image: rust:1.60
     commands:
       - cargo check
       - cargo check --tests
+
+  - name: Build
+    image: rust:1.60
+    commands:
       - cargo build
+
+  - name: Test
+    image: rust:1.60
+    commands:
       - cargo test
-      - cargo bench
+
+        #  - name: Benchmarks
+        #    image: rust:1.60
+        #    commands:
+        #     - cargo bench stark_bf
 
 trigger:
   branch:
