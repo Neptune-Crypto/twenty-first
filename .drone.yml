@@ -16,6 +16,3 @@ steps:
 trigger:
   branch:
     - master
-  event:
-    - push
-    - pull_request
