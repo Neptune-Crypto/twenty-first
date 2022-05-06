@@ -20,6 +20,7 @@ steps:
     commands:
       - cargo test
 
+        # Warning:  These takes 28 minutes to run
         #  - name: Benchmarks
         #    image: rust:1.60
         #    commands:
@@ -28,5 +29,3 @@ steps:
 trigger:
   branch:
     - master
-
-# Trigger
