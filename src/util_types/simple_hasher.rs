@@ -11,7 +11,6 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterato
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use super::mutator_set::accumulation_scheme::Chunk;
 /// A simple `Hasher` trait that allows for hashing one, two or many values into one digest.
 ///
 /// The type of digest is determined by the `impl` of a given `Hasher`, and it requires that
