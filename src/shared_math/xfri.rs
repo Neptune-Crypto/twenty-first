@@ -252,7 +252,7 @@ where
         let mut values_and_merkle_trees = vec![(codeword_local.clone(), mt)];
 
         let (num_rounds, _) = self.num_rounds();
-        for r in 0..num_rounds {
+        for _round in 0..num_rounds {
             let n = codeword_local.len();
 
             // Get challenge
@@ -376,13 +376,12 @@ where
         roots.push(first_root);
         timer.elapsed("Init");
 
-        for r in 0..num_rounds {
+        for _round in 0..num_rounds {
             // Get a challenge from the proof stream
             let alpha_raw: H::Digest = proof_stream.verifier_fiat_shamir();
             let alpha: XFieldElement =
                 XFieldElement::new([alpha_raw[0], alpha_raw[1], alpha_raw[2]]);
             alphas.push(alpha);
-            println!("Verifier Alpha of round {}: {}", r, alpha);
 
             let root: H::Digest = proof_stream.dequeue()?.as_merkle_root()?;
             roots.push(root);
@@ -470,16 +469,16 @@ where
                 "Got c-indices for current round equal to a-indices for next round ({})",
                 r + 1
             ));
-            timer.elapsed(&format!("Compute a-values for next round ({})", r + 1));
             let c_values = (0..self.colinearity_checks_count)
                 .map(|i| {
-                    Polynomial::<XFieldElement>::get_point_on_line(
+                    Polynomial::<XFieldElement>::get_colinear_y(
                         (self.get_evaluation_argument(a_indices[i], r), a_values[i]),
                         (self.get_evaluation_argument(b_indices[i], r), b_values[i]),
                         alphas[r],
                     )
                 })
                 .collect();
+            timer.elapsed(&format!("Computed colinear c-values for current round equal to a-values for next round ({})", r + 1 ));
 
             // Notice that next rounds "A"s correspond to current rounds "C":
             a_indices = c_indices;
@@ -489,8 +488,8 @@ where
         }
         timer.elapsed("Stopping query phase step 1 (loop)");
 
-        // Finally compare "C"" values (which are named "A" values) with last
-        // codeword from the proofstream.
+        // Finally compare "C" values (which are named "A" values in this
+        // enclosing scope) with last codeword from the proofstream.
         a_indices = a_indices.iter().map(|x| x % current_domain_len).collect();
         if (0..self.colinearity_checks_count).any(|i| last_codeword[a_indices[i]] != a_values[i]) {
             return Err(Box::new(ValidationError::MismatchingLastCodeword));
