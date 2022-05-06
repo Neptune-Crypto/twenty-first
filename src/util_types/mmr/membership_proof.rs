@@ -50,7 +50,10 @@ impl<H> MembershipProof<H>
 where
     H: Hasher,
 {
-    /// Verify a membership proof for an MMR
+    /**
+     * verify
+     * Verify a membership proof for an MMR. If verification succeeds, return the final state of the accumulator hash.
+     */
     pub fn verify(
         &self,
         peaks: &[H::Digest],
