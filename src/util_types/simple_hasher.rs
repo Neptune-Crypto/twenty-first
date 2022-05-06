@@ -82,7 +82,7 @@ pub trait Hasher: Sized + Send + Sync + Clone {
 
     // FIXME: This is not uniform.
     fn sample_index_not_power_of_two(&self, input: &Self::Digest, max: usize) -> usize {
-        self.sample_index(input, other::roundup_npo2(max as u64) as usize) % max
+        self.sample_index(input, (1 << 16) * other::roundup_npo2(max as u64) as usize) % max
     }
 
     /// Given a uniform random `seed` digest, a `max` that is a power of two,
