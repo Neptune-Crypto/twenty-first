@@ -1,0 +1,21 @@
+---
+kind: pipeline
+type: docker
+name: default
+
+steps:
+  - name: Step 1
+    image: rust:1.60
+    commands:
+      - cargo check
+      - cargo check --tests
+      - cargo build
+      - cargo test
+      - cargo bench
+
+trigger:
+  branch:
+    - master
+  event:
+    - push
+    - pull_request
