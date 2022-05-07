@@ -2905,25 +2905,30 @@ mod test_polynomials {
     }
 
     #[test]
-    fn get_point_on_line_test() {
+    #[should_panic(expected = "assertion failed")]
+    fn get_point_on_invalid_line_test() {
         let one = BFieldElement::ring_one();
         let two = one + one;
         let three = two + one;
-        let p_0 = (one, one);
-        let p_1 = (three, three);
-        assert_eq!(
-            two,
-            Polynomial::<BFieldElement>::get_colinear_y(p_0, p_1, two)
-        );
+        Polynomial::<BFieldElement>::get_colinear_y((one, one), (one, three), two);
+    }
+
+    #[test]
+    fn get_point_on_line_test() {
+        type BPoly = Polynomial<BFieldElement>;
+        let one = BFieldElement::ring_one();
+        let two = one + one;
+        let three = two + one;
+        assert_eq!(two, BPoly::get_colinear_y((one, one), (three, three), two));
+        assert_eq!(two, BPoly::get_colinear_y((three, three), (one, one), two));
+        assert_eq!(one, BPoly::get_colinear_y((one, one), (three, one), two));
+        type XPoly = Polynomial<XFieldElement>;
         let one = XFieldElement::ring_one();
         let two = one + one;
         let three = two + one;
-        let p_0 = (one, one);
-        let p_1 = (three, three);
-        assert_eq!(
-            two,
-            Polynomial::<XFieldElement>::get_colinear_y(p_0, p_1, two)
-        );
+        assert_eq!(two, XPoly::get_colinear_y((one, one), (three, three), two));
+        assert_eq!(two, XPoly::get_colinear_y((three, three), (one, one), two));
+        assert_eq!(one, XPoly::get_colinear_y((one, one), (three, one), two));
     }
 
     fn gen_polynomial() -> Polynomial<BFieldElement> {
