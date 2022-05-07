@@ -451,7 +451,24 @@ impl Stark {
 
         timer.elapsed("get_all_base_degree_bounds");
 
-        let mut terms: Vec<Vec<XFieldElement>> = vec![x_randomizer_codeword];
+        // Get weights for nonlinear combination
+        let weights_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
+
+        timer.elapsed("prover_fiat_shamir (again)");
+
+        let weights_count = num_randomizer_polynomials
+            + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials);
+        let weights = Self::sample_weights(&hasher, &weights_seed, weights_count);
+
+        timer.elapsed("sample_weights");
+
+        // let mut terms: Vec<Vec<XFieldElement>> = vec![x_randomizer_codeword];
+        let mut weights_counter = 0;
+        let mut combination_codeword: Vec<XFieldElement> = x_randomizer_codeword
+            .into_iter()
+            .map(|elem| elem * weights[weights_counter])
+            .collect();
+        weights_counter += 1;
         assert_eq!(base_codewords.len(), num_base_polynomials);
         let fri_x_values: Vec<BFieldElement> = self.fri.domain.b_domain_values();
 
@@ -462,18 +479,23 @@ impl Stark {
             .zip(base_degree_bounds.iter())
             .enumerate()
         {
-            let bc_lifted: Vec<XFieldElement> = bc.iter().map(|bfe| bfe.lift()).collect();
-            terms.push(bc_lifted);
+            let bc_lifted = bc.iter().map(|bfe| bfe.lift());
+
+            combination_codeword = combination_codeword
+                .into_iter()
+                .zip(bc_lifted)
+                .map(|(c, bcl)| c + bcl * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
             let shift = (self.max_degree as Degree - bdb) as u32;
             let bc_shifted: Vec<XFieldElement> = fri_x_values
                 .iter()
                 .zip(bc.iter())
                 .map(|(x, &bce)| (bce * x.mod_pow_u32(shift)).lift())
                 .collect();
-            terms.push(bc_shifted);
 
             if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
+                let interpolated = self.fri.domain.x_interpolate(&bc_shifted);
                 assert!(
                     interpolated.degree() == -1
                         || interpolated.degree() == self.max_degree as isize,
@@ -483,6 +505,13 @@ impl Stark {
                     interpolated.degree()
                 );
             }
+
+            combination_codeword = combination_codeword
+                .into_iter()
+                .zip(bc_shifted.into_iter())
+                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
         }
 
         timer.elapsed("...shift and interpolate base codewords?");
@@ -493,26 +522,37 @@ impl Stark {
             .zip(extension_degree_bounds.iter())
             .enumerate()
         {
-            terms.push(ec.to_vec());
+            combination_codeword = combination_codeword
+                .into_iter()
+                .zip(ec.iter())
+                .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
             let shift = (self.max_degree as Degree - edb) as u32;
             let ec_shifted: Vec<XFieldElement> = fri_x_values
                 .iter()
                 .zip(ec.iter())
                 .map(|(x, &ece)| ece * x.mod_pow_u32(shift).lift())
                 .collect();
-            terms.push(ec_shifted);
 
             if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
+                let interpolated = self.fri.domain.x_interpolate(&ec_shifted);
                 assert!(
-                    interpolated.degree() == -1
-                        || interpolated.degree() == self.max_degree as isize,
-                    "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
-                    i,
-                    self.max_degree,
-                    interpolated.degree()
-                );
+                        interpolated.degree() == -1
+                            || interpolated.degree() == self.max_degree as isize,
+                        "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
+                        i,
+                        self.max_degree,
+                        interpolated.degree()
+                    );
             }
+
+            combination_codeword = combination_codeword
+                .into_iter()
+                .zip(ec_shifted.into_iter())
+                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
         }
 
         timer.elapsed("...shift and interpolate extension codewords?");
@@ -523,18 +563,21 @@ impl Stark {
             .zip(quotient_degree_bounds.iter())
             .enumerate()
         {
-            terms.push(qc.to_vec());
+            combination_codeword = combination_codeword
+                .into_iter()
+                .zip(qc.iter())
+                .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
             let shift = (self.max_degree as Degree - qdb) as u32;
-            let qc_shifted: Vec<XFieldElement> = fri_x_values
+            let qc_shifted = fri_x_values
                 .iter()
                 .zip(qc.iter())
-                .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift())
-                .collect();
-            terms.push(qc_shifted);
+                .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift());
 
             // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
             // if std::env::var("DEBUG").is_ok() {
-            //     let interpolated = self.fri.domain.x_interpolate(terms.last().unwrap());
+            //     let interpolated = self.fri.domain.x_interpolate(&qc_shifted);
             //     let unshifted_degree = self
             //         .fri
             //         .domain
@@ -552,46 +595,42 @@ impl Stark {
             //         shift
             //     );
             // }
+
+            combination_codeword = combination_codeword
+                .into_iter()
+                .zip(qc_shifted)
+                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
         }
 
         timer.elapsed("...shift (~and interpolate~) quotient codewords?");
 
-        // Get weights for nonlinear combination
-        let weights_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
-
-        timer.elapsed("prover_fiat_shamir (again)");
-
-        let weights_count = num_randomizer_polynomials
-            + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials);
-        let weights = Self::sample_weights(&hasher, &weights_seed, weights_count);
-
-        timer.elapsed("sample_weights");
-
-        assert_eq!(
-            terms.len(),
-            weights.len(),
-            "Number of terms in non-linear combination must match number of weights"
-        );
+        // assert_eq!(
+        //     terms.len(),
+        //     weights.len(),
+        //     "Number of terms in non-linear combination must match number of weights"
+        // );
 
         // Take weighted sum
         // TODO: Consider if this would go faster with some form of memoization
-        let combination_codeword: Vec<XFieldElement> = weights
-            .par_iter()
-            .zip(terms.par_iter())
-            .map(|(w, t)| {
-                (0..self.fri.domain.length)
-                    .map(|i| *w * t[i])
-                    .collect::<Vec<XFieldElement>>()
-            })
-            .reduce(
-                || vec![XFieldElement::ring_zero(); self.fri.domain.length],
-                |acc, weighted_terms| {
-                    acc.iter()
-                        .zip(weighted_terms.iter())
-                        .map(|(a, wt)| *a + *wt)
-                        .collect()
-                },
-            );
+        // let combination_codeword: Vec<XFieldElement> = weights
+        //     .par_iter()
+        //     .zip(terms.par_iter())
+        //     .map(|(w, t)| {
+        //         (0..self.fri.domain.length)
+        //             .map(|i| *w * t[i])
+        //             .collect::<Vec<XFieldElement>>()
+        //     })
+        //     .reduce(
+        //         || vec![XFieldElement::ring_zero(); self.fri.domain.length],
+        //         |acc, weighted_terms| {
+        //             acc.iter()
+        //                 .zip(weighted_terms.iter())
+        //                 .map(|(a, wt)| *a + *wt)
+        //                 .collect()
+        //         },
+        //     );
 
         timer.elapsed("combination_codeword");
         let mut combination_codeword_digests: Vec<Vec<BFieldElement>> =
