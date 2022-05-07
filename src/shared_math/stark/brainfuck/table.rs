@@ -12,6 +12,10 @@ use crate::shared_math::traits::{GetRandomElements, IdentityValues};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::xfri::FriDomain;
 use rand::thread_rng;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 
 pub const PROCESSOR_TABLE: usize = 0;
 pub const INSTRUCTION_TABLE: usize = 1;
@@ -395,24 +399,23 @@ pub trait TableTrait {
         let transition_constraints = self.transition_constraints_ext(challenges);
 
         let mut quotients: Vec<Vec<XFieldElement>> = vec![];
+        let own_width = self.full_width();
+        let unit_distance = self.unit_distance(fri_domain.length);
         for tc in transition_constraints.iter() {
-            let mut quotient_codeword: Vec<XFieldElement> = vec![];
-            let mut composition_codeword: Vec<XFieldElement> = vec![];
-            for (i, z_inverse) in zerofier_inverse.iter().enumerate() {
-                let current: Vec<XFieldElement> =
-                    (0..self.full_width()).map(|j| codewords[j][i]).collect();
-                let next: Vec<XFieldElement> = (0..self.full_width())
-                    .map(|j| {
-                        codewords[j]
-                            [(i + self.unit_distance(fri_domain.length)) % fri_domain.length]
-                    })
-                    .collect();
-                let point = vec![current, next].concat();
-                let composition_evaluation = tc.evaluate(&point);
-                composition_codeword.push(composition_evaluation);
-                quotient_codeword.push(composition_evaluation * z_inverse.lift());
-                // TODO: `composition_codeword` is not returned from this function! Why?
-            }
+            let quotient_codeword: Vec<XFieldElement> = zerofier_inverse
+                .par_iter()
+                .enumerate()
+                .map(|(i, z_inverse)| {
+                    let current: Vec<XFieldElement> =
+                        (0..own_width).map(|j| codewords[j][i]).collect();
+                    let next: Vec<XFieldElement> = (0..own_width)
+                        .map(|j| codewords[j][(i + unit_distance) % fri_domain.length])
+                        .collect();
+                    let point = vec![current, next].concat();
+                    let composition_evaluation = tc.evaluate(&point);
+                    composition_evaluation * z_inverse.lift()
+                })
+                .collect();
 
             quotients.push(quotient_codeword);
         }
@@ -450,11 +453,13 @@ pub trait TableTrait {
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier_codeword);
         let terminal_constraints = self.terminal_constraints_ext(challenges, terminals);
         let mut quotient_codewords: Vec<Vec<XFieldElement>> = vec![];
+        let own_width = self.full_width();
         for termc in terminal_constraints.iter() {
             let quotient_codeword: Vec<XFieldElement> = (0..fri_domain.length)
+                .into_par_iter()
                 .map(|i| {
                     let point: Vec<XFieldElement> =
-                        (0..self.full_width()).map(|j| codewords[j][i]).collect();
+                        (0..own_width).map(|j| codewords[j][i]).collect();
                     termc.evaluate(&point) * zerofier_inverse[i].lift()
                 })
                 .collect();
@@ -489,11 +494,13 @@ pub trait TableTrait {
             .map(|i| fri_domain.b_domain_value(i as u32) - one)
             .collect();
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
+        let own_width = self.full_width();
         for bc in boundary_constraints {
             let quotient_codeword: Vec<XFieldElement> = (0..fri_domain.length)
+                .into_par_iter()
                 .map(|i| {
                     let point: Vec<XFieldElement> =
-                        (0..self.full_width()).map(|j| codewords[j][i]).collect();
+                        (0..own_width).map(|j| codewords[j][i]).collect();
                     bc.evaluate(&point) * zerofier_inverse[i].lift()
                 })
                 .collect();
