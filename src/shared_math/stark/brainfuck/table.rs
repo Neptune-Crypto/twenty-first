@@ -127,7 +127,6 @@ impl<T: TableMoreTrait> Table<T> {
             "Temporary restriction that number of randomizers must not exceed table height"
         );
 
-        let mut polynomials: Vec<Polynomial<BFieldElement>> = vec![];
         let omicron_domain: Vec<BFieldElement> = (0..self.height)
             .map(|i| self.omicron.mod_pow(i as u64))
             .collect();
@@ -135,6 +134,7 @@ impl<T: TableMoreTrait> Table<T> {
             .map(|i| omega * omicron_domain[i])
             .collect();
         let domain = vec![omicron_domain, randomizer_domain].concat();
+        let mut valuess: Vec<Vec<BFieldElement>> = vec![];
         let mut rng = thread_rng();
         for c in column_indices {
             let trace: Vec<BFieldElement> = self.matrix.iter().map(|row| row[c]).collect();
@@ -146,15 +146,13 @@ impl<T: TableMoreTrait> Table<T> {
                 domain.len(),
                 "Length of x values and y values must match"
             );
-            polynomials.push(Polynomial::fast_interpolate(
-                &domain,
-                &values,
-                &omega,
-                omega_order,
-            ));
+            valuess.push(values);
         }
 
-        polynomials
+        valuess
+            .par_iter()
+            .map(|values| Polynomial::fast_interpolate(&domain, values, &omega, omega_order))
+            .collect()
     }
 
     // TODO: Consider merging this with B-field interpolation method
@@ -189,7 +187,6 @@ impl<T: TableMoreTrait> Table<T> {
             "Temporary restriction that number of randomizers must not exceed table height"
         );
 
-        let mut polynomials: Vec<Polynomial<XFieldElement>> = vec![];
         let omicron_domain: Vec<XFieldElement> = (0..self.height)
             .map(|i| self.omicron.lift().mod_pow_u32(i as u32))
             .collect();
@@ -197,6 +194,7 @@ impl<T: TableMoreTrait> Table<T> {
             .map(|i| omega * omicron_domain[i])
             .collect();
         let domain = vec![omicron_domain, randomizer_domain].concat();
+        let mut valuess: Vec<Vec<XFieldElement>> = vec![];
         let mut rng = thread_rng();
         for c in column_indices {
             let trace: Vec<XFieldElement> = self.extended_matrix.iter().map(|row| row[c]).collect();
@@ -208,15 +206,13 @@ impl<T: TableMoreTrait> Table<T> {
                 domain.len(),
                 "Length of x values and y values must match"
             );
-            polynomials.push(Polynomial::fast_interpolate(
-                &domain,
-                &values,
-                &omega,
-                omega_order,
-            ));
+            valuess.push(values);
         }
 
-        polynomials
+        valuess
+            .par_iter()
+            .map(|values| Polynomial::fast_interpolate(&domain, values, &omega, omega_order))
+            .collect()
     }
 
     /// Evaluate the base table
@@ -227,7 +223,7 @@ impl<T: TableMoreTrait> Table<T> {
             (0..self.base_width).collect(),
         );
         self.codewords = polynomials
-            .iter()
+            .par_iter()
             .map(|p| domain.b_evaluate(p, BFieldElement::ring_zero()))
             .collect();
         self.codewords.clone()
@@ -239,13 +235,14 @@ impl<T: TableMoreTrait> Table<T> {
             domain.length,
             (self.base_width..self.full_width).collect(),
         );
+
         let extended_codewords = polynomials
-            .iter()
+            .par_iter()
             .map(|p| domain.x_evaluate(p))
             .collect::<Vec<Vec<XFieldElement>>>();
         self.extended_codewords = vec![
             self.codewords
-                .iter()
+                .par_iter()
                 .map(|x| x.iter().map(|y| y.lift()).collect::<Vec<XFieldElement>>())
                 .collect::<Vec<Vec<XFieldElement>>>(),
             extended_codewords.clone(),

@@ -15,6 +15,7 @@ fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
     let (trace_length, input_symbols, output_symbols) =
         brainfuck::vm::run(&program, input.to_vec()).unwrap();
     timer.elapsed("run");
+    println!("run done");
 
     let base_matrices: BaseMatrices = brainfuck::vm::simulate(&program, &input_symbols).unwrap();
     timer.elapsed("simulate");
@@ -67,6 +68,7 @@ fn _the_raven() {
 
 fn _the_whole_raven() {
     let program_code = brainfuck::vm::sample_programs::THE_WHOLE_RAVEN;
+    println!("compilation done");
     let input = [].map(BFieldElement::new).to_vec();
     compile_simulate_prove_verify(program_code, &input);
 }
