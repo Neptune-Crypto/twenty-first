@@ -1,5 +1,7 @@
 use itertools::Itertools;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 
 use super::b_field_element::BFieldElement;
 use super::other::{log_2_ceil, log_2_floor};
@@ -261,17 +263,19 @@ where
 
             let x_offset: Vec<XFieldElement> = generator
                 .get_cyclic_group_elements(None)
-                .into_iter()
+                .into_par_iter()
                 .map(|x| x * offset)
                 .collect();
 
             let x_offset_inverses = XFieldElement::batch_inversion(x_offset);
-            for i in 0..n / 2 {
-                codeword_local[i] = two_inv
-                    * ((one + alpha * x_offset_inverses[i]) * codeword_local[i]
-                        + (one - alpha * x_offset_inverses[i]) * codeword_local[n / 2 + i]);
-            }
-            codeword_local.truncate(n / 2);
+            codeword_local = (0..n / 2)
+                .into_par_iter()
+                .map(|i| {
+                    two_inv
+                        * ((one + alpha * x_offset_inverses[i]) * codeword_local[i]
+                            + (one - alpha * x_offset_inverses[i]) * codeword_local[n / 2 + i])
+                })
+                .collect();
 
             // Compute and send Merkle root. We have to do that within this loops, since
             // the next round's alpha must be calculated from the previous round's Merkle root.
@@ -435,7 +439,7 @@ where
             timer.elapsed(&format!("Round {} started.", r));
             // get "B" indices and verify set membership of corresponding values
             b_indices = b_indices
-                .iter()
+                .par_iter()
                 .map(|x| (x + current_domain_len / 2) % current_domain_len)
                 .collect();
             timer.elapsed(&format!("Get b-indices for current round ({})", r));
@@ -464,7 +468,10 @@ where
             );
             // compute "C" indices and values for next round from "A" and "B`"" of current round
             current_domain_len /= 2;
-            let c_indices = a_indices.iter().map(|x| x % current_domain_len).collect();
+            let c_indices = a_indices
+                .par_iter()
+                .map(|x| x % current_domain_len)
+                .collect();
             timer.elapsed(&format!(
                 "Got c-indices for current round equal to a-indices for next round ({})",
                 r + 1
