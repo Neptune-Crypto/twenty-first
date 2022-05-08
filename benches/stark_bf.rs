@@ -65,6 +65,12 @@ fn _the_raven() {
     compile_simulate_prove_verify(program_code, &input);
 }
 
+fn _the_whole_raven() {
+    let program_code = brainfuck::vm::sample_programs::THE_WHOLE_RAVEN;
+    let input = [].map(BFieldElement::new).to_vec();
+    compile_simulate_prove_verify(program_code, &input);
+}
+
 fn stark_bf(c: &mut Criterion) {
     let mut group = c.benchmark_group("stark_bf");
 
@@ -83,6 +89,12 @@ fn stark_bf(c: &mut Criterion) {
     // let the_raven_id = BenchmarkId::new("THE_RAVEN", 0);
     // group.bench_function(the_raven_id, |bencher| {
     //     bencher.iter(|| _the_raven());
+    // });
+
+    // THE_WHOLE_RAVEN
+    // let the_whole_raven_id = BenchmarkId::new("THE_WHOLE_RAVEN", 0);
+    // group.bench_function(the_whole_raven_id, |bencher| {
+    //     bencher.iter(|| _the_whole_raven());
     // });
 
     group.finish();
