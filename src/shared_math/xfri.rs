@@ -228,11 +228,11 @@ where
         codeword: &[XFieldElement],
         proof_stream: &mut StarkProofStream,
     ) -> Result<Vec<(Vec<XFieldElement>, MerkleTree<H>)>, Box<dyn Error>> {
-        let mut generator = self.domain.omega;
+        let mut subgroup_generator = self.domain.omega;
         let mut offset = self.domain.offset;
         let mut codeword_local = codeword.to_vec();
 
-        let one: XFieldElement = generator.ring_one();
+        let one: XFieldElement = subgroup_generator.ring_one();
         let two: XFieldElement = one + one;
         let two_inv = one / two;
 
@@ -261,7 +261,7 @@ where
             let alpha_b: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
             let alpha: XFieldElement = XFieldElement::new([alpha_b[0], alpha_b[1], alpha_b[2]]);
 
-            let x_offset: Vec<XFieldElement> = generator
+            let x_offset: Vec<XFieldElement> = subgroup_generator
                 .get_cyclic_group_elements(None)
                 .into_par_iter()
                 .map(|x| x * offset)
@@ -294,11 +294,12 @@ where
             values_and_merkle_trees.push((codeword_local.clone(), mt));
 
             // Update subgroup generator and offset
-            generator = generator * generator;
+            subgroup_generator = subgroup_generator * subgroup_generator;
             offset = offset * offset;
         }
 
         // Send the last codeword
+        // todo! use coefficient form for last codeword?
         let last_codeword: Vec<XFieldElement> = codeword_local;
         proof_stream.enqueue(&Item::FriCodeword(last_codeword));
 
