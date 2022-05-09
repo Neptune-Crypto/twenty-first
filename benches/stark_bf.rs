@@ -1,3 +1,4 @@
+use brainfuck::vm::sample_programs;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::stark::brainfuck;
@@ -48,56 +49,40 @@ fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
     println!("{}", report);
 }
 
-fn _two_by_two_then_output() {
-    let program_code = brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT;
-    let input = [97].map(BFieldElement::new).to_vec();
-    compile_simulate_prove_verify(program_code, &input);
-}
-
-fn _hello_world() {
-    let program_code = brainfuck::vm::sample_programs::HELLO_WORLD;
-    let input = [].map(BFieldElement::new).to_vec();
-    compile_simulate_prove_verify(program_code, &input);
-}
-
-fn _the_raven() {
-    let program_code = brainfuck::vm::sample_programs::THE_RAVEN;
-    let input = [].map(BFieldElement::new).to_vec();
-    compile_simulate_prove_verify(program_code, &input);
-}
-
-fn _the_whole_raven() {
-    let program_code = brainfuck::vm::sample_programs::THE_WHOLE_RAVEN;
-    println!("compilation done");
-    let input = [].map(BFieldElement::new).to_vec();
-    compile_simulate_prove_verify(program_code, &input);
-}
-
 fn stark_bf(c: &mut Criterion) {
     let mut group = c.benchmark_group("stark_bf");
 
     group.sample_size(10);
 
-    let two_by_two_then_output_id = BenchmarkId::new("TWO_BY_TWO_THEN_OUTPUT", 0);
-    group.bench_function(two_by_two_then_output_id, |bencher| {
-        bencher.iter(|| _two_by_two_then_output());
+    let two_by_two_then_output_id = BenchmarkId::new("TWO_BY_TWO_THEN_OUTPUT", 97);
+    let tbtto_input = [97].map(BFieldElement::new).to_vec();
+    group.bench_with_input(
+        two_by_two_then_output_id,
+        &tbtto_input,
+        |bencher, input_symbols| {
+            bencher.iter(|| {
+                compile_simulate_prove_verify(
+                    sample_programs::TWO_BY_TWO_THEN_OUTPUT,
+                    input_symbols,
+                )
+            });
+        },
+    );
+
+    let hello_world_id = BenchmarkId::new("HELLO_WORLD", "");
+    group.bench_function(hello_world_id, |bencher| {
+        bencher.iter(|| compile_simulate_prove_verify(sample_programs::HELLO_WORLD, &[]));
     });
 
-    // let hello_world_id = BenchmarkId::new("HELLO_WORLD", 0);
-    // group.bench_function(hello_world_id, |bencher| {
-    //     bencher.iter(|| _hello_world());
-    // });
+    let the_raven_id = BenchmarkId::new("THE_RAVEN", "");
+    group.bench_function(the_raven_id, |bencher| {
+        bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_RAVEN, &[]));
+    });
 
-    // let the_raven_id = BenchmarkId::new("THE_RAVEN", 0);
-    // group.bench_function(the_raven_id, |bencher| {
-    //     bencher.iter(|| _the_raven());
-    // });
-
-    // THE_WHOLE_RAVEN
-    // let the_whole_raven_id = BenchmarkId::new("THE_WHOLE_RAVEN", 0);
-    // group.bench_function(the_whole_raven_id, |bencher| {
-    //     bencher.iter(|| _the_whole_raven());
-    // });
+    let the_raven_id = BenchmarkId::new("THE_WHOLE_RAVEN", "");
+    group.bench_function(the_raven_id, |bencher| {
+        bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_WHOLE_RAVEN, &[]));
+    });
 
     group.finish();
 }
