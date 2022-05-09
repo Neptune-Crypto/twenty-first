@@ -3,12 +3,19 @@ use Ord16::*;
 use Ord4::*;
 use Ord6::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ord4 {
     N0,
     N1,
     N2,
     N3,
+}
+
+impl Display for Ord4 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n: usize = (*self).into();
+        write!(f, "{}", n)
+    }
 }
 
 impl From<Ord4> for usize {
@@ -22,14 +29,21 @@ impl From<Ord4> for usize {
     }
 }
 
-impl Display for Ord4 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let n: usize = (*self).into();
-        write!(f, "{}", n)
+impl TryFrom<usize> for Ord4 {
+    type Error = String;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(N0),
+            1 => Ok(N1),
+            2 => Ok(N2),
+            3 => Ok(N3),
+            _ => Err(format!("{} is out of range for Ord4", value)),
+        }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ord6 {
     IB0,
     IB1,
@@ -37,6 +51,13 @@ pub enum Ord6 {
     IB3,
     IB4,
     IB5,
+}
+
+impl Display for Ord6 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n: usize = (*self).into();
+        write!(f, "{}", n)
+    }
 }
 
 impl From<Ord6> for usize {
@@ -52,15 +73,24 @@ impl From<Ord6> for usize {
     }
 }
 
-impl Display for Ord6 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let n: usize = (*self).into();
-        write!(f, "{}", n)
+impl TryFrom<usize> for Ord6 {
+    type Error = String;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(IB0),
+            1 => Ok(IB1),
+            2 => Ok(IB2),
+            3 => Ok(IB3),
+            4 => Ok(IB4),
+            5 => Ok(IB5),
+            _ => Err(format!("{} is out of range for Ord6", value)),
+        }
     }
 }
 
 /// `Ord16` represents numbers that are exactly 0--15.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ord16 {
     A0,
     A1,
@@ -78,6 +108,13 @@ pub enum Ord16 {
     A13,
     A14,
     A15,
+}
+
+impl Display for Ord16 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n: usize = (*self).into();
+        write!(f, "{}", n)
+    }
 }
 
 impl From<Ord16> for usize {
@@ -103,9 +140,28 @@ impl From<Ord16> for usize {
     }
 }
 
-impl Display for Ord16 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let n: usize = (*self).into();
-        write!(f, "{}", n)
+impl TryFrom<usize> for Ord16 {
+    type Error = &'static str;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(A0),
+            1 => Ok(A1),
+            2 => Ok(A2),
+            3 => Ok(A3),
+            4 => Ok(A4),
+            5 => Ok(A5),
+            6 => Ok(A6),
+            7 => Ok(A7),
+            8 => Ok(A8),
+            9 => Ok(A9),
+            10 => Ok(A10),
+            11 => Ok(A11),
+            12 => Ok(A12),
+            13 => Ok(A13),
+            14 => Ok(A14),
+            15 => Ok(A15),
+            _ => Err("usize out of range for Ord16"),
+        }
     }
 }
