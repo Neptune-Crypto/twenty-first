@@ -250,12 +250,26 @@ impl Inverse for BFieldElement {
             "Attempted to find the multiplicative inverse of zero."
         );
 
-        let p = Self::QUOTIENT;
-        let xinv = x.mod_pow(p - 2);
+        #[inline(always)]
+        fn exp(base: BFieldElement, exponent: u64) -> BFieldElement {
+            let mut res = base;
+            for _ in 0..exponent {
+                res *= res
+            }
+            res
+        }
 
-        debug_assert_eq!(x * xinv, BFieldElement::ring_one());
+        let bin_2_ones = x.square() * x;
+        let bin_3_ones = bin_2_ones.square() * x;
+        let bin_6_ones = exp(bin_3_ones, 3) * bin_3_ones;
+        let bin_12_ones = exp(bin_6_ones, 6) * bin_6_ones;
+        let bin_24_ones = exp(bin_12_ones, 12) * bin_12_ones;
+        let bin_30_ones = exp(bin_24_ones, 6) * bin_6_ones;
+        let bin_31_ones = bin_30_ones.square() * x;
+        let bin_31_ones_1_zero = bin_31_ones.square();
+        let bin_32_ones = bin_31_ones.square() * x;
 
-        xinv
+        exp(bin_31_ones_1_zero, 32) * bin_32_ones
     }
 }
 
@@ -1066,5 +1080,19 @@ mod b_prime_field_element_test {
         // adding 1 prevents us from building multivariate polynomial containing zero-coefficients
         let elem = rng.next_u64() % limit + 1;
         BFieldElement::new(elem as u64)
+    }
+
+    #[test]
+    #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
+    fn multiplicative_inverse_of_zero() {
+        let zero = BFieldElement::ring_zero();
+        zero.inverse();
+    }
+
+    #[test]
+    #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
+    fn multiplicative_inverse_of_p() {
+        let zero = BFieldElement::new(BFieldElement::QUOTIENT);
+        zero.inverse();
     }
 }
