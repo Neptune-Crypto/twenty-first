@@ -338,20 +338,19 @@ where
         for i in 1..num_rounds {
             let codeword_length = last_codeword_length << i;
 
-            let mut new_indices: Vec<usize> = vec![];
-            for index in indices {
-                let digest: H::Digest = hasher.hash_pair(seed, &(counter as u128).to_digest());
-                let reduce_modulo: bool = hasher.sample_index(&digest, 2) == 0;
-                let new_index = if reduce_modulo {
-                    index + codeword_length / 2
-                } else {
-                    index
-                };
-                new_indices.push(new_index);
-
-                counter += 1;
-            }
-
+            let new_indices: Vec<usize> = indices
+                .par_iter()
+                .zip((counter..counter + self.colinearity_checks_count as u32).into_par_iter())
+                .map(|(index, count)| {
+                    let digest: H::Digest = hasher.hash_pair(seed, &(count as u128).to_digest());
+                    let reduce_modulo: bool = hasher.sample_index(&digest, 2) == 0;
+                    if reduce_modulo {
+                        index + codeword_length / 2
+                    } else {
+                        *index
+                    }
+                })
+                .collect();
             indices = new_indices;
         }
 
@@ -605,11 +604,43 @@ mod fri_domain_tests {
 mod xfri_tests {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::rescue_prime_xlix::{
+        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
+    };
     use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use crate::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::simple_hasher::{RescuePrimeProduction, ToDigest};
+    use crate::utils::has_unique_elements;
     use itertools::Itertools;
+    use rand::{thread_rng, RngCore};
+
+    #[test]
+    fn sample_indices_test() {
+        type Hasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
+
+        let hasher = RescuePrimeXlix::new();
+        let mut rng = thread_rng();
+        let subgroup_order = 16;
+        let expansion_factor = 4;
+        let colinearity_checks = 16;
+        let fri: Fri<Hasher> = get_x_field_fri_test_object::<Hasher>(
+            subgroup_order,
+            expansion_factor,
+            colinearity_checks,
+        );
+        let indices = fri.sample_indices(&hasher.hash(
+            &hasher.hash(
+                &vec![BFieldElement::new(rng.next_u64())],
+                RP_DEFAULT_OUTPUT_SIZE,
+            ),
+            RP_DEFAULT_OUTPUT_SIZE,
+        ));
+        assert!(
+            has_unique_elements(indices.iter()),
+            "Picked indices must be unique"
+        );
+    }
 
     #[test]
     fn get_rounds_count_test() {
