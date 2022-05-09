@@ -160,7 +160,7 @@ where
             Vec<PartialAuthenticationPath<H::Digest>>,
             Vec<XFieldElement>,
         ) = proof_stream.dequeue()?.as_fri_proof()?.into_iter().unzip();
-        let digests = values.iter().map(|v| hasher.hash(v)).collect_vec();
+        let digests: Vec<H::Digest> = values.par_iter().map(|v| hasher.hash(v)).collect();
         let path_digest_pairs = paths.into_iter().zip(digests).collect_vec();
         if MerkleTree::<H>::verify_multi_proof(root, indices, &path_digest_pairs) {
             Ok(values)
