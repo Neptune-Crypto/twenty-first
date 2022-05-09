@@ -25,6 +25,9 @@ doc:
 	cargo doc --no-deps
 	xdg-open "target/doc/twenty_first/index.html"
 
+check:
+	cargo check
+
 ctags:
 	# Do `cargo install rusty-tags`
 	# See https://github.com/dan-t/rusty-tags
@@ -54,6 +57,7 @@ test:
 bench:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo bench
+
 bench-no-run:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo bench --no-run
