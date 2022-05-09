@@ -79,7 +79,7 @@ where
 
         let hasher = H::new();
 
-        // Parallel implementation
+        // Parallel digest calculations
         let mut node_count_on_this_level: usize = digests.len() / 2;
         let mut count_acc: usize = 0;
         while node_count_on_this_level >= PARALLELLIZATION_THRESHOLD {
@@ -99,6 +99,7 @@ where
             node_count_on_this_level /= 2;
         }
 
+        // Sequential digest calculations
         for i in (1..(digests.len() - count_acc)).rev() {
             nodes[i] = hasher.hash_pair(&nodes[i * 2], &nodes[i * 2 + 1]);
         }
