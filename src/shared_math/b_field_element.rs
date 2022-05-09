@@ -243,11 +243,19 @@ impl Inverse for BFieldElement {
     #[must_use]
     #[inline]
     fn inverse(&self) -> Self {
-        let (_, _, a) = other::xgcd(Self::QUOTIENT as i128, self.0 as i128);
+        let x = *self;
+        assert_ne!(
+            x,
+            Self::ring_zero(),
+            "Attempted to find the multiplicative inverse of zero."
+        );
 
-        Self(
-            ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128) as u64,
-        )
+        let p = Self::QUOTIENT;
+        let xinv = x.mod_pow(p - 2);
+
+        debug_assert_eq!(x * xinv, BFieldElement::ring_one());
+
+        xinv
     }
 }
 
