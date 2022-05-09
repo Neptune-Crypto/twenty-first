@@ -433,13 +433,15 @@ where
         // can be calcuated from each other.
         let mut b_indices = a_indices.clone();
         let mut current_domain_len = self.domain.length;
+
         // query step 1:  loop over FRI rounds, verify "B"s, compute values for "C"s
         timer.elapsed("Starting query phase step 1 (loop)");
         for r in 0..num_rounds {
             timer.elapsed(&format!("Round {} started.", r));
+
             // get "B" indices and verify set membership of corresponding values
             b_indices = b_indices
-                .par_iter()
+                .iter()
                 .map(|x| (x + current_domain_len / 2) % current_domain_len)
                 .collect();
             timer.elapsed(&format!("Get b-indices for current round ({})", r));
@@ -466,12 +468,10 @@ where
                 b_values.len(),
                 "There must be equally many 'b values' as there are colinearity checks."
             );
+
             // compute "C" indices and values for next round from "A" and "B`"" of current round
             current_domain_len /= 2;
-            let c_indices = a_indices
-                .par_iter()
-                .map(|x| x % current_domain_len)
-                .collect();
+            let c_indices = a_indices.iter().map(|x| x % current_domain_len).collect();
             timer.elapsed(&format!(
                 "Got c-indices for current round equal to a-indices for next round ({})",
                 r + 1
