@@ -477,6 +477,7 @@ where
                 r + 1
             ));
             let c_values = (0..self.colinearity_checks_count)
+                .into_par_iter()
                 .map(|i| {
                     Polynomial::<XFieldElement>::get_colinear_y(
                         (self.get_evaluation_argument(a_indices[i], r), a_values[i]),
@@ -501,6 +502,7 @@ where
         if (0..self.colinearity_checks_count).any(|i| last_codeword[a_indices[i]] != a_values[i]) {
             return Err(Box::new(ValidationError::MismatchingLastCodeword));
         }
+
         timer.elapsed("LastCodeword comparison");
         println!("FRI-verifier Timing Report\n{}", timer.finish());
         Ok(())
