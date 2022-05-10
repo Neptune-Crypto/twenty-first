@@ -338,8 +338,8 @@ where
         for i in 1..num_rounds {
             let codeword_length = last_codeword_length << i;
 
-            let new_indices: Vec<usize> = indices
-                .par_iter()
+            indices = indices
+                .into_par_iter()
                 .zip((counter..counter + self.colinearity_checks_count as u32).into_par_iter())
                 .map(|(index, count)| {
                     let digest: H::Digest = hasher.hash_pair(seed, &(count as u128).to_digest());
@@ -347,11 +347,10 @@ where
                     if reduce_modulo {
                         index + codeword_length / 2
                     } else {
-                        *index
+                        index
                     }
                 })
                 .collect();
-            indices = new_indices;
         }
 
         indices
