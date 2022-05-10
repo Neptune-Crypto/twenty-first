@@ -1267,6 +1267,8 @@ dependencies = [
  "primitive-types",
  "proptest",
  "rand",
+ "rand_chacha",
+ "rand_core",
  "rand_distr",
  "rand_pcg",
  "rayon",
