@@ -173,9 +173,9 @@ where
     /// contain the leaf node that we are verifying for, otherwise this
     /// function will panic.
     fn verify_authentication_path_from_leaf_hash_with_memoization(
-        root_hash: H::Digest,
+        root_hash: &H::Digest,
         leaf_index: u32,
-        auth_path: Vec<H::Digest>,
+        auth_path: &[H::Digest],
         partial_tree: &HashMap<u64, H::Digest>,
         hasher: &H,
     ) -> bool {
@@ -184,24 +184,24 @@ where
         // Get the last (highest) digest in the authentication path that is contained
         // in `partial_tree`.
         let node_index = leaf_index + 2u32.pow(path_length);
-        let mut skipped = 0;
-        while partial_tree.contains_key(&(node_index as u64 >> (1 + skipped))) {
-            skipped += 1;
+        let mut level_in_tree = 0;
+        while partial_tree.contains_key(&(node_index as u64 >> (level_in_tree + 1))) {
+            level_in_tree += 1;
         }
 
-        let mut i = node_index >> skipped;
+        let mut i = node_index >> level_in_tree;
         let mut acc_hash = partial_tree[&(i as u64)].clone();
         while i / 2 >= 1 {
             if i % 2 == 0 {
-                acc_hash = hasher.hash_pair(&acc_hash, &auth_path[skipped]);
+                acc_hash = hasher.hash_pair(&acc_hash, &auth_path[level_in_tree]);
             } else {
-                acc_hash = hasher.hash_pair(&auth_path[skipped], &acc_hash);
+                acc_hash = hasher.hash_pair(&auth_path[level_in_tree], &acc_hash);
             }
             i /= 2;
-            skipped += 1;
+            level_in_tree += 1;
         }
 
-        acc_hash == root_hash
+        acc_hash == *root_hash
     }
 
     // Compact Merkle Multiproof Generation
@@ -405,9 +405,9 @@ where
             .zip(auth_paths.par_iter())
             .all(|(index, auth_path)| {
                 Self::verify_authentication_path_from_leaf_hash_with_memoization(
-                    root_hash.clone(),
+                    &root_hash,
                     *index as u32,
-                    auth_path.to_vec(),
+                    auth_path,
                     &partial_tree,
                     &hasher,
                 )
@@ -1333,9 +1333,9 @@ mod merkle_tree_test {
 
         assert!(
             MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash_with_memoization(
-                tree_a.get_root(),
+                &tree_a.get_root(),
                 leaf_index as u32,
-                auth_path_leaf_index_2.clone(),
+                &auth_path_leaf_index_2,
                 &partial_tree,
                 &hasher,
             ),
@@ -1344,9 +1344,9 @@ mod merkle_tree_test {
         let auth_path_leaf_index_3 = tree_a.get_authentication_path(3);
         assert!(
             !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash_with_memoization(
-                tree_a.get_root(),
+                &tree_a.get_root(),
                 leaf_index as u32,
-                auth_path_leaf_index_3,
+                &auth_path_leaf_index_3,
                 &partial_tree,
                 &hasher,
             ),
@@ -1361,9 +1361,9 @@ mod merkle_tree_test {
         let tree_b = MerkleTree::<Hasher>::from_digests(&leaves_b);
         assert!(
             !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash_with_memoization(
-                tree_b.get_root(),
+                &tree_b.get_root(),
                 leaf_index as u32,
-                auth_path_leaf_index_2,
+                &auth_path_leaf_index_2,
                 &partial_tree,
                 &hasher,
             ),
