@@ -351,7 +351,7 @@ mod brainfuck_table_collection_tests {
 
     #[test]
     fn invariance_of_interpolation_polynomials_argument_multiplied_by_omicron_test() {
-        let program = brainfuck::vm::compile(sample_programs::VERY_SIMPLE_PROGRAM).unwrap();
+        let program = brainfuck::vm::compile(sample_programs::HELLO_WORLD).unwrap();
 
         // create table collections with different number of randomizers
         let matrices: BaseMatrices = brainfuck::vm::simulate(&program, &[]).unwrap();
@@ -387,7 +387,7 @@ mod brainfuck_table_collection_tests {
             MemoryTable::derive_matrix(t_collect_2_rand.processor_table.0.matrix.clone());
 
         // set up FRI domain
-        let mock_fri_domain_length = 512;
+        let mock_fri_domain_length = 1 << 18;
         let fri_domain = FriDomain {
             length: mock_fri_domain_length,
             offset: BFieldElement::new(7).lift(),
@@ -397,8 +397,9 @@ mod brainfuck_table_collection_tests {
                 .unwrap(),
         };
 
+        println!("Starting LDE stuff…");
         // get all interpolation polynomials `ip_x` with different number of randomizers
-        let ip_0s = [
+        let interpolants_with_0_randomizers = [
             t_collect_0_rand.processor_table.0.lde(&fri_domain).1,
             t_collect_0_rand.instruction_table.0.lde(&fri_domain).1,
             t_collect_0_rand.memory_table.0.lde(&fri_domain).1,
@@ -407,7 +408,7 @@ mod brainfuck_table_collection_tests {
         ]
         .concat();
         println!("Successfully interpolated table collection with 0 random values");
-        let ip_1s = [
+        let interpolants_with_1_randomizer = [
             t_collect_1_rand.processor_table.0.lde(&fri_domain).1,
             t_collect_1_rand.instruction_table.0.lde(&fri_domain).1,
             t_collect_1_rand.memory_table.0.lde(&fri_domain).1,
@@ -416,7 +417,7 @@ mod brainfuck_table_collection_tests {
         ]
         .concat();
         println!("Successfully interpolated table collection with 1 random value");
-        let ip_2s = [
+        let interpolants_with_2_randomizers = [
             t_collect_2_rand.processor_table.0.lde(&fri_domain).1,
             t_collect_2_rand.instruction_table.0.lde(&fri_domain).1,
             t_collect_2_rand.memory_table.0.lde(&fri_domain).1,
@@ -427,55 +428,80 @@ mod brainfuck_table_collection_tests {
         println!("Successfully interpolated table collection with 2 random values");
 
         // get random parts r_1 = ip_1 - ip_0 and r_2 = ip_2 - ip_0
-        let r_1s = ip_1s
+        let diffs_due_to_1_randomizer = interpolants_with_1_randomizer
             .into_iter()
-            .zip(ip_0s.clone())
+            .zip(interpolants_with_0_randomizers.clone())
             .map(|(p_1, p_0)| p_1 - p_0)
             .collect::<Vec<_>>();
-        println!("The r_1 for the very first column is: {}", r_1s[0]);
-        let r_2s = ip_2s
+        println!(
+            "The r_1 for the very first column is: {}",
+            diffs_due_to_1_randomizer[0]
+        );
+        let diffs_due_to_2_randomizers = interpolants_with_2_randomizers
             .clone()
             .into_iter()
-            .zip(ip_0s)
+            .zip(interpolants_with_0_randomizers)
             .map(|(p_2, p_0)| p_2 - p_0)
             .collect::<Vec<_>>();
-        println!("The r_2 for the very first column is: {}", r_2s[0]);
+        println!(
+            "The r_2 for the very first column is: {}",
+            diffs_due_to_2_randomizers[0]
+        );
 
         // sample random evaluation points. They are re-used across property tests for r_0 and r_1
         let omicron: BFieldElement = t_collect_0_rand.processor_table.omicron();
         println!("omicron = {}", omicron);
         let mut rng = rand::thread_rng();
-        let eval_points = &BFieldElement::random_elements(r_1s.len(), &mut rng);
+        let eval_points = &BFieldElement::random_elements(100, &mut rng);
 
         // check the expected invariants
-        for (r, x) in r_1s.iter().zip(eval_points) {
+        for (r_1, x) in diffs_due_to_1_randomizer.iter().zip(eval_points) {
             assert_eq!(
-                r.evaluate(x),
-                r.evaluate(&(omicron * *x)),
+                r_1.evaluate(x),
+                r_1.evaluate(&(omicron * *x)),
                 "polynomial r_1 must be invariant to its argument being multiplied by ο.
                 r_1 was sampled in {} and {}",
                 x,
                 omicron * *x
             );
         }
-        for ((r, x), ip_2) in r_2s.iter().zip(eval_points).zip(ip_2s) {
-            if r.is_zero() {
-                assert!(
-                    ip_2.is_zero(),
-                    "r_2 was zero but ip_2 was not: ip_2 = {}",
-                    ip_2
-                );
-            } else {
-                assert_ne!(
-                    r.evaluate(x),
-                    r.evaluate(&(omicron * *x)),
-                    "polynomial r_2 must not be invariant to its argument being multiplied by ο.
+        println!("Passed sanity check: all r_1s are invariant to argument being multiplied by ο.");
+
+        // for brainfuck VM, input and output are both public. The corresponding interpolation
+        // polynomials are not randomized. Thus, this test does not make sense for them.
+        let non_io_columns =
+            ProcessorTable::BASE_WIDTH + InstructionTable::BASE_WIDTH + MemoryTable::BASE_WIDTH;
+        for (col_id, ((r_2, x), ip_2)) in diffs_due_to_2_randomizers
+            .iter()
+            .zip(eval_points)
+            .zip(interpolants_with_2_randomizers)
+            .enumerate()
+        {
+            if col_id < non_io_columns {
+                if r_2.is_zero() {
+                    assert!(
+                        ip_2.is_zero(),
+                        "in column {}, r_2 was zero but ip_2 was not:\n\tip_2 = {}\n\tr_2 = {}",
+                        col_id,
+                        ip_2,
+                        r_2
+                    );
+                } else {
+                    assert_ne!(
+                        r_2.evaluate(x),
+                        r_2.evaluate(&(omicron * *x)),
+                        "polynomial r_2 must not be invariant to its argument being multiplied by ο.
+                    column: {}
                     r_2 = {}
+                    ip_2 = {}
                     r_2 was sampled in {} and {}",
-                    r,
-                    x,
-                    omicron * *x
-                );
+                        col_id,
+                        r_2,
+                        ip_2,
+                        x,
+                        omicron * *x
+                    );
+                }
             }
         }
     }
