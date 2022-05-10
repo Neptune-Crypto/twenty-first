@@ -479,18 +479,18 @@ impl Stark {
             .zip(base_degree_bounds.iter())
             .enumerate()
         {
-            let bc_lifted = bc.iter().map(|bfe| bfe.lift());
+            let bc_lifted: Vec<XFieldElement> = bc.iter().map(|bfe| bfe.lift()).collect();
 
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(bc_lifted)
+                .into_par_iter()
+                .zip(bc_lifted.into_par_iter())
                 .map(|(c, bcl)| c + bcl * weights[weights_counter])
                 .collect();
             weights_counter += 1;
             let shift = (self.max_degree as Degree - bdb) as u32;
             let bc_shifted: Vec<XFieldElement> = fri_x_values
-                .iter()
-                .zip(bc.iter())
+                .par_iter()
+                .zip(bc.par_iter())
                 .map(|(x, &bce)| (bce * x.mod_pow_u32(shift)).lift())
                 .collect();
 
@@ -507,8 +507,8 @@ impl Stark {
             }
 
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(bc_shifted.into_iter())
+                .into_par_iter()
+                .zip(bc_shifted.into_par_iter())
                 .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
@@ -523,15 +523,15 @@ impl Stark {
             .enumerate()
         {
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(ec.iter())
+                .into_par_iter()
+                .zip(ec.par_iter())
                 .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
             let shift = (self.max_degree as Degree - edb) as u32;
             let ec_shifted: Vec<XFieldElement> = fri_x_values
-                .iter()
-                .zip(ec.iter())
+                .par_iter()
+                .zip(ec.into_par_iter())
                 .map(|(x, &ece)| ece * x.mod_pow_u32(shift).lift())
                 .collect();
 
@@ -548,8 +548,8 @@ impl Stark {
             }
 
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(ec_shifted.into_iter())
+                .into_par_iter()
+                .zip(ec_shifted.into_par_iter())
                 .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
@@ -564,16 +564,17 @@ impl Stark {
             .enumerate()
         {
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(qc.iter())
+                .into_par_iter()
+                .zip(qc.par_iter())
                 .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
             let shift = (self.max_degree as Degree - qdb) as u32;
-            let qc_shifted = fri_x_values
-                .iter()
-                .zip(qc.iter())
-                .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift());
+            let qc_shifted: Vec<XFieldElement> = fri_x_values
+                .par_iter()
+                .zip(qc.into_par_iter())
+                .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift())
+                .collect();
 
             // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
             // if std::env::var("DEBUG").is_ok() {
@@ -597,8 +598,8 @@ impl Stark {
             // }
 
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(qc_shifted)
+                .into_par_iter()
+                .zip(qc_shifted.into_par_iter())
                 .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
