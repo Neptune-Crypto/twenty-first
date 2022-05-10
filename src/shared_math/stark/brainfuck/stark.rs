@@ -1430,6 +1430,7 @@ mod brainfuck_stark_tests {
             brainfuck::vm::sample_programs::VERY_SIMPLE_PROGRAM,
             brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT,
             brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT,
+            brainfuck::vm::sample_programs::PRINT_17_CHARS,
         ] {
             let program: Vec<BFieldElement> = brainfuck::vm::compile(source_code).unwrap();
             let (trace_length, input_symbols, output_symbols) = brainfuck::vm::run(
@@ -1460,33 +1461,5 @@ mod brainfuck_stark_tests {
                 Err(err) => panic!("error in STARK verifier: {}", err),
             };
         }
-    }
-
-    fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
-        let program = brainfuck::vm::compile(program_code).unwrap();
-        let (trace_length, input_symbols, output_symbols) =
-            brainfuck::vm::run(&program, input.to_vec()).unwrap();
-        let base_matrices: BaseMatrices =
-            brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-        let mut stark = new_test_stark(
-            trace_length,
-            program_code.to_string(),
-            input_symbols,
-            output_symbols,
-        );
-        let mut proof_stream = stark.prove(base_matrices).unwrap();
-        let verifier_verdict = stark.verify(&mut proof_stream);
-        match verifier_verdict {
-            Ok(_) => (),
-            Err(err) => panic!("error in STARK verifier: {}", err),
-        };
-    }
-
-    #[test]
-    fn prove_verify_again_test() {
-        let program_code = brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT;
-        let input = [97].map(BFieldElement::new).to_vec();
-
-        compile_simulate_prove_verify(program_code, &input);
     }
 }
