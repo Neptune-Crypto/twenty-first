@@ -171,6 +171,15 @@ impl ToDigest<Blake3Hash> for BFieldElement {
     }
 }
 
+impl ToDigest<Blake3Hash> for Vec<BFieldElement> {
+    fn to_digest(&self) -> Blake3Hash {
+        let bytes = bincode::serialize(&self).unwrap();
+        let digest = Blake3Hash(blake3::hash(bytes.as_slice()));
+
+        digest
+    }
+}
+
 impl ToDigest<Blake3Hash> for XFieldElement {
     fn to_digest(&self) -> Blake3Hash {
         let bytes = bincode::serialize(&self).unwrap();
