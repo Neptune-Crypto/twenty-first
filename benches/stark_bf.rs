@@ -79,7 +79,7 @@ fn stark_bf(c: &mut Criterion) {
     //     bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_RAVEN, &[]));
     // });
 
-    // THE FOLLOWING BENCHMARK WILL CRASH UNLESS YOU HAVE 128GB RAM
+    // The following benchmark will crash unless you have 128GiB RAM
     // let the_whole_raven_id = BenchmarkId::new("THE_WHOLE_RAVEN", 0);
     // group.bench_function(the_whole_raven_id, |bencher| {
     //     bencher.iter(|| _the_whole_raven());
