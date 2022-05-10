@@ -1,7 +1,7 @@
 use super::error::{vm_fail, InstructionError::*};
 use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
-use super::ord_n::{Ord4::*, Ord6};
+use super::ord_n::{Ord6, Ord8::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
@@ -18,31 +18,11 @@ use std::io::{Stdin, Stdout, Write};
 type BWord = BFieldElement;
 type XWord = XFieldElement;
 
+/// The number of `BFieldElement`s in a Rescue-Prime digest for Triton VM.
+pub const DIGEST_LEN: usize = 6;
+
+/// The number of auxiliary registers for hashing-specific instructions.
 pub const AUX_REGISTER_COUNT: usize = 16;
-
-// `VMLiterally` describes the registers, but in a way that requires a lot of
-// manual updating.
-#[derive(Debug, Clone)]
-pub struct VMLiterally {
-    // Registers
-    pub clk: BWord, // Number of cycles the program has been running for
-    pub ip: u32,    // Instruction pointer
-    pub ci: BWord,  // Current instruction
-    pub ni: BWord,  // Next instruction
-
-    pub ib: [BWord; 6],   // Contains the i'th bit of the instruction
-    pub if_: [BWord; 10], // Instruction flags
-    pub jsp: BWord,       // Jump stack pointer
-    pub jsv: BWord,       // Return address
-    pub st: [BWord; 4],   // Operational stack registers
-    pub inv: BWord,       // Top of op-stack inverse, or 0
-    pub osp: BWord,       // Operational stack pointer
-    pub osv: BWord,       // Operational stack value
-    pub hv: [BWord; 5],   // Helper variable registers
-    pub ramp: BWord,      // RAM pointer
-    pub ramv: BWord,      // RAM value
-    pub aux: [BWord; 16], // Auxiliary registers (for hashing)
-}
 
 #[derive(Debug, Default, Clone)]
 pub struct VMState<'pgm> {
@@ -148,16 +128,16 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Dup(n) => {
-                let elem = self.op_stack.safe_peek(n);
+            Dup(arg) => {
+                let elem = self.op_stack.safe_peek(arg.into());
                 self.op_stack.push(elem);
-                self.instruction_pointer += 1;
+                self.instruction_pointer += 2;
             }
 
             Swap(arg) => {
                 // st[0] ... st[n] -> st[n] ... st[0]
-                self.op_stack.safe_swap(arg);
-                self.instruction_pointer += 1;
+                self.op_stack.safe_swap(arg.into());
+                self.instruction_pointer += 2;
             }
 
             Skiz => {
@@ -227,7 +207,16 @@ impl<'pgm> VMState<'pgm> {
 
             MerkleLeft => todo!(),
             MerkleRight => todo!(),
-            CmpDigest => todo!(),
+
+            CmpDigest => {
+                let cmp_bword = if self.cmp_digest() {
+                    BWord::ring_one()
+                } else {
+                    BWord::ring_zero()
+                };
+                self.op_stack.push(cmp_bword);
+                self.instruction_pointer += 1;
+            }
 
             Add => {
                 let a = self.op_stack.pop()?;
@@ -354,6 +343,7 @@ impl<'pgm> VMState<'pgm> {
             }
         }
 
+        // Check that no instruction left the OpStack with too few elements
         if self.op_stack.is_too_shallow() {
             return vm_err(OpStackTooShallow);
         }
@@ -427,7 +417,7 @@ impl<'pgm> VMState<'pgm> {
     }
 
     fn load(&mut self) -> Result<(), Box<dyn Error>> {
-        let mem_addr = self.op_stack.safe_peek(N0);
+        let mem_addr = self.op_stack.safe_peek(ST0);
         let mem_val = self.memory_get(&mem_addr)?;
         self.op_stack.push(mem_val);
         Ok(())
@@ -435,14 +425,34 @@ impl<'pgm> VMState<'pgm> {
 
     fn save(&mut self) -> Result<(), Box<dyn Error>> {
         let mem_value = self.op_stack.pop()?;
-        let mem_addr = self.op_stack.safe_peek(N0);
+        let mem_addr = self.op_stack.safe_peek(ST0);
         self.ram.insert(mem_addr, mem_value);
         Ok(())
+    }
+
+    fn cmp_digest(&self) -> bool {
+        for i in 0..DIGEST_LEN {
+            // Safe as long as DIGEST_LEN <= OP_STACK_REG_COUNT
+            if self.aux[i] != self.op_stack.safe_peek(i.try_into().unwrap()) {
+                return false;
+            }
+        }
+        true
     }
 }
 
 #[cfg(test)]
 mod vm_state_tests {
+    use super::super::op_stack::OP_STACK_REG_COUNT;
+    use super::*;
     // Property: All instructions increase the cycle count by 1.
     // Property: Most instructions increase the instruction pointer by 1.
+
+    #[test]
+    fn op_stack_big_enough_test() {
+        assert!(
+            DIGEST_LEN <= OP_STACK_REG_COUNT,
+            "The OpStack must be large enough to hold a single Rescue-Prime digest"
+        );
+    }
 }

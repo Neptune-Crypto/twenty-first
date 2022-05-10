@@ -1,5 +1,5 @@
 use super::error::{vm_fail, InstructionError::*};
-use super::ord_n::{Ord4, Ord4::*};
+use super::ord_n::{Ord8, Ord8::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::traits::Inverse;
 use crate::shared_math::x_field_element::XFieldElement;
@@ -45,12 +45,12 @@ impl OpStack {
         Ok(XWord::new([self.pop()?, self.pop()?, self.pop()?]))
     }
 
-    pub fn safe_peek(&self, arg: Ord4) -> BWord {
+    pub fn safe_peek(&self, arg: Ord8) -> BWord {
         let n: usize = arg.into();
         self.stack[n]
     }
 
-    pub fn safe_swap(&mut self, arg: Ord4) {
+    pub fn safe_swap(&mut self, arg: Ord8) {
         let n: usize = arg.into();
         self.stack.swap(0, n + 1);
     }
@@ -61,7 +61,7 @@ impl OpStack {
 
     /// Get the i'th op-stack element
 
-    pub fn st(&self, arg: Ord4) -> BWord {
+    pub fn st(&self, arg: Ord8) -> BWord {
         let n: usize = arg.into();
         self.stack[n]
     }
@@ -91,8 +91,10 @@ impl OpStack {
         }
     }
 
-    /// Inverse of st0
+    /// Inverse of st0, with the inverse of 0 being 0 instead of failure.
+    ///
+    /// This register is mainly intended for constraint polynomials.
     pub fn inv(&self) -> BWord {
-        self.st(N0).inverse()
+        self.st(ST0).inverse()
     }
 }

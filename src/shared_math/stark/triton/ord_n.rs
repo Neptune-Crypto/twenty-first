@@ -2,6 +2,7 @@ use std::fmt::Display;
 use Ord16::*;
 use Ord4::*;
 use Ord6::*;
+use Ord8::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ord4 {
@@ -32,6 +33,17 @@ impl From<Ord4> for usize {
 impl From<&Ord4> for usize {
     fn from(n: &Ord4) -> Self {
         (*n).into()
+    }
+}
+
+impl From<Ord4> for Ord8 {
+    fn from(n: Ord4) -> Self {
+        match n {
+            N0 => ST0,
+            N1 => ST1,
+            N2 => ST2,
+            N3 => ST3,
+        }
     }
 }
 
@@ -90,6 +102,58 @@ impl TryFrom<usize> for Ord6 {
             3 => Ok(IB3),
             4 => Ok(IB4),
             5 => Ok(IB5),
+            _ => Err(format!("{} is out of range for Ord6", value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ord8 {
+    ST0,
+    ST1,
+    ST2,
+    ST3,
+    ST4,
+    ST5,
+    ST6,
+    ST7,
+}
+
+impl Display for Ord8 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n: usize = (*self).into();
+        write!(f, "{}", n)
+    }
+}
+
+impl From<Ord8> for usize {
+    fn from(n: Ord8) -> Self {
+        match n {
+            ST0 => 0,
+            ST1 => 1,
+            ST2 => 2,
+            ST3 => 3,
+            ST4 => 4,
+            ST5 => 5,
+            ST6 => 6,
+            ST7 => 7,
+        }
+    }
+}
+
+impl TryFrom<usize> for Ord8 {
+    type Error = String;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(ST0),
+            1 => Ok(ST1),
+            2 => Ok(ST2),
+            3 => Ok(ST3),
+            4 => Ok(ST4),
+            5 => Ok(ST5),
+            6 => Ok(ST6),
+            7 => Ok(ST7),
             _ => Err(format!("{} is out of range for Ord6", value)),
         }
     }
