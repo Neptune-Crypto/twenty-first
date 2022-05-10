@@ -514,7 +514,7 @@ impl Stark {
             weights_counter += 1;
         }
 
-        timer.elapsed("...shift and interpolate base codewords?");
+        timer.elapsed("...shift and collect base codewords");
 
         assert_eq!(extension_codewords.len(), num_extension_polynomials);
         for (i, (ec, edb)) in extension_codewords
@@ -555,7 +555,7 @@ impl Stark {
             weights_counter += 1;
         }
 
-        timer.elapsed("...shift and interpolate extension codewords?");
+        timer.elapsed("...shift and collect extension codewords");
 
         assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
         for (_i, (qc, qdb)) in quotient_codewords
@@ -605,7 +605,7 @@ impl Stark {
             weights_counter += 1;
         }
 
-        timer.elapsed("...shift (~and interpolate~) quotient codewords?");
+        timer.elapsed("...shift and collect quotient codewords");
 
         // assert_eq!(
         //     terms.len(),
