@@ -20,11 +20,8 @@ pub enum Instruction {
     Push(Word),
     Pad,
     Dup(Ord4),
-    Swap,
-    Pull2,
-    Pull3,
+    Swap(Ord4),
     // Control flow
-    Nop,
     Skiz,
     Call(Word),
     Return,
@@ -33,34 +30,30 @@ pub enum Instruction {
     Halt,
     // Memory access
     Load,
-    LoadInc,
-    LoadDec,
     Save,
-    SaveInc,
-    SaveDec,
-    SetRamp,
-    GetRamp,
     // Auxiliary register instructions
     Xlix,
     ClearAll,
     Squeeze(Ord16),
     Absorb(Ord16),
-    Clear(Ord16),
-    Rotate(Ord16),
+    MerkleLeft,
+    MerkleRight,
+    CmpDigest,
     // Arithmetic on stack instructions
     Add,
-    Neg,
     Mul,
     Inv,
-    Lnot,
     Split,
     Eq,
     Lt,
     And,
-    Or,
     Xor,
     Reverse,
     Div,
+    XxAdd,
+    XxMul,
+    XInv,
+    XsMul,
     // Read/write
     Print,
     Scan,
@@ -73,47 +66,52 @@ pub fn push(value: u32) -> Instruction {
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            // OpStack manipulation
             Pop => write!(f, "pop"),
             Push(elem) => write!(f, "push {}", elem),
             Pad => write!(f, "pad"),
-            Dup(n) => write!(f, "dup{}", n),
-            Swap => write!(f, "swap"),
-            Pull2 => write!(f, "pull2"),
-            Pull3 => write!(f, "pull3"),
-            Nop => write!(f, "nop"),
+            Dup(arg) => write!(f, "dup{}", {
+                let n: usize = arg.into();
+                n + 1
+            }),
+            Swap(arg) => write!(f, "swap{}", {
+                let n: usize = arg.into();
+                n + 1
+            }),
+            // Control flow
             Skiz => write!(f, "skiz"),
             Call(addr) => write!(f, "call {}", addr),
             Return => write!(f, "return"),
             Recurse => write!(f, "recurse"),
             Assert => write!(f, "assert"),
             Halt => write!(f, "halt"),
+            // Memory access
             Load => write!(f, "load"),
-            LoadInc => write!(f, "loadinc"),
-            LoadDec => write!(f, "loaddec"),
             Save => write!(f, "save"),
-            SaveInc => write!(f, "saveinc"),
-            SaveDec => write!(f, "savedec"),
-            SetRamp => write!(f, "setramp"),
-            GetRamp => write!(f, "getramp"),
+            // Auxiliary register instructions
             Xlix => write!(f, "xlix"),
             ClearAll => write!(f, "clearall"),
             Squeeze(arg) => write!(f, "squeeze {}", arg),
             Absorb(arg) => write!(f, "absorb {}", arg),
-            Clear(arg) => write!(f, "clear {}", arg),
-            Rotate(arg) => write!(f, "rotate {}", arg),
+            MerkleLeft => write!(f, "merkle_left"),
+            MerkleRight => write!(f, "merkle_right"),
+            CmpDigest => write!(f, "cmp_digest"),
+            // Arithmetic on stack instructions
             Add => write!(f, "add"),
-            Neg => write!(f, "neg"),
             Mul => write!(f, "mul"),
             Inv => write!(f, "inv"),
-            Lnot => write!(f, "lnot"),
             Split => write!(f, "split"),
             Eq => write!(f, "eq"),
             Lt => write!(f, "lt"),
             And => write!(f, "and"),
-            Or => write!(f, "or"),
             Xor => write!(f, "xor"),
             Reverse => write!(f, "reverse"),
             Div => write!(f, "div"),
+            XxAdd => write!(f, "xxadd"),
+            XxMul => write!(f, "xxmul"),
+            XInv => write!(f, "xinv"),
+            XsMul => write!(f, "xsmul"),
+            // Read/write
             Print => write!(f, "print"),
             Scan => write!(f, "scan"),
         }
@@ -124,6 +122,7 @@ impl Instruction {
     /// Assign a unique positive integer to each `Instruction`.
     pub fn value(&self) -> u32 {
         match self {
+            // OpStack manipulation
             Pop => 0,
             Push(_) => 1,
             Pad => 2,
@@ -131,46 +130,46 @@ impl Instruction {
             Dup(N1) => 4,
             Dup(N2) => 5,
             Dup(N3) => 6,
-            Swap => 7,
-            Pull2 => 8,
-            Pull3 => 9,
-            Nop => 10,
-            Skiz => 11,
-            Call(_) => 12,
-            Return => 13,
-            Recurse => 14,
-            Assert => 15,
-            Halt => 16,
-            Load => 17,
-            LoadInc => 18,
-            LoadDec => 19,
-            Save => 20,
-            SaveInc => 21,
-            SaveDec => 22,
-            SetRamp => 23,
-            GetRamp => 24,
-            Xlix => 25,
-            // FIXME: Gap left by Ntt/Intt.
-            ClearAll => 28,
-            Squeeze(_) => 29,
-            Absorb(_) => 30,
-            Clear(_) => 31,
-            Rotate(_) => 32,
-            Add => 33,
-            Neg => 34,
-            Mul => 35,
-            Inv => 36,
-            Lnot => 37,
-            Split => 38,
-            Eq => 39,
-            Lt => 40,
-            And => 41,
-            Or => 42,
-            Xor => 43,
-            Reverse => 44,
-            Div => 45,
-            Print => 46,
-            Scan => 47,
+            Swap(N0) => 7,
+            Swap(N1) => 8,
+            Swap(N2) => 9,
+            Swap(N3) => 10,
+            // Control flow
+            Skiz => 21,
+            Call(_) => 22,
+            Return => 23,
+            Recurse => 24,
+            Assert => 25,
+            Halt => 26,
+            // Memory access
+            Load => 30,
+            Save => 31,
+            // Auxiliary register instructions
+            Xlix => 40,
+            ClearAll => 41,
+            Squeeze(_) => 42,
+            Absorb(_) => 43,
+            MerkleLeft => 44,
+            MerkleRight => 45,
+            CmpDigest => 46,
+            // Arithmetic on stack instructions
+            Add => 50,
+            Mul => 51,
+            Inv => 52,
+            Split => 53,
+            Eq => 54,
+            Lt => 55,
+            And => 56,
+            Xor => 57,
+            Reverse => 58,
+            Div => 59,
+            XxAdd => 60,
+            XxMul => 61,
+            XInv => 62,
+            XsMul => 63,
+            // Read/write
+            Print => 70,
+            Scan => 71,
         }
     }
 }
@@ -187,32 +186,28 @@ impl Display for Program {
 }
 
 #[derive(Debug)]
-pub enum TokenError<'a> {
-    UnknownInstruction(&'a str),
+pub enum TokenError {
     UnexpectedEndOfStream,
-    // InvalidConstant(&'a str),
-    // NotImplemented(&'a str),
+    UnknownInstruction(String),
 }
 
-impl<'a> Display for TokenError<'a> {
+impl Display for TokenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            UnknownInstruction(s) => write!(f, "UnknownInstructino({})", s),
+            UnknownInstruction(s) => write!(f, "UnknownInstruction({})", s),
             UnexpectedEndOfStream => write!(f, "UnexpectedEndOfStream"),
         }
     }
 }
 
-impl<'a> Error for TokenError<'a> {}
+impl Error for TokenError {}
 
-// pub fn run<'pgm>(program: &'pgm [Instruction]) -> Result<Vec<VMState<'pgm>>, Box<dyn Error>> {
 pub fn parse(code: &str) -> Result<Program, Box<dyn Error>> {
     let mut tokens = code.split_whitespace();
     let mut program = vec![];
 
     while let Some(token) = tokens.next() {
-        let instruction = parse_token(token, &mut tokens)?;
-        program.push(instruction);
+        program.push(parse_token(token, &mut tokens)?);
     }
 
     Ok(Program(program))
@@ -220,60 +215,62 @@ pub fn parse(code: &str) -> Result<Program, Box<dyn Error>> {
 
 fn parse_token(token: &str, tokens: &mut SplitWhitespace) -> Result<Instruction, Box<dyn Error>> {
     let instruction = match token {
+        // OpStack manipulation
         "pop" => Pop,
         "push" => Push(parse_elem(tokens)?),
         "pad" => Pad,
-        "dup0" => Dup(N0),
-        "dup1" => Dup(N1),
-        "dup2" => Dup(N2),
-        "dup3" => Dup(N3),
-        "swap" => Swap,
-        "pull2" => Pull2,
-        "pull3" => Pull3,
-        "nop" => Nop,
+        "dup1" => Dup(N0),
+        "dup2" => Dup(N1),
+        "dup3" => Dup(N2),
+        "dup4" => Dup(N3),
+        "swap1" => Swap(N0),
+        "swap2" => Swap(N1),
+        "swap3" => Swap(N2),
+        "swap4" => Swap(N3),
+        // Control flow
         "skiz" => Skiz,
         "call" => Call(parse_elem(tokens)?),
         "return" => Return,
         "recurse" => Recurse,
         "assert" => Assert,
         "halt" => Halt,
+        // Memory access
         "load" => Load,
-        "loadinc" => LoadInc,
-        "loaddec" => LoadDec,
         "save" => Save,
-        "saveinc" => SaveInc,
-        "savedec" => SaveDec,
-        "setramp" => SetRamp,
-        "getramp" => GetRamp,
+        // Auxiliary register instructions
         "xlix" => Xlix,
         "clearall" => ClearAll,
         "squeeze" => Squeeze(parse_arg(tokens)?),
         "absorb" => Absorb(parse_arg(tokens)?),
-        "clear" => Clear(parse_arg(tokens)?),
-        "rotate" => Rotate(parse_arg(tokens)?),
+        "merkle_left" => MerkleLeft,
+        "merkle_right" => MerkleRight,
+        "cmp_digest" => CmpDigest,
+        // Arithmetic on stack instructions
         "add" => Add,
-        "neg" => Neg,
         "mul" => Mul,
         "inv" => Inv,
-        "lnot" => Lnot,
         "split" => Split,
         "eq" => Eq,
         "lt" => Lt,
         "and" => And,
-        "or" => Or,
         "xor" => Xor,
         "reverse" => Reverse,
         "div" => Div,
+        "xxadd" => XxAdd,
+        "xxmul" => XsMul,
+        "xinv" => XInv,
+        "XsMul" => XsMul,
+        // Read/write
         "print" => Print,
         "scan" => Scan,
-        _ => Err(format!("Unknown token '{}'", token))?,
+        _ => return Err(Box::new(UnknownInstruction(token.to_string()))),
     };
 
     Ok(instruction)
 }
 
 fn parse_arg(tokens: &mut SplitWhitespace) -> Result<Ord16, Box<dyn Error>> {
-    let constant_s = tokens.next().ok_or_else(|| UnexpectedEndOfStream)?;
+    let constant_s = tokens.next().ok_or(UnexpectedEndOfStream)?;
     let constant_n = constant_s.parse::<usize>()?;
     let constant_arg = constant_n.try_into()?;
 
@@ -281,7 +278,7 @@ fn parse_arg(tokens: &mut SplitWhitespace) -> Result<Ord16, Box<dyn Error>> {
 }
 
 fn parse_elem(tokens: &mut SplitWhitespace) -> Result<BFieldElement, Box<dyn Error>> {
-    let constant_s = tokens.next().ok_or_else(|| UnexpectedEndOfStream)?;
+    let constant_s = tokens.next().ok_or(UnexpectedEndOfStream)?;
     let constant_n = constant_s.parse::<u64>()?;
     let constant_elem = BFieldElement::new(constant_n);
 

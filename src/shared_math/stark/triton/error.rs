@@ -9,7 +9,7 @@ pub enum InstructionError {
     JumpStackTooShallow,
     AssertionFailed,
     MemoryAddressNotFound,
-    LnotNonBinaryInput,
+    InverseOfZero,
 }
 
 impl Display for InstructionError {
@@ -35,8 +35,8 @@ impl Display for InstructionError {
                 write!(f, "Memory address not found")
             }
 
-            LnotNonBinaryInput => {
-                write!(f, "'lnot' requires 0 or 1 as input")
+            InverseOfZero => {
+                write!(f, "0 does not have a multiplicative inverse")
             }
         }
     }

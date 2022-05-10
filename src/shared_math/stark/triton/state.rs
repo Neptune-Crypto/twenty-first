@@ -7,6 +7,7 @@ use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
 use crate::shared_math::stark::triton::error::vm_err;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues, Inverse};
+use crate::shared_math::x_field_element::XFieldElement;
 use byteorder::{BigEndian, ReadBytesExt};
 use rand::Rng;
 use std::collections::HashMap;
@@ -15,6 +16,7 @@ use std::error::Error;
 use std::io::{Stdin, Stdout, Write};
 
 type BWord = BFieldElement;
+type XWord = XFieldElement;
 
 pub const AUX_REGISTER_COUNT: usize = 16;
 
@@ -137,7 +139,7 @@ impl<'pgm> VMState<'pgm> {
 
             Push(arg) => {
                 self.op_stack.push(arg);
-                self.instruction_pointer += 1;
+                self.instruction_pointer += 2;
             }
 
             Pad => {
@@ -152,28 +154,9 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Swap => {
-                // a b -> b a
-                self.op_stack.safe_swap(N0, N1);
-                self.instruction_pointer += 1;
-            }
-
-            Pull2 => {
-                // a b c -> b a c -> b c a
-                self.op_stack.safe_swap(N0, N1);
-                self.op_stack.safe_swap(N1, N2);
-                self.instruction_pointer += 1;
-            }
-
-            Pull3 => {
-                // a b c d -> b a c d -> b c a d -> b c d a
-                self.op_stack.safe_swap(N0, N1);
-                self.op_stack.safe_swap(N1, N2);
-                self.op_stack.safe_swap(N2, N3);
-                self.instruction_pointer += 1;
-            }
-
-            Nop => {
+            Swap(arg) => {
+                // st[0] ... st[n] -> st[n] ... st[0]
+                self.op_stack.safe_swap(arg);
                 self.instruction_pointer += 1;
             }
 
@@ -214,43 +197,8 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            LoadInc => {
-                self.load()?;
-                self.ramp.increment();
-                self.instruction_pointer += 1;
-            }
-
-            LoadDec => {
-                self.load()?;
-                self.ramp.decrement();
-                self.instruction_pointer += 1;
-            }
-
             Save => {
                 self.save()?;
-                self.instruction_pointer += 1;
-            }
-
-            SaveInc => {
-                self.save()?;
-                self.ramp.increment();
-                self.instruction_pointer += 1;
-            }
-
-            SaveDec => {
-                self.save()?;
-                self.ramp.decrement();
-                self.instruction_pointer += 1;
-            }
-
-            SetRamp => {
-                let new_ramp = self.op_stack.pop()?;
-                self.ramp = new_ramp;
-                self.instruction_pointer += 1;
-            }
-
-            GetRamp => {
-                self.op_stack.push(self.ramp);
                 self.instruction_pointer += 1;
             }
 
@@ -277,28 +225,14 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Clear(arg) => {
-                let n: usize = arg.into();
-                self.aux[n] = BWord::ring_zero();
-                self.instruction_pointer += 1;
-            }
-
-            Rotate(arg) => {
-                let n: usize = arg.into();
-                self.aux.rotate_right(n);
-                self.instruction_pointer += 1;
-            }
+            MerkleLeft => todo!(),
+            MerkleRight => todo!(),
+            CmpDigest => todo!(),
 
             Add => {
                 let a = self.op_stack.pop()?;
                 let b = self.op_stack.pop()?;
                 self.op_stack.push(a + b);
-                self.instruction_pointer += 1;
-            }
-
-            Neg => {
-                let elem = self.op_stack.pop()?;
-                self.op_stack.push(-elem);
                 self.instruction_pointer += 1;
             }
 
@@ -311,19 +245,10 @@ impl<'pgm> VMState<'pgm> {
 
             Inv => {
                 let elem = self.op_stack.pop()?;
-                self.op_stack.push(elem.inverse());
-                self.instruction_pointer += 1;
-            }
-
-            Lnot => {
-                let elem = self.op_stack.pop()?;
                 if elem.is_zero() {
-                    self.op_stack.push(1.into());
-                } else if elem.is_one() {
-                    self.op_stack.push(0.into());
-                } else {
-                    return vm_err(LnotNonBinaryInput);
+                    return vm_err(InverseOfZero);
                 }
+                self.op_stack.push(elem.inverse());
                 self.instruction_pointer += 1;
             }
 
@@ -366,13 +291,6 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Or => {
-                let a: u32 = self.op_stack.pop()?.try_into()?;
-                let b: u32 = self.op_stack.pop()?.try_into()?;
-                self.op_stack.push((a | b).into());
-                self.instruction_pointer += 1;
-            }
-
             Xor => {
                 let a: u32 = self.op_stack.pop()?.try_into()?;
                 let b: u32 = self.op_stack.pop()?.try_into()?;
@@ -392,6 +310,33 @@ impl<'pgm> VMState<'pgm> {
                 let (quot, rem) = other::div_rem(a, b);
                 self.op_stack.push(quot.into());
                 self.op_stack.push(rem.into());
+                self.instruction_pointer += 1;
+            }
+
+            XxAdd => {
+                let a: XWord = self.op_stack.popx()?;
+                let b: XWord = self.op_stack.popx()?;
+                self.op_stack.pushx(a + b);
+                self.instruction_pointer += 1;
+            }
+
+            XxMul => {
+                let a: XWord = self.op_stack.popx()?;
+                let b: XWord = self.op_stack.popx()?;
+                self.op_stack.pushx(a + b);
+                self.instruction_pointer += 1;
+            }
+
+            XInv => {
+                let a: XWord = self.op_stack.popx()?;
+                self.op_stack.pushx(a.inverse());
+                self.instruction_pointer += 1;
+            }
+
+            XsMul => {
+                let x: XWord = self.op_stack.popx()?;
+                let b: BWord = self.op_stack.pop()?;
+                self.op_stack.pushx(x * XWord::new_const(b));
                 self.instruction_pointer += 1;
             }
 

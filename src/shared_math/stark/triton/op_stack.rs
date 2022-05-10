@@ -2,9 +2,11 @@ use super::error::{vm_fail, InstructionError::*};
 use super::ord_n::{Ord4, Ord4::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::traits::Inverse;
+use crate::shared_math::x_field_element::XFieldElement;
 use std::error::Error;
 
 type BWord = BFieldElement;
+type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct OpStack {
@@ -14,7 +16,7 @@ pub struct OpStack {
 /// The number of op-stack registers, and the internal index at which the
 /// op-stack memory has index 0. This offset is used to adjust for the fact
 /// that op-stack registers are stored in the same way as op-stack memory.
-pub const OP_STACK_REG_COUNT: usize = 4;
+pub const OP_STACK_REG_COUNT: usize = 8;
 
 impl Default for OpStack {
     fn default() -> Self {
@@ -29,8 +31,18 @@ impl OpStack {
         self.stack.push(elem);
     }
 
-    pub fn pop(&mut self) -> Result<BFieldElement, Box<dyn Error>> {
+    pub fn pushx(&mut self, elem: XWord) {
+        self.push(elem.coefficients[2]);
+        self.push(elem.coefficients[1]);
+        self.push(elem.coefficients[0]);
+    }
+
+    pub fn pop(&mut self) -> Result<BWord, Box<dyn Error>> {
         self.stack.pop().ok_or_else(|| vm_fail(OpStackTooShallow))
+    }
+
+    pub fn popx(&mut self) -> Result<XWord, Box<dyn Error>> {
+        Ok(XWord::new([self.pop()?, self.pop()?, self.pop()?]))
     }
 
     pub fn safe_peek(&self, arg: Ord4) -> BWord {
@@ -38,10 +50,9 @@ impl OpStack {
         self.stack[n]
     }
 
-    pub fn safe_swap(&mut self, a: Ord4, b: Ord4) {
-        let n: usize = a.into();
-        let m: usize = b.into();
-        self.stack.swap(n, m);
+    pub fn safe_swap(&mut self, arg: Ord4) {
+        let n: usize = arg.into();
+        self.stack.swap(0, n + 1);
     }
 
     pub fn is_too_shallow(&self) -> bool {

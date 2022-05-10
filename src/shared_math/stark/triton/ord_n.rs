@@ -29,6 +29,12 @@ impl From<Ord4> for usize {
     }
 }
 
+impl From<&Ord4> for usize {
+    fn from(n: &Ord4) -> Self {
+        (*n).into()
+    }
+}
+
 impl TryFrom<usize> for Ord4 {
     type Error = String;
 

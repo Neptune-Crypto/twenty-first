@@ -311,6 +311,7 @@ impl Add for XFieldElement {
 = ...
 
 */
+
 impl Mul for XFieldElement {
     type Output = Self;
 
