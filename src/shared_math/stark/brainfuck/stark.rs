@@ -112,6 +112,7 @@ impl Stark {
             Some(prog) => prog,
         };
 
+        // Fewer than 2 randomizers means no zero-knowledge for the prover's execution.
         let num_randomizers = 2;
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
