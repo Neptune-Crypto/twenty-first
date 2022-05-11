@@ -1373,7 +1373,6 @@ mod merkle_tree_test {
         );
     }
 
-    // EINAR-DOES
     // Test of salted Merkle trees
     #[test]
     fn salted_merkle_tree_get_authentication_path_test() {
