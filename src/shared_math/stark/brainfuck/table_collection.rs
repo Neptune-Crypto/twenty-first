@@ -350,8 +350,27 @@ mod brainfuck_table_collection_tests {
     }
 
     #[test]
-    fn invariance_of_interpolation_polynomials_argument_multiplied_by_omicron_test() {
-        let program = brainfuck::vm::compile(sample_programs::HELLO_WORLD).unwrap();
+    fn invariance_of_interpolation_polynomials_argument_multiplied_by_omicron_cheap_test() {
+        invariance_of_interpolation_polynomials_argument_multiplied_by_omicron(
+            sample_programs::VERY_SIMPLE_PROGRAM,
+            512,
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn invariance_of_interpolation_polynomials_argument_multiplied_by_omicron_expensive_test() {
+        invariance_of_interpolation_polynomials_argument_multiplied_by_omicron(
+            sample_programs::HELLO_WORLD,
+            1 << 18,
+        );
+    }
+
+    fn invariance_of_interpolation_polynomials_argument_multiplied_by_omicron(
+        source_code: &str,
+        fri_domain_length: usize,
+    ) {
+        let program = brainfuck::vm::compile(source_code).unwrap();
 
         // create table collections with different number of randomizers
         let matrices: BaseMatrices = brainfuck::vm::simulate(&program, &[]).unwrap();
@@ -387,12 +406,11 @@ mod brainfuck_table_collection_tests {
             MemoryTable::derive_matrix(t_collect_2_rand.processor_table.0.matrix.clone());
 
         // set up FRI domain
-        let mock_fri_domain_length = 1 << 18;
         let fri_domain = FriDomain {
-            length: mock_fri_domain_length,
+            length: fri_domain_length,
             offset: BFieldElement::new(7).lift(),
             omega: XFieldElement::ring_zero()
-                .get_primitive_root_of_unity(mock_fri_domain_length as u64)
+                .get_primitive_root_of_unity(fri_domain_length as u64)
                 .0
                 .unwrap(),
         };
