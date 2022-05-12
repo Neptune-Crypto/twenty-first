@@ -210,6 +210,12 @@ impl From<Ord16> for usize {
     }
 }
 
+impl From<&Ord16> for usize {
+    fn from(n: &Ord16) -> Self {
+        (*n).into()
+    }
+}
+
 impl TryFrom<usize> for Ord16 {
     type Error = &'static str;
 

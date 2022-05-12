@@ -219,6 +219,18 @@ impl From<u32> for BFieldElement {
     }
 }
 
+impl From<BFieldElement> for u64 {
+    fn from(elem: BFieldElement) -> Self {
+        elem.canonical_representation()
+    }
+}
+
+impl From<&BFieldElement> for u64 {
+    fn from(elem: &BFieldElement) -> Self {
+        elem.canonical_representation()
+    }
+}
+
 impl TryFrom<BFieldElement> for u32 {
     type Error = TryFromIntError;
 

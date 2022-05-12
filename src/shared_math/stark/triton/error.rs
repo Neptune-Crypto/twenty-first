@@ -10,6 +10,7 @@ pub enum InstructionError {
     AssertionFailed,
     MemoryAddressNotFound,
     InverseOfZero,
+    RunawayInstructionArg,
 }
 
 impl Display for InstructionError {
@@ -37,6 +38,13 @@ impl Display for InstructionError {
 
             InverseOfZero => {
                 write!(f, "0 does not have a multiplicative inverse")
+            }
+
+            RunawayInstructionArg => {
+                write!(
+                    f,
+                    "A numeric argument to an instruction occurred out of place"
+                )
             }
         }
     }

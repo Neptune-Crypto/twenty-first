@@ -17,13 +17,17 @@ type Word = BFieldElement;
 pub enum Instruction {
     // OpStack manipulation
     Pop,
-    Push(Word),
+    Push,
+    PushArg(Word),
     Pad,
-    Dup(Ord4),
-    Swap(Ord4),
+    Dup,
+    DupArg(Ord4),
+    Swap,
+    SwapArg(Ord4),
     // Control flow
     Skiz,
-    Call(Word),
+    Call,
+    CallArg(Word),
     Return,
     Recurse,
     Assert,
@@ -34,8 +38,10 @@ pub enum Instruction {
     // Auxiliary register instructions
     Xlix,
     ClearAll,
-    Squeeze(Ord16),
-    Absorb(Ord16),
+    Squeeze,
+    SqueezeArg(Ord16),
+    Absorb,
+    AbsorbArg(Ord16),
     MerkleLeft,
     MerkleRight,
     CmpDigest,
@@ -59,43 +65,37 @@ pub enum Instruction {
     Scan,
 }
 
-pub fn push(value: u32) -> Instruction {
-    Push(value.into())
-}
-
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             // OpStack manipulation
             Pop => write!(f, "pop"),
-            Push(elem) => write!(f, "push {}", elem),
+            Push => write!(f, "push"),
             Pad => write!(f, "pad"),
-            Dup(arg) => write!(f, "dup{}", {
-                let n: usize = arg.into();
-                n + 1
-            }),
-            Swap(arg) => write!(f, "swap{}", {
-                let n: usize = arg.into();
-                n + 1
-            }),
+            Dup => write!(f, "dup"),
+            Swap => write!(f, "swap"),
+
             // Control flow
             Skiz => write!(f, "skiz"),
-            Call(addr) => write!(f, "call {}", addr),
+            Call => write!(f, "call"),
             Return => write!(f, "return"),
             Recurse => write!(f, "recurse"),
             Assert => write!(f, "assert"),
             Halt => write!(f, "halt"),
+
             // Memory access
             Load => write!(f, "load"),
             Save => write!(f, "save"),
+
             // Auxiliary register instructions
             Xlix => write!(f, "xlix"),
             ClearAll => write!(f, "clearall"),
-            Squeeze(arg) => write!(f, "squeeze {}", arg),
-            Absorb(arg) => write!(f, "absorb {}", arg),
+            Squeeze => write!(f, "squeeze"),
+            Absorb => write!(f, "absorb"),
             MerkleLeft => write!(f, "merkle_left"),
             MerkleRight => write!(f, "merkle_right"),
             CmpDigest => write!(f, "cmp_digest"),
+
             // Arithmetic on stack instructions
             Add => write!(f, "add"),
             Mul => write!(f, "mul"),
@@ -111,67 +111,154 @@ impl Display for Instruction {
             XxMul => write!(f, "xxmul"),
             XInv => write!(f, "xinv"),
             XsMul => write!(f, "xsmul"),
+
             // Read/write
             Print => write!(f, "print"),
             Scan => write!(f, "scan"),
+
+            PushArg(arg) => {
+                let n: u64 = arg.into();
+                write!(f, "{}", n)
+            }
+
+            DupArg(arg) => {
+                let n: usize = arg.into();
+                write!(f, "{}", n)
+            }
+
+            SwapArg(arg) => {
+                let n: usize = arg.into();
+                write!(f, "{}", n)
+            }
+
+            CallArg(arg) => {
+                let n: u64 = arg.into();
+                write!(f, "{}", n)
+            }
+
+            SqueezeArg(arg) => {
+                let n: usize = arg.into();
+                write!(f, "{}", n)
+            }
+
+            AbsorbArg(arg) => {
+                let n: usize = arg.into();
+                write!(f, "{}", n)
+            }
         }
     }
 }
 
 impl Instruction {
     /// Assign a unique positive integer to each `Instruction`.
-    pub fn value(&self) -> u32 {
-        match self {
+    pub fn opcode(&self) -> Option<u32> {
+        let value = match self {
             // OpStack manipulation
+            Pop => 1,
+            Push => 2,
+            Pad => 3,
+            Dup => 4,
+            Swap => 5,
 
-            // FIXME: Halt is actually 0 for polynomials to work.
-            Pop => 0,
-            Push(_) => 1,
-            Pad => 2,
-            Dup(N0) => 3,
-            Dup(N1) => 4,
-            Dup(N2) => 5,
-            Dup(N3) => 6,
-            Swap(N0) => 7,
-            Swap(N1) => 8,
-            Swap(N2) => 9,
-            Swap(N3) => 10,
             // Control flow
-            Skiz => 21,
-            Call(_) => 22,
-            Return => 23,
-            Recurse => 24,
-            Assert => 25,
-            Halt => 26,
+            Skiz => 10,
+            Call => 11,
+            Return => 12,
+            Recurse => 13,
+            Assert => 14,
+            Halt => 0,
+
             // Memory access
-            Load => 30,
-            Save => 31,
+            Load => 20,
+            Save => 21,
+
             // Auxiliary register instructions
-            Xlix => 40,
-            ClearAll => 41,
-            Squeeze(_) => 42,
-            Absorb(_) => 43,
-            MerkleLeft => 44,
-            MerkleRight => 45,
-            CmpDigest => 46,
+            Xlix => 30,
+            ClearAll => 31,
+            Squeeze => 32,
+            Absorb => 33,
+            MerkleLeft => 34,
+            MerkleRight => 35,
+            CmpDigest => 36,
+
             // Arithmetic on stack instructions
-            Add => 50,
-            Mul => 51,
-            Inv => 52,
-            Split => 53,
-            Eq => 54,
-            Lt => 55,
-            And => 56,
-            Xor => 57,
-            Reverse => 58,
-            Div => 59,
-            XxAdd => 60,
-            XxMul => 61,
-            XInv => 62,
-            XsMul => 63,
+            Add => 40,
+            Mul => 41,
+            Inv => 42,
+            Split => 43,
+            Eq => 44,
+            Lt => 45,
+            And => 46,
+            Xor => 47,
+            Reverse => 48,
+            Div => 49,
+
+            XxAdd => 50,
+            XxMul => 51,
+            XInv => 52,
+            XbMul => 53,
+
             // Read/write
             Print => 70,
             Scan => 71,
+
+            PushArg(_) => return None,
+            DupArg(_) => return None,
+            SwapArg(_) => return None,
+            CallArg(_) => return None,
+            SqueezeArg(_) => return None,
+            AbsorbArg(_) => return None,
+        };
+
+        Some(value)
+    }
+
+    pub fn size(&self) -> usize {
+        match self {
+            Push => 2,
+            Dup => 2,
+            Swap => 2,
+            Call => 2,
+            Squeeze => 2,
+            Absorb => 2,
+
+            Pop => 1,
+            Pad => 1,
+            Skiz => 1,
+            Return => 1,
+            Recurse => 1,
+            Assert => 1,
+            Halt => 1,
+            Load => 1,
+            Save => 1,
+            Xlix => 1,
+            ClearAll => 1,
+            MerkleLeft => 1,
+            MerkleRight => 1,
+            CmpDigest => 1,
+            Add => 1,
+            Mul => 1,
+            Inv => 1,
+            Split => 1,
+            Eq => 1,
+            Lt => 1,
+            And => 1,
+            Xor => 1,
+            Reverse => 1,
+            Div => 1,
+            XxAdd => 1,
+            XxMul => 1,
+            XInv => 1,
+            XbMul => 1,
+            Print => 1,
+            Scan => 1,
+
+            PushArg(_) => 0,
+            DupArg(_) => 0,
+            SwapArg(_) => 0,
+            CallArg(_) => 0,
+            SqueezeArg(_) => 0,
+            AbsorbArg(_) => 0,
         }
     }
 }
@@ -183,11 +270,28 @@ pub struct Program {
 
 impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.instructions
-            .iter()
-            .fold(Ok(()), |result, instruction| {
-                result.and_then(|()| writeln!(f, "{}", instruction))
-            })
+        // FIXME: Print arguments to multi-word instructions nicely after.
+        let mut iterator = self.instructions.iter();
+        loop {
+            let item = iterator.next();
+            if item.is_none() {
+                return Ok(());
+            }
+
+            let item = item.unwrap();
+
+            match item {
+                Push => writeln!(f, "{} {}", item, iterator.next().unwrap())?,
+                Call => writeln!(f, "{} {}", item, iterator.next().unwrap())?,
+
+                Dup => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
+                Swap => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
+                Squeeze => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
+                Absorb => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
+
+                instr => writeln!(f, "{}", instr)?,
+            }
+        }
     }
 }
 
@@ -213,62 +317,68 @@ pub fn parse(code: &str) -> Result<Program, Box<dyn Error>> {
     let mut instructions = vec![];
 
     while let Some(token) = tokens.next() {
-        instructions.push(parse_token(token, &mut tokens)?);
+        let mut instruction = parse_token(token, &mut tokens)?;
+        instructions.append(&mut instruction);
     }
 
     Ok(Program { instructions })
 }
 
-fn parse_token(token: &str, tokens: &mut SplitWhitespace) -> Result<Instruction, Box<dyn Error>> {
+fn parse_token(
+    token: &str,
+    tokens: &mut SplitWhitespace,
+) -> Result<Vec<Instruction>, Box<dyn Error>> {
     let instruction = match token {
         // OpStack manipulation
-        "pop" => Pop,
-        "push" => Push(parse_elem(tokens)?),
-        "pad" => Pad,
-        "dup1" => Dup(N0),
-        "dup2" => Dup(N1),
-        "dup3" => Dup(N2),
-        "dup4" => Dup(N3),
-        "swap1" => Swap(N0),
-        "swap2" => Swap(N1),
-        "swap3" => Swap(N2),
-        "swap4" => Swap(N3),
+        "pop" => vec![Pop],
+        "push" => vec![Push, PushArg(parse_elem(tokens)?)],
+        "pad" => vec![Pad],
+        "dup1" => vec![Dup, DupArg(N0)],
+        "dup2" => vec![Dup, DupArg(N1)],
+        "dup3" => vec![Dup, DupArg(N2)],
+        "dup4" => vec![Dup, DupArg(N3)],
+        "swap1" => vec![Swap, SwapArg(N0)],
+        "swap2" => vec![Swap, SwapArg(N1)],
+        "swap3" => vec![Swap, SwapArg(N2)],
+        "swap4" => vec![Swap, SwapArg(N3)],
         // Control flow
-        "skiz" => Skiz,
-        "call" => Call(parse_elem(tokens)?),
-        "return" => Return,
-        "recurse" => Recurse,
-        "assert" => Assert,
-        "halt" => Halt,
+        "skiz" => vec![Skiz],
+        "call" => vec![Call, CallArg(parse_elem(tokens)?)],
+        "return" => vec![Return],
+        "recurse" => vec![Recurse],
+        "assert" => vec![Assert],
+        "halt" => vec![Halt],
         // Memory access
-        "load" => Load,
-        "save" => Save,
+        "load" => vec![Load],
+        "save" => vec![Save],
+
         // Auxiliary register instructions
-        "xlix" => Xlix,
-        "clearall" => ClearAll,
-        "squeeze" => Squeeze(parse_arg(tokens)?),
-        "absorb" => Absorb(parse_arg(tokens)?),
-        "merkle_left" => MerkleLeft,
-        "merkle_right" => MerkleRight,
-        "cmp_digest" => CmpDigest,
+        "xlix" => vec![Xlix],
+        "clearall" => vec![ClearAll],
+        "squeeze" => vec![Squeeze, SqueezeArg(parse_arg(tokens)?)],
+        "absorb" => vec![Absorb, AbsorbArg(parse_arg(tokens)?)],
+        "merkle_left" => vec![MerkleLeft],
+        "merkle_right" => vec![MerkleRight],
+        "cmp_digest" => vec![CmpDigest],
+
         // Arithmetic on stack instructions
-        "add" => Add,
-        "mul" => Mul,
-        "inv" => Inv,
-        "split" => Split,
-        "eq" => Eq,
-        "lt" => Lt,
-        "and" => And,
-        "xor" => Xor,
-        "reverse" => Reverse,
-        "div" => Div,
-        "xxadd" => XxAdd,
-        "xxmul" => XsMul,
-        "xinv" => XInv,
-        "XsMul" => XsMul,
+        "add" => vec![Add],
+        "mul" => vec![Mul],
+        "inv" => vec![Inv],
+        "split" => vec![Split],
+        "eq" => vec![Eq],
+        "lt" => vec![Lt],
+        "and" => vec![And],
+        "xor" => vec![Xor],
+        "reverse" => vec![Reverse],
+        "div" => vec![Div],
+        "xxadd" => vec![XxAdd],
+        "xxmul" => vec![XsMul],
+        "xinv" => vec![XInv],
+        "XsMul" => vec![XsMul],
         // Read/write
-        "print" => Print,
-        "scan" => Scan,
+        "print" => vec![Print],
+        "scan" => vec![Scan],
         _ => return Err(Box::new(UnknownInstruction(token.to_string()))),
     };
 
@@ -293,15 +403,15 @@ fn parse_elem(tokens: &mut SplitWhitespace) -> Result<BFieldElement, Box<dyn Err
 pub mod sample_programs {
     use super::{Instruction::*, Program};
 
-    pub const PUSH_POP_S: &str = "
+    pub const PUSH_PUSH_ADD_POP_S: &str = "
         push 1
         push 2
         add
         pop
     ";
 
-    pub fn push_pop_p() -> Program {
-        let instructions = vec![Push(1.into()), Push(2.into()), Add, Pop];
+    pub fn push_push_add_pop_p() -> Program {
+        let instructions = vec![Push, PushArg(1.into()), Push, PushArg(2.into()), Add, Pop];
         Program { instructions }
     }
 }
@@ -313,7 +423,8 @@ mod instruction_tests {
 
     #[test]
     fn parse_display_push_pop_test() {
-        let pgm_expected = sample_programs::push_pop_p();
+        let pgm_expected: crate::shared_math::stark::triton::instruction::Program =
+            sample_programs::push_push_add_pop_p();
         let pgm_pretty = format!("{}", pgm_expected);
         let pgm_actual = parse(&pgm_pretty).unwrap();
 
@@ -322,7 +433,7 @@ mod instruction_tests {
 
         assert_eq!(pgm_expected, pgm_actual);
 
-        let pgm_text = sample_programs::PUSH_POP_S;
+        let pgm_text = sample_programs::PUSH_PUSH_ADD_POP_S;
         let pgm_actual_2 = parse(pgm_text).unwrap();
 
         assert_eq!(pgm_expected, pgm_actual_2);

@@ -111,9 +111,14 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Push(arg) => {
-                self.op_stack.push(arg);
-                self.instruction_pointer += 2;
+            Push => {
+                // FIXME: Consider what type of error this gives for invalid programs.
+                if let PushArg(arg) = self.current_instruction_arg()? {
+                    self.op_stack.push(arg);
+                    self.instruction_pointer += 2;
+                } else {
+                    return vm_err(RunawayInstructionArg);
+                }
             }
 
             Pad => {
@@ -122,16 +127,26 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Dup(arg) => {
-                let elem = self.op_stack.safe_peek(arg.into());
-                self.op_stack.push(elem);
-                self.instruction_pointer += 2;
+            Dup => {
+                // FIXME: Consider what type of error this gives for invalid programs.
+                if let DupArg(arg) = self.current_instruction_arg()? {
+                    let elem = self.op_stack.safe_peek(arg.into());
+                    self.op_stack.push(elem);
+                    self.instruction_pointer += 2;
+                } else {
+                    return vm_err(RunawayInstructionArg);
+                }
             }
 
-            Swap(arg) => {
+            Swap => {
                 // st[0] ... st[n] -> st[n] ... st[0]
-                self.op_stack.safe_swap(arg.into());
-                self.instruction_pointer += 2;
+                // FIXME: Consider what type of error this gives for invalid programs.
+                if let SwapArg(arg) = self.current_instruction_arg()? {
+                    self.op_stack.safe_swap(arg.into());
+                    self.instruction_pointer += 2;
+                } else {
+                    return vm_err(RunawayInstructionArg);
+                }
             }
 
             // FIXME: Instruction after skiz can only be: Call, Recurse, Return
@@ -141,9 +156,14 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += if elem.is_zero() { 2 } else { 1 }
             }
 
-            Call(addr) => {
-                self.jump_stack.push(self.instruction_pointer + 2);
-                self.instruction_pointer = addr.value() as usize;
+            Call => {
+                // FIXME: Consider what type of error this gives for invalid programs.
+                if let CallArg(addr) = self.current_instruction_arg()? {
+                    self.jump_stack.push(self.instruction_pointer + 2);
+                    self.instruction_pointer = addr.value() as usize;
+                } else {
+                    return vm_err(RunawayInstructionArg);
+                }
             }
 
             Return => {
@@ -188,17 +208,27 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Squeeze(arg) => {
-                let n: usize = arg.into();
-                self.op_stack.push(self.aux[n]);
-                self.instruction_pointer += 1;
+            Squeeze => {
+                // FIXME: Consider what type of error this gives for invalid programs.
+                if let SqueezeArg(arg) = self.current_instruction_arg()? {
+                    let n: usize = arg.into();
+                    self.op_stack.push(self.aux[n]);
+                    self.instruction_pointer += 1;
+                } else {
+                    return vm_err(RunawayInstructionArg);
+                }
             }
 
-            Absorb(arg) => {
-                let n: usize = arg.into();
-                let elem = self.op_stack.pop()?;
-                self.aux[n] = elem;
-                self.instruction_pointer += 1;
+            Absorb => {
+                // FIXME: Consider what type of error this gives for invalid programs.
+                if let AbsorbArg(arg) = self.current_instruction_arg()? {
+                    let n: usize = arg.into();
+                    let elem = self.op_stack.pop()?;
+                    self.aux[n] = elem;
+                    self.instruction_pointer += 1;
+                } else {
+                    return vm_err(RunawayInstructionArg);
+                }
             }
 
             MerkleLeft => todo!(),
@@ -337,11 +367,17 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push(in_char.into());
                 self.instruction_pointer += 1;
             }
+
+            PushArg(_) => return vm_err(RunawayInstructionArg),
+            DupArg(_) => return vm_err(RunawayInstructionArg),
+            SwapArg(_) => return vm_err(RunawayInstructionArg),
+            CallArg(_) => return vm_err(RunawayInstructionArg),
+            SqueezeArg(_) => return vm_err(RunawayInstructionArg),
+            AbsorbArg(_) => return vm_err(RunawayInstructionArg),
         }
 
         // Check that no instruction left the OpStack with too few elements
         if self.op_stack.is_too_shallow() {
-            println!(":(");
             return vm_err(OpStackTooShallow);
         }
 
@@ -351,11 +387,14 @@ impl<'pgm> VMState<'pgm> {
     /// Get the i'th instruction bit
     pub fn ib(&self, arg: Ord6) -> Result<BFieldElement, Box<dyn Error>> {
         let instruction = self.current_instruction()?;
-        let value = instruction.value();
+        let opcode = instruction
+            .opcode()
+            .ok_or_else(|| vm_fail(RunawayInstructionArg))?;
+
         let bit_number: usize = arg.into();
         let bit_mask: u32 = 1 << bit_number;
 
-        Ok((value & bit_mask).into())
+        Ok((opcode & bit_mask).into())
     }
 
     /// Jump-stack pointer
@@ -382,7 +421,15 @@ impl<'pgm> VMState<'pgm> {
         self.program
             .get(self.instruction_pointer)
             .ok_or_else(|| vm_fail(InstructionPointerOverflow))
-            .map(|&instruction| instruction)
+            .copied()
+    }
+
+    // FIXME: Maybe give a more specific error here.
+    fn current_instruction_arg(&self) -> Result<Instruction, Box<dyn Error>> {
+        self.program
+            .get(self.instruction_pointer + 1)
+            .ok_or_else(|| vm_fail(InstructionPointerOverflow))
+            .copied()
     }
 
     fn _next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
@@ -457,22 +504,22 @@ mod vm_state_tests {
         );
     }
 
-    fn step_with_program<'pgm>(program: &'pgm Program) -> Result<VMState<'pgm>, Box<dyn Error>> {
+    fn step_with_program<'pgm>(prev_state: &'pgm VMState) -> Result<VMState<'pgm>, Box<dyn Error>> {
         let mut rng = rand::thread_rng();
         let rescue_prime = rescue_prime_xlix::neptune_params();
         let mut stdin = std::io::stdin();
         let mut stdout = std::io::stdout();
-
-        let prev_state = VMState::new(&program.instructions);
 
         prev_state.step(&mut rng, &rescue_prime, &mut stdin, &mut stdout)
     }
 
     #[test]
     fn run_parse_pop_p() {
-        let pgm = sample_programs::push_pop_p();
-        let bla = triton::vm::run(&pgm);
+        let pgm = sample_programs::push_push_add_pop_p();
+        let trace = triton::vm::run(&pgm).unwrap();
 
-        println!("{:?}", bla);
+        for state in trace {
+            println!("{:?}", state);
+        }
     }
 }

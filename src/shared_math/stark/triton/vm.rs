@@ -26,13 +26,12 @@ pub fn run<'pgm>(program: &'pgm Program) -> Result<Vec<VMState<'pgm>>, Box<dyn E
 
 #[cfg(test)]
 mod triton_vm_tests {
-    use super::super::instruction::push;
     use super::Instruction::*;
     use super::*;
 
     #[test]
     fn vm_run_test() {
-        let instructions = vec![push(2), push(2), Add];
+        let instructions = vec![Push, PushArg(2.into()), Push, PushArg(2.into()), Add];
         let program = Program { instructions };
         let _empty_run = run(&program);
     }
