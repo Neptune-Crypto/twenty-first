@@ -144,6 +144,8 @@ where
         self.peaks[peak_height_index] = acc_hash;
     }
 
+    /// Returns true of the `new_peaks` input matches the calculated new MMR peaks resulting from the
+    /// provided appends and mutations.
     fn verify_batch_update(
         &self,
         new_peaks: &[H::Digest],
