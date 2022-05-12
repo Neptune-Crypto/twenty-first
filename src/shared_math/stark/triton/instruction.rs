@@ -414,6 +414,25 @@ pub mod sample_programs {
         let instructions = vec![Push, PushArg(1.into()), Push, PushArg(2.into()), Add, Pop];
         Program { instructions }
     }
+
+    pub const HELLO_WORLD_1: &str = "
+        push 10
+        push 33
+        push 100
+        push 108
+        push 114
+        push 111
+        push 87
+        push 32
+        push 44
+        push 111
+        push 108
+        push 108
+        push 101
+        push 72
+
+        print print print print print print print print print print print print print print
+        ";
 }
 
 #[cfg(test)]

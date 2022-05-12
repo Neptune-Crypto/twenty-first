@@ -498,12 +498,13 @@ impl<'pgm> VMState<'pgm> {
 
 #[cfg(test)]
 mod vm_state_tests {
-    use crate::shared_math::rescue_prime_xlix;
-    use crate::shared_math::stark::triton;
-    use crate::shared_math::stark::triton::instruction::{sample_programs, Program};
-
     use super::super::op_stack::OP_STACK_REG_COUNT;
     use super::*;
+    use crate::shared_math::rescue_prime_xlix;
+    use crate::shared_math::stark::triton;
+    use crate::shared_math::stark::triton::instruction;
+    use crate::shared_math::stark::triton::instruction::sample_programs;
+
     // Property: All instructions increase the cycle count by 1.
     // Property: Most instructions increase the instruction pointer by 1.
 
@@ -532,5 +533,21 @@ mod vm_state_tests {
         for state in trace {
             println!("{:?}", state);
         }
+    }
+
+    #[test]
+    fn run_hello_world_1() {
+        let code = sample_programs::HELLO_WORLD_1;
+        let program = instruction::parse(code).unwrap();
+        let trace = triton::vm::run(&program).unwrap();
+
+        // for state in trace {
+        //     println!("{:?}", state);
+        // }
+
+        let last_state = trace.last().unwrap();
+        assert_eq!(BWord::ring_zero(), last_state.op_stack.safe_peek(ST0));
+
+        println!("{:#?}", last_state);
     }
 }

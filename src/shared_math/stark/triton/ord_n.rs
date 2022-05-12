@@ -154,7 +154,7 @@ impl TryFrom<usize> for Ord8 {
             5 => Ok(ST5),
             6 => Ok(ST6),
             7 => Ok(ST7),
-            _ => Err(format!("{} is out of range for Ord6", value)),
+            _ => Err(format!("{} is out of range for Ord8", value)),
         }
     }
 }
