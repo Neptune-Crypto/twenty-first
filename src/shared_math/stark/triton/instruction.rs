@@ -123,6 +123,8 @@ impl Instruction {
     pub fn value(&self) -> u32 {
         match self {
             // OpStack manipulation
+
+            // FIXME: Halt is actually 0 for polynomials to work.
             Pop => 0,
             Push(_) => 1,
             Pad => 2,
@@ -175,13 +177,17 @@ impl Instruction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Program(pub Vec<Instruction>);
+pub struct Program {
+    pub instructions: Vec<Instruction>,
+}
 
 impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.iter().fold(Ok(()), |result, instruction| {
-            result.and_then(|()| writeln!(f, "{}", instruction))
-        })
+        self.instructions
+            .iter()
+            .fold(Ok(()), |result, instruction| {
+                result.and_then(|()| writeln!(f, "{}", instruction))
+            })
     }
 }
 
@@ -204,13 +210,13 @@ impl Error for TokenError {}
 
 pub fn parse(code: &str) -> Result<Program, Box<dyn Error>> {
     let mut tokens = code.split_whitespace();
-    let mut program = vec![];
+    let mut instructions = vec![];
 
     while let Some(token) = tokens.next() {
-        program.push(parse_token(token, &mut tokens)?);
+        instructions.push(parse_token(token, &mut tokens)?);
     }
 
-    Ok(Program(program))
+    Ok(Program { instructions })
 }
 
 fn parse_token(token: &str, tokens: &mut SplitWhitespace) -> Result<Instruction, Box<dyn Error>> {
@@ -290,12 +296,13 @@ pub mod sample_programs {
     pub const PUSH_POP_S: &str = "
         push 1
         push 2
-        pop
+        add
         pop
     ";
 
     pub fn push_pop_p() -> Program {
-        Program(vec![Push(1.into()), Push(1.into()), Pop, Pop])
+        let instructions = vec![Push(1.into()), Push(2.into()), Add, Pop];
+        Program { instructions }
     }
 }
 
@@ -306,15 +313,18 @@ mod instruction_tests {
 
     #[test]
     fn parse_display_push_pop_test() {
-        let foo = sample_programs::push_pop_p();
-        let foo_s = format!("{}", foo);
-        let foo_again = parse(&foo_s).unwrap();
+        let pgm_expected = sample_programs::push_pop_p();
+        let pgm_pretty = format!("{}", pgm_expected);
+        let pgm_actual = parse(&pgm_pretty).unwrap();
 
-        println!("{}", foo);
-        println!("{}", foo_again);
+        println!("Expected:\n{}", pgm_expected);
+        println!("Actual:\n{}", pgm_actual);
 
-        assert_eq!(foo, foo_again);
+        assert_eq!(pgm_expected, pgm_actual);
 
-        let _bar = sample_programs::PUSH_POP_S;
+        let pgm_text = sample_programs::PUSH_POP_S;
+        let pgm_actual_2 = parse(pgm_text).unwrap();
+
+        assert_eq!(pgm_expected, pgm_actual_2);
     }
 }

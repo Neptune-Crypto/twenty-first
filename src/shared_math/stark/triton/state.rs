@@ -56,12 +56,6 @@ pub struct VMState<'pgm> {
     /// Instruction flags
     pub ifl: [BWord; 10],
 
-    /// RAM pointer
-    pub ramp: BWord,
-
-    /// RAM value
-    pub ramv: BWord,
-
     /// Auxiliary registers
     pub aux: [BWord; AUX_REGISTER_COUNT],
 }
@@ -140,6 +134,8 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 2;
             }
 
+            // FIXME: Instruction after skiz can only be: Call, Recurse, Return
+            // FIXME: For Call, += 3.
             Skiz => {
                 let elem = self.op_stack.pop()?;
                 self.instruction_pointer += if elem.is_zero() { 2 } else { 1 }
@@ -345,6 +341,7 @@ impl<'pgm> VMState<'pgm> {
 
         // Check that no instruction left the OpStack with too few elements
         if self.op_stack.is_too_shallow() {
+            println!(":(");
             return vm_err(OpStackTooShallow);
         }
 
@@ -443,6 +440,10 @@ impl<'pgm> VMState<'pgm> {
 
 #[cfg(test)]
 mod vm_state_tests {
+    use crate::shared_math::rescue_prime_xlix;
+    use crate::shared_math::stark::triton;
+    use crate::shared_math::stark::triton::instruction::{sample_programs, Program};
+
     use super::super::op_stack::OP_STACK_REG_COUNT;
     use super::*;
     // Property: All instructions increase the cycle count by 1.
@@ -454,5 +455,24 @@ mod vm_state_tests {
             DIGEST_LEN <= OP_STACK_REG_COUNT,
             "The OpStack must be large enough to hold a single Rescue-Prime digest"
         );
+    }
+
+    fn step_with_program<'pgm>(program: &'pgm Program) -> Result<VMState<'pgm>, Box<dyn Error>> {
+        let mut rng = rand::thread_rng();
+        let rescue_prime = rescue_prime_xlix::neptune_params();
+        let mut stdin = std::io::stdin();
+        let mut stdout = std::io::stdout();
+
+        let prev_state = VMState::new(&program.instructions);
+
+        prev_state.step(&mut rng, &rescue_prime, &mut stdin, &mut stdout)
+    }
+
+    #[test]
+    fn run_parse_pop_p() {
+        let pgm = sample_programs::push_pop_p();
+        let bla = triton::vm::run(&pgm);
+
+        println!("{:?}", bla);
     }
 }

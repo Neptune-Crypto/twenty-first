@@ -263,6 +263,7 @@ pub trait TableTrait {
     fn omicron(&self) -> BFieldElement;
     fn generator(&self) -> BFieldElement;
     fn order(&self) -> usize;
+
     fn extend(
         &mut self,
         all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
