@@ -1001,16 +1001,16 @@ impl Stark {
             let b_domain_value = self.fri.domain.b_domain_value(index as u32);
             // collect terms: randomizer
             let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
-                .map(|i| tuples[&index][i])
+                .map(|j| tuples[&index][j])
                 .collect();
 
             // collect terms: base
-            for i in num_randomizer_polynomials..num_randomizer_polynomials + num_base_polynomials {
-                terms.push(tuples[&index][i]);
+            for j in num_randomizer_polynomials..num_randomizer_polynomials + num_base_polynomials {
+                terms.push(tuples[&index][j]);
                 let shift: u32 = (self.max_degree as i64
-                    - base_degree_bounds[i - num_randomizer_polynomials])
+                    - base_degree_bounds[j - num_randomizer_polynomials])
                     as u32;
-                terms.push(tuples[&index][i] * b_domain_value.mod_pow_u32(shift).lift());
+                terms.push(tuples[&index][j] * b_domain_value.mod_pow_u32(shift).lift());
             }
 
             // collect terms: extension
@@ -1024,8 +1024,8 @@ impl Stark {
 
             // TODO: We don't seem to need a separate loop for the base and extension columns.
             // But merging them would also require concatenating the degree bounds vector.
-            for (i, edb) in extension_degree_bounds.iter().enumerate() {
-                let extension_element: XFieldElement = tuples[&index][extension_offset + i];
+            for (j, edb) in extension_degree_bounds.iter().enumerate() {
+                let extension_element: XFieldElement = tuples[&index][extension_offset + j];
                 terms.push(extension_element);
                 let shift = (self.max_degree as i64 - edb) as u32;
                 terms.push(extension_element * b_domain_value.mod_pow_u32(shift).lift())

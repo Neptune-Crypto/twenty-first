@@ -248,9 +248,9 @@ where
             })
             .collect_into_vec(&mut digests);
         let mut mt: MerkleTree<H> = MerkleTree::from_digests(&digests);
-        let mt_root: &<H as Hasher>::Digest = &mt.get_root();
+        let mut mt_root: <H as Hasher>::Digest = mt.get_root();
 
-        proof_stream.enqueue(&Item::MerkleRoot(mt_root.to_owned()));
+        proof_stream.enqueue(&Item::MerkleRoot(mt_root));
         let mut values_and_merkle_trees = vec![(codeword_local.clone(), mt)];
 
         let (num_rounds, _) = self.num_rounds();
@@ -289,7 +289,7 @@ where
                 .collect_into_vec(&mut digests);
 
             mt = MerkleTree::from_digests(&digests);
-            let mt_root: H::Digest = mt.get_root();
+            mt_root = mt.get_root();
             proof_stream.enqueue(&Item::MerkleRoot(mt_root));
             values_and_merkle_trees.push((codeword_local.clone(), mt));
 

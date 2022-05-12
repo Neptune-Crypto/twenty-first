@@ -259,7 +259,7 @@ impl RescuePrime {
         let mut state = vec![input.ring_zero(); self.m];
         state[0] = input.to_owned();
 
-        state = (0..self.steps_count).fold(state, |state, i| self.hash_round(state, i));
+        state = (0..self.steps_count).fold(state, |istate, i| self.hash_round(istate, i));
 
         state[0]
     }

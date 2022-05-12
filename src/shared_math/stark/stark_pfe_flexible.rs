@@ -430,7 +430,7 @@ impl StarkPrimeFieldElementFlexible {
         let transition_polynomials: Vec<Polynomial<PrimeFieldElementFlexible>> =
             transition_constraints
                 .iter()
-                .map(|x| x.evaluate_symbolic(&point))
+                .map(|tc| tc.evaluate_symbolic(&point))
                 .collect();
 
         // divide out transition zerofier
@@ -452,9 +452,10 @@ impl StarkPrimeFieldElementFlexible {
         let max_degree = self.max_degree(&transition_constraints);
         let mut randomizer_polynomial_coefficients: Vec<PrimeFieldElementFlexible> = vec![];
         for _ in 0..max_degree + 1 {
-            let mut rand_bytes = [0u8; 32];
-            rng.fill_bytes(&mut rand_bytes);
-            randomizer_polynomial_coefficients.push(self.omega.from_vecu8(rand_bytes.to_vec()));
+            let mut coefficient_rand_bytes = [0u8; 32];
+            rng.fill_bytes(&mut coefficient_rand_bytes);
+            randomizer_polynomial_coefficients
+                .push(self.omega.from_vecu8(coefficient_rand_bytes.to_vec()));
         }
 
         let randomizer_polynomial = Polynomial {
@@ -463,8 +464,10 @@ impl StarkPrimeFieldElementFlexible {
 
         let randomizer_codeword: Vec<PrimeFieldElementFlexible> = randomizer_polynomial
             .fast_coset_evaluate(&self.field_generator, self.omega, self.fri.domain.length);
-        let randomizer_codeword_digests: Vec<_> =
-            randomizer_codeword.iter().map(|x| hasher.hash(x)).collect();
+        let randomizer_codeword_digests: Vec<_> = randomizer_codeword
+            .iter()
+            .map(|rand_eval| hasher.hash(rand_eval))
+            .collect();
         let randomizer_mt =
             MerkleTree::<StarkPfeHasher>::from_digests(&randomizer_codeword_digests);
         proof_stream.enqueue(&randomizer_mt.get_root())?;
@@ -633,12 +636,17 @@ impl StarkPrimeFieldElementFlexible {
         // Verify low degree of combination polynomial, and collect indices
         // Note that FRI verifier verifies number of samples, so we don't have
         // to check that number here
-        let combination_values: Vec<(usize, PrimeFieldElementFlexible)> =
+        let indices_and_combination_values: Vec<(usize, PrimeFieldElementFlexible)> =
             self.fri.verify(proof_stream)?;
 
-        let indices: Vec<usize> = combination_values.iter().map(|(i, _y)| *i).collect();
-        let values: Vec<PrimeFieldElementFlexible> =
-            combination_values.iter().map(|(_i, y)| *y).collect();
+        let indices: Vec<usize> = indices_and_combination_values
+            .iter()
+            .map(|(i, _y)| *i)
+            .collect();
+        let combination_values: Vec<PrimeFieldElementFlexible> = indices_and_combination_values
+            .iter()
+            .map(|(_i, y)| *y)
+            .collect();
 
         let mut duplicated_indices = indices.clone();
         duplicated_indices.append(
@@ -658,8 +666,9 @@ impl StarkPrimeFieldElementFlexible {
 
             let auth_paths: Vec<PartialAuthenticationPath<StarkPfeDigest>> =
                 proof_stream.dequeue_length_prepended()?;
-            let values: Vec<PrimeFieldElementFlexible> = proof_stream.dequeue_length_prepended()?;
-            let leaves: Vec<_> = values.iter().map(|x| hasher.hash(x)).collect();
+            let bq_values: Vec<PrimeFieldElementFlexible> =
+                proof_stream.dequeue_length_prepended()?;
+            let leaves: Vec<_> = bq_values.iter().map(|x| hasher.hash(x)).collect();
             let auth_pairs: Vec<_> = zip(auth_paths, leaves).collect();
 
             let valid = MerkleTree::<StarkPfeHasher>::verify_multi_proof(
@@ -675,7 +684,7 @@ impl StarkPrimeFieldElementFlexible {
 
             duplicated_indices
                 .iter()
-                .zip(values.iter())
+                .zip(bq_values.iter())
                 .for_each(|(index, value)| {
                     boundary_quotients[i].insert(*index, *value);
                 });
@@ -694,12 +703,12 @@ impl StarkPrimeFieldElementFlexible {
 
         let auth_pairs: Vec<_> = zip(randomizer_proof, randomizer_proof_digests).collect();
 
-        let valid = MerkleTree::<StarkPfeHasher>::verify_multi_proof(
+        let valid_randomizer_auth_paths = MerkleTree::<StarkPfeHasher>::verify_multi_proof(
             randomizer_mt_root,
             &duplicated_indices,
             &auth_pairs,
         );
-        if !valid {
+        if !valid_randomizer_auth_paths {
             return Err(Box::new(StarkVerifyError::BadMerkleProof(
                 MerkleProofError::RandomizerError,
             )));
@@ -818,7 +827,7 @@ impl StarkPrimeFieldElementFlexible {
                     sum + term.to_owned() * weight.to_owned()
                 });
 
-            if values[i] != combination {
+            if combination_values[i] != combination {
                 return Err(Box::new(StarkVerifyError::LinearCombinationMismatch(
                     current_index,
                 )));

@@ -331,10 +331,10 @@ impl FromVecu8 for PrimeFieldElementFlexible {
         // then it would need to read 64 bytes instead of 32 as now. And if
         // feeding it a hash, it would need to be fed a 64 byte hash.
         let bytesize = std::mem::size_of::<u64>();
-        let (first_eight_bytes, rest) = bytes.as_slice().split_at(bytesize);
-        let (second_eight_bytes, rest) = rest.split_at(bytesize);
-        let (third_eight_bytes, rest) = rest.split_at(bytesize);
-        let (fourth_eight_bytes, _rest) = rest.split_at(bytesize);
+        let (first_eight_bytes, rest0) = bytes.as_slice().split_at(bytesize);
+        let (second_eight_bytes, rest1) = rest0.split_at(bytesize);
+        let (third_eight_bytes, rest2) = rest1.split_at(bytesize);
+        let (fourth_eight_bytes, _rest) = rest2.split_at(bytesize);
         let mut u256_bytes: Vec<u8> = vec![];
         u256_bytes.extend_from_slice(first_eight_bytes);
         u256_bytes.extend_from_slice(second_eight_bytes);

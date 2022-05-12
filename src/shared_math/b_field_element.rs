@@ -195,14 +195,14 @@ impl BFieldElement {
 
         // compute ab - d; because d may be greater than ab we need to handle potential underflow
         let (tmp0, under) = ab.overflowing_sub(d);
-        let tmp0 = tmp0.wrapping_sub(Self::LOWER_MASK * (under as u64));
+        let tmp1 = tmp0.wrapping_sub(Self::LOWER_MASK * (under as u64));
 
         // compute c * 2^32 - c; this is guaranteed not to underflow
-        let tmp1 = (c << 32) - c;
+        let tmp2 = (c << 32) - c;
 
         // add temp values and return the result; because each of the temp may be up to 64 bits,
         // we need to handle potential overflow
-        let (result, over) = tmp0.overflowing_add(tmp1);
+        let (result, over) = tmp1.overflowing_add(tmp2);
         result.wrapping_add(Self::LOWER_MASK * (over as u64))
     }
 }
