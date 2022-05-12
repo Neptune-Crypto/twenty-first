@@ -278,9 +278,11 @@ where
         root_hash: H::Digest,
         leaf_indices: &[usize],
         leaf_digests: &[H::Digest],
-        auth_paths: &[PartialAuthenticationPath<H::Digest>],
+        partial_auth_paths: &[PartialAuthenticationPath<H::Digest>],
     ) -> bool {
-        if leaf_indices.len() != auth_paths.len() || leaf_indices.len() != leaf_digests.len() {
+        if leaf_indices.len() != partial_auth_paths.len()
+            || leaf_indices.len() != leaf_digests.len()
+        {
             return false;
         }
 
@@ -288,11 +290,11 @@ where
             return true;
         }
         debug_assert_eq!(leaf_indices.len(), leaf_digests.len());
-        debug_assert_eq!(leaf_digests.len(), auth_paths.len());
-        debug_assert_eq!(auth_paths.len(), leaf_indices.len());
+        debug_assert_eq!(leaf_digests.len(), partial_auth_paths.len());
+        debug_assert_eq!(partial_auth_paths.len(), leaf_indices.len());
 
         let mut partial_auth_paths: Vec<PartialAuthenticationPath<H::Digest>> =
-            auth_paths.to_owned();
+            partial_auth_paths.to_owned();
         let mut partial_tree: HashMap<u64, H::Digest> = HashMap::new();
 
         // FIXME: We find the offset from which leaf nodes occur in the tree by looking at the
@@ -395,14 +397,14 @@ where
         }
 
         // Remove 'Some' constructors from partial auth paths
-        let auth_paths = partial_auth_paths
+        let reconstructed_auth_paths = partial_auth_paths
             .iter()
             .map(Self::unwrap_partial_authentication_path)
             .collect::<Vec<_>>();
 
         leaf_indices
             .par_iter()
-            .zip(auth_paths.par_iter())
+            .zip(reconstructed_auth_paths.par_iter())
             .all(|(index, auth_path)| {
                 Self::verify_authentication_path_from_leaf_hash_with_memoization(
                     &root_hash,
@@ -616,8 +618,8 @@ where
 
         let hasher = H::new();
         let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(indices.len());
-        for (value, proof) in izip!(unsalted_leaves, proof) {
-            let salts_for_leaf = proof.1.clone();
+        for (value, proof_element) in izip!(unsalted_leaves, proof) {
+            let salts_for_leaf = proof_element.1.clone();
             let leaf_hash = hasher.hash_with_salts(value.to_digest(), &salts_for_leaf);
             leaf_hashes.push(leaf_hash);
         }

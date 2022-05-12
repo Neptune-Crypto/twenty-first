@@ -144,9 +144,9 @@ impl<const M: usize> RescuePrimeXlix<M> {
         }
 
         // MDS
-        for k in 0..M {
-            for j in 0..M {
-                state[k] += MDS[k][j] * state[j];
+        for j in 0..M {
+            for k in 0..M {
+                state[j] += MDS[j][k] * state[k];
             }
         }
 
@@ -159,9 +159,9 @@ impl<const M: usize> RescuePrimeXlix<M> {
         Self::apply_inverse_sbox(state);
 
         // MDS
-        for i in 0..M {
-            for j in 0..M {
-                state[i] += MDS[i][j] * state[j];
+        for j in 0..M {
+            for k in 0..M {
+                state[j] += MDS[j][k] * state[k];
             }
         }
 

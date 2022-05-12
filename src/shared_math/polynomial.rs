@@ -537,7 +537,6 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             return self.clone();
         }
 
-        let one = self.coefficients.last().unwrap().ring_one();
         let mut acc = Polynomial::from_constant(one);
         let bit_length: u64 = pow.bits();
         for i in 0..bit_length {
@@ -930,7 +929,6 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             return Self::ring_zero();
         }
 
-        let one = self.coefficients.last().unwrap().ring_one();
         let mut acc = Polynomial::from_constant(one);
         let bit_length: u64 = pow.bits();
         for i in 0..bit_length {

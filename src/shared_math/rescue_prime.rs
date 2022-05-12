@@ -84,7 +84,9 @@ impl RescuePrime {
         let mut state = input.to_vec();
         state.resize(self.m, BFieldElement::ring_zero());
 
-        state = (0..self.steps_count).fold(state, |state, i| self.hash_round(state, i));
+        state = (0..self.steps_count).fold(state, |intermediate_state, i| {
+            self.hash_round(intermediate_state, i)
+        });
 
         state[0..self.output_length as usize].to_vec()
     }

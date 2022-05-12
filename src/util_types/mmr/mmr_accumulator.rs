@@ -224,7 +224,7 @@ where
             );
             let (calculated_new_peaks, _new_membership_proof) = match append_res {
                 None => return false,
-                Some((new_peaks, new_mp)) => (new_peaks, new_mp),
+                Some((peaks, mp)) => (peaks, mp),
             };
             running_peaks = calculated_new_peaks;
             running_leaf_count += 1;

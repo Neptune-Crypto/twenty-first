@@ -142,9 +142,9 @@ where
     /// authentication path has been mutated, false otherwise.
     pub fn update_from_append(
         &mut self,
-        old_leaf_count: u128,
-        new_leaf: &H::Digest,
-        old_peaks: &[H::Digest],
+        old_mmr_leaf_count: u128,
+        new_mmr_leaf: &H::Digest,
+        old_mmr_peaks: &[H::Digest],
     ) -> bool {
         // 1. Get index of authentication paths's peak
         // 2. Get node indices for nodes added by the append
@@ -157,15 +157,15 @@ where
         // 6. Push required digests to the authentication path
 
         // 1
-        let (old_peak_index, old_peak_height) = self.get_peak_index_and_height();
+        let (own_old_peak_index, own_old_peak_height) = self.get_peak_index_and_height();
 
         // 2
-        let added_node_indices = node_indices_added_by_append(old_leaf_count);
+        let added_node_indices = node_indices_added_by_append(old_mmr_leaf_count);
 
         // 3
         // Any peak is a left child, so we don't have to check if it's a right or left child.
         // This means we can use a faster method to find the parent index than the generic method.
-        let peak_parent_index = old_peak_index + (1 << (old_peak_height + 1));
+        let peak_parent_index = own_old_peak_index + (1 << (own_old_peak_height + 1));
 
         // 3a
         if !added_node_indices.contains(&peak_parent_index) {
@@ -174,18 +174,23 @@ where
 
         // 4 Get node indices of missing digests
         let new_peak_index: u128 = *added_node_indices.last().unwrap();
-        let new_node_count: u128 = leaf_count_to_node_count(old_leaf_count + 1);
-        let node_indices_for_missing_digests: Vec<u128> =
-            get_authentication_path_node_indices(old_peak_index, new_peak_index, new_node_count)
-                .unwrap();
+        let new_node_count: u128 = leaf_count_to_node_count(old_mmr_leaf_count + 1);
+        let node_indices_for_missing_digests: Vec<u128> = get_authentication_path_node_indices(
+            own_old_peak_index,
+            new_peak_index,
+            new_node_count,
+        )
+        .unwrap();
 
         // 5 collect all derivable peaks in a hashmap indexed by node index
         // 5.a, collect all node hash digests that are present in the old peaks
         // The keys in the hash map are node indices
         let mut known_digests: HashMap<u128, H::Digest> = HashMap::new();
-        let (_old_peak_heights, old_peak_indices) =
-            get_peak_heights_and_peak_node_indices(old_leaf_count);
-        for (old_peak_index, old_peak_digest) in old_peak_indices.iter().zip(old_peaks.iter()) {
+        let (_old_mmr_peak_heights, old_mmr_peak_indices) =
+            get_peak_heights_and_peak_node_indices(old_mmr_leaf_count);
+        for (old_peak_index, old_peak_digest) in
+            old_mmr_peak_indices.iter().zip(old_mmr_peaks.iter())
+        {
             known_digests.insert(*old_peak_index, old_peak_digest.to_owned());
         }
 
@@ -193,9 +198,11 @@ where
         // `old_peaks`. These are the digests of `new_leaf`'s path to the root.
         // break out of loop once *one* digest is found this way since that will
         // always suffice.
-        let mut acc_hash = new_leaf.to_owned();
+        let mut acc_hash = new_mmr_leaf.to_owned();
         let hasher = H::new();
-        for (node_index, old_peak_digest) in added_node_indices.iter().zip(old_peaks.iter().rev()) {
+        for (node_index, old_peak_digest) in
+            added_node_indices.iter().zip(old_mmr_peaks.iter().rev())
+        {
             known_digests.insert(*node_index, acc_hash.to_owned());
 
             // peaks are always left children, so we don't have to check for that

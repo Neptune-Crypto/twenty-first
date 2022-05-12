@@ -246,22 +246,22 @@ pub fn data_index_to_node_index(data_index: u128) -> u128 {
 
 /// Convert from node index to data index in log(size) time
 pub fn node_index_to_data_index(node_index: u128) -> Option<u128> {
-    let (_right, height) = right_child_and_height(node_index);
-    if height != 0 {
+    let (_right, own_height) = right_child_and_height(node_index);
+    if own_height != 0 {
         return None;
     }
 
-    let (mut node, mut height) = leftmost_ancestor(node_index);
+    let (mut node, mut node_height) = leftmost_ancestor(node_index);
     let mut data_index = 0;
-    while height > 0 {
-        let left_child = left_child(node, height);
+    while node_height > 0 {
+        let left_child = left_child(node, node_height);
         if node_index <= left_child {
             node = left_child;
-            height -= 1;
+            node_height -= 1;
         } else {
             node = right_child(node);
-            height -= 1;
-            data_index += 1 << height;
+            node_height -= 1;
+            data_index += 1 << node_height;
         }
     }
 
