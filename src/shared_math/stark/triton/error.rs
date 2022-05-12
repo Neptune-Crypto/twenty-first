@@ -11,6 +11,7 @@ pub enum InstructionError {
     MemoryAddressNotFound,
     InverseOfZero,
     RunawayInstructionArg,
+    IllegalInstructionAfterSkiz,
 }
 
 impl Display for InstructionError {
@@ -44,6 +45,13 @@ impl Display for InstructionError {
                 write!(
                     f,
                     "A numeric argument to an instruction occurred out of place"
+                )
+            }
+
+            IllegalInstructionAfterSkiz => {
+                write!(
+                    f,
+                    "A 'skiz' can only be followed by 'call', 'recurse' or 'return'"
                 )
             }
         }

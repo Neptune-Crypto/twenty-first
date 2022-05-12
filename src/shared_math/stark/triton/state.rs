@@ -149,11 +149,17 @@ impl<'pgm> VMState<'pgm> {
                 }
             }
 
-            // FIXME: Instruction after skiz can only be: Call, Recurse, Return
-            // FIXME: For Call, += 3.
             Skiz => {
+                let next_instruction = self.next_sequential_instruction()?;
+                if !vec![Call, Recurse, Return].contains(&next_instruction) {
+                    return vm_err(IllegalInstructionAfterSkiz);
+                }
                 let elem = self.op_stack.pop()?;
-                self.instruction_pointer += if elem.is_zero() { 2 } else { 1 }
+                self.instruction_pointer += if elem.is_zero() {
+                    1 + next_instruction.size()
+                } else {
+                    1
+                }
             }
 
             Call => {
@@ -348,7 +354,7 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            XsMul => {
+            XbMul => {
                 let x: XWord = self.op_stack.popx()?;
                 let b: BWord = self.op_stack.pop()?;
                 self.op_stack.pushx(x * XWord::new_const(b));
@@ -432,12 +438,17 @@ impl<'pgm> VMState<'pgm> {
             .copied()
     }
 
-    fn _next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
-        match self.current_instruction()? {
-            // Skip next instruction if top of stack is zero.
-            Skiz => todo!(),
-            _ => todo!(),
-        }
+    // Return the next instruction on the tape, skipping arguments
+    //
+    // Note that this is not necessarily the next instruction to execute,
+    // since the current instruction could be a jump.
+    fn next_sequential_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
+        let ci = self.current_instruction()?;
+        let ci_size = ci.size();
+        self.program
+            .get(self.instruction_pointer + ci_size)
+            .ok_or_else(|| vm_fail(InstructionPointerOverflow))
+            .copied()
     }
 
     fn jump_stack_pop(&mut self) -> Result<usize, Box<dyn Error>> {

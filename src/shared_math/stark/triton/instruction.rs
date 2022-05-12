@@ -59,7 +59,7 @@ pub enum Instruction {
     XxAdd,
     XxMul,
     XInv,
-    XsMul,
+    XbMul,
     // Read/write
     Print,
     Scan,
@@ -110,7 +110,7 @@ impl Display for Instruction {
             XxAdd => write!(f, "xxadd"),
             XxMul => write!(f, "xxmul"),
             XInv => write!(f, "xinv"),
-            XsMul => write!(f, "xsmul"),
+            XbMul => write!(f, "xbmul"),
 
             // Read/write
             Print => write!(f, "print"),
@@ -373,9 +373,9 @@ fn parse_token(
         "reverse" => vec![Reverse],
         "div" => vec![Div],
         "xxadd" => vec![XxAdd],
-        "xxmul" => vec![XsMul],
+        "xxmul" => vec![XbMul],
         "xinv" => vec![XInv],
-        "XsMul" => vec![XsMul],
+        "xbmul" => vec![XbMul],
         // Read/write
         "print" => vec![Print],
         "scan" => vec![Scan],
