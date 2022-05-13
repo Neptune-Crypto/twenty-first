@@ -427,6 +427,15 @@ where
             // Do not calculate the last hash as it will always be a peak which
             // are never included in the authentication path
             if count == leaf_mutation_membership_proof.authentication_path.len() - 1 {
+                // TODO: REMOVE THIS DEBUG CODE
+                let (acc_right, _acc_height) = right_child_and_height(node_index);
+                acc_hash = if acc_right {
+                    hasher.hash_pair(hash, &acc_hash)
+                } else {
+                    hasher.hash_pair(&acc_hash, hash)
+                };
+                println!("peak hash from batch update is: {:?}", acc_hash);
+
                 break;
             }
             let (acc_right, _acc_height) = right_child_and_height(node_index);
@@ -591,6 +600,92 @@ mod mmr_membership_proof_test {
             assert_eq!(
                 expected_peak_index,
                 membership_proof.get_peak_index_and_height()
+            );
+        }
+    }
+
+    #[test]
+    fn update_batch_membership_proofs_from_leaf_mutations_new_test() {
+        type Digest = Blake3Hash;
+        type Hasher = blake3::Hasher;
+
+        let total_leaf_count = 8;
+        let leaf_hashes: Vec<Digest> = (14u128..14 + total_leaf_count).map(|x| x.into()).collect();
+        let mut archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
+        let mut membership_proofs: Vec<MembershipProof<Hasher>> = vec![];
+        for data_index in 0..total_leaf_count {
+            membership_proofs.push(archival_mmr.prove_membership(data_index).0);
+        }
+
+        let new_leaf2: Digest = 133337u128.into();
+        let new_leaf3: Digest = 12345678u128.into();
+        let mutation_membership_proof_old2 = archival_mmr.prove_membership(2).0;
+        let mutation_membership_proof_old3 = archival_mmr.prove_membership(3).0;
+        archival_mmr.mutate_leaf_raw(2, new_leaf2);
+        archival_mmr.mutate_leaf_raw(3, new_leaf3);
+        for mp in membership_proofs.iter_mut() {
+            mp.update_from_leaf_mutation(&mutation_membership_proof_old2, &new_leaf2);
+        }
+        for mp in membership_proofs.iter_mut() {
+            mp.update_from_leaf_mutation(&mutation_membership_proof_old3, &new_leaf3);
+        }
+
+        let mut updated_leaf_hashes = leaf_hashes.clone();
+        updated_leaf_hashes[2] = new_leaf2;
+        updated_leaf_hashes[3] = new_leaf3;
+        for (i, (mp, leaf_hash)) in membership_proofs
+            .iter()
+            .zip(updated_leaf_hashes.iter())
+            .enumerate()
+        {
+            mp.verify(
+                &archival_mmr.get_peaks(),
+                leaf_hash,
+                archival_mmr.count_leaves(),
+            );
+        }
+    }
+
+    #[test]
+    fn update_batch_membership_proofs_from_batch_leaf_mutations_test() {
+        type Digest = Blake3Hash;
+        type Hasher = blake3::Hasher;
+
+        let total_leaf_count = 8;
+        let leaf_hashes: Vec<Digest> = (14u128..14 + total_leaf_count).map(|x| x.into()).collect();
+        let mut archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
+        let modified_leaf_count = 8;
+        let mut membership_proofs: Vec<MembershipProof<Hasher>> = vec![];
+        for data_index in 0..modified_leaf_count {
+            membership_proofs.push(archival_mmr.prove_membership(data_index).0);
+        }
+
+        let new_leafs: Vec<Digest> = (1337..1337 + modified_leaf_count as u128)
+            .map(|x| x.into())
+            .collect();
+
+        for i in 0..modified_leaf_count as usize {
+            let leaf_mutation_membership_proof = membership_proofs[i].clone();
+            let new_leaf = new_leafs[i];
+            MembershipProof::batch_update_from_leaf_mutation(
+                &mut membership_proofs,
+                &leaf_mutation_membership_proof,
+                &new_leaf,
+            );
+        }
+
+        for i in 0..modified_leaf_count {
+            archival_mmr.mutate_leaf_raw(i, new_leafs[i as usize]);
+        }
+
+        for (i, mp) in membership_proofs.iter().enumerate() {
+            assert!(
+                mp.verify(
+                    &archival_mmr.get_peaks(),
+                    &new_leafs[i],
+                    archival_mmr.count_leaves()
+                )
+                .0
             );
         }
     }
