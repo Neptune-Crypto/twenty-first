@@ -1220,7 +1220,6 @@ impl<PFElem: PrimeField> Mul for MPolynomial<PFElem> {
 }
 
 #[cfg(test)]
-#[macro_use]
 mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
     use super::*;
@@ -2219,12 +2218,11 @@ mod test_mpolynomials {
         assert_eq!(degree_poly, expected);
     }
 
-    /* TODO: Einar
     #[test]
     fn symbolic_degree_bound_random() {
         let variable_count = 3;
         let term_count = 5;
-        let exponenent_limit: u64 = 7;
+        let exponenent_limit = 7;
         let coefficient_limit = 11;
 
         let rnd_mvpoly = gen_mpolynomial(
@@ -2234,23 +2232,22 @@ mod test_mpolynomials {
             coefficient_limit,
         );
 
-        let mut max_degrees = Vec::<u64>::with_capacity(variable_count);
+        let mut max_degrees = Vec::with_capacity(variable_count);
         let mut rng = rand::thread_rng();
 
         for _ in 0..variable_count {
-            max_degrees.push(rng.next_u64() % exponenent_limit + 1);
+            max_degrees.push((rng.next_u64() % exponenent_limit + 1) as i64);
         }
 
-        let degree_poly = rnd_mvpoly.symbolic_degree_bound(&max_degrees);
+        let degree_poly = rnd_mvpoly.symbolic_degree_bound(&max_degrees[..]);
 
-        assert_le!(
-            degree_poly,
-            variable_count as u64 * (exponenent_limit + 1) * (exponenent_limit + 1),
+        assert!(
+            degree_poly
+                <= (variable_count as u64 * (exponenent_limit + 1) * (exponenent_limit + 1)) as i64,
             "The total degree is the max of the sums of the exponents in any term.",
         )
     }
 
-    */
     fn symbolic_degree_bound_prop_gen() {
         let variable_count = 4;
         let term_count = 5;
