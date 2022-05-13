@@ -396,9 +396,9 @@ where
         true
     }
 
-    /// Update multiple membership proofs with a `leaf_mutation` proof. For the `membership_proof`
+    /// Update multiple membership proofs with a `leaf_mutation` proof. For the `leaf_mutation_membership_proof`
     /// parameter, it doesn't matter if you use the old or new membership proof associated
-    /// with the leaf update, as they are the same before and after the leaf update.
+    /// with the leaf mutation, as they are the same before and after the leaf mutation.
     /// Returns the indices of the membership proofs that were modified where index refers
     /// to the order in which the membership proofs were given to this function.
     pub fn batch_update_from_leaf_mutation(
