@@ -1,7 +1,7 @@
 use super::error::{vm_fail, InstructionError::*};
 use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
-use super::ord_n::{Ord6, Ord8::*};
+use super::ord_n::{Ord4, Ord6, Ord8::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
@@ -13,6 +13,7 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
+use std::fmt::Display;
 use std::io::{Stdin, Stdout, Write};
 
 type BWord = BFieldElement;
@@ -55,9 +56,6 @@ pub struct VMState<'pgm> {
 
     /// Current instruction's address in program memory
     pub instruction_pointer: usize,
-
-    /// Instruction flags
-    pub ifl: [BWord; 10],
 
     /// Auxiliary registers
     pub aux: [BWord; AUX_REGISTER_COUNT],
@@ -116,7 +114,7 @@ impl<'pgm> VMState<'pgm> {
 
             Push => {
                 // FIXME: Consider what type of error this gives for invalid programs.
-                if let PushArg(arg) = self.current_instruction_arg()? {
+                if let PushArg(arg) = self.ci_plus_1()? {
                     self.op_stack.push(arg);
                     self.instruction_pointer += 2;
                 } else {
@@ -132,7 +130,7 @@ impl<'pgm> VMState<'pgm> {
 
             Dup => {
                 // FIXME: Consider what type of error this gives for invalid programs.
-                if let DupArg(arg) = self.current_instruction_arg()? {
+                if let DupArg(arg) = self.ci_plus_1()? {
                     let elem = self.op_stack.safe_peek(arg.into());
                     self.op_stack.push(elem);
                     self.instruction_pointer += 2;
@@ -144,7 +142,7 @@ impl<'pgm> VMState<'pgm> {
             Swap => {
                 // st[0] ... st[n] -> st[n] ... st[0]
                 // FIXME: Consider what type of error this gives for invalid programs.
-                if let SwapArg(arg) = self.current_instruction_arg()? {
+                if let SwapArg(arg) = self.ci_plus_1()? {
                     self.op_stack.safe_swap(arg.into());
                     self.instruction_pointer += 2;
                 } else {
@@ -153,7 +151,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Skiz => {
-                let next_instruction = self.next_sequential_instruction()?;
+                let next_instruction = self.next_instruction()?;
                 if !vec![Call, Recurse, Return].contains(&next_instruction) {
                     return vm_err(IllegalInstructionAfterSkiz);
                 }
@@ -167,7 +165,7 @@ impl<'pgm> VMState<'pgm> {
 
             Call => {
                 // FIXME: Consider what type of error this gives for invalid programs.
-                if let CallArg(addr) = self.current_instruction_arg()? {
+                if let CallArg(addr) = self.ci_plus_1()? {
                     let o_plus_2 = self.instruction_pointer as u32 + 2;
                     let pair = (o_plus_2.into(), addr);
                     self.jump_stack.push(pair);
@@ -225,7 +223,7 @@ impl<'pgm> VMState<'pgm> {
 
             Squeeze => {
                 // FIXME: Consider what type of error this gives for invalid programs.
-                if let SqueezeArg(arg) = self.current_instruction_arg()? {
+                if let SqueezeArg(arg) = self.ci_plus_1()? {
                     let n: usize = arg.into();
                     self.op_stack.push(self.aux[n]);
                     self.instruction_pointer += 1;
@@ -236,7 +234,7 @@ impl<'pgm> VMState<'pgm> {
 
             Absorb => {
                 // FIXME: Consider what type of error this gives for invalid programs.
-                if let AbsorbArg(arg) = self.current_instruction_arg()? {
+                if let AbsorbArg(arg) = self.ci_plus_1()? {
                     let n: usize = arg.into();
                     let elem = self.op_stack.pop()?;
                     self.aux[n] = elem;
@@ -447,23 +445,40 @@ impl<'pgm> VMState<'pgm> {
             .copied()
     }
 
-    // FIXME: Maybe give a more specific error here.
-    fn current_instruction_arg(&self) -> Result<Instruction, Box<dyn Error>> {
+    // Return the next instruction on the tape, skipping arguments
+    //
+    // Note that this is not necessarily the next instruction to execute,
+    // since the current instruction could be a jump, but it is either
+    // program[ip + 1] or program[ip + 2] depending on whether the current
+    // instruction takes an argument or not.
+    fn next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
+        let ci = self.current_instruction()?;
+        let ci_size = ci.size();
+        self.program
+            .get(self.instruction_pointer + ci_size)
+            .ok_or_else(|| vm_fail(InstructionPointerOverflow))
+            .copied()
+    }
+
+    fn next_next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
+        let cur_size = self.current_instruction()?.size();
+        let next_size = self.next_instruction()?.size();
+        self.program
+            .get(self.instruction_pointer + cur_size + next_size)
+            .ok_or_else(|| vm_fail(InstructionPointerOverflow))
+            .copied()
+    }
+
+    fn ci_plus_1(&self) -> Result<Instruction, Box<dyn Error>> {
         self.program
             .get(self.instruction_pointer + 1)
             .ok_or_else(|| vm_fail(InstructionPointerOverflow))
             .copied()
     }
 
-    // Return the next instruction on the tape, skipping arguments
-    //
-    // Note that this is not necessarily the next instruction to execute,
-    // since the current instruction could be a jump.
-    fn next_sequential_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
-        let ci = self.current_instruction()?;
-        let ci_size = ci.size();
+    fn ci_plus_2(&self) -> Result<Instruction, Box<dyn Error>> {
         self.program
-            .get(self.instruction_pointer + ci_size)
+            .get(self.instruction_pointer + 2)
             .ok_or_else(|| vm_fail(InstructionPointerOverflow))
             .copied()
     }
@@ -497,6 +512,93 @@ impl<'pgm> VMState<'pgm> {
         }
         true
     }
+}
+
+impl<'pgm> Display for VMState<'pgm> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        horizontal_bar(f)?;
+
+        let ci = self
+            .current_instruction()
+            .map(|ni| ni.to_string())
+            .unwrap_or("eof".to_string());
+
+        let ni = self
+            .next_instruction()
+            .map(|w| w.to_string())
+            .unwrap_or("none".to_string());
+
+        let nni = self
+            .next_next_instruction()
+            .map(|w| w.to_string())
+            .unwrap_or("none".to_string());
+
+        let ci_plus_1 = self
+            .ci_plus_1()
+            .map(|ni| ni.to_string())
+            .unwrap_or("none".to_string());
+
+        column(
+            f,
+            format!(
+                "clk: {}   ip: {}",
+                self.cycle_count, self.instruction_pointer
+            ),
+        )?;
+
+        column(f, format!("ci: {}   ci+1: {}", ci, ci_plus_1))?;
+        column(f, format!("ni: {}   nni: {}", ni, nni))?;
+        column(f, format!("ramp: {}   ramv: {}", self.ramp, self.ramv,))?;
+        column(
+            f,
+            format!(
+                "jsp: {}   jso: {}   jsd: {}",
+                self.jsp(),
+                self.jso(),
+                self.jsd(),
+            ),
+        )?;
+        column(
+            f,
+            format!(
+                "inv: {}   osp: {}   osv: {}",
+                self.op_stack.inv(),
+                self.op_stack.osp(),
+                self.op_stack.osv(),
+            ),
+        )?;
+        column(
+            f,
+            format!(
+                "st0: {} st1: {} st2: {} st3: {} st4: {} st5: {} st6: {} st7: {}",
+                self.op_stack.st(ST0),
+                self.op_stack.st(ST1),
+                self.op_stack.st(ST2),
+                self.op_stack.st(ST3),
+                self.op_stack.st(ST4),
+                self.op_stack.st(ST5),
+                self.op_stack.st(ST6),
+                self.op_stack.st(ST7),
+            ),
+        )?;
+
+        horizontal_bar(f)?;
+
+        Ok(())
+    }
+}
+
+fn horizontal_bar(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    writeln!(
+        f,
+        "+--------------------------------------------------------------------------+"
+    )?;
+
+    Ok(())
+}
+
+fn column(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
+    writeln!(f, "| {: <72} |", s)
 }
 
 #[cfg(test)]
@@ -534,7 +636,7 @@ mod vm_state_tests {
         let trace = triton::vm::run(&pgm).unwrap();
 
         for state in trace {
-            println!("{:?}", state);
+            println!("{}", state);
         }
     }
 
@@ -551,6 +653,22 @@ mod vm_state_tests {
         let last_state = trace.last().unwrap();
         assert_eq!(BWord::ring_zero(), last_state.op_stack.safe_peek(ST0));
 
-        println!("{:#?}", last_state);
+        println!("{}", last_state);
+    }
+
+    #[test]
+    fn run_countdown_from_10_test() {
+        let code = sample_programs::COUNTDOWN_FROM_10;
+        let program = instruction::parse(code).unwrap();
+        let trace = triton::vm::run(&program).unwrap();
+
+        // println!("{}", program);
+        // for state in trace {
+        //     println!("{}", state);
+        // }
+
+        let last_state = trace.last().unwrap();
+
+        assert_eq!(BWord::ring_zero(), last_state.op_stack.st(ST0));
     }
 }

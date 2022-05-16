@@ -447,6 +447,23 @@ pub mod sample_programs {
 
         print print print print print print print print print print print print print print
         ";
+
+    pub const SUBTRACT: &str = "
+        push 5
+        push 18446744069414584320
+        add
+    ";
+
+    pub const COUNTDOWN_FROM_10: &str = "
+        push 10
+        call 4
+        push 18446744069414584320
+        add
+        dup1
+        skiz
+        recurse
+        halt
+    ";
 }
 
 #[cfg(test)]
