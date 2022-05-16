@@ -35,6 +35,9 @@ pub struct VMState<'pgm> {
     /// 2. **Random-access memory**, to which the VM can read and write field elements
     ram: HashMap<BWord, BWord>,
 
+    ramp: BWord,
+    ramv: BWord,
+
     /// 3. **Op-stack memory**, which stores the part of the operational stack
     ///    that is not represented explicitly by the operational stack registers
     ///
@@ -196,13 +199,17 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer = self.program.len();
             }
 
-            Load => {
-                self.load()?;
+            ReadMem => {
+                self.ramp = self.op_stack.safe_peek(ST0);
+                self.ramv = self.memory_get(&self.ramp)?;
+                self.op_stack.push(self.ramv);
                 self.instruction_pointer += 1;
             }
 
-            Save => {
-                self.save()?;
+            WriteMem => {
+                self.ramv = self.op_stack.pop()?;
+                self.ramp = self.op_stack.safe_peek(ST0);
+                self.ram.insert(self.ramp, self.ramv);
                 self.instruction_pointer += 1;
             }
 
@@ -363,14 +370,14 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Print => {
+            WriteIo => {
                 let codepoint: u32 = self.op_stack.pop()?.try_into()?;
                 let out_char = codepoint.to_be_bytes();
                 let _written = stdout.write(&out_char)?;
                 self.instruction_pointer += 1;
             }
 
-            Scan => {
+            ReadIo => {
                 let in_char: u32 = stdin.read_u32::<BigEndian>()?;
                 self.op_stack.push(in_char.into());
                 self.instruction_pointer += 1;
@@ -479,20 +486,6 @@ impl<'pgm> VMState<'pgm> {
             .get(mem_addr)
             .copied()
             .ok_or_else(|| vm_fail(MemoryAddressNotFound))
-    }
-
-    fn load(&mut self) -> Result<(), Box<dyn Error>> {
-        let mem_addr = self.op_stack.safe_peek(ST0);
-        let mem_val = self.memory_get(&mem_addr)?;
-        self.op_stack.push(mem_val);
-        Ok(())
-    }
-
-    fn save(&mut self) -> Result<(), Box<dyn Error>> {
-        let mem_value = self.op_stack.pop()?;
-        let mem_addr = self.op_stack.safe_peek(ST0);
-        self.ram.insert(mem_addr, mem_value);
-        Ok(())
     }
 
     fn cmp_digest(&self) -> bool {

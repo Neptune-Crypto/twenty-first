@@ -24,6 +24,7 @@ pub enum Instruction {
     DupArg(Ord4),
     Swap,
     SwapArg(Ord4),
+
     // Control flow
     Skiz,
     Call,
@@ -32,9 +33,11 @@ pub enum Instruction {
     Recurse,
     Assert,
     Halt,
+
     // Memory access
-    Load,
-    Save,
+    ReadMem,
+    WriteMem,
+
     // Auxiliary register instructions
     Xlix,
     ClearAll,
@@ -45,6 +48,7 @@ pub enum Instruction {
     MerkleLeft,
     MerkleRight,
     CmpDigest,
+
     // Arithmetic on stack instructions
     Add,
     Mul,
@@ -60,9 +64,10 @@ pub enum Instruction {
     XxMul,
     XInv,
     XbMul,
+
     // Read/write
-    Print,
-    Scan,
+    ReadIo,
+    WriteIo,
 }
 
 impl Display for Instruction {
@@ -84,8 +89,8 @@ impl Display for Instruction {
             Halt => write!(f, "halt"),
 
             // Memory access
-            Load => write!(f, "load"),
-            Save => write!(f, "save"),
+            ReadMem => write!(f, "read_mem"),
+            WriteMem => write!(f, "write_mem"),
 
             // Auxiliary register instructions
             Xlix => write!(f, "xlix"),
@@ -113,8 +118,8 @@ impl Display for Instruction {
             XbMul => write!(f, "xbmul"),
 
             // Read/write
-            Print => write!(f, "print"),
-            Scan => write!(f, "scan"),
+            ReadIo => write!(f, "read_io"),
+            WriteIo => write!(f, "write_io"),
 
             PushArg(arg) => {
                 let n: u64 = arg.into();
@@ -169,8 +174,8 @@ impl Instruction {
             Halt => 0,
 
             // Memory access
-            Load => 20,
-            Save => 21,
+            ReadMem => 20,
+            WriteMem => 21,
 
             // Auxiliary register instructions
             Xlix => 30,
@@ -199,8 +204,8 @@ impl Instruction {
             XbMul => 53,
 
             // Read/write
-            Print => 70,
-            Scan => 71,
+            ReadIo => 71,
+            WriteIo => 70,
 
             PushArg(_) => return None,
             DupArg(_) => return None,
@@ -215,6 +220,7 @@ impl Instruction {
 
     pub fn size(&self) -> usize {
         match self {
+            // Double-word instructions (instructions that take arguments)
             Push => 2,
             Dup => 2,
             Swap => 2,
@@ -222,6 +228,7 @@ impl Instruction {
             Squeeze => 2,
             Absorb => 2,
 
+            // Single-word instructions
             Pop => 1,
             Pad => 1,
             Skiz => 1,
@@ -229,8 +236,8 @@ impl Instruction {
             Recurse => 1,
             Assert => 1,
             Halt => 1,
-            Load => 1,
-            Save => 1,
+            ReadMem => 1,
+            WriteMem => 1,
             Xlix => 1,
             ClearAll => 1,
             MerkleLeft => 1,
@@ -250,9 +257,10 @@ impl Instruction {
             XxMul => 1,
             XInv => 1,
             XbMul => 1,
-            Print => 1,
-            Scan => 1,
+            WriteIo => 1,
+            ReadIo => 1,
 
+            // Arguments (already accounted for)
             PushArg(_) => 0,
             DupArg(_) => 0,
             SwapArg(_) => 0,
@@ -281,9 +289,11 @@ impl Display for Program {
             let item = item.unwrap();
 
             match item {
+                // Print arguments as separate values
                 Push => writeln!(f, "{} {}", item, iterator.next().unwrap())?,
                 Call => writeln!(f, "{} {}", item, iterator.next().unwrap())?,
 
+                // Print as argument-less pseudo-instruction ("dup1" instead of "dup 1")
                 Dup => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
                 Swap => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
                 Squeeze => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
@@ -341,6 +351,7 @@ fn parse_token(
         "swap2" => vec![Swap, SwapArg(N1)],
         "swap3" => vec![Swap, SwapArg(N2)],
         "swap4" => vec![Swap, SwapArg(N3)],
+
         // Control flow
         "skiz" => vec![Skiz],
         "call" => vec![Call, CallArg(parse_elem(tokens)?)],
@@ -348,9 +359,10 @@ fn parse_token(
         "recurse" => vec![Recurse],
         "assert" => vec![Assert],
         "halt" => vec![Halt],
+
         // Memory access
-        "load" => vec![Load],
-        "save" => vec![Save],
+        "read_mem" => vec![ReadMem],
+        "write_mem" => vec![WriteMem],
 
         // Auxiliary register instructions
         "xlix" => vec![Xlix],
@@ -376,9 +388,11 @@ fn parse_token(
         "xxmul" => vec![XbMul],
         "xinv" => vec![XInv],
         "xbmul" => vec![XbMul],
+
         // Read/write
-        "print" => vec![Print],
-        "scan" => vec![Scan],
+        "read_io" => vec![ReadIo],
+        "write_io" => vec![WriteIo],
+
         _ => return Err(Box::new(UnknownInstruction(token.to_string()))),
     };
 
