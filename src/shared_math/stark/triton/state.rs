@@ -42,7 +42,7 @@ pub struct VMState<'pgm> {
     op_stack: OpStack,
 
     /// 4. Jump-stack memory, which stores the entire jump stack
-    jump_stack: Vec<usize>,
+    jump_stack: Vec<(BWord, BWord)>,
 
     ///
     /// Registers
@@ -165,7 +165,9 @@ impl<'pgm> VMState<'pgm> {
             Call => {
                 // FIXME: Consider what type of error this gives for invalid programs.
                 if let CallArg(addr) = self.current_instruction_arg()? {
-                    self.jump_stack.push(self.instruction_pointer + 2);
+                    let o_plus_2 = self.instruction_pointer as u32 + 2;
+                    let pair = (o_plus_2.into(), addr);
+                    self.jump_stack.push(pair);
                     self.instruction_pointer = addr.value() as usize;
                 } else {
                     return vm_err(RunawayInstructionArg);
@@ -173,13 +175,13 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Return => {
-                let addr = self.jump_stack_pop()?;
-                self.instruction_pointer = addr;
+                let (orig_addr, _dest_addr) = self.jump_stack_pop()?;
+                self.instruction_pointer = orig_addr.value() as usize;
             }
 
             Recurse => {
-                let dest_addr = self.jump_stack_get(1)?;
-                self.instruction_pointer = dest_addr;
+                let (_orig_addr, dest_addr) = self.jump_stack_peek()?;
+                self.instruction_pointer = dest_addr.value() as usize;
             }
 
             Assert => {
@@ -413,11 +415,19 @@ impl<'pgm> VMState<'pgm> {
         }
     }
 
-    /// Jump-stack value
-    pub fn jsv(&self) -> BWord {
+    /// Jump-stack origin
+    pub fn jso(&self) -> BWord {
         self.jump_stack
             .last()
-            .map(|&v| BWord::new(v as u64))
+            .map(|(o, _d)| *o)
+            .unwrap_or_else(|| 0.into())
+    }
+
+    /// Jump-stack destination
+    pub fn jsd(&self) -> BWord {
+        self.jump_stack
+            .last()
+            .map(|(_o, d)| *d)
             .unwrap_or_else(|| 0.into())
     }
 
@@ -451,15 +461,15 @@ impl<'pgm> VMState<'pgm> {
             .copied()
     }
 
-    fn jump_stack_pop(&mut self) -> Result<usize, Box<dyn Error>> {
+    fn jump_stack_pop(&mut self) -> Result<(BWord, BWord), Box<dyn Error>> {
         self.jump_stack
             .pop()
             .ok_or_else(|| vm_fail(JumpStackTooShallow))
     }
 
-    fn jump_stack_get(&mut self, n: usize) -> Result<usize, Box<dyn Error>> {
+    fn jump_stack_peek(&mut self) -> Result<(BWord, BWord), Box<dyn Error>> {
         self.jump_stack
-            .get(n)
+            .last()
             .copied()
             .ok_or_else(|| vm_fail(JumpStackTooShallow))
     }

@@ -47,28 +47,41 @@ impl OpStack {
 
     pub fn safe_peek(&self, arg: Ord8) -> BWord {
         let n: usize = arg.into();
-        self.stack[n]
+        let top = self.stack.len() - 1;
+        self.stack[top - n]
     }
 
     pub fn safe_swap(&mut self, arg: Ord8) {
         let n: usize = arg.into();
-        self.stack.swap(0, n + 1);
+        let top = self.stack.len() - 1;
+        self.stack.swap(top, top - n + 1);
+    }
+
+    pub fn peek(&self, n: usize) -> Option<BWord> {
+        let top = self.stack.len() - 1;
+        self.stack.get(top - n).copied()
+    }
+
+    pub fn height(&self) -> usize {
+        self.stack.len()
     }
 
     pub fn is_too_shallow(&self) -> bool {
         self.stack.len() < OP_STACK_REG_COUNT
     }
 
-    /// Get the i'th op-stack element
-
+    /// Get the arg'th op-stack register value
     pub fn st(&self, arg: Ord8) -> BWord {
         let n: usize = arg.into();
-        self.stack[n]
+        let top = self.stack.len() - 1;
+        self.stack[top - n]
     }
 
     /// Operational stack pointer
     ///
-    /// Assumed to be 0 when the op-stack is empty.
+    /// The first value in op-stack memory (that is, beyond the op-stack registers).
+    ///
+    /// Assumed to be 0 when op-stack memory is empty.
     pub fn osp(&self) -> BWord {
         if self.stack.len() <= OP_STACK_REG_COUNT {
             0.into()
@@ -81,7 +94,7 @@ impl OpStack {
 
     /// Operational stack value
     ///
-    /// Assumed to be 0 when the op-stack is empty.
+    /// Assumed to be 0 when op-stack memory is empty.
     pub fn osv(&self) -> BWord {
         if self.stack.len() <= OP_STACK_REG_COUNT {
             0.into()
