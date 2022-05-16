@@ -689,6 +689,12 @@ mod b_prime_field_element_test {
         let ten_inv = bfield_elem!(16602069662473125889);
         let eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv =
             bfield_elem!(13115294102219178839);
+
+        // With these "alt" values we verify that the degenerated representation of
+        // B field elements works.
+        let one_alt = BFieldElement(BFieldElement::QUOTIENT + 1);
+        let two_alt = BFieldElement(BFieldElement::QUOTIENT + 2);
+        let three_alt = BFieldElement(BFieldElement::QUOTIENT + 3);
         assert_eq!(two_inv, bfield_elem!(2).inverse());
         assert_eq!(three_inv, bfield_elem!(3).inverse());
         assert_eq!(four_inv, bfield_elem!(4).inverse());
@@ -702,6 +708,9 @@ mod b_prime_field_element_test {
             eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv,
             bfield_elem!(85671106).inverse()
         );
+        assert_eq!(one_inv, one_alt.inverse());
+        assert_eq!(two_inv, two_alt.inverse());
+        assert_eq!(three_inv, three_alt.inverse());
 
         let inverses = [
             one_inv,
@@ -715,7 +724,11 @@ mod b_prime_field_element_test {
             nine_inv,
             ten_inv,
             eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv,
+            one_inv,
+            two_inv,
+            three_inv,
         ];
+
         let values = [
             bfield_elem!(1),
             bfield_elem!(2),
@@ -728,6 +741,9 @@ mod b_prime_field_element_test {
             bfield_elem!(9),
             bfield_elem!(10),
             bfield_elem!(85671106),
+            one_alt,
+            two_alt,
+            three_alt,
         ];
         let calculated_inverses = BFieldElement::batch_inversion(values.to_vec());
         assert_eq!(values.len(), calculated_inverses.len());
