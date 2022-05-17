@@ -347,10 +347,10 @@ fn parse_token(
         "dup2" => vec![Dup, DupArg(N1)],
         "dup3" => vec![Dup, DupArg(N2)],
         "dup4" => vec![Dup, DupArg(N3)],
-        "swap1" => vec![Swap, SwapArg(N0)],
-        "swap2" => vec![Swap, SwapArg(N1)],
-        "swap3" => vec![Swap, SwapArg(N2)],
-        "swap4" => vec![Swap, SwapArg(N3)],
+        "swap1" => vec![Swap, SwapArg(N1)],
+        "swap2" => vec![Swap, SwapArg(N2)],
+        "swap3" => vec![Swap, SwapArg(N3)],
+        //"swap4" => vec![Swap, SwapArg(N4)],
 
         // Control flow
         "skiz" => vec![Skiz],
@@ -473,27 +473,17 @@ pub mod sample_programs {
     // leave the stack with the n first fibonacci numbers.  f_0 = 0; f_1 = 1
     // buttom-up approach
     pub const FIBONACCI_SOURCE: &str = "
-    call $entry
-    pop - remove n      :endzero
-    pop - remove 1      :endone
-    halt
-    dup3 - 0            :fib
-    dup3 - 1
-    add
-    return
-    push 0              :entry
+    push 0
     push 1
-    push n=10
-    -- case: n==0
-    dup1
-    skiz
-    call endzero
-    -- case: n==1
-    dup1
-    push 1
+    push n=6
+    -- case: n==0 || n== 1
+    dup0
+    dup0
+    dup0
+    mul
     eq
     skiz
-    call $endone
+    call $basecase
     -- case: n>1
     call $nextline
     call $fib
@@ -502,11 +492,72 @@ pub mod sample_programs {
     add
     skiz
     recurse
-    call $endone
+    call $basecase
+    dup1     :basecase
+    push 1
+    eq
+    skiz
+    pop
+    pop - remove 1      :endone
+    halt
+";
+
+    pub const FIBONACCI_int: &str = "
+    push 0
+    push 1
+    push 7
+    dup0
+    dup0
+    dup0
+    mul
+    eq
+    skiz
+    call $basecase
+    call $nextline
+    call $fib
+    swap1 - n on top
+    push 18446744069414584320
+    add
+    skiz
+    recurse
+    call $
+    dup1     :basecase
+    push 1
+    eq
+    skiz
+    pop
+    pop - remove 1      :endone
+    halt
+    dup3            :fib
+    dup3
+    add
+    return
 ";
 
     pub const FIBONACCI: &str = "
-    call 9
+    push 0
+    push 1
+    push 7
+    dup1
+    dup1
+    dup1
+    mul
+    eq
+    skiz
+    call 32
+    call 19
+    call 41
+    swap1
+    push 18446744069414584320
+    add
+    dup1
+    skiz
+    recurse
+    call 37
+    dup1
+    push 0
+    eq
+    skiz
     pop
     pop
     halt
@@ -514,25 +565,6 @@ pub mod sample_programs {
     dup3
     add
     return
-    push 0
-    push 1
-    push 6
-    dup1
-    skiz
-    call 3
-    dup1    
-    push 1
-    eq
-    skiz
-    call 2
-    call 28
-    call 5
-    swap1
-    push 18446744069414584320
-    add
-    skiz
-    recurse
-    call 2
 ";
 }
 

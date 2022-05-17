@@ -15,7 +15,7 @@ pub fn run<'pgm>(program: &'pgm Program) -> Result<Vec<VMState<'pgm>>, Box<dyn E
         let derp2 = derp1.step(&mut rng, &rescue_prime, &mut stdin, &mut stdout);
         if derp2.is_err() {
             for x in trace.iter() {
-                println!("{:?}", x);
+                println!("{}", x);
             }
         }
         trace.push(derp2?);
