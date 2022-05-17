@@ -664,7 +664,7 @@ mod vm_state_tests {
         let t = trace.clone();
 
         println!("{}", program);
-        for state in trace {
+        for state in trace.iter() {
             println!("{}", state);
         }
 
