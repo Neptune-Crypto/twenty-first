@@ -409,8 +409,13 @@ fn parse_arg(tokens: &mut SplitWhitespace) -> Result<Ord16, Box<dyn Error>> {
 
 fn parse_elem(tokens: &mut SplitWhitespace) -> Result<BFieldElement, Box<dyn Error>> {
     let constant_s = tokens.next().ok_or(UnexpectedEndOfStream)?;
-    let constant_n = constant_s.parse::<u64>()?;
-    let constant_elem = BFieldElement::new(constant_n);
+
+    let mut constant_n128: i128 = constant_s.parse::<i128>()?;
+    if constant_n128 < 0 {
+        constant_n128 += BFieldElement::QUOTIENT as i128;
+    }
+    let constant_n64: u64 = constant_n128.try_into()?;
+    let constant_elem = BFieldElement::new(constant_n64);
 
     Ok(constant_elem)
 }
@@ -473,8 +478,7 @@ mod instruction_tests {
 
     #[test]
     fn parse_display_push_pop_test() {
-        let pgm_expected: crate::shared_math::stark::triton::instruction::Program =
-            sample_programs::push_push_add_pop_p();
+        let pgm_expected = sample_programs::push_push_add_pop_p();
         let pgm_pretty = format!("{}", pgm_expected);
         let pgm_actual = parse(&pgm_pretty).unwrap();
 
