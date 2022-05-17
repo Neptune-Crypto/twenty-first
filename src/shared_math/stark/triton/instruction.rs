@@ -469,6 +469,71 @@ pub mod sample_programs {
         recurse
         halt
     ";
+
+    // leave the stack with the n first fibonacci numbers.  f_0 = 0; f_1 = 1
+    // buttom-up approach
+    pub const FIBONACCI_SOURCE: &str = "
+    call $entry
+    pop - remove n      :endzero
+    pop - remove 1      :endone
+    halt
+    dup3 - 0            :fib
+    dup3 - 1
+    add
+    return
+    push 0              :entry
+    push 1
+    push n=10
+    -- case: n==0
+    dup1
+    skiz
+    call endzero
+    -- case: n==1
+    dup1
+    push 1
+    eq
+    skiz
+    call $endone
+    -- case: n>1
+    call $nextline
+    call $fib
+    swap1 - n on top
+    push 18446744069414584320
+    add
+    skiz
+    recurse
+    call $endone
+";
+
+    pub const FIBONACCI: &str = "
+    call 9
+    pop
+    pop
+    halt
+    dup3
+    dup3
+    add
+    return
+    push 0
+    push 1
+    push 6
+    dup1
+    skiz
+    call 3
+    dup1    
+    push 1
+    eq
+    skiz
+    call 2
+    call 28
+    call 5
+    swap1
+    push 18446744069414584320
+    add
+    skiz
+    recurse
+    call 2
+";
 }
 
 #[cfg(test)]

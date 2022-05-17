@@ -671,4 +671,21 @@ mod vm_state_tests {
 
         assert_eq!(BWord::ring_zero(), last_state.op_stack.st(ST0));
     }
+
+    #[test]
+    fn run_fib() {
+        let code = sample_programs::FIBONACCI;
+        let program = instruction::parse(code).unwrap();
+        let trace = triton::vm::run(&program).unwrap();
+
+        let t = trace.clone();
+        println!("{}", program);
+        for state in trace {
+            println!("{}", state);
+        }
+
+        let last_state = t.last().unwrap();
+
+        assert_eq!(BWord::ring_zero(), last_state.op_stack.st(ST0));
+    }
 }
