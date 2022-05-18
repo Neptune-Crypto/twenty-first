@@ -134,6 +134,21 @@ pub fn get_peak_height(leaf_count: u128, data_index: u128) -> Option<u128> {
     Some(height - 1)
 }
 
+/// leaf_index_to_peak_index
+/// Compute the index of the peak that contains the given leaf index,
+/// given the leaf count.
+pub fn leaf_index_to_peak_index(leaf_index: u128, leaf_count: u128) -> u128 {
+    let mut num_set_bits = 0;
+    let mut leaf_count_copy = leaf_count;
+    while leaf_count_copy != 0 {
+        if leaf_count_copy < leaf_index {
+            num_set_bits += 1;
+        }
+        leaf_count_copy &= leaf_count_copy - 1;
+    }
+    num_set_bits
+}
+
 /// Return the indices of the nodes added by an append, including the
 /// peak that this append gave rise to
 pub fn node_indices_added_by_append(old_leaf_count: u128) -> Vec<u128> {
@@ -177,7 +192,7 @@ pub fn get_authentication_path_node_indices(
     }
 }
 
-/// Given node count, return a vector representing the height of
+/// Given leaf count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
 pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, Vec<u128>) {
     if leaf_count == 0 {
@@ -471,6 +486,18 @@ mod mmr_test {
             node_indices_added_by_append(31)
         );
         assert_eq!(vec![64], node_indices_added_by_append(32));
+    }
+
+    #[test]
+    fn leaf_index_to_peak_index_test() {
+        assert!(leaf_index_to_peak_index(0, (1 << 32) - 1) == 0);
+        assert!(leaf_index_to_peak_index(1, (1 << 32) - 1) == 0);
+        assert!(leaf_index_to_peak_index(1 << 31, (1 << 32) - 1) == 0);
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30), (1 << 32) - 1) == 1);
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 29), (1 << 32) - 1) == 1);
+        assert!(leaf_index_to_peak_index((1 << 31) + 1, (1 << 32) - 1) == 1);
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30) + (1 << 29), (1 << 32) - 1) == 2);
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30) + 1, (1 << 32) - 1) == 2);
     }
 
     #[test]
