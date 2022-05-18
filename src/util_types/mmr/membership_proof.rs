@@ -488,8 +488,6 @@ where
     ///  - new_leafs -- new leafs in the same order as the
     ///    authentication paths
     pub fn batch_update_from_batch_leaf_mutation(
-        peaks: &Vec<H::Digest>,
-        leaf_count: u128,
         membership_proofs: &mut [Self],
         authentication_paths: &Vec<MembershipProof<H>>,
         new_leafs: &Vec<H::Digest>,
@@ -501,9 +499,15 @@ where
         all_membership_proofs.append(&mut authentication_paths.to_owned().clone());
 
         // for each modified leaf
-        for (leaf, path) in new_leafs.iter().zip(authentication_paths.iter()) {
+        for i in 0..new_leafs.len() {
             // apply update to all authentication paths
-            Self::batch_update_from_leaf_mutation(&mut all_membership_proofs, path, leaf);
+            let new_leaf = new_leafs[i].clone();
+            let updated_mutation_path = all_membership_proofs[membership_proofs.len() + i].clone();
+            Self::batch_update_from_leaf_mutation(
+                &mut all_membership_proofs,
+                &updated_mutation_path,
+                &new_leaf,
+            );
         }
 
         // take updated membership proofs and put into first argument
@@ -705,22 +709,19 @@ mod mmr_membership_proof_test {
             .map(|i| archival_mmr.prove_membership(i + 4).0)
             .collect();
 
-        let peaks = archival_mmr.get_peaks();
-        let leaf_count = archival_mmr.count_leaves();
-
         // let the magic start
         MembershipProof::batch_update_from_batch_leaf_mutation(
-            peaks,
-            leaf_count,
             &mut own_membership_proofs,
             &authentication_paths,
             &new_leafs,
         );
 
         // update MMR
+        println!("Original peaks: {:?}", archival_mmr.get_peaks());
         for i in 0..(modified_leaf_count as usize) {
             leaf_hashes[i + 4] = new_leafs[i];
             archival_mmr.mutate_leaf_raw((i + 4) as u128, new_leafs[i]);
+            println!("New peaks: {:?}", archival_mmr.get_peaks());
         }
 
         // test
