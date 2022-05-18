@@ -519,6 +519,8 @@ where
 
 #[cfg(test)]
 mod mmr_membership_proof_test {
+    use rand::{thread_rng, RngCore};
+
     use super::*;
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::{
@@ -692,49 +694,62 @@ mod mmr_membership_proof_test {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
-        let total_leaf_count = 8;
+        // TODO: This test takes ~8 seconds to run. Consider reducing it in size.
+        let total_leaf_count = 131;
         let mut leaf_hashes: Vec<Digest> =
             (14u128..14 + total_leaf_count).map(|x| x.into()).collect();
         let mut archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
-        let modified_leaf_count = 4;
-        let mut own_membership_proofs: Vec<MembershipProof<Hasher>> = vec![];
-        for data_index in 0..modified_leaf_count {
-            own_membership_proofs.push(archival_mmr.prove_membership(data_index).0);
-        }
+        let mut prng = thread_rng();
+        for modified_leaf_count in 0..=total_leaf_count {
+            // Pick a set of membership proofs that we want to batch-update
+            let own_membership_proof_count: u128 = prng.next_u32() as u128 % total_leaf_count;
+            let mut all_data_indices: Vec<u128> = (0..total_leaf_count).collect();
+            let mut own_membership_proofs: Vec<MembershipProof<Hasher>> = vec![];
+            for _ in 0..own_membership_proof_count {
+                let data_index =
+                    all_data_indices.remove(prng.next_u32() as usize % all_data_indices.len());
+                own_membership_proofs.push(archival_mmr.prove_membership(data_index).0);
+            }
 
-        let new_leafs: Vec<Digest> = (1337..1337 + modified_leaf_count as u128)
-            .map(|x| x.into())
-            .collect();
-        let authentication_paths: Vec<_> = (0..modified_leaf_count)
-            .map(|i| archival_mmr.prove_membership(i + 4).0)
-            .collect();
+            // Set the new leafs and their associated authentication paths
+            let new_leafs: Vec<Digest> = (133337..133337 + modified_leaf_count as u128)
+                .map(|x| x.into())
+                .collect();
+            let mut all_data_indices_new: Vec<u128> = (0..total_leaf_count).collect();
+            let mut authentication_paths: Vec<MembershipProof<Hasher>> = vec![];
+            for _ in 0..modified_leaf_count {
+                let data_index = all_data_indices_new
+                    .remove(prng.next_u32() as usize % all_data_indices_new.len());
+                authentication_paths.push(archival_mmr.prove_membership(data_index).0);
+            }
 
-        // let the magic start
-        MembershipProof::batch_update_from_batch_leaf_mutation(
-            &mut own_membership_proofs,
-            &authentication_paths,
-            &new_leafs,
-        );
-
-        // update MMR
-        println!("Original peaks: {:?}", archival_mmr.get_peaks());
-        for i in 0..(modified_leaf_count as usize) {
-            leaf_hashes[i + 4] = new_leafs[i];
-            archival_mmr.mutate_leaf_raw((i + 4) as u128, new_leafs[i]);
-            println!("New peaks: {:?}", archival_mmr.get_peaks());
-        }
-
-        // test
-        for i in 0..modified_leaf_count {
-            assert!(
-                own_membership_proofs[i as usize]
-                    .verify(
-                        &archival_mmr.get_peaks(),
-                        &leaf_hashes[i as usize],
-                        archival_mmr.count_leaves(),
-                    )
-                    .0
+            // let the magic start
+            MembershipProof::batch_update_from_batch_leaf_mutation(
+                &mut own_membership_proofs,
+                &authentication_paths,
+                &new_leafs,
             );
+
+            // update MMR
+            for i in 0..(modified_leaf_count as usize) {
+                let auth_path = authentication_paths[i].clone();
+                leaf_hashes[auth_path.data_index as usize] = new_leafs[i];
+                archival_mmr.mutate_leaf_raw(auth_path.data_index, new_leafs[i]);
+            }
+
+            // test
+            for i in 0..own_membership_proof_count {
+                let membership_proof = own_membership_proofs[i as usize].clone();
+                assert!(
+                    membership_proof
+                        .verify(
+                            &archival_mmr.get_peaks(),
+                            &leaf_hashes[membership_proof.data_index as usize],
+                            archival_mmr.count_leaves(),
+                        )
+                        .0
+                );
+            }
         }
     }
 
