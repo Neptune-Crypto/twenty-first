@@ -304,7 +304,7 @@ impl<'pgm> VMState<'pgm> {
             Lt => {
                 let a: u32 = self.op_stack.pop()?.try_into()?;
                 let b: u32 = self.op_stack.pop()?.try_into()?;
-                if a < b {
+                if b < a {
                     self.op_stack.push(BWord::ring_one());
                 } else {
                     self.op_stack.push(BWord::ring_zero());
@@ -675,7 +675,7 @@ mod vm_state_tests {
 
     #[test]
     fn run_fibonacci() {
-        let code = sample_programs::FIBONACCI;
+        let code = sample_programs::FIBONACCI_VIT;
         let program = instruction::parse(code).unwrap();
         println!("{}", program);
         let trace = triton::vm::run(&program).unwrap();

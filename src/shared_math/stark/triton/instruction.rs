@@ -494,7 +494,7 @@ pub mod sample_programs {
     recurse
     call $basecase
     dup1     :basecase
-    push 1
+    push 0
     eq
     skiz
     pop
@@ -505,7 +505,7 @@ pub mod sample_programs {
     pub const FIBONACCI_int: &str = "
     push 0
     push 1
-    push 7
+    push 2
     dup0
     dup0
     dup0
@@ -534,7 +534,7 @@ pub mod sample_programs {
     return
 ";
 
-    pub const FIBONACCI: &str = "
+    pub const FIBONACCI_VIT: &str = "
     push 0
     push 1
     push 7
@@ -565,6 +565,40 @@ pub mod sample_programs {
     dup3
     add
     return
+";
+
+    pub const FIBONACCI_LT: &str = "
+push 0
+push 1
+push 1
+dup1
+push 2
+lt
+push 0
+eq
+halt
+skiz
+call 30
+call 17
+call 39
+swap1
+push 18446744069414584320
+add
+dup1
+skiz
+recurse
+call 35
+dup1
+push 0
+eq
+skiz
+pop
+pop
+halt
+dup3
+dup3
+add
+return
 ";
 }
 
