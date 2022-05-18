@@ -343,14 +343,13 @@ fn parse_token(
         "pop" => vec![Pop],
         "push" => vec![Push, PushArg(parse_elem(tokens)?)],
         "pad" => vec![Pad],
-        "dup1" => vec![Dup, DupArg(N0)],
-        "dup2" => vec![Dup, DupArg(N1)],
-        "dup3" => vec![Dup, DupArg(N2)],
-        "dup4" => vec![Dup, DupArg(N3)],
+        "dup0" => vec![Dup, DupArg(N0)],
+        "dup1" => vec![Dup, DupArg(N1)],
+        "dup2" => vec![Dup, DupArg(N2)],
+        "dup3" => vec![Dup, DupArg(N3)],
         "swap1" => vec![Swap, SwapArg(N1)],
         "swap2" => vec![Swap, SwapArg(N2)],
         "swap3" => vec![Swap, SwapArg(N3)],
-        //"swap4" => vec![Swap, SwapArg(N4)],
 
         // Control flow
         "skiz" => vec![Skiz],
@@ -465,7 +464,7 @@ pub mod sample_programs {
         call 4
         push 18446744069414584320
         add
-        dup1
+        dup0
         skiz
         recurse
         halt
@@ -494,7 +493,7 @@ pub mod sample_programs {
     skiz
     recurse
     call $basecase
-    dup1     :basecase
+    dup0     :basecase
     push 0
     eq
     skiz
@@ -522,15 +521,15 @@ pub mod sample_programs {
     skiz
     recurse
     call $
-    dup1     :basecase
+    dup0     :basecase
     push 1
     eq
     skiz
     pop
     pop - remove 1      :endone
     halt
-    dup3            :fib
-    dup3
+    dup2            :fib
+    dup2
     add
     return
 ";
@@ -539,9 +538,9 @@ pub mod sample_programs {
     push 0
     push 1
     push 7
-    dup1
-    dup1
-    dup1
+    dup0
+    dup0
+    dup0
     mul
     eq
     skiz
@@ -551,19 +550,19 @@ pub mod sample_programs {
     swap1
     push 18446744069414584320
     add
-    dup1
+    dup0
     skiz
     recurse
     call 37
-    dup1
+    dup0
     push 0
     eq
     skiz
     pop
     pop
     halt
-    dup3
-    dup3
+    dup2
+    dup2
     add
     return
 ";
@@ -572,7 +571,7 @@ pub mod sample_programs {
 push 0
 push 1
 push 1
-dup1
+dup0
 push 2
 lt
 push 0
@@ -585,19 +584,19 @@ call 39
 swap1
 push 18446744069414584320
 add
-dup1
+dup0
 skiz
 recurse
 call 35
-dup1
+dup0
 push 0
 eq
 skiz
 pop
 pop
 halt
-dup3
-dup3
+dup2
+dup2
 add
 return
 ";
