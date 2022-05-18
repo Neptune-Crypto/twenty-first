@@ -1,7 +1,7 @@
 use super::error::{vm_fail, InstructionError::*};
 use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
-use super::ord_n::{Ord4, Ord6, Ord8::*};
+use super::ord_n::{Ord6, Ord8::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
@@ -112,14 +112,9 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Push => {
-                // FIXME: Consider what type of error this gives for invalid programs.
-                if let PushArg(arg) = self.ci_plus_1()? {
-                    self.op_stack.push(arg);
-                    self.instruction_pointer += 2;
-                } else {
-                    return vm_err(RunawayInstructionArg);
-                }
+            Push(arg) => {
+                self.op_stack.push(arg);
+                self.instruction_pointer += 2;
             }
 
             Pad => {
@@ -128,51 +123,33 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Dup => {
-                // FIXME: Consider what type of error this gives for invalid programs.
-                if let DupArg(arg) = self.ci_plus_1()? {
-                    let elem = self.op_stack.safe_peek(arg.into());
-                    self.op_stack.push(elem);
-                    self.instruction_pointer += 2;
-                } else {
-                    return vm_err(RunawayInstructionArg);
-                }
+            Dup(arg) => {
+                let elem = self.op_stack.safe_peek(arg.into());
+                self.op_stack.push(elem);
+                self.instruction_pointer += 2;
             }
 
-            Swap => {
+            Swap(arg) => {
                 // st[0] ... st[n] -> st[n] ... st[0]
-                // FIXME: Consider what type of error this gives for invalid programs.
-                if let SwapArg(arg) = self.ci_plus_1()? {
-                    self.op_stack.safe_swap(arg.into());
-                    self.instruction_pointer += 2;
-                } else {
-                    return vm_err(RunawayInstructionArg);
-                }
+                self.op_stack.safe_swap(arg.into());
+                self.instruction_pointer += 2;
             }
 
             Skiz => {
-                let next_instruction = self.next_instruction()?;
-                if !vec![Call, Recurse, Return, Pop].contains(&next_instruction) {
-                    return vm_err(IllegalInstructionAfterSkiz);
-                }
                 let elem = self.op_stack.pop()?;
                 self.instruction_pointer += if elem.is_zero() {
+                    let next_instruction = self.next_instruction()?;
                     1 + next_instruction.size()
                 } else {
                     1
                 }
             }
 
-            Call => {
-                // FIXME: Consider what type of error this gives for invalid programs.
-                if let CallArg(addr) = self.ci_plus_1()? {
-                    let o_plus_2 = self.instruction_pointer as u32 + 2;
-                    let pair = (o_plus_2.into(), addr);
-                    self.jump_stack.push(pair);
-                    self.instruction_pointer = addr.value() as usize;
-                } else {
-                    return vm_err(RunawayInstructionArg);
-                }
+            Call(addr) => {
+                let o_plus_2 = self.instruction_pointer as u32 + 2;
+                let pair = (o_plus_2.into(), addr);
+                self.jump_stack.push(pair);
+                self.instruction_pointer = addr.value() as usize;
             }
 
             Return => {
@@ -221,31 +198,18 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Squeeze => {
-                // FIXME: Consider what type of error this gives for invalid programs.
-                if let SqueezeArg(arg) = self.ci_plus_1()? {
-                    let n: usize = arg.into();
-                    self.op_stack.push(self.aux[n]);
-                    self.instruction_pointer += 1;
-                } else {
-                    return vm_err(RunawayInstructionArg);
-                }
+            Squeeze(arg) => {
+                let n: usize = arg.into();
+                self.op_stack.push(self.aux[n]);
+                self.instruction_pointer += 1;
             }
 
-            Absorb => {
-                // FIXME: Consider what type of error this gives for invalid programs.
-                if let AbsorbArg(arg) = self.ci_plus_1()? {
-                    let n: usize = arg.into();
-                    let elem = self.op_stack.pop()?;
-                    self.aux[n] = elem;
-                    self.instruction_pointer += 1;
-                } else {
-                    return vm_err(RunawayInstructionArg);
-                }
+            Absorb(arg) => {
+                let n: usize = arg.into();
+                let elem = self.op_stack.pop()?;
+                self.aux[n] = elem;
+                self.instruction_pointer += 1;
             }
-
-            MerkleLeft => todo!(),
-            MerkleRight => todo!(),
 
             CmpDigest => {
                 let cmp_bword = if self.cmp_digest() {
@@ -380,13 +344,6 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push(in_char.into());
                 self.instruction_pointer += 1;
             }
-
-            PushArg(_) => return vm_err(RunawayInstructionArg),
-            DupArg(_) => return vm_err(RunawayInstructionArg),
-            SwapArg(_) => return vm_err(RunawayInstructionArg),
-            CallArg(_) => return vm_err(RunawayInstructionArg),
-            SqueezeArg(_) => return vm_err(RunawayInstructionArg),
-            AbsorbArg(_) => return vm_err(RunawayInstructionArg),
         }
 
         // Check that no instruction left the OpStack with too few elements
@@ -476,13 +433,6 @@ impl<'pgm> VMState<'pgm> {
             .copied()
     }
 
-    fn ci_plus_2(&self) -> Result<Instruction, Box<dyn Error>> {
-        self.program
-            .get(self.instruction_pointer + 2)
-            .ok_or_else(|| vm_fail(InstructionPointerOverflow))
-            .copied()
-    }
-
     fn jump_stack_pop(&mut self) -> Result<(BWord, BWord), Box<dyn Error>> {
         self.jump_stack
             .pop()
@@ -521,22 +471,22 @@ impl<'pgm> Display for VMState<'pgm> {
         let ci = self
             .current_instruction()
             .map(|ni| ni.to_string())
-            .unwrap_or("eof".to_string());
+            .unwrap_or_else(|_| "eof".to_string());
 
         let ni = self
             .next_instruction()
             .map(|w| w.to_string())
-            .unwrap_or("none".to_string());
+            .unwrap_or_else(|_| "none".to_string());
 
         let nni = self
             .next_next_instruction()
             .map(|w| w.to_string())
-            .unwrap_or("none".to_string());
+            .unwrap_or_else(|_| "none".to_string());
 
         let ci_plus_1 = self
             .ci_plus_1()
             .map(|ni| ni.to_string())
-            .unwrap_or("none".to_string());
+            .unwrap_or_else(|_| "none".to_string());
 
         let width = 15;
         column(
@@ -623,6 +573,7 @@ mod vm_state_tests {
     use crate::shared_math::stark::triton;
     use crate::shared_math::stark::triton::instruction;
     use crate::shared_math::stark::triton::instruction::sample_programs;
+    use crate::shared_math::stark::triton::vm::Program;
 
     // Property: All instructions increase the cycle count by 1.
     // Property: Most instructions increase the instruction pointer by 1.
@@ -657,7 +608,7 @@ mod vm_state_tests {
     #[test]
     fn run_hello_world_1() {
         let code = sample_programs::HELLO_WORLD_1;
-        let program = instruction::parse(code).unwrap();
+        let program = Program::from_code(code).unwrap();
         let trace = triton::vm::run(&program).unwrap();
 
         // for state in trace {
@@ -673,7 +624,7 @@ mod vm_state_tests {
     #[test]
     fn run_countdown_from_10_test() {
         let code = sample_programs::COUNTDOWN_FROM_10;
-        let program = instruction::parse(code).unwrap();
+        let program = Program::from_code(code).unwrap();
         let trace = triton::vm::run(&program).unwrap();
         let t = trace.clone();
 
@@ -690,7 +641,7 @@ mod vm_state_tests {
     #[test]
     fn run_fibonacci() {
         let code = sample_programs::FIBONACCI_VIT;
-        let program = instruction::parse(code).unwrap();
+        let program = Program::from_code(code).unwrap();
         println!("{}", program);
         let trace = triton::vm::run(&program).unwrap();
         let t = trace.clone();

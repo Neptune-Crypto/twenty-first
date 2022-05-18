@@ -6,7 +6,7 @@ use std::str::SplitWhitespace;
 use Instruction::*;
 use TokenError::*;
 
-type Word = BFieldElement;
+type BWord = BFieldElement;
 
 /// A Triton VM instruction
 ///
@@ -17,18 +17,14 @@ type Word = BFieldElement;
 pub enum Instruction {
     // OpStack manipulation
     Pop,
-    Push,
-    PushArg(Word),
+    Push(BWord),
     Pad,
-    Dup,
-    DupArg(Ord4),
-    Swap,
-    SwapArg(Ord4),
+    Dup(Ord4),
+    Swap(Ord4),
 
     // Control flow
     Skiz,
-    Call,
-    CallArg(Word),
+    Call(BWord),
     Return,
     Recurse,
     Assert,
@@ -41,12 +37,8 @@ pub enum Instruction {
     // Auxiliary register instructions
     Xlix,
     ClearAll,
-    Squeeze,
-    SqueezeArg(Ord16),
-    Absorb,
-    AbsorbArg(Ord16),
-    MerkleLeft,
-    MerkleRight,
+    Squeeze(Ord16),
+    Absorb(Ord16),
     CmpDigest,
 
     // Arithmetic on stack instructions
@@ -75,14 +67,25 @@ impl Display for Instruction {
         match self {
             // OpStack manipulation
             Pop => write!(f, "pop"),
-            Push => write!(f, "push"),
+            Push(arg) => write!(f, "push {}", {
+                let n: u64 = arg.into();
+                n
+            }),
             Pad => write!(f, "pad"),
-            Dup => write!(f, "dup"),
-            Swap => write!(f, "swap"),
-
+            Dup(arg) => write!(f, "dup{}", {
+                let n: usize = arg.into();
+                n
+            }),
+            Swap(arg) => write!(f, "swap{}", {
+                let n: usize = arg.into();
+                n + 1
+            }),
             // Control flow
             Skiz => write!(f, "skiz"),
-            Call => write!(f, "call"),
+            Call(arg) => write!(f, "call {}", {
+                let addr: u64 = arg.into();
+                addr
+            }),
             Return => write!(f, "return"),
             Recurse => write!(f, "recurse"),
             Assert => write!(f, "assert"),
@@ -95,10 +98,14 @@ impl Display for Instruction {
             // Auxiliary register instructions
             Xlix => write!(f, "xlix"),
             ClearAll => write!(f, "clearall"),
-            Squeeze => write!(f, "squeeze"),
-            Absorb => write!(f, "absorb"),
-            MerkleLeft => write!(f, "merkle_left"),
-            MerkleRight => write!(f, "merkle_right"),
+            Squeeze(arg) => write!(f, "squeeze{}", {
+                let n: usize = arg.into();
+                n
+            }),
+            Absorb(arg) => write!(f, "absorb{}", {
+                let n: usize = arg.into();
+                n
+            }),
             CmpDigest => write!(f, "cmp_digest"),
 
             // Arithmetic on stack instructions
@@ -120,36 +127,6 @@ impl Display for Instruction {
             // Read/write
             ReadIo => write!(f, "read_io"),
             WriteIo => write!(f, "write_io"),
-
-            PushArg(arg) => {
-                let n: u64 = arg.into();
-                write!(f, "{}", n)
-            }
-
-            DupArg(arg) => {
-                let n: usize = arg.into();
-                write!(f, "{}", n)
-            }
-
-            SwapArg(arg) => {
-                let n: usize = arg.into();
-                write!(f, "{}", n)
-            }
-
-            CallArg(arg) => {
-                let n: u64 = arg.into();
-                write!(f, "{}", n)
-            }
-
-            SqueezeArg(arg) => {
-                let n: usize = arg.into();
-                write!(f, "{}", n)
-            }
-
-            AbsorbArg(arg) => {
-                let n: usize = arg.into();
-                write!(f, "{}", n)
-            }
         }
     }
 }
@@ -160,14 +137,14 @@ impl Instruction {
         let value = match self {
             // OpStack manipulation
             Pop => 1,
-            Push => 2,
+            Push(_) => 2,
             Pad => 3,
-            Dup => 4,
-            Swap => 5,
+            Dup(_) => 4,
+            Swap(_) => 5,
 
             // Control flow
             Skiz => 10,
-            Call => 11,
+            Call(_) => 11,
             Return => 12,
             Recurse => 13,
             Assert => 14,
@@ -180,10 +157,8 @@ impl Instruction {
             // Auxiliary register instructions
             Xlix => 30,
             ClearAll => 31,
-            Squeeze => 32,
-            Absorb => 33,
-            MerkleLeft => 34,
-            MerkleRight => 35,
+            Squeeze(_) => 32,
+            Absorb(_) => 33,
             CmpDigest => 36,
 
             // Arithmetic on stack instructions
@@ -206,13 +181,6 @@ impl Instruction {
             // Read/write
             ReadIo => 71,
             WriteIo => 70,
-
-            PushArg(_) => return None,
-            DupArg(_) => return None,
-            SwapArg(_) => return None,
-            CallArg(_) => return None,
-            SqueezeArg(_) => return None,
-            AbsorbArg(_) => return None,
         };
 
         Some(value)
@@ -221,12 +189,12 @@ impl Instruction {
     pub fn size(&self) -> usize {
         match self {
             // Double-word instructions (instructions that take arguments)
-            Push => 2,
-            Dup => 2,
-            Swap => 2,
-            Call => 2,
-            Squeeze => 2,
-            Absorb => 2,
+            Push(_) => 2,
+            Dup(_) => 2,
+            Swap(_) => 2,
+            Call(_) => 2,
+            Squeeze(_) => 2,
+            Absorb(_) => 2,
 
             // Single-word instructions
             Pop => 1,
@@ -240,8 +208,6 @@ impl Instruction {
             WriteMem => 1,
             Xlix => 1,
             ClearAll => 1,
-            MerkleLeft => 1,
-            MerkleRight => 1,
             CmpDigest => 1,
             Add => 1,
             Mul => 1,
@@ -259,48 +225,6 @@ impl Instruction {
             XbMul => 1,
             WriteIo => 1,
             ReadIo => 1,
-
-            // Arguments (already accounted for)
-            PushArg(_) => 0,
-            DupArg(_) => 0,
-            SwapArg(_) => 0,
-            CallArg(_) => 0,
-            SqueezeArg(_) => 0,
-            AbsorbArg(_) => 0,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Program {
-    pub instructions: Vec<Instruction>,
-}
-
-impl Display for Program {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // FIXME: Print arguments to multi-word instructions nicely after.
-        let mut iterator = self.instructions.iter();
-        loop {
-            let item = iterator.next();
-            if item.is_none() {
-                return Ok(());
-            }
-
-            let item = item.unwrap();
-
-            match item {
-                // Print arguments as separate values
-                Push => writeln!(f, "{} {}", item, iterator.next().unwrap())?,
-                Call => writeln!(f, "{} {}", item, iterator.next().unwrap())?,
-
-                // Print as argument-less pseudo-instruction ("dup1" instead of "dup 1")
-                Dup => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
-                Swap => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
-                Squeeze => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
-                Absorb => writeln!(f, "{}{}", item, iterator.next().unwrap())?,
-
-                instr => writeln!(f, "{}", instr)?,
-            }
         }
     }
 }
@@ -322,7 +246,7 @@ impl Display for TokenError {
 
 impl Error for TokenError {}
 
-pub fn parse(code: &str) -> Result<Program, Box<dyn Error>> {
+pub fn parse(code: &str) -> Result<Vec<Instruction>, Box<dyn Error>> {
     let mut tokens = code.split_whitespace();
     let mut instructions = vec![];
 
@@ -331,7 +255,7 @@ pub fn parse(code: &str) -> Result<Program, Box<dyn Error>> {
         instructions.append(&mut instruction);
     }
 
-    Ok(Program { instructions })
+    Ok(instructions)
 }
 
 fn parse_token(
@@ -341,20 +265,20 @@ fn parse_token(
     let instruction = match token {
         // OpStack manipulation
         "pop" => vec![Pop],
-        "push" => vec![Push, PushArg(parse_elem(tokens)?)],
+        "push" => vec![Push(parse_elem(tokens)?)],
         "pad" => vec![Pad],
-        "dup0" => vec![Dup, DupArg(N0)],
-        "dup1" => vec![Dup, DupArg(N1)],
-        "dup2" => vec![Dup, DupArg(N2)],
-        "dup3" => vec![Dup, DupArg(N3)],
-        "swap1" => vec![Swap, SwapArg(N0)],
-        "swap2" => vec![Swap, SwapArg(N1)],
-        "swap3" => vec![Swap, SwapArg(N2)],
-        "swap4" => vec![Swap, SwapArg(N2)],
+        "dup0" => vec![Dup(N0)],
+        "dup1" => vec![Dup(N1)],
+        "dup2" => vec![Dup(N2)],
+        "dup3" => vec![Dup(N3)],
+        "swap1" => vec![Swap(N0)],
+        "swap2" => vec![Swap(N1)],
+        "swap3" => vec![Swap(N2)],
+        "swap4" => vec![Swap(N2)],
 
         // Control flow
         "skiz" => vec![Skiz],
-        "call" => vec![Call, CallArg(parse_elem(tokens)?)],
+        "call" => vec![Call(parse_elem(tokens)?)],
         "return" => vec![Return],
         "recurse" => vec![Recurse],
         "assert" => vec![Assert],
@@ -367,10 +291,8 @@ fn parse_token(
         // Auxiliary register instructions
         "xlix" => vec![Xlix],
         "clearall" => vec![ClearAll],
-        "squeeze" => vec![Squeeze, SqueezeArg(parse_arg(tokens)?)],
-        "absorb" => vec![Absorb, AbsorbArg(parse_arg(tokens)?)],
-        "merkle_left" => vec![MerkleLeft],
-        "merkle_right" => vec![MerkleRight],
+        "squeeze" => vec![Squeeze(parse_arg(tokens)?)],
+        "absorb" => vec![Absorb(parse_arg(tokens)?)],
         "cmp_digest" => vec![CmpDigest],
 
         // Arithmetic on stack instructions
@@ -420,7 +342,8 @@ fn parse_elem(tokens: &mut SplitWhitespace) -> Result<BFieldElement, Box<dyn Err
     Ok(constant_elem)
 }
 pub mod sample_programs {
-    use super::{Instruction::*, Program};
+    use super::super::vm::Program;
+    use super::Instruction::*;
 
     pub const PUSH_PUSH_ADD_POP_S: &str = "
         push 1
@@ -430,8 +353,8 @@ pub mod sample_programs {
     ";
 
     pub fn push_push_add_pop_p() -> Program {
-        let instructions = vec![Push, PushArg(1.into()), Push, PushArg(2.into()), Add, Pop];
-        Program { instructions }
+        let instructions = vec![Push(1.into()), Push(2.into()), Add, Pop];
+        Program::from_instr(&instructions)
     }
 
     pub const HELLO_WORLD_1: &str = "
@@ -503,7 +426,7 @@ pub mod sample_programs {
     halt
 ";
 
-    pub const FIBONACCI_int: &str = "
+    pub const FIBONACCI_INT: &str = "
     push 0
     push 1
     push 2
@@ -602,6 +525,7 @@ return
 
 #[cfg(test)]
 mod instruction_tests {
+    use super::super::vm::Program;
     use super::parse;
     use super::sample_programs;
 
@@ -609,7 +533,8 @@ mod instruction_tests {
     fn parse_display_push_pop_test() {
         let pgm_expected = sample_programs::push_push_add_pop_p();
         let pgm_pretty = format!("{}", pgm_expected);
-        let pgm_actual = parse(&pgm_pretty).unwrap();
+        let instructions = parse(&pgm_pretty).unwrap();
+        let pgm_actual = Program::from_instr(&instructions);
 
         println!("Expected:\n{}", pgm_expected);
         println!("Actual:\n{}", pgm_actual);
@@ -617,7 +542,8 @@ mod instruction_tests {
         assert_eq!(pgm_expected, pgm_actual);
 
         let pgm_text = sample_programs::PUSH_PUSH_ADD_POP_S;
-        let pgm_actual_2 = parse(pgm_text).unwrap();
+        let instructions_2 = parse(&pgm_text).unwrap();
+        let pgm_actual_2 = Program::from_instr(&instructions_2);
 
         assert_eq!(pgm_expected, pgm_actual_2);
     }

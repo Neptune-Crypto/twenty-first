@@ -1,7 +1,38 @@
-use super::instruction::{Instruction, Program};
+use super::instruction::{parse, Instruction};
 use super::state::VMState;
 use crate::shared_math::rescue_prime_xlix;
 use std::error::Error;
+use std::fmt::Display;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Program {
+    pub instructions: Vec<Instruction>,
+}
+
+impl Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.instructions
+            .iter()
+            .fold(Ok(()), |result, instruction| {
+                result.and_then(|()| writeln!(f, "{}", instruction))
+            })
+    }
+}
+
+impl Program {
+    pub fn from_code(code: &str) -> Result<Self, Box<dyn Error>> {
+        let instructions = parse(code)?;
+        Ok(Program::from_instr(&instructions))
+    }
+
+    pub fn from_instr(input: &[Instruction]) -> Self {
+        let mut instructions = vec![];
+        for instr in input {
+            instructions.append(&mut vec![*instr; instr.size()]);
+        }
+        Program { instructions }
+    }
+}
 
 #[allow(clippy::needless_lifetimes)]
 pub fn run<'pgm>(program: &'pgm Program) -> Result<Vec<VMState<'pgm>>, Box<dyn Error>> {
@@ -31,7 +62,7 @@ mod triton_vm_tests {
 
     #[test]
     fn vm_run_test() {
-        let instructions = vec![Push, PushArg(2.into()), Push, PushArg(2.into()), Add];
+        let instructions = vec![Push(2.into()), Push(2.into()), Add];
         let program = Program { instructions };
         let _empty_run = run(&program);
     }

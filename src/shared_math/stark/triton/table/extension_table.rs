@@ -1,4 +1,3 @@
-use super::super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use super::base_table::Table;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};

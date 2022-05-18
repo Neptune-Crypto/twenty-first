@@ -35,28 +35,28 @@ impl HasBaseTable<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
 }
 
 impl Table<BFieldElement, BASE_WIDTH> for ProcessorTable {
-    fn pad(matrix: &mut Vec<[BFieldElement; BASE_WIDTH]>) {
+    fn pad(_matrix: &mut Vec<[BFieldElement; BASE_WIDTH]>) {
         todo!()
     }
 
     fn boundary_constraints(
         &self,
-        challenges: &[BFieldElement],
+        _challenges: &[BFieldElement],
     ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BFieldElement>> {
         todo!()
     }
 
     fn transition_constraints(
         &self,
-        challenges: &[BFieldElement],
+        _challenges: &[BFieldElement],
     ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BFieldElement>> {
         todo!()
     }
 
     fn terminal_constraints(
         &self,
-        challenges: &[BFieldElement],
-        terminals: &[BFieldElement],
+        _challenges: &[BFieldElement],
+        _terminals: &[BFieldElement],
     ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BFieldElement>> {
         todo!()
     }
@@ -69,22 +69,22 @@ impl Table<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
 
     fn boundary_constraints(
         &self,
-        challenges: &[XFieldElement],
+        _challenges: &[XFieldElement],
     ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<XFieldElement>> {
         todo!()
     }
 
     fn transition_constraints(
         &self,
-        challenges: &[XFieldElement],
+        _challenges: &[XFieldElement],
     ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<XFieldElement>> {
         todo!()
     }
 
     fn terminal_constraints(
         &self,
-        challenges: &[XFieldElement],
-        terminals: &[XFieldElement],
+        _challenges: &[XFieldElement],
+        _terminals: &[XFieldElement],
     ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<XFieldElement>> {
         todo!()
     }
