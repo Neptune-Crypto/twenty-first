@@ -450,7 +450,8 @@ pub mod sample_programs {
         push 101
         push 72
 
-        print print print print print print print print print print print print print print
+        write_io write_io write_io write_io write_io write_io write_io
+        write_io write_io write_io write_io write_io write_io write_io
         ";
 
     pub const SUBTRACT: &str = "
