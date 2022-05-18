@@ -347,9 +347,10 @@ fn parse_token(
         "dup1" => vec![Dup, DupArg(N1)],
         "dup2" => vec![Dup, DupArg(N2)],
         "dup3" => vec![Dup, DupArg(N3)],
-        "swap1" => vec![Swap, SwapArg(N1)],
-        "swap2" => vec![Swap, SwapArg(N2)],
-        "swap3" => vec![Swap, SwapArg(N3)],
+        "swap1" => vec![Swap, SwapArg(N0)],
+        "swap2" => vec![Swap, SwapArg(N1)],
+        "swap3" => vec![Swap, SwapArg(N2)],
+        "swap4" => vec![Swap, SwapArg(N2)],
 
         // Control flow
         "skiz" => vec![Skiz],
