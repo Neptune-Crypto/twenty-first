@@ -554,7 +554,7 @@ pub mod sample_programs {
     dup0
     skiz
     recurse
-    call 37
+    call 39
     dup0
     push 0
     eq
@@ -571,24 +571,21 @@ pub mod sample_programs {
     pub const FIBONACCI_LT: &str = "
 push 0
 push 1
-push 1
+push 7
 dup0
 push 2
 lt
-push 0
-eq
-halt
 skiz
-call 30
-call 17
-call 39
+call 29
+call 16
+call 38
 swap1
 push 18446744069414584320
 add
 dup0
 skiz
 recurse
-call 35
+call 36
 dup0
 push 0
 eq
