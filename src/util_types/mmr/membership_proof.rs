@@ -490,13 +490,13 @@ where
     pub fn batch_update_from_batch_leaf_mutation(
         membership_proofs: &mut [Self],
         authentication_paths: &Vec<MembershipProof<H>>,
-        new_leafs: &Vec<H::Digest>,
-    ) -> () {
+        new_leafs: &[H::Digest],
+    ) {
         assert!(authentication_paths.len() == new_leafs.len());
 
         // collect all membership proofs into one structure
-        let mut all_membership_proofs = membership_proofs.to_owned().clone();
-        all_membership_proofs.append(&mut authentication_paths.to_owned().clone());
+        let mut all_membership_proofs = membership_proofs.to_owned();
+        all_membership_proofs.append(&mut authentication_paths.to_owned());
 
         // for each modified leaf
         for i in 0..new_leafs.len() {
@@ -511,9 +511,7 @@ where
         }
 
         // take updated membership proofs and put into first argument
-        for i in 0..membership_proofs.len() {
-            membership_proofs[i] = all_membership_proofs[i].clone();
-        }
+        membership_proofs.clone_from_slice(&all_membership_proofs[..membership_proofs.len()]);
     }
 }
 
@@ -676,7 +674,7 @@ mod mmr_membership_proof_test {
         let mut updated_leaf_hashes = leaf_hashes.clone();
         updated_leaf_hashes[2] = new_leaf2;
         updated_leaf_hashes[3] = new_leaf3;
-        for (i, (mp, leaf_hash)) in membership_proofs
+        for (_i, (mp, leaf_hash)) in membership_proofs
             .iter()
             .zip(updated_leaf_hashes.iter())
             .enumerate()
