@@ -11,7 +11,7 @@ pub struct BaseTable<DataPF, const WIDTH: usize> {
     name: String,
 
     // The number of `data` rows
-    length: usize,
+    unpadded_height: usize,
 
     // The number of randomizers...?
     num_randomizers: usize,
@@ -48,12 +48,12 @@ where
         WIDTH
     }
 
-    fn length(&self) -> usize {
-        self.base().length
+    fn unpadded_height(&self) -> usize {
+        self.base().unpadded_height
     }
 
-    fn height(&self) -> usize {
-        other::roundup_npo2(self.length() as u64) as usize
+    fn padded_height(&self) -> usize {
+        other::roundup_npo2(self.unpadded_height() as u64) as usize
     }
 
     fn num_randomizers(&self) -> usize {
@@ -93,7 +93,7 @@ where
     // Generic functions common to all tables
 
     fn interpolant_degree(&self) -> Degree {
-        let height: Degree = self.height().try_into().unwrap_or(0);
+        let height: Degree = self.padded_height().try_into().unwrap_or(0);
         let num_randomizers: Degree = self.num_randomizers().try_into().unwrap_or(0);
 
         height + num_randomizers - 1
@@ -101,7 +101,7 @@ where
 
     /// Returns the relation between the FRI domain and the omicron domain
     fn unit_distance(&self, omega_order: usize) -> usize {
-        let height = self.height();
+        let height = self.padded_height();
         if height == 0 {
             0
         } else {

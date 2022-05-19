@@ -40,12 +40,12 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
 
         let transition_constraints = self.transition_constraints(challenges);
 
-        // Safe because height is at most 2^32?
-        let height: Degree = self.height().try_into().unwrap();
+        // Safe because padded height is at most 2^30.
+        let padded_height: Degree = self.padded_height().try_into().unwrap();
 
         transition_constraints
             .iter()
-            .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - height + 1)
+            .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - padded_height + 1)
             .collect::<Vec<Degree>>()
     }
 
@@ -86,9 +86,9 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
         let x_values: Vec<BFieldElement> = fri_domain.b_domain_values();
         let subgroup_zerofier: Vec<BFieldElement> = x_values
             .iter()
-            .map(|x| x.mod_pow_u32(self.height() as u32) - one)
+            .map(|x| x.mod_pow_u32(self.padded_height() as u32) - one)
             .collect();
-        let subgroup_zerofier_inverse = if self.height() == 0 {
+        let subgroup_zerofier_inverse = if self.padded_height() == 0 {
             subgroup_zerofier
         } else {
             BFieldElement::batch_inversion(subgroup_zerofier)
