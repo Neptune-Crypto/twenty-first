@@ -3,6 +3,7 @@ use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
 use super::ord_n::{Ord6, Ord8::*};
 use super::stdio::{InputStream, OutputStream};
+use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
@@ -63,10 +64,11 @@ pub struct VMState<'pgm> {
 impl<'pgm> VMState<'pgm> {
     /// Create initial `VMState` for a given `program`
     ///
-    /// Since `program` is read-only and transcends any individual state,
-    /// it is included as an immutable reference that exceeds the lifetime
-    /// of a single state.
-    pub fn new(program: &'pgm [Instruction]) -> Self {
+    /// Since `program` is read-only across individual states, and multiple
+    /// inner helper functions refer to it, a read-only reference is kept in
+    /// the struct.
+    pub fn new(program: &'pgm Program) -> Self {
+        let program = &program.instructions;
         Self {
             program,
             ..VMState::default()
@@ -82,9 +84,9 @@ impl<'pgm> VMState<'pgm> {
     pub fn step<R, In, Out>(
         &self,
         rng: &mut R,
-        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
         stdin: &mut In,
         stdout: &mut Out,
+        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> Result<VMState<'pgm>, Box<dyn Error>>
     where
         R: Rng,
@@ -92,7 +94,7 @@ impl<'pgm> VMState<'pgm> {
         Out: OutputStream,
     {
         let mut next_state = self.clone();
-        next_state.step_mut(rng, rescue_prime, stdin, stdout)?;
+        next_state.step_mut(rng, stdin, stdout, rescue_prime)?;
         Ok(next_state)
     }
 
@@ -102,9 +104,9 @@ impl<'pgm> VMState<'pgm> {
     fn step_mut<R, In, Out>(
         &mut self,
         rng: &mut R,
-        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
         stdin: &mut In,
         stdout: &mut Out,
+        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> Result<(), Box<dyn Error>>
     where
         R: Rng,
@@ -577,7 +579,6 @@ fn column(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
 mod vm_state_tests {
     use super::super::op_stack::OP_STACK_REG_COUNT;
     use super::*;
-    use crate::shared_math::stark::triton;
     use crate::shared_math::stark::triton::instruction::sample_programs;
     use crate::shared_math::stark::triton::vm::Program;
 
@@ -594,10 +595,10 @@ mod vm_state_tests {
 
     #[test]
     fn run_parse_pop_p() {
-        let pgm = sample_programs::push_push_add_pop_p();
-        let trace = triton::vm::run(&pgm).unwrap();
+        let program = sample_programs::push_push_add_pop_p();
+        let (trace, _out, _err) = program.run_with_input(&[]);
 
-        for state in trace {
+        for state in trace.iter() {
             println!("{}", state);
         }
     }
@@ -606,11 +607,7 @@ mod vm_state_tests {
     fn run_hello_world_1() {
         let code = sample_programs::HELLO_WORLD_1;
         let program = Program::from_code(code).unwrap();
-        let trace = triton::vm::run(&program).unwrap();
-
-        // for state in trace {
-        //     println!("{:?}", state);
-        // }
+        let (trace, _out, _err) = program.run_with_input(&[]);
 
         let last_state = trace.last().unwrap();
         assert_eq!(BWord::ring_zero(), last_state.op_stack.safe_peek(ST0));
@@ -622,18 +619,14 @@ mod vm_state_tests {
     fn run_countdown_from_10_test() {
         let code = sample_programs::COUNTDOWN_FROM_10;
         let program = Program::from_code(code).unwrap();
-        let trace = triton::vm::run(&program).unwrap();
-        let t = trace.clone();
+        let (trace, _out, _err) = program.run_with_input(&[]);
 
-        /*
         println!("{}", program);
         for state in trace.iter() {
             println!("{}", state);
         }
-        */
 
-        let last_state = t.last().unwrap();
-
+        let last_state = trace.last().unwrap();
         assert_eq!(BWord::ring_zero(), last_state.op_stack.st(ST0));
     }
 
@@ -641,18 +634,15 @@ mod vm_state_tests {
     fn run_fibonacci_vit() {
         let code = sample_programs::FIBONACCI_VIT;
         let program = Program::from_code(code).unwrap();
-        println!("{}", program);
-        let trace = triton::vm::run(&program).unwrap();
-        let t = trace.clone();
 
-        /*
+        let (trace, _out, _err) = program.run_with_input(&[]);
+
         println!("{}", program);
-        for state in trace {
+        for state in trace.iter() {
             println!("{}", state);
         }
-        */
 
-        let last_state = t.last().unwrap();
+        let last_state = trace.last().unwrap();
         assert_eq!(BWord::new(21), last_state.op_stack.st(ST0));
     }
 
@@ -660,18 +650,14 @@ mod vm_state_tests {
     fn run_fibonacci_lq() {
         let code = sample_programs::FIBONACCI_LT;
         let program = Program::from_code(code).unwrap();
-        println!("{:?}", program);
-        let trace = triton::vm::run(&program).unwrap();
-        let t = trace.clone();
+        let (trace, _out, _err) = program.run_with_input(&[]);
 
-        /*
         println!("{}", program);
-        for state in trace {
+        for state in trace.iter() {
             println!("{}", state);
         }
-        */
 
-        let last_state = t.last().unwrap();
+        let last_state = trace.last().unwrap();
         assert_eq!(BWord::new(21), last_state.op_stack.st(ST0));
     }
 
@@ -679,18 +665,16 @@ mod vm_state_tests {
     fn run_gcd() {
         let code = sample_programs::GCD_42_56;
         let program = Program::from_code(code).unwrap();
-        println!("{}", program);
-        let trace = triton::vm::run(&program).unwrap();
-        let t = trace.clone();
 
-        /*
         println!("{}", program);
-        for state in trace {
+        let (trace, _out, _err) = program.run_with_input(&[]);
+
+        println!("{}", program);
+        for state in trace.iter() {
             println!("{}", state);
         }
-        */
 
-        let last_state = t.last().unwrap();
+        let last_state = trace.last().unwrap();
         assert_eq!(BWord::new(14), last_state.op_stack.st(ST0));
     }
 }
