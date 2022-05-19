@@ -11,14 +11,23 @@ pub struct Program {
 
 impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.instructions
-            .iter()
-            .fold(Ok(()), |result, instruction| {
-                result.and_then(|()| writeln!(f, "{}", instruction))
-            })
+        let mut stream = self.instructions.iter();
+        while let Some(instruction) = stream.next() {
+            writeln!(f, "{}", instruction)?;
+
+            // Skip duplicate placeholder used for aligning instructions and instruction_pointer in VM.
+            if matches!(instruction, Instruction::Push(_)) {
+                stream.next();
+            }
+        }
+        Ok(())
     }
 }
 
+/// A `Program` is a `Vec<Instruction>` that contains duplicate elements for
+/// instructions with a size of 2. This means that the index in the vector
+/// corresponds to the VM's `instruction_pointer`. These duplicate values
+/// should most often be skipped/ignored, e.g. when pretty-printing.
 impl Program {
     pub fn from_code(code: &str) -> Result<Self, Box<dyn Error>> {
         let instructions = parse(code)?;
