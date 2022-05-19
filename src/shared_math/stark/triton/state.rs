@@ -594,15 +594,6 @@ mod vm_state_tests {
         );
     }
 
-    fn step_with_program<'pgm>(prev_state: &'pgm VMState) -> Result<VMState<'pgm>, Box<dyn Error>> {
-        let mut rng = rand::thread_rng();
-        let rescue_prime = rescue_prime_xlix::neptune_params();
-        let mut stdin = std::io::stdin();
-        let mut stdout = std::io::stdout();
-
-        prev_state.step(&mut rng, &rescue_prime, &mut stdin, &mut stdout)
-    }
-
     #[test]
     fn run_parse_pop_p() {
         let pgm = sample_programs::push_push_add_pop_p();
