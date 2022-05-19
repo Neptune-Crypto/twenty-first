@@ -677,7 +677,7 @@ mod vm_state_tests {
 
     #[test]
     fn run_gcd() {
-        let code = sample_programs::GCD;
+        let code = sample_programs::GCD_42_56;
         let program = Program::from_code(code).unwrap();
         println!("{}", program);
         let trace = triton::vm::run(&program).unwrap();

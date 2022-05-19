@@ -491,7 +491,7 @@ return
 ";
 
     //This cannot not print because we need to itoa() before write_io.
-    pub const GCD: &str = "
+    pub const GCD_42_56: &str = "
 push 42
 push 56
 dup1
