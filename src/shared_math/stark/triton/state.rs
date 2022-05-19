@@ -538,47 +538,61 @@ impl<'pgm> Display for VMState<'pgm> {
             .map(|ni| ni.to_string())
             .unwrap_or("none".to_string());
 
+        let width = 15;
         column(
             f,
             format!(
-                "clk: {}   ip: {}",
+                "clk:  {:>width$} | ip:   {:>width$} |",
                 self.cycle_count, self.instruction_pointer
             ),
         )?;
 
-        column(f, format!("ci: {}   ci+1: {}", ci, ci_plus_1))?;
-        column(f, format!("ni: {}   nni: {}", ni, nni))?;
-        column(f, format!("ramp: {}   ramv: {}", self.ramp, self.ramv,))?;
+        column(
+            f,
+            format!("ci:   {:>width$} | ci+1: {:>width$} |", ci, ci_plus_1),
+        )?;
+        column(f, format!("ni:   {:>width$} | nni:  {:>width$} |", ni, nni))?;
         column(
             f,
             format!(
-                "jsp: {}   jso: {}   jsd: {}",
-                self.jsp(),
-                self.jso(),
-                self.jsd(),
+                "ramp: {:>width$} | ramv: {:>width$} |",
+                self.ramp.value(),
+                self.ramv.value()
+            ),
+        )?;
+        let width_inv = width + 4;
+        column(
+            f,
+            format!(
+                "jsp:  {:>width$} | jso:  {:>width$} | jsd: {:>width_inv$}",
+                self.jsp().value(),
+                self.jso().value(),
+                self.jsd().value()
             ),
         )?;
         column(
             f,
             format!(
-                "inv: {}   osp: {}   osv: {}",
-                self.op_stack.inv(),
-                self.op_stack.osp(),
-                self.op_stack.osv(),
+                "osp:  {:>width$} | osv:  {:>width$} | inv: {:>width_inv$}",
+                self.op_stack.osp().value(),
+                self.op_stack.osv().value(),
+                self.op_stack.inv().value()
             ),
         )?;
+
+        let width_st = 5;
         column(
             f,
             format!(
-                "st0: {} st1: {} st2: {} st3: {} st4: {} st5: {} st6: {} st7: {}",
-                self.op_stack.st(ST0),
-                self.op_stack.st(ST1),
-                self.op_stack.st(ST2),
-                self.op_stack.st(ST3),
-                self.op_stack.st(ST4),
-                self.op_stack.st(ST5),
-                self.op_stack.st(ST6),
-                self.op_stack.st(ST7),
+                "st7-0: [ {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} ]",
+                self.op_stack.st(ST7).value(),
+                self.op_stack.st(ST6).value(),
+                self.op_stack.st(ST5).value(),
+                self.op_stack.st(ST4).value(),
+                self.op_stack.st(ST3).value(),
+                self.op_stack.st(ST2).value(),
+                self.op_stack.st(ST1).value(),
+                self.op_stack.st(ST0).value(),
             ),
         )?;
 
