@@ -521,6 +521,36 @@ dup2
 add
 return
 ";
+
+    //This cannot not print because we need to itoa() before write_io.
+    pub const GCD: &str = "
+push 42
+push 56
+dup1
+dup1
+lt
+skiz
+swap1
+dup1
+dup1
+div
+swap1
+pop
+dup0
+push 0
+eq
+skiz
+call 37
+call 30
+swap2
+pop
+swap1
+call 12
+pop
+swap1
+pop
+halt
+";
 }
 
 #[cfg(test)]
