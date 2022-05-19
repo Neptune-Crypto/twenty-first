@@ -426,38 +426,6 @@ pub mod sample_programs {
     halt
 ";
 
-    pub const FIBONACCI_INT: &str = "
-    push 0
-    push 1
-    push 2
-    dup0
-    dup0
-    dup0
-    mul
-    eq
-    skiz
-    call $basecase
-    call $nextline
-    call $fib
-    swap1 - n on top
-    push 18446744069414584320
-    add
-    skiz
-    recurse
-    call $
-    dup0     :basecase
-    push 1
-    eq
-    skiz
-    pop
-    pop - remove 1      :endone
-    halt
-    dup2            :fib
-    dup2
-    add
-    return
-";
-
     pub const FIBONACCI_VIT: &str = "
     push 0
     push 1

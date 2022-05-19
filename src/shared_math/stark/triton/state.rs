@@ -306,9 +306,9 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Div => {
-                let a: u32 = self.op_stack.pop()?.try_into()?;
-                let b: u32 = self.op_stack.pop()?.try_into()?;
-                let (quot, rem) = other::div_rem(a, b);
+                let d: u32 = self.op_stack.pop()?.try_into()?;
+                let n: u32 = self.op_stack.pop()?.try_into()?;
+                let (quot, rem) = other::div_rem(n, d);
                 self.op_stack.push(quot.into());
                 self.op_stack.push(rem.into());
                 self.instruction_pointer += 1;
@@ -577,9 +577,7 @@ fn column(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
 mod vm_state_tests {
     use super::super::op_stack::OP_STACK_REG_COUNT;
     use super::*;
-    use crate::shared_math::rescue_prime_xlix;
     use crate::shared_math::stark::triton;
-    use crate::shared_math::stark::triton::instruction;
     use crate::shared_math::stark::triton::instruction::sample_programs;
     use crate::shared_math::stark::triton::vm::Program;
 
@@ -627,10 +625,12 @@ mod vm_state_tests {
         let trace = triton::vm::run(&program).unwrap();
         let t = trace.clone();
 
+        /*
         println!("{}", program);
         for state in trace.iter() {
             println!("{}", state);
         }
+        */
 
         let last_state = t.last().unwrap();
 
@@ -638,20 +638,59 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_fibonacci() {
+    fn run_fibonacci_vit() {
         let code = sample_programs::FIBONACCI_VIT;
         let program = Program::from_code(code).unwrap();
         println!("{}", program);
         let trace = triton::vm::run(&program).unwrap();
         let t = trace.clone();
 
+        /*
         println!("{}", program);
         for state in trace {
             println!("{}", state);
         }
+        */
 
         let last_state = t.last().unwrap();
-        assert!(true);
-        //assert_eq!(BWord::ring_zero(), last_state.op_stack.st(ST0));
+        assert_eq!(BWord::new(21), last_state.op_stack.st(ST0));
+    }
+
+    #[test]
+    fn run_fibonacci_lq() {
+        let code = sample_programs::FIBONACCI_LT;
+        let program = Program::from_code(code).unwrap();
+        println!("{:?}", program);
+        let trace = triton::vm::run(&program).unwrap();
+        let t = trace.clone();
+
+        /*
+        println!("{}", program);
+        for state in trace {
+            println!("{}", state);
+        }
+        */
+
+        let last_state = t.last().unwrap();
+        assert_eq!(BWord::new(21), last_state.op_stack.st(ST0));
+    }
+
+    #[test]
+    fn run_gcd() {
+        let code = sample_programs::GCD;
+        let program = Program::from_code(code).unwrap();
+        println!("{}", program);
+        let trace = triton::vm::run(&program).unwrap();
+        let t = trace.clone();
+
+        /*
+        println!("{}", program);
+        for state in trace {
+            println!("{}", state);
+        }
+        */
+
+        let last_state = t.last().unwrap();
+        assert_eq!(BWord::new(14), last_state.op_stack.st(ST0));
     }
 }
