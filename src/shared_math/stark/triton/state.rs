@@ -742,6 +742,23 @@ mod vm_state_tests {
             println!("{}", state);
         }
 
+        let last_state = t.last().unwrap();
+        assert_eq!(BWord::new(14), last_state.op_stack.st(ST0));
+    }
+
+    #[test]
+    fn run_xgcd() {
+        let code = sample_programs::XGCD;
+        let program = Program::from_code(code).unwrap();
+        println!("{}", program);
+        let trace = triton::vm::run(&program).unwrap();
+        let t = trace.clone();
+
+        println!("{}", program);
+        for state in trace {
+            println!("{}", state);
+        }
+
         let last_state = trace.last().unwrap();
         assert_eq!(BWord::new(14), last_state.op_stack.st(ST0));
     }

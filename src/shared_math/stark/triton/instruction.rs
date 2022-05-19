@@ -553,23 +553,45 @@ dup1
 lt
 skiz
 swap1
-dup1
-dup1
-div
-swap1
-pop
 dup0
 push 0
 eq
 skiz
-call 37
-call 30
+call 33
+dup1
+dup1
+div
 swap2
+swap3
 pop
-swap1
+pop
 call 12
 pop
+halt
+";
+
+    //This cannot not print because we need to itoa() before write_io.
+    pub const XGCD: &str = "
+push 42
+push 56
+dup1
+dup1
+lt
+skiz
 swap1
+dup0
+push 0
+eq
+skiz
+call 33
+dup1
+dup1
+div
+swap2
+swap3
+pop
+pop
+call 12
 pop
 halt
 ";
