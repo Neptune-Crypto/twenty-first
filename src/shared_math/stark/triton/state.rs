@@ -2,19 +2,18 @@ use super::error::{vm_fail, InstructionError::*};
 use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
 use super::ord_n::{Ord6, Ord8::*};
+use super::stdio::{InputStream, OutputStream};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
 use crate::shared_math::stark::triton::error::vm_err;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues, Inverse};
 use crate::shared_math::x_field_element::XFieldElement;
-use byteorder::{BigEndian, ReadBytesExt};
 use rand::Rng;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt::Display;
-use std::io::{Stdin, Stdout, Write};
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -80,13 +79,18 @@ impl<'pgm> VMState<'pgm> {
     }
 
     /// Given a state, compute the next state purely.
-    pub fn step<R: Rng>(
+    pub fn step<R, In, Out>(
         &self,
         rng: &mut R,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
-        stdin: &mut Stdin,
-        stdout: &mut Stdout,
-    ) -> Result<VMState<'pgm>, Box<dyn Error>> {
+        stdin: &mut In,
+        stdout: &mut Out,
+    ) -> Result<VMState<'pgm>, Box<dyn Error>>
+    where
+        R: Rng,
+        In: InputStream,
+        Out: OutputStream,
+    {
         let mut next_state = self.clone();
         next_state.step_mut(rng, rescue_prime, stdin, stdout)?;
         Ok(next_state)
@@ -95,13 +99,18 @@ impl<'pgm> VMState<'pgm> {
     /// Perform the state transition as a mutable operation on `self`.
     ///
     /// This function is called from `step`.
-    fn step_mut<R: Rng>(
+    fn step_mut<R, In, Out>(
         &mut self,
         rng: &mut R,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
-        stdin: &mut Stdin,
-        stdout: &mut Stdout,
-    ) -> Result<(), Box<dyn Error>> {
+        stdin: &mut In,
+        stdout: &mut Out,
+    ) -> Result<(), Box<dyn Error>>
+    where
+        R: Rng,
+        In: InputStream,
+        Out: OutputStream,
+    {
         // All instructions increase the cycle count
         self.cycle_count += 1;
 
@@ -334,13 +343,12 @@ impl<'pgm> VMState<'pgm> {
 
             WriteIo => {
                 let codepoint: u32 = self.op_stack.pop()?.try_into()?;
-                let out_char = codepoint.to_be_bytes();
-                let _written = stdout.write(&out_char)?;
+                let _written = stdout.write_u32_be(codepoint)?;
                 self.instruction_pointer += 1;
             }
 
             ReadIo => {
-                let in_char: u32 = stdin.read_u32::<BigEndian>()?;
+                let in_char: u32 = stdin.read_u32_be()?;
                 self.op_stack.push(in_char.into());
                 self.instruction_pointer += 1;
             }
