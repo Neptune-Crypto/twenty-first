@@ -153,6 +153,7 @@ where
     pub fn prove_membership(&self, data_index: u128) -> (MembershipProof<H>, Vec<H::Digest>) {
         // A proof consists of an authentication path
         // and a list of peaks
+        assert!(data_index < self.count_leaves());
 
         // Find out how long the authentication path is
         let node_index = data_index_to_node_index(data_index);
