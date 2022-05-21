@@ -141,7 +141,7 @@ pub fn leaf_index_to_peak_index(leaf_index: u128, leaf_count: u128) -> u128 {
     let mut num_set_bits = 0;
     let mut leaf_count_copy = leaf_count;
     while leaf_count_copy != 0 {
-        if leaf_count_copy < leaf_index {
+        if leaf_count_copy < leaf_index + 1 {
             num_set_bits += 1;
         }
         leaf_count_copy &= leaf_count_copy - 1;
@@ -490,14 +490,38 @@ mod mmr_test {
 
     #[test]
     fn leaf_index_to_peak_index_test() {
+        assert_eq!(0, leaf_index_to_peak_index(0, 1));
+        assert_eq!(0, leaf_index_to_peak_index(0, 2));
+        assert_eq!(0, leaf_index_to_peak_index(1, 2));
+        assert_eq!(0, leaf_index_to_peak_index(0, 3));
+        assert_eq!(0, leaf_index_to_peak_index(1, 3));
+        assert_eq!(1, leaf_index_to_peak_index(2, 3));
+        assert_eq!(0, leaf_index_to_peak_index(0, 4));
+        assert_eq!(0, leaf_index_to_peak_index(1, 4));
+        assert_eq!(0, leaf_index_to_peak_index(2, 4));
+        assert_eq!(0, leaf_index_to_peak_index(3, 4));
+        assert_eq!(0, leaf_index_to_peak_index(0, 5));
+        assert_eq!(0, leaf_index_to_peak_index(1, 5));
+        assert_eq!(0, leaf_index_to_peak_index(2, 5));
+        assert_eq!(0, leaf_index_to_peak_index(3, 5));
+        assert_eq!(1, leaf_index_to_peak_index(4, 5));
+        assert_eq!(0, leaf_index_to_peak_index(0, 7));
+        assert_eq!(0, leaf_index_to_peak_index(1, 7));
+        assert_eq!(0, leaf_index_to_peak_index(2, 7));
+        assert_eq!(0, leaf_index_to_peak_index(3, 7));
+        assert_eq!(1, leaf_index_to_peak_index(4, 7));
+        assert_eq!(1, leaf_index_to_peak_index(5, 7));
+        assert_eq!(2, leaf_index_to_peak_index(6, 7));
         assert!(leaf_index_to_peak_index(0, (1 << 32) - 1) == 0);
         assert!(leaf_index_to_peak_index(1, (1 << 32) - 1) == 0);
-        assert!(leaf_index_to_peak_index(1 << 31, (1 << 32) - 1) == 0);
-        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30), (1 << 32) - 1) == 1);
-        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 29), (1 << 32) - 1) == 1);
-        assert!(leaf_index_to_peak_index((1 << 31) + 1, (1 << 32) - 1) == 1);
-        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30) + (1 << 29), (1 << 32) - 1) == 2);
-        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30) + 1, (1 << 32) - 1) == 2);
+        assert!(leaf_index_to_peak_index((1 << 31) - 1, (1 << 32) - 1) == 0);
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30) - 1, (1 << 32) - 1) == 1);
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 29) - 1, (1 << 32) - 1) == 1);
+        assert!(leaf_index_to_peak_index(1 << 31, (1 << 32) - 1) == 1);
+        assert!(
+            leaf_index_to_peak_index((1 << 31) + (1 << 30) + (1 << 29) - 1, (1 << 32) - 1) == 2
+        );
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30), (1 << 32) - 1) == 2);
     }
 
     #[test]
