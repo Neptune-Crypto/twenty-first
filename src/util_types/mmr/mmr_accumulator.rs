@@ -1,6 +1,7 @@
-use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::{collections::HashMap, fmt::Debug};
 
+use crate::util_types::mmr::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
 use crate::{
     util_types::{
         mmr::shared::calculate_new_peaks_from_leaf_mutation,
@@ -231,6 +232,93 @@ where
         }
 
         running_peaks == new_peaks
+    }
+
+    fn batch_mutate_leaf_and_update_mps(
+        &mut self,
+        membership_proofs: &mut Vec<MembershipProof<H>>,
+        mut mutation_data: Vec<(MembershipProof<H>, <H as Hasher>::Digest)>,
+    ) -> Vec<u128> {
+        // Calculate all derivable paths
+        let mut new_ap_digests: HashMap<u128, H::Digest> = HashMap::new();
+        let hasher = H::new();
+
+        // Calculate the derivable digests from a number of leaf mutations and their
+        // associated authentication paths. Notice that all authentication paths
+        // are only valid *prior* to any updates. They get invalidated (unless updated)
+        // throughout the updating as their neighbor leaf digests change values.
+        // The hash map `new_ap_digests` takes care of that.
+        while let Some((ap, new_leaf)) = mutation_data.pop() {
+            let mut node_index = data_index_to_node_index(ap.data_index);
+            let former_value = new_ap_digests.insert(node_index, new_leaf.clone());
+            assert!(
+                former_value.is_none(),
+                "Duplicated leaves are not allowed in membership proof updater"
+            );
+            let mut acc_hash: H::Digest = new_leaf.to_owned();
+
+            for (count, hash) in ap.authentication_path.iter().enumerate() {
+                // If sibling node is something that has already been calculated, we use that
+                // hash digest. Otherwise we use the one in our authentication path.
+                let (right, height) = right_child_and_height(node_index);
+                if right {
+                    let left_sibling_index = left_sibling(node_index, height);
+                    let sibling_hash: &H::Digest = match new_ap_digests.get(&left_sibling_index) {
+                        Some(h) => h,
+                        None => hash,
+                    };
+                    acc_hash = hasher.hash_pair(sibling_hash, &acc_hash);
+
+                    // Find parent node index
+                    node_index += 1;
+                } else {
+                    let right_sibling_index = right_sibling(node_index, height);
+                    let sibling_hash: &H::Digest = match new_ap_digests.get(&right_sibling_index) {
+                        Some(h) => h,
+                        None => hash,
+                    };
+                    acc_hash = hasher.hash_pair(&acc_hash, sibling_hash);
+
+                    // Find parent node index
+                    node_index += 1 << (height + 1);
+                }
+
+                // The last hash calculated is the peak hash
+                // This is not inserted in the hash map, as it will never be in any
+                // authentication path
+                if count == ap.authentication_path.len() - 1 {
+                    let peaks_index = leaf_index_to_peak_index(ap.data_index, self.count_leaves());
+                    self.peaks[peaks_index as usize] = acc_hash.clone();
+                } else {
+                    new_ap_digests.insert(node_index, acc_hash.clone());
+                }
+            }
+        }
+
+        let mut modified_membership_proof_indices: Vec<u128> = vec![];
+        for (i, membership_proof) in membership_proofs.iter_mut().enumerate() {
+            let ap_indices = membership_proof.get_node_indices();
+
+            // Some of the hashes in may `membership_proof` need to be updated. We can loop over
+            // `authentication_path_indices` and check if the element is contained `deducible_hashes`.
+            // If it is, then the appropriate element in `membership_proof.authentication_path` needs to
+            // be replaced with an element from `deducible_hashes`.
+            for (digest, authentication_path_indices) in membership_proof
+                .authentication_path
+                .iter_mut()
+                .zip(ap_indices.into_iter())
+            {
+                // Any number of hashes can be updated in the authentication path, since
+                // we're modifying multiple leaves in the MMR
+                if new_ap_digests.contains_key(&authentication_path_indices) {
+                    *digest = new_ap_digests[&authentication_path_indices].clone();
+                    modified_membership_proof_indices.push(i as u128);
+                }
+            }
+        }
+
+        modified_membership_proof_indices.dedup();
+        modified_membership_proof_indices
     }
 }
 

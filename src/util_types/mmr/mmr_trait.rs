@@ -16,6 +16,16 @@ where
     /// membership proof is valid. If the membership proof is wrong, the MMR
     /// will end up in a broken state.
     fn mutate_leaf(&mut self, old_membership_proof: &MembershipProof<H>, new_leaf: &H::Digest);
+
+    // Batch mutate an MMR while updating a list of membership proofs
+    fn batch_mutate_leaf_and_update_mps(
+        &mut self,
+        membership_proofs: &mut Vec<MembershipProof<H>>,
+        mutation_data: Vec<(MembershipProof<H>, H::Digest)>,
+    ) -> Vec<u128>;
+
+    // Returns true if a list of leaf mutations and a list of appends results in the expected
+    // `new_peaks`.
     fn verify_batch_update(
         &self,
         new_peaks: &[H::Digest],
