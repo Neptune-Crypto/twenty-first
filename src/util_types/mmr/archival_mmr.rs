@@ -1,9 +1,12 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use crate::util_types::{
-    mmr::membership_proof::MembershipProof,
-    simple_hasher::{Hasher, ToDigest},
+use crate::{
+    util_types::{
+        mmr::membership_proof::MembershipProof,
+        simple_hasher::{Hasher, ToDigest},
+    },
+    utils::has_unique_elements,
 };
 
 use super::{
@@ -104,6 +107,34 @@ where
     ) -> bool {
         let accumulator: MmrAccumulator<H> = self.into();
         accumulator.verify_batch_update(new_peaks, appended_leafs, leaf_mutations)
+    }
+
+    fn batch_mutate_leaf_and_update_mps(
+        &mut self,
+        membership_proofs: &mut Vec<MembershipProof<H>>,
+        mutation_data: Vec<(MembershipProof<H>, <H as Hasher>::Digest)>,
+    ) -> Vec<u128> {
+        assert!(
+            has_unique_elements(mutation_data.iter().map(|md| md.0.data_index)),
+            "Duplicated leaves are not allowed in membership proof updater"
+        );
+
+        for (mp, digest) in mutation_data.iter() {
+            self.mutate_leaf_raw(mp.data_index, digest.clone());
+        }
+
+        // let new_membership_proofs: Vec<MembershipProof<H>> = vec![];
+        let mut modified_mps: Vec<u128> = vec![];
+        for mp in membership_proofs.iter_mut() {
+            let new_mp = self.prove_membership(mp.data_index).0;
+            if new_mp != *mp {
+                modified_mps.push(mp.data_index);
+            }
+
+            *mp = new_mp
+        }
+
+        modified_mps
     }
 }
 

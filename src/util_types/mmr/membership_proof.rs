@@ -104,7 +104,7 @@ where
     }
 
     /// Return the node indices for the authentication path in this membership proof
-    fn get_node_indices(&self) -> Vec<u128> {
+    pub fn get_node_indices(&self) -> Vec<u128> {
         let mut node_index = data_index_to_node_index(self.data_index);
         let mut node_indices = vec![];
         for _ in 0..self.authentication_path.len() {
