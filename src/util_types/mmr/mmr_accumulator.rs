@@ -253,7 +253,7 @@ where
             let former_value = new_ap_digests.insert(node_index, new_leaf.clone());
             assert!(
                 former_value.is_none(),
-                "Duplicated leaves are not allowed in membership proof updater"
+                "Duplicated leaf indices are not allowed in membership proof updater"
             );
             let mut acc_hash: H::Digest = new_leaf.to_owned();
 
@@ -286,15 +286,17 @@ where
                 // The last hash calculated is the peak hash
                 // This is not inserted in the hash map, as it will never be in any
                 // authentication path
-                if count == ap.authentication_path.len() - 1 {
-                    let peaks_index = leaf_index_to_peak_index(ap.data_index, self.count_leaves());
-                    self.peaks[peaks_index as usize] = acc_hash.clone();
-                } else {
+                if count < ap.authentication_path.len() - 1 {
                     new_ap_digests.insert(node_index, acc_hash.clone());
                 }
             }
+
+            // Update the peak
+            let peaks_index = leaf_index_to_peak_index(ap.data_index, self.count_leaves());
+            self.peaks[peaks_index as usize] = acc_hash;
         }
 
+        // Update all the supplied membership proofs
         let mut modified_membership_proof_indices: Vec<u128> = vec![];
         for (i, membership_proof) in membership_proofs.iter_mut().enumerate() {
             let ap_indices = membership_proof.get_node_indices();
@@ -327,6 +329,7 @@ mod accumulator_mmr_tests {
     use std::cmp;
 
     use itertools::izip;
+    use rand::{thread_rng, Rng, RngCore};
 
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::utils::generate_random_numbers_u128;
@@ -472,6 +475,108 @@ mod accumulator_mmr_tests {
                 (new_leafs[1], membership_proof3)
             ]
         ));
+    }
+
+    #[test]
+    fn batch_mutate_leaf_and_update_mps_test() {
+        type Digest = Blake3Hash;
+        type Hasher = blake3::Hasher;
+
+        let mut prng = thread_rng();
+        for mmr_leaf_count in 1..100 {
+            let initial_leaf_digests: Vec<Digest> = (4000u128..4000u128 + mmr_leaf_count)
+                .map(|x| x.into())
+                .collect();
+            let mut mmra: MmrAccumulator<Hasher> =
+                MmrAccumulator::new(initial_leaf_digests.clone());
+            let mut ammr: ArchivalMmr<Hasher> = ArchivalMmr::new(initial_leaf_digests.clone());
+
+            let mutated_leaf_count = prng.gen_range(0..mmr_leaf_count);
+            let all_indices: Vec<u128> = (0..mmr_leaf_count).collect();
+
+            // Pick indices for leaves that are being mutated
+            let mut all_indices_mut0 = all_indices.clone();
+            let mut mutated_leaf_indices: Vec<u128> = vec![];
+            for _ in 0..mutated_leaf_count {
+                mutated_leaf_indices.push(
+                    all_indices_mut0.remove(prng.next_u32() as usize % all_indices_mut0.len()),
+                );
+            }
+
+            // Pick membership proofs that we want to update
+            let membership_proof_count = prng.gen_range(0..mmr_leaf_count);
+            let mut all_indices_mut1 = all_indices.clone();
+            let mut membership_proof_indices: Vec<u128> = vec![];
+            for _ in 0..membership_proof_count {
+                membership_proof_indices.push(
+                    all_indices_mut1.remove(prng.next_u32() as usize % all_indices_mut1.len()),
+                );
+            }
+
+            // Calculate the terminal leafs, as they look after the batch leaf mutation
+            // that we are preparing to execute
+            let new_leafs: Vec<Digest> =
+                (6u128..6 + mutated_leaf_count).map(|x| x.into()).collect();
+            let mut terminal_leafs: Vec<Digest> = initial_leaf_digests;
+            for (i, new_leaf) in mutated_leaf_indices.iter().zip(new_leafs.iter()) {
+                terminal_leafs[*i as usize] = new_leaf.to_owned();
+            }
+
+            // Calculate the leafs digests associated with the membership proofs, as they look
+            // *after* the batch leaf mutation
+            let mut terminal_leafs_for_mps: Vec<Digest> = vec![];
+            for i in membership_proof_indices.iter() {
+                terminal_leafs_for_mps.push(terminal_leafs[*i as usize]);
+            }
+
+            // Construct the mutation data
+            let mutated_leaf_mps: Vec<MembershipProof<Hasher>> = mutated_leaf_indices
+                .iter()
+                .map(|i| ammr.prove_membership(*i).0)
+                .collect();
+            let mutation_data: Vec<(MembershipProof<Hasher>, Digest)> = mutated_leaf_mps
+                .into_iter()
+                .zip(new_leafs.into_iter())
+                .collect();
+
+            assert_eq!(mutated_leaf_count as usize, mutation_data.len());
+
+            let original_membership_proofs: Vec<MembershipProof<Hasher>> = membership_proof_indices
+                .iter()
+                .map(|i| ammr.prove_membership(*i).0)
+                .collect();
+
+            // Do the update on both MMRs
+            let mut mmra_mps = original_membership_proofs.clone();
+            let mut ammr_mps = original_membership_proofs.clone();
+            let mut ammr_copy = ammr.clone();
+            mmra.batch_mutate_leaf_and_update_mps(&mut mmra_mps, mutation_data.clone());
+            ammr.batch_mutate_leaf_and_update_mps(&mut ammr_mps, mutation_data.clone());
+
+            // Verify that both MMRs end up with same peaks
+            assert_eq!(mmra.get_peaks(), ammr.get_peaks());
+
+            // Verify that membership proofs from AMMR and MMRA are equal
+            assert_eq!(membership_proof_count as usize, mmra_mps.len());
+            assert_eq!(membership_proof_count as usize, ammr_mps.len());
+            assert_eq!(ammr_mps, mmra_mps);
+
+            // Verify that all membership proofs still work
+            assert!(mmra_mps
+                .iter()
+                .zip(terminal_leafs_for_mps.iter())
+                .all(|(mp, leaf)| mp.verify(&mmra.get_peaks(), &leaf, mmra.count_leaves()).0));
+
+            // Manually construct an MMRA from the new data and verify that peaks and leaf count matches
+            assert!(
+                mutated_leaf_count == 0 || ammr_copy.get_peaks() != ammr.get_peaks(),
+                "If mutated leaf count is non-zero, at least on peaks must be different"
+            );
+            mutation_data.into_iter().for_each(|(mp, digest)| {
+                ammr_copy.mutate_leaf_raw(mp.data_index, digest);
+            });
+            assert_eq!(ammr_copy.get_peaks(), ammr.get_peaks(), "Mutation though batch mutation function must transform the MMR like a list of individual leaf mutations");
+        }
     }
 
     #[test]
