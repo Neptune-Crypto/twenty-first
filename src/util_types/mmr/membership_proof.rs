@@ -816,6 +816,7 @@ mod mmr_membership_proof_test {
             }
 
             // let the magic start
+            let original_mps = own_membership_proofs.clone();
             let mutation_argument: Vec<(MembershipProof<Hasher>, Digest)> = authentication_paths
                 .clone()
                 .into_iter()
@@ -823,7 +824,7 @@ mod mmr_membership_proof_test {
                 .collect();
             MembershipProof::batch_update_from_batch_leaf_mutation(
                 &mut own_membership_proofs,
-                mutation_argument,
+                mutation_argument.clone(),
             );
 
             // update MMR
@@ -833,7 +834,15 @@ mod mmr_membership_proof_test {
                 archival_mmr.mutate_leaf_raw(auth_path.data_index, new_leafs[i]);
             }
 
-            // test
+            // Let's verify that `batch_mutate_leaf_and_update_mps` from the
+            // MmrAccumulator agrees
+            let mut mmra: MmrAccumulator<Hasher> = (&archival_mmr).into();
+            let mut mps_copy = original_mps;
+            mmra.batch_mutate_leaf_and_update_mps(&mut mps_copy, mutation_argument);
+            assert_eq!(own_membership_proofs, mps_copy);
+            assert_eq!(mmra.get_peaks(), archival_mmr.get_peaks());
+
+            // test that all updated membership proofs are valid under the updated MMR
             for i in 0..own_membership_proof_count {
                 let membership_proof = own_membership_proofs[i as usize].clone();
                 assert!(

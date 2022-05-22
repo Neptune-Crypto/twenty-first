@@ -238,7 +238,7 @@ where
         &mut self,
         membership_proofs: &mut Vec<MembershipProof<H>>,
         mut mutation_data: Vec<(MembershipProof<H>, <H as Hasher>::Digest)>,
-    ) -> Vec<u128> {
+    ) -> Vec<usize> {
         // Calculate all derivable paths
         let mut new_ap_digests: HashMap<u128, H::Digest> = HashMap::new();
         let hasher = H::new();
@@ -297,7 +297,7 @@ where
         }
 
         // Update all the supplied membership proofs
-        let mut modified_membership_proof_indices: Vec<u128> = vec![];
+        let mut modified_membership_proof_indices: Vec<usize> = vec![];
         for (i, membership_proof) in membership_proofs.iter_mut().enumerate() {
             let ap_indices = membership_proof.get_node_indices();
 
@@ -314,7 +314,7 @@ where
                 // we're modifying multiple leaves in the MMR
                 if new_ap_digests.contains_key(&authentication_path_indices) {
                     *digest = new_ap_digests[&authentication_path_indices].clone();
-                    modified_membership_proof_indices.push(i as u128);
+                    modified_membership_proof_indices.push(i);
                 }
             }
         }
@@ -550,8 +550,11 @@ mod accumulator_mmr_tests {
             let mut mmra_mps = original_membership_proofs.clone();
             let mut ammr_mps = original_membership_proofs.clone();
             let mut ammr_copy = ammr.clone();
-            mmra.batch_mutate_leaf_and_update_mps(&mut mmra_mps, mutation_data.clone());
-            ammr.batch_mutate_leaf_and_update_mps(&mut ammr_mps, mutation_data.clone());
+            let mutated_mps_mmra =
+                mmra.batch_mutate_leaf_and_update_mps(&mut mmra_mps, mutation_data.clone());
+            let mutated_mps_ammr =
+                ammr.batch_mutate_leaf_and_update_mps(&mut ammr_mps, mutation_data.clone());
+            assert_eq!(mutated_mps_mmra, mutated_mps_ammr);
 
             // Verify that both MMRs end up with same peaks
             assert_eq!(mmra.get_peaks(), ammr.get_peaks());

@@ -113,7 +113,7 @@ where
         &mut self,
         membership_proofs: &mut Vec<MembershipProof<H>>,
         mutation_data: Vec<(MembershipProof<H>, <H as Hasher>::Digest)>,
-    ) -> Vec<u128> {
+    ) -> Vec<usize> {
         assert!(
             has_unique_elements(mutation_data.iter().map(|md| md.0.data_index)),
             "Duplicated leaves are not allowed in membership proof updater"
@@ -123,12 +123,11 @@ where
             self.mutate_leaf_raw(mp.data_index, digest.clone());
         }
 
-        // let new_membership_proofs: Vec<MembershipProof<H>> = vec![];
-        let mut modified_mps: Vec<u128> = vec![];
-        for mp in membership_proofs.iter_mut() {
+        let mut modified_mps: Vec<usize> = vec![];
+        for (i, mp) in membership_proofs.iter_mut().enumerate() {
             let new_mp = self.prove_membership(mp.data_index).0;
             if new_mp != *mp {
-                modified_mps.push(mp.data_index);
+                modified_mps.push(i);
             }
 
             *mp = new_mp
