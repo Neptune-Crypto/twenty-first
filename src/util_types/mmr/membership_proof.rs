@@ -476,10 +476,11 @@ where
     ///  - membership_proofs -- own membership proofs, to be updated
     ///  - authentication_paths_and_leafs -- membership proofs of the mutated
     ///    leafs, and the new leaf values
+    /// Returns those indices into the slice of membership proofs that were updated.
     pub fn batch_update_from_batch_leaf_mutation(
         membership_proofs: &mut [Self],
         mut authentication_paths_and_leafs: Vec<(MembershipProof<H>, H::Digest)>,
-    ) -> Vec<u128> {
+    ) -> Vec<usize> {
         // Calculate all derivable paths
         let mut new_ap_digests: HashMap<u128, H::Digest> = HashMap::new();
         let hasher = H::new();
@@ -535,7 +536,7 @@ where
             }
         }
 
-        let mut modified_membership_proof_indices: Vec<u128> = vec![];
+        let mut modified_membership_proof_indices: Vec<usize> = vec![];
         for (i, membership_proof) in membership_proofs.iter_mut().enumerate() {
             let ap_indices = membership_proof.get_node_indices();
 
@@ -552,7 +553,7 @@ where
                 // we're modifying multiple leaves in the MMR
                 if new_ap_digests.contains_key(&authentication_path_indices) {
                     *digest = new_ap_digests[&authentication_path_indices].clone();
-                    modified_membership_proof_indices.push(i as u128);
+                    modified_membership_proof_indices.push(i);
                 }
             }
         }
@@ -765,7 +766,7 @@ mod mmr_membership_proof_test {
         // otherwise is a membership proof that's an empty authentication path, and that
         // does not change
         assert_eq!(
-            (0..total_leaf_count).collect::<Vec<_>>(),
+            (0..total_leaf_count as usize).collect::<Vec<_>>(),
             changed_values,
             "All membership proofs must be indicated as changed"
         );
@@ -822,7 +823,7 @@ mod mmr_membership_proof_test {
                 .into_iter()
                 .zip(new_leafs.clone().into_iter())
                 .collect();
-            MembershipProof::batch_update_from_batch_leaf_mutation(
+            let updated_mp_indices_0 = MembershipProof::batch_update_from_batch_leaf_mutation(
                 &mut own_membership_proofs,
                 mutation_argument.clone(),
             );
@@ -838,9 +839,11 @@ mod mmr_membership_proof_test {
             // MmrAccumulator agrees
             let mut mmra: MmrAccumulator<Hasher> = (&archival_mmr).into();
             let mut mps_copy = original_mps;
-            mmra.batch_mutate_leaf_and_update_mps(&mut mps_copy, mutation_argument);
+            let updated_mp_indices_1 =
+                mmra.batch_mutate_leaf_and_update_mps(&mut mps_copy, mutation_argument);
             assert_eq!(own_membership_proofs, mps_copy);
             assert_eq!(mmra.get_peaks(), archival_mmr.get_peaks());
+            assert_eq!(updated_mp_indices_0, updated_mp_indices_1);
 
             // test that all updated membership proofs are valid under the updated MMR
             for i in 0..own_membership_proof_count {

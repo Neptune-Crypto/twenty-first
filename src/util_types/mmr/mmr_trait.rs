@@ -5,11 +5,24 @@ pub trait Mmr<H>
 where
     H: Hasher,
 {
+    /// Create a new MMR instanc from a list of hash digests. The supplied digests
+    /// are the leaves of the MMR.
     fn new(digests: Vec<H::Digest>) -> Self;
+
+    /// Calculate a single hash digest committing to the entire MMR.
     fn bag_peaks(&self) -> H::Digest;
+
+    /// Returns the peaks of the MMR, which are roots of the Merkle trees that constitute
+    /// the MMR
     fn get_peaks(&self) -> Vec<H::Digest>;
+
+    /// Returns `true` iff the MMR has no leaves
     fn is_empty(&self) -> bool;
+
+    /// Returns the number of leaves in the MMR
     fn count_leaves(&self) -> u128;
+
+    /// Append a hash digest to the MMR
     fn append(&mut self, new_leaf: H::Digest) -> MembershipProof<H>;
 
     /// Mutate an existing leaf. It is the caller's responsibility that the
