@@ -10,6 +10,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
 use crate::shared_math::stark::triton::error::vm_err;
+use crate::shared_math::stark::triton::table::base_matrix::ProcessorMatrixRow;
 use crate::shared_math::traits::{GetRandomElements, IdentityValues, Inverse};
 use crate::shared_math::x_field_element::XFieldElement;
 use rand::Rng;
@@ -569,103 +570,14 @@ impl<'pgm> VMState<'pgm> {
 
 impl<'pgm> Display for VMState<'pgm> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        horizontal_bar(f)?;
-
-        let ci = self
-            .current_instruction()
-            .map(|ni| ni.to_string())
-            .unwrap_or_else(|_| "eof".to_string());
-
-        let ni = self
-            .next_instruction()
-            .map(|w| w.to_string())
-            .unwrap_or_else(|_| "none".to_string());
-
-        let nni = self
-            .next_next_instruction()
-            .map(|w| w.to_string())
-            .unwrap_or_else(|_| "none".to_string());
-
-        let ci_plus_1 = self
-            .ci_plus_1()
-            .map(|ni| ni.to_string())
-            .unwrap_or_else(|_| "none".to_string());
-
-        let width = 15;
-        column(
+        write!(
             f,
-            format!(
-                "clk:  {:>width$} | ip:   {:>width$} |",
-                self.cycle_count, self.instruction_pointer
-            ),
-        )?;
-
-        column(
-            f,
-            format!("ci:   {:>width$} | ci+1: {:>width$} |", ci, ci_plus_1),
-        )?;
-        column(f, format!("ni:   {:>width$} | nni:  {:>width$} |", ni, nni))?;
-        column(
-            f,
-            format!(
-                "ramp: {:>width$} | ramv: {:>width$} |",
-                self.ramp.value(),
-                self.ramv.value()
-            ),
-        )?;
-        let width_inv = width + 4;
-        column(
-            f,
-            format!(
-                "jsp:  {:>width$} | jso:  {:>width$} | jsd: {:>width_inv$}",
-                self.jsp().value(),
-                self.jso().value(),
-                self.jsd().value()
-            ),
-        )?;
-        column(
-            f,
-            format!(
-                "osp:  {:>width$} | osv:  {:>width$} | inv: {:>width_inv$}",
-                self.op_stack.osp().value(),
-                self.op_stack.osv().value(),
-                self.op_stack.inv().value()
-            ),
-        )?;
-
-        let width_st = 5;
-        column(
-            f,
-            format!(
-                "st7-0: [ {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} ]",
-                self.op_stack.st(ST7).value(),
-                self.op_stack.st(ST6).value(),
-                self.op_stack.st(ST5).value(),
-                self.op_stack.st(ST4).value(),
-                self.op_stack.st(ST3).value(),
-                self.op_stack.st(ST2).value(),
-                self.op_stack.st(ST1).value(),
-                self.op_stack.st(ST0).value(),
-            ),
-        )?;
-
-        horizontal_bar(f)?;
-
-        Ok(())
+            "{}",
+            ProcessorMatrixRow {
+                row: self.to_processor_arr().unwrap()
+            }
+        )
     }
-}
-
-fn horizontal_bar(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    writeln!(
-        f,
-        "+--------------------------------------------------------------------------+"
-    )?;
-
-    Ok(())
-}
-
-fn column(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
-    writeln!(f, "| {: <72} |", s)
 }
 
 #[cfg(test)]
