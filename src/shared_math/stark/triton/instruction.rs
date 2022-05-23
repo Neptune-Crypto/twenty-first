@@ -431,6 +431,20 @@ pub mod sample_programs {
         write_io write_io write_io write_io write_io write_io write_io
         ";
 
+    pub const WRITE_42: &str = "
+        push 42
+        write_io
+    ";
+
+    pub const READ_WRITE_X3: &str = "
+        read_io
+        read_io
+        read_io
+        write_io
+        write_io
+        write_io
+    ";
+
     pub const SUBTRACT: &str = "
         push 5
         push 18446744069414584320
@@ -567,6 +581,7 @@ pop
 pop
 call 12
 pop
+write_io
 halt
 ";
 

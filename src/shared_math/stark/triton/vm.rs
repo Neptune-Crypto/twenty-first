@@ -41,10 +41,10 @@ impl Iterator for SkippyIter {
     type Item = Instruction;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let pos = self.cursor.position();
+        let pos = self.cursor.position() as usize;
         let instructions = self.cursor.get_ref();
-        let instruction = instructions[pos as usize];
-        self.cursor.set_position(pos + instruction.size() as u64);
+        let instruction = *instructions.get(pos)?;
+        self.cursor.set_position((pos + instruction.size()) as u64);
 
         Some(instruction)
     }
@@ -99,7 +99,7 @@ impl Program {
         loop {
             let written_word = match current_state.step_mut(rng, stdin, rescue_prime) {
                 Err(err) => return (base_matrices, Some(err)),
-                Ok(written_word) => written_word,
+                Ok(word) => word,
             };
 
             match current_state.to_processor_arr() {
@@ -121,6 +121,7 @@ impl Program {
             }
 
             if current_state.is_final() {
+                println!("FINAL? {}", current_state.is_final());
                 break;
             }
         }
@@ -208,63 +209,14 @@ impl Program {
 
             current_instruction = next_instruction;
         }
-    }
 
-    fn to_base_matrices(
-        program: Program,
-        trace: &[[BFieldElement; processor_table::BASE_WIDTH]],
-    ) -> BaseMatrices {
-        let mut base_matrices = BaseMatrices::default();
-
-        // 1. Fill instruction_matrix with program
-        let mut program_index: BWord = BWord::ring_zero();
-        let mut iter = program.into_iter();
-        let mut current_instruction = iter.next().unwrap();
-
-        while let Some(next) = iter.next() {
-            let current_opcode: BFieldElement = current_instruction.opcode().into();
-
-            if let Some(instruction_arg) = current_instruction.arg() {
-                base_matrices.instruction_matrix.push([
-                    program_index,
-                    current_opcode,
-                    instruction_arg,
-                ]);
-                program_index.increment();
-
-                let next_opcode: BFieldElement = next.opcode().into();
-                base_matrices.instruction_matrix.push([
-                    program_index,
-                    instruction_arg,
-                    next_opcode,
-                ]);
-                program_index.increment();
-            } else {
-                let next_opcode: BFieldElement = next.opcode().into();
-                base_matrices
-                    .instruction_matrix
-                    .push([program_index, current_opcode, next_opcode]);
-                program_index.increment();
-            }
-
-            current_instruction = next;
-        }
-
-        // 1.a. Add a terminating zero line
+        // Add a terminating zero line
         let last_instruction_pointer = program_index;
         let last_instruction = current_instruction.opcode().into();
         let zero = BWord::ring_zero();
         base_matrices
             .instruction_matrix
             .push([last_instruction_pointer, last_instruction, zero]);
-
-        // 2. Populate all tables with execution trace
-        for row in trace {
-            // 2.a. processor_matrix.push(vmstate.to_arr())
-            base_matrices.processor_matrix.push(*row);
-        }
-
-        base_matrices
     }
 
     pub fn len(&self) -> usize {
@@ -288,16 +240,46 @@ mod triton_vm_tests {
         let program = Program::from_code(code).unwrap();
 
         println!("{}", program);
-        let (trace, _out, _err) = program.run_with_input(&[]);
 
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&[]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, _err) =
+            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+
+        println!("{:?}", base_matrices);
+        /*
         println!("{}", program);
         for state in trace.iter() {
             println!("{}", state);
         }
+        */
 
         // 2. Convert trace to base matrices
 
         // 3. Extract constraints
         // 4. Check constraints
+    }
+
+    #[test]
+    fn initialise_table_42_test() {
+        // 1. Execute program
+        let code = sample_programs::READ_WRITE_X3;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&[]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+
+        println!("{:?}", err);
+        println!("{:?}", base_matrices);
     }
 }

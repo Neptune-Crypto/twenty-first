@@ -114,6 +114,7 @@ impl<'pgm> VMState<'pgm> {
     {
         // All instructions increase the cycle count
         self.cycle_count += 1;
+        println!("CYCLE:  {}", self.cycle_count);
         let mut written_word = None;
 
         let instruction = self.current_instruction()?;
@@ -345,6 +346,7 @@ impl<'pgm> VMState<'pgm> {
 
             WriteIo => {
                 let out_elem = self.op_stack.pop()?;
+                println!("WALDO:  {}", out_elem);
                 written_word = Some(out_elem);
                 self.instruction_pointer += 1;
             }
