@@ -80,7 +80,7 @@ impl<'pgm> VMState<'pgm> {
 
     /// Determine if this is a final state.
     pub fn is_final(&self) -> bool {
-        self.instruction_pointer == self.program.len()
+        self.instruction_pointer >= self.program.len() - 1
     }
 
     /// Given a state, compute the next state purely.
@@ -118,6 +118,7 @@ impl<'pgm> VMState<'pgm> {
         let mut written_word = None;
 
         let instruction = self.current_instruction()?;
+        println!("INSTRUCTION:  {}", instruction);
         match instruction {
             Pop => {
                 self.op_stack.pop()?;
@@ -373,9 +374,14 @@ impl<'pgm> VMState<'pgm> {
 
         let ip = (self.instruction_pointer as u32).try_into().unwrap();
         let ci = current_instruction.opcode_b();
-        let nia = current_instruction
-            .arg()
-            .unwrap_or(self.next_instruction()?.opcode_b());
+
+        let nia = match current_instruction.arg() {
+            None => {
+                let ni = self.next_instruction();
+                ni.map(|instr| instr.opcode_b()).unwrap_or(0.into())
+            }
+            Some(bfe) => bfe,
+        };
 
         Ok([ip, ci, nia])
     }
@@ -388,9 +394,13 @@ impl<'pgm> VMState<'pgm> {
         let clk = self.cycle_count.into();
         let ip = (self.instruction_pointer as u32).try_into().unwrap();
         let ci = current_instruction.opcode_b();
-        let nia = current_instruction
-            .arg()
-            .unwrap_or(self.next_instruction()?.opcode_b());
+        let nia = match current_instruction.arg() {
+            None => {
+                let ni = self.next_instruction();
+                ni.map(|instr| instr.opcode_b()).unwrap_or(0.into())
+            }
+            Some(bfe) => bfe,
+        };
         let ib0 = current_instruction.ib(IB0);
         let ib1 = current_instruction.ib(IB1);
         let ib2 = current_instruction.ib(IB2);
@@ -492,9 +502,13 @@ impl<'pgm> VMState<'pgm> {
     /// Internal helper functions
 
     fn current_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
+        println!(
+            "self.instruction_pointer: {}, self.program: {:?}",
+            self.instruction_pointer, self.program
+        );
         self.program
             .get(self.instruction_pointer)
-            .ok_or_else(|| vm_fail(InstructionPointerOverflow))
+            .ok_or_else(|| vm_fail(InstructionPointerOverflow(self.instruction_pointer)))
             .copied()
     }
 
@@ -507,9 +521,11 @@ impl<'pgm> VMState<'pgm> {
     fn next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
         let ci = self.current_instruction()?;
         let ci_size = ci.size();
+        let ni_pointer = self.instruction_pointer + ci_size;
+        println!("ci: {}, ci_size: {}, ni_ptr: {}", ci, ci_size, ni_pointer);
         self.program
-            .get(self.instruction_pointer + ci_size)
-            .ok_or_else(|| vm_fail(InstructionPointerOverflow))
+            .get(ni_pointer)
+            .ok_or_else(|| vm_fail(InstructionPointerOverflow(ni_pointer)))
             .copied()
     }
 
@@ -518,7 +534,7 @@ impl<'pgm> VMState<'pgm> {
         let next_size = self.next_instruction()?.size();
         self.program
             .get(self.instruction_pointer + cur_size + next_size)
-            .ok_or_else(|| vm_fail(InstructionPointerOverflow))
+            .ok_or_else(|| vm_fail(InstructionPointerOverflow(self.instruction_pointer)))
             .copied()
     }
 
@@ -526,7 +542,7 @@ impl<'pgm> VMState<'pgm> {
     fn ci_plus_1(&self) -> Result<Instruction, Box<dyn Error>> {
         self.program
             .get(self.instruction_pointer + 1)
-            .ok_or_else(|| vm_fail(InstructionPointerOverflow))
+            .ok_or_else(|| vm_fail(InstructionPointerOverflow(self.instruction_pointer)))
             .copied()
     }
 

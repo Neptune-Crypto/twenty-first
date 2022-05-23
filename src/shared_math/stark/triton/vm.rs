@@ -96,34 +96,45 @@ impl Program {
 
         self.initialize_instruction_matrix(&mut base_matrices);
 
+        match current_state.to_processor_arr() {
+            Err(err) => return (base_matrices, Some(err)),
+            Ok(row) => base_matrices.processor_matrix.push(row),
+        }
+
         loop {
             let written_word = match current_state.step_mut(rng, stdin, rescue_prime) {
                 Err(err) => return (base_matrices, Some(err)),
                 Ok(word) => word,
             };
+            println!("1");
 
             match current_state.to_processor_arr() {
                 Err(err) => return (base_matrices, Some(err)),
                 Ok(row) => base_matrices.processor_matrix.push(row),
             }
+            println!("2");
 
             match current_state.to_instruction_arr() {
                 Err(err) => return (base_matrices, Some(err)),
                 Ok(row) => base_matrices.instruction_matrix.push(row),
             }
+            println!("3");
 
             if let Ok(Some(word)) = current_state.read_word() {
                 base_matrices.input_matrix.push([word])
             }
+            println!("4");
 
             if let Some(word) = written_word {
-                base_matrices.output_matrix.push([word]);
+                base_matrices.output_matrix.push([word])
             }
+            println!("5");
 
             if current_state.is_final() {
                 println!("FINAL? {}", current_state.is_final());
                 break;
             }
+            println!("6");
         }
 
         base_matrices.sort_instruction_matrix();
@@ -231,7 +242,9 @@ impl Program {
 #[cfg(test)]
 mod triton_vm_tests {
     use super::*;
-    use crate::shared_math::stark::triton::instruction::sample_programs;
+    use crate::shared_math::stark::triton::{
+        instruction::sample_programs, table::base_matrix::ProcessorMatrixRow,
+    };
 
     #[test]
     fn initialise_table_test() {
@@ -266,7 +279,7 @@ mod triton_vm_tests {
     #[test]
     fn initialise_table_42_test() {
         // 1. Execute program
-        let code = sample_programs::READ_WRITE_X3;
+        let code = sample_programs::SUBTRACT;
         let program = Program::from_code(code).unwrap();
 
         println!("{}", program);
@@ -280,6 +293,8 @@ mod triton_vm_tests {
             program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
 
         println!("{:?}", err);
-        println!("{:?}", base_matrices);
+        for row in base_matrices.processor_matrix {
+            println!("{}", ProcessorMatrixRow { row });
+        }
     }
 }

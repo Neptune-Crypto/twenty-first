@@ -449,6 +449,7 @@ pub mod sample_programs {
         push 5
         push 18446744069414584320
         add
+        halt
     ";
 
     pub const COUNTDOWN_FROM_10: &str = "
