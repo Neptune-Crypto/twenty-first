@@ -572,8 +572,12 @@ halt
 
     //This cannot not print because we need to itoa() before write_io.
     pub const XGCD: &str = "
-push 42
-push 56
+push 1
+push 0
+push 0
+push 1
+push 240
+push 46
 dup1
 dup1
 lt
