@@ -66,17 +66,17 @@ impl IntoIterator for Program {
 /// corresponds to the VM's `instruction_pointer`. These duplicate values
 /// should most often be skipped/ignored, e.g. when pretty-printing.
 impl Program {
-    pub fn from_code(code: &str) -> Result<Self, Box<dyn Error>> {
-        let instructions = parse(code)?;
-        Ok(Program::from_instr(&instructions))
-    }
-
-    pub fn from_instr(input: &[Instruction]) -> Self {
+    pub fn new(input: &[Instruction]) -> Self {
         let mut instructions = vec![];
         for instr in input {
             instructions.append(&mut vec![*instr; instr.size()]);
         }
         Program { instructions }
+    }
+
+    pub fn from_code(code: &str) -> Result<Self, Box<dyn Error>> {
+        let instructions = parse(code)?;
+        Ok(Program::new(&instructions))
     }
 
     pub fn run_stdio(&self) -> (Vec<VMState>, Option<Box<dyn Error>>) {
@@ -273,7 +273,7 @@ mod triton_vm_tests {
     #[test]
     fn vm_run_test() {
         let instructions = vec![Push(2.into()), Push(2.into()), Add];
-        let program = Program::from_instr(&instructions);
+        let program = Program::new(&instructions);
         let _bla = program.run_stdio();
     }
 
