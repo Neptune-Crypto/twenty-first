@@ -9,4 +9,9 @@ pub struct BaseMatrices {
     pub input_matrix: Vec<[BFieldElement; io_table::BASE_WIDTH]>,
     pub output_matrix: Vec<[BFieldElement; io_table::BASE_WIDTH]>,
 }
-impl BaseMatrices {}
+
+impl BaseMatrices {
+    pub fn sort_instruction_matrix(&mut self) {
+        self.instruction_matrix.sort_by_key(|row| row[0].value());
+    }
+}

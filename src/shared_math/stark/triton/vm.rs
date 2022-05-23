@@ -6,7 +6,7 @@ use super::stdio::{InputStream, OutputStream, VecStream};
 use super::table::base_matrix::BaseMatrices;
 use super::table::processor_table;
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::rescue_prime_xlix::{self, RescuePrimeXlix};
+use crate::shared_math::rescue_prime_xlix::{neptune_params, RescuePrimeXlix};
 use std::error::Error;
 use std::fmt::Display;
 use std::io::Cursor;
@@ -79,26 +79,6 @@ impl Program {
         Ok(Program::new(&instructions))
     }
 
-    pub fn run_stdio(&self) -> (Vec<VMState>, Option<Box<dyn Error>>) {
-        let mut rng = rand::thread_rng();
-        let mut stdin = std::io::stdin();
-        let mut stdout = std::io::stdout();
-        let rescue_prime = rescue_prime_xlix::neptune_params();
-
-        self.run(&mut rng, &mut stdin, &mut stdout, &rescue_prime)
-    }
-
-    pub fn run_with_input(&self, input: &[u8]) -> (Vec<VMState>, Vec<u8>, Option<Box<dyn Error>>) {
-        let mut rng = rand::thread_rng();
-        let mut stdin = VecStream::new(input);
-        let mut stdout = VecStream::new(&[]);
-        let rescue_prime = rescue_prime_xlix::neptune_params();
-
-        let (trace, err) = self.run(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
-
-        (trace, stdout.to_vec(), err)
-    }
-
     pub fn simulate<R, In, Out>(
         &self,
         rng: &mut R,
@@ -111,47 +91,41 @@ impl Program {
         In: InputStream,
         Out: OutputStream,
     {
-        let mut cur_state = VMState::new(self);
+        let mut current_state = VMState::new(self);
         let mut base_matrices = BaseMatrices::default();
 
         self.initialize_instruction_matrix(&mut base_matrices);
 
         loop {
-            let written_word = match cur_state.step_mut(rng, stdin, rescue_prime) {
+            let written_word = match current_state.step_mut(rng, stdin, rescue_prime) {
                 Err(err) => return (base_matrices, Some(err)),
                 Ok(written_word) => written_word,
             };
 
-            let processor_row = cur_state.to_processor_arr();
-            if let Err(err) = processor_row {
-                return (base_matrices, Some(err));
+            match current_state.to_processor_arr() {
+                Err(err) => return (base_matrices, Some(err)),
+                Ok(row) => base_matrices.processor_matrix.push(row),
             }
 
-            let processor_row = processor_row.unwrap();
-            base_matrices.processor_matrix.push(processor_row);
+            match current_state.to_instruction_arr() {
+                Err(err) => return (base_matrices, Some(err)),
+                Ok(row) => base_matrices.instruction_matrix.push(row),
+            }
 
-            let instruction_row = cur_state.to_instruction_arr().unwrap();
-            base_matrices.instruction_matrix.push(instruction_row);
-
-            // 1. update input matrix on input
-            if let Ok(Some(word)) = cur_state.get_readio_arg() {
+            if let Ok(Some(word)) = current_state.read_word() {
                 base_matrices.input_matrix.push([word])
             }
 
-            // 2. update output matrix on output
             if let Some(word) = written_word {
                 base_matrices.output_matrix.push([word]);
             }
 
-            if !cur_state.is_final() {
+            if current_state.is_final() {
                 break;
             }
         }
 
-        // todo: Convert to method
-        base_matrices
-            .instruction_matrix
-            .sort_by_key(|row| row[0].value());
+        base_matrices.sort_instruction_matrix();
 
         (base_matrices, None)
     }
@@ -168,19 +142,36 @@ impl Program {
         In: InputStream,
         Out: OutputStream,
     {
-        let mut trace = vec![VMState::new(self)];
-        let mut prev_state = trace.last().unwrap();
+        let mut processor_trace = vec![VMState::new(self)];
+        let mut current_state = processor_trace.last().unwrap();
 
-        while !prev_state.is_final() {
-            let next_state = prev_state.step(rng, stdin, rescue_prime);
-            if let Err(err) = next_state {
-                return (trace, Some(err));
+        while !current_state.is_final() {
+            let next_state = current_state.step(rng, stdin, rescue_prime);
+            let (next_state, written_word) = match next_state {
+                Err(err) => return (processor_trace, Some(err)),
+                Ok(result) => result,
+            };
+
+            if let Some(word) = written_word {
+                let _written = stdout.write_elem(word);
             }
-            trace.push(next_state.unwrap());
-            prev_state = trace.last().unwrap();
+
+            processor_trace.push(next_state);
+            current_state = processor_trace.last().unwrap();
         }
 
-        (trace, None)
+        (processor_trace, None)
+    }
+
+    pub fn run_with_input(&self, input: &[u8]) -> (Vec<VMState>, Vec<u8>, Option<Box<dyn Error>>) {
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(input);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (trace, err) = self.run(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+
+        (trace, stdout.to_vec(), err)
     }
 
     fn initialize_instruction_matrix(&self, base_matrices: &mut BaseMatrices) {
@@ -189,7 +180,7 @@ impl Program {
         let mut current_instruction = iter.next().unwrap();
         let mut program_index: BWord = BWord::ring_zero();
 
-        while let Some(next) = iter.next() {
+        while let Some(next_instruction) = iter.next() {
             let current_opcode: BFieldElement = current_instruction.opcode().into();
 
             if let Some(instruction_arg) = current_instruction.arg() {
@@ -200,7 +191,7 @@ impl Program {
                 ]);
                 program_index.increment();
 
-                let next_opcode: BFieldElement = next.opcode().into();
+                let next_opcode: BFieldElement = next_instruction.opcode().into();
                 base_matrices.instruction_matrix.push([
                     program_index,
                     instruction_arg,
@@ -208,14 +199,14 @@ impl Program {
                 ]);
                 program_index.increment();
             } else {
-                let next_opcode: BFieldElement = next.opcode().into();
+                let next_opcode: BFieldElement = next_instruction.opcode().into();
                 base_matrices
                     .instruction_matrix
                     .push([program_index, current_opcode, next_opcode]);
                 program_index.increment();
             }
 
-            current_instruction = next;
+            current_instruction = next_instruction;
         }
     }
 
@@ -287,19 +278,8 @@ impl Program {
 
 #[cfg(test)]
 mod triton_vm_tests {
-    use crate::shared_math::stark::triton::instruction::sample_programs;
-    use crate::shared_math::stark::triton::table::base_matrix::BaseMatrices;
-    use crate::shared_math::stark::triton::table::processor_table;
-
-    use super::Instruction::*;
     use super::*;
-
-    #[test]
-    fn vm_run_test() {
-        let instructions = vec![Push(2.into()), Push(2.into()), Add];
-        let program = Program::new(&instructions);
-        let _bla = program.run_stdio();
-    }
+    use crate::shared_math::stark::triton::instruction::sample_programs;
 
     #[test]
     fn initialise_table_test() {

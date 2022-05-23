@@ -343,13 +343,14 @@ impl<'pgm> VMState<'pgm> {
             }
 
             WriteIo => {
-                written_word = Some(self.op_stack.pop()?);
+                let out_elem = self.op_stack.pop()?;
+                written_word = Some(out_elem);
                 self.instruction_pointer += 1;
             }
 
             ReadIo => {
-                let in_char: u32 = stdin.read_u32_be()?;
-                self.op_stack.push(in_char.into());
+                let in_elem = stdin.read_elem()?;
+                self.op_stack.push(in_elem);
                 self.instruction_pointer += 1;
             }
         }
@@ -556,7 +557,7 @@ impl<'pgm> VMState<'pgm> {
         true
     }
 
-    pub fn get_readio_arg(&self) -> Result<Option<BFieldElement>, Box<dyn Error>> {
+    pub fn read_word(&self) -> Result<Option<BFieldElement>, Box<dyn Error>> {
         let current_instruction = self.current_instruction()?;
         if matches!(current_instruction, ReadIo) {
             Ok(Some(self.op_stack.safe_peek(ST0)))
