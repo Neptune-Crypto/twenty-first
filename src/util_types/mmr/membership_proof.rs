@@ -240,7 +240,7 @@ where
         old_leaf_count: u128,
         new_leaf: &H::Digest,
         old_peaks: &[H::Digest],
-    ) -> Vec<u128> {
+    ) -> Vec<usize> {
         // 1. Get node indices for nodes added by the append
         //   a. If length of this list is one, newly added leaf was a left child. Return.
         // 2. Get all derivable node digests, store in hash map
@@ -282,7 +282,7 @@ where
         }
 
         // Loop over all membership proofs and insert missing hashes for each
-        let mut modified: Vec<u128> = vec![];
+        let mut modified: Vec<usize> = vec![];
         let new_peak_index: u128 = *added_node_indices.last().unwrap();
         let new_node_count: u128 = leaf_count_to_node_count(old_leaf_count + 1);
         for (i, membership_proof) in membership_proofs.iter_mut().enumerate() {
@@ -295,7 +295,7 @@ where
                 continue;
             }
 
-            modified.push(i as u128);
+            modified.push(i);
 
             let node_indices_for_missing_digests: Vec<u128> = get_authentication_path_node_indices(
                 old_peak_index,
@@ -1172,7 +1172,7 @@ mod mmr_membership_proof_test {
             let mut appended_archival_mmr = archival_mmr.clone();
             appended_archival_mmr.append(new_leaf.clone());
             let new_peaks = appended_archival_mmr.get_peaks();
-            let indices_of_mutated_mps: Vec<u128> =
+            let indices_of_mutated_mps: Vec<usize> =
                 MembershipProof::<Hasher>::batch_update_from_append(
                     &mut membership_proofs,
                     leaf_count,
@@ -1181,10 +1181,7 @@ mod mmr_membership_proof_test {
                 );
             let mut i = 0;
             for mp in membership_proofs {
-                assert!(
-                    mp.verify(&new_peaks, &leaf_hashes[i as usize], leaf_count + 1)
-                        .0
-                );
+                assert!(mp.verify(&new_peaks, &leaf_hashes[i], leaf_count + 1).0);
                 i += 1;
             }
 
@@ -1192,8 +1189,8 @@ mod mmr_membership_proof_test {
             let mut i = 0;
             for index in indices_of_mutated_mps {
                 assert!(
-                    !original_mps[index as usize]
-                        .verify(&new_peaks, &leaf_hashes[i as usize], leaf_count + 1)
+                    !original_mps[index]
+                        .verify(&new_peaks, &leaf_hashes[i], leaf_count + 1)
                         .0
                 );
                 i += 1;
