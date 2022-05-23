@@ -200,6 +200,7 @@ where
                 Some(peaks) => peaks,
             };
 
+            // TODO: Replace this with the new batch updater
             // Update all remaining membership proofs with this leaf mutation
             MembershipProof::<H>::batch_update_from_leaf_mutation(
                 &mut updated_membership_proofs,
