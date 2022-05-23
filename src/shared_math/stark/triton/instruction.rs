@@ -408,7 +408,7 @@ pub mod sample_programs {
 
     pub fn push_push_add_pop_p() -> Program {
         let instructions = vec![Push(1.into()), Push(2.into()), Add, Pop];
-        Program::from_instr(&instructions)
+        Program::new(&instructions)
     }
 
     pub const HELLO_WORLD_1: &str = "
@@ -612,7 +612,7 @@ mod instruction_tests {
         let pgm_expected = sample_programs::push_push_add_pop_p();
         let pgm_pretty = format!("{}", pgm_expected);
         let instructions = parse(&pgm_pretty).unwrap();
-        let pgm_actual = Program::from_instr(&instructions);
+        let pgm_actual = Program::new(&instructions);
 
         println!("Expected:\n{}", pgm_expected);
         println!("Actual:\n{}", pgm_actual);
@@ -621,7 +621,7 @@ mod instruction_tests {
 
         let pgm_text = sample_programs::PUSH_PUSH_ADD_POP_S;
         let instructions_2 = parse(&pgm_text).unwrap();
-        let pgm_actual_2 = Program::from_instr(&instructions_2);
+        let pgm_actual_2 = Program::new(&instructions_2);
 
         assert_eq!(pgm_expected, pgm_actual_2);
     }

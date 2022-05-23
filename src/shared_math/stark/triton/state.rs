@@ -3,7 +3,8 @@ use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
 use super::ord_n::{Ord4::*, Ord6::*, Ord8::*};
 use super::stdio::{InputStream, OutputStream};
-use super::table::processor_table::{self, BASE_WIDTH};
+use super::table::instruction_table;
+use super::table::processor_table;
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
@@ -365,7 +366,23 @@ impl<'pgm> VMState<'pgm> {
         Ok(())
     }
 
-    pub fn to_arr(&self) -> Result<[BFieldElement; processor_table::BASE_WIDTH], Box<dyn Error>> {
+    pub fn to_instruction_arr(
+        &self,
+    ) -> Result<[BFieldElement; instruction_table::BASE_WIDTH], Box<dyn Error>> {
+        let current_instruction = self.current_instruction()?;
+
+        let ip = (self.instruction_pointer as u32).try_into().unwrap();
+        let ci = current_instruction.opcode_b();
+        let nia = current_instruction
+            .arg()
+            .unwrap_or(self.next_instruction()?.opcode_b());
+
+        Ok([ip, ci, nia])
+    }
+
+    pub fn to_processor_arr(
+        &self,
+    ) -> Result<[BFieldElement; processor_table::BASE_WIDTH], Box<dyn Error>> {
         let current_instruction = self.current_instruction()?;
 
         let clk = self.cycle_count.into();

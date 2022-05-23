@@ -121,12 +121,16 @@ impl Program {
                 return (base_matrices, Some(err));
             }
 
-            let cur_state_arr = cur_state.to_arr();
-            if let Err(err) = cur_state_arr {
+            let processor_row = cur_state.to_processor_arr();
+            if let Err(err) = processor_row {
                 return (base_matrices, Some(err));
             }
 
-            base_matrices.processor_matrix.push(cur_state_arr.unwrap());
+            let processor_row = processor_row.unwrap();
+            base_matrices.processor_matrix.push(processor_row);
+
+            let instruction_row = cur_state.to_instruction_arr().unwrap();
+            base_matrices.instruction_matrix.push(instruction_row);
         }
 
         (base_matrices, None)
