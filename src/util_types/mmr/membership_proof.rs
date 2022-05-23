@@ -236,7 +236,7 @@ where
     /// Returns the indices of the membership proofs that were modified where index refers
     /// to the order in which the membership proofs were given to this function.
     pub fn batch_update_from_append(
-        membership_proofs: &mut [Self],
+        membership_proofs: &mut [&mut Self],
         old_leaf_count: u128,
         new_leaf: &H::Digest,
         old_peaks: &[H::Digest],
@@ -1174,7 +1174,7 @@ mod mmr_membership_proof_test {
             let new_peaks = appended_archival_mmr.get_peaks();
             let indices_of_mutated_mps: Vec<usize> =
                 MembershipProof::<Hasher>::batch_update_from_append(
-                    &mut membership_proofs,
+                    &mut membership_proofs.iter_mut().collect::<Vec<_>>(),
                     leaf_count,
                     &new_leaf,
                     &old_peaks,
