@@ -19,7 +19,7 @@ impl Display for Ord4 {
     }
 }
 
-impl From<Ord4> for usize {
+impl From<Ord4> for u32 {
     fn from(n: Ord4) -> Self {
         match n {
             N0 => 0,
@@ -27,6 +27,19 @@ impl From<Ord4> for usize {
             N2 => 2,
             N3 => 3,
         }
+    }
+}
+
+impl From<&Ord4> for u32 {
+    fn from(n: &Ord4) -> Self {
+        (*n).into()
+    }
+}
+
+impl From<Ord4> for usize {
+    fn from(n: Ord4) -> Self {
+        let n: u32 = n.into();
+        n as usize
     }
 }
 
@@ -187,7 +200,7 @@ impl Display for Ord16 {
     }
 }
 
-impl From<Ord16> for usize {
+impl From<Ord16> for u32 {
     fn from(n: Ord16) -> Self {
         match n {
             A0 => 0,
@@ -207,6 +220,19 @@ impl From<Ord16> for usize {
             A14 => 14,
             A15 => 15,
         }
+    }
+}
+
+impl From<&Ord16> for u32 {
+    fn from(n: &Ord16) -> Self {
+        (*n).into()
+    }
+}
+
+impl From<Ord16> for usize {
+    fn from(n: Ord16) -> Self {
+        let n: u32 = n.into();
+        n as usize
     }
 }
 

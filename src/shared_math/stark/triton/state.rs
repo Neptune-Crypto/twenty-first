@@ -1,7 +1,7 @@
 use super::error::{vm_fail, InstructionError::*};
 use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
-use super::ord_n::{Ord6, Ord8::*};
+use super::ord_n::{Ord4::*, Ord6::*, Ord8::*};
 use super::stdio::{InputStream, OutputStream};
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
@@ -101,7 +101,7 @@ impl<'pgm> VMState<'pgm> {
     /// Perform the state transition as a mutable operation on `self`.
     ///
     /// This function is called from `step`.
-    fn step_mut<R, In, Out>(
+    pub fn step_mut<R, In, Out>(
         &mut self,
         rng: &mut R,
         stdin: &mut In,
@@ -364,21 +364,89 @@ impl<'pgm> VMState<'pgm> {
         Ok(())
     }
 
-    /// Get the i'th instruction bit
-    pub fn ib(&self, arg: Ord6) -> Result<BFieldElement, Box<dyn Error>> {
-        let instruction = self.current_instruction()?;
-        let opcode = instruction
-            .opcode()
-            .ok_or_else(|| vm_fail(RunawayInstructionArg))?;
+    pub fn to_arr(&self) -> Result<Vec<BFieldElement>, Box<dyn Error>> {
+        let current_instruction = self.current_instruction()?;
 
-        let bit_number: usize = arg.into();
-        let bit_mask: u32 = 1 << bit_number;
+        let clk = self.cycle_count.into();
+        let ip = (self.instruction_pointer as u32).try_into().unwrap();
+        let ci = current_instruction.opcode_b();
+        let nia = current_instruction
+            .arg()
+            .unwrap_or(self.next_instruction()?.opcode_b());
+        let ib0 = current_instruction.ib(IB0);
+        let ib1 = current_instruction.ib(IB1);
+        let ib2 = current_instruction.ib(IB2);
+        let ib3 = current_instruction.ib(IB3);
+        let ib4 = current_instruction.ib(IB4);
+        let ib5 = current_instruction.ib(IB5);
+        let st0 = self.op_stack.st(ST0);
+        let st1 = self.op_stack.st(ST1);
+        let st2 = self.op_stack.st(ST2);
+        let st3 = self.op_stack.st(ST3);
+        let st4 = self.op_stack.st(ST4);
+        let st5 = self.op_stack.st(ST5);
+        let st6 = self.op_stack.st(ST6);
+        let st7 = self.op_stack.st(ST7);
+        let inv = self.op_stack.inv();
+        let osp = self.op_stack.osp();
+        let osv = self.op_stack.osv();
+        let hv0 = current_instruction.hv(N0);
+        let hv1 = current_instruction.hv(N1);
+        let hv2 = current_instruction.hv(N2);
+        let hv3 = current_instruction.hv(N3);
 
-        Ok((opcode & bit_mask).into())
+        Ok(vec![
+            clk,
+            ip,
+            ci,
+            nia,
+            ib0,
+            ib1,
+            ib2,
+            ib3,
+            ib4,
+            ib5,
+            self.jsp(),
+            self.jso(),
+            self.jsd(),
+            st0,
+            st1,
+            st2,
+            st3,
+            st4,
+            st5,
+            st6,
+            st7,
+            inv,
+            osp,
+            osv,
+            hv0,
+            hv1,
+            hv2,
+            hv3,
+            self.ramp,
+            self.ramv,
+            self.aux[0],
+            self.aux[1],
+            self.aux[2],
+            self.aux[3],
+            self.aux[4],
+            self.aux[5],
+            self.aux[6],
+            self.aux[7],
+            self.aux[8],
+            self.aux[9],
+            self.aux[10],
+            self.aux[11],
+            self.aux[12],
+            self.aux[13],
+            self.aux[14],
+            self.aux[15],
+        ])
     }
 
     /// Jump-stack pointer
-    pub fn jsp(&self) -> BWord {
+    fn jsp(&self) -> BWord {
         let height = self.jump_stack.len();
         if height == 0 {
             0.into()
@@ -388,7 +456,7 @@ impl<'pgm> VMState<'pgm> {
     }
 
     /// Jump-stack origin
-    pub fn jso(&self) -> BWord {
+    fn jso(&self) -> BWord {
         self.jump_stack
             .last()
             .map(|(o, _d)| *o)
@@ -396,7 +464,7 @@ impl<'pgm> VMState<'pgm> {
     }
 
     /// Jump-stack destination
-    pub fn jsd(&self) -> BWord {
+    fn jsd(&self) -> BWord {
         self.jump_stack
             .last()
             .map(|(_o, d)| *d)
@@ -436,6 +504,7 @@ impl<'pgm> VMState<'pgm> {
             .copied()
     }
 
+    // FIXME: Use instruction.arg() instead; see .to_arr()'s `let nia = ...`.
     fn ci_plus_1(&self) -> Result<Instruction, Box<dyn Error>> {
         self.program
             .get(self.instruction_pointer + 1)
@@ -580,7 +649,6 @@ mod vm_state_tests {
     use super::super::op_stack::OP_STACK_REG_COUNT;
     use super::*;
     use crate::shared_math::stark::triton::instruction::sample_programs;
-    use crate::shared_math::stark::triton::vm::Program;
 
     // Property: All instructions increase the cycle count by 1.
     // Property: Most instructions increase the instruction pointer by 1.

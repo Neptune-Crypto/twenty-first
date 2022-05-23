@@ -91,17 +91,3 @@ impl Table<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
 }
 
 impl ExtensionTable<FULL_WIDTH> for ExtProcessorTable {}
-
-#[cfg(test)]
-mod processor_table_tests {
-    use super::*;
-
-    #[test]
-    fn initialise_table_test() {
-        // 1. Execute program
-
-        // 2. Convert to table
-        // 3. Extract constraints
-        // 4. Check constraints
-    }
-}

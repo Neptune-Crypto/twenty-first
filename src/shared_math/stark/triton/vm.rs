@@ -3,9 +3,13 @@ use rand::Rng;
 use super::instruction::{parse, Instruction};
 use super::state::{VMState, AUX_REGISTER_COUNT};
 use super::stdio::{InputStream, OutputStream, VecStream};
+use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_xlix::{self, RescuePrimeXlix};
 use std::error::Error;
 use std::fmt::Display;
+use std::io::Cursor;
+
+type BWord = BFieldElement;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Program {
@@ -19,11 +23,39 @@ impl Display for Program {
             writeln!(f, "{}", instruction)?;
 
             // Skip duplicate placeholder used for aligning instructions and instruction_pointer in VM.
-            if matches!(instruction, Instruction::Push(_)) {
+            for _ in 1..instruction.size() {
                 stream.next();
             }
         }
         Ok(())
+    }
+}
+
+pub struct SkippyIter {
+    cursor: Cursor<Vec<Instruction>>,
+}
+
+impl Iterator for SkippyIter {
+    type Item = Instruction;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let pos = self.cursor.position();
+        let instructions = self.cursor.get_ref();
+        let instruction = instructions[pos as usize];
+        self.cursor.set_position(pos + instruction.size() as u64);
+
+        Some(instruction)
+    }
+}
+
+impl IntoIterator for Program {
+    type Item = Instruction;
+
+    type IntoIter = SkippyIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let cursor = Cursor::new(self.instructions);
+        SkippyIter { cursor }
     }
 }
 
@@ -65,6 +97,34 @@ impl Program {
         (trace, stdout.to_vec(), err)
     }
 
+    pub fn run_trace(
+        &self,
+        input: &[u8],
+    ) -> (Vec<Vec<BFieldElement>>, Vec<u8>, Option<Box<dyn Error>>) {
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(input);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = rescue_prime_xlix::neptune_params();
+
+        let mut cur_state = VMState::new(self);
+        let mut trace = vec![cur_state.to_arr().unwrap()];
+
+        while !cur_state.is_final() {
+            if let Err(err) = cur_state.step_mut(&mut rng, &mut stdin, &mut stdout, &rescue_prime) {
+                return (trace, stdout.to_vec(), Some(err));
+            }
+
+            let cur_state_arr = cur_state.to_arr();
+            if let Err(err) = cur_state_arr {
+                return (trace, stdout.to_vec(), Some(err));
+            }
+
+            trace.push(cur_state_arr.unwrap());
+        }
+
+        (trace, stdout.to_vec(), None)
+    }
+
     pub fn run<R, In, Out>(
         &self,
         rng: &mut R,
@@ -103,6 +163,9 @@ impl Program {
 
 #[cfg(test)]
 mod triton_vm_tests {
+    use crate::shared_math::stark::triton::instruction::sample_programs;
+    use crate::shared_math::stark::triton::table::base_matrix::BaseMatrices;
+
     use super::Instruction::*;
     use super::*;
 
@@ -111,5 +174,78 @@ mod triton_vm_tests {
         let instructions = vec![Push(2.into()), Push(2.into()), Add];
         let program = Program::from_instr(&instructions);
         let _bla = program.run_stdio();
+    }
+
+    #[test]
+    fn initialise_table_test() {
+        // 1. Execute program
+        let code = sample_programs::GCD_42_56;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+        let (trace, _out, _err) = program.run_with_input(&[]);
+
+        println!("{}", program);
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+
+        // 2. Convert trace to base matrices
+
+        // 3. Extract constraints
+        // 4. Check constraints
+    }
+
+    fn to_base_matrices(program: Program, trace: &[VMState]) -> BaseMatrices {
+        let mut base_matrices = BaseMatrices::default();
+
+        // 1. Fill instruction_matrix with program
+        let mut program_index: BWord = BWord::ring_zero();
+        let mut iter = program.into_iter();
+        let mut current_instruction = iter.next().unwrap();
+
+        while let Some(next) = iter.next() {
+            let current_opcode: BFieldElement = current_instruction.opcode().into();
+
+            if let Some(instruction_arg) = current_instruction.arg() {
+                base_matrices.instruction_matrix.push([
+                    program_index,
+                    current_opcode,
+                    instruction_arg,
+                ]);
+                program_index.increment();
+
+                let next_opcode: BFieldElement = next.opcode().into();
+                base_matrices.instruction_matrix.push([
+                    program_index,
+                    instruction_arg,
+                    next_opcode,
+                ]);
+                program_index.increment();
+            } else {
+                let next_opcode: BFieldElement = next.opcode().into();
+                base_matrices
+                    .instruction_matrix
+                    .push([program_index, current_opcode, next_opcode]);
+                program_index.increment();
+            }
+
+            current_instruction = next;
+        }
+
+        // 1.a. Add a terminating zero line
+        let last_instruction_pointer = program_index;
+        let last_instruction = current_instruction.opcode().into();
+        let zero = BWord::ring_zero();
+        base_matrices
+            .instruction_matrix
+            .push([last_instruction_pointer, last_instruction, zero]);
+
+        // 2. Populate all tables with execution trace
+        for row in trace {
+            // 2.a. processor_matrix.push(vmstate.to_arr())
+        }
+
+        base_matrices
     }
 }

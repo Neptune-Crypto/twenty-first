@@ -1,5 +1,6 @@
-use super::ord_n::{Ord16, Ord4, Ord4::*};
+use super::ord_n::{Ord16, Ord4, Ord4::*, Ord6};
 use crate::shared_math::b_field_element::BFieldElement;
+use num_traits::Zero;
 use std::error::Error;
 use std::fmt::Display;
 use std::str::SplitWhitespace;
@@ -133,8 +134,8 @@ impl Display for Instruction {
 
 impl Instruction {
     /// Assign a unique positive integer to each `Instruction`.
-    pub fn opcode(&self) -> Option<u32> {
-        let value = match self {
+    pub fn opcode(&self) -> u32 {
+        match self {
             // OpStack manipulation
             Pop => 1,
             Push(_) => 2,
@@ -181,9 +182,11 @@ impl Instruction {
             // Read/write
             ReadIo => 71,
             WriteIo => 70,
-        };
+        }
+    }
 
-        Some(value)
+    pub fn opcode_b(&self) -> BFieldElement {
+        self.opcode().into()
     }
 
     pub fn size(&self) -> usize {
@@ -227,6 +230,57 @@ impl Instruction {
             ReadIo => 1,
         }
     }
+
+    /// Get the i'th instruction bit
+    pub fn ib(&self, arg: Ord6) -> BFieldElement {
+        let opcode = self.opcode();
+        let bit_number: usize = arg.into();
+        let bit_mask: u32 = 1 << bit_number;
+
+        (opcode & bit_mask).into()
+    }
+
+    pub fn hv(&self, bit: Ord4) -> BFieldElement {
+        match self {
+            Dup(arg) => hv_calc(arg.into(), bit.into()),
+            Swap(arg) => hv_calc(arg.into(), bit.into()),
+            Squeeze(arg) => hv_calc(arg.into(), bit.into()),
+            Absorb(arg) => hv_calc(arg.into(), bit.into()),
+            _ => BFieldElement::ring_zero(),
+        }
+    }
+
+    pub fn arg(&self) -> Option<BFieldElement> {
+        match self {
+            // Double-word instructions (instructions that take arguments)
+            Push(arg) => Some(*arg),
+            Dup(arg) => Some(ord4_to_bfe(arg)),
+            Swap(arg) => Some(ord4_to_bfe(arg)),
+            Call(arg) => Some(*arg),
+            Squeeze(arg) => Some(ord16_to_bfe(arg)),
+            Absorb(arg) => Some(ord16_to_bfe(arg)),
+            _ => None,
+        }
+    }
+}
+
+fn hv_calc(opcode_arg: u32, bit_number: usize) -> BFieldElement {
+    let bit_mask: u32 = 1 << bit_number;
+    if (opcode_arg & bit_mask).is_zero() {
+        BWord::ring_zero()
+    } else {
+        BWord::ring_one()
+    }
+}
+
+fn ord4_to_bfe(n: &Ord4) -> BFieldElement {
+    let n: u32 = n.into();
+    n.into()
+}
+
+fn ord16_to_bfe(n: &Ord16) -> BFieldElement {
+    let n: u32 = n.into();
+    n.into()
 }
 
 #[derive(Debug)]
