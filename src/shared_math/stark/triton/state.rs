@@ -3,6 +3,7 @@ use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
 use super::ord_n::{Ord4::*, Ord6::*, Ord8::*};
 use super::stdio::{InputStream, OutputStream};
+use super::table::processor_table::{self, BASE_WIDTH};
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
@@ -364,7 +365,7 @@ impl<'pgm> VMState<'pgm> {
         Ok(())
     }
 
-    pub fn to_arr(&self) -> Result<Vec<BFieldElement>, Box<dyn Error>> {
+    pub fn to_arr(&self) -> Result<[BFieldElement; processor_table::BASE_WIDTH], Box<dyn Error>> {
         let current_instruction = self.current_instruction()?;
 
         let clk = self.cycle_count.into();
@@ -395,7 +396,7 @@ impl<'pgm> VMState<'pgm> {
         let hv2 = current_instruction.hv(N2);
         let hv3 = current_instruction.hv(N3);
 
-        Ok(vec![
+        Ok([
             clk,
             ip,
             ci,

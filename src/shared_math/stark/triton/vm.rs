@@ -3,6 +3,8 @@ use rand::Rng;
 use super::instruction::{parse, Instruction};
 use super::state::{VMState, AUX_REGISTER_COUNT};
 use super::stdio::{InputStream, OutputStream, VecStream};
+use super::table::base_matrix::BaseMatrices;
+use super::table::processor_table;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_xlix::{self, RescuePrimeXlix};
 use std::error::Error;
@@ -97,32 +99,37 @@ impl Program {
         (trace, stdout.to_vec(), err)
     }
 
-    pub fn run_trace(
+    pub fn run_trace<R, In, Out>(
         &self,
-        input: &[u8],
-    ) -> (Vec<Vec<BFieldElement>>, Vec<u8>, Option<Box<dyn Error>>) {
-        let mut rng = rand::thread_rng();
-        let mut stdin = VecStream::new(input);
-        let mut stdout = VecStream::new(&[]);
-        let rescue_prime = rescue_prime_xlix::neptune_params();
-
+        rng: &mut R,
+        stdin: &mut In,
+        stdout: &mut Out,
+        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
+    ) -> (BaseMatrices, Option<Box<dyn Error>>)
+    where
+        R: Rng,
+        In: InputStream,
+        Out: OutputStream,
+    {
         let mut cur_state = VMState::new(self);
-        let mut trace = vec![cur_state.to_arr().unwrap()];
+        let mut base_matrices = BaseMatrices::default();
+
+        self.initialize_instruction_matrix(&mut base_matrices);
 
         while !cur_state.is_final() {
-            if let Err(err) = cur_state.step_mut(&mut rng, &mut stdin, &mut stdout, &rescue_prime) {
-                return (trace, stdout.to_vec(), Some(err));
+            if let Err(err) = cur_state.step_mut(rng, stdin, stdout, rescue_prime) {
+                return (base_matrices, Some(err));
             }
 
             let cur_state_arr = cur_state.to_arr();
             if let Err(err) = cur_state_arr {
-                return (trace, stdout.to_vec(), Some(err));
+                return (base_matrices, Some(err));
             }
 
-            trace.push(cur_state_arr.unwrap());
+            base_matrices.processor_matrix.push(cur_state_arr.unwrap());
         }
 
-        (trace, stdout.to_vec(), None)
+        (base_matrices, None)
     }
 
     pub fn run<R, In, Out>(
@@ -152,51 +159,46 @@ impl Program {
         (trace, None)
     }
 
-    pub fn len(&self) -> usize {
-        self.instructions.len()
-    }
+    fn initialize_instruction_matrix(&self, base_matrices: &mut BaseMatrices) {
+        // Fixme:  Change `into_iter()` to `iter()`.
+        let mut iter = self.clone().into_iter();
+        let mut current_instruction = iter.next().unwrap();
+        let mut program_index: BWord = BWord::ring_zero();
 
-    pub fn is_empty(&self) -> bool {
-        self.instructions.is_empty()
-    }
-}
+        while let Some(next) = iter.next() {
+            let current_opcode: BFieldElement = current_instruction.opcode().into();
 
-#[cfg(test)]
-mod triton_vm_tests {
-    use crate::shared_math::stark::triton::instruction::sample_programs;
-    use crate::shared_math::stark::triton::table::base_matrix::BaseMatrices;
+            if let Some(instruction_arg) = current_instruction.arg() {
+                base_matrices.instruction_matrix.push([
+                    program_index,
+                    current_opcode,
+                    instruction_arg,
+                ]);
+                program_index.increment();
 
-    use super::Instruction::*;
-    use super::*;
+                let next_opcode: BFieldElement = next.opcode().into();
+                base_matrices.instruction_matrix.push([
+                    program_index,
+                    instruction_arg,
+                    next_opcode,
+                ]);
+                program_index.increment();
+            } else {
+                let next_opcode: BFieldElement = next.opcode().into();
+                base_matrices
+                    .instruction_matrix
+                    .push([program_index, current_opcode, next_opcode]);
+                program_index.increment();
+            }
 
-    #[test]
-    fn vm_run_test() {
-        let instructions = vec![Push(2.into()), Push(2.into()), Add];
-        let program = Program::from_instr(&instructions);
-        let _bla = program.run_stdio();
-    }
-
-    #[test]
-    fn initialise_table_test() {
-        // 1. Execute program
-        let code = sample_programs::GCD_42_56;
-        let program = Program::from_code(code).unwrap();
-
-        println!("{}", program);
-        let (trace, _out, _err) = program.run_with_input(&[]);
-
-        println!("{}", program);
-        for state in trace.iter() {
-            println!("{}", state);
+            current_instruction = next;
         }
-
-        // 2. Convert trace to base matrices
-
-        // 3. Extract constraints
-        // 4. Check constraints
     }
 
-    fn to_base_matrices(program: Program, trace: &[VMState]) -> BaseMatrices {
+    fn to_base_matrices(
+        program: Program,
+        trace: &[[BFieldElement; processor_table::BASE_WIDTH]],
+    ) -> BaseMatrices {
         let mut base_matrices = BaseMatrices::default();
 
         // 1. Fill instruction_matrix with program
@@ -244,8 +246,54 @@ mod triton_vm_tests {
         // 2. Populate all tables with execution trace
         for row in trace {
             // 2.a. processor_matrix.push(vmstate.to_arr())
+            base_matrices.processor_matrix.push(*row);
         }
 
         base_matrices
+    }
+
+    pub fn len(&self) -> usize {
+        self.instructions.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.instructions.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod triton_vm_tests {
+    use crate::shared_math::stark::triton::instruction::sample_programs;
+    use crate::shared_math::stark::triton::table::base_matrix::BaseMatrices;
+    use crate::shared_math::stark::triton::table::processor_table;
+
+    use super::Instruction::*;
+    use super::*;
+
+    #[test]
+    fn vm_run_test() {
+        let instructions = vec![Push(2.into()), Push(2.into()), Add];
+        let program = Program::from_instr(&instructions);
+        let _bla = program.run_stdio();
+    }
+
+    #[test]
+    fn initialise_table_test() {
+        // 1. Execute program
+        let code = sample_programs::GCD_42_56;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+        let (trace, _out, _err) = program.run_with_input(&[]);
+
+        println!("{}", program);
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+
+        // 2. Convert trace to base matrices
+
+        // 3. Extract constraints
+        // 4. Check constraints
     }
 }

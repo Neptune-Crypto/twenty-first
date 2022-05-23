@@ -3,7 +3,7 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::x_field_element::XFieldElement;
 
-pub const BASE_WIDTH: usize = 7;
+pub const BASE_WIDTH: usize = 46;
 pub const FULL_WIDTH: usize = 11;
 
 pub struct ProcessorTable {
