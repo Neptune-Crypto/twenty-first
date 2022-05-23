@@ -478,7 +478,7 @@ where
     ///    leafs, and the new leaf values
     /// Returns those indices into the slice of membership proofs that were updated.
     pub fn batch_update_from_batch_leaf_mutation(
-        membership_proofs: &mut [Self],
+        membership_proofs: &mut [&mut Self],
         mut authentication_paths_and_leafs: Vec<(MembershipProof<H>, H::Digest)>,
     ) -> Vec<usize> {
         // Calculate all derivable paths
@@ -758,7 +758,7 @@ mod mmr_membership_proof_test {
                 .zip(leaf_hashes_final.clone().into_iter())
                 .collect();
         let changed_values = MembershipProof::batch_update_from_batch_leaf_mutation(
-            &mut membership_proofs,
+            &mut membership_proofs.iter_mut().collect::<Vec<_>>(),
             membership_proofs_init_and_new_leafs,
         );
 
@@ -824,7 +824,7 @@ mod mmr_membership_proof_test {
                 .zip(new_leafs.clone().into_iter())
                 .collect();
             let updated_mp_indices_0 = MembershipProof::batch_update_from_batch_leaf_mutation(
-                &mut own_membership_proofs,
+                &mut own_membership_proofs.iter_mut().collect::<Vec<_>>(),
                 mutation_argument.clone(),
             );
 
