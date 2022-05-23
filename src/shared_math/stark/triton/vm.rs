@@ -99,7 +99,7 @@ impl Program {
         (trace, stdout.to_vec(), err)
     }
 
-    pub fn run_trace<R, In, Out>(
+    pub fn simulate<R, In, Out>(
         &self,
         rng: &mut R,
         stdin: &mut In,
@@ -116,10 +116,11 @@ impl Program {
 
         self.initialize_instruction_matrix(&mut base_matrices);
 
-        while !cur_state.is_final() {
-            if let Err(err) = cur_state.step_mut(rng, stdin, stdout, rescue_prime) {
-                return (base_matrices, Some(err));
-            }
+        loop {
+            let written_word = match cur_state.step_mut(rng, stdin, rescue_prime) {
+                Err(err) => return (base_matrices, Some(err)),
+                Ok(written_word) => written_word,
+            };
 
             let processor_row = cur_state.to_processor_arr();
             if let Err(err) = processor_row {
@@ -131,7 +132,26 @@ impl Program {
 
             let instruction_row = cur_state.to_instruction_arr().unwrap();
             base_matrices.instruction_matrix.push(instruction_row);
+
+            // 1. update input matrix on input
+            if let Ok(Some(word)) = cur_state.get_readio_arg() {
+                base_matrices.input_matrix.push([word])
+            }
+
+            // 2. update output matrix on output
+            if let Some(word) = written_word {
+                base_matrices.output_matrix.push([word]);
+            }
+
+            if !cur_state.is_final() {
+                break;
+            }
         }
+
+        // todo: Convert to method
+        base_matrices
+            .instruction_matrix
+            .sort_by_key(|row| row[0].value());
 
         (base_matrices, None)
     }
@@ -152,7 +172,7 @@ impl Program {
         let mut prev_state = trace.last().unwrap();
 
         while !prev_state.is_final() {
-            let next_state = prev_state.step(rng, stdin, stdout, rescue_prime);
+            let next_state = prev_state.step(rng, stdin, rescue_prime);
             if let Err(err) = next_state {
                 return (trace, Some(err));
             }

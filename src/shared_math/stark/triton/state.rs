@@ -83,40 +83,37 @@ impl<'pgm> VMState<'pgm> {
     }
 
     /// Given a state, compute the next state purely.
-    pub fn step<R, In, Out>(
+    pub fn step<R, In>(
         &self,
         rng: &mut R,
         stdin: &mut In,
-        stdout: &mut Out,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
-    ) -> Result<VMState<'pgm>, Box<dyn Error>>
+    ) -> Result<(VMState<'pgm>, Option<BFieldElement>), Box<dyn Error>>
     where
         R: Rng,
         In: InputStream,
-        Out: OutputStream,
     {
         let mut next_state = self.clone();
-        next_state.step_mut(rng, stdin, stdout, rescue_prime)?;
-        Ok(next_state)
+        let written_word = next_state.step_mut(rng, stdin, rescue_prime)?;
+        Ok((next_state, written_word))
     }
 
     /// Perform the state transition as a mutable operation on `self`.
     ///
     /// This function is called from `step`.
-    pub fn step_mut<R, In, Out>(
+    pub fn step_mut<R, In>(
         &mut self,
         rng: &mut R,
         stdin: &mut In,
-        stdout: &mut Out,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
-    ) -> Result<(), Box<dyn Error>>
+    ) -> Result<Option<BFieldElement>, Box<dyn Error>>
     where
         R: Rng,
         In: InputStream,
-        Out: OutputStream,
     {
         // All instructions increase the cycle count
         self.cycle_count += 1;
+        let mut written_word = None;
 
         let instruction = self.current_instruction()?;
         match instruction {
@@ -346,8 +343,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             WriteIo => {
-                let codepoint: u32 = self.op_stack.pop()?.try_into()?;
-                let _written = stdout.write_u32_be(codepoint)?;
+                written_word = Some(self.op_stack.pop()?);
                 self.instruction_pointer += 1;
             }
 
@@ -363,7 +359,7 @@ impl<'pgm> VMState<'pgm> {
             return vm_err(OpStackTooShallow);
         }
 
-        Ok(())
+        Ok(written_word)
     }
 
     pub fn to_instruction_arr(
@@ -558,6 +554,15 @@ impl<'pgm> VMState<'pgm> {
             }
         }
         true
+    }
+
+    pub fn get_readio_arg(&self) -> Result<Option<BFieldElement>, Box<dyn Error>> {
+        let current_instruction = self.current_instruction()?;
+        if matches!(current_instruction, ReadIo) {
+            Ok(Some(self.op_stack.safe_peek(ST0)))
+        } else {
+            Ok(None)
+        }
     }
 }
 
