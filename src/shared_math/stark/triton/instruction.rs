@@ -180,8 +180,8 @@ impl Instruction {
             XbMul => 53,
 
             // Read/write
-            ReadIo => 71,
-            WriteIo => 70,
+            ReadIo => 70,
+            WriteIo => 71,
         }
     }
 
@@ -602,7 +602,7 @@ pub mod sample_programs {
         push 0
         eq
         skiz
-        call 33
+        call 31
         dup1
         dup1
         div
@@ -610,7 +610,7 @@ pub mod sample_programs {
         swap3
         pop
         pop
-        call 12
+        call 10
         pop
         write_io
         halt

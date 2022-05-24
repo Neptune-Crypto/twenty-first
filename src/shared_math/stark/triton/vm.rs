@@ -255,20 +255,19 @@ mod triton_vm_tests {
         println!("{}", program);
 
         let mut rng = rand::thread_rng();
-        let mut stdin = VecStream::new(&[]);
+        let mut stdin = VecStream::new_b(&[42.into(), 56.into()]);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, _err) =
+        let (base_matrices, err) =
             program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
 
-        println!("{:?}", base_matrices);
-        /*
-        println!("{}", program);
-        for state in trace.iter() {
-            println!("{}", state);
+        println!("Err: {:?}", err);
+        for row in base_matrices.processor_matrix {
+            println!("{}", ProcessorMatrixRow { row });
         }
-        */
+
+        println!("{:?}", base_matrices.output_matrix)
 
         // 2. Convert trace to base matrices
 
@@ -296,5 +295,27 @@ mod triton_vm_tests {
         for row in base_matrices.processor_matrix {
             println!("{}", ProcessorMatrixRow { row });
         }
+    }
+
+    #[test]
+    fn simulate_gcd_test() {
+        let code = sample_programs::GCD_X_Y;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new_b(&[42.into(), 56.into()]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+
+        assert!(err.is_none());
+        let expected = BWord::new(14);
+        let actual = base_matrices.output_matrix[0][0];
+
+        assert_eq!(expected, actual);
     }
 }

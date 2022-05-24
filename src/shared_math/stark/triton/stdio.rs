@@ -1,5 +1,6 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use byteorder::{BigEndian, ReadBytesExt};
+use itertools::Itertools;
 use std::io::{Cursor, Error, Write};
 use std::io::{Stdin, Stdout};
 
@@ -34,6 +35,14 @@ impl VecStream {
         VecStream {
             cursor: Cursor::new(bytes.to_vec()),
         }
+    }
+
+    pub fn new_b(bfes: &[BFieldElement]) -> Self {
+        let bytes: Vec<u8> = bfes
+            .iter()
+            .map(|bfe| bfe.value().to_be_bytes().to_vec())
+            .concat();
+        Self::new(&bytes)
     }
 
     pub fn to_vec(&self) -> Vec<u8> {
