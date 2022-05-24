@@ -1,4 +1,4 @@
-use super::ord_n::{Ord16, Ord4, Ord4::*, Ord6};
+use super::ord_n::{Ord16, Ord16::*, Ord4, Ord4::*, Ord6};
 use crate::shared_math::b_field_element::BFieldElement;
 use num_traits::Zero;
 use std::error::Error;
@@ -328,7 +328,7 @@ fn parse_token(
         "swap1" => vec![Swap(N0)],
         "swap2" => vec![Swap(N1)],
         "swap3" => vec![Swap(N2)],
-        "swap4" => vec![Swap(N2)],
+        "swap4" => vec![Swap(N3)],
 
         // Control flow
         "skiz" => vec![Skiz],
@@ -345,8 +345,38 @@ fn parse_token(
         // Auxiliary register instructions
         "xlix" => vec![Xlix],
         "clearall" => vec![ClearAll],
-        "squeeze" => vec![Squeeze(parse_arg(tokens)?)],
-        "absorb" => vec![Absorb(parse_arg(tokens)?)],
+        "squeeze0" => vec![Squeeze(A0)],
+        "squeeze1" => vec![Squeeze(A1)],
+        "squeeze2" => vec![Squeeze(A2)],
+        "squeeze3" => vec![Squeeze(A3)],
+        "squeeze4" => vec![Squeeze(A4)],
+        "squeeze5" => vec![Squeeze(A5)],
+        "squeeze6" => vec![Squeeze(A6)],
+        "squeeze7" => vec![Squeeze(A7)],
+        "squeeze8" => vec![Squeeze(A8)],
+        "squeeze9" => vec![Squeeze(A9)],
+        "squeeze10" => vec![Squeeze(A10)],
+        "squeeze11" => vec![Squeeze(A11)],
+        "squeeze12" => vec![Squeeze(A12)],
+        "squeeze13" => vec![Squeeze(A13)],
+        "squeeze14" => vec![Squeeze(A14)],
+        "squeeze15" => vec![Squeeze(A15)],
+        "absorb0" => vec![Absorb(A0)],
+        "absorb1" => vec![Absorb(A1)],
+        "absorb2" => vec![Absorb(A2)],
+        "absorb3" => vec![Absorb(A3)],
+        "absorb4" => vec![Absorb(A4)],
+        "absorb5" => vec![Absorb(A5)],
+        "absorb6" => vec![Absorb(A6)],
+        "absorb7" => vec![Absorb(A7)],
+        "absorb8" => vec![Absorb(A8)],
+        "absorb9" => vec![Absorb(A9)],
+        "absorb10" => vec![Absorb(A10)],
+        "absorb11" => vec![Absorb(A11)],
+        "absorb12" => vec![Absorb(A12)],
+        "absorb13" => vec![Absorb(A13)],
+        "absorb14" => vec![Absorb(A14)],
+        "absorb15" => vec![Absorb(A15)],
         "cmp_digest" => vec![CmpDigest],
 
         // Arithmetic on stack instructions
@@ -361,7 +391,7 @@ fn parse_token(
         "reverse" => vec![Reverse],
         "div" => vec![Div],
         "xxadd" => vec![XxAdd],
-        "xxmul" => vec![XbMul],
+        "xxmul" => vec![XxMul],
         "xinv" => vec![XInv],
         "xbmul" => vec![XbMul],
 
@@ -375,7 +405,7 @@ fn parse_token(
     Ok(instruction)
 }
 
-fn parse_arg(tokens: &mut SplitWhitespace) -> Result<Ord16, Box<dyn Error>> {
+fn _parse_arg(tokens: &mut SplitWhitespace) -> Result<Ord16, Box<dyn Error>> {
     let constant_s = tokens.next().ok_or(UnexpectedEndOfStream)?;
     let constant_n = constant_s.parse::<usize>()?;
     let constant_arg = constant_n.try_into()?;
@@ -397,7 +427,8 @@ fn parse_elem(tokens: &mut SplitWhitespace) -> Result<BFieldElement, Box<dyn Err
 }
 pub mod sample_programs {
     use super::super::vm::Program;
-    use super::Instruction::*;
+    use super::Instruction::{self, *};
+    use super::{Ord16::*, Ord4::*};
 
     pub const PUSH_PUSH_ADD_POP_S: &str = "
         push 1
@@ -529,92 +560,255 @@ pub mod sample_programs {
 ";
 
     pub const FIBONACCI_LT: &str = "
-push 0
-push 1
-push 7
-dup0
-push 2
-lt
-skiz
-call 29
-call 16
-call 38
-swap1
-push 18446744069414584320
-add
-dup0
-skiz
-recurse
-call 36
-dup0
-push 0
-eq
-skiz
-pop
-pop
-halt
-dup2
-dup2
-add
-return
-";
+        push 0
+        push 1
+        push 7
+        dup0
+        push 2
+        lt
+        skiz
+        call 29
+        call 16
+        call 38
+        swap1
+        push 18446744069414584320
+        add
+        dup0
+        skiz
+        recurse
+        call 36
+        dup0
+        push 0
+        eq
+        skiz
+        pop
+        pop
+        halt
+        dup2
+        dup2
+        add
+        return
+    ";
 
-    //This cannot not print because we need to itoa() before write_io.
-    pub const GCD_42_56: &str = "
-push 42
-push 56
-dup1
-dup1
-lt
-skiz
-swap1
-dup0
-push 0
-eq
-skiz
-call 33
-dup1
-dup1
-div
-swap2
-swap3
-pop
-pop
-call 12
-pop
-write_io
-halt
-";
+    pub const GCD_X_Y: &str = "
+        read_io
+        read_io
+        dup1
+        dup1
+        lt
+        skiz
+        swap1
+        dup0
+        push 0
+        eq
+        skiz
+        call 33
+        dup1
+        dup1
+        div
+        swap2
+        swap3
+        pop
+        pop
+        call 12
+        pop
+        write_io
+        halt
+    ";
 
     //This cannot not print because we need to itoa() before write_io.
     pub const XGCD: &str = "
-push 1
-push 0
-push 0
-push 1
-push 240
-push 46
-dup1
-dup1
-lt
-skiz
-swap1
-dup0
-push 0
-eq
-skiz
-call 33
-dup1
-dup1
-div
-swap2
-swap3
-pop
-pop
-call 12
-pop
-halt
-";
+        push 1
+        push 0
+        push 0
+        push 1
+        push 240
+        push 46
+        dup1
+        dup1
+        lt
+        skiz
+        swap1
+        dup0
+        push 0
+        eq
+        skiz
+        call 33
+        dup1
+        dup1
+        div
+        swap2
+        swap3
+        pop
+        pop
+        call 12
+        pop
+        halt
+    ";
+
+    pub const ALL_INSTRUCTIONS: &str = "
+        pop push 42 pad dup0 dup1 dup2 dup3 swap1 swap2 swap3 swap4 skiz
+        call 0 return recurse assert halt read_mem write_mem xlix clearall
+        squeeze0 squeeze1 squeeze2 squeeze3 squeeze4 squeeze5 squeeze6
+        squeeze7 squeeze8 squeeze9 squeeze10 squeeze11 squeeze12 squeeze13
+        squeeze14 squeeze15 absorb0 absorb1 absorb2 absorb3 absorb4 absorb5
+        absorb6 absorb7 absorb8 absorb9 absorb10 absorb11 absorb12 absorb13
+        absorb14 absorb15 cmp_digest add mul inv split eq lt and xor reverse
+        div xxadd xxmul xinv xbmul read_io write_io
+    ";
+
+    pub fn all_instructions() -> Vec<Instruction> {
+        vec![
+            Pop,
+            Push(42.into()),
+            Pad,
+            Dup(N0),
+            Dup(N1),
+            Dup(N2),
+            Dup(N3),
+            Swap(N0),
+            Swap(N1),
+            Swap(N2),
+            Swap(N3),
+            Skiz,
+            Call(0.into()),
+            Return,
+            Recurse,
+            Assert,
+            Halt,
+            ReadMem,
+            WriteMem,
+            Xlix,
+            ClearAll,
+            Squeeze(A0),
+            Squeeze(A1),
+            Squeeze(A2),
+            Squeeze(A3),
+            Squeeze(A4),
+            Squeeze(A5),
+            Squeeze(A6),
+            Squeeze(A7),
+            Squeeze(A8),
+            Squeeze(A9),
+            Squeeze(A10),
+            Squeeze(A11),
+            Squeeze(A12),
+            Squeeze(A13),
+            Squeeze(A14),
+            Squeeze(A15),
+            Absorb(A0),
+            Absorb(A1),
+            Absorb(A2),
+            Absorb(A3),
+            Absorb(A4),
+            Absorb(A5),
+            Absorb(A6),
+            Absorb(A7),
+            Absorb(A8),
+            Absorb(A9),
+            Absorb(A10),
+            Absorb(A11),
+            Absorb(A12),
+            Absorb(A13),
+            Absorb(A14),
+            Absorb(A15),
+            CmpDigest,
+            Add,
+            Mul,
+            Inv,
+            Split,
+            Eq,
+            Lt,
+            And,
+            Xor,
+            Reverse,
+            Div,
+            XxAdd,
+            XxMul,
+            XInv,
+            XbMul,
+            ReadIo,
+            WriteIo,
+        ]
+    }
+
+    pub fn all_instructions_displayed() -> Vec<String> {
+        vec![
+            "pop",
+            "push 42",
+            "pad",
+            "dup0",
+            "dup1",
+            "dup2",
+            "dup3",
+            "swap1",
+            "swap2",
+            "swap3",
+            "swap4",
+            "skiz",
+            "call 0",
+            "return",
+            "recurse",
+            "assert",
+            "halt",
+            "read_mem",
+            "write_mem",
+            "xlix",
+            "clearall",
+            "squeeze0",
+            "squeeze1",
+            "squeeze2",
+            "squeeze3",
+            "squeeze4",
+            "squeeze5",
+            "squeeze6",
+            "squeeze7",
+            "squeeze8",
+            "squeeze9",
+            "squeeze10",
+            "squeeze11",
+            "squeeze12",
+            "squeeze13",
+            "squeeze14",
+            "squeeze15",
+            "absorb0",
+            "absorb1",
+            "absorb2",
+            "absorb3",
+            "absorb4",
+            "absorb5",
+            "absorb6",
+            "absorb7",
+            "absorb8",
+            "absorb9",
+            "absorb10",
+            "absorb11",
+            "absorb12",
+            "absorb13",
+            "absorb14",
+            "absorb15",
+            "cmp_digest",
+            "add",
+            "mul",
+            "inv",
+            "split",
+            "eq",
+            "lt",
+            "and",
+            "xor",
+            "reverse",
+            "div",
+            "xxadd",
+            "xxmul",
+            "xinv",
+            "xbmul",
+            "read_io",
+            "write_io",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+    }
 }
 
 #[cfg(test)]
@@ -640,5 +834,24 @@ mod instruction_tests {
         let pgm_actual_2 = Program::new(&instructions_2);
 
         assert_eq!(pgm_expected, pgm_actual_2);
+    }
+
+    #[test]
+    fn parse_and_display_each_instruction_test() {
+        let all_instructions = parse(sample_programs::ALL_INSTRUCTIONS);
+        assert!(all_instructions.is_ok());
+
+        let actual = all_instructions.unwrap();
+        let expected = sample_programs::all_instructions();
+
+        assert_eq!(expected, actual);
+
+        for (actual, expected) in actual
+            .iter()
+            .map(|instr| format!("{}", instr))
+            .zip(sample_programs::all_instructions_displayed())
+        {
+            assert_eq!(expected, actual);
+        }
     }
 }

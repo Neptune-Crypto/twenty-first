@@ -4,7 +4,6 @@ use super::instruction::{parse, Instruction};
 use super::state::{VMState, AUX_REGISTER_COUNT};
 use super::stdio::{InputStream, OutputStream, VecStream};
 use super::table::base_matrix::BaseMatrices;
-use super::table::processor_table;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_xlix::{neptune_params, RescuePrimeXlix};
 use std::error::Error;
@@ -126,7 +125,8 @@ impl Program {
             println!("4");
 
             if let Some(word) = written_word {
-                base_matrices.output_matrix.push([word])
+                base_matrices.output_matrix.push([word]);
+                let _written = stdout.write_elem(word);
             }
             println!("5");
 
@@ -192,7 +192,7 @@ impl Program {
         let mut current_instruction = iter.next().unwrap();
         let mut program_index: BWord = BWord::ring_zero();
 
-        while let Some(next_instruction) = iter.next() {
+        for next_instruction in iter {
             let current_opcode: BFieldElement = current_instruction.opcode().into();
 
             if let Some(instruction_arg) = current_instruction.arg() {
@@ -249,7 +249,7 @@ mod triton_vm_tests {
     #[test]
     fn initialise_table_test() {
         // 1. Execute program
-        let code = sample_programs::GCD_42_56;
+        let code = sample_programs::GCD_X_Y;
         let program = Program::from_code(code).unwrap();
 
         println!("{}", program);

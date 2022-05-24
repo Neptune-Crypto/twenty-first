@@ -2,7 +2,7 @@ use super::error::{vm_fail, InstructionError::*};
 use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
 use super::ord_n::{Ord4::*, Ord6::*, Ord8::*};
-use super::stdio::{InputStream, OutputStream};
+use super::stdio::InputStream;
 use super::table::instruction_table;
 use super::table::processor_table;
 use super::vm::Program;
@@ -378,7 +378,8 @@ impl<'pgm> VMState<'pgm> {
         let nia = match current_instruction.arg() {
             None => {
                 let ni = self.next_instruction();
-                ni.map(|instr| instr.opcode_b()).unwrap_or(0.into())
+                ni.map(|instr| instr.opcode_b())
+                    .unwrap_or_else(|_| 0.into())
             }
             Some(bfe) => bfe,
         };
@@ -397,7 +398,8 @@ impl<'pgm> VMState<'pgm> {
         let nia = match current_instruction.arg() {
             None => {
                 let ni = self.next_instruction();
-                ni.map(|instr| instr.opcode_b()).unwrap_or(0.into())
+                ni.map(|instr| instr.opcode_b())
+                    .unwrap_or_else(|_| 0.into())
             }
             Some(bfe) => bfe,
         };
@@ -529,19 +531,11 @@ impl<'pgm> VMState<'pgm> {
             .copied()
     }
 
-    fn next_next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
+    fn _next_next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
         let cur_size = self.current_instruction()?.size();
         let next_size = self.next_instruction()?.size();
         self.program
             .get(self.instruction_pointer + cur_size + next_size)
-            .ok_or_else(|| vm_fail(InstructionPointerOverflow(self.instruction_pointer)))
-            .copied()
-    }
-
-    // FIXME: Use instruction.arg() instead; see .to_arr()'s `let nia = ...`.
-    fn ci_plus_1(&self) -> Result<Instruction, Box<dyn Error>> {
-        self.program
-            .get(self.instruction_pointer + 1)
             .ok_or_else(|| vm_fail(InstructionPointerOverflow(self.instruction_pointer)))
             .copied()
     }
@@ -685,11 +679,11 @@ mod vm_state_tests {
 
     #[test]
     fn run_gcd() {
-        let code = sample_programs::GCD_42_56;
+        let code = sample_programs::GCD_X_Y;
         let program = Program::from_code(code).unwrap();
 
         println!("{}", program);
-        let (trace, _out, _err) = program.run_with_input(&[]);
+        let (trace, _out, _err) = program.run_with_input(&[42.into(), 56.into()]);
 
         println!("{}", program);
         for state in trace.iter() {
@@ -713,7 +707,7 @@ mod vm_state_tests {
             println!("{}", state);
         }
 
-        let last_state = trace.last().unwrap();
+        let _last_state = trace.last().unwrap();
         //assert_eq!(BWord::new(14), last_state.op_stack.st(ST0));
     }
 }
