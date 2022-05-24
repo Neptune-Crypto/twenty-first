@@ -1,4 +1,4 @@
-use super::membership_proof::MembershipProof;
+use super::{membership_proof::MembershipProof, mmr_accumulator::MmrAccumulator};
 use crate::util_types::simple_hasher::Hasher;
 
 pub trait Mmr<H>
@@ -46,4 +46,6 @@ where
         appended_leafs: &[H::Digest],
         leaf_mutations: &[(H::Digest, MembershipProof<H>)],
     ) -> bool;
+
+    fn to_accumulator(&self) -> MmrAccumulator<H>;
 }
