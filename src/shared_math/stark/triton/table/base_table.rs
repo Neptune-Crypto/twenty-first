@@ -29,6 +29,28 @@ pub struct BaseTable<DataPF, const WIDTH: usize> {
     matrix: Vec<[DataPF; WIDTH]>,
 }
 
+impl<DataPF, const WIDTH: usize> BaseTable<DataPF, WIDTH> {
+    pub fn new(
+        name: String,
+        unpadded_height: usize,
+        num_randomizers: usize,
+        omicron: BWord,
+        generator: BWord,
+        order: usize,
+        matrix: Vec<[DataPF; WIDTH]>,
+    ) -> Self {
+        BaseTable::<DataPF, WIDTH> {
+            name,
+            unpadded_height,
+            num_randomizers,
+            omicron,
+            generator,
+            order,
+            matrix,
+        }
+    }
+}
+
 pub trait HasBaseTable<DataPF, const WIDTH: usize> {
     fn new(base: BaseTable<DataPF, WIDTH>) -> Self;
     fn base(&self) -> &BaseTable<DataPF, WIDTH>;

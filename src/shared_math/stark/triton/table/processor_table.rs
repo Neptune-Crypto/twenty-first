@@ -4,7 +4,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const BASE_WIDTH: usize = 46;
-pub const FULL_WIDTH: usize = 11;
+pub const FULL_WIDTH: usize = 11; // FIXME: Should of course be >BASE_WIDTH
 
 pub struct ProcessorTable {
     base: BaseTable<BFieldElement, BASE_WIDTH>,

@@ -248,7 +248,7 @@ mod triton_vm_tests {
 
     #[test]
     fn initialise_table_test() {
-        // 1. Execute program
+        // 1. Parse program
         let code = sample_programs::GCD_X_Y;
         let program = Program::from_code(code).unwrap();
 
@@ -259,6 +259,7 @@ mod triton_vm_tests {
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
+        // 2. Execute program, convert to base matrices
         let (base_matrices, err) =
             program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
 
@@ -268,8 +269,6 @@ mod triton_vm_tests {
         }
 
         println!("{:?}", base_matrices.output_matrix)
-
-        // 2. Convert trace to base matrices
 
         // 3. Extract constraints
         // 4. Check constraints
