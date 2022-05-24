@@ -135,6 +135,10 @@ where
 
         modified_mps
     }
+
+    fn to_accumulator(&self) -> MmrAccumulator<H> {
+        MmrAccumulator::init(self.get_peaks(), self.count_leaves())
+    }
 }
 
 impl<H> ArchivalMmr<H>

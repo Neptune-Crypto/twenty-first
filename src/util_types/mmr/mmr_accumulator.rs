@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::util_types::mmr::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
+use crate::util_types::simple_hasher;
 use crate::{
     util_types::{
         mmr::shared::calculate_new_peaks_from_leaf_mutation,
@@ -20,6 +21,19 @@ use super::{
         right_child_and_height,
     },
 };
+
+impl<H: Hasher> From<ArchivalMmr<H>> for MmrAccumulator<H>
+where
+    u128: ToDigest<<H as simple_hasher::Hasher>::Digest>,
+{
+    fn from(ammr: ArchivalMmr<H>) -> Self {
+        MmrAccumulator {
+            leaf_count: ammr.count_leaves(),
+            peaks: ammr.get_peaks(),
+            _hasher: PhantomData,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct MmrAccumulator<H: Hasher>
@@ -322,6 +336,10 @@ where
 
         modified_membership_proof_indices.dedup();
         modified_membership_proof_indices
+    }
+
+    fn to_accumulator(&self) -> MmrAccumulator<H> {
+        self.to_owned()
     }
 }
 
