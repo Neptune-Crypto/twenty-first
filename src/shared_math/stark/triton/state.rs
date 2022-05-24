@@ -374,15 +374,7 @@ impl<'pgm> VMState<'pgm> {
 
         let ip = (self.instruction_pointer as u32).try_into().unwrap();
         let ci = current_instruction.opcode_b();
-
-        let nia = match current_instruction.arg() {
-            None => {
-                let ni = self.next_instruction();
-                ni.map(|instr| instr.opcode_b())
-                    .unwrap_or_else(|_| 0.into())
-            }
-            Some(bfe) => bfe,
-        };
+        let nia = self.nia();
 
         Ok([ip, ci, nia])
     }
@@ -395,14 +387,7 @@ impl<'pgm> VMState<'pgm> {
         let clk = self.cycle_count.into();
         let ip = (self.instruction_pointer as u32).try_into().unwrap();
         let ci = current_instruction.opcode_b();
-        let nia = match current_instruction.arg() {
-            None => {
-                let ni = self.next_instruction();
-                ni.map(|instr| instr.opcode_b())
-                    .unwrap_or_else(|_| 0.into())
-            }
-            Some(bfe) => bfe,
-        };
+        let nia = self.nia();
         let ib0 = current_instruction.ib(IB0);
         let ib1 = current_instruction.ib(IB1);
         let ib2 = current_instruction.ib(IB2);
@@ -473,6 +458,18 @@ impl<'pgm> VMState<'pgm> {
             self.aux[14],
             self.aux[15],
         ])
+    }
+
+    fn nia(&self) -> BWord {
+        self.current_instruction()
+            .map(|instr| {
+                instr.arg().unwrap_or_else(|| {
+                    self.next_instruction()
+                        .map(|instr| instr.opcode_b())
+                        .unwrap_or_else(|_| 0.into())
+                })
+            })
+            .unwrap_or_else(|_| 0.into())
     }
 
     /// Jump-stack pointer
