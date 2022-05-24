@@ -1,9 +1,29 @@
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::other;
-use crate::shared_math::traits::PrimeField;
+use crate::shared_math::traits::{GetPrimitiveRootOfUnity, PrimeField};
 
 type BWord = BFieldElement;
+
+/// derive a generator with degree og height
+//  Note that this pads the height unlike the brainfuck version.
+//  This should be a method.
+pub fn derive_omicron(unpadded_height: usize) -> BFieldElement {
+    let padded_height = if unpadded_height != 0 {
+        other::roundup_npo2(unpadded_height as u64) as usize
+    } else {
+        0
+    };
+
+    if padded_height == 0 {
+        return BFieldElement::ring_one();
+    }
+
+    BFieldElement::ring_zero()
+        .get_primitive_root_of_unity(padded_height as u64)
+        .0
+        .unwrap()
+}
 
 #[derive(Debug, Clone)]
 pub struct BaseTable<DataPF, const WIDTH: usize> {
@@ -31,7 +51,7 @@ pub struct BaseTable<DataPF, const WIDTH: usize> {
 
 impl<DataPF, const WIDTH: usize> BaseTable<DataPF, WIDTH> {
     pub fn new(
-        name: String,
+        name: &str,
         unpadded_height: usize,
         num_randomizers: usize,
         omicron: BWord,
@@ -40,7 +60,7 @@ impl<DataPF, const WIDTH: usize> BaseTable<DataPF, WIDTH> {
         matrix: Vec<[DataPF; WIDTH]>,
     ) -> Self {
         BaseTable::<DataPF, WIDTH> {
-            name,
+            name: name.to_string(),
             unpadded_height,
             num_randomizers,
             omicron,

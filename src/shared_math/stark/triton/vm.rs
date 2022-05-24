@@ -243,7 +243,8 @@ impl Program {
 mod triton_vm_tests {
     use super::*;
     use crate::shared_math::stark::triton::{
-        instruction::sample_programs, table::base_matrix::ProcessorMatrixRow,
+        instruction::sample_programs,
+        table::{base_matrix::ProcessorMatrixRow, base_table},
     };
 
     #[test]
@@ -268,7 +269,7 @@ mod triton_vm_tests {
             println!("{}", ProcessorMatrixRow { row });
         }
 
-        println!("{:?}", base_matrices.output_matrix)
+        println!("{:?}", base_matrices.output_matrix);
 
         // 3. Extract constraints
         // 4. Check constraints
