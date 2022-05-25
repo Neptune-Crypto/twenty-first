@@ -40,5 +40,6 @@ impl Stark {
         processor_table.pad();
 
         // 3. Create base codeword tables based on those
+        let coded_processor_table = processor_table.codewords();
     }
 }
