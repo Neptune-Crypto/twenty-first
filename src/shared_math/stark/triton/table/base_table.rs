@@ -5,26 +5,6 @@ use crate::shared_math::traits::{GetPrimitiveRootOfUnity, PrimeField};
 
 type BWord = BFieldElement;
 
-/// derive a generator with degree og height
-//  Note that this pads the height unlike the brainfuck version.
-//  This should be a method.
-pub fn derive_omicron(unpadded_height: usize) -> BFieldElement {
-    let padded_height = if unpadded_height != 0 {
-        other::roundup_npo2(unpadded_height as u64) as usize
-    } else {
-        0
-    };
-
-    if padded_height == 0 {
-        return BFieldElement::ring_one();
-    }
-
-    BFieldElement::ring_zero()
-        .get_primitive_root_of_unity(padded_height as u64)
-        .0
-        .unwrap()
-}
-
 #[derive(Debug, Clone)]
 pub struct BaseTable<DataPF, const WIDTH: usize> {
     // The name of the table (for error reporting)
@@ -149,5 +129,16 @@ where
         } else {
             omega_order / height
         }
+    }
+
+    fn derive_omicron(&self) -> BFieldElement {
+        if self.unpadded_height() == 0 {
+            return BWord::ring_one();
+        }
+
+        BWord::ring_zero()
+            .get_primitive_root_of_unity(self.padded_height() as u64)
+            .0
+            .unwrap()
     }
 }
