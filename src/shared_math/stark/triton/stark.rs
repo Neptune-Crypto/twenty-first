@@ -1,11 +1,9 @@
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::other;
-use crate::shared_math::traits::GetPrimitiveRootOfUnity;
-
 use super::table::base_matrix::BaseMatrices;
-use super::table::base_table::{derive_omicron, BaseTable, HasBaseTable, Table};
-use super::table::processor_table::{self, ProcessorTable};
+use super::table::base_table::{HasBaseTable, Table};
+use super::table::processor_table::ProcessorTable;
 use super::vm::Program;
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::traits::GetPrimitiveRootOfUnity;
 
 pub const EXTENSION_CHALLENGE_COUNT: usize = 0;
 pub const PERMUTATION_ARGUMENTS_COUNT: usize = 0;
@@ -29,20 +27,18 @@ impl Stark {
             .0
             .unwrap();
         let unpadded_height = base_matrices.processor_matrix.len();
-        // this is probably wrong
-        let omicron = derive_omicron(unpadded_height);
 
-        let processor_base_table = BaseTable::<BWord, { processor_table::BASE_WIDTH }>::new(
-            "processor_table",
+        let mut processor_table = ProcessorTable::new(
             unpadded_height,
             num_randomizers,
-            omicron,
             smooth_generator,
             order,
             base_matrices.processor_matrix,
         );
-        let _processor_table = ProcessorTable::new(processor_base_table);
 
-        // 2. Create base codeword tables based on those
+        // 2. Pad matrix
+        processor_table.pad();
+
+        // 3. Create base codeword tables based on those
     }
 }

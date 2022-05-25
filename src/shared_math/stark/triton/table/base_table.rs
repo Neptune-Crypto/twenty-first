@@ -7,9 +7,6 @@ type BWord = BFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct BaseTable<DataPF, const WIDTH: usize> {
-    // The name of the table (for error reporting)
-    name: String,
-
     // The number of `data` rows
     unpadded_height: usize,
 
@@ -29,41 +26,32 @@ pub struct BaseTable<DataPF, const WIDTH: usize> {
     matrix: Vec<[DataPF; WIDTH]>,
 }
 
-impl<DataPF, const WIDTH: usize> BaseTable<DataPF, WIDTH> {
-    pub fn new(
-        name: &str,
+pub trait HasBaseTable<DataPF, const WIDTH: usize> {
+    fn to_base(&self) -> &BaseTable<DataPF, WIDTH>;
+    fn to_mut_base(&mut self) -> &mut BaseTable<DataPF, WIDTH>;
+    fn from_base(base: BaseTable<DataPF, WIDTH>) -> Self;
+
+    fn new(
         unpadded_height: usize,
         num_randomizers: usize,
-        omicron: BWord,
         generator: BWord,
         order: usize,
         matrix: Vec<[DataPF; WIDTH]>,
-    ) -> Self {
-        BaseTable::<DataPF, WIDTH> {
-            name: name.to_string(),
+    ) -> Self
+    where
+        Self: Sized,
+    {
+        let omicron = derive_omicron(unpadded_height as u64);
+        let base = BaseTable::<DataPF, WIDTH> {
             unpadded_height,
             num_randomizers,
             omicron,
             generator,
             order,
             matrix,
-        }
-    }
-}
+        };
 
-pub trait HasBaseTable<DataPF, const WIDTH: usize> {
-    fn new(base: BaseTable<DataPF, WIDTH>) -> Self;
-    fn base(&self) -> &BaseTable<DataPF, WIDTH>;
-}
-
-pub trait Table<DataPF, const WIDTH: usize>: HasBaseTable<DataPF, WIDTH>
-where
-    DataPF: PrimeField,
-{
-    // BaseTable getters
-
-    fn name(&self) -> String {
-        self.base().name.clone()
+        Self::from_base(base)
     }
 
     fn width(&self) -> usize {
@@ -71,7 +59,7 @@ where
     }
 
     fn unpadded_height(&self) -> usize {
-        self.base().unpadded_height
+        self.to_base().unpadded_height
     }
 
     fn padded_height(&self) -> usize {
@@ -79,28 +67,49 @@ where
     }
 
     fn num_randomizers(&self) -> usize {
-        self.base().num_randomizers
+        self.to_base().num_randomizers
     }
 
     fn omicron(&self) -> BWord {
-        self.base().omicron
+        self.to_base().omicron
     }
 
     fn generator(&self) -> BWord {
-        self.base().generator
+        self.to_base().generator
     }
 
     fn order(&self) -> usize {
-        self.base().order
+        self.to_base().order
     }
 
-    fn data(&self) -> &Vec<[DataPF; WIDTH]> {
-        &self.base().matrix
+    fn data(&mut self) -> &mut Vec<[DataPF; WIDTH]> {
+        &mut self.to_mut_base().matrix
+    }
+}
+
+fn derive_omicron(unpadded_height: u64) -> BFieldElement {
+    if unpadded_height == 0 {
+        return BWord::ring_one();
     }
 
+    let padded_height = other::roundup_npo2(unpadded_height);
+    BWord::ring_zero()
+        .get_primitive_root_of_unity(padded_height)
+        .0
+        .unwrap()
+}
+
+pub trait Table<DataPF, const WIDTH: usize>: HasBaseTable<DataPF, WIDTH>
+where
+    DataPF: PrimeField,
+{
     // Abstract functions that individual structs implement
 
-    fn pad(matrix: &mut Vec<[DataPF; WIDTH]>);
+    fn name(&self) -> String;
+
+    fn pad(&mut self);
+
+    fn codewords(&self) -> Self;
 
     fn boundary_constraints(&self, challenges: &[DataPF]) -> Vec<MPolynomial<DataPF>>;
 
@@ -129,16 +138,5 @@ where
         } else {
             omega_order / height
         }
-    }
-
-    fn derive_omicron(&self) -> BFieldElement {
-        if self.unpadded_height() == 0 {
-            return BWord::ring_one();
-        }
-
-        BWord::ring_zero()
-            .get_primitive_root_of_unity(self.padded_height() as u64)
-            .0
-            .unwrap()
     }
 }

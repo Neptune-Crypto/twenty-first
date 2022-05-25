@@ -1,6 +1,7 @@
 use super::base_table::{BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::other;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const BASE_WIDTH: usize = 46;
@@ -11,12 +12,16 @@ pub struct ProcessorTable {
 }
 
 impl HasBaseTable<BFieldElement, BASE_WIDTH> for ProcessorTable {
-    fn new(base: BaseTable<BFieldElement, BASE_WIDTH>) -> Self {
+    fn from_base(base: BaseTable<BFieldElement, BASE_WIDTH>) -> Self {
         Self { base }
     }
 
-    fn base(&self) -> &BaseTable<BFieldElement, BASE_WIDTH> {
+    fn to_base(&self) -> &BaseTable<BFieldElement, BASE_WIDTH> {
         &self.base
+    }
+
+    fn to_mut_base(&mut self) -> &mut BaseTable<BFieldElement, BASE_WIDTH> {
+        &mut self.base
     }
 }
 
@@ -25,17 +30,35 @@ pub struct ExtProcessorTable {
 }
 
 impl HasBaseTable<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
-    fn new(base: BaseTable<XFieldElement, FULL_WIDTH>) -> Self {
+    fn from_base(base: BaseTable<XFieldElement, FULL_WIDTH>) -> Self {
         Self { base }
     }
 
-    fn base(&self) -> &BaseTable<XFieldElement, FULL_WIDTH> {
+    fn to_base(&self) -> &BaseTable<XFieldElement, FULL_WIDTH> {
         &self.base
+    }
+
+    fn to_mut_base(&mut self) -> &mut BaseTable<XFieldElement, FULL_WIDTH> {
+        &mut self.base
     }
 }
 
 impl Table<BFieldElement, BASE_WIDTH> for ProcessorTable {
-    fn pad(_matrix: &mut Vec<[BFieldElement; BASE_WIDTH]>) {
+    fn name(&self) -> String {
+        "ProcessorTable".to_string()
+    }
+
+    // FIXME: Apply correct padding, not just 0s.
+    fn pad(&mut self) {
+        let data = self.data();
+        while !data.is_empty() && !other::is_power_of_two(data.len()) {
+            let _last = data.last().unwrap();
+            let padding = [0.into(); BASE_WIDTH];
+            data.push(padding);
+        }
+    }
+
+    fn codewords(&self) -> Self {
         todo!()
     }
 
@@ -63,8 +86,16 @@ impl Table<BFieldElement, BASE_WIDTH> for ProcessorTable {
 }
 
 impl Table<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
-    fn pad(_matrix: &mut Vec<[XFieldElement; FULL_WIDTH]>) {
+    fn name(&self) -> String {
+        "ExtProcessorTable".to_string()
+    }
+
+    fn pad(&mut self) {
         panic!("Extension tables don't get padded");
+    }
+
+    fn codewords(&self) -> Self {
+        todo!()
     }
 
     fn boundary_constraints(
