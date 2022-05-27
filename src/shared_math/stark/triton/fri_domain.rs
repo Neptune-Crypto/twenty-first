@@ -1,27 +1,5 @@
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::PrimeField;
-use num_traits::One;
-use std::error::Error;
-use std::fmt;
-
-impl Error for ValidationError {}
-
-impl fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Deserialization error for LowDegreeProof: {:?}", self)
-    }
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub enum ValidationError {
-    BadMerkleProof,
-    BadSizedProof,
-    NonPostiveRoundCount,
-    NotColinear(usize),
-    LastIterationTooHighDegree,
-    BadMerkleRootForFirstCodeword,
-    BadMerkleRootForLastCodeword,
-}
 
 #[derive(Debug, Clone)]
 pub struct FriDomain<PF>
@@ -49,15 +27,9 @@ where
         self.omega.mod_pow_u32(index) * self.offset
     }
 
-    pub fn domain_values_old(&self) -> Vec<PF> {
-        (0..self.length)
-            .map(|index| self.domain_value(index))
-            .collect()
-    }
-
     pub fn domain_values(&self) -> Vec<PF> {
         let mut res = Vec::new();
-        let mut acc = PF::one();
+        let mut acc = self.omega.ring_one();
 
         for _ in 0..self.length {
             acc *= self.omega;
