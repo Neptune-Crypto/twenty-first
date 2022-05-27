@@ -1,5 +1,4 @@
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-
+use super::super::fri_domain::FriDomain;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::other;
@@ -7,7 +6,7 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{
     GetPrimitiveRootOfUnity, GetRandomElements, IdentityValues, ModPowU32, PrimeField,
 };
-use crate::shared_math::xfri::FriDomain;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 type BWord = BFieldElement;
 
@@ -89,7 +88,11 @@ pub trait HasBaseTable<DataPF: PrimeField, const WIDTH: usize> {
         self.to_base().order
     }
 
-    fn data(&mut self) -> &mut Vec<[DataPF; WIDTH]> {
+    fn data(&self) -> &Vec<[DataPF; WIDTH]> {
+        &self.to_base().matrix
+    }
+
+    fn mut_data(&mut self) -> &mut Vec<[DataPF; WIDTH]> {
         &mut self.to_mut_base().matrix
     }
 }
@@ -145,7 +148,7 @@ where
         }
     }
 
-    fn low_degree_extension(&self, domain: &MockFriDomain<DataPF>) -> Vec<Vec<DataPF>> {
+    fn low_degree_extension(&self, domain: &FriDomain<DataPF>) -> Vec<Vec<DataPF>> {
         self.interpolate_columns(domain.omega, domain.length)
             .par_iter()
             .map(|p| domain.evaluate(p))

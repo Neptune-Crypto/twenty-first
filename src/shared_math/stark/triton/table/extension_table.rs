@@ -2,15 +2,16 @@ use super::base_table::Table;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::stark::triton::fri_domain::{lift_domain, FriDomain};
 use crate::shared_math::traits::{Inverse, ModPowU32, PrimeField};
 use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::xfri::FriDomain;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
 // Generic methods specifically for tables that have been extended
 
+type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
@@ -63,7 +64,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
 
     fn all_quotients(
         &self,
-        fri_domain: &FriDomain,
+        fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
         challenges: &[XWord],
         terminals: &[XWord],
@@ -78,12 +79,12 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
 
     fn transition_quotients(
         &self,
-        fri_domain: &FriDomain,
+        fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
         challenges: &[XWord],
     ) -> Vec<Vec<XWord>> {
         let one = BFieldElement::ring_one();
-        let x_values: Vec<BFieldElement> = fri_domain.b_domain_values();
+        let x_values: Vec<BFieldElement> = fri_domain.domain_values();
         let subgroup_zerofier: Vec<BFieldElement> = x_values
             .iter()
             .map(|x| x.mod_pow_u32(self.padded_height() as u32) - one)
@@ -94,7 +95,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
             BFieldElement::batch_inversion(subgroup_zerofier)
         };
 
-        let omicron_inverse = self.omicron().inverse();
+        let omicron_inverse = self.omicron().unlift().unwrap().inverse();
         let zerofier_inverse: Vec<BFieldElement> = x_values
             .into_iter()
             .enumerate()
@@ -126,7 +127,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
 
         if std::env::var("DEBUG").is_ok() {
             for (i, qc) in quotients.iter().enumerate() {
-                let interpolated: Polynomial<XWord> = fri_domain.x_interpolate(qc);
+                let interpolated: Polynomial<XWord> = lift_domain(fri_domain).interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
                     "Degree of transition quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}. Unsatisfied constraint: {}", i, self.name(), interpolated.degree(), fri_domain.length, transition_constraints[i]
@@ -139,20 +140,21 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
 
     fn terminal_quotients(
         &self,
-        fri_domain: &FriDomain,
+        fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
         challenges: &[XWord],
         terminals: &[XWord],
     ) -> Vec<Vec<XWord>> {
-        let omicron_inverse = self.omicron().inverse();
+        let omicron_inverse = self.omicron().unlift().unwrap().inverse();
 
         // The zerofier for the terminal quotient has a root in the last
         // value in the cyclical group generated from omicron.
         let zerofier_codeword: Vec<BFieldElement> = fri_domain
-            .b_domain_values()
+            .domain_values()
             .into_iter()
             .map(|x| x - omicron_inverse)
             .collect();
+
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier_codeword);
         let terminal_constraints = self.terminal_constraints(challenges, terminals);
         let mut quotient_codewords: Vec<Vec<XWord>> = vec![];
@@ -169,7 +171,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
 
         if std::env::var("DEBUG").is_ok() {
             for (i, qc) in quotient_codewords.iter().enumerate() {
-                let interpolated = fri_domain.x_interpolate(qc);
+                let interpolated = lift_domain(fri_domain).interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
                     "Degree of terminal quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}. Unsatisfied constraint: {}", i, self.name(), interpolated.degree(), fri_domain.length, terminal_constraints[i]
@@ -182,7 +184,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
 
     fn boundary_quotients(
         &self,
-        fri_domain: &FriDomain,
+        fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
         challenges: &[XWord],
     ) -> Vec<Vec<XWord>> {
@@ -191,7 +193,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
         let boundary_constraints: Vec<MPolynomial<XWord>> = self.boundary_constraints(challenges);
         let one = BFieldElement::ring_one();
         let zerofier: Vec<BFieldElement> = (0..fri_domain.length)
-            .map(|i| fri_domain.b_domain_value(i as u32) - one)
+            .map(|i| fri_domain.domain_value(i as u32) - one)
             .collect();
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
         for bc in boundary_constraints {
@@ -208,7 +210,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
         // If the `DEBUG` environment variable is set, run this extra validity check
         if std::env::var("DEBUG").is_ok() {
             for (i, qc) in quotient_codewords.iter().enumerate() {
-                let interpolated = fri_domain.x_interpolate(qc);
+                let interpolated = lift_domain(fri_domain).interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
                     "Degree of boundary quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}", i, self.name(), interpolated.degree(), fri_domain.length

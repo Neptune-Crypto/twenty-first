@@ -1,14 +1,16 @@
+use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::PrimeField;
+use crate::shared_math::x_field_element::XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct FriDomain<PF>
 where
     PF: PrimeField,
 {
-    offset: PF,
-    omega: PF,
-    length: u32,
+    pub offset: PF,
+    pub omega: PF,
+    pub length: usize,
 }
 
 impl<PF> FriDomain<PF>
@@ -16,7 +18,7 @@ where
     PF: PrimeField,
 {
     pub fn evaluate(&self, polynomial: &Polynomial<PF>) -> Vec<PF> {
-        polynomial.fast_coset_evaluate(&self.offset, self.omega, self.length as usize)
+        polynomial.fast_coset_evaluate(&self.offset, self.omega, self.length)
     }
 
     pub fn interpolate(&self, values: &[PF]) -> Polynomial<PF> {
@@ -37,5 +39,13 @@ where
         }
 
         res
+    }
+}
+
+pub fn lift_domain(domain: &FriDomain<BFieldElement>) -> FriDomain<XFieldElement> {
+    FriDomain {
+        offset: domain.offset.lift(),
+        omega: domain.omega.lift(),
+        length: domain.length,
     }
 }

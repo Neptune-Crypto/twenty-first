@@ -1,6 +1,7 @@
 use super::base_table::{BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -50,7 +51,7 @@ impl Table<BFieldElement, BASE_WIDTH> for ProcessorTable {
 
     // FIXME: Apply correct padding, not just 0s.
     fn pad(&mut self) {
-        let data = self.data();
+        let data = self.mut_data();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let _last = data.last().unwrap();
             let padding = [0.into(); BASE_WIDTH];
@@ -101,14 +102,14 @@ impl Table<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
     fn boundary_constraints(
         &self,
         _challenges: &[XFieldElement],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<XFieldElement>> {
+    ) -> Vec<MPolynomial<XFieldElement>> {
         todo!()
     }
 
     fn transition_constraints(
         &self,
         _challenges: &[XFieldElement],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<XFieldElement>> {
+    ) -> Vec<MPolynomial<XFieldElement>> {
         todo!()
     }
 
@@ -116,7 +117,7 @@ impl Table<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
         &self,
         _challenges: &[XFieldElement],
         _terminals: &[XFieldElement],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<XFieldElement>> {
+    ) -> Vec<MPolynomial<XFieldElement>> {
         todo!()
     }
 }
