@@ -4,27 +4,24 @@ type: docker
 name: default
 
 steps:
-  - name: Check
+  - name: build
     image: rust:1.60
     commands:
       - cargo check
-      - cargo check --tests
-
-  - name: Build
-    image: rust:1.60
-    commands:
-      - cargo build
-
-  - name: Test
-    image: rust:1.60
-    commands:
+      - cargo clippy
+      - cargo build --profile=bench
       - cargo test
 
-  - name: Bench
+  - name: benchmark
     image: rust:1.60
     commands:
-      - cargo bench stark_bf
+    - cargo bench stark_bf
+
+  - name: notify
+    commands:
+      - curl --url 'smtps://mail.neptune.builders:25' --mail-from 'drone@mail.neptune.builders' --mail-rcpt 'simon@neptune.cash' -T <(echo -e 'From: drone@mail.neptune.builders\nTo: simon@neptune.cash\nSubject: Curl Test\n\nHello')
 
 trigger:
   branch:
     - master
+
