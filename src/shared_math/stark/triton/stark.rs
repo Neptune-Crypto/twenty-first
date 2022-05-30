@@ -1,21 +1,78 @@
+use super::super::triton;
 use super::table::base_matrix::BaseMatrices;
 use super::table::base_table::{HasBaseTable, Table};
 use super::table::processor_table::ProcessorTable;
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
 use crate::shared_math::traits::GetPrimitiveRootOfUnity;
+use crate::shared_math::x_field_element::XFieldElement;
+use crate::shared_math::{other, xfri};
 
 pub const EXTENSION_CHALLENGE_COUNT: usize = 0;
 pub const PERMUTATION_ARGUMENTS_COUNT: usize = 0;
 pub const TERMINAL_COUNT: usize = 0;
 
 type BWord = BFieldElement;
+type XWord = XFieldElement;
+type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
 
+// We use a type-parameterised FriDomain to avoid duplicate `b_*()` and `x_*()` methods.
 pub struct Stark {
+    padded_height: usize,
+    log_expansion_factor: usize,
+    security_level: usize,
+    fri_domain: triton::fri_domain::FriDomain<BWord>,
+    fri: xfri::Fri<StarkHasher>,
     program: Program,
 }
 
 impl Stark {
+    pub fn new(padded_height: usize, log_expansion_factor: usize, security_level: usize) -> Self {
+        assert_eq!(
+            0,
+            security_level % log_expansion_factor,
+            "security_level/log_expansion_factor must be a positive integer"
+        );
+
+        let expansion_factor: u64 = 1 << log_expansion_factor;
+        let colinearity_checks: usize = security_level / log_expansion_factor;
+
+        assert!(
+            colinearity_checks > 0,
+            "At least one colinearity check is required"
+        );
+
+        assert!(
+            expansion_factor >= 4,
+            "expansion factor must be at least 4."
+        );
+
+        let mut max_degree: u64 = rc_base_tables.borrow().get_max_degree();
+        max_degree = other::roundup_npo2(max_degree) - 1;
+        let fri_domain_length: u64 = (max_degree + 1) * expansion_factor;
+
+        let b_field_omega = BWord::ring_zero()
+            .get_primitive_root_of_unity(fri_domain_length as u64)
+            .0
+            .unwrap();
+        let fri_domain = triton::fri_domain::FriDomain {
+            offset: BWord::generator(),
+            omega: todo!(),
+            length: todo!(),
+        };
+
+        let fri: xfri::Fri<StarkHasher> = xfri::Fri::new(
+            b_field_generator.lift(),
+            b_field_omega.lift(),
+            fri_domain_length as usize,
+            expansion_factor as usize,
+            colinearity_checks,
+        );
+
+        todo!()
+    }
+
     pub fn prove(&self, base_matrices: BaseMatrices) {
         // 1. Create base tables based on base matrices
 

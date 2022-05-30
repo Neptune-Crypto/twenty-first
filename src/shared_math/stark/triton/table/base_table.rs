@@ -109,6 +109,7 @@ fn derive_omicron<DataPF: PrimeField>(unpadded_height: u64, dummy: DataPF) -> Da
 
 pub trait Table<DataPF, const WIDTH: usize>: HasBaseTable<DataPF, WIDTH>
 where
+    Self: Sized,
     DataPF: PrimeField + GetRandomElements,
 {
     // Abstract functions that individual structs implement
@@ -116,8 +117,6 @@ where
     fn name(&self) -> String;
 
     fn pad(&mut self);
-
-    fn codewords(&self) -> Self;
 
     fn boundary_constraints(&self, challenges: &[DataPF]) -> Vec<MPolynomial<DataPF>>;
 
@@ -148,11 +147,28 @@ where
         }
     }
 
-    fn low_degree_extension(&self, domain: &FriDomain<DataPF>) -> Vec<Vec<DataPF>> {
-        self.interpolate_columns(domain.omega, domain.length)
+    fn low_degree_extension(&self, fri_domain: &FriDomain<DataPF>) -> Vec<[DataPF; WIDTH]> {
+        // FIXME: Table<> supports Vec<[DataPF; WIDTH]>, but FriDomain does not (yet).
+        self.interpolate_columns(fri_domain.omega, fri_domain.length)
             .par_iter()
-            .map(|p| domain.evaluate(p))
+            .map(|polynomial| {
+                fri_domain
+                    .evaluate(polynomial)
+                    .try_into()
+                    .expect("FriDomain.evaluate: Could not convert Vec<DataPF> til [DataPF; WIDTH]")
+            })
             .collect()
+    }
+
+    fn codewords(&self, fri_domain: &FriDomain<DataPF>) -> Self {
+        let codewords = self.low_degree_extension(fri_domain);
+        Self::new(
+            self.unpadded_height(),
+            self.num_randomizers(),
+            self.generator(),
+            self.order(),
+            codewords,
+        )
     }
 
     /// Return the interpolation of columns. The `column_indices` variable

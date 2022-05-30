@@ -1,27 +1,33 @@
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
 use super::base_table::{BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const BASE_WIDTH: usize = 46;
 pub const FULL_WIDTH: usize = 11; // FIXME: Should of course be >BASE_WIDTH
 
+type BWord = BFieldElement;
+
 pub struct ProcessorTable {
-    base: BaseTable<BFieldElement, BASE_WIDTH>,
+    base: BaseTable<BWord, BASE_WIDTH>,
 }
 
-impl HasBaseTable<BFieldElement, BASE_WIDTH> for ProcessorTable {
-    fn from_base(base: BaseTable<BFieldElement, BASE_WIDTH>) -> Self {
+impl HasBaseTable<BWord, BASE_WIDTH> for ProcessorTable {
+    fn from_base(base: BaseTable<BWord, BASE_WIDTH>) -> Self {
         Self { base }
     }
 
-    fn to_base(&self) -> &BaseTable<BFieldElement, BASE_WIDTH> {
+    fn to_base(&self) -> &BaseTable<BWord, BASE_WIDTH> {
         &self.base
     }
 
-    fn to_mut_base(&mut self) -> &mut BaseTable<BFieldElement, BASE_WIDTH> {
+    fn to_mut_base(&mut self) -> &mut BaseTable<BWord, BASE_WIDTH> {
         &mut self.base
     }
 }
@@ -44,7 +50,7 @@ impl HasBaseTable<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
     }
 }
 
-impl Table<BFieldElement, BASE_WIDTH> for ProcessorTable {
+impl Table<BWord, BASE_WIDTH> for ProcessorTable {
     fn name(&self) -> String {
         "ProcessorTable".to_string()
     }
@@ -59,29 +65,25 @@ impl Table<BFieldElement, BASE_WIDTH> for ProcessorTable {
         }
     }
 
-    fn codewords(&self) -> Self {
-        todo!()
-    }
-
     fn boundary_constraints(
         &self,
-        _challenges: &[BFieldElement],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BFieldElement>> {
+        _challenges: &[BWord],
+    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
         todo!()
     }
 
     fn transition_constraints(
         &self,
-        _challenges: &[BFieldElement],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BFieldElement>> {
+        _challenges: &[BWord],
+    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
         todo!()
     }
 
     fn terminal_constraints(
         &self,
-        _challenges: &[BFieldElement],
-        _terminals: &[BFieldElement],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BFieldElement>> {
+        _challenges: &[BWord],
+        _terminals: &[BWord],
+    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
         todo!()
     }
 }
@@ -93,10 +95,6 @@ impl Table<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
 
     fn pad(&mut self) {
         panic!("Extension tables don't get padded");
-    }
-
-    fn codewords(&self) -> Self {
-        todo!()
     }
 
     fn boundary_constraints(
