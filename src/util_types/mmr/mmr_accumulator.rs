@@ -16,9 +16,8 @@ use super::{
     membership_proof::MembershipProof,
     mmr_trait::Mmr,
     shared::{
-        bag_peaks, calculate_new_peaks_from_append, data_index_to_node_index, get_peak_height,
-        get_peak_heights_and_peak_node_indices, leaf_count_to_node_count, parent,
-        right_child_and_height,
+        bag_peaks, calculate_new_peaks_from_append, data_index_to_node_index,
+        leaf_count_to_node_count, parent, right_child_and_height,
     },
 };
 
@@ -139,24 +138,15 @@ where
             acc_index = parent(acc_index);
         }
 
-        // This function is *not* secure when verified against *any* peak.
-        // It **must** be compared against the correct peak.
-        // Otherwise you could lie leaf_hash, data_index, authentication path
-        let (peak_heights, _) = get_peak_heights_and_peak_node_indices(self.leaf_count);
-        let expected_peak_height_res =
-            get_peak_height(self.leaf_count, old_membership_proof.data_index);
-        let expected_peak_height = match expected_peak_height_res {
+        // Find the correct peak to mutate
+        let peak_index_res =
+            leaf_index_to_peak_index(old_membership_proof.data_index, self.leaf_count);
+        let peak_index = match peak_index_res {
             None => panic!("Did not find any peak height for (leaf_count, data_index) combination. Got: leaf_count = {}, data_index = {}", self.leaf_count, old_membership_proof.data_index),
-            Some(eph) => eph,
+            Some(pi) => pi,
         };
 
-        let peak_height_index_res = peak_heights.iter().position(|x| *x == expected_peak_height);
-        let peak_height_index = match peak_height_index_res {
-            None => panic!("Did not find a matching peak"),
-            Some(index) => index,
-        };
-
-        self.peaks[peak_height_index] = acc_hash;
+        self.peaks[peak_index as usize] = acc_hash;
     }
 
     /// Returns true of the `new_peaks` input matches the calculated new MMR peaks resulting from the
@@ -308,7 +298,10 @@ where
 
             // Update the peak
             let peaks_index = leaf_index_to_peak_index(ap.data_index, self.count_leaves());
-            self.peaks[peaks_index as usize] = acc_hash;
+            match peaks_index {
+                None => panic!("Could not find peak in MMR. Is the leaf index/data index beyond the size of the MMR?"),
+                Some(pi) => { self.peaks[pi as usize] = acc_hash; },
+            }
         }
 
         // Update all the supplied membership proofs
