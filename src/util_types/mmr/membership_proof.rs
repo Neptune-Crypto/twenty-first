@@ -1131,12 +1131,29 @@ mod mmr_membership_proof_test {
                 let new_peaks = appended_archival_mmr.get_peaks();
 
                 // Update membership proof and verify that it succeeds
-                membership_proof.update_from_append(leaf_count, &new_leaf, &old_peaks);
+                let original_mp = membership_proof.clone();
+                let changed =
+                    membership_proof.update_from_append(leaf_count, &new_leaf, &old_peaks);
                 assert!(
                     membership_proof
                         .verify(&new_peaks, &leaf_hashes[i as usize], leaf_count + 1)
                         .0
                 );
+
+                // Verify that the old membership proof fails iff a change was indicated
+                if changed {
+                    assert!(
+                        !original_mp
+                            .verify(&new_peaks, &leaf_hashes[i as usize], leaf_count + 1)
+                            .0
+                    );
+                } else {
+                    assert!(
+                        original_mp
+                            .verify(&new_peaks, &leaf_hashes[i as usize], leaf_count + 1)
+                            .0
+                    );
+                }
 
                 // Verify that the appended Arhival MMR produces the same membership proof
                 // as the one we got by updating the old membership proof
@@ -1150,19 +1167,17 @@ mod mmr_membership_proof_test {
             let mut membership_proofs: Vec<MembershipProof<Hasher>> = (0..leaf_count)
                 .map(|i| archival_mmr.prove_membership(i).0)
                 .collect();
-            let original_mps = membership_proofs.clone();
             let old_peaks = archival_mmr.get_peaks();
-            let mut i = 0;
-            for mp in membership_proofs.iter() {
+            for (i, mp) in membership_proofs.iter().enumerate() {
                 assert!(
                     mp.verify(&old_peaks, &leaf_hashes[i as usize], leaf_count)
                         .0
                 );
-                i += 1;
             }
             let mut appended_archival_mmr = archival_mmr.clone();
             appended_archival_mmr.append(new_leaf.clone());
             let new_peaks = appended_archival_mmr.get_peaks();
+            let original_mps = membership_proofs.clone();
             let indices_of_mutated_mps: Vec<usize> =
                 MembershipProof::<Hasher>::batch_update_from_append(
                     &mut membership_proofs.iter_mut().collect::<Vec<_>>(),
@@ -1170,21 +1185,26 @@ mod mmr_membership_proof_test {
                     &new_leaf,
                     &old_peaks,
                 );
-            let mut i = 0;
-            for mp in membership_proofs {
+            for (i, mp) in membership_proofs.iter().enumerate() {
                 assert!(mp.verify(&new_peaks, &leaf_hashes[i], leaf_count + 1).0);
-                i += 1;
             }
 
-            // Verify that mutated membership proofs no longer work
-            let mut i = 0;
-            for index in indices_of_mutated_mps {
-                assert!(
-                    !original_mps[index]
-                        .verify(&new_peaks, &leaf_hashes[i], leaf_count + 1)
-                        .0
-                );
-                i += 1;
+            // Verify that mutated membership proofs no longer work and that the non-mutated
+            // still work
+            for (i, original_mp) in original_mps.iter().enumerate() {
+                if indices_of_mutated_mps.contains(&i) {
+                    assert!(
+                        !original_mp
+                            .verify(&new_peaks, &leaf_hashes[i], leaf_count + 1)
+                            .0
+                    );
+                } else {
+                    assert!(
+                        original_mp
+                            .verify(&new_peaks, &leaf_hashes[i], leaf_count + 1)
+                            .0
+                    );
+                }
             }
         }
     }
