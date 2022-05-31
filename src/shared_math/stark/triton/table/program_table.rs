@@ -5,8 +5,8 @@ use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::x_field_element::XFieldElement;
 
-pub const BASE_WIDTH: usize = 1; // FIXME: Find right width
-pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >BASE_WIDTH
+pub const BASE_WIDTH: usize = 2;
+pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >=BASE_WIDTH
 
 type BWord = BFieldElement;
 

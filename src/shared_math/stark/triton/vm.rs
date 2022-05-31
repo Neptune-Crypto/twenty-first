@@ -93,7 +93,7 @@ impl Program {
         let mut current_state = VMState::new(self);
         let mut base_matrices = BaseMatrices::default();
 
-        self.initialize_instruction_matrix(&mut base_matrices);
+        self.initialize_matrices(&mut base_matrices);
 
         match current_state.to_processor_arr() {
             Err(err) => return (base_matrices, Some(err)),
@@ -186,7 +186,7 @@ impl Program {
         (trace, stdout.to_vec(), err)
     }
 
-    fn initialize_instruction_matrix(&self, base_matrices: &mut BaseMatrices) {
+    fn initialize_matrices(&self, base_matrices: &mut BaseMatrices) {
         // Fixme:  Change `into_iter()` to `iter()`.
         let mut iter = self.clone().into_iter();
         let mut current_instruction = iter.next().unwrap();
@@ -195,6 +195,11 @@ impl Program {
         for next_instruction in iter {
             let current_opcode: BFieldElement = current_instruction.opcode().into();
 
+            base_matrices
+                .program_matrix
+                .push([program_index, current_opcode]);
+
+            // Initalize program and instruction matrix
             if let Some(instruction_arg) = current_instruction.arg() {
                 base_matrices.instruction_matrix.push([
                     program_index,
@@ -202,6 +207,11 @@ impl Program {
                     instruction_arg,
                 ]);
                 program_index.increment();
+
+                // Add another row to program matrix for current_instruction's argument
+                base_matrices
+                    .program_matrix
+                    .push([program_index, instruction_arg]);
 
                 let next_opcode: BFieldElement = next_instruction.opcode().into();
                 base_matrices.instruction_matrix.push([

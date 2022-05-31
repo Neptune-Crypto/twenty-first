@@ -2,14 +2,23 @@ use std::fmt::Display;
 
 use crate::shared_math::b_field_element::BFieldElement;
 
-use super::{instruction_table, io_table, processor_table};
+use super::{
+    hash_coprocessor_table, instruction_table, io_table, jump_stack_table, op_stack_table,
+    processor_table, program_table, ram_table, u32_op_table,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct BaseMatrices {
+    pub program_matrix: Vec<[BFieldElement; program_table::BASE_WIDTH]>,
     pub processor_matrix: Vec<[BFieldElement; processor_table::BASE_WIDTH]>,
     pub instruction_matrix: Vec<[BFieldElement; instruction_table::BASE_WIDTH]>,
     pub input_matrix: Vec<[BFieldElement; io_table::BASE_WIDTH]>,
     pub output_matrix: Vec<[BFieldElement; io_table::BASE_WIDTH]>,
+    pub op_stack_matrix: Vec<[BFieldElement; op_stack_table::BASE_WIDTH]>,
+    pub ram_matrix: Vec<[BFieldElement; ram_table::BASE_WIDTH]>,
+    pub jump_stack_matrix: Vec<[BFieldElement; jump_stack_table::BASE_WIDTH]>,
+    pub hash_coprocessor_matrix: Vec<[BFieldElement; hash_coprocessor_table::BASE_WIDTH]>,
+    pub u32_op_matrix: Vec<[BFieldElement; u32_op_table::BASE_WIDTH]>,
 }
 
 impl BaseMatrices {
