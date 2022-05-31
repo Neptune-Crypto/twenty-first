@@ -1,56 +1,45 @@
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
 use super::base_table::{BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const BASE_WIDTH: usize = 46;
-pub const FULL_WIDTH: usize = 11; // FIXME: Should of course be >BASE_WIDTH
+pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >BASE_WIDTH
 
 type BWord = BFieldElement;
 
+#[derive(Debug, Clone)]
 pub struct ProcessorTable {
-    base: BaseTable<BWord, BASE_WIDTH>,
+    base: BaseTable<BWord>,
 }
 
-impl HasBaseTable<BWord, BASE_WIDTH> for ProcessorTable {
-    fn from_base(base: BaseTable<BWord, BASE_WIDTH>) -> Self {
-        Self { base }
-    }
-
-    fn to_base(&self) -> &BaseTable<BWord, BASE_WIDTH> {
+impl HasBaseTable<BWord> for ProcessorTable {
+    fn to_base(&self) -> &BaseTable<BWord> {
         &self.base
     }
 
-    fn to_mut_base(&mut self) -> &mut BaseTable<BWord, BASE_WIDTH> {
+    fn to_mut_base(&mut self) -> &mut BaseTable<BWord> {
         &mut self.base
     }
 }
 
 pub struct ExtProcessorTable {
-    base: BaseTable<XFieldElement, FULL_WIDTH>,
+    base: BaseTable<XFieldElement>,
 }
 
-impl HasBaseTable<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
-    fn from_base(base: BaseTable<XFieldElement, FULL_WIDTH>) -> Self {
-        Self { base }
-    }
-
-    fn to_base(&self) -> &BaseTable<XFieldElement, FULL_WIDTH> {
+impl HasBaseTable<XFieldElement> for ExtProcessorTable {
+    fn to_base(&self) -> &BaseTable<XFieldElement> {
         &self.base
     }
 
-    fn to_mut_base(&mut self) -> &mut BaseTable<XFieldElement, FULL_WIDTH> {
+    fn to_mut_base(&mut self) -> &mut BaseTable<XFieldElement> {
         &mut self.base
     }
 }
 
-impl Table<BWord, BASE_WIDTH> for ProcessorTable {
+impl Table<BWord> for ProcessorTable {
     fn name(&self) -> String {
         "ProcessorTable".to_string()
     }
@@ -60,7 +49,7 @@ impl Table<BWord, BASE_WIDTH> for ProcessorTable {
         let data = self.mut_data();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let _last = data.last().unwrap();
-            let padding = [0.into(); BASE_WIDTH];
+            let padding = vec![0.into(); BASE_WIDTH];
             data.push(padding);
         }
     }
@@ -69,14 +58,14 @@ impl Table<BWord, BASE_WIDTH> for ProcessorTable {
         &self,
         _challenges: &[BWord],
     ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
-        todo!()
+        vec![]
     }
 
     fn transition_constraints(
         &self,
         _challenges: &[BWord],
     ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
-        todo!()
+        vec![]
     }
 
     fn terminal_constraints(
@@ -84,11 +73,11 @@ impl Table<BWord, BASE_WIDTH> for ProcessorTable {
         _challenges: &[BWord],
         _terminals: &[BWord],
     ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
-        todo!()
+        vec![]
     }
 }
 
-impl Table<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
+impl Table<XFieldElement> for ExtProcessorTable {
     fn name(&self) -> String {
         "ExtProcessorTable".to_string()
     }
@@ -101,14 +90,14 @@ impl Table<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
         &self,
         _challenges: &[XFieldElement],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        vec![]
     }
 
     fn transition_constraints(
         &self,
         _challenges: &[XFieldElement],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        vec![]
     }
 
     fn terminal_constraints(
@@ -116,8 +105,8 @@ impl Table<XFieldElement, FULL_WIDTH> for ExtProcessorTable {
         _challenges: &[XFieldElement],
         _terminals: &[XFieldElement],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        todo!()
+        vec![]
     }
 }
 
-impl ExtensionTable<FULL_WIDTH> for ExtProcessorTable {}
+impl ExtensionTable for ExtProcessorTable {}

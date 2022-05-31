@@ -1,4 +1,5 @@
 use super::super::fri_domain::FriDomain;
+use super::processor_table::ProcessorTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::other;
@@ -11,7 +12,10 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 type BWord = BFieldElement;
 
 #[derive(Debug, Clone)]
-pub struct BaseTable<DataPF, const WIDTH: usize> {
+pub struct BaseTable<DataPF> {
+    // The width of each `data` row
+    width: usize,
+
     // The number of `data` rows
     unpadded_height: usize,
 
@@ -28,40 +32,41 @@ pub struct BaseTable<DataPF, const WIDTH: usize> {
     order: usize,
 
     // The table data (trace data)
-    matrix: Vec<[DataPF; WIDTH]>,
+    matrix: Vec<Vec<DataPF>>,
 }
 
-pub trait HasBaseTable<DataPF: PrimeField, const WIDTH: usize> {
-    fn to_base(&self) -> &BaseTable<DataPF, WIDTH>;
-    fn to_mut_base(&mut self) -> &mut BaseTable<DataPF, WIDTH>;
-    fn from_base(base: BaseTable<DataPF, WIDTH>) -> Self;
+pub trait HasBaseTable<DataPF: PrimeField> {
+    fn to_base(&self) -> &BaseTable<DataPF>;
+    fn to_mut_base(&mut self) -> &mut BaseTable<DataPF>;
+    // fn from_base(base: BaseTable<DataPF>) -> Self;
+    // fn new(
+    //     width: usize,
+    //     unpadded_height: usize,
+    //     num_randomizers: usize,
+    //     generator: DataPF,
+    //     order: usize,
+    //     matrix: Vec<Vec<DataPF>>,
+    // ) -> Self
+    // where
+    //     Self: Sized,
+    // {
+    //     let dummy = generator;
+    //     let omicron = derive_omicron::<DataPF>(unpadded_height as u64, dummy);
+    //     let base = BaseTable::<DataPF> {
+    //         width,
+    //         unpadded_height,
+    //         num_randomizers,
+    //         omicron,
+    //         generator,
+    //         order,
+    //         matrix,
+    //     };
 
-    fn new(
-        unpadded_height: usize,
-        num_randomizers: usize,
-        generator: DataPF,
-        order: usize,
-        matrix: Vec<[DataPF; WIDTH]>,
-    ) -> Self
-    where
-        Self: Sized,
-    {
-        let dummy = generator;
-        let omicron = derive_omicron::<DataPF>(unpadded_height as u64, dummy);
-        let base = BaseTable::<DataPF, WIDTH> {
-            unpadded_height,
-            num_randomizers,
-            omicron,
-            generator,
-            order,
-            matrix,
-        };
-
-        Self::from_base(base)
-    }
+    //     Self::from_base(base)
+    // }
 
     fn width(&self) -> usize {
-        WIDTH
+        self.to_base().width
     }
 
     fn unpadded_height(&self) -> usize {
@@ -88,11 +93,11 @@ pub trait HasBaseTable<DataPF: PrimeField, const WIDTH: usize> {
         self.to_base().order
     }
 
-    fn data(&self) -> &Vec<[DataPF; WIDTH]> {
+    fn data(&self) -> &Vec<Vec<DataPF>> {
         &self.to_base().matrix
     }
 
-    fn mut_data(&mut self) -> &mut Vec<[DataPF; WIDTH]> {
+    fn mut_data(&mut self) -> &mut Vec<Vec<DataPF>> {
         &mut self.to_mut_base().matrix
     }
 }
@@ -107,9 +112,9 @@ fn derive_omicron<DataPF: PrimeField>(unpadded_height: u64, dummy: DataPF) -> Da
     dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
 }
 
-pub trait Table<DataPF, const WIDTH: usize>: HasBaseTable<DataPF, WIDTH>
+pub trait Table<DataPF>: HasBaseTable<DataPF>
 where
-    Self: Sized,
+    // Self: Sized,
     DataPF: PrimeField + GetRandomElements,
 {
     // Abstract functions that individual structs implement
@@ -147,7 +152,19 @@ where
         }
     }
 
-    fn low_degree_extension(&self, fri_domain: &FriDomain<DataPF>) -> Vec<[DataPF; WIDTH]> {
+    // fn codewords(&self, fri_domain: &FriDomain<DataPF>) -> Self {
+    //     let codewords = self.low_degree_extension(fri_domain);
+    //     Self::new(
+    //         self.width(),
+    //         self.unpadded_height(),
+    //         self.num_randomizers(),
+    //         self.generator(),
+    //         self.order(),
+    //         codewords,
+    //     )
+    // }
+
+    fn low_degree_extension(&self, fri_domain: &FriDomain<DataPF>) -> Vec<Vec<DataPF>> {
         // FIXME: Table<> supports Vec<[DataPF; WIDTH]>, but FriDomain does not (yet).
         self.interpolate_columns(fri_domain.omega, fri_domain.length)
             .par_iter()
@@ -158,17 +175,6 @@ where
                     .expect("FriDomain.evaluate: Could not convert Vec<DataPF> til [DataPF; WIDTH]")
             })
             .collect()
-    }
-
-    fn codewords(&self, fri_domain: &FriDomain<DataPF>) -> Self {
-        let codewords = self.low_degree_extension(fri_domain);
-        Self::new(
-            self.unpadded_height(),
-            self.num_randomizers(),
-            self.generator(),
-            self.order(),
-            codewords,
-        )
     }
 
     /// Return the interpolation of columns. The `column_indices` variable
@@ -196,7 +202,7 @@ where
         );
 
         if self.padded_height() == 0 {
-            return vec![Polynomial::ring_zero(); WIDTH];
+            return vec![Polynomial::ring_zero(); self.width()];
         }
 
         assert!(
@@ -218,7 +224,7 @@ where
         let mut valuess: Vec<Vec<DataPF>> = vec![];
 
         let data = self.data();
-        for c in 0..WIDTH {
+        for c in 0..self.width() {
             let trace: Vec<DataPF> = data.iter().map(|row| row[c]).collect();
             let randomizers: Vec<DataPF> =
                 DataPF::random_elements(self.num_randomizers(), &mut rng);

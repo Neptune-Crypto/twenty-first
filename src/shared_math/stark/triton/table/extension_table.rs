@@ -14,7 +14,7 @@ use rayon::iter::{
 type BWord = BFieldElement;
 type XWord = XFieldElement;
 
-pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
+pub trait ExtensionTable: Table<XWord> + Sync {
     fn all_quotient_degree_bounds(&self, challenges: &[XWord], terminals: &[XWord]) -> Vec<Degree> {
         vec![
             self.boundary_quotient_degree_bounds(challenges),
@@ -25,7 +25,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
     }
 
     fn boundary_quotient_degree_bounds(&self, challenges: &[XWord]) -> Vec<Degree> {
-        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); FULL_WIDTH];
+        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.width()];
 
         let degree_bounds: Vec<Degree> = self
             .boundary_constraints(challenges)
@@ -37,7 +37,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
     }
 
     fn transition_quotient_degree_bounds(&self, challenges: &[XWord]) -> Vec<Degree> {
-        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); 2 * FULL_WIDTH];
+        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); 2 * self.width()];
 
         let transition_constraints = self.transition_constraints(challenges);
 
@@ -55,7 +55,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
         challenges: &[XWord],
         terminals: &[XWord],
     ) -> Vec<Degree> {
-        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); FULL_WIDTH];
+        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.width()];
         self.terminal_constraints(challenges, terminals)
             .iter()
             .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - 1)
@@ -111,8 +111,8 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
                 .par_iter()
                 .enumerate()
                 .map(|(i, z_inverse)| {
-                    let current: Vec<XWord> = (0..FULL_WIDTH).map(|j| codewords[j][i]).collect();
-                    let next: Vec<XWord> = (0..FULL_WIDTH)
+                    let current: Vec<XWord> = (0..self.width()).map(|j| codewords[j][i]).collect();
+                    let next: Vec<XWord> = (0..self.width())
                         .map(|j| codewords[j][(i + unit_distance) % fri_domain.length])
                         .collect();
                     let point = vec![current, next].concat();
@@ -162,7 +162,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
                 .into_par_iter()
                 .map(|i| {
-                    let point: Vec<XWord> = (0..FULL_WIDTH).map(|j| codewords[j][i]).collect();
+                    let point: Vec<XWord> = (0..self.width()).map(|j| codewords[j][i]).collect();
                     termc.evaluate(&point) * zerofier_inverse[i].lift()
                 })
                 .collect();
@@ -200,7 +200,7 @@ pub trait ExtensionTable<const FULL_WIDTH: usize>: Table<XWord, FULL_WIDTH> {
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
                 .into_par_iter()
                 .map(|i| {
-                    let point: Vec<XWord> = (0..FULL_WIDTH).map(|j| codewords[j][i]).collect();
+                    let point: Vec<XWord> = (0..self.width()).map(|j| codewords[j][i]).collect();
                     bc.evaluate(&point) * zerofier_inverse[i].lift()
                 })
                 .collect();

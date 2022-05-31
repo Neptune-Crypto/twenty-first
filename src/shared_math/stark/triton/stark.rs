@@ -48,7 +48,16 @@ impl Stark {
             "expansion factor must be at least 4."
         );
 
-        let mut max_degree: u64 = rc_base_tables.borrow().get_max_degree();
+        let num_randomizers = 1;
+        let order: usize = 1 << 32;
+        let smooth_generator = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(order as u64)
+            .0
+            .unwrap();
+
+        // TODO: Create empty table collection to derive max degree.
+
+        let mut max_degree: u64 = todo!(); // rc_base_tables.borrow().get_max_degree();
         max_degree = other::roundup_npo2(max_degree) - 1;
         let fri_domain_length: u64 = (max_degree + 1) * expansion_factor;
 
@@ -62,13 +71,13 @@ impl Stark {
             length: todo!(),
         };
 
-        let fri: xfri::Fri<StarkHasher> = xfri::Fri::new(
-            b_field_generator.lift(),
-            b_field_omega.lift(),
-            fri_domain_length as usize,
-            expansion_factor as usize,
-            colinearity_checks,
-        );
+        // let fri: xfri::Fri<StarkHasher> = xfri::Fri::new(
+        //     todo!()
+        //     todo!(),
+        //     fri_domain_length as usize,
+        //     expansion_factor as usize,
+        //     colinearity_checks,
+        // );
 
         todo!()
     }

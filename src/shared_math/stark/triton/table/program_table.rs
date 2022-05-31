@@ -5,22 +5,17 @@ use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::x_field_element::XFieldElement;
 
-pub const BASE_WIDTH: usize = 1;
-pub const FULL_WIDTH: usize = 2;
+pub const BASE_WIDTH: usize = 1; // FIXME: Find right width
+pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >BASE_WIDTH
 
 type BWord = BFieldElement;
 
 #[derive(Debug, Clone)]
-pub struct InputTable {
+pub struct ProgramTable {
     base: BaseTable<BWord>,
 }
 
-#[derive(Debug, Clone)]
-pub struct IOTable {
-    base: BaseTable<BWord>,
-}
-
-impl HasBaseTable<BWord> for InputTable {
+impl HasBaseTable<BWord> for ProgramTable {
     fn to_base(&self) -> &BaseTable<BWord> {
         &self.base
     }
@@ -30,11 +25,11 @@ impl HasBaseTable<BWord> for InputTable {
     }
 }
 
-pub struct ExtIOTable {
+pub struct ExtProgramTable {
     base: BaseTable<XFieldElement>,
 }
 
-impl HasBaseTable<XFieldElement> for ExtIOTable {
+impl HasBaseTable<XFieldElement> for ExtProgramTable {
     fn to_base(&self) -> &BaseTable<XFieldElement> {
         &self.base
     }
@@ -44,9 +39,9 @@ impl HasBaseTable<XFieldElement> for ExtIOTable {
     }
 }
 
-impl Table<BWord> for InputTable {
+impl Table<BWord> for ProgramTable {
     fn name(&self) -> String {
-        "IOTable".to_string()
+        "ProgramTable".to_string()
     }
 
     // FIXME: Apply correct padding, not just 0s.
@@ -82,9 +77,9 @@ impl Table<BWord> for InputTable {
     }
 }
 
-impl Table<XFieldElement> for ExtIOTable {
+impl Table<XFieldElement> for ExtProgramTable {
     fn name(&self) -> String {
-        "ExtIOTable".to_string()
+        "ExtProgramTable".to_string()
     }
 
     fn pad(&mut self) {
@@ -114,4 +109,4 @@ impl Table<XFieldElement> for ExtIOTable {
     }
 }
 
-impl ExtensionTable for ExtIOTable {}
+impl ExtensionTable for ExtProgramTable {}
