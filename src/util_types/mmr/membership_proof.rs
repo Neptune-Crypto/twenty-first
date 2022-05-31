@@ -7,9 +7,9 @@ use std::{
 };
 
 use super::shared::{
-    data_index_to_node_index, get_authentication_path_node_indices, get_peak_height,
-    get_peak_heights_and_peak_node_indices, leaf_count_to_node_count, left_sibling,
-    node_indices_added_by_append, parent, right_child_and_height, right_sibling,
+    data_index_to_node_index, get_authentication_path_node_indices,
+    get_peak_heights_and_peak_node_indices, leaf_count_to_node_count, leaf_index_to_peak_index,
+    left_sibling, node_indices_added_by_append, parent, right_child_and_height, right_sibling,
 };
 
 #[derive(Debug)]
@@ -80,23 +80,14 @@ where
         }
 
         // Find the correct peak index
-        let (heights, _) = get_peak_heights_and_peak_node_indices(leaf_count);
-        if heights.len() != peaks.len() {
-            return (false, None);
-        }
-        let expected_peak_height_res = get_peak_height(leaf_count, self.data_index);
-        let expected_peak_height = match expected_peak_height_res {
-            None => return (false, None),
-            Some(eph) => eph,
-        };
-        let peak_index_res = heights.into_iter().position(|x| x == expected_peak_height);
+        let peak_index_res = leaf_index_to_peak_index(self.data_index, leaf_count);
         let peak_index = match peak_index_res {
             None => return (false, None),
             Some(pi) => pi,
         };
 
         // Compare the peak at the expected index with accumulated hash
-        if peaks[peak_index] != acc_hash {
+        if peaks[peak_index as usize] != acc_hash {
             return (false, None);
         }
 
