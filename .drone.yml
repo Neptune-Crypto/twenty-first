@@ -9,13 +9,15 @@ trigger:
 
 steps:
   - name: build
-    image: rust:1.60
+    image: rust:1.61
     commands:
       - cargo check
+      - rustup component add clippy
+      - cargo clippy
       - cargo build --profile=bench
       - cargo test
 
   - name: benchmark
-    image: rust:1.60
+    image: rust:1.61
     commands:
       - cargo bench stark_bf

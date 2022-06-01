@@ -883,7 +883,6 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
     }
 }
 
-#[must_use]
 impl<PFElem: PrimeField> Polynomial<PFElem> {
     pub fn multiply(self, other: Self) -> Self {
         let degree_lhs = self.degree();
