@@ -1,4 +1,4 @@
-use super::membership_proof::MembershipProof;
+use super::mmr_membership_proof::MmrMembershipProof;
 use crate::shared_math::other::log_2_floor;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use std::marker::PhantomData;
@@ -276,13 +276,13 @@ pub fn calculate_new_peaks_from_append<H: Hasher>(
     old_leaf_count: u128,
     old_peaks: Vec<H::Digest>,
     new_leaf: H::Digest,
-) -> Option<(Vec<H::Digest>, MembershipProof<H>)> {
+) -> Option<(Vec<H::Digest>, MmrMembershipProof<H>)> {
     let mut peaks = old_peaks;
     let mut new_node_index = data_index_to_node_index(old_leaf_count);
     let (mut new_node_is_right_child, _height) = right_child_and_height(new_node_index);
     peaks.push(new_leaf);
     let hasher = H::new();
-    let mut membership_proof: MembershipProof<H> = MembershipProof {
+    let mut membership_proof: MmrMembershipProof<H> = MmrMembershipProof {
         authentication_path: vec![],
         data_index: old_leaf_count,
         _hasher: PhantomData,
@@ -312,7 +312,7 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: Hasher>(
     old_peaks: &[H::Digest],
     new_leaf: &H::Digest,
     leaf_count: u128,
-    membership_proof: &MembershipProof<H>,
+    membership_proof: &MmrMembershipProof<H>,
 ) -> Option<Vec<H::Digest>>
 where
     u128: ToDigest<H::Digest>,
