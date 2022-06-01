@@ -320,7 +320,12 @@ where
             {
                 // Any number of hashes can be updated in the authentication path, since
                 // we're modifying multiple leaves in the MMR
-                if new_ap_digests.contains_key(&authentication_path_indices) {
+                // Since this function returns the indices of the modified membership proofs,
+                // a check if the new digest is actually different from the previous value is
+                // needed.
+                if new_ap_digests.contains_key(&authentication_path_indices)
+                    && *digest != new_ap_digests[&authentication_path_indices]
+                {
                     *digest = new_ap_digests[&authentication_path_indices].clone();
                     modified_membership_proof_indices.push(i);
                 }
