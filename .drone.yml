@@ -12,7 +12,6 @@ steps:
     image: rust:1.60
     commands:
       - cargo check
-      - cargo clippy
       - cargo build --profile=bench
       - cargo test
 
