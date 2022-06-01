@@ -20,6 +20,8 @@ endif
 build:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo build $(release)
+	rustup check
+	@echo "Update with \`rustup install stable\` if needed."
 
 doc:
 	cargo doc --no-deps
