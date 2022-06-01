@@ -33,6 +33,8 @@ paw = "1.0"
 phf = { version = "0.10", features = ["macros"] }
 primitive-types = { version = "0.11", features = ["serde"] }
 rand = "0.8"
+rand_chacha = "0"
+rand_core = "0"
 rand_distr = "0.4"
 rand_pcg = "0.3"
 rayon = "1.5"

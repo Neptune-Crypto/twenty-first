@@ -10,12 +10,13 @@ use crate::util_types::blake3_wrapper::Blake3Hash;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
 /// A simple `Hasher` trait that allows for hashing one, two or many values into one digest.
 ///
 /// The type of digest is determined by the `impl` of a given `Hasher`, and it requires that
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
-pub trait Hasher: Sized + Send + Sync {
+pub trait Hasher: Sized + Send + Sync + Clone {
     type Digest: ToDigest<Self::Digest>
         + PartialEq
         + Clone
@@ -80,7 +81,7 @@ pub trait Hasher: Sized + Send + Sync {
 
     // FIXME: This is not uniform.
     fn sample_index_not_power_of_two(&self, input: &Self::Digest, max: usize) -> usize {
-        self.sample_index(input, other::roundup_npo2(max as u64) as usize) % max
+        self.sample_index(input, (1 << 16) * other::roundup_npo2(max as u64) as usize) % max
     }
 
     /// Given a uniform random `seed` digest, a `max` that is a power of two,
@@ -162,6 +163,15 @@ impl ToDigest<Blake3Hash> for Blake3Hash {
 }
 
 impl ToDigest<Blake3Hash> for BFieldElement {
+    fn to_digest(&self) -> Blake3Hash {
+        let bytes = bincode::serialize(&self).unwrap();
+        let digest = Blake3Hash(blake3::hash(bytes.as_slice()));
+
+        digest
+    }
+}
+
+impl ToDigest<Blake3Hash> for Vec<BFieldElement> {
     fn to_digest(&self) -> Blake3Hash {
         let bytes = bincode::serialize(&self).unwrap();
         let digest = Blake3Hash(blake3::hash(bytes.as_slice()));
