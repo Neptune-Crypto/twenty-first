@@ -446,7 +446,12 @@ where
                 // Maximum 1 digest can be updated in each authentication path
                 // so if that is encountered, we might as well break and go to
                 // the next membership proof
-                if deducible_hashes.contains_key(&authentication_path_indices) {
+                // Since this function returns the indices of the modified membership proofs,
+                // a check if the new digest is actually different from the previous value is
+                // needed.
+                if deducible_hashes.contains_key(&authentication_path_indices)
+                    && *digest != deducible_hashes[&authentication_path_indices]
+                {
                     *digest = deducible_hashes[&authentication_path_indices].clone();
                     modified_membership_proofs.push(i as u128);
                     break;
@@ -542,9 +547,14 @@ where
             {
                 // Any number of hashes can be updated in the authentication path, since
                 // we're modifying multiple leaves in the MMR
-                if new_ap_digests.contains_key(&authentication_path_indices) {
-                    *digest = new_ap_digests[&authentication_path_indices].clone();
+                // Since this function returns the indices of the modified membership proofs,
+                // a check if the new digest is actually different from the previous value is
+                // needed.
+                if new_ap_digests.contains_key(&authentication_path_indices)
+                    && *digest != new_ap_digests[&authentication_path_indices]
+                {
                     modified_membership_proof_indices.push(i);
+                    *digest = new_ap_digests[&authentication_path_indices].clone();
                 }
             }
         }
@@ -850,6 +860,59 @@ mod mmr_membership_proof_test {
                 );
             }
         }
+    }
+
+    #[test]
+    fn batch_update_from_leaf_mutation_no_change_return_value_test() {
+        // This test verifies that the return value indicating changed membership proofs is empty
+        // even though the mutations affect the membership proofs. The reason it is empty is that
+        // the resulting membership proof digests are unchanged, since the leaf hashes mutations
+        // are the identity operators. In other words: the leafs don't change.
+        type Digest = Blake3Hash;
+        type Hasher = blake3::Hasher;
+
+        let total_leaf_count = 8;
+        let leaf_hashes: Vec<Digest> = (14u128..14 + total_leaf_count).map(|x| x.into()).collect();
+        let archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
+        let mut membership_proofs: Vec<MembershipProof<Hasher>> = vec![];
+        for data_index in 0..total_leaf_count {
+            membership_proofs.push(archival_mmr.prove_membership(data_index).0);
+        }
+
+        for i in 0..total_leaf_count as usize {
+            let leaf_mutation_membership_proof = membership_proofs[i].clone();
+            let new_leaf = leaf_hashes[i];
+            let ret = MembershipProof::batch_update_from_leaf_mutation(
+                &mut membership_proofs,
+                &leaf_mutation_membership_proof,
+                &new_leaf,
+            );
+
+            // the return value must be empty since no membership proof has changed
+            assert!(ret.is_empty());
+        }
+
+        let membership_proofs_init_and_new_leafs: Vec<(MembershipProof<Hasher>, Digest)> =
+            membership_proofs
+                .clone()
+                .into_iter()
+                .zip(leaf_hashes.clone().into_iter())
+                .collect();
+        let ret = MembershipProof::batch_update_from_batch_leaf_mutation(
+            &mut membership_proofs.iter_mut().collect::<Vec<_>>(),
+            membership_proofs_init_and_new_leafs.clone(),
+        );
+
+        // the return value must be empty since no membership proof has changed
+        assert!(ret.is_empty());
+
+        // Let's test the exact same for the MMR accumulator scheme
+        let mut mmra: MmrAccumulator<Hasher> = MmrAccumulator::new(leaf_hashes);
+        let ret_from_acc = mmra.batch_mutate_leaf_and_update_mps(
+            &mut membership_proofs,
+            membership_proofs_init_and_new_leafs,
+        );
+        assert!(ret_from_acc.is_empty());
     }
 
     #[test]
