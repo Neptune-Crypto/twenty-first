@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     archival_mmr::ArchivalMmr,
-    membership_proof::MembershipProof,
+    mmr_membership_proof::MmrMembershipProof,
     mmr_trait::Mmr,
     shared::{
         bag_peaks, calculate_new_peaks_from_append, data_index_to_node_index,
@@ -110,7 +110,7 @@ where
         self.leaf_count
     }
 
-    fn append(&mut self, new_leaf: H::Digest) -> MembershipProof<H> {
+    fn append(&mut self, new_leaf: H::Digest) -> MmrMembershipProof<H> {
         let (new_peaks, membership_proof) =
             calculate_new_peaks_from_append::<H>(self.leaf_count, self.peaks.clone(), new_leaf)
                 .unwrap();
@@ -123,7 +123,7 @@ where
     /// Mutate an existing leaf. It is the caller's responsibility that the
     /// membership proof is valid. If the membership proof is wrong, the MMR
     /// will end up in a broken state.
-    fn mutate_leaf(&mut self, old_membership_proof: &MembershipProof<H>, new_leaf: &H::Digest) {
+    fn mutate_leaf(&mut self, old_membership_proof: &MmrMembershipProof<H>, new_leaf: &H::Digest) {
         let node_index = data_index_to_node_index(old_membership_proof.data_index);
         let hasher = H::new();
         let mut acc_hash: H::Digest = new_leaf.to_owned();
@@ -155,7 +155,7 @@ where
         &self,
         new_peaks: &[H::Digest],
         appended_leafs: &[H::Digest],
-        leaf_mutations: &[(H::Digest, MembershipProof<H>)],
+        leaf_mutations: &[(H::Digest, MmrMembershipProof<H>)],
     ) -> bool {
         // Verify that all leaf mutations operate on unique leafs and that they do
         // not exceed the total leaf count
@@ -175,7 +175,7 @@ where
 
         let mut leaf_mutation_target_values: Vec<H::Digest> =
             leaf_mutations.iter().map(|x| x.0.to_owned()).collect();
-        let mut updated_membership_proofs: Vec<MembershipProof<H>> =
+        let mut updated_membership_proofs: Vec<MmrMembershipProof<H>> =
             leaf_mutations.iter().map(|x| x.1.to_owned()).collect();
 
         // Reverse the leaf mutation vectors, since I would like to apply them in the order
@@ -206,7 +206,7 @@ where
 
             // TODO: Replace this with the new batch updater
             // Update all remaining membership proofs with this leaf mutation
-            MembershipProof::<H>::batch_update_from_leaf_mutation(
+            MmrMembershipProof::<H>::batch_update_from_leaf_mutation(
                 &mut updated_membership_proofs,
                 &membership_proof,
                 &new_leaf_value,
@@ -241,8 +241,8 @@ where
 
     fn batch_mutate_leaf_and_update_mps(
         &mut self,
-        membership_proofs: &mut Vec<MembershipProof<H>>,
-        mut mutation_data: Vec<(MembershipProof<H>, <H as Hasher>::Digest)>,
+        membership_proofs: &mut Vec<MmrMembershipProof<H>>,
+        mut mutation_data: Vec<(MmrMembershipProof<H>, <H as Hasher>::Digest)>,
     ) -> Vec<usize> {
         // Calculate all derivable paths
         let mut new_ap_digests: HashMap<u128, H::Digest> = HashMap::new();
@@ -547,21 +547,22 @@ mod accumulator_mmr_tests {
             }
 
             // Construct the mutation data
-            let mutated_leaf_mps: Vec<MembershipProof<Hasher>> = mutated_leaf_indices
+            let mutated_leaf_mps: Vec<MmrMembershipProof<Hasher>> = mutated_leaf_indices
                 .iter()
                 .map(|i| ammr.prove_membership(*i).0)
                 .collect();
-            let mutation_data: Vec<(MembershipProof<Hasher>, Digest)> = mutated_leaf_mps
+            let mutation_data: Vec<(MmrMembershipProof<Hasher>, Digest)> = mutated_leaf_mps
                 .into_iter()
                 .zip(new_leafs.into_iter())
                 .collect();
 
             assert_eq!(mutated_leaf_count as usize, mutation_data.len());
 
-            let original_membership_proofs: Vec<MembershipProof<Hasher>> = membership_proof_indices
-                .iter()
-                .map(|i| ammr.prove_membership(*i).0)
-                .collect();
+            let original_membership_proofs: Vec<MmrMembershipProof<Hasher>> =
+                membership_proof_indices
+                    .iter()
+                    .map(|i| ammr.prove_membership(*i).0)
+                    .collect();
 
             // Do the update on both MMRs
             let mut mmra_mps = original_membership_proofs.clone();
@@ -611,7 +612,7 @@ mod accumulator_mmr_tests {
             let bad_digests: Vec<Digest> =
                 (12u128..12u128 + start_size).map(|x| x.into()).collect();
             let bad_mmr = ArchivalMmr::<Hasher>::new(bad_digests.clone());
-            let bad_membership_proof: MembershipProof<Hasher> = bad_mmr.prove_membership(0).0;
+            let bad_membership_proof: MmrMembershipProof<Hasher> = bad_mmr.prove_membership(0).0;
             let bad_membership_proof_digest = bad_digests[0];
             let bad_leaf: Digest = 8765432165123u128.into();
             let archival_mmr_init = ArchivalMmr::<Hasher>::new(leaf_hashes_start.clone());
@@ -653,11 +654,11 @@ mod accumulator_mmr_tests {
                     );
 
                     // Create the inputs to the method call
-                    let membership_proofs: Vec<MembershipProof<Hasher>> = mutated_indices
+                    let membership_proofs: Vec<MmrMembershipProof<Hasher>> = mutated_indices
                         .iter()
                         .map(|&i| archival_mmr_init.prove_membership(i).0)
                         .collect();
-                    let mut leaf_mutations: Vec<(Digest, MembershipProof<Hasher>)> =
+                    let mut leaf_mutations: Vec<(Digest, MmrMembershipProof<Hasher>)> =
                         new_leaf_values
                             .clone()
                             .into_iter()
