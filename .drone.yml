@@ -19,7 +19,7 @@ steps:
 
   - name: notify
     commands:
-      - curl --url 'smtps://mail.neptune.builders:25' --mail-from 'drone@mail.neptune.builders' --mail-rcpt 'simon@neptune.cash' -T <(echo -e 'From: drone@mail.neptune.builders\nTo: simon@neptune.cash\nSubject: Curl Test\n\nHello')
+      - curl --url 'smtp://mail.neptune.builders:25' --mail-from 'drone@mail.neptune.builders' --mail-rcpt 'simon@neptune.cash' -T <(echo -e 'From: drone@mail.neptune.builders\nTo: simon@neptune.cash\nSubject: Curl Test\n\nHello')
 
 trigger:
   branch:
