@@ -3,6 +3,10 @@ kind: pipeline
 type: docker
 name: default
 
+trigger:
+  branch:
+    - master
+
 steps:
   - name: build
     image: rust:1.60
@@ -15,14 +19,11 @@ steps:
   - name: benchmark
     image: rust:1.60
     commands:
-    - cargo bench stark_bf
+      - cargo bench stark_bf
 
   - name: notify
     image: rust:1.60
     commands:
       - curl --url 'smtp://mail.neptune.builders:25' --mail-from 'drone@mail.neptune.builders' --mail-rcpt 'simon@neptune.cash' -T <(echo -e 'From: drone@mail.neptune.builders\nTo: simon@neptune.cash\nSubject: Curl Test\n\nHello')
 
-trigger:
-  branch:
-    - master
 
