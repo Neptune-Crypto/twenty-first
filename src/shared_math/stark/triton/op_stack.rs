@@ -94,6 +94,8 @@ impl OpStack {
 
     /// Operational stack value
     ///
+    /// Has the value of the top-most op-stack value that does not have an st_ register.
+    ///
     /// Assumed to be 0 when op-stack memory is empty.
     pub fn osv(&self) -> BWord {
         if self.stack.len() <= OP_STACK_REG_COUNT {

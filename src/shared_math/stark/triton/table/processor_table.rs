@@ -25,6 +25,31 @@ impl HasBaseTable<BWord> for ProcessorTable {
     }
 }
 
+impl ProcessorTable {
+    pub fn new(
+        width: usize,
+        unpadded_height: usize,
+        num_randomizers: usize,
+        generator: BWord,
+        order: usize,
+        matrix: Vec<Vec<BWord>>,
+    ) -> Self {
+        let dummy = generator;
+        let omicron = BaseTable::derive_omicron(unpadded_height as u64, dummy);
+        let base = BaseTable {
+            width,
+            unpadded_height,
+            num_randomizers,
+            omicron,
+            generator,
+            order,
+            matrix,
+        };
+
+        Self { base }
+    }
+}
+
 pub struct ExtProcessorTable {
     base: BaseTable<XFieldElement>,
 }

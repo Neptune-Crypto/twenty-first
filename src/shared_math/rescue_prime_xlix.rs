@@ -1,5 +1,6 @@
 use super::b_field_element::BFieldElement;
 use super::rescue_prime_params;
+use super::stark::triton::table::hash_coprocessor_table;
 use super::traits::PrimeField;
 
 type Word = BFieldElement;
@@ -73,6 +74,30 @@ impl<const M: usize> RescuePrimeXlix<M> {
         for round in 0..self.n {
             self.rescue_xlix_round(round, state);
         }
+    }
+
+    pub fn rescue_xlix_permutation_trace(
+        &self,
+        state: &mut [Word; M],
+    ) -> Vec<[Word; hash_coprocessor_table::BASE_WIDTH]> {
+        debug_assert_eq!(M, state.len());
+        let mut states: Vec<[Word; hash_coprocessor_table::BASE_WIDTH]> =
+            Vec::with_capacity(self.n);
+
+        let mut idc: Word = 0.into();
+        let bla = [idc; hash_coprocessor_table::BASE_WIDTH];
+        bla[1..].copy_from_slice(state);
+        states.push(bla);
+
+        for round in 0..self.n {
+            idc += 1.into();
+            self.rescue_xlix_round(round, state);
+            let bla = [idc; hash_coprocessor_table::BASE_WIDTH];
+            bla[1..].copy_from_slice(state);
+            states.push(bla);
+        }
+
+        states
     }
 
     #[inline(always)]

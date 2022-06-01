@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use rand::Rng;
 
 use super::instruction::{parse, Instruction};
@@ -65,19 +66,58 @@ impl IntoIterator for Program {
 /// corresponds to the VM's `instruction_pointer`. These duplicate values
 /// should most often be skipped/ignored, e.g. when pretty-printing.
 impl Program {
+    /// Create a `Program` from a slice of `Instruction`.
+    ///
+    /// All valid programs terminate with `Halt`.
+    ///
+    /// `new()` will append `Halt` if not present.
     pub fn new(input: &[Instruction]) -> Self {
         let mut instructions = vec![];
         for instr in input {
             instructions.append(&mut vec![*instr; instr.size()]);
         }
+
+        if instructions.last() != Some(&Instruction::Halt) {
+            instructions.push(Instruction::Halt)
+        }
+
         Program { instructions }
     }
 
+    /// Create a `Program` by parsing source code.
+    ///
+    /// All valid programs terminate with `Halt`.
+    ///
+    /// `from_code()` will append `Halt` if not present.
     pub fn from_code(code: &str) -> Result<Self, Box<dyn Error>> {
         let instructions = parse(code)?;
         Ok(Program::new(&instructions))
     }
 
+    /// Convert a `Program` to a `Vec<BWord>`.
+    ///
+    /// Every single-word instruction is converted to a single word.
+    ///
+    /// Every double-word instruction is converted to two words.
+    pub fn to_bwords(&self) -> Vec<BWord> {
+        self.into_iter()
+            .map(|instruction| {
+                let opcode = instruction.opcode_b();
+                if let Some(arg) = instruction.arg() {
+                    vec![opcode, arg]
+                } else {
+                    vec![opcode]
+                }
+            })
+            .concat()
+    }
+
+    /// Simulate (execute) a `Program` and record every state transition.
+    ///
+    /// Returns a `BaseMatrices` that records the execution.
+    ///
+    /// Optionally returns errors on premature termination, but returns a
+    /// `BaseMatrices` for the execution up to the point of failure.
     pub fn simulate<R, In, Out>(
         &self,
         rng: &mut R,
@@ -90,54 +130,29 @@ impl Program {
         In: InputStream,
         Out: OutputStream,
     {
-        let mut current_state = VMState::new(self);
         let mut base_matrices = BaseMatrices::default();
+        base_matrices.initialize(self);
 
-        self.initialize_matrices(&mut base_matrices);
+        // FIXME: Get rid of .unwrap() x 3 in favor of safe error handling.
+        let mut state = VMState::new(self);
+        base_matrices.append(&state, None, state.current_instruction().unwrap());
 
-        match current_state.to_processor_arr() {
-            Err(err) => return (base_matrices, Some(err)),
-            Ok(row) => base_matrices.processor_matrix.push(row),
-        }
-
-        loop {
-            let written_word = match current_state.step_mut(rng, stdin, rescue_prime) {
+        while !state.is_final() {
+            let written_word = match state.step_mut(rng, stdin, rescue_prime) {
                 Err(err) => return (base_matrices, Some(err)),
                 Ok(word) => word,
             };
-            println!("1");
 
-            match current_state.to_processor_arr() {
-                Err(err) => return (base_matrices, Some(err)),
-                Ok(row) => base_matrices.processor_matrix.push(row),
-            }
-            println!("2");
-
-            match current_state.to_instruction_arr() {
-                Err(err) => return (base_matrices, Some(err)),
-                Ok(row) => base_matrices.instruction_matrix.push(row),
-            }
-            println!("3");
-
-            if let Ok(Some(word)) = current_state.read_word() {
-                base_matrices.input_matrix.push([word])
-            }
-            println!("4");
+            base_matrices.append(&state, written_word, state.current_instruction().unwrap());
 
             if let Some(word) = written_word {
-                base_matrices.output_matrix.push([word]);
-                let _written = stdout.write_elem(word);
+                stdout.write_elem(word);
             }
-            println!("5");
-
-            if current_state.is_final() {
-                println!("FINAL? {}", current_state.is_final());
-                break;
-            }
-            println!("6");
         }
 
+        base_matrices.append(&state, None, state.current_instruction().unwrap());
         base_matrices.sort_instruction_matrix();
+        base_matrices.sort_jump_stack_matrix();
 
         (base_matrices, None)
     }
@@ -184,60 +199,6 @@ impl Program {
         let (trace, err) = self.run(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
 
         (trace, stdout.to_vec(), err)
-    }
-
-    fn initialize_matrices(&self, base_matrices: &mut BaseMatrices) {
-        // Fixme:  Change `into_iter()` to `iter()`.
-        let mut iter = self.clone().into_iter();
-        let mut current_instruction = iter.next().unwrap();
-        let mut program_index: BWord = BWord::ring_zero();
-
-        for next_instruction in iter {
-            let current_opcode: BFieldElement = current_instruction.opcode().into();
-
-            base_matrices
-                .program_matrix
-                .push([program_index, current_opcode]);
-
-            // Initalize program and instruction matrix
-            if let Some(instruction_arg) = current_instruction.arg() {
-                base_matrices.instruction_matrix.push([
-                    program_index,
-                    current_opcode,
-                    instruction_arg,
-                ]);
-                program_index.increment();
-
-                // Add another row to program matrix for current_instruction's argument
-                base_matrices
-                    .program_matrix
-                    .push([program_index, instruction_arg]);
-
-                let next_opcode: BFieldElement = next_instruction.opcode().into();
-                base_matrices.instruction_matrix.push([
-                    program_index,
-                    instruction_arg,
-                    next_opcode,
-                ]);
-                program_index.increment();
-            } else {
-                let next_opcode: BFieldElement = next_instruction.opcode().into();
-                base_matrices
-                    .instruction_matrix
-                    .push([program_index, current_opcode, next_opcode]);
-                program_index.increment();
-            }
-
-            current_instruction = next_instruction;
-        }
-
-        // Add a terminating zero line
-        let last_instruction_pointer = program_index;
-        let last_instruction = current_instruction.opcode().into();
-        let zero = BWord::ring_zero();
-        base_matrices
-            .instruction_matrix
-            .push([last_instruction_pointer, last_instruction, zero]);
     }
 
     pub fn len(&self) -> usize {

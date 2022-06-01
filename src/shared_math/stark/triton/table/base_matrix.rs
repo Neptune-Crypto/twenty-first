@@ -1,11 +1,14 @@
-use std::fmt::Display;
-
-use crate::shared_math::b_field_element::BFieldElement;
-
 use super::{
     hash_coprocessor_table, instruction_table, io_table, jump_stack_table, op_stack_table,
     processor_table, program_table, ram_table, u32_op_table,
 };
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::stark::triton::instruction::Instruction;
+use crate::shared_math::stark::triton::state::VMState;
+use crate::shared_math::stark::triton::vm::Program;
+use std::fmt::Display;
+
+type BWord = BFieldElement;
 
 #[derive(Debug, Clone, Default)]
 pub struct BaseMatrices {
@@ -22,8 +25,77 @@ pub struct BaseMatrices {
 }
 
 impl BaseMatrices {
+    /// Initialize `program_matrix` and `instruction_matrix` so that both
+    /// contain one row per word in the program. Instructions that take two
+    /// words (e.g. `push N`) add two rows.
+    pub fn initialize(&mut self, program: &Program) {
+        let words = program.to_bwords().into_iter().enumerate();
+        let (i, mut current_word) = words.next().unwrap();
+
+        let index: BWord = (i as u32).into();
+        self.program_matrix.push([index, current_word]);
+
+        for (i, next_word) in words {
+            let index: BWord = (i as u32).into();
+            self.program_matrix.push([index, current_word]);
+            self.instruction_matrix
+                .push([index, current_word, next_word]);
+            current_word = next_word;
+        }
+    }
+
+    // FIXME: We have to name the row's fields here.
+    //
+    // row[0] corresponds to clk
     pub fn sort_instruction_matrix(&mut self) {
         self.instruction_matrix.sort_by_key(|row| row[0].value());
+    }
+
+    // FIXME: We have to name the row's fields here.
+    //
+    // row[1] corresponds to jsp
+    // row[0] corresponds to clk
+    pub fn sort_jump_stack_matrix(&mut self) {
+        self.jump_stack_matrix
+            .sort_by_key(|row| (row[1].value(), row[0].value()))
+    }
+
+    pub fn append(
+        &mut self,
+        state: &VMState,
+        written_word: Option<BWord>,
+        current_instruction: Instruction,
+    ) {
+        self.processor_matrix
+            .push(state.to_processor_row(current_instruction));
+
+        self.instruction_matrix
+            .push(state.to_instruction_row(current_instruction));
+
+        if let Some(op_stack_row) = state.to_op_stack_row(current_instruction) {
+            self.op_stack_matrix.push(op_stack_row);
+        }
+
+        if let Some(ram_row) = state.to_ram_row(current_instruction) {
+            self.ram_matrix.push(ram_row);
+        }
+
+        self.jump_stack_matrix
+            .push(state.to_jump_stack_row(current_instruction));
+
+        if let Some(mut hash_coprocessor_rows) = state.to_hash_coprocessor_rows(current_instruction)
+        {
+            self.hash_coprocessor_matrix
+                .append(&mut hash_coprocessor_rows);
+        }
+
+        if let Ok(Some(word)) = state.read_word() {
+            self.input_matrix.push([word])
+        }
+
+        if let Some(word) = written_word {
+            self.output_matrix.push([word]);
+        }
     }
 }
 

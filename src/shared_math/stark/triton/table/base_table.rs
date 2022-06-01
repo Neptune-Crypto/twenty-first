@@ -38,32 +38,6 @@ pub struct BaseTable<DataPF> {
 pub trait HasBaseTable<DataPF: PrimeField> {
     fn to_base(&self) -> &BaseTable<DataPF>;
     fn to_mut_base(&mut self) -> &mut BaseTable<DataPF>;
-    // fn from_base(base: BaseTable<DataPF>) -> Self;
-    // fn new(
-    //     width: usize,
-    //     unpadded_height: usize,
-    //     num_randomizers: usize,
-    //     generator: DataPF,
-    //     order: usize,
-    //     matrix: Vec<Vec<DataPF>>,
-    // ) -> Self
-    // where
-    //     Self: Sized,
-    // {
-    //     let dummy = generator;
-    //     let omicron = derive_omicron::<DataPF>(unpadded_height as u64, dummy);
-    //     let base = BaseTable::<DataPF> {
-    //         width,
-    //         unpadded_height,
-    //         num_randomizers,
-    //         omicron,
-    //         generator,
-    //         order,
-    //         matrix,
-    //     };
-
-    //     Self::from_base(base)
-    // }
 
     fn width(&self) -> usize {
         self.to_base().width
@@ -100,16 +74,16 @@ pub trait HasBaseTable<DataPF: PrimeField> {
     fn mut_data(&mut self) -> &mut Vec<Vec<DataPF>> {
         &mut self.to_mut_base().matrix
     }
-}
 
-fn derive_omicron<DataPF: PrimeField>(unpadded_height: u64, dummy: DataPF) -> DataPF {
-    if unpadded_height == 0 {
-        // FIXME: Cannot return 1 because of IdentityValues.
-        return dummy.ring_one();
+    fn derive_omicron(unpadded_height: u64, dummy: DataPF) -> DataPF {
+        if unpadded_height == 0 {
+            // FIXME: Cannot return 1 because of IdentityValues.
+            return dummy.ring_one();
+        }
+
+        let padded_height = other::roundup_npo2(unpadded_height);
+        dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
     }
-
-    let padded_height = other::roundup_npo2(unpadded_height);
-    dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
 }
 
 pub trait Table<DataPF>: HasBaseTable<DataPF>

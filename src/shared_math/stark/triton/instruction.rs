@@ -185,6 +185,49 @@ impl Instruction {
         }
     }
 
+    /// Returns whether a given instruction modifies the op-stack.
+    ///
+    /// A modification involves any amount of pushing and/or popping.
+    pub fn is_op_stack_instruction(&self) -> bool {
+        match self {
+            Pad => false,
+            Call(_) => false,
+            Return => false,
+            Recurse => false,
+            Halt => false,
+            Xlix => false,
+            ClearAll => false,
+            CmpDigest => false,
+
+            Pop => true,
+            Push(_) => true,
+            Dup(_) => true,
+            Swap(_) => true,
+            Skiz => true,
+            Assert => true,
+            ReadMem => true,
+            WriteMem => true,
+            Squeeze(_) => true,
+            Absorb(_) => true,
+            Add => true,
+            Mul => true,
+            Inv => true,
+            Split => true,
+            Eq => true,
+            Lt => true,
+            And => true,
+            Xor => true,
+            Reverse => true,
+            Div => true,
+            XxAdd => true,
+            XxMul => true,
+            XInv => true,
+            XbMul => true,
+            ReadIo => true,
+            WriteIo => true,
+        }
+    }
+
     pub fn opcode_b(&self) -> BFieldElement {
         self.opcode().into()
     }

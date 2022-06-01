@@ -3,8 +3,8 @@ use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
 use super::ord_n::{Ord4::*, Ord6::*, Ord8::*};
 use super::stdio::InputStream;
-use super::table::instruction_table;
-use super::table::processor_table;
+use super::table::{hash_coprocessor_table, instruction_table, jump_stack_table, op_stack_table};
+use super::table::{processor_table, ram_table};
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other;
@@ -62,6 +62,9 @@ pub struct VMState<'pgm> {
 
     /// Auxiliary registers
     pub aux: [BWord; AUX_REGISTER_COUNT],
+
+    // Trace of auxiliary registers for hash coprocessor table
+    pub aux_trace: Vec<[BWord; hash_coprocessor_table::BASE_WIDTH]>,
 }
 
 impl<'pgm> VMState<'pgm> {
@@ -202,7 +205,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Xlix => {
-                rescue_prime.rescue_xlix_permutation(&mut self.aux);
+                self.aux_trace = rescue_prime.rescue_xlix_permutation_trace(&mut self.aux);
                 self.instruction_pointer += 1;
             }
 
@@ -367,23 +370,22 @@ impl<'pgm> VMState<'pgm> {
         Ok(written_word)
     }
 
-    pub fn to_instruction_arr(
+    pub fn to_instruction_row(
         &self,
-    ) -> Result<[BFieldElement; instruction_table::BASE_WIDTH], Box<dyn Error>> {
-        let current_instruction = self.current_instruction()?;
-
+        current_instruction: Instruction,
+    ) -> [BFieldElement; instruction_table::BASE_WIDTH] {
         let ip = (self.instruction_pointer as u32).try_into().unwrap();
         let ci = current_instruction.opcode_b();
         let nia = self.nia();
 
-        Ok([ip, ci, nia])
+        [ip, ci, nia]
     }
 
-    pub fn to_processor_arr(
+    // FIXME: Avoid Result<...> by passing in current_instruction.
+    pub fn to_processor_row(
         &self,
-    ) -> Result<[BFieldElement; processor_table::BASE_WIDTH], Box<dyn Error>> {
-        let current_instruction = self.current_instruction()?;
-
+        current_instruction: Instruction,
+    ) -> [BFieldElement; processor_table::BASE_WIDTH] {
         let clk = self.cycle_count.into();
         let ip = (self.instruction_pointer as u32).try_into().unwrap();
         let ci = current_instruction.opcode_b();
@@ -410,7 +412,7 @@ impl<'pgm> VMState<'pgm> {
         let hv2 = current_instruction.hv(N2);
         let hv3 = current_instruction.hv(N3);
 
-        Ok([
+        [
             clk,
             ip,
             ci,
@@ -457,7 +459,57 @@ impl<'pgm> VMState<'pgm> {
             self.aux[13],
             self.aux[14],
             self.aux[15],
-        ])
+        ]
+    }
+
+    // FIXME: Avoid Result<...> by passing in current_instruction.
+    pub fn to_op_stack_row(
+        &self,
+        current_instruction: Instruction,
+    ) -> Option<[BFieldElement; op_stack_table::BASE_WIDTH]> {
+        if !current_instruction.is_op_stack_instruction() {
+            return None;
+        }
+
+        let clk = self.cycle_count.into();
+        let ci = current_instruction.opcode_b();
+        let osp = self.op_stack.osp();
+        let osv = self.op_stack.osv();
+
+        // clk, ci, osv, osp
+        Some([clk, ci, osv, osp])
+    }
+
+    pub fn to_ram_row(
+        &self,
+        current_instruction: Instruction,
+    ) -> Option<[BFieldElement; ram_table::BASE_WIDTH]> {
+        if [ReadMem, WriteMem].contains(&current_instruction) {
+            let clk = self.cycle_count.into();
+            Some([clk, self.ramp, self.ramv])
+        } else {
+            None
+        }
+    }
+
+    pub fn to_jump_stack_row(
+        &self,
+        current_instruction: Instruction,
+    ) -> [BFieldElement; jump_stack_table::BASE_WIDTH] {
+        let clk = self.cycle_count.into();
+
+        [clk, self.jsp(), self.jso(), self.jsd()]
+    }
+
+    pub fn to_hash_coprocessor_rows(
+        &self,
+        current_instruction: Instruction,
+    ) -> Option<Vec<[BFieldElement; hash_coprocessor_table::BASE_WIDTH]>> {
+        if current_instruction == Instruction::Xlix {
+            Some(self.aux_trace)
+        } else {
+            None
+        }
     }
 
     fn nia(&self) -> BWord {
@@ -498,9 +550,7 @@ impl<'pgm> VMState<'pgm> {
             .unwrap_or_else(|| 0.into())
     }
 
-    /// Internal helper functions
-
-    fn current_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
+    pub fn current_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
         println!(
             "self.instruction_pointer: {}, self.program: {:?}",
             self.instruction_pointer, self.program
@@ -517,7 +567,7 @@ impl<'pgm> VMState<'pgm> {
     // since the current instruction could be a jump, but it is either
     // program[ip + 1] or program[ip + 2] depending on whether the current
     // instruction takes an argument or not.
-    fn next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
+    pub fn next_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
         let ci = self.current_instruction()?;
         let ci_size = ci.size();
         let ni_pointer = self.instruction_pointer + ci_size;
@@ -583,7 +633,7 @@ impl<'pgm> Display for VMState<'pgm> {
             f,
             "{}",
             ProcessorMatrixRow {
-                row: self.to_processor_arr().unwrap()
+                row: self.to_processor_row()
             }
         )
     }
