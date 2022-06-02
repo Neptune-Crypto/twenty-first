@@ -227,8 +227,8 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            CmpDigest => {
-                let cmp_bword = if self.cmp_digest() {
+            AssertDigest => {
+                let cmp_bword = if self.assert_digest() {
                     BWord::ring_one()
                 } else {
                     BWord::ring_zero()
@@ -604,7 +604,7 @@ impl<'pgm> VMState<'pgm> {
             .ok_or_else(|| vm_fail(MemoryAddressNotFound))
     }
 
-    fn cmp_digest(&self) -> bool {
+    fn assert_digest(&self) -> bool {
         for i in 0..DIGEST_LEN {
             // Safe as long as DIGEST_LEN <= OP_STACK_REG_COUNT
             if self.aux[i] != self.op_stack.safe_peek(i.try_into().unwrap()) {

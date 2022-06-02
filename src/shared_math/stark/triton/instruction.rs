@@ -40,7 +40,7 @@ pub enum Instruction {
     ClearAll,
     Squeeze(Ord16),
     Absorb(Ord16),
-    CmpDigest,
+    AssertDigest,
 
     // Arithmetic on stack instructions
     Add,
@@ -107,7 +107,7 @@ impl Display for Instruction {
                 let n: usize = arg.into();
                 n
             }),
-            CmpDigest => write!(f, "cmp_digest"),
+            AssertDigest => write!(f, "assert_digest"),
 
             // Arithmetic on stack instructions
             Add => write!(f, "add"),
@@ -160,7 +160,7 @@ impl Instruction {
             ClearAll => 31,
             Squeeze(_) => 32,
             Absorb(_) => 33,
-            CmpDigest => 36,
+            AssertDigest => 36,
 
             // Arithmetic on stack instructions
             Add => 40,
@@ -197,7 +197,7 @@ impl Instruction {
             Halt => false,
             Xlix => false,
             ClearAll => false,
-            CmpDigest => false,
+            AssertDigest => false,
 
             Pop => true,
             Push(_) => true,
@@ -254,7 +254,7 @@ impl Instruction {
             WriteMem => 1,
             Xlix => 1,
             ClearAll => 1,
-            CmpDigest => 1,
+            AssertDigest => 1,
             Add => 1,
             Mul => 1,
             Inv => 1,
@@ -420,7 +420,7 @@ fn parse_token(
         "absorb13" => vec![Absorb(A13)],
         "absorb14" => vec![Absorb(A14)],
         "absorb15" => vec![Absorb(A15)],
-        "cmp_digest" => vec![CmpDigest],
+        "assert_digest" => vec![AssertDigest],
 
         // Arithmetic on stack instructions
         "add" => vec![Add],
@@ -696,7 +696,7 @@ pub mod sample_programs {
         squeeze7 squeeze8 squeeze9 squeeze10 squeeze11 squeeze12 squeeze13
         squeeze14 squeeze15 absorb0 absorb1 absorb2 absorb3 absorb4 absorb5
         absorb6 absorb7 absorb8 absorb9 absorb10 absorb11 absorb12 absorb13
-        absorb14 absorb15 cmp_digest add mul inv split eq lt and xor reverse
+        absorb14 absorb15 assert_digest add mul inv split eq lt and xor reverse
         div xxadd xxmul xinv xbmul read_io write_io
     ";
 
@@ -755,7 +755,7 @@ pub mod sample_programs {
             Absorb(A13),
             Absorb(A14),
             Absorb(A15),
-            CmpDigest,
+            AssertDigest,
             Add,
             Mul,
             Inv,
@@ -830,7 +830,7 @@ pub mod sample_programs {
             "absorb13",
             "absorb14",
             "absorb15",
-            "cmp_digest",
+            "assert_digest",
             "add",
             "mul",
             "inv",
