@@ -69,7 +69,7 @@ impl Stark {
         let fri_domain = triton::fri_domain::FriDomain {
             offset,
             omega,
-            length: fri_domain_length,
+            length: fri_domain_length as usize,
         };
 
         todo!()
