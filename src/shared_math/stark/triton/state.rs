@@ -133,12 +133,6 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 2;
             }
 
-            Pad => {
-                let elem = BWord::random_elements(1, rng)[0];
-                self.op_stack.push(elem);
-                self.instruction_pointer += 1;
-            }
-
             Dup(arg) => {
                 let elem = self.op_stack.safe_peek(arg.into());
                 self.op_stack.push(elem);

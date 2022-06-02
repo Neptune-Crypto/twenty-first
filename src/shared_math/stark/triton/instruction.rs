@@ -19,7 +19,6 @@ pub enum Instruction {
     // OpStack manipulation
     Pop,
     Push(BWord),
-    Pad,
     Dup(Ord4),
     Swap(Ord4),
 
@@ -72,7 +71,6 @@ impl Display for Instruction {
                 let n: u64 = arg.into();
                 n
             }),
-            Pad => write!(f, "pad"),
             Dup(arg) => write!(f, "dup{}", {
                 let n: usize = arg.into();
                 n
@@ -139,7 +137,6 @@ impl Instruction {
             // OpStack manipulation
             Pop => 1,
             Push(_) => 2,
-            Pad => 3,
             Dup(_) => 4,
             Swap(_) => 5,
 
@@ -190,7 +187,6 @@ impl Instruction {
     /// A modification involves any amount of pushing and/or popping.
     pub fn is_op_stack_instruction(&self) -> bool {
         match self {
-            Pad => false,
             Call(_) => false,
             Return => false,
             Recurse => false,
@@ -244,7 +240,6 @@ impl Instruction {
 
             // Single-word instructions
             Pop => 1,
-            Pad => 1,
             Skiz => 1,
             Return => 1,
             Recurse => 1,
@@ -363,7 +358,6 @@ fn parse_token(
         // OpStack manipulation
         "pop" => vec![Pop],
         "push" => vec![Push(parse_elem(tokens)?)],
-        "pad" => vec![Pad],
         "dup0" => vec![Dup(N0)],
         "dup1" => vec![Dup(N1)],
         "dup2" => vec![Dup(N2)],
@@ -690,7 +684,7 @@ pub mod sample_programs {
     ";
 
     pub const ALL_INSTRUCTIONS: &str = "
-        pop push 42 pad dup0 dup1 dup2 dup3 swap1 swap2 swap3 swap4 skiz
+        pop push 42 dup0 dup1 dup2 dup3 swap1 swap2 swap3 swap4 skiz
         call 0 return recurse assert halt read_mem write_mem xlix clearall
         squeeze0 squeeze1 squeeze2 squeeze3 squeeze4 squeeze5 squeeze6
         squeeze7 squeeze8 squeeze9 squeeze10 squeeze11 squeeze12 squeeze13
@@ -704,7 +698,6 @@ pub mod sample_programs {
         vec![
             Pop,
             Push(42.into()),
-            Pad,
             Dup(N0),
             Dup(N1),
             Dup(N2),
@@ -779,7 +772,6 @@ pub mod sample_programs {
         vec![
             "pop",
             "push 42",
-            "pad",
             "dup0",
             "dup1",
             "dup2",
