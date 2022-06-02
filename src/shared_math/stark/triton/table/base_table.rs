@@ -142,6 +142,21 @@ where
         }
     }
 
+    fn max_degree(&self) -> Degree {
+        let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.width() * 2];
+
+        self.transition_constraints(&[])
+            .iter()
+            .map(|air| {
+                let symbolic_degree_bound: Degree = air.symbolic_degree_bound(&degree_bounds);
+                let padded_height: Degree = self.padded_height() as Degree;
+
+                symbolic_degree_bound - padded_height + 1
+            })
+            .max()
+            .unwrap_or(-1)
+    }
+
     fn low_degree_extension(&self, fri_domain: &FriDomain<DataPF>) -> Vec<Vec<DataPF>> {
         // FIXME: Table<> supports Vec<[DataPF; WIDTH]>, but FriDomain does not (yet).
         self.interpolate_columns(fri_domain.omega, fri_domain.length)

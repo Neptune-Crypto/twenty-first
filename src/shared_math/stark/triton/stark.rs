@@ -5,6 +5,7 @@ use super::table::processor_table::{self, ProcessorTable};
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
+use crate::shared_math::stark::triton::table::table_collection::BaseTableCollection;
 use crate::shared_math::traits::GetPrimitiveRootOfUnity;
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{other, xfri};
@@ -54,11 +55,10 @@ impl Stark {
             .0
             .unwrap();
 
-        // TODO: Create empty table collection to derive max degree.
+        let base_table_collection = BaseTableCollection::empty();
 
-        let mut max_degree = todo!(); // rc_base_tables.borrow().get_max_degree();
-        max_degree = other::roundup_npo2(max_degree) - 1;
-        let fri_domain_length = (max_degree + 1) * expansion_factor;
+        let max_degree = other::roundup_npo2(base_table_collection.max_degree()) - 1;
+        let fri_domain_length = ((max_degree + 1) * expansion_factor) as usize;
 
         let offset = BWord::generator();
         let omega = BWord::ring_zero()
@@ -103,7 +103,6 @@ impl Stark {
         processor_table.pad();
 
         // 3. Create base codeword tables based on those
-        // FIXME: Create triton::fri_domain::FriDomain<BWord> object
         let coded_processor_table = processor_table.codewords(&self.fri_domain);
     }
 }

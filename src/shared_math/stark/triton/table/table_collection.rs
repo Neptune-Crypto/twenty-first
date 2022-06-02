@@ -52,6 +52,13 @@ impl BaseTableCollection {
             u32_op_table,
         }
     }
+
+    pub fn max_degree(&self) -> u64 {
+        self.into_iter()
+            .map(|table| table.max_degree())
+            .max()
+            .unwrap_or(1) as u64
+    }
 }
 
 impl<'a> IntoIterator for &'a BaseTableCollection {
