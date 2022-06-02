@@ -83,7 +83,7 @@ impl<'pgm> VMState<'pgm> {
 
     /// Determine if this is a final state.
     pub fn is_final(&self) -> bool {
-        self.instruction_pointer >= self.program.len() - 1
+        self.program.len() <= self.instruction_pointer
     }
 
     /// Given a state, compute the next state purely.
@@ -626,13 +626,16 @@ impl<'pgm> VMState<'pgm> {
 
 impl<'pgm> Display for VMState<'pgm> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            ProcessorMatrixRow {
-                row: self.to_processor_row(self.current_instruction().unwrap())
-            }
-        )
+        let res = self.current_instruction().map(|instruction| {
+            write!(
+                f,
+                "{}",
+                ProcessorMatrixRow {
+                    row: self.to_processor_row(instruction)
+                }
+            )
+        });
+        res.unwrap_or_else(|_| write!(f, "END-OF-FILE"))
     }
 }
 
@@ -707,7 +710,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_fibonacci_lq() {
+    fn run_fibonacci_lt() {
         let code = sample_programs::FIBONACCI_LT;
         let program = Program::from_code(code).unwrap();
         let (trace, _out, _err) = program.run_with_input(&[]);
