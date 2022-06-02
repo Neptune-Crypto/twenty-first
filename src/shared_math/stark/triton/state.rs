@@ -82,7 +82,7 @@ impl<'pgm> VMState<'pgm> {
     }
 
     /// Determine if this is a final state.
-    pub fn is_final(&self) -> bool {
+    pub fn is_complete(&self) -> bool {
         self.program.len() <= self.instruction_pointer
     }
 
@@ -344,7 +344,6 @@ impl<'pgm> VMState<'pgm> {
 
             WriteIo => {
                 let out_elem = self.op_stack.pop()?;
-                println!("WALDO:  {}", out_elem);
                 written_word = Some(out_elem);
                 self.instruction_pointer += 1;
             }

@@ -138,7 +138,7 @@ impl Program {
         let mut state = VMState::new(self);
         base_matrices.append(&state, None, state.current_instruction().unwrap());
 
-        while !state.is_final() {
+        while !state.is_complete() {
             let written_word = match state.step_mut(rng, stdin, rescue_prime) {
                 Err(err) => return (base_matrices, Some(err)),
                 Ok(word) => word,
@@ -173,7 +173,7 @@ impl Program {
         let mut processor_trace = vec![VMState::new(self)];
         let mut current_state = processor_trace.last().unwrap();
 
-        while !current_state.is_final() {
+        while !current_state.is_complete() {
             let next_state = current_state.step(rng, stdin, rescue_prime);
             let (next_state, written_word) = match next_state {
                 Err(err) => return (processor_trace, Some(err)),
