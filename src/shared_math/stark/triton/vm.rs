@@ -100,7 +100,8 @@ impl Program {
     ///
     /// Every double-word instruction is converted to two words.
     pub fn to_bwords(&self) -> Vec<BWord> {
-        self.into_iter()
+        self.clone()
+            .into_iter()
             .map(|instruction| {
                 let opcode = instruction.opcode_b();
                 if let Some(arg) = instruction.arg() {
@@ -146,7 +147,7 @@ impl Program {
             base_matrices.append(&state, written_word, state.current_instruction().unwrap());
 
             if let Some(word) = written_word {
-                stdout.write_elem(word);
+                let _written = stdout.write_elem(word);
             }
         }
 

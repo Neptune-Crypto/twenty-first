@@ -85,16 +85,16 @@ impl<const M: usize> RescuePrimeXlix<M> {
             Vec::with_capacity(self.n);
 
         let mut idc: Word = 0.into();
-        let bla = [idc; hash_coprocessor_table::BASE_WIDTH];
-        bla[1..].copy_from_slice(state);
-        states.push(bla);
+        let mut row = [idc; hash_coprocessor_table::BASE_WIDTH];
+        row[1..].copy_from_slice(state);
+        states.push(row);
 
         for round in 0..self.n {
             idc += 1.into();
             self.rescue_xlix_round(round, state);
-            let bla = [idc; hash_coprocessor_table::BASE_WIDTH];
-            bla[1..].copy_from_slice(state);
-            states.push(bla);
+            let mut row = [idc; hash_coprocessor_table::BASE_WIDTH];
+            row[1..].copy_from_slice(state);
+            states.push(row);
         }
 
         states

@@ -1,7 +1,7 @@
 use super::super::triton;
 use super::table::base_matrix::BaseMatrices;
 use super::table::base_table::{HasBaseTable, Table};
-use super::table::processor_table::ProcessorTable;
+use super::table::processor_table::{self, ProcessorTable};
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
@@ -24,7 +24,6 @@ pub struct Stark {
     security_level: usize,
     fri_domain: triton::fri_domain::FriDomain<BWord>,
     fri: xfri::Fri<StarkHasher>,
-    program: Program,
 }
 
 impl Stark {
@@ -57,27 +56,21 @@ impl Stark {
 
         // TODO: Create empty table collection to derive max degree.
 
-        let mut max_degree: u64 = todo!(); // rc_base_tables.borrow().get_max_degree();
+        let mut max_degree = todo!(); // rc_base_tables.borrow().get_max_degree();
         max_degree = other::roundup_npo2(max_degree) - 1;
-        let fri_domain_length: u64 = (max_degree + 1) * expansion_factor;
+        let fri_domain_length = (max_degree + 1) * expansion_factor;
 
-        let b_field_omega = BWord::ring_zero()
+        let offset = BWord::generator();
+        let omega = BWord::ring_zero()
             .get_primitive_root_of_unity(fri_domain_length as u64)
             .0
             .unwrap();
-        let fri_domain = triton::fri_domain::FriDomain {
-            offset: BWord::generator(),
-            omega: todo!(),
-            length: todo!(),
-        };
 
-        // let fri: xfri::Fri<StarkHasher> = xfri::Fri::new(
-        //     todo!()
-        //     todo!(),
-        //     fri_domain_length as usize,
-        //     expansion_factor as usize,
-        //     colinearity_checks,
-        // );
+        let fri_domain = triton::fri_domain::FriDomain {
+            offset,
+            omega,
+            length: fri_domain_length,
+        };
 
         todo!()
     }
@@ -99,13 +92,18 @@ impl Stark {
             num_randomizers,
             smooth_generator,
             order,
-            base_matrices.processor_matrix,
+            base_matrices
+                .processor_matrix
+                .iter()
+                .map(|row| row.to_vec())
+                .collect(),
         );
 
         // 2. Pad matrix
         processor_table.pad();
 
         // 3. Create base codeword tables based on those
-        let coded_processor_table = processor_table.codewords();
+        // FIXME: Create triton::fri_domain::FriDomain<BWord> object
+        let coded_processor_table = processor_table.codewords(&self.fri_domain);
     }
 }

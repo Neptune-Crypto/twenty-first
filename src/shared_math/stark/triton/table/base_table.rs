@@ -1,15 +1,9 @@
 use super::super::fri_domain::FriDomain;
-use super::processor_table::ProcessorTable;
-use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::other;
 use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::{
-    GetPrimitiveRootOfUnity, GetRandomElements, IdentityValues, ModPowU32, PrimeField,
-};
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-
-type BWord = BFieldElement;
+use crate::shared_math::traits::{GetRandomElements, PrimeField};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 #[derive(Debug, Clone)]
 pub struct BaseTable<DataPF> {
@@ -33,6 +27,28 @@ pub struct BaseTable<DataPF> {
 
     // The table data (trace data)
     matrix: Vec<Vec<DataPF>>,
+}
+
+impl<DataPF: PrimeField> BaseTable<DataPF> {
+    pub fn new(
+        width: usize,
+        unpadded_height: usize,
+        num_randomizers: usize,
+        omicron: DataPF,
+        generator: DataPF,
+        order: usize,
+        matrix: Vec<Vec<DataPF>>,
+    ) -> Self {
+        BaseTable {
+            width,
+            unpadded_height,
+            num_randomizers,
+            omicron,
+            generator,
+            order,
+            matrix,
+        }
+    }
 }
 
 pub trait HasBaseTable<DataPF: PrimeField> {
@@ -74,16 +90,16 @@ pub trait HasBaseTable<DataPF: PrimeField> {
     fn mut_data(&mut self) -> &mut Vec<Vec<DataPF>> {
         &mut self.to_mut_base().matrix
     }
+}
 
-    fn derive_omicron(unpadded_height: u64, dummy: DataPF) -> DataPF {
-        if unpadded_height == 0 {
-            // FIXME: Cannot return 1 because of IdentityValues.
-            return dummy.ring_one();
-        }
-
-        let padded_height = other::roundup_npo2(unpadded_height);
-        dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
+pub fn derive_omicron<DataPF: PrimeField>(unpadded_height: u64, dummy: DataPF) -> DataPF {
+    if unpadded_height == 0 {
+        // FIXME: Cannot return 1 because of IdentityValues.
+        return dummy.ring_one();
     }
+
+    let padded_height = other::roundup_npo2(unpadded_height);
+    dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
 }
 
 pub trait Table<DataPF>: HasBaseTable<DataPF>
@@ -125,18 +141,6 @@ where
             omega_order / height
         }
     }
-
-    // fn codewords(&self, fri_domain: &FriDomain<DataPF>) -> Self {
-    //     let codewords = self.low_degree_extension(fri_domain);
-    //     Self::new(
-    //         self.width(),
-    //         self.unpadded_height(),
-    //         self.num_randomizers(),
-    //         self.generator(),
-    //         self.order(),
-    //         codewords,
-    //     )
-    // }
 
     fn low_degree_extension(&self, fri_domain: &FriDomain<DataPF>) -> Vec<Vec<DataPF>> {
         // FIXME: Table<> supports Vec<[DataPF; WIDTH]>, but FriDomain does not (yet).

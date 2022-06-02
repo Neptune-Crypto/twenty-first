@@ -1,8 +1,9 @@
-use super::base_table::{BaseTable, HasBaseTable, Table};
+use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const BASE_WIDTH: usize = 46;
@@ -27,7 +28,6 @@ impl HasBaseTable<BWord> for ProcessorTable {
 
 impl ProcessorTable {
     pub fn new(
-        width: usize,
         unpadded_height: usize,
         num_randomizers: usize,
         generator: BWord,
@@ -35,18 +35,29 @@ impl ProcessorTable {
         matrix: Vec<Vec<BWord>>,
     ) -> Self {
         let dummy = generator;
-        let omicron = BaseTable::derive_omicron(unpadded_height as u64, dummy);
-        let base = BaseTable {
-            width,
+        let omicron = base_table::derive_omicron(unpadded_height as u64, dummy);
+        let base = BaseTable::new(
+            BASE_WIDTH,
             unpadded_height,
             num_randomizers,
             omicron,
             generator,
             order,
             matrix,
-        };
+        );
 
         Self { base }
+    }
+
+    pub fn codewords(&self, fri_domain: &FriDomain<BWord>) -> Self {
+        let codewords = self.low_degree_extension(fri_domain);
+        Self::new(
+            self.unpadded_height(),
+            self.num_randomizers(),
+            self.generator(),
+            self.order(),
+            codewords,
+        )
     }
 }
 

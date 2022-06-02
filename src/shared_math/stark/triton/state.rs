@@ -492,10 +492,7 @@ impl<'pgm> VMState<'pgm> {
         }
     }
 
-    pub fn to_jump_stack_row(
-        &self,
-        current_instruction: Instruction,
-    ) -> [BFieldElement; jump_stack_table::BASE_WIDTH] {
+    pub fn to_jump_stack_row(&self) -> [BFieldElement; jump_stack_table::BASE_WIDTH] {
         let clk = self.cycle_count.into();
 
         [clk, self.jsp(), self.jso(), self.jsd()]
@@ -506,7 +503,7 @@ impl<'pgm> VMState<'pgm> {
         current_instruction: Instruction,
     ) -> Option<Vec<[BFieldElement; hash_coprocessor_table::BASE_WIDTH]>> {
         if current_instruction == Instruction::Xlix {
-            Some(self.aux_trace)
+            Some(self.aux_trace.clone())
         } else {
             None
         }
@@ -633,7 +630,7 @@ impl<'pgm> Display for VMState<'pgm> {
             f,
             "{}",
             ProcessorMatrixRow {
-                row: self.to_processor_row()
+                row: self.to_processor_row(self.current_instruction().unwrap())
             }
         )
     }

@@ -29,7 +29,7 @@ impl BaseMatrices {
     /// contain one row per word in the program. Instructions that take two
     /// words (e.g. `push N`) add two rows.
     pub fn initialize(&mut self, program: &Program) {
-        let words = program.to_bwords().into_iter().enumerate();
+        let mut words = program.to_bwords().into_iter().enumerate();
         let (i, mut current_word) = words.next().unwrap();
 
         let index: BWord = (i as u32).into();
@@ -80,14 +80,15 @@ impl BaseMatrices {
             self.ram_matrix.push(ram_row);
         }
 
-        self.jump_stack_matrix
-            .push(state.to_jump_stack_row(current_instruction));
+        self.jump_stack_matrix.push(state.to_jump_stack_row());
 
         if let Some(mut hash_coprocessor_rows) = state.to_hash_coprocessor_rows(current_instruction)
         {
             self.hash_coprocessor_matrix
                 .append(&mut hash_coprocessor_rows);
         }
+
+        // TODO: u32 op table
 
         if let Ok(Some(word)) = state.read_word() {
             self.input_matrix.push([word])
