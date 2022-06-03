@@ -1,7 +1,5 @@
 pub mod b_field_element;
 pub mod complex_number;
-pub mod dyadic_rationals;
-pub mod four_u32s;
 pub mod fraction;
 pub mod fri;
 pub mod integer_ring_polynomial;
