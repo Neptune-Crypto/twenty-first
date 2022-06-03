@@ -730,12 +730,14 @@ mod vm_state_tests {
             println!("{}", state);
         }
 
-        let output = *out.last().unwrap();
-        assert_eq!(BFieldElement::new(14), output);
+        let expected = BFieldElement::new(14);
+        let actual = *out.last().unwrap();
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn run_xgcd() {
+        // The XGCD program is work in progress.
         let code = sample_programs::XGCD;
         let program = Program::from_code(code).unwrap();
 
@@ -748,6 +750,10 @@ mod vm_state_tests {
         }
 
         let _last_state = trace.last().unwrap();
-        //assert_eq!(BWord::new(14), last_state.op_stack.st(ST0));
+
+        let _expected = BFieldElement::new(14);
+        let _actual = _last_state.op_stack.st(ST0);
+
+        //assert_eq!(expected, actual);
     }
 }

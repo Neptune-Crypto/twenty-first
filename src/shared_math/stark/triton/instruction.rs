@@ -653,7 +653,8 @@ pub mod sample_programs {
         halt
     ";
 
-    //This cannot not print because we need to itoa() before write_io.
+    // This cannot not print because we need to itoa() before write_io.
+    // TODO: Swap0-7 are now available and we can continue this implementation.
     pub const XGCD: &str = "
         push 1
         push 0

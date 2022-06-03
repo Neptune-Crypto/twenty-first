@@ -232,6 +232,8 @@ impl Program {
 
 #[cfg(test)]
 mod triton_vm_tests {
+    use std::iter::zip;
+
     use super::*;
     use crate::shared_math::stark::triton::{
         instruction::sample_programs,
@@ -308,5 +310,45 @@ mod triton_vm_tests {
         let actual = base_matrices.output_matrix[0][0];
 
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn hello_world() {
+        // 1. Execute program
+        let code = sample_programs::HELLO_WORLD_1;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&[]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+
+        println!("{:?}", err);
+        for row in base_matrices.processor_matrix {
+            println!("{}", ProcessorMatrixRow { row });
+        }
+
+        let expecteds = vec![
+            10, 33, 100, 108, 114, 111, 87, 32, 44, 111, 108, 108, 101, 72,
+        ]
+        .into_iter()
+        .rev()
+        .map(|x| BWord::new(x));
+        let actuals: Vec<BWord> = base_matrices
+            .output_matrix
+            .iter()
+            .map(|&[val]| val)
+            .collect_vec();
+
+        assert_eq!(expecteds.len(), actuals.len());
+
+        for (expected, actual) in zip(expecteds, actuals) {
+            assert_eq!(expected, actual)
+        }
     }
 }
