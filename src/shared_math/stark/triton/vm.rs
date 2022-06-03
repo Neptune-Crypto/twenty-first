@@ -329,26 +329,63 @@ mod triton_vm_tests {
             program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
 
         println!("{:?}", err);
-        for row in base_matrices.processor_matrix {
+        for row in base_matrices.processor_matrix.clone() {
             println!("{}", ProcessorMatrixRow { row });
         }
 
-        let expecteds = vec![
-            10, 33, 100, 108, 114, 111, 87, 32, 44, 111, 108, 108, 101, 72,
-        ]
-        .into_iter()
-        .rev()
-        .map(|x| BWord::new(x));
-        let actuals: Vec<BWord> = base_matrices
-            .output_matrix
-            .iter()
-            .map(|&[val]| val)
-            .collect_vec();
+        // 1. Check `output_matrix`.
+        {
+            let expecteds = vec![
+                10, 33, 100, 108, 114, 111, 87, 32, 44, 111, 108, 108, 101, 72,
+            ]
+            .into_iter()
+            .rev()
+            .map(|x| BWord::new(x));
+            let actuals: Vec<BWord> = base_matrices
+                .output_matrix
+                .iter()
+                .map(|&[val]| val)
+                .collect_vec();
 
-        assert_eq!(expecteds.len(), actuals.len());
+            assert_eq!(expecteds.len(), actuals.len());
 
-        for (expected, actual) in zip(expecteds, actuals) {
-            assert_eq!(expected, actual)
+            for (expected, actual) in zip(expecteds, actuals) {
+                assert_eq!(expected, actual)
+            }
+        }
+
+        // 2. Each `xlix` operation result in 8 rows.
+        {
+            //    let xlix_instruction_count = 0;
+            //    let prc_rows_count = base_matrices.processor_matrix.len();
+            //    assert_eq!(xlix_instruction_count * 8, prc_rows_count)
+        }
+
+        //3. noRows(jmpstack_tabel) == noRows(processor_table)
+        {
+            let jmp_rows_count = base_matrices.jump_stack_matrix.len();
+            let prc_rows_count = base_matrices.processor_matrix.len();
+            assert_eq!(jmp_rows_count, prc_rows_count)
+        }
+
+        // "4. "READIO; WRITEIO" -> noRows(inputable) + noRows(outputtable) == noReadIO +
+        // noWriteIO"
+
+        {
+            // Input
+            let expected_input_count = 0;
+
+            let actual_input_count = base_matrices.input_matrix.len();
+
+            assert_eq!(expected_input_count, actual_input_count);
+
+            // Output
+            let expected_output_count = 14;
+            //let actual = base_matrices.ram_matrix.len();
+
+            let actual_output_count = base_matrices.output_matrix.len();
+
+            assert_eq!(expected_output_count, actual_output_count);
         }
     }
 }
