@@ -139,19 +139,20 @@ impl Program {
         base_matrices.append(&state, None, state.current_instruction().unwrap());
 
         while !state.is_complete() {
+            let curr_instruction = state.current_instruction().unwrap();
+
             let written_word = match state.step_mut(rng, stdin, rescue_prime) {
                 Err(err) => return (base_matrices, Some(err)),
                 Ok(word) => word,
             };
 
-            base_matrices.append(&state, written_word, state.current_instruction().unwrap());
+            base_matrices.append(&state, written_word, curr_instruction);
 
             if let Some(word) = written_word {
                 let _written = stdout.write_elem(word);
             }
         }
 
-        base_matrices.append(&state, None, state.current_instruction().unwrap());
         base_matrices.sort_instruction_matrix();
         base_matrices.sort_jump_stack_matrix();
 
