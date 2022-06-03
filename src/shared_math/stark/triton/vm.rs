@@ -191,15 +191,36 @@ impl Program {
         (processor_trace, None)
     }
 
-    pub fn run_with_input(&self, input: &[u8]) -> (Vec<VMState>, Vec<u8>, Option<Box<dyn Error>>) {
+    pub fn run_with_input(
+        &self,
+        input: &[BFieldElement],
+    ) -> (Vec<VMState>, Vec<BWord>, Option<Box<dyn Error>>) {
+        let input_bytes = input
+            .iter()
+            .map(|elem| elem.value().to_be_bytes())
+            .flatten()
+            .collect_vec();
         let mut rng = rand::thread_rng();
-        let mut stdin = VecStream::new(input);
+        let mut stdin = VecStream::new(&input_bytes);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
         let (trace, err) = self.run(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
 
-        (trace, stdout.to_vec(), err)
+        const U64SIZE: usize = std::mem::size_of::<u64>();
+        let array_chunks: Vec<[u8; 8]> = stdout
+            .to_vec()
+            .chunks_exact(U64SIZE)
+            .map(|chunk| chunk.try_into().expect("Chunks must have length 8."))
+            .collect_vec();
+
+        let out = array_chunks
+            .iter()
+            .map(|&chunk| u64::from_be_bytes(chunk))
+            .map(|usixtyfour| BFieldElement::new(usixtyfour))
+            .collect_vec();
+
+        (trace, out, err)
     }
 
     pub fn len(&self) -> usize {
