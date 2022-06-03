@@ -723,15 +723,15 @@ mod vm_state_tests {
         let program = Program::from_code(code).unwrap();
 
         println!("{}", program);
-        let (trace, _out, _err) = program.run_with_input(&[42.into(), 56.into()]);
+        let (trace, out, _err) = program.run_with_input(&[42.into(), 56.into()]);
 
         println!("{}", program);
         for state in trace.iter() {
             println!("{}", state);
         }
 
-        let last_state = trace.last().unwrap();
-        assert_eq!(BWord::new(14), last_state.op_stack.st(ST0));
+        let output = *out.last().unwrap();
+        assert_eq!(BFieldElement::new(14), output);
     }
 
     #[test]

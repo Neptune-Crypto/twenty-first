@@ -208,16 +208,13 @@ impl Program {
         let (trace, err) = self.run(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
 
         const U64SIZE: usize = std::mem::size_of::<u64>();
-        let array_chunks: Vec<[u8; 8]> = stdout
+        let out = stdout
             .to_vec()
             .chunks_exact(U64SIZE)
-            .map(|chunk| chunk.try_into().expect("Chunks must have length 8."))
-            .collect_vec();
-
-        let out = array_chunks
-            .iter()
-            .map(|&chunk| u64::from_be_bytes(chunk))
-            .map(|usixtyfour| BFieldElement::new(usixtyfour))
+            .map(|chunk: &[u8]| -> &[u8; 8] {
+                chunk.try_into().expect("Chunks must have length 8.")
+            }) // force compatible type
+            .map(|&chunk| BFieldElement::new(u64::from_be_bytes(chunk)))
             .collect_vec();
 
         (trace, out, err)
