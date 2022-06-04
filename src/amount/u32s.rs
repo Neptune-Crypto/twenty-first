@@ -1,9 +1,103 @@
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, Div, Mul, Sub};
 
-use num_traits::{ops::overflowing::OverflowingMul, One, Zero};
+use num_traits::{One, Zero};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct U32s<const N: usize>([u32; N]);
+
+impl<const N: usize> Eq for U32s<N> {}
+
+impl<const N: usize> U32s<N> {
+    fn set_bit(&mut self, bit_index: usize, val: bool) {
+        assert!(bit_index < 32 * N, "bit index exceeded length of U32 array");
+        let u32_element_index = bit_index / 32;
+        let element_bit_index = bit_index % 32;
+        self.0[u32_element_index] = (self.0[u32_element_index] & !(1u32 << element_bit_index))
+            | ((val as u32) << element_bit_index);
+    }
+
+    fn get_bit(&self, bit_index: usize) -> bool {
+        assert!(bit_index < 32 * N, "bit index exceeded length of U32 array");
+        let u32_element_index = bit_index / 32;
+        let element_bit_index = bit_index % 32;
+        (self.0[u32_element_index] & (1u32 << element_bit_index)) == 0
+    }
+
+    pub fn div_two(&mut self) {
+        let mut carry = false;
+        for i in (0..N).rev() {
+            let new_carry = (self.0[i] & 0x00000001u32) == 1;
+            let mut new_cell = self.0[i] >> 1;
+            if carry {
+                new_cell += 1 << 31;
+            }
+            carry = new_carry;
+            self.0[i] = new_cell;
+        }
+    }
+
+    pub fn mul_two(&mut self) {
+        let mut carry = false;
+        for i in 0..N {
+            let (temp, carry_mul) = self.0[i].overflowing_mul(2);
+            (self.0[i], carry) = temp.overflowing_add(carry as u32);
+            carry |= carry_mul;
+        }
+
+        assert!(!carry, "Overflow in mul_two");
+    }
+
+    // pub fn mod_div(&self, divisor: &Self) -> (Self, Self) {
+    //     assert!(!divisor.is_zero(), "Division by zero error");
+    //     let mut quotient: [u32; N] = Self([0; N]);
+    //     let mut remainder: Self = Self([0; N]);
+    //     for i in (0..N * 32).rev() {
+    //         remainder.div_two();
+    //     }
+
+    //     (quotient, remainder)
+    // }
+
+    // pub fn mod_div(&self, divisor: &Self) -> (Self, Self) {
+    //     assert!(!divisor.is_zero(), "Division by zero error");
+    //     let numerator = self;
+
+    //     let mut quotient_array: [u32; N] = [0; N];
+    //     let mut remainder_array: [u32; N] = numerator.0;
+    //     let mut leading_divisor = 0;
+    //     let leading_divisor_index;
+    //     for i in (0..N).rev() {
+    //         if divisor.0[i] != 0 {
+    //             leading_divisor = divisor.0[i];
+    //             leading_divisor_index = i;
+    //             break;
+    //         }
+    //     }
+
+    //     for i in (0..N).rev() {
+    //         let mut guess = remainder_array[i] /
+    //     }
+
+    //     todo!()
+}
+
+impl<const N: usize> PartialOrd for U32s<N> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        for i in (0..N).rev() {
+            if self.0[i] != other.0[i] {
+                return Some(self.0[i].cmp(&other.0[i]));
+            }
+        }
+
+        Some(std::cmp::Ordering::Equal)
+    }
+}
+
+impl<const N: usize> Ord for U32s<N> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
 
 impl<const N: usize> Zero for U32s<N> {
     fn zero() -> Self {
@@ -15,17 +109,21 @@ impl<const N: usize> Zero for U32s<N> {
     }
 }
 
-// impl<const N: usize> One for U32s<N> {
-//     fn one() -> Self {}
+impl<const N: usize> One for U32s<N> {
+    fn one() -> Self {
+        let mut ret_array = [0; N];
+        ret_array[0] = 1;
+        Self(ret_array)
+    }
 
-//     fn is_one(&self) -> bool {
-//         *self == Self::one()
-//     }
+    fn is_one(&self) -> bool {
+        *self == Self::one()
+    }
 
-//     fn set_one(&mut self) {
-//         // *self = One::one();
-//     }
-// }
+    fn set_one(&mut self) {
+        *self = One::one();
+    }
+}
 
 impl<const N: usize> Sub for U32s<N> {
     type Output = Self;
@@ -67,26 +165,28 @@ impl<const N: usize> Add for U32s<N> {
     }
 }
 
+impl<const N: usize> Div for U32s<N> {
+    type Output = U32s<N>;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        //
+        todo!()
+    }
+}
+
 impl<const N: usize> Mul for U32s<N> {
     type Output = U32s<N>;
     fn mul(self, other: U32s<N>) -> U32s<N> {
         let mut res: U32s<N> = U32s([0; N]);
         for i in 0..N {
-            let mut add_carry: bool = false;
+            let mut add_carry: bool;
             for j in 0..N {
-                // let (lo, hi) = self.0[i].wrapping_mul(other, carry);
-                // let (lo, hi) = self.0[i].widening_mul(other.0[j]);
-                // let res = self.0[i].widening_mul(other.0[j]);
-                // let res = self.0[i].carrying_mul(other.0[j], carry);
-                // assert!(i + j > N && )
                 let hi_lo: u64 = self.0[i] as u64 * other.0[j] as u64;
                 let hi: u32 = (hi_lo >> 32) as u32;
                 let lo: u32 = hi_lo as u32;
                 assert!(
-                    i + j <= N || hi == 0 && lo == 0,
-                    "Overflow in multiplication. Got: {:?}*{:?}",
-                    self,
-                    other
+                    i + j < N || hi == 0 && lo == 0,
+                    "Overflow in multiplication",
                 );
 
                 if hi == 0 && lo == 0 {
@@ -97,6 +197,7 @@ impl<const N: usize> Mul for U32s<N> {
                 (res.0[i + j], add_carry) = res.0[i + j].overflowing_add(lo);
                 let mut k = 1;
                 while add_carry {
+                    assert!(i + j + k < N, "Overflow in multiplication",);
                     (res.0[i + j + k], add_carry) =
                         res.0[i + j + k].overflowing_add(add_carry as u32);
                     k += 1;
@@ -106,24 +207,20 @@ impl<const N: usize> Mul for U32s<N> {
                 if hi == 0 {
                     continue;
                 }
+
+                assert!(i + j + 1 < N, "Overflow in multiplication",);
+                (res.0[i + j + 1], add_carry) = res.0[i + j + 1].overflowing_add(hi);
+                k = 2;
+                while add_carry {
+                    assert!(i + j + k < N, "Overflow in multiplication",);
+                    (res.0[i + j + k], add_carry) =
+                        res.0[i + j + k].overflowing_add(add_carry as u32);
+                    k += 1;
+                }
             }
         }
 
-        todo!()
-        // let mut carry_old = false;
-        // let mut res: U32s<N> = U32s([0; N]);
-        // for i in 0..N {
-        //     let (int, carry_new) = self.0[i].overflowing_add(other.0[i]);
-        //     (res.0[i], carry_old) = int.overflowing_add(carry_old.into());
-        //     carry_old = carry_new || carry_old;
-        // }
-        // assert!(
-        //     !carry_old,
-        //     "overflow error in addition of U32s. Input: ({:?}+{:?})",
-        //     self, other
-        // );
-
-        // res
+        res
     }
 }
 
@@ -150,6 +247,72 @@ mod u32s_tests {
     }
 
     #[test]
+    fn simple_mul_test() {
+        let a = U32s([41000, 17, 5, 0]);
+        let b = U32s([3, 2, 0, 0]);
+        let expected = U32s([123000, 82051, 49, 10]);
+        assert_eq!(expected, a * b);
+    }
+
+    #[test]
+    fn mul_test_with_carry() {
+        let a = U32s([1 << 31, 0, 1 << 9, 0]);
+        let b = U32s([1 << 31, 1 << 17, 0, 0]);
+        assert_eq!(U32s([0, 1 << 30, 1 << 16, (1 << 26) + (1 << 8)]), a * b);
+    }
+
+    #[test]
+    #[should_panic(expected = "Overflow in multiplication")]
+    fn mul_overflow_test_0() {
+        let a = U32s([41000, 17, 5, 0]);
+        let b = U32s([3, 2, 2, 0]);
+        let _c = a * b;
+    }
+
+    #[test]
+    #[should_panic(expected = "Overflow in multiplication")]
+    fn mul_overflow_test_1() {
+        let a = U32s([0, 0, 1, 0]);
+        let b = U32s([0, 0, 1, 0]);
+        let _c = a * b;
+    }
+
+    #[test]
+    fn mul_two_div_two() {
+        let vals = get_u32s::<4>(100, Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF]));
+        for val in vals {
+            let mut calculated = val;
+            println!("val = {:?}", val);
+            calculated.mul_two();
+            println!("calculated = {:?}", calculated);
+            calculated.div_two();
+            println!("calculated = {:?}", calculated);
+            assert_eq!(val, calculated);
+        }
+    }
+
+    #[test]
+    fn identity_mul_test() {
+        let masks: [Option<[u32; 4]>; 4] = [
+            Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF]),
+            Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x0]),
+            Some([0xFFFFFFFF, 0xFFFFFFFF, 0x0, 0x0]),
+            Some([0xFFFFFFFF, 0x0, 0x0, 0x0]),
+        ];
+        let mut rhs: U32s<4>;
+        for i in 0..4 {
+            rhs = U32s([0; 4]);
+            rhs.0[i] = 1u32;
+            let vals = get_u32s::<4>(100, masks[i]);
+            for val in vals {
+                let mut expected = val;
+                expected.0.rotate_right(i);
+                assert_eq!(expected, val * rhs);
+            }
+        }
+    }
+
+    #[test]
     fn sub_add_pbt() {
         let count = 100;
         let inputs = get_u32s::<4>(
@@ -161,6 +324,23 @@ mod u32s_tests {
                 inputs[2 * i],
                 inputs[2 * i + 1] + inputs[2 * i] - inputs[2 * i + 1]
             );
+        }
+    }
+
+    #[test]
+    fn div_2_pbt() {
+        let count = 100;
+        let vals: Vec<U32s<4>> = get_u32s::<4>(count, None);
+        for val in vals {
+            let even: bool = (val.0[0] & 0x00000001u32) == 0;
+            let mut calculated = val;
+            calculated.div_two();
+            calculated = calculated + calculated;
+            if even {
+                assert_eq!(val, calculated);
+            } else {
+                assert_eq!(val, calculated + U32s::one());
+            }
         }
     }
 
