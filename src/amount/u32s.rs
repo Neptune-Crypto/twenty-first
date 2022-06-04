@@ -20,7 +20,7 @@ impl<const N: usize> U32s<N> {
         assert!(bit_index < 32 * N, "bit index exceeded length of U32 array");
         let u32_element_index = bit_index / 32;
         let element_bit_index = bit_index % 32;
-        (self.0[u32_element_index] & (1u32 << element_bit_index)) == 0
+        (self.0[u32_element_index] & (1u32 << element_bit_index)) != 0
     }
 
     pub fn div_two(&mut self) {
@@ -47,16 +47,21 @@ impl<const N: usize> U32s<N> {
         assert!(!carry, "Overflow in mul_two");
     }
 
-    // pub fn mod_div(&self, divisor: &Self) -> (Self, Self) {
-    //     assert!(!divisor.is_zero(), "Division by zero error");
-    //     let mut quotient: [u32; N] = Self([0; N]);
-    //     let mut remainder: Self = Self([0; N]);
-    //     for i in (0..N * 32).rev() {
-    //         remainder.div_two();
-    //     }
+    pub fn mod_div(&self, divisor: &Self) -> (Self, Self) {
+        assert!(!divisor.is_zero(), "Division by zero error");
+        let mut quotient = Self([0; N]);
+        let mut remainder = Self([0; N]);
+        for i in (0..N * 32).rev() {
+            remainder.mul_two();
+            remainder.set_bit(0, self.get_bit(i));
+            if remainder >= *divisor {
+                remainder = remainder - *divisor;
+                quotient.set_bit(i, true);
+            }
+        }
 
-    //     (quotient, remainder)
-    // }
+        (quotient, remainder)
+    }
 
     // pub fn mod_div(&self, divisor: &Self) -> (Self, Self) {
     //     assert!(!divisor.is_zero(), "Division by zero error");
@@ -278,6 +283,56 @@ mod u32s_tests {
     }
 
     #[test]
+    fn mod_div_simple_test_0() {
+        let a = U32s([12, 0]);
+        let b = U32s([4, 0]);
+        assert_eq!((U32s([3, 0]), U32s([0, 0])), a.mod_div(&b));
+    }
+
+    #[test]
+    fn mod_div_simple_test_1() {
+        let a = U32s([13, 64]);
+        let b = U32s([4, 0]);
+        assert_eq!((U32s([3, 16]), U32s([1, 0])), a.mod_div(&b));
+    }
+
+    #[test]
+    fn set_bit_simple_test() {
+        let mut a = U32s([12, 0]);
+        a.set_bit(10, true);
+        assert_eq!(U32s([1036, 0]), a);
+        a.set_bit(10, false);
+        assert_eq!(U32s([12, 0]), a);
+        a.set_bit(42, true);
+        assert_eq!(U32s([12, 1024]), a);
+        a.set_bit(0, true);
+        assert_eq!(U32s([13, 1024]), a);
+    }
+
+    #[test]
+    fn get_bit_test() {
+        let a = U32s([0x010000, 1024]);
+        for i in 0..64 {
+            assert_eq!(
+                i == 16 || i == 42,
+                a.get_bit(i),
+                "bit i must match set value for i = {}",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn compare_simple_test() {
+        assert!(U32s([1]) > U32s([0]));
+        assert!(U32s([100]) > U32s([0]));
+        assert!(U32s([100]) > U32s([99]));
+        assert!(U32s([100, 0]) > U32s([99, 0]));
+        assert!(U32s([0, 1]) > U32s([1 << 31, 0]));
+        assert!(U32s([542, 12]) > U32s([1 << 31, 11]));
+    }
+
+    #[test]
     fn mul_two_div_two() {
         let vals = get_u32s::<4>(100, Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF]));
         for val in vals {
@@ -309,6 +364,16 @@ mod u32s_tests {
                 expected.0.rotate_right(i);
                 assert_eq!(expected, val * rhs);
             }
+        }
+    }
+
+    #[test]
+    fn div_mul_pbt() {
+        let count = 100;
+        let vals: Vec<U32s<4>> = get_u32s::<4>(2 * count, None);
+        for i in 0..count {
+            let (quot, rem) = vals[2 * i].mod_div(&vals[2 * i + 1]);
+            assert_eq!(vals[2 * i], quot * vals[2 * i + 1] + rem);
         }
     }
 
