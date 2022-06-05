@@ -3,23 +3,11 @@ use std::ops::{Add, Mul, Sub};
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 
-// pub enum Sign {
-//     Positive,
-//     Negative,
-// }
-
-// pub struct DyadicRational {
-//     mantissa: (Sign, Vec<u32>),
-//     exponent: (Sign, Vec<u32>),
-// }
-
 #[derive(Clone, Debug)]
 pub struct DyadicRational {
     mantissa: BigUint,
     exponent: u32,
 }
-
-// Implement: Eq, Add, Sub, scalar_mul, divide_by_power_of_two, canonize,
 
 impl Zero for DyadicRational {
     fn zero() -> Self {

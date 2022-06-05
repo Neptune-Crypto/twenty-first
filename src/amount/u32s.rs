@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, Div, Mul, Rem, Sub};
 
 use num_traits::{One, Zero};
 
@@ -36,10 +36,13 @@ impl<const N: usize> U32s<N> {
         }
     }
 
+    // Linter complains about line setting `carry` but it looks fine to me. Maybe a bug?
+    #[allow(clippy::shadow_unrelated)]
     pub fn mul_two(&mut self) {
         let mut carry = false;
         for i in 0..N {
             let (temp, carry_mul) = self.0[i].overflowing_mul(2);
+
             (self.0[i], carry) = temp.overflowing_add(carry as u32);
             carry |= carry_mul;
         }
@@ -47,7 +50,8 @@ impl<const N: usize> U32s<N> {
         assert!(!carry, "Overflow in mul_two");
     }
 
-    pub fn mod_div(&self, divisor: &Self) -> (Self, Self) {
+    /// Returns (quotient, remainder)
+    pub fn rem_div(&self, divisor: &Self) -> (Self, Self) {
         assert!(!divisor.is_zero(), "Division by zero error");
         let mut quotient = Self([0; N]);
         let mut remainder = Self([0; N]);
@@ -62,28 +66,6 @@ impl<const N: usize> U32s<N> {
 
         (quotient, remainder)
     }
-
-    // pub fn mod_div(&self, divisor: &Self) -> (Self, Self) {
-    //     assert!(!divisor.is_zero(), "Division by zero error");
-    //     let numerator = self;
-
-    //     let mut quotient_array: [u32; N] = [0; N];
-    //     let mut remainder_array: [u32; N] = numerator.0;
-    //     let mut leading_divisor = 0;
-    //     let leading_divisor_index;
-    //     for i in (0..N).rev() {
-    //         if divisor.0[i] != 0 {
-    //             leading_divisor = divisor.0[i];
-    //             leading_divisor_index = i;
-    //             break;
-    //         }
-    //     }
-
-    //     for i in (0..N).rev() {
-    //         let mut guess = remainder_array[i] /
-    //     }
-
-    //     todo!()
 }
 
 impl<const N: usize> PartialOrd for U32s<N> {
@@ -133,6 +115,8 @@ impl<const N: usize> One for U32s<N> {
 impl<const N: usize> Sub for U32s<N> {
     type Output = Self;
 
+    // Linter complains about line setting `carry_old` but it looks fine to me. Maybe a bug?
+    #[allow(clippy::shadow_unrelated)]
     fn sub(self, rhs: Self) -> Self::Output {
         let mut carry_old = false;
         let mut res: U32s<N> = U32s([0; N]);
@@ -152,6 +136,9 @@ impl<const N: usize> Sub for U32s<N> {
 
 impl<const N: usize> Add for U32s<N> {
     type Output = U32s<N>;
+
+    // Linter complains about line setting `carry_old` but it looks fine to me. Maybe a bug?
+    #[allow(clippy::shadow_unrelated)]
     fn add(self, other: U32s<N>) -> U32s<N> {
         let mut carry_old = false;
         let mut res: U32s<N> = U32s([0; N]);
@@ -174,13 +161,23 @@ impl<const N: usize> Div for U32s<N> {
     type Output = U32s<N>;
 
     fn div(self, rhs: Self) -> Self::Output {
-        //
-        todo!()
+        self.rem_div(&rhs).0
+    }
+}
+
+impl<const N: usize> Rem for U32s<N> {
+    type Output = U32s<N>;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        self.rem_div(&rhs).1
     }
 }
 
 impl<const N: usize> Mul for U32s<N> {
     type Output = U32s<N>;
+
+    // Linter complains about line setting `add_carry` but it looks fine to me. Maybe a bug?
+    #[allow(clippy::shadow_unrelated)]
     fn mul(self, other: U32s<N>) -> U32s<N> {
         let mut res: U32s<N> = U32s([0; N]);
         for i in 0..N {
@@ -286,14 +283,31 @@ mod u32s_tests {
     fn mod_div_simple_test_0() {
         let a = U32s([12, 0]);
         let b = U32s([4, 0]);
-        assert_eq!((U32s([3, 0]), U32s([0, 0])), a.mod_div(&b));
+        assert_eq!((U32s([3, 0]), U32s([0, 0])), a.rem_div(&b));
     }
 
     #[test]
     fn mod_div_simple_test_1() {
         let a = U32s([13, 64]);
         let b = U32s([4, 0]);
-        assert_eq!((U32s([3, 16]), U32s([1, 0])), a.mod_div(&b));
+        assert_eq!((U32s([3, 16]), U32s([1, 0])), a.rem_div(&b));
+    }
+
+    #[test]
+    fn mod_div_simple_test_2() {
+        let a = U32s([420_000_000, 0, 420_000_000, 0]);
+        assert_eq!(
+            (U32s([210_000, 0, 210_000, 0]), U32s::zero()),
+            a.rem_div(&U32s([2000, 0, 0, 0]))
+        );
+        assert_eq!(
+            (U32s([0, 2_100_000, 0, 0]), U32s([420_000_000, 0, 0, 0])),
+            a.rem_div(&U32s([0, 200, 0, 0]))
+        );
+        assert_eq!(
+            (U32s([21_000_000, 0, 0, 0]), U32s([420_000_000, 0, 0, 0])),
+            a.rem_div(&U32s([0, 0, 20, 0]))
+        );
     }
 
     #[test]
@@ -337,11 +351,8 @@ mod u32s_tests {
         let vals = get_u32s::<4>(100, Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF]));
         for val in vals {
             let mut calculated = val;
-            println!("val = {:?}", val);
             calculated.mul_two();
-            println!("calculated = {:?}", calculated);
             calculated.div_two();
-            println!("calculated = {:?}", calculated);
             assert_eq!(val, calculated);
         }
     }
@@ -369,11 +380,24 @@ mod u32s_tests {
 
     #[test]
     fn div_mul_pbt() {
-        let count = 100;
+        let count = 40;
         let vals: Vec<U32s<4>> = get_u32s::<4>(2 * count, None);
         for i in 0..count {
-            let (quot, rem) = vals[2 * i].mod_div(&vals[2 * i + 1]);
+            let (quot, rem) = vals[2 * i].rem_div(&vals[2 * i + 1]);
             assert_eq!(vals[2 * i], quot * vals[2 * i + 1] + rem);
+            assert!(rem < vals[2 * i + 1]);
+            assert_eq!(quot, vals[2 * i] / vals[2 * i + 1]);
+            assert_eq!(rem, vals[2 * i] % vals[2 * i + 1]);
+        }
+
+        // Restrict divisors to 2^64, so quotients are usually in the range of 2^64
+        let divisors: Vec<U32s<4>> =
+            get_u32s::<4>(2 * count, Some([0xFFFFFFFF, 0xFFFFFFFF, 0x00, 0x00]));
+        for i in 0..2 * count {
+            let (quot, rem) = vals[i].rem_div(&divisors[i]);
+            assert_eq!(vals[i], quot * divisors[i] + rem);
+            assert!(rem < divisors[i]);
+            assert!(quot > U32s([0, 1, 0, 0])); // True with a probability of ~=1 - 2^(-33)
         }
     }
 
