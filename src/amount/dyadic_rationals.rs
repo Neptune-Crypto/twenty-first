@@ -1,3 +1,4 @@
+use std::cmp::Ordering::{Equal, Greater, Less};
 use std::ops::{Add, Mul, Sub};
 
 use num_bigint::BigUint;
@@ -5,6 +6,7 @@ use num_traits::{One, Zero};
 
 #[derive(Clone, Debug)]
 pub struct DyadicRational {
+    // TODO: Consider changing mantissa type to `u32` or to `U32s<N>`
     mantissa: BigUint,
     exponent: u32,
 }
@@ -40,6 +42,10 @@ impl One for DyadicRational {
 }
 
 impl DyadicRational {
+    pub fn new(mantissa: BigUint, exponent: u32) -> Self {
+        Self { mantissa, exponent }
+    }
+
     fn canonize(&mut self) {
         let two: BigUint = BigUint::one() + BigUint::one();
         while (self.mantissa.clone() % two.clone()).is_zero() && self.exponent > 0 {
@@ -120,9 +126,15 @@ impl Add for DyadicRational {
 
 impl PartialOrd for DyadicRational {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        // make sure self.exponent is the larger exponent
+        // Make sure self.exponent is the larger exponent
         if self.exponent < other.exponent {
-            return other.partial_cmp(self);
+            // Flip result when this function is called recursively with flipped
+            // arguments.
+            return match other.partial_cmp(self) {
+                Some(Greater) => Some(Less),
+                Some(Less) => Some(Greater),
+                _ => Some(Equal),
+            };
         }
 
         // Put on same denominator
@@ -198,6 +210,8 @@ impl From<u32> for DyadicRational {
 
 #[cfg(test)]
 mod dyadic_rationals_tests {
+    use rand::{thread_rng, RngCore};
+
     use super::*;
 
     #[test]
@@ -237,6 +251,20 @@ mod dyadic_rationals_tests {
     }
 
     #[test]
+    fn add_sub_pbt() {
+        let count: usize = 100;
+        let vals: Vec<DyadicRational> = get_rands(2 * count);
+        for i in 0..count {
+            let sum = vals[2 * i + 1].clone() + vals[2 * i].clone();
+            assert_eq!(vals[2 * i], sum.clone() - vals[2 * i + 1].clone());
+            assert_eq!(vals[2 * i + 1], sum.clone() - vals[2 * i].clone());
+
+            assert!(sum >= vals[2 * i]);
+            assert!(sum >= vals[2 * i + 1]);
+        }
+    }
+
+    #[test]
     fn equality_test() {
         let a: DyadicRational = 16.into();
         let b = DyadicRational {
@@ -266,5 +294,21 @@ mod dyadic_rationals_tests {
         };
 
         assert_eq!(b.clone() + a.clone() - a, b);
+    }
+
+    fn get_rands(length: usize) -> Vec<DyadicRational> {
+        let mut prng = thread_rng();
+        let mut ret = Vec::with_capacity(length);
+
+        for _ in 0..length {
+            let mantissa: BigUint = prng.next_u64().into();
+
+            // Restrict exponent to a value between 0 and 255
+            let exponent: u32 = prng.next_u32() % 0x0100;
+            let val = DyadicRational::new(mantissa, exponent);
+            ret.push(val);
+        }
+
+        ret
     }
 }
