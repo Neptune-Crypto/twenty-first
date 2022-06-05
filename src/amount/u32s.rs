@@ -408,11 +408,26 @@ mod u32s_tests {
             2 * count,
             Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF]),
         );
+
+        let one = U32s::<4>::one();
+        let zero = U32s::<4>::zero();
+
         for i in 0..count {
-            assert_eq!(
-                inputs[2 * i],
-                inputs[2 * i + 1] + inputs[2 * i] - inputs[2 * i + 1]
-            );
+            let sum = inputs[2 * i + 1] + inputs[2 * i];
+            assert_eq!(inputs[2 * i], sum - inputs[2 * i + 1]);
+            assert_eq!(inputs[2 * i + 1], sum - inputs[2 * i]);
+
+            // Let's also test compare, while we're at it
+            assert!(sum >= inputs[2 * i]);
+            assert!(sum >= inputs[2 * i + 1]);
+
+            // subtracting one could overflow if LHS is zero, but the chances are negligible
+            assert!(inputs[2 * i] - one < inputs[2 * i]);
+            assert!(inputs[2 * i] == inputs[2 * i]);
+
+            // And simple identities
+            assert_eq!(inputs[2 * i], inputs[2 * i] + zero);
+            assert_eq!(inputs[2 * i], inputs[2 * i] * one);
         }
     }
 
