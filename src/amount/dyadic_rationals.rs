@@ -1,10 +1,10 @@
+use num_bigint::BigUint;
+use num_traits::{One, Zero};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering::{Equal, Greater, Less};
 use std::ops::{Add, Mul, Sub};
 
-use num_bigint::BigUint;
-use num_traits::{One, Zero};
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DyadicRational {
     // TODO: Consider changing mantissa type to `u32` or to `U32s<N>`
     mantissa: BigUint,
