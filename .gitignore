@@ -30,6 +30,7 @@ cmake-build-*/
 # Unwanted VS Code files
 .vscode/dryrun.log
 .vscode/targets.log
+.vscode/configurationCache.log
 
 # Mongo Explorer plugin
 .idea/**/mongoSettings.xml
