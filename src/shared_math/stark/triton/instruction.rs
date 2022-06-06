@@ -684,6 +684,19 @@ pub mod sample_programs {
         halt
     ";
 
+    pub const XLIX_XLIX_XLIX_HALT: &str = "
+        xlix
+        xlix
+        xlix
+        halt
+    ";
+
+    pub const XLIX_XLIX_XLIX: &str = "
+        xlix
+        xlix
+        xlix
+    ";
+
     pub const ALL_INSTRUCTIONS: &str = "
         pop push 42 dup0 dup1 dup2 dup3 swap1 swap2 swap3 swap4 skiz
         call 0 return recurse assert halt read_mem write_mem xlix clearall

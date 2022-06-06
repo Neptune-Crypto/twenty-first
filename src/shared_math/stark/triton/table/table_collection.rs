@@ -1,14 +1,17 @@
+use itertools::Itertools;
+
+use super::aux_table::{ExtHashCoprocessorTable, HashCoprocessorTable};
 use super::base_table::Table;
-use super::hash_coprocessor_table::HashCoprocessorTable;
-use super::instruction_table::InstructionTable;
-use super::io_table::InputTable;
-use super::jump_stack_table::JumpStackTable;
-use super::op_stack_table::OpStackTable;
-use super::processor_table::ProcessorTable;
-use super::program_table::ProgramTable;
-use super::ram_table::RAMTable;
-use super::u32_op_table::U32OpTable;
+use super::instruction_table::{ExtInstructionTable, InstructionTable};
+use super::io_table::{ExtIOTable, InputTable};
+use super::jump_stack_table::{ExtJumpStackTable, JumpStackTable};
+use super::op_stack_table::{ExtOpStackTable, OpStackTable};
+use super::processor_table::{ExtProcessorTable, ProcessorTable};
+use super::program_table::{ExtProgramTable, ProgramTable};
+use super::ram_table::{ExtRAMTable, RAMTable};
+use super::u32_op_table::{ExtU32OpTable, U32OpTable};
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::mpolynomial::MPolynomial;
 
 type BWord = BFieldElement;
 
@@ -22,8 +25,22 @@ pub struct BaseTableCollection {
     pub op_stack_table: OpStackTable,
     pub ram_table: RAMTable,
     pub jump_stack_table: JumpStackTable,
-    pub hash_coprocessor_table: HashCoprocessorTable,
+    pub aux_table: HashCoprocessorTable,
     pub u32_op_table: U32OpTable,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtTableCollection {
+    pub program_table: ExtProgramTable,
+    pub instruction_table: ExtInstructionTable,
+    pub processor_table: ExtProcessorTable,
+    pub input_table: ExtIOTable,
+    pub output_table: ExtIOTable,
+    pub op_stack_table: ExtOpStackTable,
+    pub ram_table: ExtRAMTable,
+    pub jump_stack_table: ExtJumpStackTable,
+    pub aux_table: ExtHashCoprocessorTable,
+    pub u32_op_table: ExtU32OpTable,
 }
 
 impl BaseTableCollection {
@@ -36,7 +53,7 @@ impl BaseTableCollection {
         let op_stack_table = todo!(); // OpStackTable,
         let ram_table = todo!(); // RAMTable,
         let jump_stack_table = todo!(); // JumpStackTable,
-        let hash_coprocessor_table = todo!(); // HashCoprocessorTable,
+        let aux_table = todo!(); // HashCoprocessorTable,
         let u32_op_table = todo!(); // U32OpTable,
 
         BaseTableCollection {
@@ -48,7 +65,34 @@ impl BaseTableCollection {
             op_stack_table,
             ram_table,
             jump_stack_table,
-            hash_coprocessor_table,
+            aux_table,
+            u32_op_table,
+        }
+    }
+
+    pub fn from_base_matrices(bm: &BaseMatrices) -> Self {
+        todo!();
+        let program_table = ProgramTable::new(bm.pro);
+        //let instruction_table = bm
+        let processor_table = todo!(); // ProcessorTable,
+        let input_table = todo!(); // InputTable,
+        let output_table = todo!(); // InputTable,
+        let op_stack_table = todo!(); // OpStackTable,
+        let ram_table = todo!(); // RAMTable,
+        let jump_stack_table = todo!(); // JumpStackTable,
+        let aux_table = todo!(); // HashCoprocessorTable,
+        let u32_op_table = todo!(); // U32OpTable,
+
+        BaseTableCollection {
+            program_table,
+            instruction_table,
+            processor_table,
+            input_table,
+            output_table,
+            op_stack_table,
+            ram_table,
+            jump_stack_table,
+            aux_table,
             u32_op_table,
         }
     }
@@ -58,6 +102,13 @@ impl BaseTableCollection {
             .map(|table| table.max_degree())
             .max()
             .unwrap_or(1) as u64
+    }
+
+    pub fn all_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
+        // self.into_iter()
+        //     .map(|table| table.boundary_constraints(&[BFieldElement::new(1)]))
+        //     .flatten()
+        todo!()
     }
 }
 
@@ -76,7 +127,7 @@ impl<'a> IntoIterator for &'a BaseTableCollection {
             &self.op_stack_table as &'a dyn Table<BWord>,
             &self.ram_table as &'a dyn Table<BWord>,
             &self.jump_stack_table as &'a dyn Table<BWord>,
-            &self.hash_coprocessor_table as &'a dyn Table<BWord>,
+            &self.aux_table as &'a dyn Table<BWord>,
             &self.u32_op_table as &'a dyn Table<BWord>,
         ]
         .into_iter()

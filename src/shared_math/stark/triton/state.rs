@@ -3,7 +3,7 @@ use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
 use super::ord_n::{Ord4::*, Ord6::*, Ord8::*};
 use super::stdio::InputStream;
-use super::table::{hash_coprocessor_table, instruction_table, jump_stack_table, op_stack_table};
+use super::table::{aux_table, instruction_table, jump_stack_table, op_stack_table};
 use super::table::{processor_table, ram_table};
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
@@ -64,7 +64,7 @@ pub struct VMState<'pgm> {
     pub aux: [BWord; AUX_REGISTER_COUNT],
 
     // Trace of auxiliary registers for hash coprocessor table
-    pub aux_trace: Vec<[BWord; hash_coprocessor_table::BASE_WIDTH]>,
+    pub aux_trace: Vec<[BWord; aux_table::BASE_WIDTH]>,
 }
 
 impl<'pgm> VMState<'pgm> {
@@ -494,7 +494,7 @@ impl<'pgm> VMState<'pgm> {
     pub fn to_hash_coprocessor_rows(
         &self,
         current_instruction: Instruction,
-    ) -> Option<Vec<[BFieldElement; hash_coprocessor_table::BASE_WIDTH]>> {
+    ) -> Option<Vec<[BFieldElement; aux_table::BASE_WIDTH]>> {
         if current_instruction == Instruction::Xlix {
             Some(self.aux_trace.clone())
         } else {

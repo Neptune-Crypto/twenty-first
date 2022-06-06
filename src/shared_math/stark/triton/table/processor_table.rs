@@ -1,9 +1,13 @@
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
+use super::table_collection::ExtTableCollection;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
+use crate::shared_math::stark::triton::stark::{
+    EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT,
+};
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const BASE_WIDTH: usize = 46;
@@ -58,6 +62,36 @@ impl ProcessorTable {
             self.order(),
             codewords,
         )
+    }
+
+    pub fn extend(
+        &self,
+        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
+    ) -> ExtTableCollection {
+        let program_table = self.program_table.extend(); // ProgramTable,
+        let instruction_table = todo!(); // InstructionTable,
+        let processor_table = todo!(); // ProcessorTable,
+        let input_table = todo!(); // InputTable,
+        let output_table = todo!(); // InputTable,
+        let op_stack_table = todo!(); // OpStackTable,
+        let ram_table = todo!(); // RAMTable,
+        let jump_stack_table = todo!(); // JumpStackTable,
+        let aux_table = todo!(); // HashCoprocessorTable,
+        let u32_op_table = todo!(); // U32OpTable,
+
+        BaseTableCollection {
+            program_table,
+            instruction_table,
+            processor_table,
+            input_table,
+            output_table,
+            op_stack_table,
+            ram_table,
+            jump_stack_table,
+            aux_table,
+            u32_op_table,
+        }
     }
 }
 

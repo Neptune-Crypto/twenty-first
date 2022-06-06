@@ -159,6 +159,28 @@ impl Program {
         (base_matrices, None)
     }
 
+    pub fn simulate_with_input<R, In, Out>(
+        &self,
+        input: &[BFieldElement],
+    ) -> (BaseMatrices, Option<Box<dyn Error>>)
+    where
+        R: Rng,
+        In: InputStream,
+        Out: OutputStream,
+    {
+        let input_bytes = input
+            .iter()
+            .map(|elem| elem.value().to_be_bytes())
+            .flatten()
+            .collect_vec();
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&input_bytes);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        self.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime)
+    }
+
     pub fn run<R, In, Out>(
         &self,
         rng: &mut R,
@@ -235,9 +257,18 @@ mod triton_vm_tests {
     use std::iter::zip;
 
     use super::*;
-    use crate::shared_math::stark::triton::{
-        instruction::sample_programs,
-        table::{base_matrix::ProcessorMatrixRow, base_table},
+    use crate::shared_math::{
+        other,
+        stark::triton::{
+            instruction::sample_programs,
+            table::{
+                base_matrix::{self, ProcessorMatrixRow},
+                base_table::{self, HasBaseTable, Table},
+                processor_table::ProcessorTable,
+                table_collection::BaseTableCollection,
+            },
+        },
+        traits::{GetPrimitiveRootOfUnity, IdentityValues},
     };
 
     #[test]
@@ -356,9 +387,9 @@ mod triton_vm_tests {
 
         // 2. Each `xlix` operation result in 8 rows.
         {
-            //    let xlix_instruction_count = 0;
-            //    let prc_rows_count = base_matrices.processor_matrix.len();
-            //    assert_eq!(xlix_instruction_count * 8, prc_rows_count)
+            let xlix_instruction_count = 0;
+            let prc_rows_count = base_matrices.processor_matrix.len();
+            assert!(xlix_instruction_count <= 8 * prc_rows_count)
         }
 
         //3. noRows(jmpstack_tabel) == noRows(processor_table)
@@ -386,6 +417,332 @@ mod triton_vm_tests {
             let actual_output_count = base_matrices.output_matrix.len();
 
             assert_eq!(expected_output_count, actual_output_count);
+        }
+    }
+
+    #[test]
+    fn xlix_xlix_xlix_halt() {
+        // 1. Execute program
+        let code = sample_programs::XLIX_XLIX_XLIX_HALT;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&[]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+
+        println!("{:?}", err);
+        for row in base_matrices.processor_matrix.clone() {
+            println!("{}", ProcessorMatrixRow { row });
+        }
+
+        // 1. Check `output_matrix`.
+        {
+            let expecteds = vec![].into_iter().rev().map(|x| BWord::new(x));
+            let actuals: Vec<BWord> = base_matrices
+                .output_matrix
+                .iter()
+                .map(|&[val]| val)
+                .collect_vec();
+
+            assert_eq!(expecteds.len(), actuals.len());
+
+            for (expected, actual) in zip(expecteds, actuals) {
+                assert_eq!(expected, actual)
+            }
+        }
+
+        // 2. Each `xlix` operation result in 8 rows.
+        {
+            let xlix_instruction_count = 3;
+            let prc_rows_count = base_matrices.processor_matrix.len();
+            assert!(xlix_instruction_count <= 8 * prc_rows_count)
+        }
+
+        //3. noRows(jmpstack_tabel) == noRows(processor_table)
+        {
+            let jmp_rows_count = base_matrices.jump_stack_matrix.len();
+            let prc_rows_count = base_matrices.processor_matrix.len();
+            assert_eq!(jmp_rows_count, prc_rows_count)
+        }
+
+        // "4. "READIO; WRITEIO" -> noRows(inputable) + noRows(outputtable) == noReadIO +
+        // noWriteIO"
+
+        {
+            // Input
+            let expected_input_count = 0;
+
+            let actual_input_count = base_matrices.input_matrix.len();
+
+            assert_eq!(expected_input_count, actual_input_count);
+
+            // Output
+            let expected_output_count = 0;
+            //let actual = base_matrices.ram_matrix.len();
+
+            let actual_output_count = base_matrices.output_matrix.len();
+
+            assert_eq!(expected_output_count, actual_output_count);
+        }
+    }
+
+    #[test]
+    fn xlix_xlix_xlix() {
+        // 1. Execute program
+        let code = sample_programs::XLIX_XLIX_XLIX;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&[]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+
+        println!("{:?}", err);
+        for row in base_matrices.processor_matrix.clone() {
+            println!("{}", ProcessorMatrixRow { row });
+        }
+
+        // 1. Check `output_matrix`.
+        {
+            let expecteds = vec![].into_iter().rev().map(|x| BWord::new(x));
+            let actuals: Vec<BWord> = base_matrices
+                .output_matrix
+                .iter()
+                .map(|&[val]| val)
+                .collect_vec();
+
+            assert_eq!(expecteds.len(), actuals.len());
+
+            for (expected, actual) in zip(expecteds, actuals) {
+                assert_eq!(expected, actual)
+            }
+        }
+
+        // 2. Each `xlix` operation result in 8 rows.
+        {
+            let xlix_instruction_count = 3;
+            let prc_rows_count = base_matrices.processor_matrix.len();
+            assert!(xlix_instruction_count <= 8 * prc_rows_count)
+        }
+        {
+            let xlix_instruction_count = 3;
+            let prc_rows_count = base_matrices.processor_matrix.len();
+            assert_eq!(xlix_instruction_count, prc_rows_count)
+        }
+
+        //3. noRows(jmpstack_tabel) == noRows(processor_table)
+        {
+            let jmp_rows_count = base_matrices.jump_stack_matrix.len();
+            let prc_rows_count = base_matrices.processor_matrix.len();
+            assert_eq!(jmp_rows_count, prc_rows_count)
+        }
+
+        // "4. "READIO; WRITEIO" -> noRows(inputable) + noRows(outputtable) == noReadIO +
+        // noWriteIO"
+
+        {
+            // Input
+            let expected_input_count = 0;
+
+            let actual_input_count = base_matrices.input_matrix.len();
+
+            assert_eq!(expected_input_count, actual_input_count);
+
+            // Output
+            let expected_output_count = 0;
+            //let actual = base_matrices.ram_matrix.len();
+
+            let actual_output_count = base_matrices.output_matrix.len();
+
+            assert_eq!(expected_output_count, actual_output_count);
+        }
+    }
+
+    #[test]
+    fn xlix_xlix_xlix2() {
+        // 1. Execute program
+        let code = sample_programs::XLIX_XLIX_XLIX;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&[]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+
+        println!("{:?}", err);
+        for row in base_matrices.processor_matrix.clone() {
+            println!("{}", ProcessorMatrixRow { row });
+        }
+
+        check_base_matrices(&base_matrices, 1, 0, 3)
+    }
+
+    fn check_base_matrices(
+        base_matrices: &BaseMatrices,
+        expected_input_rows: usize,
+        expected_output_rows: usize,
+        xlix_instruction_count: usize,
+    ) {
+        // 1. Check `output_matrix`.
+        {
+            let expecteds = vec![].into_iter().rev().map(|x| BWord::new(x));
+            let actuals: Vec<BWord> = base_matrices
+                .output_matrix
+                .iter()
+                .map(|&[val]| val)
+                .collect_vec();
+
+            assert_eq!(expecteds.len(), actuals.len());
+
+            for (expected, actual) in zip(expecteds, actuals) {
+                assert_eq!(expected, actual)
+            }
+        }
+
+        // 2. Each `xlix` operation result in 8 rows in the aux matrix.
+        {
+            let aux_rows_count = base_matrices.aux_matrix.len();
+            assert_eq!(xlix_instruction_count * 8, aux_rows_count)
+        }
+
+        //3. noRows(jmpstack_tabel) == noRows(processor_table)
+        {
+            let jmp_rows_count = base_matrices.jump_stack_matrix.len();
+            let prc_rows_count = base_matrices.processor_matrix.len();
+            assert_eq!(jmp_rows_count, prc_rows_count)
+        }
+
+        // "4. "READIO; WRITEIO" -> noRows(inputable) + noRows(outputtable) == noReadIO +
+        // noWriteIO"
+        {
+            // Input
+            let actual_input_rows = base_matrices.input_matrix.len();
+            assert_eq!(expected_input_rows, actual_input_rows);
+
+            // Output
+            let actual_output_rows = base_matrices.output_matrix.len();
+
+            assert_eq!(expected_output_rows, actual_output_rows);
+        }
+    }
+
+    fn check_polynomials_of_program(program: Program) {
+        let mut rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&[]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+
+        // 1. Make table collections so we can extract polynomials.
+        // let table_collection = BaseTableCollection::from_base_matrices(base_matrices);
+
+        // 2. Extract polynomials to get vector of MPolynomial<BFieldElement>
+    }
+
+    #[test]
+    fn processor_table_constraints_evaluate_to_zero_test() {
+        let mut rng = rand::thread_rng();
+
+        let all_programs = vec![sample_programs::XLIX_XLIX_XLIX_HALT];
+        for source_code in all_programs.into_iter() {
+            let program = Program::from_code(source_code).expect("Could not load source code.");
+            let (base_matrices, err) = program.simulate_with_input(&[]);
+            let number_of_randomizers = 2;
+            let order = 1 << 32;
+            let smooth_generator = BFieldElement::ring_zero()
+                .get_primitive_root_of_unity(order)
+                .0
+                .unwrap();
+
+            let processor_matrix = base_matrices
+                .processor_matrix
+                .iter()
+                .map(|row| row.to_vec())
+                .collect_vec();
+
+            // instantiate table objects
+            // unpadded_height: usize,
+            // num_randomizers: usize,
+            // generator: BWord,
+            // order: usize,
+            // matrix: Vec<Vec<BWord>>,
+            let mut processor_table: ProcessorTable = ProcessorTable::new(
+                base_matrices.processor_matrix.len(),
+                number_of_randomizers,
+                smooth_generator,
+                order as usize,
+                processor_matrix,
+            );
+
+            let air_constraints = processor_table.transition_constraints(&[]);
+            assert_air_constraints_on_matrix(base_matrices, processor_matrix, air_constraints);
+
+            // Test air constraints after padding as well
+            processor_table.pad();
+
+            assert!(
+                other::is_power_of_two(processor_table.data().len()),
+                "Matrix length must be power of 2 after padding"
+            );
+
+            assert_air_constraints_on_matrix(base_matrices, processor_matrix, air_constraints);
+
+            // Test the same for the extended matrix
+            let challenges = XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
+                .try_into()
+                .unwrap();
+            processor_table.extend(
+                challenges,
+                XFieldElement::random_elements(2, &mut rng)
+                    .try_into()
+                    .unwrap(),
+            );
+            let x_air_constraints = processor_table.transition_constraints_ext(challenges);
+            for step in 0..processor_table.0.matrix.len() - 1 {
+                let row = processor_table.0.extended_matrix[step].clone();
+                let next_register = processor_table.0.extended_matrix[step + 1].clone();
+                let xpoint: Vec<XFieldElement> = vec![row.clone(), next_register.clone()].concat();
+
+                for x_air_constraint in x_air_constraints.iter() {
+                    assert!(x_air_constraint.evaluate(&xpoint).is_zero());
+                }
+
+                // TODO: Can we add a negative test here?
+            }
+        }
+    }
+
+    fn assert_air_constraints_on_matrix(
+        base_matrices: BaseMatrices,
+        processor_matrix: Vec<Vec<BFieldElement>>,
+        air_constraints: Vec<crate::shared_math::mpolynomial::MPolynomial<BFieldElement>>,
+    ) {
+        for step in 0..base_matrices.processor_matrix.len() - 1 {
+            let register: Vec<BFieldElement> = processor_matrix[step].clone().into();
+            let next_register: Vec<BFieldElement> = processor_matrix[step + 1].clone().into();
+            let point: Vec<BFieldElement> = vec![register, next_register].concat();
+
+            for air_constraint in air_constraints.iter() {
+                assert!(air_constraint.evaluate(&point).is_zero());
+            }
         }
     }
 }
