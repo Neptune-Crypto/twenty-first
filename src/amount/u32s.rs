@@ -347,7 +347,28 @@ mod u32s_tests {
     }
 
     #[test]
-    fn mul_two_div_two() {
+    fn mul_two_div_two_simple_test() {
+        // Without carry
+        let a = U32s([3, 6, 9, 12]);
+        let mut x = a;
+        x.mul_two();
+        assert_eq!(U32s([6, 12, 18, 24]), x);
+        x.div_two();
+        assert_eq!(a, x);
+
+        // With carry
+        let b = U32s([3, 6, 9 + (1 << 31), 12]);
+        x = b;
+        x.mul_two();
+        assert_eq!(U32s([6, 12, 18, 25]), x);
+        x.div_two();
+        assert_eq!(U32s([3, 6, 9 + (1 << 31), 12]), x);
+        x.div_two();
+        assert_eq!(U32s([1, 3 + (1 << 31), 4 + (1 << 30), 6]), x);
+    }
+
+    #[test]
+    fn mul_two_div_two_pbt() {
         let vals = get_u32s::<4>(100, Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF]));
         for val in vals {
             let mut calculated = val;
@@ -396,6 +417,7 @@ mod u32s_tests {
         for i in 0..2 * count {
             let (quot, rem) = vals[i].rem_div(&divisors[i]);
             assert_eq!(vals[i], quot * divisors[i] + rem);
+            assert!(quot * divisors[i] < vals[i]);
             assert!(rem < divisors[i]);
             assert!(quot > U32s([0, 1, 0, 0])); // True with a probability of ~=1 - 2^(-33)
         }
@@ -409,8 +431,9 @@ mod u32s_tests {
             Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF]),
         );
 
-        let one = U32s::<4>::one();
         let zero = U32s::<4>::zero();
+        let one = U32s::<4>::one();
+        let two = one + one;
 
         for i in 0..count {
             let sum = inputs[2 * i + 1] + inputs[2 * i];
@@ -421,13 +444,18 @@ mod u32s_tests {
             assert!(sum >= inputs[2 * i]);
             assert!(sum >= inputs[2 * i + 1]);
 
-            // subtracting one could overflow if LHS is zero, but the chances are negligible
+            // subtracting/adding one could overflow if LHS is zero, but the chances are negligible (~= 2^(-126))
             assert!(inputs[2 * i] - one < inputs[2 * i]);
+            assert!(inputs[2 * i] + one > inputs[2 * i]);
             assert!(inputs[2 * i] == inputs[2 * i]);
 
             // And simple identities
             assert_eq!(inputs[2 * i], inputs[2 * i] + zero);
             assert_eq!(inputs[2 * i], inputs[2 * i] * one);
+            assert_eq!(inputs[2 * i] + inputs[2 * i], inputs[2 * i] * two);
+            let mut two_self = inputs[2 * i];
+            two_self.mul_two();
+            assert_eq!(inputs[2 * i] + inputs[2 * i], two_self);
         }
     }
 
@@ -444,6 +472,22 @@ mod u32s_tests {
                 assert_eq!(val, calculated);
             } else {
                 assert_eq!(val, calculated + U32s::one());
+            }
+        }
+    }
+
+    #[test]
+    fn get_bit_set_bit_pbt() {
+        let outer_count = 100;
+        let inner_count = 20;
+        let mut prng = thread_rng();
+        let vals: Vec<U32s<4>> = get_u32s::<4>(outer_count, None);
+        for mut val in vals {
+            let bit_value = prng.next_u32() % 2 == 0;
+            for _ in 0..inner_count {
+                let bit_index: usize = (prng.next_u32() % (4 * 32)) as usize;
+                val.set_bit(bit_index as usize, bit_value);
+                assert_eq!(bit_value, val.get_bit(bit_index));
             }
         }
     }
