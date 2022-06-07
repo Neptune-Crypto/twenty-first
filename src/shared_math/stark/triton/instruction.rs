@@ -19,6 +19,7 @@ pub enum Instruction {
     // OpStack manipulation
     Pop,
     Push(BWord),
+    Divine,
     Dup(Ord4),
     Swap(Ord4),
 
@@ -50,7 +51,7 @@ pub enum Instruction {
     Lt,
     And,
     Xor,
-    Reverse,
+    Rev,
     Div,
     XxAdd,
     XxMul,
@@ -71,6 +72,7 @@ impl Display for Instruction {
                 let n: u64 = arg.into();
                 n
             }),
+            Divine => write!(f, "divine"),
             Dup(arg) => write!(f, "dup{}", {
                 let n: usize = arg.into();
                 n
@@ -116,7 +118,7 @@ impl Display for Instruction {
             Lt => write!(f, "lt"),
             And => write!(f, "and"),
             Xor => write!(f, "xor"),
-            Reverse => write!(f, "reverse"),
+            Rev => write!(f, "rev"),
             Div => write!(f, "div"),
             XxAdd => write!(f, "xxadd"),
             XxMul => write!(f, "xxmul"),
@@ -137,6 +139,7 @@ impl Instruction {
             // OpStack manipulation
             Pop => 1,
             Push(_) => 2,
+            Divine => 3,
             Dup(_) => 4,
             Swap(_) => 5,
 
@@ -168,7 +171,7 @@ impl Instruction {
             Lt => 45,
             And => 46,
             Xor => 47,
-            Reverse => 48,
+            Rev => 48,
             Div => 49,
 
             XxAdd => 50,
@@ -177,8 +180,8 @@ impl Instruction {
             XbMul => 53,
 
             // Read/write
-            ReadIo => 70,
-            WriteIo => 71,
+            ReadIo => 60,
+            WriteIo => 61,
         }
     }
 
@@ -195,6 +198,7 @@ impl Instruction {
             ClearAll => false,
             AssertDigest => false,
 
+            Divine => true,
             Pop => true,
             Push(_) => true,
             Dup(_) => true,
@@ -213,7 +217,7 @@ impl Instruction {
             Lt => true,
             And => true,
             Xor => true,
-            Reverse => true,
+            Rev => true,
             Div => true,
             XxAdd => true,
             XxMul => true,
@@ -221,6 +225,46 @@ impl Instruction {
             XbMul => true,
             ReadIo => true,
             WriteIo => true,
+        }
+    }
+
+    pub fn is_u32_op(&self) -> bool {
+        match self {
+            Lt => true,
+            And => true,
+            Xor => true,
+            Rev => true,
+            Div => true,
+
+            Divine => false,
+            Split => false,
+            Call(_) => false,
+            Return => false,
+            Recurse => false,
+            Halt => false,
+            Xlix => false,
+            ClearAll => false,
+            AssertDigest => false,
+            Pop => false,
+            Push(_) => false,
+            Dup(_) => false,
+            Swap(_) => false,
+            Skiz => false,
+            Assert => false,
+            ReadMem => false,
+            WriteMem => false,
+            Squeeze(_) => false,
+            Absorb(_) => false,
+            Add => false,
+            Mul => false,
+            Inv => false,
+            Eq => false,
+            XxAdd => false,
+            XxMul => false,
+            XInv => false,
+            XbMul => false,
+            ReadIo => false,
+            WriteIo => false,
         }
     }
 
@@ -240,6 +284,7 @@ impl Instruction {
 
             // Single-word instructions
             Pop => 1,
+            Divine => 1,
             Skiz => 1,
             Return => 1,
             Recurse => 1,
@@ -258,7 +303,7 @@ impl Instruction {
             Lt => 1,
             And => 1,
             Xor => 1,
-            Reverse => 1,
+            Rev => 1,
             Div => 1,
             XxAdd => 1,
             XxMul => 1,
@@ -358,6 +403,7 @@ fn parse_token(
         // OpStack manipulation
         "pop" => vec![Pop],
         "push" => vec![Push(parse_elem(tokens)?)],
+        "divine" => vec![Divine],
         "dup0" => vec![Dup(N0)],
         "dup1" => vec![Dup(N1)],
         "dup2" => vec![Dup(N2)],
@@ -425,7 +471,7 @@ fn parse_token(
         "lt" => vec![Lt],
         "and" => vec![And],
         "xor" => vec![Xor],
-        "reverse" => vec![Reverse],
+        "rev" => vec![Rev],
         "div" => vec![Div],
         "xxadd" => vec![XxAdd],
         "xxmul" => vec![XxMul],
@@ -698,7 +744,7 @@ pub mod sample_programs {
     ";
 
     pub const ALL_INSTRUCTIONS: &str = "
-        pop push 42 dup0 dup1 dup2 dup3 swap1 swap2 swap3 swap4 skiz
+        pop push 42 divine dup0 dup1 dup2 dup3 swap1 swap2 swap3 swap4 skiz
         call 0 return recurse assert halt read_mem write_mem xlix clearall
         squeeze0 squeeze1 squeeze2 squeeze3 squeeze4 squeeze5 squeeze6
         squeeze7 squeeze8 squeeze9 squeeze10 squeeze11 squeeze12 squeeze13
@@ -712,6 +758,7 @@ pub mod sample_programs {
         vec![
             Pop,
             Push(42.into()),
+            Divine,
             Dup(N0),
             Dup(N1),
             Dup(N2),
@@ -771,7 +818,7 @@ pub mod sample_programs {
             Lt,
             And,
             Xor,
-            Reverse,
+            Rev,
             Div,
             XxAdd,
             XxMul,
@@ -786,6 +833,7 @@ pub mod sample_programs {
         vec![
             "pop",
             "push 42",
+            "divine",
             "dup0",
             "dup1",
             "dup2",
@@ -845,7 +893,7 @@ pub mod sample_programs {
             "lt",
             "and",
             "xor",
-            "reverse",
+            "rev",
             "div",
             "xxadd",
             "xxmul",

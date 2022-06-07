@@ -4,7 +4,7 @@ use super::{
 };
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::stark::triton::instruction::Instruction;
-use crate::shared_math::stark::triton::state::VMState;
+use crate::shared_math::stark::triton::state::{VMOutput, VMState};
 use crate::shared_math::stark::triton::vm::Program;
 use std::fmt::Display;
 
@@ -63,7 +63,7 @@ impl BaseMatrices {
     pub fn append(
         &mut self,
         state: &VMState,
-        written_word: Option<BWord>,
+        vm_output: Option<VMOutput>,
         current_instruction: Instruction,
     ) {
         self.processor_matrix
@@ -72,29 +72,22 @@ impl BaseMatrices {
         self.instruction_matrix
             .push(state.to_instruction_row(current_instruction));
 
-        if let Some(op_stack_row) = state.to_op_stack_row(current_instruction) {
-            self.op_stack_matrix.push(op_stack_row);
-        }
-
-        if let Some(ram_row) = state.to_ram_row(current_instruction) {
-            self.ram_matrix.push(ram_row);
-        }
+        self.op_stack_matrix
+            .push(state.to_op_stack_row(current_instruction));
 
         self.jump_stack_matrix.push(state.to_jump_stack_row());
 
-        if let Some(mut hash_coprocessor_rows) = state.to_hash_coprocessor_rows(current_instruction)
-        {
-            self.aux_matrix.append(&mut hash_coprocessor_rows);
-        }
-
-        // TODO: u32 op table
+        self.ram_matrix.push(state.to_ram_row(current_instruction));
 
         if let Ok(Some(word)) = state.read_word() {
             self.input_matrix.push([word])
         }
 
-        if let Some(word) = written_word {
-            self.output_matrix.push([word]);
+        match vm_output {
+            Some(VMOutput::WriteIoTrace(written_word)) => self.output_matrix.push([written_word]),
+            Some(VMOutput::XlixTrace(mut aux_trace)) => self.aux_matrix.append(&mut aux_trace),
+            Some(VMOutput::U32OpTrace(mut trace)) => self.u32_op_matrix.append(&mut trace),
+            None => (),
         }
     }
 }

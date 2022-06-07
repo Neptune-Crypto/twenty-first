@@ -1,12 +1,11 @@
-use itertools::Itertools;
-use rand::Rng;
-
 use super::instruction::{parse, Instruction};
-use super::state::{VMState, AUX_REGISTER_COUNT};
+use super::state::{VMOutput, VMState, AUX_REGISTER_COUNT};
 use super::stdio::{InputStream, OutputStream, VecStream};
 use super::table::base_matrix::BaseMatrices;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_xlix::{neptune_params, RescuePrimeXlix};
+use itertools::Itertools;
+use rand::Rng;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::Cursor;
@@ -134,23 +133,23 @@ impl Program {
         let mut base_matrices = BaseMatrices::default();
         base_matrices.initialize(self);
 
-        // FIXME: Get rid of .unwrap() x 3 in favor of safe error handling.
         let mut state = VMState::new(self);
-        base_matrices.append(&state, None, state.current_instruction().unwrap());
+        let initial_instruction = state.current_instruction().unwrap();
+
+        base_matrices.append(&state, None, initial_instruction);
 
         while !state.is_complete() {
-            let curr_instruction = state.current_instruction().unwrap();
-
-            let written_word = match state.step_mut(rng, stdin, rescue_prime) {
+            let vm_output = match state.step_mut(rng, stdin, rescue_prime) {
                 Err(err) => return (base_matrices, Some(err)),
-                Ok(word) => word,
+                Ok(vm_output) => vm_output,
             };
+            let current_instruction = state.current_instruction().unwrap_or(Instruction::Halt);
 
-            base_matrices.append(&state, written_word, curr_instruction);
-
-            if let Some(word) = written_word {
-                let _written = stdout.write_elem(word);
+            if let Some(VMOutput::WriteIoTrace(written_word)) = &vm_output {
+                let _written = stdout.write_elem(*written_word);
             }
+
+            base_matrices.append(&state, vm_output, current_instruction);
         }
 
         base_matrices.sort_instruction_matrix();
@@ -159,15 +158,10 @@ impl Program {
         (base_matrices, None)
     }
 
-    pub fn simulate_with_input<R, In, Out>(
+    pub fn simulate_with_input(
         &self,
         input: &[BFieldElement],
-    ) -> (BaseMatrices, Option<Box<dyn Error>>)
-    where
-        R: Rng,
-        In: InputStream,
-        Out: OutputStream,
-    {
+    ) -> (BaseMatrices, Option<Box<dyn Error>>) {
         let input_bytes = input
             .iter()
             .map(|elem| elem.value().to_be_bytes())
@@ -193,25 +187,24 @@ impl Program {
         In: InputStream,
         Out: OutputStream,
     {
-        let mut processor_trace = vec![VMState::new(self)];
-        let mut current_state = processor_trace.last().unwrap();
+        let mut states = vec![VMState::new(self)];
+        let mut current_state = states.last().unwrap();
 
         while !current_state.is_complete() {
-            let next_state = current_state.step(rng, stdin, rescue_prime);
-            let (next_state, written_word) = match next_state {
-                Err(err) => return (processor_trace, Some(err)),
-                Ok(result) => result,
+            let (next_state, vm_output) = match current_state.step(rng, stdin, rescue_prime) {
+                Err(err) => return (states, Some(err)),
+                Ok((next_state, vm_output)) => (next_state, vm_output),
             };
 
-            if let Some(word) = written_word {
-                let _written = stdout.write_elem(word);
+            if let Some(VMOutput::WriteIoTrace(written_word)) = vm_output {
+                let _written = stdout.write_elem(written_word);
             }
 
-            processor_trace.push(next_state);
-            current_state = processor_trace.last().unwrap();
+            states.push(next_state);
+            current_state = states.last().unwrap();
         }
 
-        (processor_trace, None)
+        (states, None)
     }
 
     pub fn run_with_input(
@@ -257,19 +250,17 @@ mod triton_vm_tests {
     use std::iter::zip;
 
     use super::*;
-    use crate::shared_math::{
-        other,
-        stark::triton::{
-            instruction::sample_programs,
-            table::{
-                base_matrix::{self, ProcessorMatrixRow},
-                base_table::{self, HasBaseTable, Table},
-                processor_table::ProcessorTable,
-                table_collection::BaseTableCollection,
-            },
-        },
-        traits::{GetPrimitiveRootOfUnity, IdentityValues},
-    };
+    use crate::shared_math::mpolynomial::MPolynomial;
+    use crate::shared_math::other;
+    use crate::shared_math::stark::triton::instruction::sample_programs;
+    use crate::shared_math::stark::triton::stark::EXTENSION_CHALLENGE_COUNT;
+    use crate::shared_math::stark::triton::table::base_matrix::ProcessorMatrixRow;
+    use crate::shared_math::stark::triton::table::base_table::{HasBaseTable, Table};
+    use crate::shared_math::stark::triton::table::extension_table::ExtensionTable;
+    use crate::shared_math::stark::triton::table::processor_table::ProcessorTable;
+    use crate::shared_math::traits::GetRandomElements;
+    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
+    use crate::shared_math::x_field_element::XFieldElement;
 
     #[test]
     fn initialise_table_test() {
@@ -692,8 +683,8 @@ mod triton_vm_tests {
                 processor_matrix,
             );
 
-            let air_constraints = processor_table.transition_constraints(&[]);
-            assert_air_constraints_on_matrix(base_matrices, processor_matrix, air_constraints);
+            let air_constraints = processor_table.base_transition_constraints();
+            assert_air_constraints_on_matrix(processor_table.data(), &air_constraints);
 
             // Test air constraints after padding as well
             processor_table.pad();
@@ -703,22 +694,24 @@ mod triton_vm_tests {
                 "Matrix length must be power of 2 after padding"
             );
 
-            assert_air_constraints_on_matrix(base_matrices, processor_matrix, air_constraints);
+            assert_air_constraints_on_matrix(processor_table.data(), &air_constraints);
 
             // Test the same for the extended matrix
             let challenges = XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
                 .try_into()
                 .unwrap();
-            processor_table.extend(
-                challenges,
-                XFieldElement::random_elements(2, &mut rng)
-                    .try_into()
-                    .unwrap(),
-            );
-            let x_air_constraints = processor_table.transition_constraints_ext(challenges);
-            for step in 0..processor_table.0.matrix.len() - 1 {
-                let row = processor_table.0.extended_matrix[step].clone();
-                let next_register = processor_table.0.extended_matrix[step + 1].clone();
+
+            let initials = XFieldElement::random_elements(2, &mut rng)
+                .try_into()
+                .unwrap();
+
+            let ext_processor_table = processor_table.extend(challenges, initials);
+            let x_air_constraints = ext_processor_table.ext_transition_constraints(&challenges);
+            let ext_data = ext_processor_table.data();
+
+            for step in 0..ext_processor_table.padded_height() - 1 {
+                let row = ext_data[step].clone();
+                let next_register = ext_data[step + 1].clone();
                 let xpoint: Vec<XFieldElement> = vec![row.clone(), next_register.clone()].concat();
 
                 for x_air_constraint in x_air_constraints.iter() {
@@ -731,13 +724,12 @@ mod triton_vm_tests {
     }
 
     fn assert_air_constraints_on_matrix(
-        base_matrices: BaseMatrices,
-        processor_matrix: Vec<Vec<BFieldElement>>,
-        air_constraints: Vec<crate::shared_math::mpolynomial::MPolynomial<BFieldElement>>,
+        table_data: &[Vec<BFieldElement>],
+        air_constraints: &[MPolynomial<BFieldElement>],
     ) {
-        for step in 0..base_matrices.processor_matrix.len() - 1 {
-            let register: Vec<BFieldElement> = processor_matrix[step].clone().into();
-            let next_register: Vec<BFieldElement> = processor_matrix[step + 1].clone().into();
+        for step in 0..table_data.len() - 1 {
+            let register: Vec<BFieldElement> = table_data[step].clone().into();
+            let next_register: Vec<BFieldElement> = table_data[step + 1].clone().into();
             let point: Vec<BFieldElement> = vec![register, next_register].concat();
 
             for air_constraint in air_constraints.iter() {

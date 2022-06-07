@@ -113,15 +113,7 @@ where
 
     fn pad(&mut self);
 
-    fn boundary_constraints(&self, challenges: &[DataPF]) -> Vec<MPolynomial<DataPF>>;
-
-    fn transition_constraints(&self, challenges: &[DataPF]) -> Vec<MPolynomial<DataPF>>;
-
-    fn terminal_constraints(
-        &self,
-        challenges: &[DataPF],
-        terminals: &[DataPF],
-    ) -> Vec<MPolynomial<DataPF>>;
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<DataPF>>;
 
     // Generic functions common to all tables
 
@@ -145,7 +137,7 @@ where
     fn max_degree(&self) -> Degree {
         let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.width() * 2];
 
-        self.transition_constraints(&[])
+        self.base_transition_constraints()
             .iter()
             .map(|air| {
                 let symbolic_degree_bound: Degree = air.symbolic_degree_bound(&degree_bounds);

@@ -5,18 +5,18 @@ use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::x_field_element::XFieldElement;
 
-pub const BASE_WIDTH: usize = 7;
+pub const BASE_WIDTH: usize = 17;
 pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >BASE_WIDTH
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
-pub struct U32OpTable {
+pub struct HashCoprocessorTable {
     base: BaseTable<BWord>,
 }
 
-impl HasBaseTable<BWord> for U32OpTable {
+impl HasBaseTable<BWord> for HashCoprocessorTable {
     fn to_base(&self) -> &BaseTable<BWord> {
         &self.base
     }
@@ -27,11 +27,11 @@ impl HasBaseTable<BWord> for U32OpTable {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExtU32OpTable {
+pub struct ExtHashCoprocessorTable {
     base: BaseTable<XFieldElement>,
 }
 
-impl HasBaseTable<XFieldElement> for ExtU32OpTable {
+impl HasBaseTable<XFieldElement> for ExtHashCoprocessorTable {
     fn to_base(&self) -> &BaseTable<XFieldElement> {
         &self.base
     }
@@ -41,9 +41,9 @@ impl HasBaseTable<XFieldElement> for ExtU32OpTable {
     }
 }
 
-impl Table<BWord> for U32OpTable {
+impl Table<BWord> for HashCoprocessorTable {
     fn name(&self) -> String {
-        "U32OpTable".to_string()
+        "HashCoprocessorTable".to_string()
     }
 
     // FIXME: Apply correct padding, not just 0s.
@@ -61,9 +61,9 @@ impl Table<BWord> for U32OpTable {
     }
 }
 
-impl Table<XFieldElement> for ExtU32OpTable {
+impl Table<XFieldElement> for ExtHashCoprocessorTable {
     fn name(&self) -> String {
-        "ExtU32OpTable".to_string()
+        "ExtHashCoprocessorTable".to_string()
     }
 
     fn pad(&mut self) {
@@ -75,7 +75,7 @@ impl Table<XFieldElement> for ExtU32OpTable {
     }
 }
 
-impl ExtensionTable for ExtU32OpTable {
+impl ExtensionTable for ExtHashCoprocessorTable {
     fn ext_boundary_constraints(&self, _challenges: &[XWord]) -> Vec<MPolynomial<XWord>> {
         vec![]
     }

@@ -15,6 +15,16 @@ type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 pub trait ExtensionTable: Table<XWord> + Sync {
+    fn ext_boundary_constraints(&self, challenges: &[XWord]) -> Vec<MPolynomial<XWord>>;
+
+    fn ext_transition_constraints(&self, challenges: &[XWord]) -> Vec<MPolynomial<XWord>>;
+
+    fn ext_terminal_constraints(
+        &self,
+        challenges: &[XWord],
+        terminals: &[XWord],
+    ) -> Vec<MPolynomial<XWord>>;
+
     fn all_quotient_degree_bounds(&self, challenges: &[XWord], terminals: &[XWord]) -> Vec<Degree> {
         vec![
             self.boundary_quotient_degree_bounds(challenges),
@@ -28,7 +38,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.width()];
 
         let degree_bounds: Vec<Degree> = self
-            .boundary_constraints(challenges)
+            .ext_boundary_constraints(challenges)
             .iter()
             .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - 1)
             .collect();
@@ -39,7 +49,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
     fn transition_quotient_degree_bounds(&self, challenges: &[XWord]) -> Vec<Degree> {
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); 2 * self.width()];
 
-        let transition_constraints = self.transition_constraints(challenges);
+        let transition_constraints = self.ext_transition_constraints(challenges);
 
         // Safe because padded height is at most 2^30.
         let padded_height: Degree = self.padded_height().try_into().unwrap();
@@ -56,7 +66,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         terminals: &[XWord],
     ) -> Vec<Degree> {
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.width()];
-        self.terminal_constraints(challenges, terminals)
+        self.ext_terminal_constraints(challenges, terminals)
             .iter()
             .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - 1)
             .collect::<Vec<Degree>>()
@@ -102,7 +112,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
             .map(|(i, x)| subgroup_zerofier_inverse[i] * (x - omicron_inverse))
             .collect();
 
-        let transition_constraints = self.transition_constraints(challenges);
+        let transition_constraints = self.ext_transition_constraints(challenges);
 
         let mut quotients: Vec<Vec<XWord>> = vec![];
         let unit_distance = self.unit_distance(fri_domain.length);
@@ -156,7 +166,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
             .collect();
 
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier_codeword);
-        let terminal_constraints = self.terminal_constraints(challenges, terminals);
+        let terminal_constraints = self.ext_terminal_constraints(challenges, terminals);
         let mut quotient_codewords: Vec<Vec<XWord>> = vec![];
         for termc in terminal_constraints.iter() {
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
@@ -190,7 +200,8 @@ pub trait ExtensionTable: Table<XWord> + Sync {
     ) -> Vec<Vec<XWord>> {
         assert!(!codewords.is_empty(), "Codewords must be non-empty");
         let mut quotient_codewords: Vec<Vec<XWord>> = vec![];
-        let boundary_constraints: Vec<MPolynomial<XWord>> = self.boundary_constraints(challenges);
+        let boundary_constraints: Vec<MPolynomial<XWord>> =
+            self.ext_boundary_constraints(challenges);
         let one = BFieldElement::ring_one();
         let zerofier: Vec<BFieldElement> = (0..fri_domain.length)
             .map(|i| fri_domain.domain_value(i as u32) - one)

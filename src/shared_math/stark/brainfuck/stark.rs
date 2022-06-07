@@ -270,6 +270,7 @@ impl Stark {
             self.max_degree as usize + 1,
             &mut rng,
         ));
+
         let x_randomizer_codeword: Vec<XFieldElement> =
             self.fri.domain.x_evaluate(&randomizer_polynomial);
         let mut b_randomizer_codewords: [Vec<BFieldElement>; 3] = [vec![], vec![], vec![]];

@@ -1,6 +1,7 @@
 use itertools::Itertools;
 
 use super::aux_table::{ExtHashCoprocessorTable, HashCoprocessorTable};
+use super::base_matrix::BaseMatrices;
 use super::base_table::Table;
 use super::instruction_table::{ExtInstructionTable, InstructionTable};
 use super::io_table::{ExtIOTable, InputTable};
@@ -12,6 +13,7 @@ use super::ram_table::{ExtRAMTable, RAMTable};
 use super::u32_op_table::{ExtU32OpTable, U32OpTable};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 
 type BWord = BFieldElement;
 
@@ -44,37 +46,10 @@ pub struct ExtTableCollection {
 }
 
 impl BaseTableCollection {
-    pub fn empty() -> Self {
-        let program_table = todo!(); // ProgramTable,
-        let instruction_table = todo!(); // InstructionTable,
+    pub fn from_base_matrices(base_matrices: &BaseMatrices) -> Self {
+        let program_table = todo!(); // ProgramTable
         let processor_table = todo!(); // ProcessorTable,
-        let input_table = todo!(); // InputTable,
-        let output_table = todo!(); // InputTable,
-        let op_stack_table = todo!(); // OpStackTable,
-        let ram_table = todo!(); // RAMTable,
-        let jump_stack_table = todo!(); // JumpStackTable,
-        let aux_table = todo!(); // HashCoprocessorTable,
-        let u32_op_table = todo!(); // U32OpTable,
-
-        BaseTableCollection {
-            program_table,
-            instruction_table,
-            processor_table,
-            input_table,
-            output_table,
-            op_stack_table,
-            ram_table,
-            jump_stack_table,
-            aux_table,
-            u32_op_table,
-        }
-    }
-
-    pub fn from_base_matrices(bm: &BaseMatrices) -> Self {
-        todo!();
-        let program_table = ProgramTable::new(bm.pro);
-        //let instruction_table = bm
-        let processor_table = todo!(); // ProcessorTable,
+        let instruction_table = todo!(); // InstructionTable
         let input_table = todo!(); // InputTable,
         let output_table = todo!(); // InputTable,
         let op_stack_table = todo!(); // OpStackTable,
@@ -104,11 +79,10 @@ impl BaseTableCollection {
             .unwrap_or(1) as u64
     }
 
-    pub fn all_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        // self.into_iter()
-        //     .map(|table| table.boundary_constraints(&[BFieldElement::new(1)]))
-        //     .flatten()
-        todo!()
+    pub fn codewords(&self, fri_domain: &FriDomain<BWord>) -> Vec<Vec<BWord>> {
+        self.into_iter()
+            .map(|table| table.low_degree_extension(fri_domain))
+            .concat()
     }
 }
 

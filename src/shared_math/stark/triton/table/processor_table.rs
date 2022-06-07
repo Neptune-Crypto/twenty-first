@@ -14,6 +14,7 @@ pub const BASE_WIDTH: usize = 46;
 pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >BASE_WIDTH
 
 type BWord = BFieldElement;
+type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct ProcessorTable {
@@ -30,6 +31,7 @@ impl HasBaseTable<BWord> for ProcessorTable {
     }
 }
 
+// TODO: Replace `unpadded_height` with `padded_height` so that verify() can instantiate it.
 impl ProcessorTable {
     pub fn new(
         unpadded_height: usize,
@@ -53,48 +55,16 @@ impl ProcessorTable {
         Self { base }
     }
 
-    pub fn codewords(&self, fri_domain: &FriDomain<BWord>) -> Self {
-        let codewords = self.low_degree_extension(fri_domain);
-        Self::new(
-            self.unpadded_height(),
-            self.num_randomizers(),
-            self.generator(),
-            self.order(),
-            codewords,
-        )
-    }
-
     pub fn extend(
         &self,
         all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
-    ) -> ExtTableCollection {
-        let program_table = self.program_table.extend(); // ProgramTable,
-        let instruction_table = todo!(); // InstructionTable,
-        let processor_table = todo!(); // ProcessorTable,
-        let input_table = todo!(); // InputTable,
-        let output_table = todo!(); // InputTable,
-        let op_stack_table = todo!(); // OpStackTable,
-        let ram_table = todo!(); // RAMTable,
-        let jump_stack_table = todo!(); // JumpStackTable,
-        let aux_table = todo!(); // HashCoprocessorTable,
-        let u32_op_table = todo!(); // U32OpTable,
-
-        BaseTableCollection {
-            program_table,
-            instruction_table,
-            processor_table,
-            input_table,
-            output_table,
-            op_stack_table,
-            ram_table,
-            jump_stack_table,
-            aux_table,
-            u32_op_table,
-        }
+    ) -> ExtProcessorTable {
+        todo!()
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ExtProcessorTable {
     base: BaseTable<XFieldElement>,
 }
@@ -124,25 +94,7 @@ impl Table<BWord> for ProcessorTable {
         }
     }
 
-    fn boundary_constraints(
-        &self,
-        _challenges: &[BWord],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
-        vec![]
-    }
-
-    fn transition_constraints(
-        &self,
-        _challenges: &[BWord],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
-        vec![]
-    }
-
-    fn terminal_constraints(
-        &self,
-        _challenges: &[BWord],
-        _terminals: &[BWord],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<BWord>> {
         vec![]
     }
 }
@@ -156,27 +108,25 @@ impl Table<XFieldElement> for ExtProcessorTable {
         panic!("Extension tables don't get padded");
     }
 
-    fn boundary_constraints(
-        &self,
-        _challenges: &[XFieldElement],
-    ) -> Vec<MPolynomial<XFieldElement>> {
-        vec![]
-    }
-
-    fn transition_constraints(
-        &self,
-        _challenges: &[XFieldElement],
-    ) -> Vec<MPolynomial<XFieldElement>> {
-        vec![]
-    }
-
-    fn terminal_constraints(
-        &self,
-        _challenges: &[XFieldElement],
-        _terminals: &[XFieldElement],
-    ) -> Vec<MPolynomial<XFieldElement>> {
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
 }
 
-impl ExtensionTable for ExtProcessorTable {}
+impl ExtensionTable for ExtProcessorTable {
+    fn ext_boundary_constraints(&self, _challenges: &[XWord]) -> Vec<MPolynomial<XWord>> {
+        vec![]
+    }
+
+    fn ext_transition_constraints(&self, _challenges: &[XWord]) -> Vec<MPolynomial<XWord>> {
+        vec![]
+    }
+
+    fn ext_terminal_constraints(
+        &self,
+        _challenges: &[XWord],
+        _terminals: &[XWord],
+    ) -> Vec<MPolynomial<XWord>> {
+        vec![]
+    }
+}

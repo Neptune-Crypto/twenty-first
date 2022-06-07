@@ -3,7 +3,7 @@ use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
 use super::ord_n::{Ord4::*, Ord6::*, Ord8::*};
 use super::stdio::InputStream;
-use super::table::{aux_table, instruction_table, jump_stack_table, op_stack_table};
+use super::table::{aux_table, instruction_table, jump_stack_table, op_stack_table, u32_op_table};
 use super::table::{processor_table, ram_table};
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
@@ -62,9 +62,22 @@ pub struct VMState<'pgm> {
 
     /// Auxiliary registers
     pub aux: [BWord; AUX_REGISTER_COUNT],
+}
 
-    // Trace of auxiliary registers for hash coprocessor table
-    pub aux_trace: Vec<[BWord; aux_table::BASE_WIDTH]>,
+#[derive(Debug, PartialEq)]
+pub enum VMOutput {
+    /// Trace output from `write_io`
+    WriteIoTrace(BWord),
+
+    /// Trace of auxiliary registers for hash coprocessor table
+    ///
+    /// One row per round in the XLIX permutation
+    XlixTrace(Vec<[BWord; aux_table::BASE_WIDTH]>),
+
+    /// Trace of u32 operations for u32 op table
+    ///
+    /// One row per defined bit
+    U32OpTrace(Vec<[BWord; u32_op_table::BASE_WIDTH]>),
 }
 
 impl<'pgm> VMState<'pgm> {
@@ -86,42 +99,39 @@ impl<'pgm> VMState<'pgm> {
         self.program.len() <= self.instruction_pointer
     }
 
-    /// Given a state, compute the next state purely.
+    /// Given a state, compute `(next_state, vm_output)`.
     pub fn step<R, In>(
         &self,
         rng: &mut R,
         stdin: &mut In,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
-    ) -> Result<(VMState<'pgm>, Option<BFieldElement>), Box<dyn Error>>
+    ) -> Result<(VMState<'pgm>, Option<VMOutput>), Box<dyn Error>>
     where
         R: Rng,
         In: InputStream,
     {
         let mut next_state = self.clone();
-        let written_word = next_state.step_mut(rng, stdin, rescue_prime)?;
-        Ok((next_state, written_word))
+        next_state
+            .step_mut(rng, stdin, rescue_prime)
+            .map(|vm_output| (next_state, vm_output))
     }
 
     /// Perform the state transition as a mutable operation on `self`.
-    ///
-    /// This function is called from `step`.
     pub fn step_mut<R, In>(
         &mut self,
         rng: &mut R,
         stdin: &mut In,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
-    ) -> Result<Option<BFieldElement>, Box<dyn Error>>
+    ) -> Result<Option<VMOutput>, Box<dyn Error>>
     where
         R: Rng,
         In: InputStream,
     {
         // All instructions increase the cycle count
         self.cycle_count += 1;
-        println!("CYCLE:  {}", self.cycle_count);
-        let mut written_word = None;
+        let mut vm_output = None;
 
         let instruction = self.current_instruction()?;
-        println!("INSTRUCTION:  {}", instruction);
         match instruction {
             Pop => {
                 self.op_stack.pop()?;
@@ -131,6 +141,12 @@ impl<'pgm> VMState<'pgm> {
             Push(arg) => {
                 self.op_stack.push(arg);
                 self.instruction_pointer += 2;
+            }
+
+            Divine => {
+                let elem = BWord::random_elements(1, rng)[0];
+                self.op_stack.push(elem);
+                self.instruction_pointer += 1;
             }
 
             Dup(arg) => {
@@ -199,7 +215,8 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Xlix => {
-                self.aux_trace = rescue_prime.rescue_xlix_permutation_trace(&mut self.aux);
+                let aux_trace = rescue_prime.rescue_xlix_permutation_trace(&mut self.aux);
+                vm_output = Some(VMOutput::XlixTrace(aux_trace));
                 self.instruction_pointer += 1;
             }
 
@@ -222,26 +239,22 @@ impl<'pgm> VMState<'pgm> {
             }
 
             AssertDigest => {
-                let cmp_bword = if self.assert_digest() {
-                    BWord::ring_one()
-                } else {
-                    BWord::ring_zero()
-                };
+                let cmp_bword = self.assert_digest();
                 self.op_stack.push(cmp_bword);
                 self.instruction_pointer += 1;
             }
 
             Add => {
-                let a = self.op_stack.pop()?;
-                let b = self.op_stack.pop()?;
-                self.op_stack.push(a + b);
+                let lhs = self.op_stack.pop()?;
+                let rhs = self.op_stack.pop()?;
+                self.op_stack.push(lhs + rhs);
                 self.instruction_pointer += 1;
             }
 
             Mul => {
-                let a = self.op_stack.pop()?;
-                let b = self.op_stack.pop()?;
-                self.op_stack.push(a * b);
+                let lhs = self.op_stack.pop()?;
+                let rhs = self.op_stack.pop()?;
+                self.op_stack.push(lhs * rhs);
                 self.instruction_pointer += 1;
             }
 
@@ -265,86 +278,97 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Eq => {
-                let a = self.op_stack.pop()?;
-                let b = self.op_stack.pop()?;
-                if a == b {
-                    self.op_stack.push(BWord::ring_one());
-                } else {
-                    self.op_stack.push(BWord::ring_zero());
-                };
+                let lhs = self.op_stack.pop()?;
+                let rhs = self.op_stack.pop()?;
+                self.op_stack.push(Self::eq(lhs, rhs));
                 self.instruction_pointer += 1;
             }
 
             Lt => {
-                let a: u32 = self.op_stack.pop()?.try_into()?;
-                let b: u32 = self.op_stack.pop()?.try_into()?;
-                if b < a {
-                    self.op_stack.push(BWord::ring_one());
-                } else {
-                    self.op_stack.push(BWord::ring_zero());
-                };
+                let lhs: u32 = self.op_stack.pop()?.try_into()?;
+                let rhs: u32 = self.op_stack.pop()?.try_into()?;
+                self.op_stack.push(Self::lt(lhs, rhs));
+                let trace = self.u32_op_trace(lhs, rhs);
+                vm_output = Some(VMOutput::U32OpTrace(trace));
                 self.instruction_pointer += 1;
             }
 
             And => {
-                let a: u32 = self.op_stack.pop()?.try_into()?;
-                let b: u32 = self.op_stack.pop()?.try_into()?;
-                self.op_stack.push((a & b).into());
+                let lhs: u32 = self.op_stack.pop()?.try_into()?;
+                let rhs: u32 = self.op_stack.pop()?.try_into()?;
+                self.op_stack.push((lhs & rhs).into());
+                let trace = self.u32_op_trace(lhs, rhs);
+                vm_output = Some(VMOutput::U32OpTrace(trace));
                 self.instruction_pointer += 1;
             }
 
             Xor => {
-                let a: u32 = self.op_stack.pop()?.try_into()?;
-                let b: u32 = self.op_stack.pop()?.try_into()?;
-                self.op_stack.push((a ^ b).into());
+                let lhs: u32 = self.op_stack.pop()?.try_into()?;
+                let rhs: u32 = self.op_stack.pop()?.try_into()?;
+                self.op_stack.push((lhs ^ rhs).into());
+                let trace = self.u32_op_trace(lhs, rhs);
+                vm_output = Some(VMOutput::U32OpTrace(trace));
                 self.instruction_pointer += 1;
             }
 
-            Reverse => {
+            Rev => {
                 let elem: u32 = self.op_stack.pop()?.try_into()?;
+
+                // `rev` needs to constrain that the second-top-most element
+                // fits within u32, since otherwise the u32 op table constraint
+                // polynomials cannot account for the 'rhs' column going to 0 in
+                // at most 32 steps (rows).
+                //
+                // So while `rev` is a unary instruction (does not have a RHS),
+                // it still has a rule about the second-top-most element.
+                let rhs: u32 = self.op_stack.safe_peek(ST0).try_into()?;
+
                 self.op_stack.push(elem.reverse_bits().into());
+                let trace = self.u32_op_trace(elem, rhs);
+                vm_output = Some(VMOutput::U32OpTrace(trace));
                 self.instruction_pointer += 1;
             }
 
             Div => {
-                let d: u32 = self.op_stack.pop()?.try_into()?;
-                let n: u32 = self.op_stack.pop()?.try_into()?;
-                let (quot, rem) = other::div_rem(n, d);
+                let denom: u32 = self.op_stack.pop()?.try_into()?;
+                let numerator: u32 = self.op_stack.pop()?.try_into()?;
+                let (quot, rem) = other::div_rem(numerator, denom);
                 self.op_stack.push(quot.into());
                 self.op_stack.push(rem.into());
+                let trace = self.u32_op_trace(denom, numerator);
+                vm_output = Some(VMOutput::U32OpTrace(trace));
                 self.instruction_pointer += 1;
             }
 
             XxAdd => {
-                let a: XWord = self.op_stack.popx()?;
-                let b: XWord = self.op_stack.popx()?;
-                self.op_stack.pushx(a + b);
+                let lhs: XWord = self.op_stack.popx()?;
+                let rhs: XWord = self.op_stack.popx()?;
+                self.op_stack.pushx(lhs + rhs);
                 self.instruction_pointer += 1;
             }
 
             XxMul => {
-                let a: XWord = self.op_stack.popx()?;
-                let b: XWord = self.op_stack.popx()?;
-                self.op_stack.pushx(a + b);
+                let lhs: XWord = self.op_stack.popx()?;
+                let rhs: XWord = self.op_stack.popx()?;
+                self.op_stack.pushx(lhs + rhs);
                 self.instruction_pointer += 1;
             }
 
             XInv => {
-                let a: XWord = self.op_stack.popx()?;
-                self.op_stack.pushx(a.inverse());
+                let elem: XWord = self.op_stack.popx()?;
+                self.op_stack.pushx(elem.inverse());
                 self.instruction_pointer += 1;
             }
 
             XbMul => {
-                let x: XWord = self.op_stack.popx()?;
-                let b: BWord = self.op_stack.pop()?;
-                self.op_stack.pushx(x * XWord::new_const(b));
+                let lhs: XWord = self.op_stack.popx()?;
+                let rhs: BWord = self.op_stack.pop()?;
+                self.op_stack.pushx(lhs * rhs.lift());
                 self.instruction_pointer += 1;
             }
 
             WriteIo => {
-                let out_elem = self.op_stack.pop()?;
-                written_word = Some(out_elem);
+                vm_output = Some(VMOutput::WriteIoTrace(self.op_stack.pop()?));
                 self.instruction_pointer += 1;
             }
 
@@ -360,7 +384,7 @@ impl<'pgm> VMState<'pgm> {
             return vm_err(OpStackTooShallow);
         }
 
-        Ok(written_word)
+        Ok(vm_output)
     }
 
     pub fn to_instruction_row(
@@ -374,7 +398,6 @@ impl<'pgm> VMState<'pgm> {
         [ip, ci, nia]
     }
 
-    // FIXME: Avoid Result<...> by passing in current_instruction.
     pub fn to_processor_row(
         &self,
         current_instruction: Instruction,
@@ -459,30 +482,22 @@ impl<'pgm> VMState<'pgm> {
     pub fn to_op_stack_row(
         &self,
         current_instruction: Instruction,
-    ) -> Option<[BFieldElement; op_stack_table::BASE_WIDTH]> {
-        if !current_instruction.is_op_stack_instruction() {
-            return None;
-        }
-
+    ) -> [BFieldElement; op_stack_table::BASE_WIDTH] {
         let clk = self.cycle_count.into();
         let ci = current_instruction.opcode_b();
         let osp = self.op_stack.osp();
         let osv = self.op_stack.osv();
 
         // clk, ci, osv, osp
-        Some([clk, ci, osv, osp])
+        [clk, ci, osv, osp]
     }
 
     pub fn to_ram_row(
         &self,
         current_instruction: Instruction,
-    ) -> Option<[BFieldElement; ram_table::BASE_WIDTH]> {
-        if [ReadMem, WriteMem].contains(&current_instruction) {
-            let clk = self.cycle_count.into();
-            Some([clk, self.ramp, self.ramv])
-        } else {
-            None
-        }
+    ) -> [BFieldElement; ram_table::BASE_WIDTH] {
+        let clk = self.cycle_count.into();
+        [clk, self.ramp, self.ramv]
     }
 
     pub fn to_jump_stack_row(&self) -> [BFieldElement; jump_stack_table::BASE_WIDTH] {
@@ -491,14 +506,47 @@ impl<'pgm> VMState<'pgm> {
         [clk, self.jsp(), self.jso(), self.jsd()]
     }
 
-    pub fn to_hash_coprocessor_rows(
+    pub fn u32_op_trace(
         &self,
-        current_instruction: Instruction,
-    ) -> Option<Vec<[BFieldElement; aux_table::BASE_WIDTH]>> {
-        if current_instruction == Instruction::Xlix {
-            Some(self.aux_trace.clone())
+        mut lhs: u32,
+        mut rhs: u32,
+    ) -> Vec<[BFieldElement; u32_op_table::BASE_WIDTH]> {
+        let mut rows = vec![];
+        let mut idc = 1.into();
+        let zero = 0.into();
+
+        while lhs > 0 || rhs > 0 {
+            let row = [
+                idc,
+                lhs.into(),
+                rhs.into(),
+                Self::lt(lhs, rhs),
+                (lhs & rhs).into(),
+                (lhs ^ rhs).into(),
+                lhs.reverse_bits().into(),
+            ];
+            rows.push(row);
+            lhs >>= 1;
+            rhs >>= 1;
+            idc = zero;
+        }
+
+        rows
+    }
+
+    fn lt(lhs: u32, rhs: u32) -> BWord {
+        if rhs < lhs {
+            1.into()
         } else {
-            None
+            0.into()
+        }
+    }
+
+    fn eq(lhs: BWord, rhs: BWord) -> BWord {
+        if lhs == rhs {
+            1.into()
+        } else {
+            0.into()
         }
     }
 
@@ -597,14 +645,14 @@ impl<'pgm> VMState<'pgm> {
             .ok_or_else(|| vm_fail(MemoryAddressNotFound))
     }
 
-    fn assert_digest(&self) -> bool {
+    fn assert_digest(&self) -> BWord {
         for i in 0..DIGEST_LEN {
             // Safe as long as DIGEST_LEN <= OP_STACK_REG_COUNT
             if self.aux[i] != self.op_stack.safe_peek(i.try_into().unwrap()) {
-                return false;
+                return 0.into();
             }
         }
-        true
+        1.into()
     }
 
     pub fn read_word(&self) -> Result<Option<BFieldElement>, Box<dyn Error>> {

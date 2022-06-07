@@ -9,6 +9,7 @@ pub const BASE_WIDTH: usize = 4;
 pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >BASE_WIDTH
 
 type BWord = BFieldElement;
+type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct JumpStackTable {
@@ -25,6 +26,7 @@ impl HasBaseTable<BWord> for JumpStackTable {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ExtJumpStackTable {
     base: BaseTable<XFieldElement>,
 }
@@ -54,25 +56,7 @@ impl Table<BWord> for JumpStackTable {
         }
     }
 
-    fn boundary_constraints(
-        &self,
-        _challenges: &[BWord],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
-        vec![]
-    }
-
-    fn transition_constraints(
-        &self,
-        _challenges: &[BWord],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
-        vec![]
-    }
-
-    fn terminal_constraints(
-        &self,
-        _challenges: &[BWord],
-        _terminals: &[BWord],
-    ) -> Vec<crate::shared_math::mpolynomial::MPolynomial<BWord>> {
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<BWord>> {
         vec![]
     }
 }
@@ -86,27 +70,25 @@ impl Table<XFieldElement> for ExtJumpStackTable {
         panic!("Extension tables don't get padded");
     }
 
-    fn boundary_constraints(
-        &self,
-        _challenges: &[XFieldElement],
-    ) -> Vec<MPolynomial<XFieldElement>> {
-        vec![]
-    }
-
-    fn transition_constraints(
-        &self,
-        _challenges: &[XFieldElement],
-    ) -> Vec<MPolynomial<XFieldElement>> {
-        vec![]
-    }
-
-    fn terminal_constraints(
-        &self,
-        _challenges: &[XFieldElement],
-        _terminals: &[XFieldElement],
-    ) -> Vec<MPolynomial<XFieldElement>> {
+    fn base_transition_constraints(&self) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
 }
 
-impl ExtensionTable for ExtJumpStackTable {}
+impl ExtensionTable for ExtJumpStackTable {
+    fn ext_boundary_constraints(&self, _challenges: &[XWord]) -> Vec<MPolynomial<XWord>> {
+        vec![]
+    }
+
+    fn ext_transition_constraints(&self, _challenges: &[XWord]) -> Vec<MPolynomial<XWord>> {
+        vec![]
+    }
+
+    fn ext_terminal_constraints(
+        &self,
+        _challenges: &[XWord],
+        _terminals: &[XWord],
+    ) -> Vec<MPolynomial<XWord>> {
+        vec![]
+    }
+}
