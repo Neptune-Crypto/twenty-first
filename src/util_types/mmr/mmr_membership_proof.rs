@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use std::{
     collections::{hash_map::RandomState, hash_set::Intersection, HashMap, HashSet},
@@ -12,7 +14,7 @@ use super::shared::{
     left_sibling, node_indices_added_by_append, parent, right_child_and_height, right_sibling,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MmrMembershipProof<H>
 where
     H: Hasher + Sized,

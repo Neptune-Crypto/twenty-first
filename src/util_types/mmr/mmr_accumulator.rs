@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 use std::{collections::HashMap, fmt::Debug};
 
+use serde::{Deserialize, Serialize};
+
 use crate::util_types::mmr::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
 use crate::util_types::simple_hasher;
 use crate::{
@@ -34,7 +36,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MmrAccumulator<H: Hasher>
 where
     H: Hasher,
@@ -348,6 +350,10 @@ mod accumulator_mmr_tests {
     use itertools::izip;
     use rand::{thread_rng, Rng, RngCore};
 
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::rescue_prime_xlix::{
+        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
+    };
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::utils::generate_random_numbers_u128;
 
@@ -706,5 +712,22 @@ mod accumulator_mmr_tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn mmra_serialization_test() {
+        // You could argue that this test doesn't belong here, as it tests the behavior of
+        // an imported library. I included it here, though, because the setup seems a bit clumsy
+        // to me so far.
+        type Hasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
+        let hasher = Hasher::new();
+        type Mmr = MmrAccumulator<Hasher>;
+        let mut mmra: Mmr = MmrAccumulator::new(vec![]);
+        mmra.append(hasher.hash(&vec![BFieldElement::ring_zero()], RP_DEFAULT_OUTPUT_SIZE));
+
+        let json = serde_json::to_string(&mmra).unwrap();
+        let s_back = serde_json::from_str::<Mmr>(&json).unwrap();
+        assert!(&mmra.bag_peaks() == &s_back.bag_peaks());
+        assert_eq!(1, mmra.count_leaves());
     }
 }
