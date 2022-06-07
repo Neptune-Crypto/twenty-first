@@ -1,8 +1,10 @@
 use super::super::triton;
 use super::table::base_matrix::BaseMatrices;
-use super::table::base_table::Table;
-use super::table::processor_table::ProcessorTable;
+use super::table::base_table::{HasBaseTable, Table};
+use super::table::processor_table::{self, ProcessorTable};
+use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
 use crate::shared_math::stark::triton::table::table_collection::BaseTableCollection;
 use crate::shared_math::traits::GetPrimitiveRootOfUnity;
@@ -19,7 +21,7 @@ type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
 
 // We use a type-parameterised FriDomain to avoid duplicate `b_*()` and `x_*()` methods.
 pub struct Stark {
-    base_table_collection: BaseTableCollection,
+    padded_height: usize,
     log_expansion_factor: usize,
     security_level: usize,
     fri_domain: triton::fri_domain::FriDomain<BWord>,
@@ -27,11 +29,7 @@ pub struct Stark {
 }
 
 impl Stark {
-    pub fn new(
-        base_table_collection: BaseTableCollection,
-        log_expansion_factor: usize,
-        security_level: usize,
-    ) -> Self {
+    pub fn new(padded_height: usize, log_expansion_factor: usize, security_level: usize) -> Self {
         assert_eq!(
             0,
             security_level % log_expansion_factor,
@@ -51,12 +49,14 @@ impl Stark {
             "expansion factor must be at least 4."
         );
 
-        let num_randomizers = 2;
+        let num_randomizers = 1;
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(order as u64)
             .0
             .unwrap();
+
+        let base_table_collection = BaseTableCollection::empty();
 
         let max_degree = other::roundup_npo2(base_table_collection.max_degree()) - 1;
         let fri_domain_length = ((max_degree + 1) * expansion_factor) as usize;
@@ -87,12 +87,12 @@ impl Stark {
             .0
             .unwrap();
         let unpadded_height = base_matrices.processor_matrix.len();
+        let padded_height = roundup_npo2(unpadded_height as u64);
 
-        let mut processor_table = ProcessorTable::new(
-            unpadded_height,
-            num_randomizers,
+        let mut processor_table = ProcessorTable::new_prover(
             smooth_generator,
             order,
+            num_randomizers,
             base_matrices
                 .processor_matrix
                 .iter()
@@ -104,6 +104,8 @@ impl Stark {
         processor_table.pad();
 
         // 3. Create base codeword tables based on those
-        let processor_codewords = processor_table.low_degree_extension(&self.fri_domain);
+        let coded_processor_table = processor_table.codewords(&self.fri_domain);
+
+        todo!()
     }
 }

@@ -1,6 +1,6 @@
 use super::super::fri_domain::FriDomain;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
-use crate::shared_math::other;
+use crate::shared_math::other::{self, is_power_of_two};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{GetRandomElements, PrimeField};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -10,8 +10,8 @@ pub struct BaseTable<DataPF> {
     // The width of each `data` row
     width: usize,
 
-    // The number of `data` rows
-    unpadded_height: usize,
+    // The number of `data` rows after padding
+    padded_height: usize,
 
     // The number of randomizers...?
     num_randomizers: usize,
@@ -32,7 +32,7 @@ pub struct BaseTable<DataPF> {
 impl<DataPF: PrimeField> BaseTable<DataPF> {
     pub fn new(
         width: usize,
-        unpadded_height: usize,
+        padded_height: usize,
         num_randomizers: usize,
         omicron: DataPF,
         generator: DataPF,
@@ -41,7 +41,7 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
     ) -> Self {
         BaseTable {
             width,
-            unpadded_height,
+            padded_height,
             num_randomizers,
             omicron,
             generator,
@@ -59,12 +59,13 @@ pub trait HasBaseTable<DataPF: PrimeField> {
         self.to_base().width
     }
 
-    fn unpadded_height(&self) -> usize {
-        self.to_base().unpadded_height
+    fn padded_height(&self) -> usize {
+        self.to_base().padded_height
     }
 
-    fn padded_height(&self) -> usize {
-        other::roundup_npo2(self.unpadded_height() as u64) as usize
+    // TODO
+    fn from_unpadded_height(&self) -> usize {
+        other::roundup_npo2(self.padded_height() as u64) as usize
     }
 
     fn num_randomizers(&self) -> usize {
@@ -92,13 +93,8 @@ pub trait HasBaseTable<DataPF: PrimeField> {
     }
 }
 
-pub fn derive_omicron<DataPF: PrimeField>(unpadded_height: u64, dummy: DataPF) -> DataPF {
-    if unpadded_height == 0 {
-        // FIXME: Cannot return 1 because of IdentityValues.
-        return dummy.ring_one();
-    }
-
-    let padded_height = other::roundup_npo2(unpadded_height);
+pub fn derive_omicron<DataPF: PrimeField>(padded_height: u64, dummy: DataPF) -> DataPF {
+    debug_assert!(is_power_of_two(padded_height));
     dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
 }
 

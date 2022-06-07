@@ -33,18 +33,46 @@ impl HasBaseTable<BWord> for ProcessorTable {
 
 // TODO: Replace `unpadded_height` with `padded_height` so that verify() can instantiate it.
 impl ProcessorTable {
-    pub fn new(
-        unpadded_height: usize,
-        num_randomizers: usize,
+    // TODO: new() for prover: Takes matrix, but not padded_height
+    // TODO: new() for verifier: Takes padded height
+    // Removing unpadded_height propagates to BaseTable.
+
+    pub fn new_verifier(
         generator: BWord,
         order: usize,
-        matrix: Vec<Vec<BWord>>,
+        num_randomizers: usize,
+        padded_height: usize,
     ) -> Self {
+        let matrix: Vec<Vec<BWord>> = vec![];
+
         let dummy = generator;
-        let omicron = base_table::derive_omicron(unpadded_height as u64, dummy);
+        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
             BASE_WIDTH,
-            unpadded_height,
+            padded_height,
+            num_randomizers,
+            omicron,
+            generator,
+            order,
+            matrix,
+        );
+
+        Self { base }
+    }
+
+    pub fn new_prover(
+        generator: BWord,
+        order: usize,
+        num_randomizers: usize,
+        matrix: Vec<Vec<BWord>>,
+    ) -> Self {
+        let padded_height = matrix.len();
+
+        let dummy = generator;
+        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
+        let base = BaseTable::new(
+            BASE_WIDTH,
+            padded_height,
             num_randomizers,
             omicron,
             generator,
