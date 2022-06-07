@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use super::b_field_element::BFieldElement;
 use super::rescue_prime_params;
 use super::stark::triton::table::aux_table;
@@ -8,7 +10,7 @@ type Word = BFieldElement;
 pub const RP_DEFAULT_OUTPUT_SIZE: usize = 5;
 pub const RP_DEFAULT_WIDTH: usize = 16;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RescuePrimeXlix<const M: usize> {
     pub capacity: usize,
     pub n: usize,
