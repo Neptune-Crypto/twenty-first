@@ -678,11 +678,10 @@ mod triton_vm_tests {
             // generator: BWord,
             // order: usize,
             // matrix: Vec<Vec<BWord>>,
-            let mut processor_table: ProcessorTable = ProcessorTable::new(
-                base_matrices.processor_matrix.len(),
-                number_of_randomizers,
+            let mut processor_table: ProcessorTable = ProcessorTable::new_prover(
                 smooth_generator,
                 order as usize,
+                number_of_randomizers,
                 processor_matrix,
             );
 
