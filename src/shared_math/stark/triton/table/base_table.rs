@@ -63,11 +63,6 @@ pub trait HasBaseTable<DataPF: PrimeField> {
         self.to_base().padded_height
     }
 
-    // TODO
-    fn from_unpadded_height(&self) -> usize {
-        other::roundup_npo2(self.padded_height() as u64) as usize
-    }
-
     fn num_randomizers(&self) -> usize {
         self.to_base().num_randomizers
     }

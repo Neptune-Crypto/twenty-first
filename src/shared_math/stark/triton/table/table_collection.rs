@@ -46,30 +46,36 @@ pub struct ExtTableCollection {
 }
 
 impl BaseTableCollection {
-    pub fn from_base_matrices(base_matrices: &BaseMatrices) -> Self {
-        let program_table = todo!(); // ProgramTable
-        let processor_table = todo!(); // ProcessorTable,
-        let instruction_table = todo!(); // InstructionTable
-        let input_table = todo!(); // InputTable,
-        let output_table = todo!(); // InputTable,
-        let op_stack_table = todo!(); // OpStackTable,
-        let ram_table = todo!(); // RAMTable,
-        let jump_stack_table = todo!(); // JumpStackTable,
-        let aux_table = todo!(); // HashCoprocessorTable,
-        let u32_op_table = todo!(); // U32OpTable,
+    pub fn empty() -> Self {
+        // delete me when `from_base_matrices` works.
+        todo!()
+    }
 
-        BaseTableCollection {
-            program_table,
-            instruction_table,
-            processor_table,
-            input_table,
-            output_table,
-            op_stack_table,
-            ram_table,
-            jump_stack_table,
-            aux_table,
-            u32_op_table,
-        }
+    pub fn from_base_matrices(base_matrices: &BaseMatrices) -> Self {
+        todo!();
+        // let program_table = todo!(); // ProgramTable
+        // let processor_table = todo!(); // ProcessorTable,
+        // let instruction_table = todo!(); // InstructionTable
+        // let input_table = todo!(); // InputTable,
+        // let output_table = todo!(); // InputTable,
+        // let op_stack_table = todo!(); // OpStackTable,
+        // let ram_table = todo!(); // RAMTable,
+        // let jump_stack_table = todo!(); // JumpStackTable,
+        // let aux_table = todo!(); // HashCoprocessorTable,
+        // let u32_op_table = todo!(); // U32OpTable,
+
+        // BaseTableCollection {
+        //     program_table,
+        //     instruction_table,
+        //     processor_table,
+        //     input_table,
+        //     output_table,
+        //     op_stack_table,
+        //     ram_table,
+        //     jump_stack_table,
+        //     aux_table,
+        //     u32_op_table,
+        // }
     }
 
     pub fn max_degree(&self) -> u64 {

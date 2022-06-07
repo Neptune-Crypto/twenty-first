@@ -49,7 +49,7 @@ impl Stark {
             "expansion factor must be at least 4."
         );
 
-        let num_randomizers = 1;
+        let num_randomizers = 2;
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(order as u64)
@@ -104,8 +104,7 @@ impl Stark {
         processor_table.pad();
 
         // 3. Create base codeword tables based on those
-        let coded_processor_table = processor_table.codewords(&self.fri_domain);
-
+        //let coded_processor_table = processor_table.codewords(&self.fri_domain);
         todo!()
     }
 }

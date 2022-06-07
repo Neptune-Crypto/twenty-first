@@ -145,11 +145,14 @@ impl Program {
             };
             let current_instruction = state.current_instruction().unwrap_or(Instruction::Halt);
 
+            let mut written_word_to_be_appended = None;
+
             if let Some(VMOutput::WriteIoTrace(written_word)) = &vm_output {
                 let _written = stdout.write_elem(*written_word);
+                written_word_to_be_appended = Some(*written_word);
             }
 
-            base_matrices.append(&state, vm_output, current_instruction);
+            base_matrices.append(&state, written_word_to_be_appended, current_instruction);
         }
 
         base_matrices.sort_instruction_matrix();

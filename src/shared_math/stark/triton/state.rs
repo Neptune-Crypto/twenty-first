@@ -500,6 +500,13 @@ impl<'pgm> VMState<'pgm> {
         [clk, self.ramp, self.ramv]
     }
 
+    pub fn to_aux_row(
+        &self,
+        current_instruction: Instruction,
+    ) -> [BFieldElement; aux_table::BASE_WIDTH] {
+        todo!()
+    }
+
     pub fn to_jump_stack_row(&self) -> [BFieldElement; jump_stack_table::BASE_WIDTH] {
         let clk = self.cycle_count.into();
 

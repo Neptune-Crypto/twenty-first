@@ -72,19 +72,19 @@ impl BaseMatrices {
         self.instruction_matrix
             .push(state.to_instruction_row(current_instruction));
 
-        if let Some(op_stack_row) = state.to_op_stack_row(current_instruction) {
+        // TODO: Remove the `Some` constructor on RHS in the next 3 `if` statements.
+        if let Some(op_stack_row) = Some(state.to_op_stack_row(current_instruction)) {
             self.op_stack_matrix.push(op_stack_row);
         }
 
-        if let Some(ram_row) = state.to_ram_row(current_instruction) {
+        if let Some(ram_row) = Some(state.to_ram_row(current_instruction)) {
             self.ram_matrix.push(ram_row);
         }
 
         self.jump_stack_matrix.push(state.to_jump_stack_row());
 
-        if let Some(mut hash_coprocessor_rows) = state.to_hash_coprocessor_rows(current_instruction)
-        {
-            self.aux_matrix.append(&mut hash_coprocessor_rows);
+        if let Some(aux_row) = Some(state.to_aux_row(current_instruction)) {
+            self.aux_matrix.push(aux_row);
         }
 
         // TODO: u32 op table
