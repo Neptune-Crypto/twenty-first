@@ -2,7 +2,7 @@ use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::other::{self, pad_height};
+use crate::shared_math::other::{self};
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::stark::{
     EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT,
@@ -66,7 +66,7 @@ impl ProcessorTable {
         matrix: Vec<Vec<BWord>>,
     ) -> Self {
         let unpadded_height = matrix.len();
-        let padded_height = pad_height(unpadded_height);
+        let padded_height = base_table::pad_height(unpadded_height);
 
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);

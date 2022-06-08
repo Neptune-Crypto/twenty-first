@@ -1,4 +1,4 @@
-use super::base_table::{BaseTable, HasBaseTable, Table};
+use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
@@ -90,5 +90,54 @@ impl ExtensionTable for ExtU32OpTable {
         _terminals: &[XWord],
     ) -> Vec<MPolynomial<XWord>> {
         vec![]
+    }
+}
+
+impl U32OpTable {
+    pub fn new_verifier(
+        generator: BWord,
+        order: usize,
+        num_randomizers: usize,
+        padded_height: usize,
+    ) -> Self {
+        let matrix: Vec<Vec<BWord>> = vec![];
+
+        let dummy = generator;
+        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
+        let base = BaseTable::new(
+            BASE_WIDTH,
+            padded_height,
+            num_randomizers,
+            omicron,
+            generator,
+            order,
+            matrix,
+        );
+
+        Self { base }
+    }
+
+    pub fn new_prover(
+        generator: BWord,
+        order: usize,
+        num_randomizers: usize,
+        matrix: Vec<Vec<BWord>>,
+    ) -> Self {
+        let unpadded_height = matrix.len();
+        let padded_height = base_table::pad_height(unpadded_height);
+
+        let dummy = generator;
+        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
+        let base = BaseTable::new(
+            BASE_WIDTH,
+            padded_height,
+            num_randomizers,
+            omicron,
+            generator,
+            order,
+            matrix,
+        );
+
+        Self { base }
     }
 }

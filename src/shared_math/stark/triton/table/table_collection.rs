@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use super::aux_table::{ExtHashCoprocessorTable, HashCoprocessorTable};
+use super::aux_table::{AuxTable, ExtAuxTable};
 use super::base_matrix::BaseMatrices;
 use super::base_table::Table;
 use super::instruction_table::{ExtInstructionTable, InstructionTable};
@@ -27,7 +27,7 @@ pub struct BaseTableCollection {
     pub op_stack_table: OpStackTable,
     pub ram_table: RAMTable,
     pub jump_stack_table: JumpStackTable,
-    pub aux_table: HashCoprocessorTable,
+    pub aux_table: AuxTable,
     pub u32_op_table: U32OpTable,
 }
 
@@ -41,7 +41,7 @@ pub struct ExtTableCollection {
     pub op_stack_table: ExtOpStackTable,
     pub ram_table: ExtRAMTable,
     pub jump_stack_table: ExtJumpStackTable,
-    pub aux_table: ExtHashCoprocessorTable,
+    pub aux_table: ExtAuxTable,
     pub u32_op_table: ExtU32OpTable,
 }
 
@@ -52,7 +52,7 @@ impl BaseTableCollection {
     }
 
     pub fn from_base_matrices(base_matrices: &BaseMatrices) -> Self {
-        todo!();
+        todo!()
         // let program_table = todo!(); // ProgramTable
         // let processor_table = todo!(); // ProcessorTable,
         // let instruction_table = todo!(); // InstructionTable

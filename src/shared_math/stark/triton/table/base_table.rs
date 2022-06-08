@@ -1,6 +1,6 @@
 use super::super::fri_domain::FriDomain;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
-use crate::shared_math::other::{self, is_power_of_two};
+use crate::shared_math::other::{self, is_power_of_two, roundup_npo2};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{GetRandomElements, PrimeField};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -91,6 +91,10 @@ pub trait HasBaseTable<DataPF: PrimeField> {
 pub fn derive_omicron<DataPF: PrimeField>(padded_height: u64, dummy: DataPF) -> DataPF {
     debug_assert!(is_power_of_two(padded_height));
     dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
+}
+
+pub fn pad_height(height: usize) -> usize {
+    roundup_npo2(height as u64) as usize
 }
 
 pub trait Table<DataPF>: HasBaseTable<DataPF>
@@ -219,5 +223,19 @@ where
                 Polynomial::<DataPF>::fast_interpolate(&domain, values, &omega, omega_order)
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod test_base_table {
+    use crate::shared_math::stark::triton::table::base_table::pad_height;
+
+    #[ignore]
+    #[test]
+    /// padding should be idempotent.
+    fn pad_height_test() {
+        for x in 0..=1025 {
+            assert_eq!(pad_height(x), pad_height(pad_height(x)))
+        }
     }
 }

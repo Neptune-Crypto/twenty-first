@@ -1,4 +1,4 @@
-use super::base_table::{BaseTable, HasBaseTable, Table};
+use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
@@ -12,11 +12,11 @@ type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
-pub struct HashCoprocessorTable {
+pub struct AuxTable {
     base: BaseTable<BWord>,
 }
 
-impl HasBaseTable<BWord> for HashCoprocessorTable {
+impl HasBaseTable<BWord> for AuxTable {
     fn to_base(&self) -> &BaseTable<BWord> {
         &self.base
     }
@@ -27,11 +27,11 @@ impl HasBaseTable<BWord> for HashCoprocessorTable {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExtHashCoprocessorTable {
+pub struct ExtAuxTable {
     base: BaseTable<XFieldElement>,
 }
 
-impl HasBaseTable<XFieldElement> for ExtHashCoprocessorTable {
+impl HasBaseTable<XFieldElement> for ExtAuxTable {
     fn to_base(&self) -> &BaseTable<XFieldElement> {
         &self.base
     }
@@ -41,9 +41,9 @@ impl HasBaseTable<XFieldElement> for ExtHashCoprocessorTable {
     }
 }
 
-impl Table<BWord> for HashCoprocessorTable {
+impl Table<BWord> for AuxTable {
     fn name(&self) -> String {
-        "HashCoprocessorTable".to_string()
+        "AuxTable".to_string()
     }
 
     // FIXME: Apply correct padding, not just 0s.
@@ -61,9 +61,9 @@ impl Table<BWord> for HashCoprocessorTable {
     }
 }
 
-impl Table<XFieldElement> for ExtHashCoprocessorTable {
+impl Table<XFieldElement> for ExtAuxTable {
     fn name(&self) -> String {
-        "ExtHashCoprocessorTable".to_string()
+        "ExtAuxTable".to_string()
     }
 
     fn pad(&mut self) {
@@ -75,7 +75,7 @@ impl Table<XFieldElement> for ExtHashCoprocessorTable {
     }
 }
 
-impl ExtensionTable for ExtHashCoprocessorTable {
+impl ExtensionTable for ExtAuxTable {
     fn ext_boundary_constraints(&self, _challenges: &[XWord]) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
@@ -90,5 +90,54 @@ impl ExtensionTable for ExtHashCoprocessorTable {
         _terminals: &[XWord],
     ) -> Vec<MPolynomial<XWord>> {
         vec![]
+    }
+}
+
+impl AuxTable {
+    pub fn new_verifier(
+        generator: BWord,
+        order: usize,
+        num_randomizers: usize,
+        padded_height: usize,
+    ) -> Self {
+        let matrix: Vec<Vec<BWord>> = vec![];
+
+        let dummy = generator;
+        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
+        let base = BaseTable::new(
+            BASE_WIDTH,
+            padded_height,
+            num_randomizers,
+            omicron,
+            generator,
+            order,
+            matrix,
+        );
+
+        Self { base }
+    }
+
+    pub fn new_prover(
+        generator: BWord,
+        order: usize,
+        num_randomizers: usize,
+        matrix: Vec<Vec<BWord>>,
+    ) -> Self {
+        let unpadded_height = matrix.len();
+        let padded_height = base_table::pad_height(unpadded_height);
+
+        let dummy = generator;
+        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
+        let base = BaseTable::new(
+            BASE_WIDTH,
+            padded_height,
+            num_randomizers,
+            omicron,
+            generator,
+            order,
+            matrix,
+        );
+
+        Self { base }
     }
 }
