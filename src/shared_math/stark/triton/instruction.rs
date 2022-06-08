@@ -1,4 +1,4 @@
-use super::ord_n::{Ord16, Ord16::*, Ord4, Ord4::*, Ord6};
+use super::ord_n::{Ord16, Ord16::*, Ord4, Ord6, Ord6::*, Ord8, Ord8::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use num_traits::Zero;
 use std::error::Error;
@@ -20,8 +20,8 @@ pub enum Instruction {
     Pop,
     Push(BWord),
     Divine,
-    Dup(Ord4),
-    Swap(Ord4),
+    Dup(Ord8),
+    Swap(Ord8),
 
     // Control flow
     Skiz,
@@ -337,8 +337,8 @@ impl Instruction {
         match self {
             // Double-word instructions (instructions that take arguments)
             Push(arg) => Some(*arg),
-            Dup(arg) => Some(ord4_to_bfe(arg)),
-            Swap(arg) => Some(ord4_to_bfe(arg)),
+            Dup(arg) => Some(ord8_to_bfe(arg)),
+            Swap(arg) => Some(ord8_to_bfe(arg)),
             Call(arg) => Some(*arg),
             Squeeze(arg) => Some(ord16_to_bfe(arg)),
             Absorb(arg) => Some(ord16_to_bfe(arg)),
@@ -357,6 +357,11 @@ fn hv_calc(opcode_arg: u32, bit_number: usize) -> BFieldElement {
 }
 
 fn ord4_to_bfe(n: &Ord4) -> BFieldElement {
+    let n: u32 = n.into();
+    n.into()
+}
+
+fn ord8_to_bfe(n: &Ord8) -> BFieldElement {
     let n: u32 = n.into();
     n.into()
 }
@@ -404,14 +409,22 @@ fn parse_token(
         "pop" => vec![Pop],
         "push" => vec![Push(parse_elem(tokens)?)],
         "divine" => vec![Divine],
-        "dup0" => vec![Dup(N0)],
-        "dup1" => vec![Dup(N1)],
-        "dup2" => vec![Dup(N2)],
-        "dup3" => vec![Dup(N3)],
-        "swap1" => vec![Swap(N0)],
-        "swap2" => vec![Swap(N1)],
-        "swap3" => vec![Swap(N2)],
-        "swap4" => vec![Swap(N3)],
+        "dup0" => vec![Dup(ST0)],
+        "dup1" => vec![Dup(ST1)],
+        "dup2" => vec![Dup(ST2)],
+        "dup3" => vec![Dup(ST3)],
+        "dup4" => vec![Dup(ST4)],
+        "dup5" => vec![Dup(ST5)],
+        "dup6" => vec![Dup(ST6)],
+        "dup7" => vec![Dup(ST7)],
+        "swap0" => vec![Swap(ST0)],
+        "swap1" => vec![Swap(ST1)],
+        "swap2" => vec![Swap(ST2)],
+        "swap3" => vec![Swap(ST3)],
+        "swap4" => vec![Swap(ST4)],
+        "swap5" => vec![Swap(ST5)],
+        "swap6" => vec![Swap(ST6)],
+        "swap7" => vec![Swap(ST7)],
 
         // Control flow
         "skiz" => vec![Skiz],
@@ -508,10 +521,11 @@ fn parse_elem(tokens: &mut SplitWhitespace) -> Result<BFieldElement, Box<dyn Err
 
     Ok(constant_elem)
 }
+
 pub mod sample_programs {
     use super::super::vm::Program;
     use super::Instruction::{self, *};
-    use super::{Ord16::*, Ord4::*};
+    use super::{Ord16::*, Ord8::*};
 
     pub const PUSH_PUSH_ADD_POP_S: &str = "
         push 1
@@ -759,14 +773,22 @@ pub mod sample_programs {
             Pop,
             Push(42.into()),
             Divine,
-            Dup(N0),
-            Dup(N1),
-            Dup(N2),
-            Dup(N3),
-            Swap(N0),
-            Swap(N1),
-            Swap(N2),
-            Swap(N3),
+            Dup(ST0),
+            Dup(ST1),
+            Dup(ST2),
+            Dup(ST3),
+            Dup(ST4),
+            Dup(ST5),
+            Dup(ST6),
+            Dup(ST7),
+            Swap(ST0),
+            Swap(ST1),
+            Swap(ST2),
+            Swap(ST3),
+            Swap(ST4),
+            Swap(ST5),
+            Swap(ST6),
+            Swap(ST7),
             Skiz,
             Call(0.into()),
             Return,

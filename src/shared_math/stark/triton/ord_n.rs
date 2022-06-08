@@ -154,6 +154,33 @@ impl From<Ord8> for usize {
     }
 }
 
+impl From<&Ord8> for usize {
+    fn from(n: &Ord8) -> Self {
+        (*n).into()
+    }
+}
+
+impl From<Ord8> for u32 {
+    fn from(n: Ord8) -> Self {
+        match n {
+            ST0 => 0,
+            ST1 => 1,
+            ST2 => 2,
+            ST3 => 3,
+            ST4 => 4,
+            ST5 => 5,
+            ST6 => 6,
+            ST7 => 7,
+        }
+    }
+}
+
+impl From<&Ord8> for u32 {
+    fn from(n: &Ord8) -> Self {
+        (*n).into()
+    }
+}
+
 impl TryFrom<usize> for Ord8 {
     type Error = String;
 
