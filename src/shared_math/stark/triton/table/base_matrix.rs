@@ -4,7 +4,7 @@ use super::{
 };
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::stark::triton::instruction::Instruction;
-use crate::shared_math::stark::triton::state::VMState;
+use crate::shared_math::stark::triton::state::{VMOutput, VMState};
 use crate::shared_math::stark::triton::vm::Program;
 use std::fmt::Display;
 
@@ -63,7 +63,7 @@ impl BaseMatrices {
     pub fn append(
         &mut self,
         state: &VMState,
-        written_word: Option<BWord>,
+        vm_output: Option<VMOutput>,
         current_instruction: Instruction,
     ) {
         self.processor_matrix
@@ -72,29 +72,22 @@ impl BaseMatrices {
         self.instruction_matrix
             .push(state.to_instruction_row(current_instruction));
 
-        // TODO: Remove the `Some` constructor on RHS in the next 3 `if` statements.
-        if let Some(op_stack_row) = Some(state.to_op_stack_row(current_instruction)) {
-            self.op_stack_matrix.push(op_stack_row);
-        }
+        self.op_stack_matrix
+            .push(state.to_op_stack_row(current_instruction));
 
-        if let Some(ram_row) = Some(state.to_ram_row(current_instruction)) {
-            self.ram_matrix.push(ram_row);
-        }
+        self.ram_matrix.push(state.to_ram_row(current_instruction));
 
         self.jump_stack_matrix.push(state.to_jump_stack_row());
-
-        if let Some(aux_row) = Some(state.to_aux_row(current_instruction)) {
-            self.aux_matrix.push(aux_row);
-        }
-
-        // TODO: u32 op table
 
         if let Ok(Some(word)) = state.read_word() {
             self.input_matrix.push([word])
         }
 
-        if let Some(word) = written_word {
-            self.output_matrix.push([word]);
+        match vm_output {
+            Some(VMOutput::WriteIoTrace(written_word)) => self.output_matrix.push([written_word]),
+            Some(VMOutput::XlixTrace(mut aux_trace)) => self.aux_matrix.append(&mut aux_trace),
+            Some(VMOutput::U32OpTrace(mut trace)) => self.u32_op_matrix.append(&mut trace),
+            None => (),
         }
     }
 }
