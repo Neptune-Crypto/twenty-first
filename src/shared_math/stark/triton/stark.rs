@@ -6,6 +6,7 @@ use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
+use crate::shared_math::stark::triton::instruction::sample_programs;
 use crate::shared_math::stark::triton::table::table_collection::BaseTableCollection;
 use crate::shared_math::traits::GetPrimitiveRootOfUnity;
 use crate::shared_math::x_field_element::XFieldElement;
@@ -56,7 +57,17 @@ impl Stark {
             .0
             .unwrap();
 
-        let base_table_collection = BaseTableCollection::empty();
+        let code = sample_programs::HELLO_WORLD_1;
+        let program = Program::from_code(code).unwrap();
+
+        let (base_matrices, err) = program.simulate_with_input(&[]);
+
+        let base_table_collection = BaseTableCollection::from_base_matrices(
+            smooth_generator,
+            order,
+            num_randomizers,
+            &base_matrices,
+        );
 
         let max_degree = other::roundup_npo2(base_table_collection.max_degree()) - 1;
         let fri_domain_length = ((max_degree + 1) * expansion_factor) as usize;
