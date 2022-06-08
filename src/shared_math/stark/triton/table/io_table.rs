@@ -12,16 +12,11 @@ type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
-pub struct InputTable {
-    base: BaseTable<BWord>,
-}
-
-#[derive(Debug, Clone)]
 pub struct IOTable {
     base: BaseTable<BWord>,
 }
 
-impl HasBaseTable<BWord> for InputTable {
+impl HasBaseTable<BWord> for IOTable {
     fn to_base(&self) -> &BaseTable<BWord> {
         &self.base
     }
@@ -46,7 +41,7 @@ impl HasBaseTable<XFieldElement> for ExtIOTable {
     }
 }
 
-impl Table<BWord> for InputTable {
+impl Table<BWord> for IOTable {
     fn name(&self) -> String {
         "IOTable".to_string()
     }
