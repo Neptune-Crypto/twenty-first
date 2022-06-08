@@ -608,6 +608,16 @@ mod b_prime_field_element_test {
     }
 
     #[test]
+    fn display_test() {
+        // Ensure that display always prints the canonical value, not a number
+        // exceeding BFieldElement::QUOTIENT
+        let seven: BFieldElement = BFieldElement(7);
+        let seven_alt: BFieldElement = BFieldElement(7 + BFieldElement::QUOTIENT);
+        assert_eq!("7", format!("{}", seven));
+        assert_eq!("7", format!("{}", seven_alt));
+    }
+
+    #[test]
     fn test_zero_one() {
         let zero = bfield_elem!(0);
         let one = bfield_elem!(1);
