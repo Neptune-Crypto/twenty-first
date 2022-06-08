@@ -5,6 +5,8 @@ use std::ops::{Add, Div, Mul, Rem, Sub};
 
 use num_traits::{One, Zero};
 
+use crate::shared_math::b_field_element::BFieldElement;
+
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct U32s<const N: usize> {
     #[serde(with = "BigArray")]
@@ -76,6 +78,17 @@ impl<const N: usize> U32s<N> {
         }
 
         (quotient, remainder)
+    }
+}
+
+impl<const N: usize> From<U32s<N>> for [BFieldElement; N] {
+    fn from(value: U32s<N>) -> Self {
+        let mut ret = [BFieldElement::ring_zero(); N];
+        for (&value_elem, ret_elem) in value.values.iter().zip(ret.iter_mut()) {
+            *ret_elem = value_elem.into();
+        }
+
+        ret
     }
 }
 
@@ -242,6 +255,17 @@ mod u32s_tests {
     use rand::{thread_rng, RngCore};
 
     use super::*;
+
+    #[test]
+    fn convert_to_bfields_test() {
+        let a = U32s::new([(1 << 31) + 2001, 200, 400, 9999, 123456]);
+        let bfes: [BFieldElement; 5] = a.into();
+        assert_eq!(bfes[0].value(), (1 << 31) + 2001);
+        assert_eq!(bfes[1].value(), 200);
+        assert_eq!(bfes[2].value(), 400);
+        assert_eq!(bfes[3].value(), 9999);
+        assert_eq!(bfes[4].value(), 123456);
+    }
 
     #[test]
     fn simple_add_test() {
