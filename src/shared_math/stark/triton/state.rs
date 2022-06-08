@@ -1,7 +1,7 @@
 use super::error::{vm_fail, InstructionError::*};
 use super::instruction::{Instruction, Instruction::*};
 use super::op_stack::OpStack;
-use super::ord_n::{Ord4::*, Ord6::*, Ord8::*};
+use super::ord_n::{Ord5::*, Ord6::*, Ord8::*};
 use super::stdio::InputStream;
 use super::table::{aux_table, instruction_table, jump_stack_table, op_stack_table, u32_op_table};
 use super::table::{processor_table, ram_table};
@@ -423,10 +423,11 @@ impl<'pgm> VMState<'pgm> {
         let inv = self.op_stack.inv();
         let osp = self.op_stack.osp();
         let osv = self.op_stack.osv();
-        let hv0 = current_instruction.hv(N0);
-        let hv1 = current_instruction.hv(N1);
-        let hv2 = current_instruction.hv(N2);
-        let hv3 = current_instruction.hv(N3);
+        let hv0 = current_instruction.hv(HV0);
+        let hv1 = current_instruction.hv(HV1);
+        let hv2 = current_instruction.hv(HV2);
+        let hv3 = current_instruction.hv(HV3);
+        let hv4 = current_instruction.hv(HV4);
 
         [
             clk,
@@ -457,6 +458,7 @@ impl<'pgm> VMState<'pgm> {
             hv1,
             hv2,
             hv3,
+            hv4,
             self.ramp,
             self.ramv,
             self.aux[0],

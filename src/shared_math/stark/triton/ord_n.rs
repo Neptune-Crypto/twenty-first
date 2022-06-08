@@ -1,75 +1,79 @@
 use std::fmt::Display;
 use Ord16::*;
-use Ord4::*;
+use Ord5::*;
 use Ord6::*;
 use Ord8::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Ord4 {
-    N0,
-    N1,
-    N2,
-    N3,
+pub enum Ord5 {
+    HV0,
+    HV1,
+    HV2,
+    HV3,
+    HV4,
 }
 
-impl Display for Ord4 {
+impl Display for Ord5 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let n: usize = (*self).into();
         write!(f, "{}", n)
     }
 }
 
-impl From<Ord4> for u32 {
-    fn from(n: Ord4) -> Self {
+impl From<Ord5> for u32 {
+    fn from(n: Ord5) -> Self {
         match n {
-            N0 => 0,
-            N1 => 1,
-            N2 => 2,
-            N3 => 3,
+            HV0 => 0,
+            HV1 => 1,
+            HV2 => 2,
+            HV3 => 3,
+            HV4 => 4,
         }
     }
 }
 
-impl From<&Ord4> for u32 {
-    fn from(n: &Ord4) -> Self {
+impl From<&Ord5> for u32 {
+    fn from(n: &Ord5) -> Self {
         (*n).into()
     }
 }
 
-impl From<Ord4> for usize {
-    fn from(n: Ord4) -> Self {
+impl From<Ord5> for usize {
+    fn from(n: Ord5) -> Self {
         let n: u32 = n.into();
         n as usize
     }
 }
 
-impl From<&Ord4> for usize {
-    fn from(n: &Ord4) -> Self {
+impl From<&Ord5> for usize {
+    fn from(n: &Ord5) -> Self {
         (*n).into()
     }
 }
 
-impl From<Ord4> for Ord8 {
-    fn from(n: Ord4) -> Self {
+impl From<Ord5> for Ord8 {
+    fn from(n: Ord5) -> Self {
         match n {
-            N0 => ST0,
-            N1 => ST1,
-            N2 => ST2,
-            N3 => ST3,
+            HV0 => ST0,
+            HV1 => ST1,
+            HV2 => ST2,
+            HV3 => ST3,
+            HV4 => ST4,
         }
     }
 }
 
-impl TryFrom<usize> for Ord4 {
+impl TryFrom<usize> for Ord5 {
     type Error = String;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(N0),
-            1 => Ok(N1),
-            2 => Ok(N2),
-            3 => Ok(N3),
-            _ => Err(format!("{} is out of range for Ord4", value)),
+            0 => Ok(HV0),
+            1 => Ok(HV1),
+            2 => Ok(HV2),
+            3 => Ok(HV3),
+            4 => Ok(HV4),
+            _ => Err(format!("{} is out of range for Ord5", value)),
         }
     }
 }

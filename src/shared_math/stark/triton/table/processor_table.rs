@@ -1,6 +1,5 @@
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
-use super::table_collection::ExtTableCollection;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other::{self, pad_height};
@@ -10,8 +9,8 @@ use crate::shared_math::stark::triton::stark::{
 };
 use crate::shared_math::x_field_element::XFieldElement;
 
-pub const BASE_WIDTH: usize = 46;
 pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >BASE_WIDTH
+pub const BASE_WIDTH: usize = 47;
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;

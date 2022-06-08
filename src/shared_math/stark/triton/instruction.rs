@@ -1,4 +1,4 @@
-use super::ord_n::{Ord16, Ord16::*, Ord4, Ord6, Ord6::*, Ord8, Ord8::*};
+use super::ord_n::{Ord16, Ord16::*, Ord5, Ord6, Ord6::*, Ord8, Ord8::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use num_traits::Zero;
 use std::error::Error;
@@ -323,7 +323,7 @@ impl Instruction {
         (opcode & bit_mask).into()
     }
 
-    pub fn hv(&self, bit: Ord4) -> BFieldElement {
+    pub fn hv(&self, bit: Ord5) -> BFieldElement {
         match self {
             Dup(arg) => hv_calc(arg.into(), bit.into()),
             Swap(arg) => hv_calc(arg.into(), bit.into()),
@@ -356,7 +356,7 @@ fn hv_calc(opcode_arg: u32, bit_number: usize) -> BFieldElement {
     }
 }
 
-fn ord4_to_bfe(n: &Ord4) -> BFieldElement {
+fn ord5_to_bfe(n: &Ord5) -> BFieldElement {
     let n: u32 = n.into();
     n.into()
 }
