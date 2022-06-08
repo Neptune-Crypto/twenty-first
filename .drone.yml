@@ -1,23 +1,45 @@
+# Please run `yamllint .drone.yml` after editing this file.
 ---
 kind: pipeline
 type: docker
 name: default
 
-trigger:
-  branch:
-    - master
+# Run `rustup check` to see newest version and update here:
+define: &latest_stable 'rust:1.61'
 
 steps:
-  - name: build
-    image: rust:1.61
+  - name: Check
+    image: *latest_stable
     commands:
-      - cargo check
-      - rustup component add clippy
-      - cargo clippy
-      - cargo build --profile=bench
-      - cargo test
+      - cargo check --all-targets
 
-  - name: benchmark
-    image: rust:1.61
+  - name: Clippy
+    image: *latest_stable
+    commands:
+      - rustup component add clippy
+      - cargo clippy --all-targets
+
+  - name: Build
+    image: *latest_stable
+    commands:
+      - RUSTFLAGS="-D warnings" cargo build --all-targets --profile=bench
+
+  - name: Test
+    image: *latest_stable
+    commands:
+      - cargo test --all-targets
+      # Taget `doc` is not tested by `--all-targets` according to
+      # [Target Selection]
+      # (https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection)
+  - cargo test --doc
+
+  - name: Bench
+    image: *latest_stable
     commands:
       - cargo bench stark_bf
+
+branch:
+  - master
+
+...
+# Please run `yamllint .drone.yml` after editing this file.
