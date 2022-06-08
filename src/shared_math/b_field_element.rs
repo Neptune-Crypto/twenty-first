@@ -239,6 +239,27 @@ impl TryFrom<BFieldElement> for u32 {
     }
 }
 
+/// Convert a B-field element to a byte array.
+/// The client uses this for its database.
+impl From<BFieldElement> for [u8; 8] {
+    fn from(bfe: BFieldElement) -> Self {
+        // It's crucial to map this to the canonical representation
+        // before converting. Otherwise the representation is degenerate.
+        bfe.canonical_representation().to_le_bytes()
+    }
+}
+
+impl From<[u8; 8]> for BFieldElement {
+    fn from(array: [u8; 8]) -> Self {
+        let n: u64 = u64::from_le_bytes(array);
+        assert!(
+            n <= Self::MAX,
+            "Byte representation must represent a valid B field element, less than the quotient."
+        );
+        BFieldElement::new(n)
+    }
+}
+
 impl Inverse for BFieldElement {
     #[must_use]
     #[inline]
@@ -331,8 +352,7 @@ impl FromVecu8 for BFieldElement {
         // length.
         let (eight_bytes, _rest) = bytes.as_slice().split_at(std::mem::size_of::<u64>());
         let coerced: [u8; 8] = eight_bytes.try_into().unwrap();
-        let n: u64 = u64::from_ne_bytes(coerced);
-        BFieldElement::new(n)
+        coerced.into()
     }
 }
 
@@ -578,6 +598,7 @@ mod b_prime_field_element_test {
     };
     use itertools::izip;
     use proptest::prelude::*;
+    use rand::thread_rng;
 
     // TODO: Move this into separate file.
     macro_rules! bfield_elem {
@@ -597,6 +618,52 @@ mod b_prime_field_element_test {
         assert!(one.is_one());
         assert!(bfield_elem!(BFieldElement::MAX + 1).is_zero());
         assert!(bfield_elem!(BFieldElement::MAX + 2).is_one());
+    }
+
+    #[test]
+    fn byte_array_conversion_test() {
+        let a = BFieldElement::new(123);
+        let array_a: [u8; 8] = a.into();
+        assert_eq!(123, array_a[0]);
+        for i in 1..7 {
+            assert_eq!(0, array_a[i]);
+        }
+
+        let a_converted_back: BFieldElement = array_a.into();
+        assert_eq!(a, a_converted_back);
+
+        // Same but with a value above Self::MAX
+        let b = BFieldElement::new(123 + BFieldElement::QUOTIENT);
+        let array_b: [u8; 8] = b.into();
+        assert_eq!(array_a, array_b);
+
+        // Let's also do some PBT
+        let mut prng = thread_rng();
+        let xs: Vec<BFieldElement> = BFieldElement::random_elements(100, &mut prng);
+        for x in xs {
+            let array: [u8; 8] = x.into();
+            let x_recalculated: BFieldElement = array.into();
+            assert_eq!(x, x_recalculated);
+        }
+    }
+
+    #[should_panic(
+        expected = "Byte representation must represent a valid B field element, less than the quotient."
+    )]
+    #[test]
+    fn disallow_conversion_of_u8_array_outside_range() {
+        let bad_bfe_array: [u8; 8] = [
+            u8::MAX,
+            255,
+            0xFF,
+            0o377,
+            0_255,
+            'ÿ' as u8,
+            0b11111111,
+            (('Ǿ' as u16) / 2) as u8,
+        ];
+        println!("bad_bfe_array = {:?}", bad_bfe_array);
+        let _value: BFieldElement = bad_bfe_array.into();
     }
 
     #[test]
