@@ -571,7 +571,9 @@ mod mmr_membership_proof_test {
     use rand::{thread_rng, RngCore};
 
     use super::*;
-    use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
+    use crate::shared_math::rescue_prime_xlix::{
+        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
+    };
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::{
         shared_math::b_field_element::BFieldElement,
@@ -1329,12 +1331,12 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn serialization_test() {
-        // TODO: You could argue that this test doesn't belong here, as it tests the behavior of
+        // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
         // to me so far.
         let rp = RescuePrimeXlix::new();
         let leaf_hashes: Vec<Vec<BFieldElement>> = (1001..1001 + 3)
-            .map(|x| rp.hash(&vec![BFieldElement::new(x as u64)], 3))
+            .map(|x| rp.hash(&vec![BFieldElement::new(x as u64)], RP_DEFAULT_OUTPUT_SIZE))
             .collect();
         let archival_mmr =
             ArchivalMmr::<RescuePrimeXlix<RP_DEFAULT_WIDTH>>::new(leaf_hashes.clone());
