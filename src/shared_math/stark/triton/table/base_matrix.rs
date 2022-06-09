@@ -181,59 +181,62 @@ impl ProcessorMatrixRow {
     pub fn hv3(&self) -> BFieldElement {
         self.row[27]
     }
-    pub fn ramp(&self) -> BFieldElement {
+    pub fn hv4(&self) -> BFieldElement {
         self.row[28]
     }
-    pub fn ramv(&self) -> BFieldElement {
+    pub fn ramp(&self) -> BFieldElement {
         self.row[29]
     }
-    pub fn aux0(&self) -> BFieldElement {
+    pub fn ramv(&self) -> BFieldElement {
         self.row[30]
     }
-    pub fn aux1(&self) -> BFieldElement {
+    pub fn aux0(&self) -> BFieldElement {
         self.row[31]
     }
-    pub fn aux2(&self) -> BFieldElement {
+    pub fn aux1(&self) -> BFieldElement {
         self.row[32]
     }
-    pub fn aux3(&self) -> BFieldElement {
+    pub fn aux2(&self) -> BFieldElement {
         self.row[33]
     }
-    pub fn aux4(&self) -> BFieldElement {
+    pub fn aux3(&self) -> BFieldElement {
         self.row[34]
     }
-    pub fn aux5(&self) -> BFieldElement {
+    pub fn aux4(&self) -> BFieldElement {
         self.row[35]
     }
-    pub fn aux6(&self) -> BFieldElement {
+    pub fn aux5(&self) -> BFieldElement {
         self.row[36]
     }
-    pub fn aux7(&self) -> BFieldElement {
+    pub fn aux6(&self) -> BFieldElement {
         self.row[37]
     }
-    pub fn aux8(&self) -> BFieldElement {
+    pub fn aux7(&self) -> BFieldElement {
         self.row[38]
     }
-    pub fn aux9(&self) -> BFieldElement {
+    pub fn aux8(&self) -> BFieldElement {
         self.row[39]
     }
-    pub fn aux10(&self) -> BFieldElement {
+    pub fn aux9(&self) -> BFieldElement {
         self.row[40]
     }
-    pub fn aux11(&self) -> BFieldElement {
+    pub fn aux10(&self) -> BFieldElement {
         self.row[41]
     }
-    pub fn aux12(&self) -> BFieldElement {
+    pub fn aux11(&self) -> BFieldElement {
         self.row[42]
     }
-    pub fn aux13(&self) -> BFieldElement {
+    pub fn aux12(&self) -> BFieldElement {
         self.row[43]
     }
-    pub fn aux14(&self) -> BFieldElement {
+    pub fn aux13(&self) -> BFieldElement {
         self.row[44]
     }
-    pub fn aux15(&self) -> BFieldElement {
+    pub fn aux14(&self) -> BFieldElement {
         self.row[45]
+    }
+    pub fn aux15(&self) -> BFieldElement {
+        self.row[46]
     }
 }
 
