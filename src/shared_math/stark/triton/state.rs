@@ -355,7 +355,7 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Rev => {
+            Reverse => {
                 let elem: u32 = self.op_stack.pop()?.try_into()?;
 
                 // `rev` needs to constrain that the second-top-most element

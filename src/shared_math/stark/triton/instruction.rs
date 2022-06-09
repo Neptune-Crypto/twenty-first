@@ -52,7 +52,7 @@ pub enum Instruction {
     Lt,
     And,
     Xor,
-    Rev,
+    Reverse,
     Div,
     XxAdd,
     XxMul,
@@ -120,7 +120,7 @@ impl Display for Instruction {
             Lt => write!(f, "lt"),
             And => write!(f, "and"),
             Xor => write!(f, "xor"),
-            Rev => write!(f, "rev"),
+            Reverse => write!(f, "reverse"),
             Div => write!(f, "div"),
             XxAdd => write!(f, "xxadd"),
             XxMul => write!(f, "xxmul"),
@@ -174,7 +174,7 @@ impl Instruction {
             Lt => 45,
             And => 46,
             Xor => 47,
-            Rev => 48,
+            Reverse => 48,
             Div => 49,
 
             XxAdd => 50,
@@ -221,7 +221,7 @@ impl Instruction {
             Lt => true,
             And => true,
             Xor => true,
-            Rev => true,
+            Reverse => true,
             Div => true,
             XxAdd => true,
             XxMul => true,
@@ -237,7 +237,7 @@ impl Instruction {
             Lt => true,
             And => true,
             Xor => true,
-            Rev => true,
+            Reverse => true,
             Div => true,
 
             Divine => false,
@@ -309,7 +309,7 @@ impl Instruction {
             Lt => 1,
             And => 1,
             Xor => 1,
-            Rev => 1,
+            Reverse => 1,
             Div => 1,
             XxAdd => 1,
             XxMul => 1,
@@ -491,7 +491,7 @@ fn parse_token(
         "lt" => vec![Lt],
         "and" => vec![And],
         "xor" => vec![Xor],
-        "rev" => vec![Rev],
+        "reverse" => vec![Reverse],
         "div" => vec![Div],
         "xxadd" => vec![XxAdd],
         "xxmul" => vec![XxMul],
@@ -765,8 +765,8 @@ pub mod sample_programs {
     ";
 
     pub const ALL_INSTRUCTIONS: &str = "
-        pop push 42 divine dup0 dup1 dup2 dup3 swap1 swap2 swap3 swap4 skiz
-        call 0 return recurse assert halt read_mem write_mem xlix clearall
+        pop push 42 divine dup0 dup1 dup2 dup3 dup4 dup5 dup6 dup7 swap1 swap2 swap3 swap4 swap5
+        swap6 swap7 skiz call 0 return recurse assert halt read_mem write_mem xlix clearall
         squeeze0 squeeze1 squeeze2 squeeze3 squeeze4 squeeze5 squeeze6
         squeeze7 squeeze8 squeeze9 squeeze10 squeeze11 squeeze12 squeeze13
         squeeze14 squeeze15 absorb0 absorb1 absorb2 absorb3 absorb4 absorb5
@@ -788,7 +788,6 @@ pub mod sample_programs {
             Dup(ST5),
             Dup(ST6),
             Dup(ST7),
-            Swap(ST0),
             Swap(ST1),
             Swap(ST2),
             Swap(ST3),
@@ -848,7 +847,7 @@ pub mod sample_programs {
             Lt,
             And,
             Xor,
-            Rev,
+            Reverse,
             Div,
             XxAdd,
             XxMul,
@@ -868,10 +867,17 @@ pub mod sample_programs {
             "dup1",
             "dup2",
             "dup3",
+            "dup4",
+            "dup5",
+            "dup6",
+            "dup7",
             "swap1",
             "swap2",
             "swap3",
             "swap4",
+            "swap5",
+            "swap6",
+            "swap7",
             "skiz",
             "call 0",
             "return",
@@ -924,7 +930,7 @@ pub mod sample_programs {
             "lt",
             "and",
             "xor",
-            "rev",
+            "reverse",
             "div",
             "xxadd",
             "xxmul",
@@ -966,8 +972,10 @@ mod instruction_tests {
 
     #[test]
     fn parse_and_display_each_instruction_test() {
+        println!("Parsing all instructions…");
         let all_instructions = parse(sample_programs::ALL_INSTRUCTIONS);
         assert!(all_instructions.is_ok());
+        println!("Parsed all instructions.");
 
         let actual = all_instructions.unwrap();
         let expected = sample_programs::all_instructions();
