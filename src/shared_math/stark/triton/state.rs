@@ -636,10 +636,6 @@ impl<'pgm> VMState<'pgm> {
     }
 
     pub fn current_instruction(&self) -> Result<Instruction, Box<dyn Error>> {
-        println!(
-            "self.instruction_pointer: {}, self.program: {:?}",
-            self.instruction_pointer, self.program
-        );
         self.program
             .get(self.instruction_pointer)
             .ok_or_else(|| vm_fail(InstructionPointerOverflow(self.instruction_pointer)))
