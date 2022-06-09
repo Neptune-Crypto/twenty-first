@@ -181,6 +181,41 @@ impl BFieldElement {
         }
     }
 
+    /// Convert a byte array to a vector of B field elements
+    pub fn from_byte_array<const N: usize>(input: [u8; N]) -> Vec<Self> {
+        // Although the output size should be known at compile time, Rust cannot handle constant
+        // expressions, so we have to accept a vector as output.
+        // Cf. https://github.com/rust-lang/rust/issues/76560
+        let bytes_per_element = 7;
+        let output_length = N / 7 + if N % 7 == 0 { 0 } else { 1 };
+        let full_iterations = N / 7;
+        let mut ret: Vec<BFieldElement> = Vec::with_capacity(output_length);
+        for i in 0..full_iterations {
+            let bytes: [u8; 7] = input[i * bytes_per_element..(i + 1) * bytes_per_element]
+                .try_into()
+                .expect("slice with incorrect length");
+
+            // I think a specific function can be used here, we shouldn't use a for-loop
+            let mut u64_input: [u8; 8] = [0u8; 8];
+            u64_input[..bytes_per_element].copy_from_slice(&bytes[..bytes_per_element]);
+
+            let u64_value: u64 = u64::from_le_bytes(u64_input);
+            ret.push(BFieldElement(u64_value));
+        }
+
+        // Handle any remaining bits, if input length is not a factor of 7.
+        if full_iterations + 1 == output_length {
+            // We are missing `7 % N` bytes
+            let remaining = N % 7;
+            let mut u64_input: [u8; 8] = [0u8; 8];
+            u64_input[..remaining].copy_from_slice(&input[full_iterations * bytes_per_element..]);
+            let u64_value: u64 = u64::from_le_bytes(u64_input);
+            ret.push(BFieldElement(u64_value));
+        }
+
+        ret
+    }
+
     #[inline(always)]
     fn mod_reduce(x: u128) -> u64 {
         // Copied from (MIT licensed):
@@ -655,6 +690,45 @@ mod b_prime_field_element_test {
             let x_recalculated: BFieldElement = array.into();
             assert_eq!(x, x_recalculated);
         }
+    }
+
+    #[test]
+    fn byte_array_conversion_multiple_test() {
+        // Ensure we can't overflow
+        let byte_array_0: [u8; 7] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+        let output = BFieldElement::from_byte_array(byte_array_0);
+        assert_eq!(1, output.len());
+        assert_eq!(BFieldElement(72057594037927935u64), output[0]);
+
+        // Ensure we're using little-endianness
+        let byte_array_1: [u8; 7] = [100, 0, 0, 0, 0, 0, 0];
+        let output = BFieldElement::from_byte_array(byte_array_1);
+        assert_eq!(1, output.len());
+        assert_eq!(BFieldElement(100), output[0]);
+
+        // Ensure we can handle bigger inputs, with lengths not multiple of 7
+        let byte_array_3: [u8; 33] = [
+            100, 0, 0, 0, 0, 0, 0, 200, 0, 0, 0, 0, 0, 0, 100, 100, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0,
+            0, 0, 150, 0, 0, 0, 0,
+        ];
+        let output = BFieldElement::from_byte_array(byte_array_3);
+        assert_eq!(5, output.len());
+        assert_eq!(BFieldElement(100), output[0]);
+        assert_eq!(BFieldElement(200), output[1]);
+        assert_eq!(BFieldElement(100 * 256 + 100), output[2]);
+        assert_eq!(BFieldElement(100), output[3]);
+        assert_eq!(BFieldElement(150), output[4]);
+
+        // Assert more sizes can be handled, without crashing
+        BFieldElement::from_byte_array([0u8; 1]);
+        BFieldElement::from_byte_array([0u8; 2]);
+        BFieldElement::from_byte_array([0u8; 3]);
+        BFieldElement::from_byte_array([0u8; 4]);
+        BFieldElement::from_byte_array([0u8; 5]);
+        BFieldElement::from_byte_array([0u8; 6]);
+        BFieldElement::from_byte_array([0u8; 8]);
+        BFieldElement::from_byte_array([0u8; 9]);
+        BFieldElement::from_byte_array([0u8; 14]);
     }
 
     #[should_panic(
