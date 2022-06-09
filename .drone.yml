@@ -31,12 +31,44 @@ steps:
       # Taget `doc` is not tested by `--all-targets` according to
       # [Target Selection]
       # (https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection)
-  - cargo test --doc
+      - cargo test --doc
 
   - name: Bench
     image: *latest_stable
     commands:
       - cargo bench stark_bf
+
+  - name: Telegram
+    image: appleboy/drone-telegram
+    secrets: [telegram_token, telegram_to]
+    when:
+      status: [success, failure]
+    format: markdown
+    # Reference:
+    # https://github.com/appleboy/drone-telegram/blob/master/DOCS.md#parameter-reference
+    message: >
+      {{#success build.status}}
+      ✅ Build #{{build.number}} of `{{repo.name}}` succeeded.
+
+      📝 Commit by {{commit.author}} on `{{commit.branch}}`:
+
+      ```
+      {{commit.message}}
+      ```
+
+      🌐 {{ build.link }}
+      {{else}}
+      ❌ Build #{{build.number}} of `{{repo.name}}` failed.
+
+      📝 Commit by {{commit.author}} on `{{commit.branch}}`:
+
+      ```
+      {{commit.message}}
+      ```
+
+      🌐 {{ build.link }}
+      {{/success}}
+
 
 branch:
   - master
