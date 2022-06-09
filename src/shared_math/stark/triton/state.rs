@@ -763,6 +763,87 @@ mod vm_state_tests {
     }
 
     #[test]
+    fn run_mt_ap_verify_test() {
+        let code = sample_programs::MT_AP_VERIFY;
+        let program = Program::from_code(code).unwrap();
+        println!("Successfully parsed the program.");
+        let (trace, _out, err) = program.run_with_input(
+            &[
+                // Merkle root
+                BWord::new(17520959918188528334),
+                BWord::new(15041448862488693843),
+                BWord::new(298116966047567369),
+                BWord::new(15868284389682039986),
+                BWord::new(10576343946532188879),
+                BWord::new(9153918202384051329),
+                // leaf's index
+                BWord::new(92),
+                // leaf's value
+                BWord::new(45),
+                BWord::new(50),
+                BWord::new(47),
+            ],
+            &[
+                // Merkle Authentication Path Element 1
+                BWord::new(6083984126818143390),
+                BWord::new(3068114068019721586),
+                BWord::new(3759135683318231675),
+                BWord::new(12661293681732607010),
+                BWord::new(6748738404164062279),
+                BWord::new(9498241828820249207),
+                // Merkle Authentication Path Element 2
+                BWord::new(8915238764673447613),
+                BWord::new(942439158432159996),
+                BWord::new(312764170689326023),
+                BWord::new(10945419959481343904),
+                BWord::new(5750200734225507788),
+                BWord::new(3793111105236268823),
+                // Merkle Authentication Path Element 3
+                BWord::new(14019449591007199492),
+                BWord::new(18357587908965733025),
+                BWord::new(12465922695385012477),
+                BWord::new(1517140721628804219),
+                BWord::new(9611960197719015309),
+                BWord::new(9776705825929245273),
+                // Merkle Authentication Path Element 4
+                BWord::new(7309515647084889872),
+                BWord::new(9712533577403755189),
+                BWord::new(4921865008647832542),
+                BWord::new(4769370959411372374),
+                BWord::new(14537750035888652552),
+                BWord::new(13532396896348551998),
+                // Merkle Authentication Path Element 5
+                BWord::new(16902405264740278807),
+                BWord::new(14918340102437258285),
+                BWord::new(979815985758098826),
+                BWord::new(17118084172379918870),
+                BWord::new(12824459547005533540),
+                BWord::new(16968722063561851448),
+                // Merkle Authentication Path Element 6
+                BWord::new(699976577639234824),
+                BWord::new(13059558942272293990),
+                BWord::new(15739587478100963457),
+                BWord::new(11329100596238735474),
+                BWord::new(11433851170242101939),
+                BWord::new(648656172379535759),
+            ],
+        );
+
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+        if let Some(e) = err {
+            println!("Error: {}", e);
+        }
+
+        let last_state = trace.last().unwrap();
+        // todo check that VM terminated gracefully
+        // assert_eq!(last_state.current_instruction().unwrap(), Halt);
+
+        println!("{}", last_state);
+    }
+
+    #[test]
     fn run_countdown_from_10_test() {
         let code = sample_programs::COUNTDOWN_FROM_10;
         let program = Program::from_code(code).unwrap();

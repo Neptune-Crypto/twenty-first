@@ -545,6 +545,25 @@ pub mod sample_programs {
         Program::new(&instructions)
     }
 
+    pub const MT_AP_VERIFY: &str = concat!(
+        "read_io read_io read_io read_io read_io read_io ", // Merkle root
+        "read_io ",                                         // index
+        "read_io read_io read_io ",                         // leaf's value (XField Element)
+        "absorb0 absorb1 absorb2 ",                         // absorb leaf's value into aux
+        "push 1 absorb3 ", // padding for xlix todo this line needs to be removed
+        "xlix ",           // compute leaf's digest
+        // todo: check if index is 1, terminate stepping up Merkle tree if it is
+        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 5 todo remove padding
+        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 4 todo remove padding
+        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 3 todo remove padding
+        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 2 todo remove padding
+        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 1 todo remove padding
+        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 0 todo remove padding
+        "assert ",                              // remove remnant of index
+        "assert_digest ",
+        "halt",
+    );
+
     pub const HELLO_WORLD_1: &str = "
         push 10
         push 33
