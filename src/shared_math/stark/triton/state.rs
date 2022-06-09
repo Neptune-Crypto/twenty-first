@@ -230,14 +230,14 @@ impl<'pgm> VMState<'pgm> {
             Squeeze(arg) => {
                 let n: usize = arg.into();
                 self.op_stack.push(self.aux[n]);
-                self.instruction_pointer += 1;
+                self.instruction_pointer += 2;
             }
 
             Absorb(arg) => {
                 let n: usize = arg.into();
                 let elem = self.op_stack.pop()?;
                 self.aux[n] = elem;
-                self.instruction_pointer += 1;
+                self.instruction_pointer += 2;
             }
 
             DivineSibling => {
