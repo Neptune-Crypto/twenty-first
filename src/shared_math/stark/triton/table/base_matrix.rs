@@ -242,89 +242,141 @@ impl ProcessorMatrixRow {
 
 impl Display for ProcessorMatrixRow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        horizontal_bar(f)?;
+        fn horizontal_bar_top(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            writeln!(
+                f,
+                "╭────────────────────────────┬─────────────────────\
+                ───────┬───────────────────────────┬───────────────────╮"
+            )
+        }
 
-        let width = 15;
-        column(
+        fn row(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
+            writeln!(f, "│ {: <103} │", s)
+        }
+        fn row_box_end(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
+            writeln!(f, "│ {: <103}┤", s)
+        }
+        fn horizontal_bar_bot(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            writeln!(
+                f,
+                "╰─────────────────────────────────────────────────────\
+                ────────────────────────────────────────────────────╯"
+            )
+        }
+
+        horizontal_bar_top(f)?;
+
+        let width = 20;
+        row(
             f,
             format!(
-                "clk:  {:>width$} | ip:   {:>width$} |",
-                self.clk(),
-                self.ip()
-            ),
-        )?;
-
-        column(
-            f,
-            format!(
-                "ci:   {:>width$} | nia: {:>width$} |",
-                self.ci(),
-                self.nia()
+                "ip:   {:>width$} │ ci:   {:>width$} │ nia: {:>width$} │ {:>17}",
+                self.ip().value(),
+                self.ci().value(),
+                self.nia().value(),
+                self.clk().value(),
             ),
         )?;
 
         // FIXME: ib0-ib5
         // FIXME: hv0-hv3
 
-        column(
+        row_box_end(
             f,
             format!(
-                "ramp: {:>width$} | ramv: {:>width$} |",
-                self.ramp(),
-                self.ramv()
-            ),
-        )?;
-        let width_inv = width + 4;
-        column(
-            f,
-            format!(
-                "jsp:  {:>width$} | jso:  {:>width$} | jsd: {:>width_inv$}",
+                "jsp:  {:>width$} │ jso:  {:>width$} │ jsd: {:>width$} ╰───────────────────",
                 self.jsp().value(),
                 self.jso().value(),
                 self.jsd().value()
             ),
         )?;
-        column(
+        row(
             f,
             format!(
-                "osp:  {:>width$} | osv:  {:>width$} | inv: {:>width_inv$}",
-                self.osp(),
-                self.osv(),
-                self.inv()
+                "ramp: {:>width$} │ ramv: {:>width$} │",
+                self.ramp().value(),
+                self.ramv().value()
+            ),
+        )?;
+        row(
+            f,
+            format!(
+                "osp:  {:>width$} ╵ osv:  {:>width$} ╵",
+                self.osp().value(),
+                self.osv().value()
+            ),
+        )?;
+        row(
+            f,
+            format!(
+                "                                                                            inv: {:>width$}",
+                self.inv().value()
+            ),
+        )?;
+        row(
+            f,
+            format!(
+                "st3-0:    [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
+                self.st3().value(),
+                self.st2().value(),
+                self.st1().value(),
+                self.st0().value(),
+            ),
+        )?;
+        row(
+            f,
+            format!(
+                "st7-4:    [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
+                self.st7().value(),
+                self.st6().value(),
+                self.st5().value(),
+                self.st4().value(),
+            ),
+        )?;
+        row(f, format!(""))?;
+        row(
+            f,
+            format!(
+                "aux3-0:   [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
+                self.aux3().value(),
+                self.aux2().value(),
+                self.aux1().value(),
+                self.aux0().value(),
+            ),
+        )?;
+        row(
+            f,
+            format!(
+                "aux7-4:   [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
+                self.aux7().value(),
+                self.aux6().value(),
+                self.aux5().value(),
+                self.aux4().value(),
+            ),
+        )?;
+        row(
+            f,
+            format!(
+                "aux11-8:  [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
+                self.aux11().value(),
+                self.aux10().value(),
+                self.aux9().value(),
+                self.aux8().value(),
+            ),
+        )?;
+        row(
+            f,
+            format!(
+                "aux15-12: [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
+                self.aux15().value(),
+                self.aux14().value(),
+                self.aux13().value(),
+                self.aux12().value(),
             ),
         )?;
 
-        let width_st = 5;
-        column(
-            f,
-            format!(
-                "st7-0: [ {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} | {:^width_st$} ]",
-                self.st7(),
-                self.st6(),
-                self.st5(),
-                self.st4(),
-                self.st3(),
-                self.st2(),
-                self.st1(),
-                self.st0(),
-            ),
-        )?;
-
-        horizontal_bar(f)?;
+        horizontal_bar_bot(f)?;
 
         Ok(())
     }
-}
-
-fn horizontal_bar(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    writeln!(
-        f,
-        "+--------------------------------------------------------------------------+"
-    )?;
-
-    Ok(())
-}
-
-fn column(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
-    writeln!(f, "| {: <72} |", s)
 }
