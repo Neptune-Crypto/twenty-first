@@ -247,44 +247,9 @@ impl<'pgm> VMState<'pgm> {
             }
 
             DivineSibling => {
-                let digest_0 = secret_in.read_elem()?;
-                let digest_1 = secret_in.read_elem()?;
-                let digest_2 = secret_in.read_elem()?;
-                let digest_3 = secret_in.read_elem()?;
-                let digest_4 = secret_in.read_elem()?;
-                let digest_5 = secret_in.read_elem()?;
-                let i: u32 = self.op_stack.pop()?.try_into()?;
-                let is_left_node = i % 2 == 0;
-                if is_left_node {
-                    // move sibling digest to rhs
-                    self.aux[6] = digest_0;
-                    self.aux[7] = digest_1;
-                    self.aux[8] = digest_2;
-                    self.aux[9] = digest_3;
-                    self.aux[10] = digest_4;
-                    self.aux[11] = digest_5;
-                } else {
-                    // move lhs to rhs
-                    self.aux[6] = self.aux[0];
-                    self.aux[7] = self.aux[1];
-                    self.aux[8] = self.aux[2];
-                    self.aux[9] = self.aux[3];
-                    self.aux[10] = self.aux[4];
-                    self.aux[11] = self.aux[5];
-                    // move sibling digest to lhs
-                    self.aux[0] = digest_0;
-                    self.aux[1] = digest_1;
-                    self.aux[2] = digest_2;
-                    self.aux[3] = digest_3;
-                    self.aux[4] = digest_4;
-                    self.aux[5] = digest_5;
-                }
-                self.aux[12] = BWord::new(0);
-                self.aux[13] = BWord::new(0);
-                self.aux[14] = BWord::new(0);
-                self.aux[15] = BWord::new(0);
-                // todo: set hv registers to correct decomposition of i
-                self.op_stack.push(BWord::new(i as u64 / 2));
+                let node_index: u32 = self.op_stack.pop()?.try_into()?;
+                let new_node_index = self.divine_sibling::<In>(node_index, secret_in)?;
+                self.op_stack.push(new_node_index);
                 self.instruction_pointer += 1;
             }
 
@@ -706,6 +671,41 @@ impl<'pgm> VMState<'pgm> {
         } else {
             Ok(None)
         }
+    }
+    fn divine_sibling<In: InputStream>(
+        &mut self,
+        node_index: u32,
+        secret_in: &mut In,
+    ) -> Result<BWord, Box<dyn Error>> {
+        let divined_digest = [
+            secret_in.read_elem()?,
+            secret_in.read_elem()?,
+            secret_in.read_elem()?,
+            secret_in.read_elem()?,
+            secret_in.read_elem()?,
+            secret_in.read_elem()?,
+        ];
+        // lsb = least significant bit
+        let node_index_lsb = node_index % 2;
+        let node_index_msbs = node_index / 2;
+        let is_left_node = node_index_lsb == 0;
+        if is_left_node {
+            // move sibling digest to rhs
+            self.aux[6..12].copy_from_slice(&divined_digest);
+        } else {
+            // move lhs to rhs
+            self.aux[6..12].copy_from_slice(&self.aux[0..6]);
+            // move sibling digest to lhs
+            self.aux[0..6].copy_from_slice(&divined_digest);
+        }
+        // set capacity to 0
+        self.aux[12..16].copy_from_slice(&[0.into(); 4]);
+
+        // set hv registers to correct decomposition of node_index
+        self.hv[0] = node_index_lsb.into();
+        self.hv[1] = node_index_msbs.into();
+
+        Ok(node_index_msbs.into())
     }
 }
 
