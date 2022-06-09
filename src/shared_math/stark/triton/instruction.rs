@@ -423,7 +423,6 @@ fn parse_token(
         "dup5" => vec![Dup(ST5)],
         "dup6" => vec![Dup(ST6)],
         "dup7" => vec![Dup(ST7)],
-        "swap0" => vec![Swap(ST0)],
         "swap1" => vec![Swap(ST1)],
         "swap2" => vec![Swap(ST2)],
         "swap3" => vec![Swap(ST3)],
