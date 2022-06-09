@@ -40,6 +40,7 @@ pub enum Instruction {
     ClearAll,
     Squeeze(Ord16),
     Absorb(Ord16),
+    DivineSibling,
     AssertDigest,
 
     // Arithmetic on stack instructions
@@ -107,6 +108,7 @@ impl Display for Instruction {
                 let n: usize = arg.into();
                 n
             }),
+            DivineSibling => write!(f, "divine_sibling"),
             AssertDigest => write!(f, "assert_digest"),
 
             // Arithmetic on stack instructions
@@ -160,6 +162,7 @@ impl Instruction {
             ClearAll => 31,
             Squeeze(_) => 32,
             Absorb(_) => 33,
+            DivineSibling => 34,
             AssertDigest => 36,
 
             // Arithmetic on stack instructions
@@ -209,6 +212,7 @@ impl Instruction {
             WriteMem => true,
             Squeeze(_) => true,
             Absorb(_) => true,
+            DivineSibling => true,
             Add => true,
             Mul => true,
             Inv => true,
@@ -255,6 +259,7 @@ impl Instruction {
             WriteMem => false,
             Squeeze(_) => false,
             Absorb(_) => false,
+            DivineSibling => false,
             Add => false,
             Mul => false,
             Inv => false,
@@ -294,6 +299,7 @@ impl Instruction {
             WriteMem => 1,
             Xlix => 1,
             ClearAll => 1,
+            DivineSibling => 1,
             AssertDigest => 1,
             Add => 1,
             Mul => 1,
@@ -473,6 +479,7 @@ fn parse_token(
         "absorb13" => vec![Absorb(A13)],
         "absorb14" => vec![Absorb(A14)],
         "absorb15" => vec![Absorb(A15)],
+        "divine_sibling" => vec![DivineSibling],
         "assert_digest" => vec![AssertDigest],
 
         // Arithmetic on stack instructions
@@ -764,7 +771,7 @@ pub mod sample_programs {
         squeeze7 squeeze8 squeeze9 squeeze10 squeeze11 squeeze12 squeeze13
         squeeze14 squeeze15 absorb0 absorb1 absorb2 absorb3 absorb4 absorb5
         absorb6 absorb7 absorb8 absorb9 absorb10 absorb11 absorb12 absorb13
-        absorb14 absorb15 assert_digest add mul inv split eq lt and xor reverse
+        absorb14 absorb15 divine_sibling assert_digest add mul inv split eq lt and xor reverse
         div xxadd xxmul xinv xbmul read_io write_io
     ";
 
@@ -831,6 +838,7 @@ pub mod sample_programs {
             Absorb(A13),
             Absorb(A14),
             Absorb(A15),
+            DivineSibling,
             AssertDigest,
             Add,
             Mul,
@@ -906,6 +914,7 @@ pub mod sample_programs {
             "absorb13",
             "absorb14",
             "absorb15",
+            "divine_sibling",
             "assert_digest",
             "add",
             "mul",
