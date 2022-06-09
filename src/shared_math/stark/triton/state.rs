@@ -677,7 +677,8 @@ impl<'pgm> VMState<'pgm> {
         node_index: u32,
         secret_in: &mut In,
     ) -> Result<BWord, Box<dyn Error>> {
-        let divined_digest = [
+        let known_digest: [BWord; 6] = self.aux[0..6].try_into().unwrap();
+        let sibling_digest = [
             secret_in.read_elem()?,
             secret_in.read_elem()?,
             secret_in.read_elem()?,
@@ -688,15 +689,17 @@ impl<'pgm> VMState<'pgm> {
         // lsb = least significant bit
         let node_index_lsb = node_index % 2;
         let node_index_msbs = node_index / 2;
+
         let is_left_node = node_index_lsb == 0;
         if is_left_node {
+            // no need to change lhs
             // move sibling digest to rhs
-            self.aux[6..12].copy_from_slice(&divined_digest);
+            self.aux[6..12].copy_from_slice(&sibling_digest);
         } else {
-            // move lhs to rhs
-            self.aux[6..12].copy_from_slice(&self.aux[0..6]);
             // move sibling digest to lhs
-            self.aux[0..6].copy_from_slice(&divined_digest);
+            self.aux[0..6].copy_from_slice(&sibling_digest);
+            // move lhs to rhs
+            self.aux[6..12].copy_from_slice(&known_digest);
         }
         // set capacity to 0
         self.aux[12..16].copy_from_slice(&[0.into(); 4]);
