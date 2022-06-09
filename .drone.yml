@@ -1,8 +1,8 @@
-# Please run `yamllint .drone.yml` after editing this file.
 ---
 kind: pipeline
 type: docker
 name: default
+# Please run `yamllint .drone.yml` after editing this file.
 
 # Run `rustup check` to see newest version and update here:
 define: &latest_stable 'rust:1.61'
@@ -39,7 +39,8 @@ steps:
       - cargo bench stark_bf
 
   - name: Telegram
-    image: appleboy/drone-telegram
+    image:
+      appleboy/drone-telegram:sha256:896707270a77372001b6ed40e895f3f15ef1cfb6ec93463d6f496e96c28aaf7b
     secrets: [telegram_token, telegram_to]
     when:
       status: [success, failure]
