@@ -284,7 +284,9 @@ impl<'pgm> VMState<'pgm> {
 
             AssertDigest => {
                 let cmp_bword = self.assert_digest();
-                self.op_stack.push(cmp_bword);
+                if !cmp_bword.is_one() {
+                    return vm_err(AssertionFailed);
+                }
                 self.instruction_pointer += 1;
             }
 
