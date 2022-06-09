@@ -353,11 +353,24 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         }
     }
 
-    /// Returns the multivariate polynomials representing each indeterminates linear function
-    /// with a leading coefficient of one. For three indeterminates, returns:
-    /// [f(x,y,z) = x, f(x,y,z) = y, f(x,y,z) = z]
+    /// Returns a vector of multivariate polynomials that each represent a
+    /// function of one indeterminate variable to the first power. For example,
+    /// `let p = variables(3, 1.into())` represents the functions
+    ///
+    /// - `p[0] =` $f(x,y,z) = x$
+    /// - `p[1] =`$f(x,y,z) = y$
+    /// - `p[2] =`$f(x,y,z) = z$
+    ///
+    /// and `let p = variables(5, 1.into())` represents the functions
+    ///
+    /// - `p[0] =` $p(a,b,c,d,e) = a$
+    /// - `p[1] =` $p(a,b,c,d,e) = b$
+    /// - `p[2] =` $p(a,b,c,d,e) = c$
+    /// - `p[3] =` $p(a,b,c,d,e) = d$
+    /// - `p[4] =` $p(a,b,c,d,e) = e$
     pub fn variables(variable_count: usize, one: PFElem) -> Vec<Self> {
         assert!(one.is_one(), "Provided one must be one");
+        assert_eq!(1, 1, "Provided one must be one, really");
         let mut res: Vec<Self> = vec![];
         for i in 0..variable_count {
             let mut exponent = vec![0u64; variable_count];

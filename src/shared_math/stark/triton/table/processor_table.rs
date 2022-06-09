@@ -1,3 +1,4 @@
+use super::base_matrix::ProcessorTableColumn;
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
@@ -137,6 +138,8 @@ impl Table<XFieldElement> for ExtProcessorTable {
     }
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<XWord>> {
+        let variables = MPolynomial::<BFieldElement>::variables(2 * BASE_WIDTH, 1.into());
+
         vec![]
     }
 }
@@ -156,5 +159,63 @@ impl ExtensionTable for ExtProcessorTable {
         _terminals: &[XWord],
     ) -> Vec<MPolynomial<XWord>> {
         vec![]
+    }
+}
+
+/// TODO: Move the constraint polynomial boilerplate to a separate section of the code (e.g. a subdirectory for polynomials)
+///
+/// Working title. This needs to have a good name.
+///
+/// 2 * BASE_WIDTH because
+pub struct ProcessorTableTransitionConstraintPolynomialFactory {
+    variables: [MPolynomial<BWord>; 2 * BASE_WIDTH],
+}
+
+impl Default for ProcessorTableTransitionConstraintPolynomialFactory {
+    fn default() -> Self {
+        let variables = MPolynomial::<BWord>::variables(2 * BASE_WIDTH, 1.into())
+            .try_into()
+            .expect("Dynamic conversion of polynomials for each variable to known-width set of variables");
+
+        Self { variables }
+    }
+}
+
+impl ProcessorTableTransitionConstraintPolynomialFactory {
+    /// ## The cycle counter (`clk`) always increases by one
+    ///
+    /// $$
+    /// p(..., clk, clk_next, ...) = clk_next - clk - 1
+    /// $$
+    ///
+    /// In general, for all $clk = a$, and $clk_next = a + 1$,
+    ///
+    /// $$
+    /// p(..., a, a+1, ...) = (a+1) - a - 1 = a + 1 - a - 1 = a - a + 1 - 1 = 0
+    /// $$
+    ///
+    /// So the `clk_increase_by_one` base transition constraint polynomial holds exactly
+    /// when every `clk` register $a$ is one less than `clk` register $a + 1$.
+    pub fn clk_always_increases_by_one(&self) -> MPolynomial<BWord> {
+        let one = self.one();
+        let clk = self.clk();
+        let clk_next = self.clk_next();
+
+        clk_next - clk - one
+    }
+
+    // FIXME: Consider caching this on first run (caching computed getter)
+    pub fn one(&self) -> MPolynomial<BWord> {
+        MPolynomial::from_constant(1.into(), 2 * BASE_WIDTH)
+    }
+
+    pub fn clk(&self) -> MPolynomial<BWord> {
+        self.variables[usize::from(ProcessorTableColumn::CLK)].clone()
+    }
+
+    // Property: All polynomial variables that contain '_next' have the same
+    // variable position / value as the one without '_next', +/- BASE_WIDTH.
+    pub fn clk_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + usize::from(ProcessorTableColumn::CLK)].clone()
     }
 }
