@@ -28,6 +28,9 @@ pub const DIGEST_LEN: usize = 6;
 /// The number of auxiliary registers for hashing-specific instructions.
 pub const AUX_REGISTER_COUNT: usize = 16;
 
+/// The number of helper variable registers
+pub const HV_REGISTER_COUNT: usize = 5;
+
 #[derive(Debug, Default, Clone)]
 pub struct VMState<'pgm> {
     ///
@@ -62,6 +65,9 @@ pub struct VMState<'pgm> {
 
     /// Auxiliary registers
     pub aux: [BWord; AUX_REGISTER_COUNT],
+
+    /// Helper Variable Registers
+    pub hv: [BWord; HV_REGISTER_COUNT],
 }
 
 #[derive(Debug, PartialEq)]
@@ -469,11 +475,6 @@ impl<'pgm> VMState<'pgm> {
         let inv = self.op_stack.inv();
         let osp = self.op_stack.osp();
         let osv = self.op_stack.osv();
-        let hv0 = current_instruction.hv(HV0);
-        let hv1 = current_instruction.hv(HV1);
-        let hv2 = current_instruction.hv(HV2);
-        let hv3 = current_instruction.hv(HV3);
-        let hv4 = current_instruction.hv(HV4);
 
         [
             clk,
@@ -500,11 +501,11 @@ impl<'pgm> VMState<'pgm> {
             inv,
             osp,
             osv,
-            hv0,
-            hv1,
-            hv2,
-            hv3,
-            hv4,
+            self.hv[0],
+            self.hv[1],
+            self.hv[2],
+            self.hv[3],
+            self.hv[4],
             self.ramp,
             self.ramv,
             self.aux[0],

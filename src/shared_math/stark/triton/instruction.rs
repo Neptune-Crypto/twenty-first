@@ -329,16 +329,6 @@ impl Instruction {
         (opcode & bit_mask).into()
     }
 
-    pub fn hv(&self, bit: Ord5) -> BFieldElement {
-        match self {
-            Dup(arg) => hv_calc(arg.into(), bit.into()),
-            Swap(arg) => hv_calc(arg.into(), bit.into()),
-            Squeeze(arg) => hv_calc(arg.into(), bit.into()),
-            Absorb(arg) => hv_calc(arg.into(), bit.into()),
-            _ => BFieldElement::ring_zero(),
-        }
-    }
-
     pub fn arg(&self) -> Option<BFieldElement> {
         match self {
             // Double-word instructions (instructions that take arguments)
@@ -350,15 +340,6 @@ impl Instruction {
             Absorb(arg) => Some(ord16_to_bfe(arg)),
             _ => None,
         }
-    }
-}
-
-fn hv_calc(opcode_arg: u32, bit_number: usize) -> BFieldElement {
-    let bit_mask: u32 = 1 << bit_number;
-    if (opcode_arg & bit_mask).is_zero() {
-        BWord::ring_zero()
-    } else {
-        BWord::ring_one()
     }
 }
 
