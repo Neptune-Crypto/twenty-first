@@ -104,6 +104,7 @@ impl<'pgm> VMState<'pgm> {
         &self,
         rng: &mut R,
         stdin: &mut In,
+        secret_in: &mut In,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> Result<(VMState<'pgm>, Option<VMOutput>), Box<dyn Error>>
     where
@@ -112,7 +113,7 @@ impl<'pgm> VMState<'pgm> {
     {
         let mut next_state = self.clone();
         next_state
-            .step_mut(rng, stdin, rescue_prime)
+            .step_mut(rng, stdin, secret_in, rescue_prime)
             .map(|vm_output| (next_state, vm_output))
     }
 
@@ -121,6 +122,7 @@ impl<'pgm> VMState<'pgm> {
         &mut self,
         rng: &mut R,
         stdin: &mut In,
+        secret_in: &mut In,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> Result<Option<VMOutput>, Box<dyn Error>>
     where
@@ -144,7 +146,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Divine => {
-                let elem = BWord::random_elements(1, rng)[0];
+                let elem = secret_in.read_elem()?;
                 self.op_stack.push(elem);
                 self.instruction_pointer += 1;
             }
@@ -701,7 +703,7 @@ mod vm_state_tests {
     #[test]
     fn run_parse_pop_p() {
         let program = sample_programs::push_push_add_pop_p();
-        let (trace, _out, _err) = program.run_with_input(&[]);
+        let (trace, _out, _err) = program.run_with_input(&[], &[]);
 
         for state in trace.iter() {
             println!("{}", state);
@@ -712,7 +714,7 @@ mod vm_state_tests {
     fn run_hello_world_1() {
         let code = sample_programs::HELLO_WORLD_1;
         let program = Program::from_code(code).unwrap();
-        let (trace, _out, _err) = program.run_with_input(&[]);
+        let (trace, _out, _err) = program.run_with_input(&[], &[]);
 
         let last_state = trace.last().unwrap();
         assert_eq!(BWord::ring_zero(), last_state.op_stack.safe_peek(ST0));
@@ -724,7 +726,7 @@ mod vm_state_tests {
     fn run_countdown_from_10_test() {
         let code = sample_programs::COUNTDOWN_FROM_10;
         let program = Program::from_code(code).unwrap();
-        let (trace, _out, _err) = program.run_with_input(&[]);
+        let (trace, _out, _err) = program.run_with_input(&[], &[]);
 
         println!("{}", program);
         for state in trace.iter() {
@@ -740,7 +742,7 @@ mod vm_state_tests {
         let code = sample_programs::FIBONACCI_VIT;
         let program = Program::from_code(code).unwrap();
 
-        let (trace, _out, _err) = program.run_with_input(&[]);
+        let (trace, _out, _err) = program.run_with_input(&[], &[]);
 
         println!("{}", program);
         for state in trace.iter() {
@@ -755,7 +757,7 @@ mod vm_state_tests {
     fn run_fibonacci_lt() {
         let code = sample_programs::FIBONACCI_LT;
         let program = Program::from_code(code).unwrap();
-        let (trace, _out, _err) = program.run_with_input(&[]);
+        let (trace, _out, _err) = program.run_with_input(&[], &[]);
 
         println!("{}", program);
         for state in trace.iter() {
@@ -772,7 +774,7 @@ mod vm_state_tests {
         let program = Program::from_code(code).unwrap();
 
         println!("{}", program);
-        let (trace, out, _err) = program.run_with_input(&[42.into(), 56.into()]);
+        let (trace, out, _err) = program.run_with_input(&[42.into(), 56.into()], &[]);
 
         println!("{}", program);
         for state in trace.iter() {
@@ -791,7 +793,7 @@ mod vm_state_tests {
         let program = Program::from_code(code).unwrap();
 
         println!("{}", program);
-        let (trace, _out, _err) = program.run_with_input(&[]);
+        let (trace, _out, _err) = program.run_with_input(&[], &[]);
 
         println!("{}", program);
         for state in trace.iter() {

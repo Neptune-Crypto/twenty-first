@@ -122,6 +122,7 @@ impl Program {
         &self,
         rng: &mut R,
         stdin: &mut In,
+        secret_in: &mut In,
         stdout: &mut Out,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> (BaseMatrices, Option<Box<dyn Error>>)
@@ -139,7 +140,7 @@ impl Program {
         base_matrices.append(&state, None, initial_instruction);
 
         while !state.is_complete() {
-            let vm_output = match state.step_mut(rng, stdin, rescue_prime) {
+            let vm_output = match state.step_mut(rng, stdin, secret_in, rescue_prime) {
                 Err(err) => return (base_matrices, Some(err)),
                 Ok(vm_output) => vm_output,
             };
@@ -161,24 +162,38 @@ impl Program {
     pub fn simulate_with_input(
         &self,
         input: &[BFieldElement],
+        secret_input: &[BFieldElement],
     ) -> (BaseMatrices, Option<Box<dyn Error>>) {
         let input_bytes = input
             .iter()
             .map(|elem| elem.value().to_be_bytes())
             .flatten()
             .collect_vec();
+        let secret_input_bytes = secret_input
+            .iter()
+            .map(|elem| elem.value().to_be_bytes())
+            .flatten()
+            .collect_vec();
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new(&input_bytes);
+        let mut secret_in = VecStream::new(&secret_input_bytes);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        self.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime)
+        self.simulate(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        )
     }
 
     pub fn run<R, In, Out>(
         &self,
         rng: &mut R,
         stdin: &mut In,
+        secret_in: &mut In,
         stdout: &mut Out,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> (Vec<VMState>, Option<Box<dyn Error>>)
@@ -210,18 +225,31 @@ impl Program {
     pub fn run_with_input(
         &self,
         input: &[BFieldElement],
+        secret_input: &[BFieldElement],
     ) -> (Vec<VMState>, Vec<BWord>, Option<Box<dyn Error>>) {
         let input_bytes = input
             .iter()
             .map(|elem| elem.value().to_be_bytes())
             .flatten()
             .collect_vec();
+        let secret_input_bytes = secret_input
+            .iter()
+            .map(|elem| elem.value().to_be_bytes())
+            .flatten()
+            .collect_vec();
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new(&input_bytes);
+        let mut secret_in = VecStream::new(&secret_input_bytes);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (trace, err) = self.run(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+        let (trace, err) = self.run(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        );
 
         const U64SIZE: usize = std::mem::size_of::<u64>();
         let out = stdout
@@ -272,12 +300,18 @@ mod triton_vm_tests {
 
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new_b(&[42.into(), 56.into()]);
+        let mut secret_in = VecStream::new_b(&[]);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
         // 2. Execute program, convert to base matrices
-        let (base_matrices, err) =
-            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+        let (base_matrices, err) = program.simulate(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        );
 
         println!("Err: {:?}", err);
         for row in base_matrices.processor_matrix {
@@ -300,11 +334,17 @@ mod triton_vm_tests {
 
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new(&[]);
+        let mut secret_in = VecStream::new(&[]);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, err) =
-            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+        let (base_matrices, err) = program.simulate(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        );
 
         println!("{:?}", err);
         for row in base_matrices.processor_matrix {
@@ -321,11 +361,17 @@ mod triton_vm_tests {
 
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new_b(&[42.into(), 56.into()]);
+        let mut secret_in = VecStream::new(&[]);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, err) =
-            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+        let (base_matrices, err) = program.simulate(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        );
 
         assert!(err.is_none());
         let expected = BWord::new(14);
@@ -344,11 +390,17 @@ mod triton_vm_tests {
 
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new(&[]);
+        let mut secret_in = VecStream::new(&[]);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, err) =
-            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+        let (base_matrices, err) = program.simulate(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        );
 
         println!("{:?}", err);
         for row in base_matrices.processor_matrix.clone() {
@@ -421,11 +473,17 @@ mod triton_vm_tests {
 
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new(&[]);
+        let mut secret_in = VecStream::new(&[]);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, err) =
-            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+        let (base_matrices, err) = program.simulate(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        );
 
         println!("{:?}", err);
         for row in base_matrices.processor_matrix.clone() {
@@ -493,11 +551,17 @@ mod triton_vm_tests {
 
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new(&[]);
+        let mut secret_in = VecStream::new(&[]);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, err) =
-            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+        let (base_matrices, err) = program.simulate(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        );
 
         println!("{:?}", err);
         for row in base_matrices.processor_matrix.clone() {
@@ -570,11 +634,17 @@ mod triton_vm_tests {
 
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new(&[]);
+        let mut secret_in = VecStream::new(&[]);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, err) =
-            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+        let (base_matrices, err) = program.simulate(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        );
 
         println!("{:?}", err);
         for row in base_matrices.processor_matrix.clone() {
@@ -636,11 +706,17 @@ mod triton_vm_tests {
     fn check_polynomials_of_program(program: Program) {
         let mut rng = rand::thread_rng();
         let mut stdin = VecStream::new(&[]);
+        let mut secret_in = VecStream::new(&[]);
         let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, err) =
-            program.simulate(&mut rng, &mut stdin, &mut stdout, &rescue_prime);
+        let (base_matrices, err) = program.simulate(
+            &mut rng,
+            &mut stdin,
+            &mut secret_in,
+            &mut stdout,
+            &rescue_prime,
+        );
 
         // 1. Make table collections so we can extract polynomials.
         // let table_collection = BaseTableCollection::from_base_matrices(base_matrices);
@@ -655,7 +731,7 @@ mod triton_vm_tests {
         let all_programs = vec![sample_programs::XLIX_XLIX_XLIX_HALT];
         for source_code in all_programs.into_iter() {
             let program = Program::from_code(source_code).expect("Could not load source code.");
-            let (base_matrices, err) = program.simulate_with_input(&[]);
+            let (base_matrices, err) = program.simulate_with_input(&[], &[]);
             let number_of_randomizers = 2;
             let order = 1 << 32;
             let smooth_generator = BFieldElement::ring_zero()

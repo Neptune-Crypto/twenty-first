@@ -60,7 +60,7 @@ impl Stark {
         let code = sample_programs::HELLO_WORLD_1;
         let program = Program::from_code(code).unwrap();
 
-        let (base_matrices, err) = program.simulate_with_input(&[]);
+        let (base_matrices, err) = program.simulate_with_input(&[], &[]);
 
         let base_table_collection = BaseTableCollection::from_base_matrices(
             smooth_generator,
