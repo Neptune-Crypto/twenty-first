@@ -87,7 +87,12 @@ impl ProcessorTable {
         }
     }
 
-    // We *could* consider fixing this, I guess...
+    /// We *could* consider fixing this, I guess...
+    ///
+    /// This function produces six transition constraint polynomials:
+    ///
+    /// - 3 instruction-specific polynomials
+    /// - 3 instruction-independent polynomials
     #[allow(clippy::too_many_arguments)]
     fn transition_constraints_afo_named_variables(
         cycle: MPolynomial<BFieldElement>,
@@ -145,8 +150,17 @@ impl ProcessorTable {
         }
 
         // Instruction independent polynomials
+
+        // p(x1,...,x14) = 1
         let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+
+        // p(cycle,cycle_next,...) = cycle_next - cycle - 1;
+        //
+        // The cycle counter increases by one.
+        //
+        // p(a,a+1,...) = (a+1) - a - 1 = a + 1 - a - 1 = a - a + 1 - 1 = 0
         polynomials[3] = cycle_next - cycle - one.clone();
+
         let memory_value_is_zero = memory_value.clone() * memory_value_inverse.clone() - one;
         polynomials[4] = memory_value * memory_value_is_zero.clone();
         polynomials[5] = memory_value_inverse * memory_value_is_zero;
@@ -155,7 +169,6 @@ impl ProcessorTable {
         polynomials
     }
 
-    // We *could* consider fixing this, I guess...
     #[allow(clippy::too_many_arguments)]
     fn instruction_polynomials(
         instruction: char,
@@ -328,6 +341,7 @@ impl TableTrait for ProcessorTable {
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         let mut variables = MPolynomial::<BFieldElement>::variables(14, BFieldElement::ring_one());
+
         variables.reverse();
         let cycle = variables.pop().unwrap();
         let instruction_pointer = variables.pop().unwrap();
