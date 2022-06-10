@@ -17,7 +17,7 @@ steps:
     image: *latest_stable
     commands:
       - rustup component add clippy
-      - cargo clippy --all-targets
+      - cargo clippy  # --all-targets Reenable when issue #124 has been resolved
 
   - name: Build
     image: *latest_stable
