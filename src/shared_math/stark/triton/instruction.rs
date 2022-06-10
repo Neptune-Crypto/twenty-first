@@ -532,14 +532,10 @@ pub mod sample_programs {
         "read_io read_io read_io ",                         // leaf's value (XField Element)
         "absorb0 absorb1 absorb2 ",                         // absorb leaf's value into aux
         "xlix ",                                            // compute leaf's digest
-        // todo: check if index is 1, terminate stepping up Merkle tree if it is
-        "divine_sibling xlix ", // move to Merkle tree level 5
-        "divine_sibling xlix ", // move to Merkle tree level 4
-        "divine_sibling xlix ", // move to Merkle tree level 3
-        "divine_sibling xlix ", // move to Merkle tree level 2
-        "divine_sibling xlix ", // move to Merkle tree level 1
-        "divine_sibling xlix ", // move to Merkle tree level 0
-        "assert ",              // remove remnant of index
+        "call 19 ",                                         // start Merkle tree traversal
+        "dup0 push 1 eq skiz call 30 ",                     // break loop if index is 1
+        "divine_sibling xlix recurse ",                     // move up one level in the Merkle tree
+        "assert ",                                          // remove remnant of index
         "assert_digest ",
         "halt",
     );
