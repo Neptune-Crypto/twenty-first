@@ -286,15 +286,11 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     }
 
     fn hash<Value: ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
-        let elements_per_digest: usize = 5;
-        self.hash(&input.to_digest(), elements_per_digest)
+        self.hash(&input.to_digest(), 5)
     }
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
         let mut state = [BFieldElement::ring_zero(); RP_DEFAULT_WIDTH];
-
-        // Set padding
-        state[2 * RP_DEFAULT_OUTPUT_SIZE] = BFieldElement::ring_one();
 
         // Copy over left and right into state for hasher
         state[0..RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(left_input);
@@ -306,8 +302,7 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     }
 
     fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
-        let elements_per_digest: usize = 5;
-        self.hash(&inputs.concat(), elements_per_digest)
+        self.hash(&inputs.concat(), 5)
     }
 }
 
@@ -366,7 +361,7 @@ pub mod test_simple_hasher {
         assert_eq!(
             vec![
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 100
+                0, 0, 0, 100,
             ],
             inner.as_bytes()
         );
@@ -381,7 +376,7 @@ pub mod test_simple_hasher {
         let hash_digest = rpp.hash(&digests, 5);
         let hash_pair_digest = rpp.hash_pair(&digest1, &digest2);
         let hash_many_digest = rpp.hash_many(&[digest1, digest2]);
-        assert_eq!(hash_digest, hash_pair_digest);
+        assert_ne!(hash_digest, hash_pair_digest);
         assert_eq!(hash_digest, hash_many_digest);
         println!("hash_digest = {:?}", hash_digest);
     }
