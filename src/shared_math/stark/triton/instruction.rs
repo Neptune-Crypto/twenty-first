@@ -78,10 +78,7 @@ impl Display for Instruction {
                 let n: usize = arg.into();
                 n
             }),
-            Swap(arg) => write!(f, "swap{}", {
-                let n: usize = arg.into();
-                n + 1
-            }),
+            Swap(arg) => write!(f, "swap{}", { arg }),
             // Control flow
             Skiz => write!(f, "skiz"),
             Call(arg) => write!(f, "call {}", {
