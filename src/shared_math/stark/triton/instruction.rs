@@ -540,6 +540,25 @@ pub mod sample_programs {
         "halt",
     );
 
+    // pub fn get_colinear_y(p0: (PFElem, PFElem), p1: (PFElem, PFElem), p2_x: PFElem) -> PFElem {
+    //     debug_assert_ne!(p0.x, p1.x, "Line must not be parallel to y-axis");
+    //     let dy = p0.y - p1.y;
+    //     let p2_y_times_dx = dy * (p2_x - p0.x);
+    //     let dx = p0.x - p1.x;
+    //     (p2_y_times_dx / dx) + p0.y
+    // }
+    pub const GET_COLINEAR_Y: &str = concat!(
+        "read_io ",                       // p2_x
+        "read_io read_io ",               // p1_y p1_x
+        "read_io read_io ",               // p0_y p0_x
+        "swap3 push -1 mul dup1 add ",    // dy = p0_y - p1_y
+        "dup3 push -1 mul dup5 add mul ", // dy·(p2_x - p0_x)
+        "dup3 dup3 push -1 mul add ",     // dx = p0_x - p1_x
+        "invert mul add ",                // compute result
+        "swap3 pop pop pop ",             // leave a clean stack
+        "halt ",
+    );
+
     pub const HELLO_WORLD_1: &str = "
         push 10
         push 33
