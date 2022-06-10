@@ -764,6 +764,21 @@ mod vm_state_tests {
     }
 
     #[test]
+    fn run_halt_then_do_stuff_test() {
+        let program = Program::from_code(sample_programs::HALT_THEN_DO_STUFF).unwrap();
+        let (trace, _out, err) = program.run_with_input(&[], &[]);
+
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+        if let Some(e) = err {
+            println!("Error: {}", e);
+        }
+
+        // todo check that the VM actually stopped on the halt instruction
+    }
+
+    #[test]
     fn run_mt_ap_verify_test() {
         let program = Program::from_code(sample_programs::MT_AP_VERIFY).unwrap();
         println!("Successfully parsed the program.");

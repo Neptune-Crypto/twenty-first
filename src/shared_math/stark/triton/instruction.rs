@@ -576,6 +576,8 @@ pub mod sample_programs {
         write_io write_io write_io write_io write_io write_io write_io
         ";
 
+    pub const HALT_THEN_DO_STUFF: &str = "halt push 1 push 2 add invert write_io";
+
     pub const WRITE_42: &str = "
         push 42
         write_io
