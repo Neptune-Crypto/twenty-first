@@ -106,33 +106,29 @@ impl<'pgm> VMState<'pgm> {
     }
 
     /// Given a state, compute `(next_state, vm_output)`.
-    pub fn step<R, In>(
+    pub fn step<In>(
         &self,
-        rng: &mut R,
         stdin: &mut In,
         secret_in: &mut In,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> Result<(VMState<'pgm>, Option<VMOutput>), Box<dyn Error>>
     where
-        R: Rng,
         In: InputStream,
     {
         let mut next_state = self.clone();
         next_state
-            .step_mut(rng, stdin, secret_in, rescue_prime)
+            .step_mut(stdin, secret_in, rescue_prime)
             .map(|vm_output| (next_state, vm_output))
     }
 
     /// Perform the state transition as a mutable operation on `self`.
-    pub fn step_mut<R, In>(
+    pub fn step_mut<In>(
         &mut self,
-        rng: &mut R,
         stdin: &mut In,
         secret_in: &mut In,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> Result<Option<VMOutput>, Box<dyn Error>>
     where
-        R: Rng,
         In: InputStream,
     {
         // All instructions increase the cycle count
