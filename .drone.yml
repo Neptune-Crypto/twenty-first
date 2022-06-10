@@ -41,34 +41,38 @@ steps:
   - name: Telegram
     image:
       appleboy/drone-telegram@sha256:896707270a77372001b6ed40e895f3f15ef1cfb6ec93463d6f496e96c28aaf7b
-    secrets: [telegram_token, telegram_to]
-    when:
-      status: [success, failure]
-    format: markdown
-    # Reference:
-    # https://github.com/appleboy/drone-telegram/blob/master/DOCS.md#parameter-reference
-    message: >
-      {{#success build.status}}
-      ✅ Build #{{build.number}} of `{{repo.name}}` succeeded.
+    settings:
+      to:
+        from_secret: telegram_to
+      token:
+        from_secret: telegram_token
+      when:
+        status: [success, failure]
+      format: markdown
+      # Reference:
+      # https://github.com/appleboy/drone-telegram/blob/master/DOCS.md#parameter-reference
+      message: >
+        {{#success build.status}}
+        ✅ Build #{{build.number}} of `{{repo.name}}` succeeded.
 
-      📝 Commit by {{commit.author}} on `{{commit.branch}}`:
+        📝 Commit by {{commit.author}} on `{{commit.branch}}`:
 
-      ```
-      {{commit.message}}
-      ```
+        ```
+        {{commit.message}}
+        ```
 
-      🌐 {{ build.link }}
-      {{else}}
-      ❌ Build #{{build.number}} of `{{repo.name}}` failed.
+        🌐 {{ build.link }}
+        {{else}}
+        ❌ Build #{{build.number}} of `{{repo.name}}` failed.
 
-      📝 Commit by {{commit.author}} on `{{commit.branch}}`:
+        📝 Commit by {{commit.author}} on `{{commit.branch}}`:
 
-      ```
-      {{commit.message}}
-      ```
+        ```
+        {{commit.message}}
+        ```
 
-      🌐 {{ build.link }}
-      {{/success}}
+        🌐 {{ build.link }}
+        {{/success}}
 
 
 branch:
