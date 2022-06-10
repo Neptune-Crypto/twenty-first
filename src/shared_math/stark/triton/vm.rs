@@ -206,10 +206,11 @@ impl Program {
         let mut current_state = states.last().unwrap();
 
         while !current_state.is_complete() {
-            let (next_state, vm_output) = match current_state.step(rng, stdin, rescue_prime) {
-                Err(err) => return (states, Some(err)),
-                Ok((next_state, vm_output)) => (next_state, vm_output),
-            };
+            let (next_state, vm_output) =
+                match current_state.step(rng, stdin, secret_in, rescue_prime) {
+                    Err(err) => return (states, Some(err)),
+                    Ok((next_state, vm_output)) => (next_state, vm_output),
+                };
 
             if let Some(VMOutput::WriteIoTrace(written_word)) = vm_output {
                 let _written = stdout.write_elem(written_word);
