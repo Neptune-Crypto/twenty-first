@@ -553,7 +553,7 @@ pub mod sample_programs {
         "dup3 dup3 push -1 mul add ",     // dx = p0_x - p1_x
         "invert mul add ",                // compute result
         "swap3 pop pop pop ",             // leave a clean stack
-        "halt ",
+        "write_io halt ",
     );
 
     pub const HELLO_WORLD_1: &str = "

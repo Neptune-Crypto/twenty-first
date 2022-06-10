@@ -845,8 +845,9 @@ mod vm_state_tests {
     fn run_get_colinear_y_tvmasm_test() {
         let program = Program::from_code(sample_programs::GET_COLINEAR_Y).unwrap();
         println!("Successfully parsed the program.");
-        let (trace, _out, err) =
-            program.run_with_input(&[2.into(), 3.into(), 3.into(), 1.into(), 1.into()], &[]);
+        let (trace, out, err) =
+            program.run_with_input(&[7.into(), 2.into(), 1.into(), 3.into(), 4.into()], &[]);
+        assert_eq!(out[0], 4.into());
         for state in trace.iter() {
             println!("{}", state);
         }
