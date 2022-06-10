@@ -720,15 +720,16 @@ mod b_prime_field_element_test {
         assert_eq!(BFieldElement(150), output[4]);
 
         // Assert more sizes can be handled, without crashing
-        BFieldElement::from_byte_array([0u8; 1]);
-        BFieldElement::from_byte_array([0u8; 2]);
-        BFieldElement::from_byte_array([0u8; 3]);
-        BFieldElement::from_byte_array([0u8; 4]);
-        BFieldElement::from_byte_array([0u8; 5]);
-        BFieldElement::from_byte_array([0u8; 6]);
-        BFieldElement::from_byte_array([0u8; 8]);
-        BFieldElement::from_byte_array([0u8; 9]);
-        BFieldElement::from_byte_array([0u8; 14]);
+        assert_eq!(1, BFieldElement::from_byte_array([0u8; 1]).len());
+        assert_eq!(1, BFieldElement::from_byte_array([0u8; 3]).len());
+        assert_eq!(1, BFieldElement::from_byte_array([0u8; 2]).len());
+        assert_eq!(1, BFieldElement::from_byte_array([0u8; 4]).len());
+        assert_eq!(1, BFieldElement::from_byte_array([0u8; 5]).len());
+        assert_eq!(1, BFieldElement::from_byte_array([0u8; 6]).len());
+        assert_eq!(2, BFieldElement::from_byte_array([0u8; 8]).len());
+        assert_eq!(2, BFieldElement::from_byte_array([0u8; 9]).len());
+        assert_eq!(2, BFieldElement::from_byte_array([0u8; 14]).len());
+        assert_eq!(2, BFieldElement::from_byte_array([0u8; 15]).len());
     }
 
     #[should_panic(
