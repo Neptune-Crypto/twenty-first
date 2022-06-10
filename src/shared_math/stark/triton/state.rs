@@ -618,7 +618,6 @@ impl<'pgm> VMState<'pgm> {
         let ci = self.current_instruction()?;
         let ci_size = ci.size();
         let ni_pointer = self.instruction_pointer + ci_size;
-        println!("ci: {}, ci_size: {}, ni_ptr: {}", ci, ci_size, ni_pointer);
         self.program
             .get(ni_pointer)
             .ok_or_else(|| vm_fail(InstructionPointerOverflow(ni_pointer)))
@@ -715,6 +714,8 @@ impl<'pgm> VMState<'pgm> {
 impl<'pgm> Display for VMState<'pgm> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let res = self.current_instruction().map(|instruction| {
+            writeln!(f, " ╭────────────────╮")?;
+            writeln!(f, " │ {: <14} │", format!("{}", instruction))?;
             write!(
                 f,
                 "{}",

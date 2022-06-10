@@ -5,6 +5,7 @@ use super::{
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::stark::triton::instruction::Instruction;
 use crate::shared_math::stark::triton::state::{VMOutput, VMState};
+use crate::shared_math::stark::triton::table::base_matrix::ProcessorTableColumn::*;
 use crate::shared_math::stark::triton::vm::Program;
 use std::fmt::Display;
 
@@ -204,287 +205,148 @@ pub struct ProcessorMatrixRow {
     pub row: [BFieldElement; processor_table::BASE_WIDTH],
 }
 
-impl ProcessorMatrixRow {
-    pub fn clk(&self) -> BFieldElement {
-        self.row[0]
-    }
-    pub fn ip(&self) -> BFieldElement {
-        self.row[1]
-    }
-    pub fn ci(&self) -> BFieldElement {
-        self.row[2]
-    }
-    pub fn nia(&self) -> BFieldElement {
-        self.row[3]
-    }
-    pub fn ib0(&self) -> BFieldElement {
-        self.row[4]
-    }
-    pub fn ib1(&self) -> BFieldElement {
-        self.row[5]
-    }
-    pub fn ib2(&self) -> BFieldElement {
-        self.row[6]
-    }
-    pub fn ib3(&self) -> BFieldElement {
-        self.row[7]
-    }
-    pub fn ib4(&self) -> BFieldElement {
-        self.row[8]
-    }
-    pub fn ib5(&self) -> BFieldElement {
-        self.row[9]
-    }
-    pub fn jsp(&self) -> BFieldElement {
-        self.row[10]
-    }
-    pub fn jso(&self) -> BFieldElement {
-        self.row[11]
-    }
-    pub fn jsd(&self) -> BFieldElement {
-        self.row[12]
-    }
-    pub fn st0(&self) -> BFieldElement {
-        self.row[13]
-    }
-    pub fn st1(&self) -> BFieldElement {
-        self.row[14]
-    }
-    pub fn st2(&self) -> BFieldElement {
-        self.row[15]
-    }
-    pub fn st3(&self) -> BFieldElement {
-        self.row[16]
-    }
-    pub fn st4(&self) -> BFieldElement {
-        self.row[17]
-    }
-    pub fn st5(&self) -> BFieldElement {
-        self.row[18]
-    }
-    pub fn st6(&self) -> BFieldElement {
-        self.row[19]
-    }
-    pub fn st7(&self) -> BFieldElement {
-        self.row[20]
-    }
-    pub fn inv(&self) -> BFieldElement {
-        self.row[21]
-    }
-    pub fn osp(&self) -> BFieldElement {
-        self.row[22]
-    }
-    pub fn osv(&self) -> BFieldElement {
-        self.row[23]
-    }
-    pub fn hv0(&self) -> BFieldElement {
-        self.row[24]
-    }
-    pub fn hv1(&self) -> BFieldElement {
-        self.row[25]
-    }
-    pub fn hv2(&self) -> BFieldElement {
-        self.row[26]
-    }
-    pub fn hv3(&self) -> BFieldElement {
-        self.row[27]
-    }
-    pub fn hv4(&self) -> BFieldElement {
-        self.row[28]
-    }
-    pub fn ramp(&self) -> BFieldElement {
-        self.row[29]
-    }
-    pub fn ramv(&self) -> BFieldElement {
-        self.row[30]
-    }
-    pub fn aux0(&self) -> BFieldElement {
-        self.row[31]
-    }
-    pub fn aux1(&self) -> BFieldElement {
-        self.row[32]
-    }
-    pub fn aux2(&self) -> BFieldElement {
-        self.row[33]
-    }
-    pub fn aux3(&self) -> BFieldElement {
-        self.row[34]
-    }
-    pub fn aux4(&self) -> BFieldElement {
-        self.row[35]
-    }
-    pub fn aux5(&self) -> BFieldElement {
-        self.row[36]
-    }
-    pub fn aux6(&self) -> BFieldElement {
-        self.row[37]
-    }
-    pub fn aux7(&self) -> BFieldElement {
-        self.row[38]
-    }
-    pub fn aux8(&self) -> BFieldElement {
-        self.row[39]
-    }
-    pub fn aux9(&self) -> BFieldElement {
-        self.row[40]
-    }
-    pub fn aux10(&self) -> BFieldElement {
-        self.row[41]
-    }
-    pub fn aux11(&self) -> BFieldElement {
-        self.row[42]
-    }
-    pub fn aux12(&self) -> BFieldElement {
-        self.row[43]
-    }
-    pub fn aux13(&self) -> BFieldElement {
-        self.row[44]
-    }
-    pub fn aux14(&self) -> BFieldElement {
-        self.row[45]
-    }
-    pub fn aux15(&self) -> BFieldElement {
-        self.row[46]
-    }
-}
-
 impl Display for ProcessorMatrixRow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn horizontal_bar_top(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            writeln!(
-                f,
-                "╭────────────────────────────┬─────────────────────\
-                ───────┬───────────────────────────┬───────────────────╮"
-            )
-        }
-
         fn row(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
             writeln!(f, "│ {: <103} │", s)
         }
-        fn row_box_end(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
-            writeln!(f, "│ {: <103}┤", s)
-        }
-        fn horizontal_bar_bot(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            writeln!(
-                f,
-                "╰─────────────────────────────────────────────────────\
-                ────────────────────────────────────────────────────╯"
-            )
-        }
 
-        horizontal_bar_top(f)?;
+        writeln!(
+            f,
+            "╭┴────────────────┴───────────────────────────────────────────────\
+            ────────────────────┬───────────────────╮"
+        )?;
 
         let width = 20;
         row(
             f,
             format!(
-                "ip:   {:>width$} │ ci:   {:>width$} │ nia: {:>width$} │ {:>17}",
-                self.ip().value(),
-                self.ci().value(),
-                self.nia().value(),
-                self.clk().value(),
+                "ip:   {:>width$} ╷ ci:   {:>width$} ╷ nia: {:>width$} │ {:>17}",
+                self.row[IP as usize].value(),
+                self.row[CI as usize].value(),
+                self.row[NIA as usize].value(),
+                self.row[CLK as usize].value(),
             ),
         )?;
 
-        // FIXME: ib0-ib5
-        // FIXME: hv0-hv3
-
-        row_box_end(
+        writeln!(
             f,
-            format!(
-                "jsp:  {:>width$} │ jso:  {:>width$} │ jsd: {:>width$} ╰───────────────────",
-                self.jsp().value(),
-                self.jso().value(),
-                self.jsd().value()
-            ),
+            "│ jsp:  {:>width$} │ jso:  {:>width$} │ jsd: {:>width$} ╰───────────────────┤",
+            self.row[JSP as usize].value(),
+            self.row[JSO as usize].value(),
+            self.row[JSD as usize].value(),
         )?;
         row(
             f,
             format!(
                 "ramp: {:>width$} │ ramv: {:>width$} │",
-                self.ramp().value(),
-                self.ramv().value()
+                self.row[RAMP as usize].value(),
+                self.row[RAMV as usize].value(),
             ),
         )?;
-        row(
+        writeln!(
             f,
-            format!(
-                "osp:  {:>width$} ╵ osv:  {:>width$} ╵",
-                self.osp().value(),
-                self.osv().value()
-            ),
+            "│ osp:  {:>width$} ╵ osv:  {:>width$} ╵                 \
+            ╭─────────────────────────────┤",
+            self.row[OSP as usize].value(),
+            self.row[OSV as usize].value(),
         )?;
-        row(
+        writeln!(
             f,
-            format!(
-                "                                                                            inv: {:>width$}",
-                self.inv().value()
-            ),
+            "│ {:>72} ╶╯ inv: {:>width$}   │",
+            " ",
+            self.row[INV as usize].value()
         )?;
         row(
             f,
             format!(
                 "st3-0:    [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.st3().value(),
-                self.st2().value(),
-                self.st1().value(),
-                self.st0().value(),
+                self.row[ST3 as usize].value(),
+                self.row[ST2 as usize].value(),
+                self.row[ST1 as usize].value(),
+                self.row[ST0 as usize].value(),
             ),
         )?;
         row(
             f,
             format!(
                 "st7-4:    [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.st7().value(),
-                self.st6().value(),
-                self.st5().value(),
-                self.st4().value(),
+                self.row[ST7 as usize].value(),
+                self.row[ST6 as usize].value(),
+                self.row[ST5 as usize].value(),
+                self.row[ST4 as usize].value(),
             ),
         )?;
-        row(f, format!(""))?;
+        row(f, "".into())?;
         row(
             f,
             format!(
                 "aux3-0:   [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.aux3().value(),
-                self.aux2().value(),
-                self.aux1().value(),
-                self.aux0().value(),
+                self.row[AUX3 as usize].value(),
+                self.row[AUX2 as usize].value(),
+                self.row[AUX1 as usize].value(),
+                self.row[AUX0 as usize].value(),
             ),
         )?;
         row(
             f,
             format!(
                 "aux7-4:   [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.aux7().value(),
-                self.aux6().value(),
-                self.aux5().value(),
-                self.aux4().value(),
+                self.row[AUX7 as usize].value(),
+                self.row[AUX6 as usize].value(),
+                self.row[AUX5 as usize].value(),
+                self.row[AUX4 as usize].value(),
             ),
         )?;
         row(
             f,
             format!(
                 "aux11-8:  [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.aux11().value(),
-                self.aux10().value(),
-                self.aux9().value(),
-                self.aux8().value(),
+                self.row[AUX11 as usize].value(),
+                self.row[AUX10 as usize].value(),
+                self.row[AUX9 as usize].value(),
+                self.row[AUX8 as usize].value(),
             ),
         )?;
         row(
             f,
             format!(
                 "aux15-12: [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.aux15().value(),
-                self.aux14().value(),
-                self.aux13().value(),
-                self.aux12().value(),
+                self.row[AUX15 as usize].value(),
+                self.row[AUX14 as usize].value(),
+                self.row[AUX13 as usize].value(),
+                self.row[AUX12 as usize].value(),
             ),
         )?;
-
-        horizontal_bar_bot(f)?;
-
+        row(f, "".into())?;
+        row(
+            f,
+            format!(
+                "hv4-0: [ {:>16} | {:>16} | {:>16} | {:>16} | {:>16} ]",
+                self.row[HV4 as usize].value(),
+                self.row[HV3 as usize].value(),
+                self.row[HV2 as usize].value(),
+                self.row[HV1 as usize].value(),
+                self.row[HV0 as usize].value(),
+            ),
+        )?;
+        row(
+            f,
+            format!(
+                "ib5-0: [ {:>12} | {:>13} | {:>13} | {:>13} | {:>13} | {:>13} ]",
+                self.row[IB5 as usize].value(),
+                self.row[IB4 as usize].value(),
+                self.row[IB3 as usize].value(),
+                self.row[IB2 as usize].value(),
+                self.row[IB1 as usize].value(),
+                self.row[IB0 as usize].value(),
+            ),
+        )?;
+        writeln!(
+            f,
+            "╰─────────────────────────────────────────────────────────────────\
+            ────────────────────────────────────────╯"
+        )?;
         Ok(())
     }
 }
