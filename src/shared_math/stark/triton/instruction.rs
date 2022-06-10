@@ -46,7 +46,7 @@ pub enum Instruction {
     // Arithmetic on stack instructions
     Add,
     Mul,
-    Inv,
+    Invert,
     Split,
     Eq,
     Lt,
@@ -56,7 +56,7 @@ pub enum Instruction {
     Div,
     XxAdd,
     XxMul,
-    XInv,
+    XInvert,
     XbMul,
 
     // Read/write
@@ -114,7 +114,7 @@ impl Display for Instruction {
             // Arithmetic on stack instructions
             Add => write!(f, "add"),
             Mul => write!(f, "mul"),
-            Inv => write!(f, "inv"),
+            Invert => write!(f, "invert"),
             Split => write!(f, "split"),
             Eq => write!(f, "eq"),
             Lt => write!(f, "lt"),
@@ -124,7 +124,7 @@ impl Display for Instruction {
             Div => write!(f, "div"),
             XxAdd => write!(f, "xxadd"),
             XxMul => write!(f, "xxmul"),
-            XInv => write!(f, "xinv"),
+            XInvert => write!(f, "xinvert"),
             XbMul => write!(f, "xbmul"),
 
             // Read/write
@@ -168,7 +168,7 @@ impl Instruction {
             // Arithmetic on stack instructions
             Add => 40,
             Mul => 41,
-            Inv => 42,
+            Invert => 42,
             Split => 43,
             Eq => 44,
             Lt => 45,
@@ -179,7 +179,7 @@ impl Instruction {
 
             XxAdd => 50,
             XxMul => 51,
-            XInv => 52,
+            XInvert => 52,
             XbMul => 53,
 
             // Read/write
@@ -215,7 +215,7 @@ impl Instruction {
             DivineSibling => true,
             Add => true,
             Mul => true,
-            Inv => true,
+            Invert => true,
             Split => true,
             Eq => true,
             Lt => true,
@@ -225,7 +225,7 @@ impl Instruction {
             Div => true,
             XxAdd => true,
             XxMul => true,
-            XInv => true,
+            XInvert => true,
             XbMul => true,
             ReadIo => true,
             WriteIo => true,
@@ -262,11 +262,11 @@ impl Instruction {
             DivineSibling => false,
             Add => false,
             Mul => false,
-            Inv => false,
+            Invert => false,
             Eq => false,
             XxAdd => false,
             XxMul => false,
-            XInv => false,
+            XInvert => false,
             XbMul => false,
             ReadIo => false,
             WriteIo => false,
@@ -303,7 +303,7 @@ impl Instruction {
             AssertDigest => 1,
             Add => 1,
             Mul => 1,
-            Inv => 1,
+            Invert => 1,
             Split => 1,
             Eq => 1,
             Lt => 1,
@@ -313,7 +313,7 @@ impl Instruction {
             Div => 1,
             XxAdd => 1,
             XxMul => 1,
-            XInv => 1,
+            XInvert => 1,
             XbMul => 1,
             WriteIo => 1,
             ReadIo => 1,
@@ -465,7 +465,7 @@ fn parse_token(
         // Arithmetic on stack instructions
         "add" => vec![Add],
         "mul" => vec![Mul],
-        "inv" => vec![Inv],
+        "invert" => vec![Invert],
         "split" => vec![Split],
         "eq" => vec![Eq],
         "lt" => vec![Lt],
@@ -475,7 +475,7 @@ fn parse_token(
         "div" => vec![Div],
         "xxadd" => vec![XxAdd],
         "xxmul" => vec![XxMul],
-        "xinv" => vec![XInv],
+        "xinvert" => vec![XInvert],
         "xbmul" => vec![XbMul],
 
         // Read/write
@@ -765,8 +765,8 @@ pub mod sample_programs {
         squeeze7 squeeze8 squeeze9 squeeze10 squeeze11 squeeze12 squeeze13
         squeeze14 squeeze15 absorb0 absorb1 absorb2 absorb3 absorb4 absorb5
         absorb6 absorb7 absorb8 absorb9 absorb10 absorb11 absorb12 absorb13
-        absorb14 absorb15 divine_sibling assert_digest add mul inv split eq lt and xor reverse
-        div xxadd xxmul xinv xbmul read_io write_io
+        absorb14 absorb15 divine_sibling assert_digest add mul invert split eq lt and xor reverse
+        div xxadd xxmul xinvert xbmul read_io write_io
     ";
 
     pub fn all_instructions() -> Vec<Instruction> {
@@ -835,7 +835,7 @@ pub mod sample_programs {
             AssertDigest,
             Add,
             Mul,
-            Inv,
+            Invert,
             Split,
             Eq,
             Lt,
@@ -845,7 +845,7 @@ pub mod sample_programs {
             Div,
             XxAdd,
             XxMul,
-            XInv,
+            XInvert,
             XbMul,
             ReadIo,
             WriteIo,
@@ -918,7 +918,7 @@ pub mod sample_programs {
             "assert_digest",
             "add",
             "mul",
-            "inv",
+            "invert",
             "split",
             "eq",
             "lt",
@@ -928,7 +928,7 @@ pub mod sample_programs {
             "div",
             "xxadd",
             "xxmul",
-            "xinv",
+            "xinvert",
             "xbmul",
             "read_io",
             "write_io",

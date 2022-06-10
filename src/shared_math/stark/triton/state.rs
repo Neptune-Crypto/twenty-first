@@ -271,7 +271,7 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Inv => {
+            Invert => {
                 let elem = self.op_stack.pop()?;
                 if elem.is_zero() {
                     return vm_err(InverseOfZero);
@@ -367,7 +367,7 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            XInv => {
+            XInvert => {
                 let elem: XWord = self.op_stack.popx()?;
                 self.op_stack.pushx(elem.inverse());
                 self.instruction_pointer += 1;
@@ -765,8 +765,7 @@ mod vm_state_tests {
 
     #[test]
     fn run_mt_ap_verify_test() {
-        let code = sample_programs::MT_AP_VERIFY;
-        let program = Program::from_code(code).unwrap();
+        let program = Program::from_code(sample_programs::MT_AP_VERIFY).unwrap();
         println!("Successfully parsed the program.");
         let (trace, _out, err) = program.run_with_input(
             &[
@@ -840,8 +839,20 @@ mod vm_state_tests {
         let last_state = trace.last().unwrap();
         // todo check that VM terminated gracefully
         // assert_eq!(last_state.current_instruction().unwrap(), Halt);
+    }
 
-        println!("{}", last_state);
+    #[test]
+    fn run_get_colinear_y_tvmasm_test() {
+        let program = Program::from_code(sample_programs::GET_COLINEAR_Y).unwrap();
+        println!("Successfully parsed the program.");
+        let (trace, _out, err) =
+            program.run_with_input(&[2.into(), 3.into(), 3.into(), 1.into(), 1.into()], &[]);
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+        if let Some(e) = err {
+            println!("Error: {}", e);
+        }
     }
 
     #[test]
