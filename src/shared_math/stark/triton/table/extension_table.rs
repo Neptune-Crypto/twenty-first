@@ -1,4 +1,5 @@
 use super::base_table::Table;
+use super::challenges_initials::{AllChallenges, AllInitials};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::polynomial::Polynomial;
@@ -15,17 +16,21 @@ type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 pub trait ExtensionTable: Table<XWord> + Sync {
-    fn ext_boundary_constraints(&self, challenges: &[XWord]) -> Vec<MPolynomial<XWord>>;
+    fn ext_boundary_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>>;
 
-    fn ext_transition_constraints(&self, challenges: &[XWord]) -> Vec<MPolynomial<XWord>>;
+    fn ext_transition_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>>;
 
     fn ext_terminal_constraints(
         &self,
-        challenges: &[XWord],
-        terminals: &[XWord],
+        challenges: &AllChallenges,
+        terminals: &AllInitials,
     ) -> Vec<MPolynomial<XWord>>;
 
-    fn all_quotient_degree_bounds(&self, challenges: &[XWord], terminals: &[XWord]) -> Vec<Degree> {
+    fn all_quotient_degree_bounds(
+        &self,
+        challenges: &AllChallenges,
+        terminals: &AllInitials,
+    ) -> Vec<Degree> {
         vec![
             self.boundary_quotient_degree_bounds(challenges),
             self.transition_quotient_degree_bounds(challenges),
@@ -34,7 +39,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         .concat()
     }
 
-    fn boundary_quotient_degree_bounds(&self, challenges: &[XWord]) -> Vec<Degree> {
+    fn boundary_quotient_degree_bounds(&self, challenges: &AllChallenges) -> Vec<Degree> {
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.width()];
 
         let degree_bounds: Vec<Degree> = self
@@ -46,7 +51,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         degree_bounds
     }
 
-    fn transition_quotient_degree_bounds(&self, challenges: &[XWord]) -> Vec<Degree> {
+    fn transition_quotient_degree_bounds(&self, challenges: &AllChallenges) -> Vec<Degree> {
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); 2 * self.width()];
 
         let transition_constraints = self.ext_transition_constraints(challenges);
@@ -62,8 +67,8 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
     fn terminal_quotient_degree_bounds(
         &self,
-        challenges: &[XWord],
-        terminals: &[XWord],
+        challenges: &AllChallenges,
+        terminals: &AllInitials,
     ) -> Vec<Degree> {
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.width()];
         self.ext_terminal_constraints(challenges, terminals)
@@ -76,8 +81,8 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         &self,
         fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
-        challenges: &[XWord],
-        terminals: &[XWord],
+        challenges: &AllChallenges,
+        terminals: &AllInitials,
     ) -> Vec<Vec<XWord>> {
         let boundary_quotients = self.boundary_quotients(fri_domain, codewords, challenges);
         let transition_quotients = self.transition_quotients(fri_domain, codewords, challenges);
@@ -91,7 +96,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         &self,
         fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
-        challenges: &[XWord],
+        challenges: &AllChallenges,
     ) -> Vec<Vec<XWord>> {
         let one = BFieldElement::ring_one();
         let x_values: Vec<BFieldElement> = fri_domain.domain_values();
@@ -152,8 +157,8 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         &self,
         fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
-        challenges: &[XWord],
-        terminals: &[XWord],
+        challenges: &AllChallenges,
+        terminals: &AllInitials,
     ) -> Vec<Vec<XWord>> {
         let omicron_inverse = self.omicron().unlift().unwrap().inverse();
 
@@ -196,7 +201,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         &self,
         fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
-        challenges: &[XWord],
+        challenges: &AllChallenges,
     ) -> Vec<Vec<XWord>> {
         assert!(!codewords.is_empty(), "Codewords must be non-empty");
         let mut quotient_codewords: Vec<Vec<XWord>> = vec![];

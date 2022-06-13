@@ -116,4 +116,21 @@ impl Stark {
         //let coded_processor_table = processor_table.codewords(&self.fri_domain);
         todo!()
     }
+
+    fn sample_weights(
+        hasher: &StarkHasher,
+        seed: &StarkDigest,
+        count: usize,
+    ) -> Vec<XFieldElement> {
+        hasher
+            .get_n_hash_rounds(seed, count)
+            .iter()
+            .flat_map(|digest| {
+                vec![
+                    XFieldElement::new([digest[0], digest[1], digest[2]]),
+                    XFieldElement::new([digest[3], digest[4], digest[5]]),
+                ]
+            })
+            .collect()
+    }
 }
