@@ -698,7 +698,7 @@ mod b_prime_field_element_test {
         let byte_array_0: [u8; 7] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
         let output = BFieldElement::from_byte_array(byte_array_0);
         assert_eq!(1, output.len());
-        assert_eq!(BFieldElement(72057594037927935u64), output[0]);
+        assert_eq!(BFieldElement((1 << 56) - 1), output[0]);
 
         // Ensure we're using little-endianness
         let byte_array_1: [u8; 7] = [100, 0, 0, 0, 0, 0, 0];
@@ -729,7 +729,7 @@ mod b_prime_field_element_test {
         assert_eq!(2, BFieldElement::from_byte_array([0u8; 8]).len());
         assert_eq!(2, BFieldElement::from_byte_array([0u8; 9]).len());
         assert_eq!(2, BFieldElement::from_byte_array([0u8; 14]).len());
-        assert_eq!(2, BFieldElement::from_byte_array([0u8; 15]).len());
+        assert_eq!(3, BFieldElement::from_byte_array([0u8; 15]).len());
     }
 
     #[should_panic(
