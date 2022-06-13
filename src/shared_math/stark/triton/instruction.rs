@@ -1,6 +1,5 @@
-use super::ord_n::{Ord16, Ord16::*, Ord5, Ord6, Ord6::*, Ord8, Ord8::*};
+use super::ord_n::{Ord16, Ord16::*, Ord6, Ord8, Ord8::*};
 use crate::shared_math::b_field_element::BFieldElement;
-use num_traits::Zero;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Display;
@@ -104,7 +103,7 @@ impl<Dest: Display> Display for AnInstruction<Dest> {
             }),
             Swap(arg) => write!(f, "swap{}", {
                 let n: usize = arg.into();
-                n + 1
+                n
             }),
             // Control flow
             Skiz => write!(f, "skiz"),
@@ -409,11 +408,6 @@ impl Instruction {
     }
 }
 
-fn ord5_to_bfe(n: &Ord5) -> BFieldElement {
-    let n: u32 = n.into();
-    n.into()
-}
-
 fn ord8_to_bfe(n: &Ord8) -> BFieldElement {
     let n: u32 = n.into();
     n.into()
@@ -502,8 +496,8 @@ fn parse_token(
     token: &str,
     tokens: &mut SplitWhitespace,
 ) -> Result<Vec<LabelledInstruction>, Box<dyn Error>> {
-    if token.ends_with(':') {
-        let label_name = token[..token.len() - 1].to_string();
+    if let Some(label) = token.strip_suffix(':') {
+        let label_name = label.to_string();
         return Ok(vec![LabelledInstruction::Label(label_name)]);
     }
 
@@ -603,7 +597,7 @@ fn parse_token(
 
     let labelled_instruction = instruction
         .into_iter()
-        .map(|instr| LabelledInstruction::Instruction(instr))
+        .map(LabelledInstruction::Instruction)
         .collect();
 
     Ok(labelled_instruction)
@@ -798,7 +792,7 @@ pub mod sample_programs {
         skiz
         call 29
         call 16
-        call 38
+    16: call 38
         swap1
         push 18446744069414584320
         add
@@ -806,14 +800,14 @@ pub mod sample_programs {
         skiz
         recurse
         call 36
-        dup0
+    29: dup0
         push 0
         eq
         skiz
         pop
-        pop
+    36: pop
         halt
-        dup2
+    38: dup2
         dup2
         add
         return
@@ -854,7 +848,7 @@ terminate: pop
         push 1
         push 240
         push 46
-        dup1
+    12: dup1
         dup1
         lt
         skiz
@@ -867,7 +861,7 @@ terminate: pop
         dup1
         dup1
         div
-        swap2
+    33: swap2
         swap3
         pop
         pop
@@ -1001,7 +995,7 @@ terminate: pop
             "swap6",
             "swap7",
             "skiz",
-            "call 0",
+            "call foo",
             "return",
             "recurse",
             "assert",

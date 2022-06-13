@@ -1,7 +1,7 @@
 use super::super::triton;
 use super::table::base_matrix::BaseMatrices;
-use super::table::base_table::{HasBaseTable, Table};
-use super::table::processor_table::{self, ProcessorTable};
+use super::table::base_table::Table;
+use super::table::processor_table::ProcessorTable;
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other::roundup_npo2;
@@ -9,28 +9,26 @@ use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
 use crate::shared_math::stark::triton::instruction::sample_programs;
 use crate::shared_math::stark::triton::table::table_collection::BaseTableCollection;
 use crate::shared_math::traits::GetPrimitiveRootOfUnity;
-use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{other, xfri};
 
-pub const EXTENSION_CHALLENGE_COUNT: usize = 0;
-pub const PERMUTATION_ARGUMENTS_COUNT: usize = 0;
+pub const PERMUTATION_ARGUMENTS_COUNT: usize = 10;
+pub const EXTENSION_CHALLENGE_COUNT: usize = 2;
 pub const TERMINAL_COUNT: usize = 0;
 
 type BWord = BFieldElement;
-type XWord = XFieldElement;
 type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
 
 // We use a type-parameterised FriDomain to avoid duplicate `b_*()` and `x_*()` methods.
 pub struct Stark {
-    padded_height: usize,
-    log_expansion_factor: usize,
-    security_level: usize,
-    fri_domain: triton::fri_domain::FriDomain<BWord>,
-    fri: xfri::Fri<StarkHasher>,
+    _padded_height: usize,
+    _log_expansion_factor: usize,
+    _security_level: usize,
+    _fri_domain: triton::fri_domain::FriDomain<BWord>,
+    _fri: xfri::Fri<StarkHasher>,
 }
 
 impl Stark {
-    pub fn new(padded_height: usize, log_expansion_factor: usize, security_level: usize) -> Self {
+    pub fn new(_padded_height: usize, log_expansion_factor: usize, security_level: usize) -> Self {
         assert_eq!(
             0,
             security_level % log_expansion_factor,
@@ -60,7 +58,7 @@ impl Stark {
         let code = sample_programs::HELLO_WORLD_1;
         let program = Program::from_code(code).unwrap();
 
-        let (base_matrices, err) = program.simulate_with_input(&[], &[]);
+        let (base_matrices, _err) = program.simulate_with_input(&[], &[]);
 
         let base_table_collection = BaseTableCollection::from_base_matrices(
             smooth_generator,
@@ -78,7 +76,7 @@ impl Stark {
             .0
             .unwrap();
 
-        let fri_domain = triton::fri_domain::FriDomain {
+        let _fri_domain = triton::fri_domain::FriDomain {
             offset,
             omega,
             length: fri_domain_length as usize,
@@ -98,7 +96,7 @@ impl Stark {
             .0
             .unwrap();
         let unpadded_height = base_matrices.processor_matrix.len();
-        let padded_height = roundup_npo2(unpadded_height as u64);
+        let _padded_height = roundup_npo2(unpadded_height as u64);
 
         let mut processor_table = ProcessorTable::new_prover(
             smooth_generator,

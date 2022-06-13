@@ -54,7 +54,7 @@ impl OpStack {
     pub fn safe_swap(&mut self, arg: Ord8) {
         let n: usize = arg.into();
         let top = self.stack.len() - 1;
-        self.stack.swap(top, top - n - 1);
+        self.stack.swap(top, top - n);
     }
 
     pub fn peek(&self, n: usize) -> Option<BWord> {

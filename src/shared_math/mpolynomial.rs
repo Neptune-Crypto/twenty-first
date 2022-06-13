@@ -370,7 +370,6 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
     /// - `p[4] =` $p(a,b,c,d,e) = e$
     pub fn variables(variable_count: usize, one: PFElem) -> Vec<Self> {
         assert!(one.is_one(), "Provided one must be one");
-        assert_eq!(1, 1, "Provided one must be one, really");
         let mut res: Vec<Self> = vec![];
         for i in 0..variable_count {
             let mut exponent = vec![0u64; variable_count];

@@ -45,11 +45,6 @@ pub fn roundup_npo2(x: u64) -> u64 {
     1 << log_2_ceil(x)
 }
 
-/// Communicate intention
-pub fn pad_height(height: usize) -> usize {
-    roundup_npo2(height as u64) as usize
-}
-
 #[inline]
 pub fn mod_pow_raw(x: u128, exp: u64, quotient: u128) -> u128 {
     // Special case for handling 0^0 = 1
@@ -290,12 +285,5 @@ mod test_other {
         assert_eq!(4, count_bits(10));
         assert_eq!(10, count_bits(1023));
         assert_eq!(11, count_bits(1024));
-    }
-
-    #[test]
-    fn pad_height_test() {
-        for x in 0..1025 {
-            assert_eq!(pad_height(x), pad_height(pad_height(x)))
-        }
     }
 }

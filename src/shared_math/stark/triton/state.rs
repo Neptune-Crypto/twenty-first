@@ -1,7 +1,7 @@
 use super::error::{vm_fail, InstructionError::*};
 use super::instruction::{AnInstruction::*, Instruction};
 use super::op_stack::OpStack;
-use super::ord_n::{Ord5::*, Ord6::*, Ord8::*};
+use super::ord_n::{Ord6::*, Ord8::*};
 use super::stdio::InputStream;
 use super::table::{aux_table, instruction_table, jump_stack_table, op_stack_table, u32_op_table};
 use super::table::{processor_table, ram_table};
@@ -11,9 +11,8 @@ use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::RescuePrimeXlix;
 use crate::shared_math::stark::triton::error::vm_err;
 use crate::shared_math::stark::triton::table::base_matrix::ProcessorMatrixRow;
-use crate::shared_math::traits::{GetRandomElements, IdentityValues, Inverse};
+use crate::shared_math::traits::{IdentityValues, Inverse};
 use crate::shared_math::x_field_element::XFieldElement;
-use rand::Rng;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
@@ -106,33 +105,29 @@ impl<'pgm> VMState<'pgm> {
     }
 
     /// Given a state, compute `(next_state, vm_output)`.
-    pub fn step<R, In>(
+    pub fn step<In>(
         &self,
-        rng: &mut R,
         stdin: &mut In,
         secret_in: &mut In,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> Result<(VMState<'pgm>, Option<VMOutput>), Box<dyn Error>>
     where
-        R: Rng,
         In: InputStream,
     {
         let mut next_state = self.clone();
         next_state
-            .step_mut(rng, stdin, secret_in, rescue_prime)
+            .step_mut(stdin, secret_in, rescue_prime)
             .map(|vm_output| (next_state, vm_output))
     }
 
     /// Perform the state transition as a mutable operation on `self`.
-    pub fn step_mut<R, In>(
+    pub fn step_mut<In>(
         &mut self,
-        rng: &mut R,
         stdin: &mut In,
         secret_in: &mut In,
         rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
     ) -> Result<Option<VMOutput>, Box<dyn Error>>
     where
-        R: Rng,
         In: InputStream,
     {
         // All instructions increase the cycle count
@@ -158,14 +153,14 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Dup(arg) => {
-                let elem = self.op_stack.safe_peek(arg.into());
+                let elem = self.op_stack.safe_peek(arg);
                 self.op_stack.push(elem);
                 self.instruction_pointer += 2;
             }
 
             Swap(arg) => {
                 // st[0] ... st[n] -> st[n] ... st[0]
-                self.op_stack.safe_swap(arg.into());
+                self.op_stack.safe_swap(arg);
                 self.instruction_pointer += 2;
             }
 
@@ -505,11 +500,9 @@ impl<'pgm> VMState<'pgm> {
         [clk, ci, osv, osp]
     }
 
-    pub fn to_ram_row(
-        &self,
-        current_instruction: Instruction,
-    ) -> [BFieldElement; ram_table::BASE_WIDTH] {
+    pub fn to_ram_row(&self) -> [BFieldElement; ram_table::BASE_WIDTH] {
         let clk = self.cycle_count.into();
+
         [clk, self.ramp, self.ramv]
     }
 
@@ -931,5 +924,16 @@ mod vm_state_tests {
         let _actual = _last_state.op_stack.st(ST0);
 
         //assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn swap_test() {
+        let code = "push 1 push 2 swap1 halt";
+        let program = Program::from_code(code).unwrap();
+        let (trace, _out, _err) = program.run_with_input(&[], &[]);
+
+        for state in trace.iter() {
+            println!("{}", state);
+        }
     }
 }

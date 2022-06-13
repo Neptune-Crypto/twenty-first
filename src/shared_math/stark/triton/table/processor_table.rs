@@ -4,7 +4,6 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other::{self};
-use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::stark::{
     EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT,
 };
@@ -86,8 +85,8 @@ impl ProcessorTable {
 
     pub fn extend(
         &self,
-        all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
-        all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
+        _all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
+        _all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT],
     ) -> ExtProcessorTable {
         todo!()
     }
@@ -138,8 +137,6 @@ impl Table<XFieldElement> for ExtProcessorTable {
     }
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<XWord>> {
-        let variables = MPolynomial::<BFieldElement>::variables(2 * BASE_WIDTH, 1.into());
-
         vec![]
     }
 }

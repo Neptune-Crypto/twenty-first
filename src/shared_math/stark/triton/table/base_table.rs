@@ -1,6 +1,6 @@
 use super::super::fri_domain::FriDomain;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
-use crate::shared_math::other::{self, is_power_of_two, roundup_npo2};
+use crate::shared_math::other::{is_power_of_two, roundup_npo2};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{GetRandomElements, PrimeField};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -94,7 +94,11 @@ pub fn derive_omicron<DataPF: PrimeField>(padded_height: u64, dummy: DataPF) -> 
 }
 
 pub fn pad_height(height: usize) -> usize {
-    roundup_npo2(height as u64) as usize
+    if height == 0 {
+        0
+    } else {
+        roundup_npo2(height as u64) as usize
+    }
 }
 
 pub trait Table<DataPF>: HasBaseTable<DataPF>
@@ -148,12 +152,7 @@ where
         // FIXME: Table<> supports Vec<[DataPF; WIDTH]>, but FriDomain does not (yet).
         self.interpolate_columns(fri_domain.omega, fri_domain.length)
             .par_iter()
-            .map(|polynomial| {
-                fri_domain
-                    .evaluate(polynomial)
-                    .try_into()
-                    .expect("FriDomain.evaluate: Could not convert Vec<DataPF> til [DataPF; WIDTH]")
-            })
+            .map(|polynomial| fri_domain.evaluate(polynomial))
             .collect()
     }
 
@@ -228,14 +227,18 @@ where
 
 #[cfg(test)]
 mod test_base_table {
+    use crate::shared_math::other;
     use crate::shared_math::stark::triton::table::base_table::pad_height;
 
     #[ignore]
     #[test]
     /// padding should be idempotent.
     fn pad_height_test() {
-        for x in 0..=1025 {
-            assert_eq!(pad_height(x), pad_height(pad_height(x)))
+        assert_eq!(0, pad_height(0));
+        for x in 1..=1025 {
+            let padded_x = pad_height(x);
+            assert_eq!(other::roundup_npo2(x as u64) as usize, padded_x);
+            assert_eq!(padded_x, pad_height(padded_x))
         }
     }
 }

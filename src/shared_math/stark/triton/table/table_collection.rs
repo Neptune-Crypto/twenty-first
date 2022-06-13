@@ -45,9 +45,9 @@ pub struct ExtTableCollection {
 }
 
 /// Convert vector-of-arrays to vector-of-vectors.
-fn to_vec_vecs<T: Sized + Clone, const S: usize>(vector_of_arrays: &Vec<[T; S]>) -> Vec<Vec<T>> {
+fn to_vec_vecs<T: Sized + Clone, const S: usize>(vector_of_arrays: &[[T; S]]) -> Vec<Vec<T>> {
     vector_of_arrays
-        .into_iter()
+        .iter()
         .map(|arr| arr.to_vec())
         .collect_vec()
 }

@@ -75,7 +75,7 @@ impl BaseMatrices {
         self.op_stack_matrix
             .push(state.to_op_stack_row(current_instruction));
 
-        self.ram_matrix.push(state.to_ram_row(current_instruction));
+        self.ram_matrix.push(state.to_ram_row());
 
         self.jump_stack_matrix.push(state.to_jump_stack_row());
 
@@ -361,9 +361,15 @@ impl Display for ProcessorMatrixRow {
         fn row(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
             writeln!(f, "│ {: <103} │", s)
         }
+
+        fn row_blank(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            writeln!(f, "│ {: <103} │", "")
+        }
+
         fn row_box_end(f: &mut std::fmt::Formatter<'_>, s: String) -> std::fmt::Result {
             writeln!(f, "│ {: <103}┤", s)
         }
+
         fn horizontal_bar_bot(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             writeln!(
                 f,
@@ -441,7 +447,7 @@ impl Display for ProcessorMatrixRow {
                 self.st4().value(),
             ),
         )?;
-        row(f, format!(""))?;
+        row_blank(f)?;
         row(
             f,
             format!(
