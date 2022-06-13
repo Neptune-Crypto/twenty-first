@@ -1,4 +1,5 @@
-use super::instruction::{parse, Instruction};
+use super::instruction;
+use super::instruction::{parse, Instruction, LabelledInstruction};
 use super::state::{VMOutput, VMState, AUX_REGISTER_COUNT};
 use super::stdio::{InputStream, OutputStream, VecStream};
 use super::table::base_matrix::BaseMatrices;
@@ -70,15 +71,11 @@ impl Program {
     /// All valid programs terminate with `Halt`.
     ///
     /// `new()` will append `Halt` if not present.
-    pub fn new(input: &[Instruction]) -> Self {
-        let mut instructions = vec![];
-        for instr in input {
-            instructions.append(&mut vec![*instr; instr.size()]);
-        }
-
-        if instructions.last() != Some(&Instruction::Halt) {
-            instructions.push(Instruction::Halt)
-        }
+    pub fn new(input: &[LabelledInstruction]) -> Self {
+        let instructions = instruction::convert_labels(input)
+            .iter()
+            .flat_map(|instr| vec![*instr; instr.size()])
+            .collect::<Vec<_>>();
 
         Program { instructions }
     }
@@ -206,10 +203,11 @@ impl Program {
         let mut current_state = states.last().unwrap();
 
         while !current_state.is_complete() {
-            let (next_state, vm_output) = match current_state.step(rng, stdin, rescue_prime) {
-                Err(err) => return (states, Some(err)),
-                Ok((next_state, vm_output)) => (next_state, vm_output),
-            };
+            let (next_state, vm_output) =
+                match current_state.step(rng, stdin, secret_in, rescue_prime) {
+                    Err(err) => return (states, Some(err)),
+                    Ok((next_state, vm_output)) => (next_state, vm_output),
+                };
 
             if let Some(VMOutput::WriteIoTrace(written_word)) = vm_output {
                 let _written = stdout.write_elem(written_word);
@@ -464,7 +462,7 @@ mod triton_vm_tests {
     }
 
     #[test]
-    fn xlix_xlix_xlix_halt() {
+    fn xlix_xlix_xlix_halt_test_1() {
         // 1. Execute program
         let code = sample_programs::XLIX_XLIX_XLIX_HALT;
         let program = Program::from_code(code).unwrap();
@@ -490,7 +488,7 @@ mod triton_vm_tests {
             println!("{}", ProcessorMatrixRow { row });
         }
 
-        // 1. Check `output_matrix`.
+        // 1. Check that `output_matrix` is equivalent to `stdout`
         {
             let expecteds = vec![].into_iter().rev().map(|x| BWord::new(x));
             let actuals: Vec<BWord> = base_matrices
@@ -506,11 +504,10 @@ mod triton_vm_tests {
             }
         }
 
-        // 2. Each `xlix` operation result in 8 rows.
+        // 2. Each of three `xlix` operations result in 8 rows.
         {
-            let xlix_instruction_count = 3;
-            let prc_rows_count = base_matrices.processor_matrix.len();
-            assert!(xlix_instruction_count <= 8 * prc_rows_count)
+            let expected = 24;
+            assert_eq!(expected, base_matrices.aux_matrix.len());
         }
 
         //3. noRows(jmpstack_tabel) == noRows(processor_table)
@@ -520,138 +517,19 @@ mod triton_vm_tests {
             assert_eq!(jmp_rows_count, prc_rows_count)
         }
 
-        // "4. "READIO; WRITEIO" -> noRows(inputable) + noRows(outputtable) == noReadIO +
-        // noWriteIO"
-
         {
-            // Input
+            // 4.1. The number of input_table rows is equivalent to the number of read_io operations.
             let expected_input_count = 0;
-
             let actual_input_count = base_matrices.input_matrix.len();
 
             assert_eq!(expected_input_count, actual_input_count);
 
-            // Output
+            // 4.2. The number of output_table rows is equivalent to the number of write_io operations.
             let expected_output_count = 0;
-            //let actual = base_matrices.ram_matrix.len();
-
             let actual_output_count = base_matrices.output_matrix.len();
 
             assert_eq!(expected_output_count, actual_output_count);
         }
-    }
-
-    #[test]
-    fn xlix_xlix_xlix() {
-        // 1. Execute program
-        let code = sample_programs::XLIX_XLIX_XLIX;
-        let program = Program::from_code(code).unwrap();
-
-        println!("{}", program);
-
-        let mut rng = rand::thread_rng();
-        let mut stdin = VecStream::new(&[]);
-        let mut secret_in = VecStream::new(&[]);
-        let mut stdout = VecStream::new(&[]);
-        let rescue_prime = neptune_params();
-
-        let (base_matrices, err) = program.simulate(
-            &mut rng,
-            &mut stdin,
-            &mut secret_in,
-            &mut stdout,
-            &rescue_prime,
-        );
-
-        println!("{:?}", err);
-        for row in base_matrices.processor_matrix.clone() {
-            println!("{}", ProcessorMatrixRow { row });
-        }
-
-        // 1. Check `output_matrix`.
-        {
-            let expecteds = vec![].into_iter().rev().map(|x| BWord::new(x));
-            let actuals: Vec<BWord> = base_matrices
-                .output_matrix
-                .iter()
-                .map(|&[val]| val)
-                .collect_vec();
-
-            assert_eq!(expecteds.len(), actuals.len());
-
-            for (expected, actual) in zip(expecteds, actuals) {
-                assert_eq!(expected, actual)
-            }
-        }
-
-        // 2. Each `xlix` operation result in 8 rows.
-        {
-            let xlix_instruction_count = 3;
-            let prc_rows_count = base_matrices.processor_matrix.len();
-            assert!(xlix_instruction_count <= 8 * prc_rows_count)
-        }
-        {
-            let xlix_instruction_count = 3;
-            let prc_rows_count = base_matrices.processor_matrix.len();
-            assert_eq!(xlix_instruction_count, prc_rows_count)
-        }
-
-        //3. noRows(jmpstack_tabel) == noRows(processor_table)
-        {
-            let jmp_rows_count = base_matrices.jump_stack_matrix.len();
-            let prc_rows_count = base_matrices.processor_matrix.len();
-            assert_eq!(jmp_rows_count, prc_rows_count)
-        }
-
-        // "4. "READIO; WRITEIO" -> noRows(inputable) + noRows(outputtable) == noReadIO +
-        // noWriteIO"
-
-        {
-            // Input
-            let expected_input_count = 0;
-
-            let actual_input_count = base_matrices.input_matrix.len();
-
-            assert_eq!(expected_input_count, actual_input_count);
-
-            // Output
-            let expected_output_count = 0;
-            //let actual = base_matrices.ram_matrix.len();
-
-            let actual_output_count = base_matrices.output_matrix.len();
-
-            assert_eq!(expected_output_count, actual_output_count);
-        }
-    }
-
-    #[test]
-    fn xlix_xlix_xlix2() {
-        // 1. Execute program
-        let code = sample_programs::XLIX_XLIX_XLIX;
-        let program = Program::from_code(code).unwrap();
-
-        println!("{}", program);
-
-        let mut rng = rand::thread_rng();
-        let mut stdin = VecStream::new(&[]);
-        let mut secret_in = VecStream::new(&[]);
-        let mut stdout = VecStream::new(&[]);
-        let rescue_prime = neptune_params();
-
-        let (base_matrices, err) = program.simulate(
-            &mut rng,
-            &mut stdin,
-            &mut secret_in,
-            &mut stdout,
-            &rescue_prime,
-        );
-
-        println!("{:?}", err);
-        for row in base_matrices.processor_matrix.clone() {
-            println!("{}", ProcessorMatrixRow { row });
-        }
-
-        check_base_matrices(&base_matrices, 1, 0, 3)
     }
 
     fn check_base_matrices(

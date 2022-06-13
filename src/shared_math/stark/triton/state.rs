@@ -1,5 +1,5 @@
 use super::error::{vm_fail, InstructionError::*};
-use super::instruction::{Instruction, Instruction::*};
+use super::instruction::{AnInstruction::*, Instruction};
 use super::op_stack::OpStack;
 use super::ord_n::{Ord5::*, Ord6::*, Ord8::*};
 use super::stdio::InputStream;

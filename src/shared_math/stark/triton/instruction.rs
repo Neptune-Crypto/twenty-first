@@ -1,21 +1,45 @@
 use super::ord_n::{Ord16, Ord16::*, Ord5, Ord6, Ord6::*, Ord8, Ord8::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use num_traits::Zero;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Display;
 use std::str::SplitWhitespace;
-use Instruction::*;
+use AnInstruction::*;
 use TokenError::*;
 
 type BWord = BFieldElement;
+
+/// An `Instruction` has `call` addresses encoded as absolute integers.
+pub type Instruction = AnInstruction<BWord>;
+
+/// A `LabelledInstruction` has `call` addresses encoded as label names.
+///
+/// A label name is a `String` that occurs as "`label_name`:".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LabelledInstruction {
+    Instruction(AnInstruction<String>),
+    Label(String),
+}
+
+impl Display for LabelledInstruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LabelledInstruction::Instruction(instr) => write!(f, "{}", instr),
+            LabelledInstruction::Label(label_name) => write!(f, "{}:", label_name),
+        }
+    }
+}
 
 /// A Triton VM instruction
 ///
 /// The ISA is defined at:
 ///
 /// https://neptune.builders/core-team/triton-vm/src/branch/master/specification/isa.md
+///
+/// The type parameter `Dest` describes the type of addresses (absolute or labels).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Instruction {
+pub enum AnInstruction<Dest> {
     // OpStack manipulation
     Pop,
     Push(BWord),
@@ -25,7 +49,7 @@ pub enum Instruction {
 
     // Control flow
     Skiz,
-    Call(BWord),
+    Call(Dest),
     Return,
     Recurse,
     Assert,
@@ -64,7 +88,7 @@ pub enum Instruction {
     WriteIo,
 }
 
-impl Display for Instruction {
+impl<Dest: Display> Display for AnInstruction<Dest> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             // OpStack manipulation
@@ -84,10 +108,7 @@ impl Display for Instruction {
             }),
             // Control flow
             Skiz => write!(f, "skiz"),
-            Call(arg) => write!(f, "call {}", {
-                let addr: u64 = arg.into();
-                addr
-            }),
+            Call(arg) => write!(f, "call {}", arg),
             Return => write!(f, "return"),
             Recurse => write!(f, "recurse"),
             Assert => write!(f, "assert"),
@@ -134,7 +155,7 @@ impl Display for Instruction {
     }
 }
 
-impl Instruction {
+impl<Dest> AnInstruction<Dest> {
     /// Assign a unique positive integer to each `Instruction`.
     pub fn opcode(&self) -> u32 {
         match self {
@@ -329,6 +350,51 @@ impl Instruction {
         (opcode & bit_mask).into()
     }
 
+    fn map_call_address<F, NewDest>(&self, f: F) -> AnInstruction<NewDest>
+    where
+        F: Fn(&Dest) -> NewDest,
+    {
+        match self {
+            Pop => Pop,
+            Push(x) => Push(*x),
+            Divine => Divine,
+            Dup(x) => Dup(*x),
+            Swap(x) => Swap(*x),
+            Skiz => Skiz,
+            Call(lala) => Call(f(lala)),
+            Return => Return,
+            Recurse => Recurse,
+            Assert => Assert,
+            Halt => Halt,
+            ReadMem => ReadMem,
+            WriteMem => WriteMem,
+            Xlix => Xlix,
+            ClearAll => ClearAll,
+            Squeeze(x) => Squeeze(*x),
+            Absorb(x) => Absorb(*x),
+            DivineSibling => DivineSibling,
+            AssertDigest => AssertDigest,
+            Add => Add,
+            Mul => Mul,
+            Inv => Inv,
+            Split => Split,
+            Eq => Eq,
+            Lt => Lt,
+            And => And,
+            Xor => Xor,
+            Reverse => Reverse,
+            Div => Div,
+            XxAdd => XxAdd,
+            XxMul => XxMul,
+            XInv => XInv,
+            XbMul => XbMul,
+            ReadIo => ReadIo,
+            WriteIo => WriteIo,
+        }
+    }
+}
+
+impl Instruction {
     pub fn arg(&self) -> Option<BFieldElement> {
         match self {
             // Double-word instructions (instructions that take arguments)
@@ -375,7 +441,52 @@ impl Display for TokenError {
 
 impl Error for TokenError {}
 
-pub fn parse(code: &str) -> Result<Vec<Instruction>, Box<dyn Error>> {
+/// Convert a program with labels to a program with absolute positions
+pub fn convert_labels(program: &[LabelledInstruction]) -> Vec<Instruction> {
+    let mut label_map = HashMap::<String, usize>::new();
+    let mut instruction_pointer: usize = 0;
+
+    // 1. Add all labels to a map
+    for labelled_instruction in program.iter() {
+        match labelled_instruction {
+            LabelledInstruction::Label(label_name) => {
+                label_map.insert(label_name.clone(), instruction_pointer);
+            }
+
+            LabelledInstruction::Instruction(instr) => {
+                instruction_pointer += instr.size();
+            }
+        }
+    }
+
+    // 2. Convert every label to the lookup value of that map
+    program
+        .iter()
+        .flat_map(|labelled_instruction| convert_labels_helper(labelled_instruction, &label_map))
+        .collect()
+}
+
+fn convert_labels_helper(
+    instruction: &LabelledInstruction,
+    label_map: &HashMap<String, usize>,
+) -> Vec<Instruction> {
+    match instruction {
+        LabelledInstruction::Label(_) => vec![],
+
+        LabelledInstruction::Instruction(instr) => {
+            let unlabelled_instruction: Instruction = instr.map_call_address(|label_name| {
+                // FIXME: Consider failing graciously on missing labels.
+                let label_not_found = format!("Label not found: {}", label_name);
+                let absolute_address = label_map.get(label_name).expect(&label_not_found);
+                BWord::new(*absolute_address as u64)
+            });
+
+            vec![unlabelled_instruction]
+        }
+    }
+}
+
+pub fn parse(code: &str) -> Result<Vec<LabelledInstruction>, Box<dyn Error>> {
     let mut tokens = code.split_whitespace();
     let mut instructions = vec![];
 
@@ -390,8 +501,13 @@ pub fn parse(code: &str) -> Result<Vec<Instruction>, Box<dyn Error>> {
 fn parse_token(
     token: &str,
     tokens: &mut SplitWhitespace,
-) -> Result<Vec<Instruction>, Box<dyn Error>> {
-    let instruction = match token {
+) -> Result<Vec<LabelledInstruction>, Box<dyn Error>> {
+    if token.ends_with(':') {
+        let label_name = token[..token.len() - 1].to_string();
+        return Ok(vec![LabelledInstruction::Label(label_name)]);
+    }
+
+    let instruction: Vec<AnInstruction<String>> = match token {
         // OpStack manipulation
         "pop" => vec![Pop],
         "push" => vec![Push(parse_elem(tokens)?)],
@@ -414,7 +530,7 @@ fn parse_token(
 
         // Control flow
         "skiz" => vec![Skiz],
-        "call" => vec![Call(parse_elem(tokens)?)],
+        "call" => vec![Call(parse_label(tokens)?)],
         "return" => vec![Return],
         "recurse" => vec![Recurse],
         "assert" => vec![Assert],
@@ -485,15 +601,12 @@ fn parse_token(
         _ => return Err(Box::new(UnknownInstruction(token.to_string()))),
     };
 
-    Ok(instruction)
-}
+    let labelled_instruction = instruction
+        .into_iter()
+        .map(|instr| LabelledInstruction::Instruction(instr))
+        .collect();
 
-fn _parse_arg(tokens: &mut SplitWhitespace) -> Result<Ord16, Box<dyn Error>> {
-    let constant_s = tokens.next().ok_or(UnexpectedEndOfStream)?;
-    let constant_n = constant_s.parse::<usize>()?;
-    let constant_arg = constant_n.try_into()?;
-
-    Ok(constant_arg)
+    Ok(labelled_instruction)
 }
 
 fn parse_elem(tokens: &mut SplitWhitespace) -> Result<BFieldElement, Box<dyn Error>> {
@@ -509,9 +622,18 @@ fn parse_elem(tokens: &mut SplitWhitespace) -> Result<BFieldElement, Box<dyn Err
     Ok(constant_elem)
 }
 
+fn parse_label(tokens: &mut SplitWhitespace) -> Result<String, Box<dyn Error>> {
+    let label = tokens
+        .next()
+        .map(|s| s.to_string())
+        .ok_or(UnexpectedEndOfStream)?;
+
+    Ok(label)
+}
+
 pub mod sample_programs {
     use super::super::vm::Program;
-    use super::Instruction::{self, *};
+    use super::{AnInstruction::*, LabelledInstruction};
     use super::{Ord16::*, Ord8::*};
 
     pub const PUSH_PUSH_ADD_POP_S: &str = "
@@ -522,7 +644,11 @@ pub mod sample_programs {
     ";
 
     pub fn push_push_add_pop_p() -> Program {
-        let instructions = vec![Push(1.into()), Push(2.into()), Add, Pop];
+        let instructions: Vec<LabelledInstruction> = vec![Push(1.into()), Push(2.into()), Add, Pop]
+            .into_iter()
+            .map(LabelledInstruction::Instruction)
+            .collect();
+
         Program::new(&instructions)
     }
 
@@ -588,8 +714,8 @@ pub mod sample_programs {
 
     pub const COUNTDOWN_FROM_10: &str = "
         push 10
-        call 4
-        push 18446744069414584320
+        call foo
+   foo: push 18446744069414584320
         add
         dup0
         skiz
@@ -630,37 +756,37 @@ pub mod sample_programs {
 ";
 
     pub const FIBONACCI_VIT: &str = "
-    push 0
-    push 1
-    push 7
-    dup0
-    dup0
-    dup0
-    mul
-    eq
-    skiz
-    call 32
-    call 19
-    call 41
-    swap1
-    push 18446744069414584320
-    add
-    dup0
-    skiz
-    recurse
-    call 39
-    dup0
-    push 0
-    eq
-    skiz
-    pop
-    pop
-    halt
-    dup2
-    dup2
-    add
-    return
-";
+        push 0
+        push 1
+        push 7
+        dup0
+        dup0
+        dup0
+        mul
+        eq
+        skiz
+        call bar
+        call foo
+   foo: call bob
+        swap1
+        push 18446744069414584320
+        add
+        dup0
+        skiz
+        recurse
+        call baz
+   bar: dup0
+        push 0
+        eq
+        skiz
+        pop
+   baz: pop
+        halt
+   bob: dup2
+        dup2
+        add
+        return
+    ";
 
     pub const FIBONACCI_LT: &str = "
         push 0
@@ -694,29 +820,29 @@ pub mod sample_programs {
     ";
 
     pub const GCD_X_Y: &str = "
-        read_io
-        read_io
-        dup1
-        dup1
-        lt
-        skiz
-        swap1
-        dup0
-        push 0
-        eq
-        skiz
-        call 31
-        dup1
-        dup1
-        div
-        swap2
-        swap3
-        pop
-        pop
-        call 10
-        pop
-        write_io
-        halt
+           read_io
+           read_io
+           dup1
+           dup1
+           lt
+           skiz
+           swap1
+loop_cond: dup0
+           push 0
+           eq
+           skiz
+           call terminate
+           dup1
+           dup1
+           div
+           swap2
+           swap3
+           pop
+           pop
+           call loop_cond
+terminate: pop
+           write_io
+           halt
     ";
 
     // This cannot not print because we need to itoa() before write_io.
@@ -757,15 +883,9 @@ pub mod sample_programs {
         halt
     ";
 
-    pub const XLIX_XLIX_XLIX: &str = "
-        xlix
-        xlix
-        xlix
-    ";
-
     pub const ALL_INSTRUCTIONS: &str = "
         pop push 42 divine dup0 dup1 dup2 dup3 dup4 dup5 dup6 dup7 swap1 swap2 swap3 swap4 swap5
-        swap6 swap7 skiz call 0 return recurse assert halt read_mem write_mem xlix clearall
+        swap6 swap7 skiz call foo return recurse assert halt read_mem write_mem xlix clearall
         squeeze0 squeeze1 squeeze2 squeeze3 squeeze4 squeeze5 squeeze6
         squeeze7 squeeze8 squeeze9 squeeze10 squeeze11 squeeze12 squeeze13
         squeeze14 squeeze15 absorb0 absorb1 absorb2 absorb3 absorb4 absorb5
@@ -774,7 +894,7 @@ pub mod sample_programs {
         div xxadd xxmul xinv xbmul read_io write_io
     ";
 
-    pub fn all_instructions() -> Vec<Instruction> {
+    pub fn all_instructions() -> Vec<LabelledInstruction> {
         vec![
             Pop,
             Push(42.into()),
@@ -795,7 +915,7 @@ pub mod sample_programs {
             Swap(ST6),
             Swap(ST7),
             Skiz,
-            Call(0.into()),
+            Call("foo".to_string()),
             Return,
             Recurse,
             Assert,
@@ -855,6 +975,9 @@ pub mod sample_programs {
             ReadIo,
             WriteIo,
         ]
+        .into_iter()
+        .map(LabelledInstruction::Instruction)
+        .collect()
     }
 
     pub fn all_instructions_displayed() -> Vec<String> {
