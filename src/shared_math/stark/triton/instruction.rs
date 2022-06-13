@@ -839,12 +839,20 @@ terminate: pop
     ";
 
     pub const ALL_INSTRUCTIONS: &str = "
-        pop push 42 divine dup0 dup1 dup2 dup3 dup4 dup5 dup6 dup7 dup8 dup9 dup10 dup11 dup12
-        dup13 dup14 dup15 swap1 swap2 swap3 swap4 swap5 swap6 swap7 swap8 swap9 swap10 swap11
-        swap12 swap13 swap14 swap15
-        skiz call foo return recurse assert halt read_mem write_mem hash
-        divine_sibling assert_vector add mul inv split eq lt and xor reverse
-        div xxadd xxmul xinv xbmul read_io write_io
+        pop
+        push 42
+        divine
+
+        dup0 dup1 dup2 dup3 dup4 dup5 dup6 dup7 dup8 dup9 dup10 dup11 dup12 dup13 dup14 dup15
+        swap1 swap2 swap3 swap4 swap5 swap6 swap7 swap8 swap9 swap10 swap11 swap12 swap13 swap14 swap15
+
+        skiz
+        call foo
+
+        return recurse assert halt read_mem write_mem hash divine_sibling assert_vector
+        add mul invert split eq lt and xor reverse div xxadd xxmul xinvert xbmul
+
+        read_io write_io
     ";
 
     pub fn all_instructions() -> Vec<LabelledInstruction> {
@@ -929,6 +937,14 @@ terminate: pop
             "dup5",
             "dup6",
             "dup7",
+            "dup8",
+            "dup9",
+            "dup10",
+            "dup11",
+            "dup12",
+            "dup13",
+            "dup14",
+            "dup15",
             "swap1",
             "swap2",
             "swap3",
@@ -936,6 +952,14 @@ terminate: pop
             "swap5",
             "swap6",
             "swap7",
+            "swap8",
+            "swap9",
+            "swap10",
+            "swap11",
+            "swap12",
+            "swap13",
+            "swap14",
+            "swap15",
             "skiz",
             "call foo",
             "return",
@@ -945,41 +969,8 @@ terminate: pop
             "read_mem",
             "write_mem",
             "hash",
-            "clearall",
-            "squeeze0",
-            "squeeze1",
-            "squeeze2",
-            "squeeze3",
-            "squeeze4",
-            "squeeze5",
-            "squeeze6",
-            "squeeze7",
-            "squeeze8",
-            "squeeze9",
-            "squeeze10",
-            "squeeze11",
-            "squeeze12",
-            "squeeze13",
-            "squeeze14",
-            "squeeze15",
-            "absorb0",
-            "absorb1",
-            "absorb2",
-            "absorb3",
-            "absorb4",
-            "absorb5",
-            "absorb6",
-            "absorb7",
-            "absorb8",
-            "absorb9",
-            "absorb10",
-            "absorb11",
-            "absorb12",
-            "absorb13",
-            "absorb14",
-            "absorb15",
             "divine_sibling",
-            "assert_digest",
+            "assert_vector",
             "add",
             "mul",
             "invert",
@@ -1030,13 +1021,8 @@ mod instruction_tests {
 
     #[test]
     fn parse_and_display_each_instruction_test() {
-        println!("Parsing all instructions…");
-        let all_instructions = parse(sample_programs::ALL_INSTRUCTIONS);
-        assert!(all_instructions.is_ok());
-        println!("Parsed all instructions.");
-
-        let actual = all_instructions.unwrap();
         let expected = sample_programs::all_instructions();
+        let actual = parse(sample_programs::ALL_INSTRUCTIONS).unwrap();
 
         assert_eq!(expected, actual);
 

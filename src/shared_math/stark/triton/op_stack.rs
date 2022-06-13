@@ -1,7 +1,7 @@
 use super::error::{vm_fail, InstructionError::*};
 use super::ord_n::{Ord16, Ord16::*};
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::traits::Inverse;
+use crate::shared_math::traits::{IdentityValues, Inverse};
 use crate::shared_math::x_field_element::XFieldElement;
 use std::error::Error;
 
@@ -16,7 +16,7 @@ pub struct OpStack {
 /// The number of op-stack registers, and the internal index at which the
 /// op-stack memory has index 0. This offset is used to adjust for the fact
 /// that op-stack registers are stored in the same way as op-stack memory.
-pub const OP_STACK_REG_COUNT: usize = 8;
+pub const OP_STACK_REG_COUNT: usize = 16;
 
 impl Default for OpStack {
     fn default() -> Self {
@@ -72,8 +72,8 @@ impl OpStack {
 
     /// Get the arg'th op-stack register value
     pub fn st(&self, arg: Ord16) -> BWord {
-        let n: usize = arg.into();
         let top = self.stack.len() - 1;
+        let n: usize = arg.into();
         self.stack[top - n]
     }
 
@@ -110,6 +110,11 @@ impl OpStack {
     ///
     /// This register is mainly intended for constraint polynomials.
     pub fn inv(&self) -> BWord {
-        self.st(A0).inverse()
+        let st0 = self.st(A0);
+        if st0.is_zero() {
+            st0
+        } else {
+            st0.inverse()
+        }
     }
 }

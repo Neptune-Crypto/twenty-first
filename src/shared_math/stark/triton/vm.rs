@@ -548,6 +548,7 @@ mod triton_vm_tests {
     }
 
     #[test]
+    #[ignore = "rewrite this test according to 'hash' instruction"]
     fn processor_table_constraints_evaluate_to_zero_test() {
         let mut rng = rand::thread_rng();
 
