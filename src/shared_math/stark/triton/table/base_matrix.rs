@@ -1,6 +1,6 @@
 use super::super::ord_n::Ord16::*;
 use super::{
-    aux_table, instruction_table, io_table, jump_stack_table, op_stack_table, processor_table,
+    hash_table, instruction_table, io_table, jump_stack_table, op_stack_table, processor_table,
     program_table, ram_table, u32_op_table,
 };
 use crate::shared_math::b_field_element::BFieldElement;
@@ -22,7 +22,7 @@ pub struct BaseMatrices {
     pub op_stack_matrix: Vec<[BFieldElement; op_stack_table::BASE_WIDTH]>,
     pub ram_matrix: Vec<[BFieldElement; ram_table::BASE_WIDTH]>,
     pub jump_stack_matrix: Vec<[BFieldElement; jump_stack_table::BASE_WIDTH]>,
-    pub aux_matrix: Vec<[BFieldElement; aux_table::BASE_WIDTH]>,
+    pub aux_matrix: Vec<[BFieldElement; hash_table::BASE_WIDTH]>,
     pub u32_op_matrix: Vec<[BFieldElement; u32_op_table::BASE_WIDTH]>,
 }
 

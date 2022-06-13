@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::b_field_element::BFieldElement;
 use super::rescue_prime_params;
-use super::stark::triton::table::aux_table;
+use super::stark::triton::table::hash_table;
 use super::traits::PrimeField;
 
 type Word = BFieldElement;
@@ -75,19 +75,19 @@ impl<const M: usize> RescuePrimeXlix<M> {
     pub fn rescue_xlix_permutation_trace(
         &self,
         state: &mut [Word; M],
-    ) -> Vec<[Word; aux_table::BASE_WIDTH]> {
+    ) -> Vec<[Word; hash_table::BASE_WIDTH]> {
         debug_assert_eq!(M, state.len());
-        let mut states: Vec<[Word; aux_table::BASE_WIDTH]> = Vec::with_capacity(self.n);
+        let mut states: Vec<[Word; hash_table::BASE_WIDTH]> = Vec::with_capacity(self.n);
 
         let mut idc: Word = 0.into();
-        let mut first_row = [idc; aux_table::BASE_WIDTH];
+        let mut first_row = [idc; hash_table::BASE_WIDTH];
         first_row[1..].copy_from_slice(state);
         states.push(first_row);
 
         for round in 0..self.n {
             idc += 1.into();
             self.rescue_xlix_round(round, state);
-            let mut row = [idc; aux_table::BASE_WIDTH];
+            let mut row = [idc; hash_table::BASE_WIDTH];
             row[1..].copy_from_slice(state);
             states.push(row);
         }

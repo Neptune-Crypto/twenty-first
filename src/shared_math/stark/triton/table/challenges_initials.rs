@@ -1,4 +1,4 @@
-use super::aux_table::{
+use super::hash_table::{
     HashTableChallenges, HashTableInitials, HASH_TABLE_EXTENSION_CHALLENGE_COUNT,
     HASH_TABLE_INITIALS_COUNT,
 };

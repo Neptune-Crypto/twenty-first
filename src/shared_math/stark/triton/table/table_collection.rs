@@ -1,7 +1,7 @@
-use super::aux_table::{AuxTable, ExtAuxTable};
 use super::base_matrix::BaseMatrices;
 use super::base_table::Table;
 use super::challenges_initials::{AllChallenges, AllInitials};
+use super::hash_table::{ExtHashTable, HashTable};
 use super::instruction_table::{ExtInstructionTable, InstructionTable};
 use super::io_table::{ExtIOTable, IOTable};
 use super::jump_stack_table::{ExtJumpStackTable, JumpStackTable};
@@ -28,7 +28,7 @@ pub struct BaseTableCollection {
     pub op_stack_table: OpStackTable,
     pub ram_table: RAMTable,
     pub jump_stack_table: JumpStackTable,
-    pub aux_table: AuxTable,
+    pub hash_table: HashTable,
     pub u32_op_table: U32OpTable,
 }
 
@@ -42,7 +42,7 @@ pub struct ExtTableCollection {
     pub op_stack_table: ExtOpStackTable,
     pub ram_table: ExtRAMTable,
     pub jump_stack_table: ExtJumpStackTable,
-    pub aux_table: ExtAuxTable,
+    pub hash_table: ExtHashTable,
     pub u32_op_table: ExtU32OpTable,
 }
 
@@ -117,7 +117,7 @@ impl BaseTableCollection {
             to_vec_vecs(&base_matrices.jump_stack_matrix),
         );
 
-        let aux_table = AuxTable::new_prover(
+        let hash_table = HashTable::new_prover(
             generator,
             order,
             num_randomizers,
@@ -140,7 +140,7 @@ impl BaseTableCollection {
             op_stack_table,
             ram_table,
             jump_stack_table,
-            aux_table,
+            hash_table,
             u32_op_table,
         }
     }
@@ -156,6 +156,19 @@ impl BaseTableCollection {
         self.into_iter()
             .map(|table| table.low_degree_extension(fri_domain))
             .concat()
+    }
+
+    pub fn pad(&mut self) {
+        self.program_table.pad();
+        self.instruction_table.pad();
+        self.processor_table.pad();
+        self.input_table.pad();
+        self.output_table.pad();
+        self.op_stack_table.pad();
+        self.ram_table.pad();
+        self.jump_stack_table.pad();
+        self.hash_table.pad();
+        self.u32_op_table.pad();
     }
 }
 
@@ -174,7 +187,7 @@ impl<'a> IntoIterator for &'a BaseTableCollection {
             &self.op_stack_table as &'a dyn Table<BWord>,
             &self.ram_table as &'a dyn Table<BWord>,
             &self.jump_stack_table as &'a dyn Table<BWord>,
-            &self.aux_table as &'a dyn Table<BWord>,
+            &self.hash_table as &'a dyn Table<BWord>,
             &self.u32_op_table as &'a dyn Table<BWord>,
         ]
         .into_iter()
@@ -227,7 +240,7 @@ impl ExtTableCollection {
             &all_initials.jump_stack_table_initials,
         );
 
-        let aux_table = tables.aux_table.extend(
+        let hash_table = tables.hash_table.extend(
             &all_challenges.hash_table_challenges,
             &all_initials.hash_table_initials,
         );
@@ -246,7 +259,7 @@ impl ExtTableCollection {
             op_stack_table,
             ram_table,
             jump_stack_table,
-            aux_table,
+            hash_table,
             u32_op_table,
         }
     }
@@ -273,7 +286,7 @@ impl<'a> IntoIterator for &'a ExtTableCollection {
             &self.op_stack_table as &'a dyn Table<XWord>,
             &self.ram_table as &'a dyn Table<XWord>,
             &self.jump_stack_table as &'a dyn Table<XWord>,
-            &self.aux_table as &'a dyn Table<XWord>,
+            &self.hash_table as &'a dyn Table<XWord>,
             &self.u32_op_table as &'a dyn Table<XWord>,
         ]
         .into_iter()

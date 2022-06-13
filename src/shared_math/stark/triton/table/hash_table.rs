@@ -22,11 +22,11 @@ type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
-pub struct AuxTable {
+pub struct HashTable {
     base: BaseTable<BWord>,
 }
 
-impl HasBaseTable<BWord> for AuxTable {
+impl HasBaseTable<BWord> for HashTable {
     fn to_base(&self) -> &BaseTable<BWord> {
         &self.base
     }
@@ -37,11 +37,11 @@ impl HasBaseTable<BWord> for AuxTable {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExtAuxTable {
+pub struct ExtHashTable {
     base: BaseTable<XFieldElement>,
 }
 
-impl HasBaseTable<XFieldElement> for ExtAuxTable {
+impl HasBaseTable<XFieldElement> for ExtHashTable {
     fn to_base(&self) -> &BaseTable<XFieldElement> {
         &self.base
     }
@@ -51,12 +51,11 @@ impl HasBaseTable<XFieldElement> for ExtAuxTable {
     }
 }
 
-impl Table<BWord> for AuxTable {
+impl Table<BWord> for HashTable {
     fn name(&self) -> String {
-        "AuxTable".to_string()
+        "HashTable".to_string()
     }
 
-    // FIXME: Apply correct padding, not just 0s.
     fn pad(&mut self) {
         let data = self.mut_data();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
@@ -71,9 +70,9 @@ impl Table<BWord> for AuxTable {
     }
 }
 
-impl Table<XFieldElement> for ExtAuxTable {
+impl Table<XFieldElement> for ExtHashTable {
     fn name(&self) -> String {
-        "ExtAuxTable".to_string()
+        "ExtHashTable".to_string()
     }
 
     fn pad(&mut self) {
@@ -85,7 +84,7 @@ impl Table<XFieldElement> for ExtAuxTable {
     }
 }
 
-impl ExtensionTable for ExtAuxTable {
+impl ExtensionTable for ExtHashTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
@@ -103,7 +102,7 @@ impl ExtensionTable for ExtAuxTable {
     }
 }
 
-impl AuxTable {
+impl HashTable {
     pub fn new_verifier(
         generator: BWord,
         order: usize,
@@ -155,7 +154,7 @@ impl AuxTable {
         &self,
         challenges: &HashTableChallenges,
         initials: &HashTableInitials,
-    ) -> ExtAuxTable {
+    ) -> ExtHashTable {
         todo!()
     }
 }
