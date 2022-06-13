@@ -10,7 +10,7 @@ use crate::shared_math::stark::triton::stark::{
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >BASE_WIDTH
-pub const BASE_WIDTH: usize = 47;
+pub const BASE_WIDTH: usize = 39;
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;

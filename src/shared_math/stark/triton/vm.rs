@@ -417,9 +417,10 @@ mod triton_vm_tests {
     }
 
     #[test]
-    fn xlix_xlix_xlix_halt_test_1() {
+    #[ignore = "rewrite this test according to 'hash' instruction"]
+    fn hash_hash_hash_test() {
         // 1. Execute program
-        let code = sample_programs::XLIX_XLIX_XLIX_HALT;
+        let code = sample_programs::HASH_HASH_HASH_HALT;
         let program = Program::from_code(code).unwrap();
 
         println!("{}", program);
@@ -534,7 +535,7 @@ mod triton_vm_tests {
     fn processor_table_constraints_evaluate_to_zero_test() {
         let mut rng = rand::thread_rng();
 
-        let all_programs = vec![sample_programs::XLIX_XLIX_XLIX_HALT];
+        let all_programs = vec![sample_programs::HASH_HASH_HASH_HALT];
         for source_code in all_programs.into_iter() {
             let program = Program::from_code(source_code).expect("Could not load source code.");
             let (base_matrices, err) = program.simulate_with_input(&[], &[]);

@@ -43,8 +43,8 @@ pub enum AnInstruction<Dest> {
     Pop,
     Push(BWord),
     Divine,
-    Dup(Ord8),
-    Swap(Ord8),
+    Dup(Ord16),
+    Swap(Ord16),
 
     // Control flow
     Skiz,
@@ -59,12 +59,9 @@ pub enum AnInstruction<Dest> {
     WriteMem,
 
     // Auxiliary register instructions
-    Xlix,
-    ClearAll,
-    Squeeze(Ord16),
-    Absorb(Ord16),
+    Hash,
     DivineSibling,
-    AssertDigest,
+    AssertVector,
 
     // Arithmetic on stack instructions
     Add,
@@ -118,18 +115,9 @@ impl<Dest: Display> Display for AnInstruction<Dest> {
             WriteMem => write!(f, "write_mem"),
 
             // Auxiliary register instructions
-            Xlix => write!(f, "xlix"),
-            ClearAll => write!(f, "clearall"),
-            Squeeze(arg) => write!(f, "squeeze{}", {
-                let n: usize = arg.into();
-                n
-            }),
-            Absorb(arg) => write!(f, "absorb{}", {
-                let n: usize = arg.into();
-                n
-            }),
+            Hash => write!(f, "hash"),
             DivineSibling => write!(f, "divine_sibling"),
-            AssertDigest => write!(f, "assert_digest"),
+            AssertVector => write!(f, "assert_digest"),
 
             // Arithmetic on stack instructions
             Add => write!(f, "add"),
@@ -178,12 +166,9 @@ impl<Dest> AnInstruction<Dest> {
             WriteMem => 21,
 
             // Auxiliary register instructions
-            Xlix => 30,
-            ClearAll => 31,
-            Squeeze(_) => 32,
-            Absorb(_) => 33,
+            Hash => 30,
             DivineSibling => 34,
-            AssertDigest => 36,
+            AssertVector => 36,
 
             // Arithmetic on stack instructions
             Add => 40,
@@ -217,9 +202,8 @@ impl<Dest> AnInstruction<Dest> {
             Return => false,
             Recurse => false,
             Halt => false,
-            Xlix => false,
-            ClearAll => false,
-            AssertDigest => false,
+            Hash => false,
+            AssertVector => false,
 
             Divine => true,
             Pop => true,
@@ -230,8 +214,6 @@ impl<Dest> AnInstruction<Dest> {
             Assert => true,
             ReadMem => true,
             WriteMem => true,
-            Squeeze(_) => true,
-            Absorb(_) => true,
             DivineSibling => true,
             Add => true,
             Mul => true,
@@ -266,9 +248,8 @@ impl<Dest> AnInstruction<Dest> {
             Return => false,
             Recurse => false,
             Halt => false,
-            Xlix => false,
-            ClearAll => false,
-            AssertDigest => false,
+            Hash => false,
+            AssertVector => false,
             Pop => false,
             Push(_) => false,
             Dup(_) => false,
@@ -277,8 +258,6 @@ impl<Dest> AnInstruction<Dest> {
             Assert => false,
             ReadMem => false,
             WriteMem => false,
-            Squeeze(_) => false,
-            Absorb(_) => false,
             DivineSibling => false,
             Add => false,
             Mul => false,
@@ -304,8 +283,6 @@ impl<Dest> AnInstruction<Dest> {
             Dup(_) => 2,
             Swap(_) => 2,
             Call(_) => 2,
-            Squeeze(_) => 2,
-            Absorb(_) => 2,
 
             // Single-word instructions
             Pop => 1,
@@ -317,10 +294,9 @@ impl<Dest> AnInstruction<Dest> {
             Halt => 1,
             ReadMem => 1,
             WriteMem => 1,
-            Xlix => 1,
-            ClearAll => 1,
+            Hash => 1,
             DivineSibling => 1,
-            AssertDigest => 1,
+            AssertVector => 1,
             Add => 1,
             Mul => 1,
             Inv => 1,
@@ -367,12 +343,9 @@ impl<Dest> AnInstruction<Dest> {
             Halt => Halt,
             ReadMem => ReadMem,
             WriteMem => WriteMem,
-            Xlix => Xlix,
-            ClearAll => ClearAll,
-            Squeeze(x) => Squeeze(*x),
-            Absorb(x) => Absorb(*x),
+            Hash => Hash,
             DivineSibling => DivineSibling,
-            AssertDigest => AssertDigest,
+            AssertVector => AssertVector,
             Add => Add,
             Mul => Mul,
             Inv => Inv,
@@ -398,11 +371,9 @@ impl Instruction {
         match self {
             // Double-word instructions (instructions that take arguments)
             Push(arg) => Some(*arg),
-            Dup(arg) => Some(ord8_to_bfe(arg)),
-            Swap(arg) => Some(ord8_to_bfe(arg)),
+            Dup(arg) => Some(ord16_to_bfe(arg)),
+            Swap(arg) => Some(ord16_to_bfe(arg)),
             Call(arg) => Some(*arg),
-            Squeeze(arg) => Some(ord16_to_bfe(arg)),
-            Absorb(arg) => Some(ord16_to_bfe(arg)),
             _ => None,
         }
     }
@@ -506,21 +477,37 @@ fn parse_token(
         "pop" => vec![Pop],
         "push" => vec![Push(parse_elem(tokens)?)],
         "divine" => vec![Divine],
-        "dup0" => vec![Dup(ST0)],
-        "dup1" => vec![Dup(ST1)],
-        "dup2" => vec![Dup(ST2)],
-        "dup3" => vec![Dup(ST3)],
-        "dup4" => vec![Dup(ST4)],
-        "dup5" => vec![Dup(ST5)],
-        "dup6" => vec![Dup(ST6)],
-        "dup7" => vec![Dup(ST7)],
-        "swap1" => vec![Swap(ST1)],
-        "swap2" => vec![Swap(ST2)],
-        "swap3" => vec![Swap(ST3)],
-        "swap4" => vec![Swap(ST4)],
-        "swap5" => vec![Swap(ST5)],
-        "swap6" => vec![Swap(ST6)],
-        "swap7" => vec![Swap(ST7)],
+        "dup0" => vec![Dup(A0)],
+        "dup1" => vec![Dup(A1)],
+        "dup2" => vec![Dup(A2)],
+        "dup3" => vec![Dup(A3)],
+        "dup4" => vec![Dup(A4)],
+        "dup5" => vec![Dup(A5)],
+        "dup6" => vec![Dup(A6)],
+        "dup7" => vec![Dup(A7)],
+        "dup8" => vec![Dup(A8)],
+        "dup9" => vec![Dup(A9)],
+        "dup10" => vec![Dup(A10)],
+        "dup11" => vec![Dup(A11)],
+        "dup12" => vec![Dup(A12)],
+        "dup13" => vec![Dup(A13)],
+        "dup14" => vec![Dup(A14)],
+        "dup15" => vec![Dup(A15)],
+        "swap1" => vec![Swap(A1)],
+        "swap2" => vec![Swap(A2)],
+        "swap3" => vec![Swap(A3)],
+        "swap4" => vec![Swap(A4)],
+        "swap5" => vec![Swap(A5)],
+        "swap6" => vec![Swap(A6)],
+        "swap7" => vec![Swap(A7)],
+        "swap8" => vec![Swap(A8)],
+        "swap9" => vec![Swap(A9)],
+        "swap10" => vec![Swap(A10)],
+        "swap11" => vec![Swap(A11)],
+        "swap12" => vec![Swap(A12)],
+        "swap13" => vec![Swap(A13)],
+        "swap14" => vec![Swap(A14)],
+        "swap15" => vec![Swap(A15)],
 
         // Control flow
         "skiz" => vec![Skiz],
@@ -535,42 +522,9 @@ fn parse_token(
         "write_mem" => vec![WriteMem],
 
         // Auxiliary register instructions
-        "xlix" => vec![Xlix],
-        "clearall" => vec![ClearAll],
-        "squeeze0" => vec![Squeeze(A0)],
-        "squeeze1" => vec![Squeeze(A1)],
-        "squeeze2" => vec![Squeeze(A2)],
-        "squeeze3" => vec![Squeeze(A3)],
-        "squeeze4" => vec![Squeeze(A4)],
-        "squeeze5" => vec![Squeeze(A5)],
-        "squeeze6" => vec![Squeeze(A6)],
-        "squeeze7" => vec![Squeeze(A7)],
-        "squeeze8" => vec![Squeeze(A8)],
-        "squeeze9" => vec![Squeeze(A9)],
-        "squeeze10" => vec![Squeeze(A10)],
-        "squeeze11" => vec![Squeeze(A11)],
-        "squeeze12" => vec![Squeeze(A12)],
-        "squeeze13" => vec![Squeeze(A13)],
-        "squeeze14" => vec![Squeeze(A14)],
-        "squeeze15" => vec![Squeeze(A15)],
-        "absorb0" => vec![Absorb(A0)],
-        "absorb1" => vec![Absorb(A1)],
-        "absorb2" => vec![Absorb(A2)],
-        "absorb3" => vec![Absorb(A3)],
-        "absorb4" => vec![Absorb(A4)],
-        "absorb5" => vec![Absorb(A5)],
-        "absorb6" => vec![Absorb(A6)],
-        "absorb7" => vec![Absorb(A7)],
-        "absorb8" => vec![Absorb(A8)],
-        "absorb9" => vec![Absorb(A9)],
-        "absorb10" => vec![Absorb(A10)],
-        "absorb11" => vec![Absorb(A11)],
-        "absorb12" => vec![Absorb(A12)],
-        "absorb13" => vec![Absorb(A13)],
-        "absorb14" => vec![Absorb(A14)],
-        "absorb15" => vec![Absorb(A15)],
+        "hash" => vec![Hash],
         "divine_sibling" => vec![DivineSibling],
-        "assert_digest" => vec![AssertDigest],
+        "assert_vector" => vec![AssertVector],
 
         // Arithmetic on stack instructions
         "add" => vec![Add],
@@ -870,7 +824,7 @@ terminate: pop
         halt
     ";
 
-    pub const XLIX_XLIX_XLIX_HALT: &str = "
+    pub const HASH_HASH_HASH_HALT: &str = "
         xlix
         xlix
         xlix
@@ -878,13 +832,11 @@ terminate: pop
     ";
 
     pub const ALL_INSTRUCTIONS: &str = "
-        pop push 42 divine dup0 dup1 dup2 dup3 dup4 dup5 dup6 dup7 swap1 swap2 swap3 swap4 swap5
-        swap6 swap7 skiz call foo return recurse assert halt read_mem write_mem xlix clearall
-        squeeze0 squeeze1 squeeze2 squeeze3 squeeze4 squeeze5 squeeze6
-        squeeze7 squeeze8 squeeze9 squeeze10 squeeze11 squeeze12 squeeze13
-        squeeze14 squeeze15 absorb0 absorb1 absorb2 absorb3 absorb4 absorb5
-        absorb6 absorb7 absorb8 absorb9 absorb10 absorb11 absorb12 absorb13
-        absorb14 absorb15 divine_sibling assert_digest add mul inv split eq lt and xor reverse
+        pop push 42 divine dup0 dup1 dup2 dup3 dup4 dup5 dup6 dup7 dup8 dup9 dup10 dup11 dup12
+        dup13 dup14 dup15 swap1 swap2 swap3 swap4 swap5 swap6 swap7 swap8 swap9 swap10 swap11
+        swap12 swap13 swap14 swap15
+        skiz call foo return recurse assert halt read_mem write_mem hash
+        divine_sibling assert_vector add mul inv split eq lt and xor reverse
         div xxadd xxmul xinv xbmul read_io write_io
     ";
 
@@ -893,21 +845,37 @@ terminate: pop
             Pop,
             Push(42.into()),
             Divine,
-            Dup(ST0),
-            Dup(ST1),
-            Dup(ST2),
-            Dup(ST3),
-            Dup(ST4),
-            Dup(ST5),
-            Dup(ST6),
-            Dup(ST7),
-            Swap(ST1),
-            Swap(ST2),
-            Swap(ST3),
-            Swap(ST4),
-            Swap(ST5),
-            Swap(ST6),
-            Swap(ST7),
+            Dup(A0),
+            Dup(A1),
+            Dup(A2),
+            Dup(A3),
+            Dup(A4),
+            Dup(A5),
+            Dup(A6),
+            Dup(A7),
+            Dup(A8),
+            Dup(A9),
+            Dup(A10),
+            Dup(A11),
+            Dup(A12),
+            Dup(A13),
+            Dup(A14),
+            Dup(A15),
+            Swap(A1),
+            Swap(A2),
+            Swap(A3),
+            Swap(A4),
+            Swap(A5),
+            Swap(A6),
+            Swap(A7),
+            Swap(A8),
+            Swap(A9),
+            Swap(A10),
+            Swap(A11),
+            Swap(A12),
+            Swap(A13),
+            Swap(A14),
+            Swap(A15),
             Skiz,
             Call("foo".to_string()),
             Return,
@@ -916,42 +884,9 @@ terminate: pop
             Halt,
             ReadMem,
             WriteMem,
-            Xlix,
-            ClearAll,
-            Squeeze(A0),
-            Squeeze(A1),
-            Squeeze(A2),
-            Squeeze(A3),
-            Squeeze(A4),
-            Squeeze(A5),
-            Squeeze(A6),
-            Squeeze(A7),
-            Squeeze(A8),
-            Squeeze(A9),
-            Squeeze(A10),
-            Squeeze(A11),
-            Squeeze(A12),
-            Squeeze(A13),
-            Squeeze(A14),
-            Squeeze(A15),
-            Absorb(A0),
-            Absorb(A1),
-            Absorb(A2),
-            Absorb(A3),
-            Absorb(A4),
-            Absorb(A5),
-            Absorb(A6),
-            Absorb(A7),
-            Absorb(A8),
-            Absorb(A9),
-            Absorb(A10),
-            Absorb(A11),
-            Absorb(A12),
-            Absorb(A13),
-            Absorb(A14),
-            Absorb(A15),
+            Hash,
             DivineSibling,
-            AssertDigest,
+            AssertVector,
             Add,
             Mul,
             Inv,
@@ -1002,7 +937,7 @@ terminate: pop
             "halt",
             "read_mem",
             "write_mem",
-            "xlix",
+            "hash",
             "clearall",
             "squeeze0",
             "squeeze1",

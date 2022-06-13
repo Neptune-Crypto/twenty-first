@@ -1,5 +1,5 @@
 use super::error::{vm_fail, InstructionError::*};
-use super::ord_n::{Ord8, Ord8::*};
+use super::ord_n::{Ord16, Ord16::*};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::traits::Inverse;
 use crate::shared_math::x_field_element::XFieldElement;
@@ -10,7 +10,7 @@ type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct OpStack {
-    stack: Vec<BWord>,
+    pub stack: Vec<BWord>,
 }
 
 /// The number of op-stack registers, and the internal index at which the
@@ -45,13 +45,13 @@ impl OpStack {
         Ok(XWord::new([self.pop()?, self.pop()?, self.pop()?]))
     }
 
-    pub fn safe_peek(&self, arg: Ord8) -> BWord {
+    pub fn safe_peek(&self, arg: Ord16) -> BWord {
         let n: usize = arg.into();
         let top = self.stack.len() - 1;
         self.stack[top - n]
     }
 
-    pub fn safe_swap(&mut self, arg: Ord8) {
+    pub fn safe_swap(&mut self, arg: Ord16) {
         let n: usize = arg.into();
         let top = self.stack.len() - 1;
         self.stack.swap(top, top - n);
@@ -71,7 +71,7 @@ impl OpStack {
     }
 
     /// Get the arg'th op-stack register value
-    pub fn st(&self, arg: Ord8) -> BWord {
+    pub fn st(&self, arg: Ord16) -> BWord {
         let n: usize = arg.into();
         let top = self.stack.len() - 1;
         self.stack[top - n]
@@ -110,6 +110,6 @@ impl OpStack {
     ///
     /// This register is mainly intended for constraint polynomials.
     pub fn inv(&self) -> BWord {
-        self.st(ST0).inverse()
+        self.st(A0).inverse()
     }
 }
