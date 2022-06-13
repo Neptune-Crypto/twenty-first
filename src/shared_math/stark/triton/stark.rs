@@ -1,22 +1,28 @@
 use super::super::triton;
 use super::table::base_matrix::BaseMatrices;
-use super::table::base_table::Table;
-use super::table::processor_table::ProcessorTable;
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other::roundup_npo2;
-use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::rescue_prime_xlix::{neptune_params, RescuePrimeXlix, RP_DEFAULT_WIDTH};
+use crate::shared_math::stark::brainfuck::stark_proof_stream::{Item, StarkProofStream};
 use crate::shared_math::stark::triton::instruction::sample_programs;
-use crate::shared_math::stark::triton::table::table_collection::BaseTableCollection;
-use crate::shared_math::traits::GetPrimitiveRootOfUnity;
+use crate::shared_math::stark::triton::state::DIGEST_LEN;
+use crate::shared_math::stark::triton::table::challenges_initials::{AllChallenges, AllInitials};
+use crate::shared_math::stark::triton::table::table_collection::{
+    BaseTableCollection, ExtTableCollection,
+};
+use crate::shared_math::traits::{GetPrimitiveRootOfUnity, GetRandomElements};
+use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{other, xfri};
-
-pub const PERMUTATION_ARGUMENTS_COUNT: usize = 10;
-pub const EXTENSION_CHALLENGE_COUNT: usize = 2;
-pub const TERMINAL_COUNT: usize = 0;
+use crate::timing_reporter::TimingReporter;
+use crate::util_types::merkle_tree::MerkleTree;
+use crate::util_types::simple_hasher::Hasher;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 type BWord = BFieldElement;
 type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
+type StarkDigest = Vec<BFieldElement>;
 
 // We use a type-parameterised FriDomain to avoid duplicate `b_*()` and `x_*()` methods.
 pub struct Stark {
@@ -24,7 +30,7 @@ pub struct Stark {
     _log_expansion_factor: usize,
     _security_level: usize,
     _fri_domain: triton::fri_domain::FriDomain<BWord>,
-    _fri: xfri::Fri<StarkHasher>,
+    fri: xfri::Fri<StarkHasher>,
 }
 
 impl Stark {
@@ -86,9 +92,8 @@ impl Stark {
     }
 
     pub fn prove(&self, base_matrices: BaseMatrices) {
-        // 1. Create base tables based on base matrices
+        let mut timer = TimingReporter::start();
 
-        // From brainfuck
         let num_randomizers = 1;
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
@@ -96,24 +101,83 @@ impl Stark {
             .0
             .unwrap();
         let unpadded_height = base_matrices.processor_matrix.len();
-        let _padded_height = roundup_npo2(unpadded_height as u64);
+        let padded_height = roundup_npo2(unpadded_height as u64);
 
-        let mut processor_table = ProcessorTable::new_prover(
+        // 1. Create base tables based on base matrices
+
+        let mut base_tables = BaseTableCollection::from_base_matrices(
             smooth_generator,
             order,
             num_randomizers,
-            base_matrices
-                .processor_matrix
-                .iter()
-                .map(|row| row.to_vec())
-                .collect(),
+            &base_matrices,
         );
 
-        // 2. Pad matrix
-        processor_table.pad();
+        // TODO: Add padding to all tables
+        base_tables.pad();
 
-        // 3. Create base codeword tables based on those
-        //let coded_processor_table = processor_table.codewords(&self.fri_domain);
+        let max_degree = base_tables.max_degree();
+
+        // Randomizer bla bla
+        let mut rng = rand::thread_rng();
+        let randomizer_coefficients =
+            XFieldElement::random_elements(max_degree as usize + 1, &mut rng);
+        let randomizer_polynomial = Polynomial::new(randomizer_coefficients);
+
+        let x_randomizer_codeword: Vec<XFieldElement> =
+            self.fri.domain.x_evaluate(&randomizer_polynomial);
+        let mut b_randomizer_codewords: [Vec<BFieldElement>; 3] = [vec![], vec![], vec![]];
+        for x_elem in x_randomizer_codeword.iter() {
+            b_randomizer_codewords[0].push(x_elem.coefficients[0]);
+            b_randomizer_codewords[1].push(x_elem.coefficients[1]);
+            b_randomizer_codewords[2].push(x_elem.coefficients[2]);
+        }
+
+        timer.elapsed("randomizer_codewords");
+
+        let base_codewords: Vec<Vec<BFieldElement>> =
+            base_tables.all_base_codewords(&self._fri_domain);
+
+        let all_base_codewords =
+            vec![b_randomizer_codewords.into(), base_codewords.clone()].concat();
+
+        let transposed_base_codewords: Vec<Vec<BFieldElement>> = (0..all_base_codewords[0].len())
+            .map(|i| {
+                all_base_codewords
+                    .iter()
+                    .map(|inner| inner[i])
+                    .collect::<Vec<BFieldElement>>()
+            })
+            .collect();
+
+        let hasher = neptune_params();
+
+        let mut base_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
+            Vec::with_capacity(transposed_base_codewords.len());
+
+        transposed_base_codewords
+            .par_iter()
+            .map(|values| hasher.hash(values, DIGEST_LEN))
+            .collect_into_vec(&mut base_codeword_digests_by_index);
+
+        let base_merkle_tree =
+            MerkleTree::<StarkHasher>::from_digests(&base_codeword_digests_by_index);
+
+        // Commit to base codewords
+
+        let mut proof_stream = StarkProofStream::default();
+        let base_merkle_tree_root: Vec<BFieldElement> = base_merkle_tree.get_root();
+        proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root));
+
+        let seed = proof_stream.prover_fiat_shamir();
+
+        let challenges: AllChallenges =
+            AllChallenges::new(Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL));
+
+        let initials: AllInitials =
+            AllInitials::new(Self::sample_weights(&hasher, &seed, AllInitials::TOTAL));
+
+        let ext_tables = ExtTableCollection::from_base_tables(&base_tables, &challenges, &initials);
+
         todo!()
     }
 

@@ -1,8 +1,7 @@
-use itertools::Itertools;
-
 use super::aux_table::{AuxTable, ExtAuxTable};
 use super::base_matrix::BaseMatrices;
 use super::base_table::Table;
+use super::challenges_initials::{AllChallenges, AllInitials};
 use super::instruction_table::{ExtInstructionTable, InstructionTable};
 use super::io_table::{ExtIOTable, IOTable};
 use super::jump_stack_table::{ExtJumpStackTable, JumpStackTable};
@@ -13,8 +12,11 @@ use super::ram_table::{ExtRAMTable, RAMTable};
 use super::u32_op_table::{ExtU32OpTable, U32OpTable};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
+use crate::shared_math::x_field_element::XFieldElement;
+use itertools::Itertools;
 
 type BWord = BFieldElement;
+type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct BaseTableCollection {
@@ -53,11 +55,6 @@ fn to_vec_vecs<T: Sized + Clone, const S: usize>(vector_of_arrays: &[[T; S]]) ->
 }
 
 impl BaseTableCollection {
-    pub fn empty() -> Self {
-        // delete me when `from_base_matrices` works.
-        todo!()
-    }
-
     pub fn from_base_matrices(
         generator: BWord,
         order: usize,
@@ -70,60 +67,69 @@ impl BaseTableCollection {
             num_randomizers,
             to_vec_vecs(&base_matrices.program_matrix),
         );
+
         let processor_table = ProcessorTable::new_prover(
             generator,
             order,
             num_randomizers,
             to_vec_vecs(&base_matrices.processor_matrix),
-        ); // ProcessorTable,
+        );
+
         let instruction_table = InstructionTable::new_prover(
             generator,
             order,
             num_randomizers,
             to_vec_vecs(&base_matrices.instruction_matrix),
-        ); // InstructionTable
+        );
+
         let input_table = IOTable::new_prover(
             generator,
             order,
             num_randomizers,
             to_vec_vecs(&base_matrices.input_matrix),
-        ); // InputTable,
+        );
+
         let output_table = IOTable::new_prover(
             generator,
             order,
             num_randomizers,
             to_vec_vecs(&base_matrices.input_matrix),
-        ); // InputTable,
+        );
+
         let op_stack_table = OpStackTable::new_prover(
             generator,
             order,
             num_randomizers,
             to_vec_vecs(&base_matrices.op_stack_matrix),
-        ); // OpStackTable,
+        );
+
         let ram_table = RAMTable::new_prover(
             generator,
             order,
             num_randomizers,
             to_vec_vecs(&base_matrices.ram_matrix),
-        ); // RAMTable,
+        );
+
         let jump_stack_table = JumpStackTable::new_prover(
             generator,
             order,
             num_randomizers,
             to_vec_vecs(&base_matrices.jump_stack_matrix),
-        ); // JumpStackTable,
+        );
+
         let aux_table = AuxTable::new_prover(
             generator,
             order,
             num_randomizers,
             to_vec_vecs(&base_matrices.aux_matrix),
-        ); // Previously HashCoprocessorTable,
+        );
+
         let u32_op_table = U32OpTable::new_prover(
             generator,
             order,
             num_randomizers,
             to_vec_vecs(&base_matrices.u32_op_matrix),
-        ); // U32OpTable,
+        );
 
         BaseTableCollection {
             program_table,
