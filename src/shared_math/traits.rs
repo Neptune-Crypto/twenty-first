@@ -137,6 +137,7 @@ pub trait PrimeField:
         res
     }
 
+    #[inline(always)]
     fn square(self) -> Self {
         self * self
     }

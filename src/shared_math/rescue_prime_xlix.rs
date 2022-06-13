@@ -28,42 +28,28 @@ impl<const M: usize> RescuePrimeXlix<M> {
     pub fn hash(&self, input: &[Word], output_len: usize) -> Vec<Word> {
         assert!(output_len <= M, "Output at most {} words.", M);
 
-        // Calculate width of state for input chunks
         let rate = M - self.capacity;
 
-        // Calculate number of rounds that don't require padding
-        let full_iterations = input.len() / rate;
+        // Pad input
+        let iterations = (input.len() / rate) + 1;
+        let mut padded_input: Vec<Word> = vec![0.into(); iterations * rate];
+        padded_input[0..input.len()].copy_from_slice(input);
+        padded_input[input.len()] = 1.into();
 
-        // Calculate number of elements that require padding
-        let last_iteration_elements = input.len() % rate;
-
-        // Initialize state to all zeros
+        // Initialize state
         let mut state: [Word; M] = [0.into(); M];
 
-        // Absorbing (full rounds)
-        for iteration in 0..full_iterations {
+        // Absorb
+        for iteration in 0..iterations {
             let start = iteration * rate;
             let end = start + rate;
-            let input_slice = &input[start..end];
+            let input_slice = &padded_input[start..end];
             state[0..rate].copy_from_slice(input_slice);
 
             self.rescue_xlix_permutation(&mut state);
         }
 
-        // Absorbing (last round with padding)
-        if last_iteration_elements > 0 {
-            let start = input.len() - last_iteration_elements;
-            let input_slice = &input[start..];
-            state[0..last_iteration_elements].copy_from_slice(input_slice);
-
-            // Padding
-            state[last_iteration_elements] = BFieldElement::ring_one();
-            state[last_iteration_elements + 1..rate].fill(BFieldElement::ring_zero());
-
-            self.rescue_xlix_permutation(&mut state);
-        }
-
-        // Squeezing
+        // Squeeze
         (&state[0..output_len]).to_vec()
     }
 
@@ -144,9 +130,9 @@ impl<const M: usize> RescuePrimeXlix<M> {
         }
 
         // MDS
-        for k in 0..M {
-            for j in 0..M {
-                state[k] += MDS[k][j] * state[j];
+        for j in 0..M {
+            for k in 0..M {
+                state[j] += MDS[j][k] * state[k];
             }
         }
 
@@ -159,9 +145,9 @@ impl<const M: usize> RescuePrimeXlix<M> {
         Self::apply_inverse_sbox(state);
 
         // MDS
-        for i in 0..M {
-            for j in 0..M {
-                state[i] += MDS[i][j] * state[j];
+        for j in 0..M {
+            for k in 0..M {
+                state[j] += MDS[j][k] * state[k];
             }
         }
 
@@ -241,11 +227,11 @@ mod rescue_prime_xlix_tests {
             .map(BFieldElement::new)
             .collect::<Vec<_>>();
         let expected = vec![
-            BFieldElement::new(15553216544334069563),
-            BFieldElement::new(4073764666052098467),
-            BFieldElement::new(859354448687586835),
-            BFieldElement::new(1073582295778570986),
-            BFieldElement::new(11270468737577744401),
+            BFieldElement::new(13854889922040347713),
+            BFieldElement::new(9107023863351443899),
+            BFieldElement::new(10066861977733156370),
+            BFieldElement::new(12168766094991429332),
+            BFieldElement::new(14235729488804827283),
         ];
         assert_eq!(expected, rp.hash(&input, 5));
     }

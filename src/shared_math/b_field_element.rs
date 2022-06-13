@@ -195,14 +195,14 @@ impl BFieldElement {
 
         // compute ab - d; because d may be greater than ab we need to handle potential underflow
         let (tmp0, under) = ab.overflowing_sub(d);
-        let tmp0 = tmp0.wrapping_sub(Self::LOWER_MASK * (under as u64));
+        let tmp1 = tmp0.wrapping_sub(Self::LOWER_MASK * (under as u64));
 
         // compute c * 2^32 - c; this is guaranteed not to underflow
-        let tmp1 = (c << 32) - c;
+        let tmp2 = (c << 32) - c;
 
         // add temp values and return the result; because each of the temp may be up to 64 bits,
         // we need to handle potential overflow
-        let (result, over) = tmp0.overflowing_add(tmp1);
+        let (result, over) = tmp1.overflowing_add(tmp2);
         result.wrapping_add(Self::LOWER_MASK * (over as u64))
     }
 }
@@ -243,11 +243,33 @@ impl Inverse for BFieldElement {
     #[must_use]
     #[inline]
     fn inverse(&self) -> Self {
-        let (_, _, a) = other::xgcd(Self::QUOTIENT as i128, self.0 as i128);
+        let x = *self;
+        assert_ne!(
+            x,
+            Self::ring_zero(),
+            "Attempted to find the multiplicative inverse of zero."
+        );
 
-        Self(
-            ((a % Self::QUOTIENT as i128 + Self::QUOTIENT as i128) % Self::QUOTIENT as i128) as u64,
-        )
+        #[inline(always)]
+        fn exp(base: BFieldElement, exponent: u64) -> BFieldElement {
+            let mut res = base;
+            for _ in 0..exponent {
+                res *= res
+            }
+            res
+        }
+
+        let bin_2_ones = x.square() * x;
+        let bin_3_ones = bin_2_ones.square() * x;
+        let bin_6_ones = exp(bin_3_ones, 3) * bin_3_ones;
+        let bin_12_ones = exp(bin_6_ones, 6) * bin_6_ones;
+        let bin_24_ones = exp(bin_12_ones, 12) * bin_12_ones;
+        let bin_30_ones = exp(bin_24_ones, 6) * bin_6_ones;
+        let bin_31_ones = bin_30_ones.square() * x;
+        let bin_31_ones_1_zero = bin_31_ones.square();
+        let bin_32_ones = bin_31_ones.square() * x;
+
+        exp(bin_31_ones_1_zero, 32) * bin_32_ones
     }
 }
 
@@ -679,6 +701,12 @@ mod b_prime_field_element_test {
         let ten_inv = bfield_elem!(16602069662473125889);
         let eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv =
             bfield_elem!(13115294102219178839);
+
+        // With these "alt" values we verify that the degenerated representation of
+        // B field elements works.
+        let one_alt = BFieldElement(BFieldElement::QUOTIENT + 1);
+        let two_alt = BFieldElement(BFieldElement::QUOTIENT + 2);
+        let three_alt = BFieldElement(BFieldElement::QUOTIENT + 3);
         assert_eq!(two_inv, bfield_elem!(2).inverse());
         assert_eq!(three_inv, bfield_elem!(3).inverse());
         assert_eq!(four_inv, bfield_elem!(4).inverse());
@@ -692,6 +720,9 @@ mod b_prime_field_element_test {
             eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv,
             bfield_elem!(85671106).inverse()
         );
+        assert_eq!(one_inv, one_alt.inverse());
+        assert_eq!(two_inv, two_alt.inverse());
+        assert_eq!(three_inv, three_alt.inverse());
 
         let inverses = [
             one_inv,
@@ -705,7 +736,11 @@ mod b_prime_field_element_test {
             nine_inv,
             ten_inv,
             eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv,
+            one_inv,
+            two_inv,
+            three_inv,
         ];
+
         let values = [
             bfield_elem!(1),
             bfield_elem!(2),
@@ -718,6 +753,9 @@ mod b_prime_field_element_test {
             bfield_elem!(9),
             bfield_elem!(10),
             bfield_elem!(85671106),
+            one_alt,
+            two_alt,
+            three_alt,
         ];
         let calculated_inverses = BFieldElement::batch_inversion(values.to_vec());
         assert_eq!(values.len(), calculated_inverses.len());
@@ -1058,5 +1096,19 @@ mod b_prime_field_element_test {
         // adding 1 prevents us from building multivariate polynomial containing zero-coefficients
         let elem = rng.next_u64() % limit + 1;
         BFieldElement::new(elem as u64)
+    }
+
+    #[test]
+    #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
+    fn multiplicative_inverse_of_zero() {
+        let zero = BFieldElement::ring_zero();
+        zero.inverse();
+    }
+
+    #[test]
+    #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
+    fn multiplicative_inverse_of_p() {
+        let zero = BFieldElement::new(BFieldElement::QUOTIENT);
+        zero.inverse();
     }
 }

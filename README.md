@@ -1,13 +1,13 @@
+[![Build Status](https://drone.neptune.builders/api/badges/core-team/twenty-first/status.svg)](https://drone.neptune.builders/core-team/twenty-first)
 # twenty-first
 
 A collection of cryptography functions written in Rust.
-[![Build Status](https://drone.neptune.builders/api/badges/core-team/twenty-first/status.svg)](https://drone.neptune.builders/core-team/twenty-first)
 
 ## Setup
 
 ### Ubuntu
  - curl -- `sudo apt install curl`
- - rustup -- `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` (installs rustup, cargo, rustc etc.)
+ - rustup -- `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` (installs `rustup`, `cargo`, `rustc` etc.)
  - source the rust environment `source $HOME/.cargo/env`
  - gnuplot -- `sudo apt install gnuplot`
  - build-essential (for `make`) -- `sudo apt install build-essential`
@@ -20,13 +20,15 @@ A collection of cryptography functions written in Rust.
 ## Cheatsheet
 
  - To test, use `cargo test [start_of_test_name]`. Or, for a complete and much slower build, run `make test`.
+ - To generate and view API documentation, use `make doc`.
  - To run, use `make run`.
  - To lint, use `make lint`.
  - To format, use `make format`.
+ - To check your code for errors, but skip code generation, use `make check`.  This should be faster than `make build`.
  - To build, use `make build`.
  - To install, use `make install`.
  - To run lint, compile, and run tests use `make all`. Note that this does *not* run install.
- - To run the benchmarks and generate the benchmark report, use `make bench`, or run `cargo criterion <specific-benchmark>`.
+ - To run the benchmarks and generate the benchmark report, use `make bench`, or run `cargo criterion --bench <specific-benchmark>`.
 
 ## Notes
 

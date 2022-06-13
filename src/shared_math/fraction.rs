@@ -32,8 +32,8 @@ impl<T: num_traits::Num + Clone + Copy + Display> std::fmt::Display for Fraction
 impl<U: num_traits::Num + Clone + Copy + Debug + Display> Num for Fraction<U> {
     type FromStrRadixErr = &'static str;
     fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-        let dividend = U::from_str_radix(str, radix);
-        match dividend {
+        let dividend_res = U::from_str_radix(str, radix);
+        match dividend_res {
             Ok(dividend) => Ok(Self {
                 dividend,
                 divisor: num_traits::one(),

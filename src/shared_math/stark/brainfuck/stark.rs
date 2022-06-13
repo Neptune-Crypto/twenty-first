@@ -112,7 +112,8 @@ impl Stark {
             Some(prog) => prog,
         };
 
-        let num_randomizers = 1;
+        // Fewer than 2 randomizers means no zero-knowledge for the prover's execution.
+        let num_randomizers = 2;
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(order as u64)
@@ -480,18 +481,18 @@ impl Stark {
             .zip(base_degree_bounds.iter())
             .enumerate()
         {
-            let bc_lifted = bc.iter().map(|bfe| bfe.lift());
+            let bc_lifted: Vec<XFieldElement> = bc.iter().map(|bfe| bfe.lift()).collect();
 
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(bc_lifted)
+                .into_par_iter()
+                .zip(bc_lifted.into_par_iter())
                 .map(|(c, bcl)| c + bcl * weights[weights_counter])
                 .collect();
             weights_counter += 1;
             let shift = (self.max_degree as Degree - bdb) as u32;
             let bc_shifted: Vec<XFieldElement> = fri_x_values
-                .iter()
-                .zip(bc.iter())
+                .par_iter()
+                .zip(bc.par_iter())
                 .map(|(x, &bce)| (bce * x.mod_pow_u32(shift)).lift())
                 .collect();
 
@@ -508,14 +509,14 @@ impl Stark {
             }
 
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(bc_shifted.into_iter())
+                .into_par_iter()
+                .zip(bc_shifted.into_par_iter())
                 .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
         }
 
-        timer.elapsed("...shift and interpolate base codewords?");
+        timer.elapsed("...shift and collect base codewords");
 
         assert_eq!(extension_codewords.len(), num_extension_polynomials);
         for (i, (ec, edb)) in extension_codewords
@@ -524,39 +525,39 @@ impl Stark {
             .enumerate()
         {
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(ec.iter())
+                .into_par_iter()
+                .zip(ec.par_iter())
                 .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
             let shift = (self.max_degree as Degree - edb) as u32;
             let ec_shifted: Vec<XFieldElement> = fri_x_values
-                .iter()
-                .zip(ec.iter())
+                .par_iter()
+                .zip(ec.into_par_iter())
                 .map(|(x, &ece)| ece * x.mod_pow_u32(shift).lift())
                 .collect();
 
             if std::env::var("DEBUG").is_ok() {
                 let interpolated = self.fri.domain.x_interpolate(&ec_shifted);
                 assert!(
-                        interpolated.degree() == -1
-                            || interpolated.degree() == self.max_degree as isize,
-                        "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
-                        i,
-                        self.max_degree,
-                        interpolated.degree()
-                    );
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
+                    i,
+                    self.max_degree,
+                    interpolated.degree()
+                );
             }
 
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(ec_shifted.into_iter())
+                .into_par_iter()
+                .zip(ec_shifted.into_par_iter())
                 .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
         }
 
-        timer.elapsed("...shift and interpolate extension codewords?");
+        timer.elapsed("...shift and collect extension codewords");
 
         assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
         for (_i, (qc, qdb)) in quotient_codewords
@@ -565,47 +566,42 @@ impl Stark {
             .enumerate()
         {
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(qc.iter())
+                .into_par_iter()
+                .zip(qc.par_iter())
                 .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
             let shift = (self.max_degree as Degree - qdb) as u32;
-            let qc_shifted = fri_x_values
-                .iter()
-                .zip(qc.iter())
-                .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift());
+            let qc_shifted: Vec<XFieldElement> = fri_x_values
+                .par_iter()
+                .zip(qc.into_par_iter())
+                .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift())
+                .collect();
 
             // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
-            // if std::env::var("DEBUG").is_ok() {
-            //     let interpolated = self.fri.domain.x_interpolate(&qc_shifted);
-            //     let unshifted_degree = self
-            //         .fri
-            //         .domain
-            //         .x_interpolate(&terms[terms.len() - 2])
-            //         .degree();
-            //     assert!(
-            //         interpolated.degree() == -1
-            //             || interpolated.degree() == self.max_degree as isize,
-            //         "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. Actual degree of unshifted codeword: {}. Shift = {}",
-            //         _i,
-            //         self.max_degree,
-            //         interpolated.degree(),
-            //         qdb,
-            //         unshifted_degree,
-            //         shift
-            //     );
-            // }
+            if std::env::var("DEBUG").is_ok() {
+                let interpolated = self.fri.domain.x_interpolate(&qc_shifted);
+                assert!(
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. . Shift = {}",
+                    _i,
+                    self.max_degree,
+                    interpolated.degree(),
+                    qdb,
+                    shift
+                );
+            }
 
             combination_codeword = combination_codeword
-                .into_iter()
-                .zip(qc_shifted)
+                .into_par_iter()
+                .zip(qc_shifted.into_par_iter())
                 .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
         }
 
-        timer.elapsed("...shift (~and interpolate~) quotient codewords?");
+        timer.elapsed("...shift and collect quotient codewords");
 
         // assert_eq!(
         //     terms.len(),
@@ -1006,16 +1002,16 @@ impl Stark {
             let b_domain_value = self.fri.domain.b_domain_value(index as u32);
             // collect terms: randomizer
             let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
-                .map(|i| tuples[&index][i])
+                .map(|j| tuples[&index][j])
                 .collect();
 
             // collect terms: base
-            for i in num_randomizer_polynomials..num_randomizer_polynomials + num_base_polynomials {
-                terms.push(tuples[&index][i]);
+            for j in num_randomizer_polynomials..num_randomizer_polynomials + num_base_polynomials {
+                terms.push(tuples[&index][j]);
                 let shift: u32 = (self.max_degree as i64
-                    - base_degree_bounds[i - num_randomizer_polynomials])
+                    - base_degree_bounds[j - num_randomizer_polynomials])
                     as u32;
-                terms.push(tuples[&index][i] * b_domain_value.mod_pow_u32(shift).lift());
+                terms.push(tuples[&index][j] * b_domain_value.mod_pow_u32(shift).lift());
             }
 
             // collect terms: extension
@@ -1029,8 +1025,8 @@ impl Stark {
 
             // TODO: We don't seem to need a separate loop for the base and extension columns.
             // But merging them would also require concatenating the degree bounds vector.
-            for (i, edb) in extension_degree_bounds.iter().enumerate() {
-                let extension_element: XFieldElement = tuples[&index][extension_offset + i];
+            for (j, edb) in extension_degree_bounds.iter().enumerate() {
+                let extension_element: XFieldElement = tuples[&index][extension_offset + j];
                 terms.push(extension_element);
                 let shift = (self.max_degree as i64 - edb) as u32;
                 terms.push(extension_element * b_domain_value.mod_pow_u32(shift).lift())
@@ -1430,6 +1426,7 @@ mod brainfuck_stark_tests {
             brainfuck::vm::sample_programs::VERY_SIMPLE_PROGRAM,
             brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT,
             brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT,
+            brainfuck::vm::sample_programs::PRINT_17_CHARS,
         ] {
             let program: Vec<BFieldElement> = brainfuck::vm::compile(source_code).unwrap();
             let (trace_length, input_symbols, output_symbols) = brainfuck::vm::run(
@@ -1460,33 +1457,5 @@ mod brainfuck_stark_tests {
                 Err(err) => panic!("error in STARK verifier: {}", err),
             };
         }
-    }
-
-    fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
-        let program = brainfuck::vm::compile(program_code).unwrap();
-        let (trace_length, input_symbols, output_symbols) =
-            brainfuck::vm::run(&program, input.to_vec()).unwrap();
-        let base_matrices: BaseMatrices =
-            brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-        let mut stark = new_test_stark(
-            trace_length,
-            program_code.to_string(),
-            input_symbols,
-            output_symbols,
-        );
-        let mut proof_stream = stark.prove(base_matrices).unwrap();
-        let verifier_verdict = stark.verify(&mut proof_stream);
-        match verifier_verdict {
-            Ok(_) => (),
-            Err(err) => panic!("error in STARK verifier: {}", err),
-        };
-    }
-
-    #[test]
-    fn prove_verify_again_test() {
-        let program_code = brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT;
-        let input = [97].map(BFieldElement::new).to_vec();
-
-        compile_simulate_prove_verify(program_code, &input);
     }
 }

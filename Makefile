@@ -20,10 +20,15 @@ endif
 build:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo build $(release)
+	rustup check
+	@echo "Update with \`rustup install stable\` if needed."
 
 doc:
 	cargo doc --no-deps
 	xdg-open "target/doc/twenty_first/index.html"
+
+check:
+	cargo check
 
 ctags:
 	# Do `cargo install rusty-tags`
@@ -54,6 +59,7 @@ test:
 bench:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo bench
+
 bench-no-run:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo bench --no-run

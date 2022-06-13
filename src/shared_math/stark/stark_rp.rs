@@ -146,8 +146,8 @@ impl StarkRp {
         let tp_bounds =
             self.transition_degree_bounds(transition_constraints, rounded_trace_length as usize);
         let tp_degree: &Degree = tp_bounds.iter().max().unwrap();
-        let tq_degree: Degree = tp_degree - (original_trace_length - 1);
-        let max_degree: Degree = roundup_npo2((tq_degree + 1) as u64) as i64 - 1; // The max degree bound provable by FRI
+        let tq_degree_max: Degree = tp_degree - (original_trace_length - 1);
+        let max_degree: Degree = roundup_npo2((tq_degree_max + 1) as u64) as i64 - 1; // The max degree bound provable by FRI
         let fri_domain_length = (max_degree + 1) * self.expansion_factor as i64;
         let blowup_factor_new = fri_domain_length / (rounded_trace_length as i64);
 
@@ -410,8 +410,10 @@ impl StarkRp {
             fri_domain_length as usize,
         );
 
-        let randomizer_codeword_digests: Vec<_> =
-            randomizer_codeword.iter().map(|x| hasher.hash(x)).collect();
+        let randomizer_codeword_digests: Vec<_> = randomizer_codeword
+            .iter()
+            .map(|rand_eval| hasher.hash(rand_eval))
+            .collect();
         let randomizer_mt: XFieldMt = XFieldMt::from_digests(&randomizer_codeword_digests);
 
         let randomizer_mt_root = randomizer_mt.get_root();

@@ -118,20 +118,20 @@ impl<'a, T: Sized> Node<T> {
                             polynomium_products[&mod_pow_exponents].clone()
                         } else {
                             // println!("Calculating mod_pow");
-                            let mut mod_pow_intermediate: Option<Polynomial<PFElem>> = None;
+                            let mut mod_pow_intermediate_lookup: Option<Polynomial<PFElem>> = None;
                             let mut mod_pow_reduced = mod_pow_exponents.clone();
                             while mod_pow_reduced[i] > 2 {
                                 mod_pow_reduced[i] -= 1;
                                 // println!("looking for {:?}", mod_pow_reduced);
                                 if polynomium_products.contains_key(&mod_pow_reduced) {
                                     // println!("Found result for {:?}", mod_pow_reduced);
-                                    mod_pow_intermediate =
+                                    mod_pow_intermediate_lookup =
                                         Some(polynomium_products[&mod_pow_reduced].clone());
                                     break;
                                 }
                             }
 
-                            match mod_pow_intermediate {
+                            match mod_pow_intermediate_lookup {
                                 None => {
                                     // println!("Missed reduced mod_pow result!");
                                     let mod_pow_intermediate =
@@ -744,7 +744,7 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
                 println!("Missed!");
                 prod = Polynomial::from_constant(v.ring_one());
                 let mut k_sorted: Vec<(usize, u64)> = k.clone().into_iter().enumerate().collect();
-                k_sorted.sort_by_key(|k| k.1);
+                k_sorted.sort_by_key(|e| e.1);
                 let mut x_pow_mul = 0;
                 for (i, ki) in k_sorted.into_iter() {
                     // calculate prod * point[i].mod_pow(k[i].into(), v.ring_one()) with some optimizations,
@@ -916,6 +916,8 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
 
     #[must_use]
     pub fn mod_pow(&self, pow: BigInt, one: PFElem) -> Self {
+        assert!(one.is_one(), "one must be one");
+
         // Handle special case of 0^0
         if pow.is_zero() {
             let mut coefficients: MCoefficients<PFElem> = HashMap::new();
@@ -931,7 +933,6 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
             return Self::zero(self.variable_count);
         }
 
-        let one = self.coefficients.values().last().unwrap().ring_one();
         let exp = vec![0u64; self.variable_count];
         let mut acc_coefficients_init: MCoefficients<PFElem> = HashMap::new();
         acc_coefficients_init.insert(exp, one);
@@ -966,34 +967,34 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         for i in 0..exponents.len() {
             let ki = exponents[i];
             let v0 = self.coefficients[ki];
-            let mut new_exponents = Vec::with_capacity(self.variable_count);
+            let mut diagonal_exponents = Vec::with_capacity(self.variable_count);
             for exponent in ki {
-                new_exponents.push(exponent * 2);
+                diagonal_exponents.push(exponent * 2);
             }
-            if output_coefficients.contains_key(&new_exponents) {
+            if output_coefficients.contains_key(&diagonal_exponents) {
                 output_coefficients.insert(
-                    new_exponents.to_vec(),
-                    v0 * v0 + output_coefficients[&new_exponents],
+                    diagonal_exponents.to_vec(),
+                    v0 * v0 + output_coefficients[&diagonal_exponents],
                 );
             } else {
-                output_coefficients.insert(new_exponents.to_vec(), v0 * v0);
+                output_coefficients.insert(diagonal_exponents.to_vec(), v0 * v0);
             }
 
             for kj in exponents.iter().skip(i + 1) {
-                let mut new_exponents = Vec::with_capacity(self.variable_count);
+                let mut non_diagonal_exponents = Vec::with_capacity(self.variable_count);
                 for k in 0..self.variable_count {
                     // TODO: Can overflow.
                     let exponent = ki[k] + kj[k];
-                    new_exponents.push(exponent);
+                    non_diagonal_exponents.push(exponent);
                 }
                 let v1 = self.coefficients[*kj];
-                if output_coefficients.contains_key(&new_exponents) {
+                if output_coefficients.contains_key(&non_diagonal_exponents) {
                     output_coefficients.insert(
-                        new_exponents.to_vec(),
-                        two * v0 * v1 + output_coefficients[&new_exponents],
+                        non_diagonal_exponents.to_vec(),
+                        two * v0 * v1 + output_coefficients[&non_diagonal_exponents],
                     );
                 } else {
-                    output_coefficients.insert(new_exponents.to_vec(), two * v0 * v1);
+                    output_coefficients.insert(non_diagonal_exponents.to_vec(), two * v0 * v1);
                 }
             }
         }
@@ -1231,7 +1232,6 @@ impl<PFElem: PrimeField> Mul for MPolynomial<PFElem> {
 }
 
 #[cfg(test)]
-#[macro_use]
 mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
     use super::*;
@@ -2230,12 +2230,11 @@ mod test_mpolynomials {
         assert_eq!(degree_poly, expected);
     }
 
-    /* TODO: Einar
     #[test]
     fn symbolic_degree_bound_random() {
         let variable_count = 3;
         let term_count = 5;
-        let exponenent_limit: u64 = 7;
+        let exponenent_limit = 7;
         let coefficient_limit = 11;
 
         let rnd_mvpoly = gen_mpolynomial(
@@ -2245,23 +2244,22 @@ mod test_mpolynomials {
             coefficient_limit,
         );
 
-        let mut max_degrees = Vec::<u64>::with_capacity(variable_count);
+        let mut max_degrees = Vec::with_capacity(variable_count);
         let mut rng = rand::thread_rng();
 
         for _ in 0..variable_count {
-            max_degrees.push(rng.next_u64() % exponenent_limit + 1);
+            max_degrees.push((rng.next_u64() % exponenent_limit + 1) as i64);
         }
 
-        let degree_poly = rnd_mvpoly.symbolic_degree_bound(&max_degrees);
+        let degree_poly = rnd_mvpoly.symbolic_degree_bound(&max_degrees[..]);
 
-        assert_le!(
-            degree_poly,
-            variable_count as u64 * (exponenent_limit + 1) * (exponenent_limit + 1),
+        assert!(
+            degree_poly
+                <= (variable_count as u64 * (exponenent_limit + 1) * (exponenent_limit + 1)) as i64,
             "The total degree is the max of the sums of the exponents in any term.",
         )
     }
 
-    */
     fn symbolic_degree_bound_prop_gen() {
         let variable_count = 4;
         let term_count = 5;

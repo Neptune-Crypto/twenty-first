@@ -69,17 +69,17 @@ fn stark_bf(c: &mut Criterion) {
         },
     );
 
-    let hello_world_id = BenchmarkId::new("HELLO_WORLD", "");
-    group.bench_function(hello_world_id, |bencher| {
-        bencher.iter(|| compile_simulate_prove_verify(sample_programs::HELLO_WORLD, &[]));
-    });
+    // let hello_world_id = BenchmarkId::new("HELLO_WORLD", "");
+    // group.bench_function(hello_world_id, |bencher| {
+    //     bencher.iter(|| compile_simulate_prove_verify(sample_programs::HELLO_WORLD, &[]));
+    // });
 
-    let the_raven_id = BenchmarkId::new("THE_RAVEN", "");
-    group.bench_function(the_raven_id, |bencher| {
-        bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_RAVEN, &[]));
-    });
+    // let the_raven_id = BenchmarkId::new("THE_RAVEN", "");
+    // group.bench_function(the_raven_id, |bencher| {
+    //     bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_RAVEN, &[]));
+    // });
 
-    // THE FOLLOWING BENCHMARK WILL CRASH UNLESS YOU HAVE 128GB RAM
+    // The following benchmark will crash unless you have 128GiB RAM
     // let the_whole_raven_id = BenchmarkId::new("THE_WHOLE_RAVEN", 0);
     // group.bench_function(the_whole_raven_id, |bencher| {
     //     bencher.iter(|| _the_whole_raven());

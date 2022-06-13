@@ -53,8 +53,8 @@ impl<U: num_traits::Num + Clone + Copy> Num for ComplexNumber<U> {
     fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
         let real = U::from_str_radix(str, radix);
         match real {
-            Ok(real) => Ok(ComplexNumber {
-                r: real,
+            Ok(r) => Ok(ComplexNumber {
+                r,
                 i: num_traits::zero(),
             }),
             _ => Err("Failed"),
