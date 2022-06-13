@@ -1,4 +1,4 @@
-use super::membership_proof::MembershipProof;
+use super::mmr_membership_proof::MmrMembershipProof;
 use crate::shared_math::other::log_2_floor;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use std::marker::PhantomData;
@@ -116,22 +116,23 @@ pub fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
     non_leaf_nodes_after + non_leaf_nodes_left + leaf_count
 }
 
-/// Given a leaf count and a data index, return the height of the peak
-/// that this leaf points to.
-pub fn get_peak_height(leaf_count: u128, data_index: u128) -> Option<u128> {
-    if data_index >= leaf_count {
-        return None;
+/// leaf_index_to_peak_index
+/// Compute the index of the peak that contains the given leaf index,
+/// given the leaf count.
+pub fn leaf_index_to_peak_index(leaf_index: u128, leaf_count: u128) -> Option<u128> {
+    if leaf_index >= leaf_count {
+        None
+    } else {
+        let mut num_set_bits = 0;
+        let mut leaf_count_copy = leaf_count;
+        while leaf_count_copy != 0 {
+            if leaf_count_copy < leaf_index + 1 {
+                num_set_bits += 1;
+            }
+            leaf_count_copy &= leaf_count_copy - 1;
+        }
+        Some(num_set_bits)
     }
-
-    let mut node_index = data_index_to_node_index(data_index);
-    let node_count = leaf_count_to_node_count(leaf_count);
-    let mut height = 0;
-    while node_index < node_count + 1 {
-        height += 1;
-        node_index = parent(node_index);
-    }
-
-    Some(height - 1)
 }
 
 /// Return the indices of the nodes added by an append, including the
@@ -177,7 +178,7 @@ pub fn get_authentication_path_node_indices(
     }
 }
 
-/// Given node count, return a vector representing the height of
+/// Given leaf count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
 pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, Vec<u128>) {
     if leaf_count == 0 {
@@ -246,22 +247,22 @@ pub fn data_index_to_node_index(data_index: u128) -> u128 {
 
 /// Convert from node index to data index in log(size) time
 pub fn node_index_to_data_index(node_index: u128) -> Option<u128> {
-    let (_right, height) = right_child_and_height(node_index);
-    if height != 0 {
+    let (_right, own_height) = right_child_and_height(node_index);
+    if own_height != 0 {
         return None;
     }
 
-    let (mut node, mut height) = leftmost_ancestor(node_index);
+    let (mut node, mut node_height) = leftmost_ancestor(node_index);
     let mut data_index = 0;
-    while height > 0 {
-        let left_child = left_child(node, height);
+    while node_height > 0 {
+        let left_child = left_child(node, node_height);
         if node_index <= left_child {
             node = left_child;
-            height -= 1;
+            node_height -= 1;
         } else {
             node = right_child(node);
-            height -= 1;
-            data_index += 1 << height;
+            node_height -= 1;
+            data_index += 1 << node_height;
         }
     }
 
@@ -275,13 +276,13 @@ pub fn calculate_new_peaks_from_append<H: Hasher>(
     old_leaf_count: u128,
     old_peaks: Vec<H::Digest>,
     new_leaf: H::Digest,
-) -> Option<(Vec<H::Digest>, MembershipProof<H>)> {
+) -> Option<(Vec<H::Digest>, MmrMembershipProof<H>)> {
     let mut peaks = old_peaks;
     let mut new_node_index = data_index_to_node_index(old_leaf_count);
     let (mut new_node_is_right_child, _height) = right_child_and_height(new_node_index);
     peaks.push(new_leaf);
     let hasher = H::new();
-    let mut membership_proof: MembershipProof<H> = MembershipProof {
+    let mut membership_proof: MmrMembershipProof<H> = MmrMembershipProof {
         authentication_path: vec![],
         data_index: old_leaf_count,
         _hasher: PhantomData,
@@ -311,7 +312,7 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: Hasher>(
     old_peaks: &[H::Digest],
     new_leaf: &H::Digest,
     leaf_count: u128,
-    membership_proof: &MembershipProof<H>,
+    membership_proof: &MmrMembershipProof<H>,
 ) -> Option<Vec<H::Digest>>
 where
     u128: ToDigest<H::Digest>,
@@ -330,26 +331,15 @@ where
         acc_index = parent(acc_index);
     }
 
-    // Calculate which peak that needs to be update
-    let (peak_heights, _) = get_peak_heights_and_peak_node_indices(leaf_count);
-    let expected_peak_height_res = get_peak_height(leaf_count, membership_proof.data_index);
-    let expected_peak_height = match expected_peak_height_res {
+    // Find the correct peak to update
+    let peak_index_res = leaf_index_to_peak_index(membership_proof.data_index, leaf_count);
+    let peak_index = match peak_index_res {
         None => return None,
-        Some(eph) => eph,
-    };
-
-    if membership_proof.authentication_path.len() as u128 != expected_peak_height {
-        return None;
-    }
-
-    let peak_height_index_res = peak_heights.iter().position(|x| *x == expected_peak_height);
-    let peak_height_index = match peak_height_index_res {
-        None => return None,
-        Some(index) => index,
+        Some(pi) => pi,
     };
 
     let mut calculated_peaks: Vec<H::Digest> = old_peaks.to_vec();
-    calculated_peaks[peak_height_index] = acc_hash;
+    calculated_peaks[peak_index as usize] = acc_hash;
 
     Some(calculated_peaks)
 }
@@ -474,6 +464,52 @@ mod mmr_test {
     }
 
     #[test]
+    fn leaf_index_to_peak_index_test() {
+        assert_eq!(0, leaf_index_to_peak_index(0, 1).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(0, 2).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(1, 2).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(0, 3).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(1, 3).unwrap());
+        assert_eq!(1, leaf_index_to_peak_index(2, 3).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(0, 4).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(1, 4).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(2, 4).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(3, 4).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(0, 5).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(1, 5).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(2, 5).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(3, 5).unwrap());
+        assert_eq!(1, leaf_index_to_peak_index(4, 5).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(0, 7).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(1, 7).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(2, 7).unwrap());
+        assert_eq!(0, leaf_index_to_peak_index(3, 7).unwrap());
+        assert_eq!(1, leaf_index_to_peak_index(4, 7).unwrap());
+        assert_eq!(1, leaf_index_to_peak_index(5, 7).unwrap());
+        assert_eq!(2, leaf_index_to_peak_index(6, 7).unwrap());
+        assert!(leaf_index_to_peak_index(0, (1 << 32) - 1).unwrap() == 0);
+        assert!(leaf_index_to_peak_index(1, (1 << 32) - 1).unwrap() == 0);
+        assert!(leaf_index_to_peak_index((1 << 31) - 1, (1 << 32) - 1).unwrap() == 0);
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30) - 1, (1 << 32) - 1).unwrap() == 1);
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 29) - 1, (1 << 32) - 1).unwrap() == 1);
+        assert!(leaf_index_to_peak_index(1 << 31, (1 << 32) - 1).unwrap() == 1);
+        assert!(
+            leaf_index_to_peak_index((1 << 31) + (1 << 30) + (1 << 29) - 1, (1 << 32) - 1).unwrap()
+                == 2
+        );
+        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30), (1 << 32) - 1).unwrap() == 2);
+
+        // Verify that None is returned if leaf index exceeds leaf count
+        assert!(leaf_index_to_peak_index(1, 0).is_none());
+        assert!(leaf_index_to_peak_index(1, 1).is_none());
+        assert!(leaf_index_to_peak_index(2, 1).is_none());
+        assert!(leaf_index_to_peak_index(100, 1).is_none());
+        assert!(leaf_index_to_peak_index(100, 99).is_none());
+        assert!(leaf_index_to_peak_index(100, 100).is_none());
+        assert!(leaf_index_to_peak_index(100, 101).is_some());
+    }
+
+    #[test]
     fn data_index_node_index_pbt() {
         let mut rng = rand::thread_rng();
         for _ in 0..10000 {
@@ -571,36 +607,6 @@ mod mmr_test {
         for (i, node_count) in node_counts.iter().enumerate() {
             assert_eq!(*node_count, leaf_count_to_node_count(i as u128));
         }
-    }
-
-    #[test]
-    fn get_peak_height_test() {
-        assert_eq!(Some(1), get_peak_height(2, 0));
-        assert_eq!(Some(1), get_peak_height(2, 1));
-        assert_eq!(Some(0), get_peak_height(1, 0));
-        assert_eq!(Some(1), get_peak_height(3, 0));
-        assert_eq!(Some(1), get_peak_height(3, 1));
-        assert_eq!(Some(0), get_peak_height(3, 2));
-        assert_eq!(None, get_peak_height(3, 3));
-        assert_eq!(None, get_peak_height(3, 4));
-        assert_eq!(Some(2), get_peak_height(4, 0));
-        assert_eq!(Some(2), get_peak_height(4, 1));
-        assert_eq!(Some(2), get_peak_height(4, 2));
-        assert_eq!(Some(2), get_peak_height(4, 3));
-        assert_eq!(None, get_peak_height(4, 4));
-        assert_eq!(Some(2), get_peak_height(5, 0));
-        assert_eq!(Some(2), get_peak_height(5, 1));
-        assert_eq!(Some(2), get_peak_height(5, 2));
-        assert_eq!(Some(2), get_peak_height(5, 3));
-        assert_eq!(Some(0), get_peak_height(5, 4));
-        assert_eq!(None, get_peak_height(5, 5));
-        assert_eq!(Some(5), get_peak_height(33, 0));
-        assert_eq!(Some(5), get_peak_height(33, 1));
-        assert_eq!(Some(5), get_peak_height(33, 2));
-        assert_eq!(Some(5), get_peak_height(33, 17));
-        assert_eq!(Some(5), get_peak_height(33, 31));
-        assert_eq!(Some(0), get_peak_height(33, 32));
-        assert_eq!(None, get_peak_height(33, 33));
     }
 
     #[test]

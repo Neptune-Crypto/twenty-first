@@ -1,30 +1,82 @@
 ---
+# Please run `yamllint .drone.yml` after editing this file.
 kind: pipeline
 type: docker
 name: default
 
+# Run `rustup check` to see newest version and update here:
+define: &latest_stable 'rust:1.61'
+
 steps:
   - name: Check
-    image: rust:1.60
+    image: *latest_stable
     commands:
-      - cargo check
-      - cargo check --tests
+      - cargo check --all-targets
+
+  - name: Clippy
+    image: *latest_stable
+    commands:
+      - rustup component add clippy
+      - cargo clippy  # --all-targets Reenable when issue #124 has been resolved
 
   - name: Build
-    image: rust:1.60
+    image: *latest_stable
     commands:
-      - cargo build
+      - RUSTFLAGS="-D warnings" cargo build --all-targets --profile=bench
 
   - name: Test
-    image: rust:1.60
+    image: *latest_stable
     commands:
-      - cargo test
+      - cargo test --all-targets
+      # Taget `doc` is not tested by `--all-targets` according to
+      # [Target Selection]
+      # (https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection)
+      - cargo test --doc
 
   - name: Bench
-    image: rust:1.60
+    image: *latest_stable
     commands:
       - cargo bench stark_bf
 
-trigger:
-  branch:
-    - master
+  - name: Telegram
+    image:
+      appleboy/drone-telegram@sha256:896707270a77372001b6ed40e895f3f15ef1cfb6ec93463d6f496e96c28aaf7b
+    settings:
+      to:
+        from_secret: telegram_to
+      token:
+        from_secret: telegram_token
+      when:
+        status: [success, failure]
+      format: markdown
+      # Reference:
+      # https://github.com/appleboy/drone-telegram/blob/master/DOCS.md#parameter-reference
+      message: >
+        {{#success build.status}}
+        ✅ Build #{{build.number}} of `{{repo.name}}` succeeded.
+
+        📝 Commit by {{commit.author}} on `{{commit.branch}}`:
+
+        ```
+        {{commit.message}}
+        ```
+
+        🌐 {{ build.link }}
+        {{else}}
+        ❌ Build #{{build.number}} of `{{repo.name}}` failed.
+
+        📝 Commit by {{commit.author}} on `{{commit.branch}}`:
+
+        ```
+        {{commit.message}}
+        ```
+
+        🌐 {{ build.link }}
+        {{/success}}
+
+
+branch:
+  - master
+
+# Please run `yamllint .drone.yml` after editing this file.
+...

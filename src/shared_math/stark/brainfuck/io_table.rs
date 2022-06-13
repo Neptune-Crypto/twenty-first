@@ -38,6 +38,7 @@ impl IOTable {
 
     // TODO: Refactor to avoid duplicate code.
     pub fn new_input_table(length: usize, generator: BFieldElement, order: usize) -> Self {
+        // for brainfuck VM, input is public – randomization is superfluous
         let num_randomizers = 0;
 
         let mut table = Table::<IOTableMore>::new(
@@ -57,6 +58,7 @@ impl IOTable {
     }
 
     pub fn new_output_table(length: usize, generator: BFieldElement, order: usize) -> Self {
+        // for brainfuck VM, output is public – randomization is superfluous
         let num_randomizers = 0;
         let base_width = 1;
         let full_width = 2;

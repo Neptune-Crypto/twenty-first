@@ -10,12 +10,13 @@ use crate::util_types::blake3_wrapper::Blake3Hash;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
 /// A simple `Hasher` trait that allows for hashing one, two or many values into one digest.
 ///
 /// The type of digest is determined by the `impl` of a given `Hasher`, and it requires that
 /// `Value` has a `ToDigest<Self::Digest>` instance. For hashing hash digests, this `impl`
 /// is quite trivial. For non-trivial cases it may include byte-encoding or hashing.
-pub trait Hasher: Sized + Send + Sync {
+pub trait Hasher: Sized + Send + Sync + Clone {
     type Digest: ToDigest<Self::Digest>
         + PartialEq
         + Clone
@@ -80,7 +81,7 @@ pub trait Hasher: Sized + Send + Sync {
 
     // FIXME: This is not uniform.
     fn sample_index_not_power_of_two(&self, input: &Self::Digest, max: usize) -> usize {
-        self.sample_index(input, other::roundup_npo2(max as u64) as usize) % max
+        self.sample_index(input, (1 << 16) * other::roundup_npo2(max as u64) as usize) % max
     }
 
     /// Given a uniform random `seed` digest, a `max` that is a power of two,
@@ -162,6 +163,15 @@ impl ToDigest<Blake3Hash> for Blake3Hash {
 }
 
 impl ToDigest<Blake3Hash> for BFieldElement {
+    fn to_digest(&self) -> Blake3Hash {
+        let bytes = bincode::serialize(&self).unwrap();
+        let digest = Blake3Hash(blake3::hash(bytes.as_slice()));
+
+        digest
+    }
+}
+
+impl ToDigest<Blake3Hash> for Vec<BFieldElement> {
     fn to_digest(&self) -> Blake3Hash {
         let bytes = bincode::serialize(&self).unwrap();
         let digest = Blake3Hash(blake3::hash(bytes.as_slice()));
@@ -276,15 +286,11 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     }
 
     fn hash<Value: ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
-        let elements_per_digest: usize = 5;
-        self.hash(&input.to_digest(), elements_per_digest)
+        self.hash(&input.to_digest(), 5)
     }
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
         let mut state = [BFieldElement::ring_zero(); RP_DEFAULT_WIDTH];
-
-        // Set padding
-        state[2 * RP_DEFAULT_OUTPUT_SIZE] = BFieldElement::ring_one();
 
         // Copy over left and right into state for hasher
         state[0..RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(left_input);
@@ -296,8 +302,7 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     }
 
     fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
-        let elements_per_digest: usize = 5;
-        self.hash(&inputs.concat(), elements_per_digest)
+        self.hash(&inputs.concat(), 5)
     }
 }
 
@@ -356,7 +361,7 @@ pub mod test_simple_hasher {
         assert_eq!(
             vec![
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 100
+                0, 0, 0, 100,
             ],
             inner.as_bytes()
         );
@@ -371,7 +376,7 @@ pub mod test_simple_hasher {
         let hash_digest = rpp.hash(&digests, 5);
         let hash_pair_digest = rpp.hash_pair(&digest1, &digest2);
         let hash_many_digest = rpp.hash_many(&[digest1, digest2]);
-        assert_eq!(hash_digest, hash_pair_digest);
+        assert_ne!(hash_digest, hash_pair_digest);
         assert_eq!(hash_digest, hash_many_digest);
         println!("hash_digest = {:?}", hash_digest);
     }
