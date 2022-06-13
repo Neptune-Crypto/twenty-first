@@ -209,7 +209,7 @@ impl BFieldElement {
 
 impl fmt::Display for BFieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.canonical_representation())
     }
 }
 

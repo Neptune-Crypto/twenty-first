@@ -1,4 +1,4 @@
-use super::ord_n::{Ord16, Ord16::*, Ord6, Ord8, Ord8::*};
+use super::ord_n::{Ord16, Ord16::*, Ord6, Ord8};
 use crate::shared_math::b_field_element::BFieldElement;
 use std::collections::HashMap;
 use std::error::Error;
@@ -66,7 +66,7 @@ pub enum AnInstruction<Dest> {
     // Arithmetic on stack instructions
     Add,
     Mul,
-    Inv,
+    Invert,
     Split,
     Eq,
     Lt,
@@ -76,7 +76,7 @@ pub enum AnInstruction<Dest> {
     Div,
     XxAdd,
     XxMul,
-    XInv,
+    XInvert,
     XbMul,
 
     // Read/write
@@ -89,19 +89,10 @@ impl<Dest: Display> Display for AnInstruction<Dest> {
         match self {
             // OpStack manipulation
             Pop => write!(f, "pop"),
-            Push(arg) => write!(f, "push {}", {
-                let n: u64 = arg.into();
-                n
-            }),
+            Push(arg) => write!(f, "push {}", arg),
             Divine => write!(f, "divine"),
-            Dup(arg) => write!(f, "dup{}", {
-                let n: usize = arg.into();
-                n
-            }),
-            Swap(arg) => write!(f, "swap{}", {
-                let n: usize = arg.into();
-                n
-            }),
+            Dup(arg) => write!(f, "dup{}", arg),
+            Swap(arg) => write!(f, "swap{}", arg),
             // Control flow
             Skiz => write!(f, "skiz"),
             Call(arg) => write!(f, "call {}", arg),
@@ -114,15 +105,15 @@ impl<Dest: Display> Display for AnInstruction<Dest> {
             ReadMem => write!(f, "read_mem"),
             WriteMem => write!(f, "write_mem"),
 
-            // Auxiliary register instructions
+            // Hash instructions
             Hash => write!(f, "hash"),
             DivineSibling => write!(f, "divine_sibling"),
-            AssertVector => write!(f, "assert_digest"),
+            AssertVector => write!(f, "assert_vector"),
 
             // Arithmetic on stack instructions
             Add => write!(f, "add"),
             Mul => write!(f, "mul"),
-            Inv => write!(f, "inv"),
+            Invert => write!(f, "invert"),
             Split => write!(f, "split"),
             Eq => write!(f, "eq"),
             Lt => write!(f, "lt"),
@@ -132,7 +123,7 @@ impl<Dest: Display> Display for AnInstruction<Dest> {
             Div => write!(f, "div"),
             XxAdd => write!(f, "xxadd"),
             XxMul => write!(f, "xxmul"),
-            XInv => write!(f, "xinv"),
+            XInvert => write!(f, "xinvert"),
             XbMul => write!(f, "xbmul"),
 
             // Read/write
@@ -173,7 +164,7 @@ impl<Dest> AnInstruction<Dest> {
             // Arithmetic on stack instructions
             Add => 40,
             Mul => 41,
-            Inv => 42,
+            Invert => 42,
             Split => 43,
             Eq => 44,
             Lt => 45,
@@ -184,7 +175,7 @@ impl<Dest> AnInstruction<Dest> {
 
             XxAdd => 50,
             XxMul => 51,
-            XInv => 52,
+            XInvert => 52,
             XbMul => 53,
 
             // Read/write
@@ -217,7 +208,7 @@ impl<Dest> AnInstruction<Dest> {
             DivineSibling => true,
             Add => true,
             Mul => true,
-            Inv => true,
+            Invert => true,
             Split => true,
             Eq => true,
             Lt => true,
@@ -227,7 +218,7 @@ impl<Dest> AnInstruction<Dest> {
             Div => true,
             XxAdd => true,
             XxMul => true,
-            XInv => true,
+            XInvert => true,
             XbMul => true,
             ReadIo => true,
             WriteIo => true,
@@ -261,11 +252,11 @@ impl<Dest> AnInstruction<Dest> {
             DivineSibling => false,
             Add => false,
             Mul => false,
-            Inv => false,
+            Invert => false,
             Eq => false,
             XxAdd => false,
             XxMul => false,
-            XInv => false,
+            XInvert => false,
             XbMul => false,
             ReadIo => false,
             WriteIo => false,
@@ -299,7 +290,7 @@ impl<Dest> AnInstruction<Dest> {
             AssertVector => 1,
             Add => 1,
             Mul => 1,
-            Inv => 1,
+            Invert => 1,
             Split => 1,
             Eq => 1,
             Lt => 1,
@@ -309,7 +300,7 @@ impl<Dest> AnInstruction<Dest> {
             Div => 1,
             XxAdd => 1,
             XxMul => 1,
-            XInv => 1,
+            XInvert => 1,
             XbMul => 1,
             WriteIo => 1,
             ReadIo => 1,
@@ -348,7 +339,7 @@ impl<Dest> AnInstruction<Dest> {
             AssertVector => AssertVector,
             Add => Add,
             Mul => Mul,
-            Inv => Inv,
+            Invert => Invert,
             Split => Split,
             Eq => Eq,
             Lt => Lt,
@@ -358,7 +349,7 @@ impl<Dest> AnInstruction<Dest> {
             Div => Div,
             XxAdd => XxAdd,
             XxMul => XxMul,
-            XInv => XInv,
+            XInvert => XInvert,
             XbMul => XbMul,
             ReadIo => ReadIo,
             WriteIo => WriteIo,
@@ -379,7 +370,7 @@ impl Instruction {
     }
 }
 
-fn ord8_to_bfe(n: &Ord8) -> BFieldElement {
+fn _ord8_to_bfe(n: &Ord8) -> BFieldElement {
     let n: u32 = n.into();
     n.into()
 }
@@ -529,7 +520,7 @@ fn parse_token(
         // Arithmetic on stack instructions
         "add" => vec![Add],
         "mul" => vec![Mul],
-        "inv" => vec![Inv],
+        "invert" => vec![Invert],
         "split" => vec![Split],
         "eq" => vec![Eq],
         "lt" => vec![Lt],
@@ -539,7 +530,7 @@ fn parse_token(
         "div" => vec![Div],
         "xxadd" => vec![XxAdd],
         "xxmul" => vec![XxMul],
-        "xinv" => vec![XInv],
+        "xinvert" => vec![XInvert],
         "xbmul" => vec![XbMul],
 
         // Read/write
@@ -581,8 +572,8 @@ fn parse_label(tokens: &mut SplitWhitespace) -> Result<String, Box<dyn Error>> {
 
 pub mod sample_programs {
     use super::super::vm::Program;
+    use super::Ord16::*;
     use super::{AnInstruction::*, LabelledInstruction};
-    use super::{Ord16::*, Ord8::*};
 
     pub const PUSH_PUSH_ADD_POP_S: &str = "
         push 1
@@ -605,18 +596,32 @@ pub mod sample_programs {
         "read_io ",                                         // index
         "read_io read_io read_io ",                         // leaf's value (XField Element)
         "absorb0 absorb1 absorb2 ",                         // absorb leaf's value into aux
-        "push 1 absorb3 ", // padding for xlix todo this line needs to be removed
-        "xlix ",           // compute leaf's digest
-        // todo: check if index is 1, terminate stepping up Merkle tree if it is
-        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 5 todo remove padding
-        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 4 todo remove padding
-        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 3 todo remove padding
-        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 2 todo remove padding
-        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 1 todo remove padding
-        "divine_sibling push 1 absorb12 xlix ", // move to Merkle tree level 0 todo remove padding
-        "assert ",                              // remove remnant of index
+        "xlix ",                                            // compute leaf's digest
+        "call 19 ",                                         // start Merkle tree traversal
+        "dup0 push 1 eq skiz call 30 ",                     // break loop if index is 1
+        "divine_sibling xlix recurse ",                     // move up one level in the Merkle tree
+        "assert ",                                          // remove remnant of index
         "assert_digest ",
         "halt",
+    );
+
+    // pub fn get_colinear_y(p0: (PFElem, PFElem), p1: (PFElem, PFElem), p2_x: PFElem) -> PFElem {
+    //     debug_assert_ne!(p0.x, p1.x, "Line must not be parallel to y-axis");
+    //     let dy = p0.y - p1.y;
+    //     let p2_y_times_dx = dy * (p2_x - p0.x);
+    //     let dx = p0.x - p1.x;
+    //     (p2_y_times_dx / dx) + p0.y
+    // }
+    pub const GET_COLINEAR_Y: &str = concat!(
+        "read_io ",                       // p2_x
+        "read_io read_io ",               // p1_y p1_x
+        "read_io read_io ",               // p0_y p0_x
+        "swap3 push -1 mul dup1 add ",    // dy = p0_y - p1_y
+        "dup3 push -1 mul dup5 add mul ", // dy·(p2_x - p0_x)
+        "dup3 dup3 push -1 mul add ",     // dx = p0_x - p1_x
+        "invert mul add ",                // compute result
+        "swap3 pop pop pop ",             // leave a clean stack
+        "write_io halt ",
     );
 
     pub const HELLO_WORLD_1: &str = "
@@ -638,6 +643,8 @@ pub mod sample_programs {
         write_io write_io write_io write_io write_io write_io write_io
         write_io write_io write_io write_io write_io write_io write_io
         ";
+
+    pub const HALT_THEN_DO_STUFF: &str = "halt push 1 push 2 add invert write_io";
 
     pub const WRITE_42: &str = "
         push 42
@@ -889,7 +896,7 @@ terminate: pop
             AssertVector,
             Add,
             Mul,
-            Inv,
+            Invert,
             Split,
             Eq,
             Lt,
@@ -899,7 +906,7 @@ terminate: pop
             Div,
             XxAdd,
             XxMul,
-            XInv,
+            XInvert,
             XbMul,
             ReadIo,
             WriteIo,
@@ -975,7 +982,7 @@ terminate: pop
             "assert_digest",
             "add",
             "mul",
-            "inv",
+            "invert",
             "split",
             "eq",
             "lt",
@@ -985,7 +992,7 @@ terminate: pop
             "div",
             "xxadd",
             "xxmul",
-            "xinv",
+            "xinvert",
             "xbmul",
             "read_io",
             "write_io",

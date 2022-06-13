@@ -70,9 +70,9 @@ impl<const M: usize> RescuePrimeXlix<M> {
         let mut states: Vec<[Word; aux_table::BASE_WIDTH]> = Vec::with_capacity(self.n);
 
         let mut idc: Word = 0.into();
-        let mut row = [idc; aux_table::BASE_WIDTH];
-        row[1..].copy_from_slice(state);
-        states.push(row);
+        let mut first_row = [idc; aux_table::BASE_WIDTH];
+        first_row[1..].copy_from_slice(state);
+        states.push(first_row);
 
         for round in 0..self.n {
             idc += 1.into();

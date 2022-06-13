@@ -11,7 +11,7 @@ pub enum InstructionError {
     MemoryAddressNotFound,
     InverseOfZero,
     RunawayInstructionArg,
-    IllegalInstructionAfterSkiz,
+    UngracefulTermination,
 }
 
 impl Display for InstructionError {
@@ -48,10 +48,10 @@ impl Display for InstructionError {
                 )
             }
 
-            IllegalInstructionAfterSkiz => {
+            UngracefulTermination => {
                 write!(
                     f,
-                    "A 'skiz' can only be followed by 'call', 'recurse' or 'return'"
+                    "The Virtual Machine must terminate using instruction Halt"
                 )
             }
         }

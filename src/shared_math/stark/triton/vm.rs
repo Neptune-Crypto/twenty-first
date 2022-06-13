@@ -119,7 +119,7 @@ impl Program {
         stdin: &mut In,
         secret_in: &mut In,
         stdout: &mut Out,
-        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
+        rescue_prime: &RescuePrimeXlix<{ AUX_REGISTER_COUNT }>,
     ) -> (BaseMatrices, Option<Box<dyn Error>>)
     where
         In: InputStream,
@@ -179,7 +179,7 @@ impl Program {
         stdin: &mut In,
         secret_in: &mut In,
         stdout: &mut Out,
-        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
+        rescue_prime: &RescuePrimeXlix<{ AUX_REGISTER_COUNT }>,
     ) -> (Vec<VMState>, Option<Box<dyn Error>>)
     where
         In: InputStream,
@@ -529,6 +529,22 @@ mod triton_vm_tests {
 
             assert_eq!(expected_output_rows, actual_output_rows);
         }
+    }
+
+    fn _check_polynomials_of_program(program: Program) {
+        let mut _rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&[]);
+        let mut secret_in = VecStream::new(&[]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (_base_matrices, _err) =
+            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+
+        // 1. Make table collections so we can extract polynomials.
+        // let table_collection = BaseTableCollection::from_base_matrices(base_matrices);
+
+        // 2. Extract polynomials to get vector of MPolynomial<BFieldElement>
     }
 
     #[test]

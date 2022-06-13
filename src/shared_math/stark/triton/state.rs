@@ -1,7 +1,7 @@
 use super::error::{vm_fail, InstructionError::*};
 use super::instruction::{AnInstruction::*, Instruction};
 use super::op_stack::OpStack;
-use super::ord_n::{Ord16, Ord16::*, Ord6::*};
+use super::ord_n::{Ord16::*, Ord6::*};
 use super::stdio::InputStream;
 use super::table::{aux_table, instruction_table, jump_stack_table, op_stack_table, u32_op_table};
 use super::table::{processor_table, ram_table};
@@ -82,6 +82,7 @@ pub enum VMOutput {
     U32OpTrace(Vec<[BWord; u32_op_table::BASE_WIDTH]>),
 }
 
+#[allow(clippy::needless_range_loop)]
 impl<'pgm> VMState<'pgm> {
     /// Create initial `VMState` for a given `program`
     ///
@@ -226,7 +227,7 @@ impl<'pgm> VMState<'pgm> {
                 let aux_trace = rescue_prime.rescue_xlix_permutation_trace(&mut aux);
                 vm_output = Some(VMOutput::XlixTrace(aux_trace));
 
-                for i in 0..DIGEST_LEN {
+                for _ in 0..DIGEST_LEN {
                     self.op_stack.push(0.into());
                 }
 
@@ -263,7 +264,7 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            Inv => {
+            Invert => {
                 let elem = self.op_stack.pop()?;
                 if elem.is_zero() {
                     return vm_err(InverseOfZero);
@@ -359,7 +360,7 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 1;
             }
 
-            XInv => {
+            XInvert => {
                 let elem: XWord = self.op_stack.popx()?;
                 self.op_stack.pushx(elem.inverse());
                 self.instruction_pointer += 1;
@@ -551,10 +552,10 @@ impl<'pgm> VMState<'pgm> {
 
     fn nia(&self) -> BWord {
         self.current_instruction()
-            .map(|instr| {
-                instr.arg().unwrap_or_else(|| {
+            .map(|curr_instr| {
+                curr_instr.arg().unwrap_or_else(|| {
                     self.next_instruction()
-                        .map(|instr| instr.opcode_b())
+                        .map(|next_instr| next_instr.opcode_b())
                         .unwrap_or_else(|_| 0.into())
                 })
             })
@@ -604,7 +605,6 @@ impl<'pgm> VMState<'pgm> {
         let ci = self.current_instruction()?;
         let ci_size = ci.size();
         let ni_pointer = self.instruction_pointer + ci_size;
-        println!("ci: {}, ci_size: {}, ni_ptr: {}", ci, ci_size, ni_pointer);
         self.program
             .get(ni_pointer)
             .ok_or_else(|| vm_fail(InstructionPointerOverflow(ni_pointer)))
@@ -726,6 +726,8 @@ impl<'pgm> VMState<'pgm> {
 impl<'pgm> Display for VMState<'pgm> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let res = self.current_instruction().map(|instruction| {
+            writeln!(f, " ╭────────────────╮")?;
+            writeln!(f, " │ {: <14} │", format!("{}", instruction))?;
             write!(
                 f,
                 "{}",
@@ -778,20 +780,34 @@ mod vm_state_tests {
     }
 
     #[test]
+    fn run_halt_then_do_stuff_test() {
+        let program = Program::from_code(sample_programs::HALT_THEN_DO_STUFF).unwrap();
+        let (trace, _out, err) = program.run_with_input(&[], &[]);
+
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+        if let Some(e) = err {
+            println!("Error: {}", e);
+        }
+
+        // todo check that the VM actually stopped on the halt instruction
+    }
+
+    #[test]
     #[ignore = "rewrite this test according to 'hash' instruction"]
     fn run_mt_ap_verify_test() {
-        let code = sample_programs::MT_AP_VERIFY;
-        let program = Program::from_code(code).unwrap();
+        let program = Program::from_code(sample_programs::MT_AP_VERIFY).unwrap();
         println!("Successfully parsed the program.");
         let (trace, _out, err) = program.run_with_input(
             &[
                 // Merkle root
-                BWord::new(17520959918188528334),
-                BWord::new(15041448862488693843),
-                BWord::new(298116966047567369),
-                BWord::new(15868284389682039986),
-                BWord::new(10576343946532188879),
-                BWord::new(9153918202384051329),
+                BWord::new(2661879877493968030),
+                BWord::new(8411897398996365015),
+                BWord::new(11724741215505059774),
+                BWord::new(10869446635029787183),
+                BWord::new(3194712170375950680),
+                BWord::new(5350293309391779043),
                 // leaf's index
                 BWord::new(92),
                 // leaf's value
@@ -801,47 +817,47 @@ mod vm_state_tests {
             ],
             &[
                 // Merkle Authentication Path Element 1
-                BWord::new(6083984126818143390),
-                BWord::new(3068114068019721586),
-                BWord::new(3759135683318231675),
-                BWord::new(12661293681732607010),
-                BWord::new(6748738404164062279),
-                BWord::new(9498241828820249207),
+                BWord::new(9199975892950715767),
+                BWord::new(18392437377232084500),
+                BWord::new(7389509101855274876),
+                BWord::new(13193152724141987884),
+                BWord::new(12764531673520060724),
+                BWord::new(16294749329463136349),
                 // Merkle Authentication Path Element 2
-                BWord::new(8915238764673447613),
-                BWord::new(942439158432159996),
-                BWord::new(312764170689326023),
-                BWord::new(10945419959481343904),
-                BWord::new(5750200734225507788),
-                BWord::new(3793111105236268823),
+                BWord::new(13265185672483741593),
+                BWord::new(4801722111881156327),
+                BWord::new(297253697970945484),
+                BWord::new(8955967409623509220),
+                BWord::new(10440367450900769517),
+                BWord::new(10816277785135288164),
                 // Merkle Authentication Path Element 3
-                BWord::new(14019449591007199492),
-                BWord::new(18357587908965733025),
-                BWord::new(12465922695385012477),
-                BWord::new(1517140721628804219),
-                BWord::new(9611960197719015309),
-                BWord::new(9776705825929245273),
+                BWord::new(3378320220263195325),
+                BWord::new(17709073937843856976),
+                BWord::new(3737595776877974498),
+                BWord::new(1050267233733511018),
+                BWord::new(18417031760560110797),
+                BWord::new(13081044610877517462),
                 // Merkle Authentication Path Element 4
-                BWord::new(7309515647084889872),
-                BWord::new(9712533577403755189),
-                BWord::new(4921865008647832542),
-                BWord::new(4769370959411372374),
-                BWord::new(14537750035888652552),
-                BWord::new(13532396896348551998),
+                BWord::new(11029368221459961736),
+                BWord::new(2601431810170510531),
+                BWord::new(3845091993529784163),
+                BWord::new(18440963282863373173),
+                BWord::new(15782363319704900162),
+                BWord::new(5649168943621408804),
                 // Merkle Authentication Path Element 5
-                BWord::new(16902405264740278807),
-                BWord::new(14918340102437258285),
-                BWord::new(979815985758098826),
-                BWord::new(17118084172379918870),
-                BWord::new(12824459547005533540),
-                BWord::new(16968722063561851448),
+                BWord::new(10193657868364591231),
+                BWord::new(10099674955292945516),
+                BWord::new(11861368391420694868),
+                BWord::new(12281343418175235418),
+                BWord::new(4979963636183136673),
+                BWord::new(18369998622044683261),
                 // Merkle Authentication Path Element 6
-                BWord::new(699976577639234824),
-                BWord::new(13059558942272293990),
-                BWord::new(15739587478100963457),
-                BWord::new(11329100596238735474),
-                BWord::new(11433851170242101939),
-                BWord::new(648656172379535759),
+                BWord::new(239086846863014618),
+                BWord::new(18353654918351264251),
+                BWord::new(1162413056004073118),
+                BWord::new(63172233802162855),
+                BWord::new(15287652336563130555),
+                BWord::new(6615623432715966135),
             ],
         );
 
@@ -852,11 +868,24 @@ mod vm_state_tests {
             println!("Error: {}", e);
         }
 
-        let last_state = trace.last().unwrap();
+        let _last_state = trace.last().unwrap();
         // todo check that VM terminated gracefully
         // assert_eq!(last_state.current_instruction().unwrap(), Halt);
+    }
 
-        println!("{}", last_state);
+    #[test]
+    fn run_get_colinear_y_tvmasm_test() {
+        let program = Program::from_code(sample_programs::GET_COLINEAR_Y).unwrap();
+        println!("Successfully parsed the program.");
+        let (trace, out, err) =
+            program.run_with_input(&[7.into(), 2.into(), 1.into(), 3.into(), 4.into()], &[]);
+        assert_eq!(out[0], 4.into());
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+        if let Some(e) = err {
+            println!("Error: {}", e);
+        }
     }
 
     #[test]
