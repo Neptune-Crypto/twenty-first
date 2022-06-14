@@ -17,7 +17,7 @@ pub const OP_STACK_TABLE_INITIALS_COUNT: usize =
 pub const OP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 4;
 
 pub const BASE_WIDTH: usize = 4;
-pub const FULL_WIDTH: usize = 5; // BASE + INITIALS
+pub const FULL_WIDTH: usize = 6; // BASE_WIDTH + 2 * INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -164,11 +164,14 @@ impl OpStackTable {
         let mut running_product = initials.processor_perm_initial;
 
         for row in self.data().iter() {
+            let mut extension_row = Vec::with_capacity(FULL_WIDTH);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
+
             let (clk, ci, osv, osp) = (
-                row[OpStackTableColumn::CLK as usize].lift(),
-                row[OpStackTableColumn::CI as usize].lift(),
-                row[OpStackTableColumn::OSV as usize].lift(),
-                row[OpStackTableColumn::OSP as usize].lift(),
+                extension_row[OpStackTableColumn::CLK as usize],
+                extension_row[OpStackTableColumn::CI as usize],
+                extension_row[OpStackTableColumn::OSV as usize],
+                extension_row[OpStackTableColumn::OSP as usize],
             );
 
             let (clk_w, ci_w, osp_w, osv_w) = (
@@ -182,8 +185,6 @@ impl OpStackTable {
             let compressed_row_for_permutation_argument =
                 clk * clk_w + ci * ci_w + osv * osv_w + osp * osp_w;
 
-            let mut extension_row = Vec::with_capacity(row.len() + 1);
-            extension_row.extend(row.iter().map(|elem| elem.lift()));
             extension_row.push(compressed_row_for_permutation_argument);
 
             // 2. Compute the running *product* of the compressed column (permutation value)

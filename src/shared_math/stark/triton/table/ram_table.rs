@@ -17,7 +17,7 @@ pub const RAM_TABLE_INITIALS_COUNT: usize =
 pub const RAM_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 3;
 
 pub const BASE_WIDTH: usize = 3;
-pub const FULL_WIDTH: usize = 4; // BASE + INITIALS
+pub const FULL_WIDTH: usize = 5; // BASE_WIDTH + 2 * INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -112,10 +112,13 @@ impl RAMTable {
         let mut running_product = initials.processor_perm_initial;
 
         for row in self.data().iter() {
+            let mut extension_row = Vec::with_capacity(FULL_WIDTH);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
+
             let (clk, ramp, ramv) = (
-                row[RAMTableColumn::CLK as usize].lift(),
-                row[RAMTableColumn::RAMP as usize].lift(),
-                row[RAMTableColumn::RAMV as usize].lift(),
+                extension_row[RAMTableColumn::CLK as usize],
+                extension_row[RAMTableColumn::RAMP as usize],
+                extension_row[RAMTableColumn::RAMV as usize],
             );
 
             let (clk_w, ramp_w, ramv_w) = (
@@ -128,8 +131,6 @@ impl RAMTable {
             let compressed_row_for_permutation_argument =
                 clk * clk_w + ramp * ramp_w + ramv * ramv_w;
 
-            let mut extension_row = Vec::with_capacity(row.len() + 1);
-            extension_row.extend(row.iter().map(|elem| elem.lift()));
             extension_row.push(compressed_row_for_permutation_argument);
 
             // 2. Compute the running *product* of the compressed column (permutation value)

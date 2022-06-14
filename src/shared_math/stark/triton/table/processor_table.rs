@@ -18,7 +18,8 @@ pub const PROCESSOR_TABLE_INITIALS_COUNT: usize =
 pub const PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 48;
 
 pub const BASE_WIDTH: usize = 39;
-pub const FULL_WIDTH: usize = 52; // BASE + INITIALS
+/// BASE_WIDTH + 2 * INITIALS_COUNT - 2 (because IOSymbols don't need compression)
+pub const FULL_WIDTH: usize = 63;
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;

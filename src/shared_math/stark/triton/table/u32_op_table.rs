@@ -7,7 +7,6 @@ use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::table::base_matrix::U32OpTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
-use itertools::Itertools;
 
 pub const U32_OP_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 5;
 pub const U32_OP_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 0;
@@ -18,7 +17,7 @@ pub const U32_OP_TABLE_INITIALS_COUNT: usize =
 pub const U32_OP_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 15;
 
 pub const BASE_WIDTH: usize = 7;
-pub const FULL_WIDTH: usize = 12; // BASE + INITIALS
+pub const FULL_WIDTH: usize = 17; // BASE_WIDTH + 2 * INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -162,12 +161,15 @@ impl U32OpTable {
 
         let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
         for row in self.data().iter() {
-            let mut extension_row = row.iter().map(|elem| elem.lift()).collect_vec();
-            let lhs = row[U32OpTableColumn::LHS as usize].lift();
-            let rhs = row[U32OpTableColumn::RHS as usize].lift();
+            let mut extension_row = Vec::with_capacity(FULL_WIDTH);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
+
+            // lhs and rhs are needed for _all_ of U32Table's Permutation Arguments
+            let lhs = extension_row[U32OpTableColumn::LHS as usize];
+            let rhs = extension_row[U32OpTableColumn::RHS as usize];
 
             // Compress (lhs, rhs, lt) into single value
-            let lt = row[U32OpTableColumn::LT as usize].lift();
+            let lt = extension_row[U32OpTableColumn::LT as usize];
             let compressed_row_for_lt = lhs * challenges.u32_op_table_challenges.lt_lhs_weight
                 + rhs * challenges.u32_op_table_challenges.lt_rhs_weight
                 + lt * challenges.u32_op_table_challenges.lt_result_weight;
@@ -182,7 +184,7 @@ impl U32OpTable {
             extension_row.push(lt_running_product);
 
             // Compress (lhs, rhs, and) into single value
-            let and = row[U32OpTableColumn::AND as usize].lift();
+            let and = extension_row[U32OpTableColumn::AND as usize];
             let compressed_row_for_and = lhs * challenges.u32_op_table_challenges.and_lhs_weight
                 + rhs * challenges.u32_op_table_challenges.and_rhs_weight
                 + and * challenges.u32_op_table_challenges.and_result_weight;
@@ -197,7 +199,7 @@ impl U32OpTable {
             extension_row.push(and_running_product);
 
             // Compress (lhs, rhs, xor) into single value
-            let xor = row[U32OpTableColumn::XOR as usize].lift();
+            let xor = extension_row[U32OpTableColumn::XOR as usize];
             let compressed_row_for_xor = lhs * challenges.u32_op_table_challenges.xor_lhs_weight
                 + rhs * challenges.u32_op_table_challenges.xor_rhs_weight
                 + xor * challenges.u32_op_table_challenges.xor_result_weight;
@@ -212,7 +214,7 @@ impl U32OpTable {
             extension_row.push(xor_running_product);
 
             // Compress (lhs, rhs, reverse) into single value
-            let reverse = row[U32OpTableColumn::REV as usize].lift();
+            let reverse = extension_row[U32OpTableColumn::REV as usize];
             let compressed_row_for_reverse = lhs
                 * challenges.u32_op_table_challenges.reverse_lhs_weight
                 + rhs * challenges.u32_op_table_challenges.reverse_rhs_weight
@@ -228,7 +230,7 @@ impl U32OpTable {
             extension_row.push(reverse_running_product);
 
             // Compress (lhs, rhs, lt) into single value for div
-            let lt_for_div = row[U32OpTableColumn::LT as usize].lift();
+            let lt_for_div = extension_row[U32OpTableColumn::LT as usize];
             let compressed_row_for_div = lhs * challenges.u32_op_table_challenges.div_lhs_weight
                 + rhs * challenges.u32_op_table_challenges.div_rhs_weight
                 + lt_for_div * challenges.u32_op_table_challenges.div_result_weight;

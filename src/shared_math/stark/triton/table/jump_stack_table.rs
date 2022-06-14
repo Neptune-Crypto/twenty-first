@@ -19,7 +19,7 @@ pub const JUMP_STACK_TABLE_INITIALS_COUNT: usize =
 pub const JUMP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 5;
 
 pub const BASE_WIDTH: usize = 4;
-pub const FULL_WIDTH: usize = 5; // BASE + INITIALS
+pub const FULL_WIDTH: usize = 6; // BASE_WIDTH + 2 * INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -167,12 +167,15 @@ impl JumpStackTable {
         let mut running_product = initials.processor_perm_initial;
 
         for row in self.data().iter() {
+            let mut extension_row = Vec::with_capacity(FULL_WIDTH);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
+
             let (clk, ci, jsp, jso, jsd) = (
-                row[JumpStackTableColumn::CLK as usize].lift(),
-                row[JumpStackTableColumn::CI as usize].lift(),
-                row[JumpStackTableColumn::JSP as usize].lift(),
-                row[JumpStackTableColumn::JSO as usize].lift(),
-                row[JumpStackTableColumn::JSD as usize].lift(),
+                extension_row[JumpStackTableColumn::CLK as usize],
+                extension_row[JumpStackTableColumn::CI as usize],
+                extension_row[JumpStackTableColumn::JSP as usize],
+                extension_row[JumpStackTableColumn::JSO as usize],
+                extension_row[JumpStackTableColumn::JSD as usize],
             );
 
             let (clk_w, ci_w, jsp_w, jso_w, jsd_w) = (
@@ -187,8 +190,6 @@ impl JumpStackTable {
             let compressed_row_for_permutation_argument =
                 clk * clk_w + ci * ci_w + jsp * jsp_w + jso * jso_w + jsd * jsd_w;
 
-            let mut extension_row = Vec::with_capacity(row.len() + 1);
-            extension_row.extend(row.iter().map(|elem| elem.lift()));
             extension_row.push(compressed_row_for_permutation_argument);
 
             // 2. Compute the running *product* of the compressed column (permutation value)

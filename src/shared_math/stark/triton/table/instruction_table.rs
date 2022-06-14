@@ -8,6 +8,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
+use crate::shared_math::stark::triton::table::base_matrix::InstructionTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const INSTRUCTION_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 1;
@@ -19,7 +20,7 @@ pub const INSTRUCTION_TABLE_INITIALS_COUNT: usize =
 pub const INSTRUCTION_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 5;
 
 pub const BASE_WIDTH: usize = 3;
-pub const FULL_WIDTH: usize = 5; // BASE + INITIALS
+pub const FULL_WIDTH: usize = 7; // BASE_WIDTH + 2 * INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -169,7 +170,8 @@ impl InstructionTable {
         let mut running_sum = initials.program_eval_initial;
 
         for row in self.data().iter() {
-            let mut extension_row = row.iter().map(|elem| elem.lift()).collect_vec();
+            let mut extension_row = Vec::with_capacity(FULL_WIDTH);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
 
             // 1. Compress multiple values within one row so they become one value.
             let ip = row[Address as usize].lift();

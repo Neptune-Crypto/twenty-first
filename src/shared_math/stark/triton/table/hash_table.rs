@@ -21,7 +21,7 @@ pub const HASH_TABLE_INITIALS_COUNT: usize =
 pub const HASH_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 18;
 
 pub const BASE_WIDTH: usize = 17;
-pub const FULL_WIDTH: usize = 19; // BASE + INITIALS
+pub const FULL_WIDTH: usize = 21; // BASE_WIDTH + 2 * INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -164,22 +164,23 @@ impl HashTable {
 
         let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
         for row in self.data().iter() {
-            let mut extension_row = row.iter().map(|elem| elem.lift()).collect_vec();
+            let mut extension_row = Vec::with_capacity(FULL_WIDTH);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
 
             // Compress input values into single value (independent of round index)
             let aux_for_input = [
-                row[HashTableColumn::AUX0 as usize].lift(),
-                row[HashTableColumn::AUX1 as usize].lift(),
-                row[HashTableColumn::AUX2 as usize].lift(),
-                row[HashTableColumn::AUX3 as usize].lift(),
-                row[HashTableColumn::AUX4 as usize].lift(),
-                row[HashTableColumn::AUX5 as usize].lift(),
-                row[HashTableColumn::AUX6 as usize].lift(),
-                row[HashTableColumn::AUX7 as usize].lift(),
-                row[HashTableColumn::AUX8 as usize].lift(),
-                row[HashTableColumn::AUX9 as usize].lift(),
-                row[HashTableColumn::AUX10 as usize].lift(),
-                row[HashTableColumn::AUX11 as usize].lift(),
+                extension_row[HashTableColumn::AUX0 as usize],
+                extension_row[HashTableColumn::AUX1 as usize],
+                extension_row[HashTableColumn::AUX2 as usize],
+                extension_row[HashTableColumn::AUX3 as usize],
+                extension_row[HashTableColumn::AUX4 as usize],
+                extension_row[HashTableColumn::AUX5 as usize],
+                extension_row[HashTableColumn::AUX6 as usize],
+                extension_row[HashTableColumn::AUX7 as usize],
+                extension_row[HashTableColumn::AUX8 as usize],
+                extension_row[HashTableColumn::AUX9 as usize],
+                extension_row[HashTableColumn::AUX10 as usize],
+                extension_row[HashTableColumn::AUX11 as usize],
             ];
             let compressed_aux_for_input = aux_for_input
                 .iter()
@@ -200,12 +201,12 @@ impl HashTable {
 
             // Compress digest values into single value (independent of round index)
             let aux_for_output = [
-                row[HashTableColumn::AUX0 as usize].lift(),
-                row[HashTableColumn::AUX1 as usize].lift(),
-                row[HashTableColumn::AUX2 as usize].lift(),
-                row[HashTableColumn::AUX3 as usize].lift(),
-                row[HashTableColumn::AUX4 as usize].lift(),
-                row[HashTableColumn::AUX5 as usize].lift(),
+                extension_row[HashTableColumn::AUX0 as usize],
+                extension_row[HashTableColumn::AUX1 as usize],
+                extension_row[HashTableColumn::AUX2 as usize],
+                extension_row[HashTableColumn::AUX3 as usize],
+                extension_row[HashTableColumn::AUX4 as usize],
+                extension_row[HashTableColumn::AUX5 as usize],
             ];
             let compressed_aux_for_output = aux_for_output
                 .iter()

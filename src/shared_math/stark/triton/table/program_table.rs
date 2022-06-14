@@ -17,7 +17,7 @@ pub const PROGRAM_TABLE_INITIALS_COUNT: usize =
 pub const PROGRAM_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 2;
 
 pub const BASE_WIDTH: usize = 2;
-pub const FULL_WIDTH: usize = 3; // BASE + INITIALS
+pub const FULL_WIDTH: usize = 4; // BASE_WIDTH + 2 * INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;

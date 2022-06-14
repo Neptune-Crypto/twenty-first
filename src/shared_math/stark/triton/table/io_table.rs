@@ -19,7 +19,7 @@ pub const IOTABLE_INITIALS_COUNT: usize =
 pub const IOTABLE_EXTENSION_CHALLENGE_COUNT: usize = 0;
 
 pub const BASE_WIDTH: usize = 1;
-pub const FULL_WIDTH: usize = 2; // BASE + INITIALS
+pub const FULL_WIDTH: usize = 2; // BASE_WIDTH + INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -152,10 +152,10 @@ impl IOTable {
         Self { base }
     }
 
-    pub fn extend(&self, challenges: &IOTableChallenges, initials: &IOTableInitials) -> ExtIOTable {
+    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtIOTable {
         let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
 
-        let mut running_sum = initials.processor_eval_initial;
+        let mut running_sum = initials.input_table_initials.processor_eval_initial;
 
         for row in self.data().iter() {
             let mut extension_row = Vec::with_capacity(FULL_WIDTH);
@@ -167,8 +167,11 @@ impl IOTable {
             // 3. Not applicable
 
             // 4. In the case of the evalutation arguement we need to compute the running *sum*.
-            running_sum = running_sum * challenges.processor_eval_row_weight + iosymbol;
+            running_sum = running_sum * challenges.input_table_challenges.processor_eval_row_weight
+                + iosymbol;
             extension_row.push(running_sum);
+
+            extension_matrix.push(extension_row);
         }
 
         let base = self.base.with_lifted_data(extension_matrix);
