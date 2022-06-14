@@ -21,6 +21,14 @@ pub struct RescuePrimeXlix<const M: usize> {
     pub round_constants: Vec<Word>,
 }
 
+// Dummy-implementation of rescue prime hasher to allow composite types
+// to be compared for equality
+impl<const M: usize> PartialEq for RescuePrimeXlix<M> {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
 #[allow(clippy::needless_range_loop)]
 impl<const M: usize> RescuePrimeXlix<M> {
     /// Hash an arbitrary-length slice of words into a vector of at most `M`
@@ -185,6 +193,13 @@ pub fn neptune_params() -> RescuePrimeXlix<RP_DEFAULT_WIDTH> {
 #[cfg(test)]
 mod rescue_prime_xlix_tests {
     use super::*;
+
+    #[test]
+    fn equality_test() {
+        let rp0 = neptune_params();
+        let rp1 = neptune_params();
+        assert_eq!(rp0, rp1, "Two Rescue Prime hashers must be equal");
+    }
 
     #[test]
     fn test_vector_0() {
