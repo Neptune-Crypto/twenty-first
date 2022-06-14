@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use super::base_matrix::InstructionTableColumn;
+use super::base_matrix::InstructionTableColumn::*;
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::challenges_initials::{AllChallenges, AllInitials};
 use super::extension_table::ExtensionTable;
@@ -172,11 +172,10 @@ impl InstructionTable {
             let mut extension_row = row.iter().map(|elem| elem.lift()).collect_vec();
 
             // 1. Compress multiple values within one row so they become one value.
-            let (ip, ci, nia) = (
-                row[InstructionTableColumn::Address as usize].lift(),
-                row[InstructionTableColumn::CI as usize].lift(),
-                row[InstructionTableColumn::NIA as usize].lift(),
-            );
+            let ip = row[Address as usize].lift();
+            let ci = row[CI as usize].lift();
+            let nia = row[NIA as usize].lift();
+
             let (ip_w, ci_w, nia_w) = (
                 challenges.ip_weight,
                 challenges.ci_processor_weight,
@@ -191,10 +190,9 @@ impl InstructionTable {
             extension_row.push(running_product);
 
             // 3. Since we are in the instruction table we compress multiple values for the evaluation arguement.
-            let (address, instruction) = (
-                row[InstructionTableColumn::Address as usize].lift(),
-                row[InstructionTableColumn::CI as usize].lift(),
-            );
+            let address = row[Address as usize].lift();
+            let instruction = row[CI as usize].lift();
+
             let (address_w, instruction_w) =
                 (challenges.addr_weight, challenges.instruction_weight);
             let compressed_row_for_evaluation_arguement =

@@ -4,7 +4,12 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
+<<<<<<< Updated upstream
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
+||||||| constructed merge base
+=======
+use crate::shared_math::stark::triton::table::base_matrix::IOTableColumn::*;
+>>>>>>> Stashed changes
 use crate::shared_math::x_field_element::XFieldElement;
 
 /// Determine how many random values we get from the verifier
@@ -151,8 +156,33 @@ impl IOTable {
         Self { base }
     }
 
-    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtIOTable {
-        todo!()
+    pub fn extend(&self, challenges: &IOTableChallenges, initials: &IOTableInitials) -> ExtIOTable {
+        let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
+
+        let mut running_sum = initials.processor_eval_initial;
+
+        for row in self.data().iter() {
+            let mut extension_row = Vec::with_capacity(row.len() + 1);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
+
+            let iosymbol = row[IOSymbol as usize].lift();
+            // No linear combination because we only have one column and no challenges.
+            extension_row.push(iosymbol);
+
+            // 2. In the case of the permutation value we need to compute the running *product* of the compressed column.
+            //running_product = running_product * (challenges.processor_perm_row_weight - iosymbol);
+            //extension_row.push(running_product);
+
+            // 3. Not applicable
+
+            // 4. In the case of the evalutation arguement we need to compute the running *sum*.
+            running_sum = running_sum * challenges.processor_eval_row_weight + iosymbol;
+            extension_row.push(running_sum);
+        }
+
+        let base = self.base.with_lifted_data(extension_matrix);
+
+        ExtIOTable { base }
     }
 }
 
