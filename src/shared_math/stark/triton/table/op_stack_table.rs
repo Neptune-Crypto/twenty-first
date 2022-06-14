@@ -152,8 +152,51 @@ impl OpStackTable {
         Self { base }
     }
 
-    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtOpStackTable {
-        todo!()
+    pub fn extend(
+        &self,
+        all_challenges: &AllChallenges,
+        all_initials: &AllInitials,
+    ) -> ExtOpStackTable {
+        let challenges = &all_challenges.op_stack_table_challenges;
+        let initials = &all_initials.op_stack_table_initials;
+
+        let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
+        let mut running_product = initials.processor_perm_initial;
+
+        for row in self.data().iter() {
+            let (clk, ci, osv, osp) = (
+                row[OpStackTableColumn::CLK as usize].lift(),
+                row[OpStackTableColumn::CI as usize].lift(),
+                row[OpStackTableColumn::OSV as usize].lift(),
+                row[OpStackTableColumn::OSP as usize].lift(),
+            );
+
+            let (clk_w, ci_w, osp_w, osv_w) = (
+                challenges.clk_weight,
+                challenges.ci_weight,
+                challenges.osv_weight,
+                challenges.osp_weight,
+            );
+
+            // 1. Compress multiple values within one row so they become one value.
+            let compressed_row_for_permutation_argument =
+                clk * clk_w + ci * ci_w + osv * osv_w + osp * osp_w;
+
+            let mut extension_row = Vec::with_capacity(row.len() + 1);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
+            extension_row.push(compressed_row_for_permutation_argument);
+
+            // 2. Compute the running *product* of the compressed column (permutation value)
+            running_product = running_product
+                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_argument);
+            extension_row.push(running_product);
+
+            extension_matrix.push(extension_row);
+        }
+
+        let base = self.base.with_lifted_data(extension_matrix);
+
+        ExtOpStackTable { base }
     }
 }
 
