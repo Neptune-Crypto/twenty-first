@@ -7,7 +7,10 @@ use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::neptune_params;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::state::{AUX_REGISTER_COUNT, DIGEST_LEN};
+use crate::shared_math::stark::triton::table::base_matrix::HashTableColumn;
+use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::x_field_element::XFieldElement;
+use itertools::Itertools;
 
 pub const HASH_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 0;
 pub const HASH_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 2;
@@ -155,7 +158,90 @@ impl HashTable {
     }
 
     pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtHashTable {
-        todo!()
+        let mut from_processor_running_sum =
+            initials.hash_table_initials.from_processor_eval_initial;
+        let mut to_processor_running_sum = initials.hash_table_initials.to_processor_eval_initial;
+
+        let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
+        for row in self.data().iter() {
+            let mut extension_row = row.iter().map(|elem| elem.lift()).collect_vec();
+
+            // Compress input values into single value (independent of round index)
+            let aux_for_input = [
+                row[HashTableColumn::AUX0 as usize].lift(),
+                row[HashTableColumn::AUX1 as usize].lift(),
+                row[HashTableColumn::AUX2 as usize].lift(),
+                row[HashTableColumn::AUX3 as usize].lift(),
+                row[HashTableColumn::AUX4 as usize].lift(),
+                row[HashTableColumn::AUX5 as usize].lift(),
+                row[HashTableColumn::AUX6 as usize].lift(),
+                row[HashTableColumn::AUX7 as usize].lift(),
+                row[HashTableColumn::AUX8 as usize].lift(),
+                row[HashTableColumn::AUX9 as usize].lift(),
+                row[HashTableColumn::AUX10 as usize].lift(),
+                row[HashTableColumn::AUX11 as usize].lift(),
+            ];
+            let compressed_aux_for_input = aux_for_input
+                .iter()
+                .zip(challenges.hash_table_challenges.stack_input_weights.iter())
+                .map(|(aux, weight)| *weight * *aux)
+                .fold(XWord::ring_zero(), |sum, summand| sum + summand);
+            extension_row.push(compressed_aux_for_input);
+
+            // Add compressed input to running sum if round index is 0
+            if row[HashTableColumn::RoundNumber as usize].is_zero() {
+                from_processor_running_sum = from_processor_running_sum
+                    * challenges
+                        .hash_table_challenges
+                        .from_processor_eval_row_weight
+                    + compressed_aux_for_input;
+            }
+            extension_row.push(from_processor_running_sum);
+
+            // Compress digest values into single value (independent of round index)
+            let aux_for_output = [
+                row[HashTableColumn::AUX0 as usize].lift(),
+                row[HashTableColumn::AUX1 as usize].lift(),
+                row[HashTableColumn::AUX2 as usize].lift(),
+                row[HashTableColumn::AUX3 as usize].lift(),
+                row[HashTableColumn::AUX4 as usize].lift(),
+                row[HashTableColumn::AUX5 as usize].lift(),
+            ];
+            let compressed_aux_for_output = aux_for_output
+                .iter()
+                .zip(
+                    challenges
+                        .hash_table_challenges
+                        .digest_output_weights
+                        .iter(),
+                )
+                .map(|(aux, weight)| *weight * *aux)
+                .fold(XWord::ring_zero(), |sum, summand| sum + summand);
+            extension_row.push(compressed_aux_for_output);
+
+            // Add compressed digest to running sum if round index is 7
+            if row[HashTableColumn::RoundNumber as usize].value() == 7 {
+                to_processor_running_sum = to_processor_running_sum
+                    * challenges
+                        .hash_table_challenges
+                        .to_processor_eval_row_weight
+                    + compressed_aux_for_output;
+            }
+            extension_row.push(to_processor_running_sum);
+
+            extension_matrix.push(extension_row);
+        }
+
+        let base = BaseTable::<XWord>::new(
+            self.width(),
+            self.padded_height(),
+            self.num_randomizers(),
+            self.omicron().lift(),
+            self.generator().lift(),
+            self.order(),
+            extension_matrix,
+        );
+        ExtHashTable { base }
     }
 }
 
