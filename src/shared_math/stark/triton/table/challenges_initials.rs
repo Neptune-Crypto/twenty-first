@@ -273,7 +273,19 @@ impl AllInitials {
         };
 
         let processor_table_initials = ProcessorTableInitials {
-            processor_perm_initial: weights.pop().unwrap(),
+            input_table_eval_initial: todo!(),
+            output_table_eval_initial: todo!(),
+            instruction_table_perm_initial: todo!(),
+            opstack_table_perm_initial: todo!(),
+            ram_table_perm_initial: todo!(),
+            jump_stack_perm_initial: todo!(),
+            to_hash_table_eval_initial: todo!(),
+            from_hash_table_eval_initial: todo!(),
+            u32_table_lt_perm_initial: todo!(),
+            u32_table_and_perm_initial: todo!(),
+            u32_table_xor_perm_initial: todo!(),
+            u32_table_reverse_perm_initial: todo!(),
+            u32_table_div_perm_initial: todo!(),
         };
 
         let op_stack_table_initials = OpStackTableInitials {

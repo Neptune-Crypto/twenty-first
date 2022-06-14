@@ -183,12 +183,12 @@ impl InstructionTable {
                 challenges.ci_processor_weight,
                 challenges.nia_weight,
             );
-            let compressed_row_for_permutation_arguement = ip * ip_w + ci * ci_w + nia * nia_w;
-            extension_row.push(compressed_row_for_permutation_arguement);
+            let compressed_row_for_permutation_argument = ip * ip_w + ci * ci_w + nia * nia_w;
+            extension_row.push(compressed_row_for_permutation_argument);
 
             // 2. In the case of the permutation value we need to compute the running *product* of the compressed column.
             running_product = running_product
-                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_arguement);
+                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_argument);
             extension_row.push(running_product);
 
             // 3. Since we are in the instruction table we compress multiple values for the evaluation arguement.
