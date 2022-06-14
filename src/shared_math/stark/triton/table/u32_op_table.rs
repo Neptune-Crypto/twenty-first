@@ -4,6 +4,7 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const U32_OP_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 5;
@@ -148,12 +149,17 @@ impl U32OpTable {
         Self { base }
     }
 
-    pub fn extend(
-        &self,
-        challenges: &U32OpTableChallenges,
-        initials: &U32OpTableInitials,
-    ) -> ExtU32OpTable {
+    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtU32OpTable {
         todo!()
+    }
+}
+
+impl ExtU32OpTable {
+    pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
+        let ext_codewords = self.low_degree_extension(fri_domain);
+        let base = self.base.with_data(ext_codewords);
+
+        ExtU32OpTable { base }
     }
 }
 

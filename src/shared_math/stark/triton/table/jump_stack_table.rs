@@ -4,6 +4,7 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::table::base_matrix::JumpStackTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -154,10 +155,19 @@ impl JumpStackTable {
 
     pub fn extend(
         &self,
-        all_challenges: &JumpStackTableChallenges,
-        all_initials: &JumpStackTableInitials,
+        all_challenges: &AllChallenges,
+        all_initials: &AllInitials,
     ) -> ExtJumpStackTable {
         todo!()
+    }
+}
+
+impl ExtJumpStackTable {
+    pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
+        let ext_codewords = self.low_degree_extension(fri_domain);
+        let base = self.base.with_data(ext_codewords);
+
+        ExtJumpStackTable { base }
     }
 }
 

@@ -6,6 +6,7 @@ use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::rescue_prime_xlix::{neptune_params, RescuePrimeXlix, RP_DEFAULT_WIDTH};
 use crate::shared_math::stark::brainfuck::stark_proof_stream::{Item, StarkProofStream};
+use crate::shared_math::stark::triton::fri_domain::lift_domain;
 use crate::shared_math::stark::triton::instruction::sample_programs;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::stark::triton::table::challenges_initials::{AllChallenges, AllInitials};
@@ -21,6 +22,7 @@ use crate::util_types::simple_hasher::Hasher;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 type BWord = BFieldElement;
+type XWord = XFieldElement;
 type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
 type StarkDigest = Vec<BFieldElement>;
 
@@ -29,7 +31,7 @@ pub struct Stark {
     _padded_height: usize,
     _log_expansion_factor: usize,
     _security_level: usize,
-    _fri_domain: triton::fri_domain::FriDomain<BWord>,
+    fri_domain: triton::fri_domain::FriDomain<BWord>,
     fri: xfri::Fri<StarkHasher>,
 }
 
@@ -134,7 +136,7 @@ impl Stark {
         timer.elapsed("randomizer_codewords");
 
         let base_codewords: Vec<Vec<BFieldElement>> =
-            base_tables.all_base_codewords(&self._fri_domain);
+            base_tables.all_base_codewords(&self.fri_domain);
 
         let all_base_codewords =
             vec![b_randomizer_codewords.into(), base_codewords.clone()].concat();
@@ -175,7 +177,9 @@ impl Stark {
         let initials: AllInitials =
             AllInitials::new(Self::sample_weights(&hasher, &seed, AllInitials::TOTAL));
 
-        let ext_tables = ExtTableCollection::from_base_tables(&base_tables, &challenges, &initials);
+        let ext_tables = ExtTableCollection::extend_tables(&base_tables, &challenges, &initials);
+        let ext_codeword_tables = ext_tables.codeword_tables(&lift_domain(&self.fri_domain));
+        let all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
 
         todo!()
     }

@@ -39,6 +39,15 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
         order: usize,
         matrix: Vec<Vec<DataPF>>,
     ) -> Self {
+        if !matrix.is_empty() {
+            let actual_padded_height = roundup_npo2(matrix.len() as u64) as usize;
+            assert_eq!(
+                padded_height, actual_padded_height,
+                "Expected padded_height {}, but data pads to {}",
+                padded_height, actual_padded_height,
+            );
+        }
+
         BaseTable {
             width,
             padded_height,
@@ -48,6 +57,19 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
             order,
             matrix,
         }
+    }
+
+    /// Create a `BaseTable<DataPF>` with the same parameters, but new `matrix` data.
+    pub fn with_data(&self, matrix: Vec<Vec<DataPF>>) -> Self {
+        BaseTable::new(
+            self.width,
+            self.padded_height,
+            self.num_randomizers,
+            self.omicron,
+            self.generator,
+            self.order,
+            matrix,
+        )
     }
 }
 

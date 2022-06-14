@@ -3,7 +3,8 @@ use super::challenges_initials::{AllChallenges, AllInitials};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::other::{self};
+use crate::shared_math::other;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::table::base_matrix::OpStackTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -151,12 +152,17 @@ impl OpStackTable {
         Self { base }
     }
 
-    pub fn extend(
-        &self,
-        challenges: &OpStackTableChallenges,
-        initials: &OpStackTableInitials,
-    ) -> ExtOpStackTable {
+    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtOpStackTable {
         todo!()
+    }
+}
+
+impl ExtOpStackTable {
+    pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
+        let ext_codewords = self.low_degree_extension(fri_domain);
+        let base = self.base.with_data(ext_codewords);
+
+        ExtOpStackTable { base }
     }
 }
 

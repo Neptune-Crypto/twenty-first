@@ -5,6 +5,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::rescue_prime_xlix::neptune_params;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::state::{AUX_REGISTER_COUNT, DIGEST_LEN};
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -153,12 +154,17 @@ impl HashTable {
         Self { base }
     }
 
-    pub fn extend(
-        &self,
-        challenges: &HashTableChallenges,
-        initials: &HashTableInitials,
-    ) -> ExtHashTable {
+    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtHashTable {
         todo!()
+    }
+}
+
+impl ExtHashTable {
+    pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
+        let ext_codewords = self.low_degree_extension(fri_domain);
+        let base = self.base.with_data(ext_codewords);
+
+        ExtHashTable { base }
     }
 }
 

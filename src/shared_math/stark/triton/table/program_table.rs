@@ -4,6 +4,7 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::table::base_matrix::ProgramTableColum;
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -152,12 +153,17 @@ impl ProgramTable {
         Self { base }
     }
 
-    pub fn extend(
-        &self,
-        challenges: &ProgramTableChallenges,
-        initials: &ProgramTableInitials,
-    ) -> ExtProgramTable {
+    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtProgramTable {
         todo!()
+    }
+}
+
+impl ExtProgramTable {
+    pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
+        let ext_codewords = self.low_degree_extension(fri_domain);
+        let base = self.base.with_data(ext_codewords);
+
+        ExtProgramTable { base }
     }
 }
 

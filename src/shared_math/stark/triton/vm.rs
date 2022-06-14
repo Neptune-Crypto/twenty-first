@@ -604,10 +604,7 @@ mod triton_vm_tests {
             let challenges: AllChallenges = todo!();
             let initials: AllInitials = todo!();
 
-            let ext_processor_table = processor_table.extend(
-                &challenges.processor_table_challenges,
-                &initials.processor_table_initials,
-            );
+            let ext_processor_table = processor_table.extend(&challenges, &initials);
             let x_air_constraints = ext_processor_table.ext_transition_constraints(&challenges);
             let ext_data = ext_processor_table.data();
 

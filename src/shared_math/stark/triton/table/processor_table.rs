@@ -5,6 +5,7 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -37,12 +38,7 @@ impl HasBaseTable<BWord> for ProcessorTable {
     }
 }
 
-// TODO: Replace `unpadded_height` with `padded_height` so that verify() can instantiate it.
 impl ProcessorTable {
-    // TODO: new() for prover: Takes matrix, but not padded_height
-    // TODO: new() for verifier: Takes padded height
-    // Removing unpadded_height propagates to BaseTable.
-
     pub fn new_verifier(
         generator: BWord,
         order: usize,
@@ -90,12 +86,17 @@ impl ProcessorTable {
         Self { base }
     }
 
-    pub fn extend(
-        &self,
-        challenges: &ProcessorTableChallenges,
-        initials: &ProcessorTableInitials,
-    ) -> ExtProcessorTable {
+    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtProcessorTable {
         todo!()
+    }
+}
+
+impl ExtProcessorTable {
+    pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
+        let ext_codewords = self.low_degree_extension(fri_domain);
+        let base = self.base.with_data(ext_codewords);
+
+        ExtProcessorTable { base }
     }
 }
 

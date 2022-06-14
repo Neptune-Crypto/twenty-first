@@ -195,60 +195,42 @@ impl<'a> IntoIterator for &'a BaseTableCollection {
 }
 
 impl ExtTableCollection {
-    pub fn from_base_tables(
+    /// Create an ExtTableCollection from a BaseTableCollection by
+    /// `.extend()`ing each base table.
+    ///
+    /// The `.extend()` for each table is specific to that table, but always
+    /// involves adding some number of columns. Each table only needs their
+    /// own challenges and initials, but `AllChallenges` and `AllInitials`
+    /// are passed everywhere to keep each table's `.extend()` homogenous.
+    pub fn extend_tables(
         tables: &BaseTableCollection,
         all_challenges: &AllChallenges,
         all_initials: &AllInitials,
     ) -> Self {
-        let program_table = tables.program_table.extend(
-            &all_challenges.program_table_challenges,
-            &all_initials.program_table_initials,
-        );
+        let program_table = tables.program_table.extend(&all_challenges, &all_initials);
 
-        let instruction_table = tables.instruction_table.extend(
-            &all_challenges.instruction_table_challenges,
-            &all_initials.instruction_table_initials,
-        );
+        let instruction_table = tables
+            .instruction_table
+            .extend(&all_challenges, &all_initials);
 
-        let processor_table = tables.processor_table.extend(
-            &all_challenges.processor_table_challenges,
-            &all_initials.processor_table_initials,
-        );
+        let processor_table = tables
+            .processor_table
+            .extend(&all_challenges, &all_initials);
 
-        let input_table = tables.input_table.extend(
-            &all_challenges.input_table_challenges,
-            &all_initials.input_table_initials,
-        );
+        let input_table = tables.input_table.extend(&all_challenges, &all_initials);
+        let output_table = tables.output_table.extend(&all_challenges, &all_initials);
 
-        let output_table = tables.output_table.extend(
-            &all_challenges.output_table_challenges,
-            &all_initials.output_table_initials,
-        );
+        let op_stack_table = tables.op_stack_table.extend(&all_challenges, &all_initials);
 
-        let op_stack_table = tables.op_stack_table.extend(
-            &all_challenges.op_stack_table_challenges,
-            &all_initials.op_stack_table_initials,
-        );
+        let ram_table = tables.ram_table.extend(&all_challenges, &all_initials);
 
-        let ram_table = tables.ram_table.extend(
-            &all_challenges.ram_table_challenges,
-            &all_initials.ram_table_initials,
-        );
+        let jump_stack_table = tables
+            .jump_stack_table
+            .extend(&all_challenges, &all_initials);
 
-        let jump_stack_table = tables.jump_stack_table.extend(
-            &all_challenges.jump_stack_table_challenges,
-            &all_initials.jump_stack_table_initials,
-        );
+        let hash_table = tables.hash_table.extend(&all_challenges, &all_initials);
 
-        let hash_table = tables.hash_table.extend(
-            &all_challenges.hash_table_challenges,
-            &all_initials.hash_table_initials,
-        );
-
-        let u32_op_table = tables.u32_op_table.extend(
-            &all_challenges.u32_op_table_challenges,
-            &all_initials.u32_op_table_initials,
-        );
+        let u32_op_table = tables.u32_op_table.extend(&all_challenges, &all_initials);
 
         ExtTableCollection {
             program_table,
@@ -264,10 +246,43 @@ impl ExtTableCollection {
         }
     }
 
-    pub fn all_ext_codewords(&self, fri_domain: &FriDomain<XWord>) -> Vec<Vec<XWord>> {
-        self.into_iter()
-            .map(|table| table.low_degree_extension(fri_domain))
-            .concat()
+    pub fn codeword_tables(&self, fri_domain: &FriDomain<XWord>) -> Self {
+        let program_table = self.program_table.ext_codeword_table(fri_domain);
+        let instruction_table = self.instruction_table.ext_codeword_table(fri_domain);
+        let processor_table = self.processor_table.ext_codeword_table(fri_domain);
+        let input_table = self.input_table.ext_codeword_table(fri_domain);
+        let output_table = self.output_table.ext_codeword_table(fri_domain);
+        let op_stack_table = self.op_stack_table.ext_codeword_table(fri_domain);
+        let ram_table = self.ram_table.ext_codeword_table(fri_domain);
+        let jump_stack_table = self.jump_stack_table.ext_codeword_table(fri_domain);
+        let hash_table = self.hash_table.ext_codeword_table(fri_domain);
+        let u32_op_table = self.u32_op_table.ext_codeword_table(fri_domain);
+
+        ExtTableCollection {
+            program_table,
+            instruction_table,
+            processor_table,
+            input_table,
+            output_table,
+            op_stack_table,
+            ram_table,
+            jump_stack_table,
+            hash_table,
+            u32_op_table,
+        }
+    }
+
+    pub fn concat_table_data(&self) -> Vec<Vec<XWord>> {
+        let total_codeword_count = self.into_iter().map(|table| table.data().len()).sum();
+        let mut all_table_data = Vec::with_capacity(total_codeword_count);
+
+        for table in self.into_iter() {
+            for row in table.data().iter() {
+                all_table_data.push(row.clone());
+            }
+        }
+
+        all_table_data
     }
 }
 

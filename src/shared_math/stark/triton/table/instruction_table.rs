@@ -7,7 +7,7 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
-use crate::shared_math::stark::triton::table::base_matrix::InstructionTableColumn;
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const INSTRUCTION_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 1;
@@ -157,13 +157,13 @@ impl InstructionTable {
 
     pub fn extend(
         &self,
-        challenges: &InstructionTableChallenges,
-        initials: &InstructionTableInitials,
+        challenges: &AllChallenges,
+        initials: &AllInitials,
     ) -> ExtInstructionTable {
         let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
 
-        let mut running_product = initials.processor_perm_initial;
-        let mut running_sum = initials.program_eval_initial;
+        let mut running_product = initials.instruction_table_initials.processor_perm_initial;
+        let mut running_sum = initials.instruction_table_initials.program_eval_initial;
 
         for row in self.data().iter() {
             let mut extension_row = row.iter().map(|elem| elem.lift()).collect_vec();
@@ -175,16 +175,19 @@ impl InstructionTable {
                 row[InstructionTableColumn::NIA as usize].lift(),
             );
             let (ip_w, ci_w, nia_w) = (
-                challenges.ip_weight,
-                challenges.ci_processor_weight,
-                challenges.nia_weight,
+                challenges.instruction_table_challenges.ip_weight,
+                challenges.instruction_table_challenges.ci_processor_weight,
+                challenges.instruction_table_challenges.nia_weight,
             );
             let compressed_row_for_permutation_arguement = ip * ip_w + ci * ci_w + nia * nia_w;
             extension_row.push(compressed_row_for_permutation_arguement);
 
             // 2. In the case of the permutation value we need to compute the running *product* of the compressed column.
             running_product = running_product
-                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_arguement);
+                * (challenges
+                    .instruction_table_challenges
+                    .processor_perm_row_weight
+                    - compressed_row_for_permutation_arguement);
             extension_row.push(running_product);
 
             // 3. Since we are in the instruction table we compress multiple values for the evaluation arguement.
@@ -192,14 +195,19 @@ impl InstructionTable {
                 row[InstructionTableColumn::Address as usize].lift(),
                 row[InstructionTableColumn::CI as usize].lift(),
             );
-            let (address_w, instruction_w) =
-                (challenges.addr_weight, challenges.instruction_weight);
+            let (address_w, instruction_w) = (
+                challenges.instruction_table_challenges.addr_weight,
+                challenges.instruction_table_challenges.instruction_weight,
+            );
             let compressed_row_for_evaluation_arguement =
                 address * address_w + instruction * instruction_w;
             extension_row.push(compressed_row_for_evaluation_arguement);
 
             // 4. In the case of the evalutation arguement we need to compute the running *sum*.
-            running_sum = running_sum * challenges.program_eval_row_weight
+            running_sum = running_sum
+                * challenges
+                    .instruction_table_challenges
+                    .program_eval_row_weight
                 + compressed_row_for_evaluation_arguement;
             extension_row.push(running_sum);
 
@@ -216,6 +224,15 @@ impl InstructionTable {
             self.order(),
             extension_matrix,
         );
+
+        ExtInstructionTable { base }
+    }
+}
+
+impl ExtInstructionTable {
+    pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
+        let ext_codewords = self.low_degree_extension(fri_domain);
+        let base = self.base.with_data(ext_codewords);
 
         ExtInstructionTable { base }
     }
