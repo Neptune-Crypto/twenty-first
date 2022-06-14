@@ -1,3 +1,6 @@
+use itertools::Itertools;
+
+use super::base_matrix::InstructionTableColumn;
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::challenges_initials::{AllChallenges, AllInitials};
 use super::extension_table::ExtensionTable;
@@ -12,7 +15,7 @@ pub const INSTRUCTION_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 1;
 pub const INSTRUCTION_TABLE_INITIALS_COUNT: usize =
     INSTRUCTION_TABLE_PERMUTATION_ARGUMENTS_COUNT + INSTRUCTION_TABLE_EVALUATION_ARGUMENT_COUNT;
 
-/// This is 3 because it combines: ip, ci, nia
+/// This is 5 because it combines: (ip, ci, nia) and (addr, instruction).
 pub const INSTRUCTION_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 5;
 
 pub const BASE_WIDTH: usize = 3;
@@ -157,7 +160,64 @@ impl InstructionTable {
         challenges: &InstructionTableChallenges,
         initials: &InstructionTableInitials,
     ) -> ExtInstructionTable {
-        todo!()
+        let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
+
+        let mut running_product = initials.processor_perm_initial;
+        let mut running_sum = initials.program_eval_initial;
+
+        for row in self.data().iter() {
+            let mut extension_row = row.iter().map(|elem| elem.lift()).collect_vec();
+
+            // 1. Compress multiple values within one row so they become one value.
+            let (ip, ci, nia) = (
+                row[InstructionTableColumn::Address as usize].lift(),
+                row[InstructionTableColumn::CI as usize].lift(),
+                row[InstructionTableColumn::NIA as usize].lift(),
+            );
+            let (ip_w, ci_w, nia_w) = (
+                challenges.ip_weight,
+                challenges.ci_processor_weight,
+                challenges.nia_weight,
+            );
+            let compressed_row_for_permutation_arguement = ip * ip_w + ci * ci_w + nia * nia_w;
+            extension_row.push(compressed_row_for_permutation_arguement);
+
+            // 2. In the case of the permutation value we need to compute the running *product* of the compressed column.
+            running_product = running_product
+                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_arguement);
+            extension_row.push(running_product);
+
+            // 3. Since we are in the instruction table we compress multiple values for the evaluation arguement.
+            let (address, instruction) = (
+                row[InstructionTableColumn::Address as usize].lift(),
+                row[InstructionTableColumn::CI as usize].lift(),
+            );
+            let (address_w, instruction_w) =
+                (challenges.addr_weight, challenges.instruction_weight);
+            let compressed_row_for_evaluation_arguement =
+                address * address_w + instruction * instruction_w;
+            extension_row.push(compressed_row_for_evaluation_arguement);
+
+            // 4. In the case of the evalutation arguement we need to compute the running *sum*.
+            running_sum = running_sum * challenges.program_eval_row_weight
+                + compressed_row_for_evaluation_arguement;
+            extension_row.push(running_sum);
+
+            // Build the extension matrix
+            extension_matrix.push(extension_row);
+        }
+
+        let base = BaseTable::<XFieldElement>::new(
+            self.width(),
+            self.padded_height(),
+            self.num_randomizers(),
+            self.omicron().lift(),
+            self.generator().lift(),
+            self.order(),
+            extension_matrix,
+        );
+
+        ExtInstructionTable { base }
     }
 }
 
