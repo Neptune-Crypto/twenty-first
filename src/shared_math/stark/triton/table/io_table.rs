@@ -4,12 +4,8 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
-<<<<<<< Updated upstream
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-||||||| constructed merge base
-=======
 use crate::shared_math::stark::triton::table::base_matrix::IOTableColumn::*;
->>>>>>> Stashed changes
 use crate::shared_math::x_field_element::XFieldElement;
 
 /// Determine how many random values we get from the verifier
@@ -162,7 +158,7 @@ impl IOTable {
         let mut running_sum = initials.processor_eval_initial;
 
         for row in self.data().iter() {
-            let mut extension_row = Vec::with_capacity(row.len() + 1);
+            let mut extension_row = Vec::with_capacity(FULL_WIDTH);
             extension_row.extend(row.iter().map(|elem| elem.lift()));
 
             // 1. No compression needed for a single column
