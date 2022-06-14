@@ -71,7 +71,7 @@ impl AllChallenges {
     pub fn new(mut weights: Vec<XFieldElement>) -> Self {
         let program_table_challenges = ProgramTableChallenges {
             instruction_eval_row_weight: weights.pop().unwrap(),
-            addr_weight: weights.pop().unwrap(),
+            address_weight: weights.pop().unwrap(),
             instruction_weight: weights.pop().unwrap(),
         };
 

@@ -198,16 +198,16 @@ impl From<IOTableColumn> for usize {
     }
 }
 
-pub enum ProgramTableColum {
+pub enum ProgramTableColumn {
     Address,
     Instruction,
 }
 
-impl From<ProgramTableColum> for usize {
-    fn from(c: ProgramTableColum) -> Self {
+impl From<ProgramTableColumn> for usize {
+    fn from(c: ProgramTableColumn) -> Self {
         match c {
-            ProgramTableColum::Address => 0,
-            ProgramTableColum::Instruction => 1,
+            ProgramTableColumn::Address => 0,
+            ProgramTableColumn::Instruction => 1,
         }
     }
 }

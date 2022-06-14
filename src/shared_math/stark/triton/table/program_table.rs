@@ -5,7 +5,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::table::base_matrix::ProgramTableColum;
+use crate::shared_math::stark::triton::table::base_matrix::ProgramTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const PROGRAM_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 0;
@@ -62,8 +62,8 @@ impl Table<BWord> for ProgramTable {
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
             // address keeps increasing
-            padding_row[ProgramTableColum::Address as usize] =
-                padding_row[ProgramTableColum::Address as usize] + 1.into();
+            padding_row[ProgramTableColumn::Address as usize] =
+                padding_row[ProgramTableColumn::Address as usize] + 1.into();
             data.push(padding_row);
         }
     }
@@ -153,8 +153,45 @@ impl ProgramTable {
         Self { base }
     }
 
-    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtProgramTable {
-        todo!()
+    pub fn extend(
+        &self,
+        all_challenges: &AllChallenges,
+        all_initials: &AllInitials,
+    ) -> ExtProgramTable {
+        let challenges = &all_challenges.program_table_challenges;
+        let initials = &all_initials.program_table_initials;
+
+        let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
+        let mut running_sum = initials.instruction_eval_initial;
+
+        for row in self.data().iter() {
+            let (address, instruction) = (
+                row[ProgramTableColumn::Address as usize].lift(),
+                row[ProgramTableColumn::Instruction as usize].lift(),
+            );
+
+            let (address_w, instruction_w) =
+                (challenges.address_weight, challenges.instruction_weight);
+
+            // 1. Compress multiple values within one row so they become one value.
+            let compressed_row_for_evaluation_argument =
+                address * address_w + instruction * instruction_w;
+
+            let mut extension_row = Vec::with_capacity(FULL_WIDTH);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
+            extension_row.push(compressed_row_for_evaluation_argument);
+
+            // 2. Compute the running *product* of the compressed column (permutation value)
+            running_sum = running_sum * challenges.instruction_eval_row_weight
+                + compressed_row_for_evaluation_argument;
+            extension_row.push(running_sum);
+
+            extension_matrix.push(extension_row);
+        }
+
+        let base = self.base.with_lifted_data(extension_matrix);
+
+        ExtProgramTable { base }
     }
 }
 
@@ -174,7 +211,7 @@ pub struct ProgramTableChallenges {
     pub instruction_eval_row_weight: XFieldElement,
 
     /// Weights for condensing part of a row into a single column. (Related to program table.)
-    pub addr_weight: XFieldElement,
+    pub address_weight: XFieldElement,
     pub instruction_weight: XFieldElement,
 }
 
