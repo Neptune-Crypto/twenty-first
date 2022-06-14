@@ -174,8 +174,11 @@ impl Stark {
         let challenges: AllChallenges =
             AllChallenges::new(Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL));
 
-        let initials: AllEndpoints =
-            AllEndpoints::new(Self::sample_weights(&hasher, &seed, AllEndpoints::TOTAL));
+        let initials: AllEndpoints = AllEndpoints::create_initials(Self::sample_weights(
+            &hasher,
+            &seed,
+            AllEndpoints::TOTAL,
+        ));
 
         let (ext_tables, terminals) =
             ExtTableCollection::extend_tables(&base_tables, &challenges, &initials);

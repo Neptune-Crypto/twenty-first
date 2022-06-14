@@ -237,63 +237,65 @@ pub struct AllEndpoints {
 impl AllEndpoints {
     pub const TOTAL: usize = 10;
 
-    pub fn new(mut weights: Vec<XFieldElement>) -> Self {
+    pub fn create_initials(mut weights: Vec<XFieldElement>) -> Self {
+        let processor_table_initials = ProcessorTableEndpoints {
+            input_table_eval_sum: weights.pop().unwrap(),
+            output_table_eval_sum: weights.pop().unwrap(),
+            instruction_table_perm_product: weights.pop().unwrap(),
+            opstack_table_perm_product: weights.pop().unwrap(),
+            ram_table_perm_product: weights.pop().unwrap(),
+            jump_stack_perm_product: weights.pop().unwrap(),
+            to_hash_table_eval_sum: weights.pop().unwrap(),
+            from_hash_table_eval_sum: weights.pop().unwrap(),
+            u32_table_lt_perm_product: weights.pop().unwrap(),
+            u32_table_and_perm_product: weights.pop().unwrap(),
+            u32_table_xor_perm_product: weights.pop().unwrap(),
+            u32_table_reverse_perm_product: weights.pop().unwrap(),
+            u32_table_div_perm_product: weights.pop().unwrap(),
+        };
+
         let program_table_initials = ProgramTableEndpoints {
             instruction_eval_sum: weights.pop().unwrap(),
         };
 
         let instruction_table_initials = InstructionTableEndpoints {
-            processor_perm_product: weights.pop().unwrap(),
-            program_eval_sum: weights.pop().unwrap(),
+            processor_perm_product: processor_table_initials.instruction_table_perm_product,
+            program_eval_sum: program_table_initials.instruction_eval_sum,
         };
 
         let input_table_initials = IOTableEndpoints {
-            processor_eval_sum: weights.pop().unwrap(),
+            processor_eval_sum: processor_table_initials.input_table_eval_sum,
         };
 
         let output_table_initials = IOTableEndpoints {
-            processor_eval_sum: weights.pop().unwrap(),
-        };
-
-        let processor_table_initials = ProcessorTableEndpoints {
-            input_table_eval_sum: todo!(),
-            output_table_eval_sum: todo!(),
-            instruction_table_perm_product: todo!(),
-            opstack_table_perm_product: todo!(),
-            ram_table_perm_product: todo!(),
-            jump_stack_perm_product: todo!(),
-            to_hash_table_eval_sum: todo!(),
-            from_hash_table_eval_sum: todo!(),
-            u32_table_lt_perm_product: todo!(),
-            u32_table_and_perm_product: todo!(),
-            u32_table_xor_perm_product: todo!(),
-            u32_table_reverse_perm_product: todo!(),
-            u32_table_div_perm_product: todo!(),
+            processor_eval_sum: processor_table_initials.output_table_eval_sum,
         };
 
         let op_stack_table_initials = OpStackTableEndpoints {
-            processor_perm_product: weights.pop().unwrap(),
+            processor_perm_product: processor_table_initials.opstack_table_perm_product,
         };
 
         let ram_table_initials = RamTableEndpoints {
-            processor_perm_product: weights.pop().unwrap(),
+            processor_perm_product: processor_table_initials.ram_table_perm_product,
         };
 
         let jump_stack_table_initials = JumpStackTableEndpoints {
-            processor_perm_product: weights.pop().unwrap(),
+            processor_perm_product: processor_table_initials.jump_stack_perm_product,
         };
 
+        // hash_table.from_processor <-> processor_table.to_hash, and
+        // hash_table.to_processor   <-> processor_table.from_hash
         let hash_table_initials = HashTableEndpoints {
-            from_processor_eval_sum: weights.pop().unwrap(),
-            to_processor_eval_sum: weights.pop().unwrap(),
+            from_processor_eval_sum: processor_table_initials.to_hash_table_eval_sum,
+            to_processor_eval_sum: processor_table_initials.from_hash_table_eval_sum,
         };
 
         let u32_op_table_initials = U32OpTableEndpoints {
-            processor_lt_perm_product: weights.pop().unwrap(),
-            processor_and_perm_product: weights.pop().unwrap(),
-            processor_xor_perm_product: weights.pop().unwrap(),
-            processor_reverse_perm_product: weights.pop().unwrap(),
-            processor_div_perm_product: weights.pop().unwrap(),
+            processor_lt_perm_product: processor_table_initials.u32_table_lt_perm_product,
+            processor_and_perm_product: processor_table_initials.u32_table_and_perm_product,
+            processor_xor_perm_product: processor_table_initials.u32_table_xor_perm_product,
+            processor_reverse_perm_product: processor_table_initials.u32_table_reverse_perm_product,
+            processor_div_perm_product: processor_table_initials.u32_table_div_perm_product,
         };
 
         AllEndpoints {
