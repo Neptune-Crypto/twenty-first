@@ -258,12 +258,12 @@ mod triton_vm_tests {
     use crate::shared_math::stark::triton::instruction::sample_programs;
     use crate::shared_math::stark::triton::table::base_matrix::ProcessorMatrixRow;
     use crate::shared_math::stark::triton::table::base_table::{HasBaseTable, Table};
-    use crate::shared_math::stark::triton::table::challenges_initials::{
-        AllChallenges, AllInitials,
+    use crate::shared_math::stark::triton::table::challenges_endpoints::{
+        AllChallenges, AllEndpoints,
     };
     use crate::shared_math::stark::triton::table::extension_table::ExtensionTable;
     use crate::shared_math::stark::triton::table::processor_table::{
-        ProcessorTable, ProcessorTableChallenges, ProcessorTableInitials,
+        ProcessorTable, ProcessorTableChallenges, ProcessorTableEndpoints,
         PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT, PROCESSOR_TABLE_INITIALS_COUNT,
     };
     use crate::shared_math::traits::GetRandomElements;
@@ -602,9 +602,12 @@ mod triton_vm_tests {
 
             // Test the same for the extended matrix
             let challenges: AllChallenges = todo!();
-            let initials: AllInitials = todo!();
+            let initials: AllEndpoints = todo!();
 
-            let ext_processor_table = processor_table.extend(&challenges, &initials);
+            let (ext_processor_table, terminals) = processor_table.extend(
+                &challenges.processor_table_challenges,
+                &initials.processor_table_endpoints,
+            );
             let x_air_constraints = ext_processor_table.ext_transition_constraints(&challenges);
             let ext_data = ext_processor_table.data();
 

@@ -1,5 +1,5 @@
 use super::base_table::Table;
-use super::challenges_initials::{AllChallenges, AllInitials};
+use super::challenges_endpoints::{AllChallenges, AllEndpoints};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::polynomial::Polynomial;
@@ -23,13 +23,13 @@ pub trait ExtensionTable: Table<XWord> + Sync {
     fn ext_terminal_constraints(
         &self,
         challenges: &AllChallenges,
-        terminals: &AllInitials,
+        terminals: &AllEndpoints,
     ) -> Vec<MPolynomial<XWord>>;
 
     fn all_quotient_degree_bounds(
         &self,
         challenges: &AllChallenges,
-        terminals: &AllInitials,
+        terminals: &AllEndpoints,
     ) -> Vec<Degree> {
         vec![
             self.boundary_quotient_degree_bounds(challenges),
@@ -68,7 +68,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
     fn terminal_quotient_degree_bounds(
         &self,
         challenges: &AllChallenges,
-        terminals: &AllInitials,
+        terminals: &AllEndpoints,
     ) -> Vec<Degree> {
         let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.width()];
         self.ext_terminal_constraints(challenges, terminals)
@@ -82,7 +82,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
         challenges: &AllChallenges,
-        terminals: &AllInitials,
+        terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {
         let boundary_quotients = self.boundary_quotients(fri_domain, codewords, challenges);
         let transition_quotients = self.transition_quotients(fri_domain, codewords, challenges);
@@ -158,7 +158,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         fri_domain: &FriDomain<BWord>,
         codewords: &[Vec<XWord>],
         challenges: &AllChallenges,
-        terminals: &AllInitials,
+        terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {
         let omicron_inverse = self.omicron().unlift().unwrap().inverse();
 

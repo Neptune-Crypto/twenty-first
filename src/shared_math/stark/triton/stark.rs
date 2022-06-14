@@ -9,7 +9,7 @@ use crate::shared_math::stark::brainfuck::stark_proof_stream::{Item, StarkProofS
 use crate::shared_math::stark::triton::fri_domain::lift_domain;
 use crate::shared_math::stark::triton::instruction::sample_programs;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
-use crate::shared_math::stark::triton::table::challenges_initials::{AllChallenges, AllInitials};
+use crate::shared_math::stark::triton::table::challenges_endpoints::{AllChallenges, AllEndpoints};
 use crate::shared_math::stark::triton::table::table_collection::{
     BaseTableCollection, ExtTableCollection,
 };
@@ -174,10 +174,11 @@ impl Stark {
         let challenges: AllChallenges =
             AllChallenges::new(Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL));
 
-        let initials: AllInitials =
-            AllInitials::new(Self::sample_weights(&hasher, &seed, AllInitials::TOTAL));
+        let initials: AllEndpoints =
+            AllEndpoints::new(Self::sample_weights(&hasher, &seed, AllEndpoints::TOTAL));
 
-        let ext_tables = ExtTableCollection::extend_tables(&base_tables, &challenges, &initials);
+        let (ext_tables, terminals) =
+            ExtTableCollection::extend_tables(&base_tables, &challenges, &initials);
         let ext_codeword_tables = ext_tables.codeword_tables(&lift_domain(&self.fri_domain));
         let all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
 

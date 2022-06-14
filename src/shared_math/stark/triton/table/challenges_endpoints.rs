@@ -1,36 +1,36 @@
 use super::hash_table::{
-    HashTableChallenges, HashTableInitials, HASH_TABLE_EXTENSION_CHALLENGE_COUNT,
+    HashTableChallenges, HashTableEndpoints, HASH_TABLE_EXTENSION_CHALLENGE_COUNT,
     HASH_TABLE_INITIALS_COUNT,
 };
 use super::instruction_table::{
-    InstructionTableChallenges, InstructionTableInitials,
+    InstructionTableChallenges, InstructionTableEndpoints,
     INSTRUCTION_TABLE_EXTENSION_CHALLENGE_COUNT, INSTRUCTION_TABLE_INITIALS_COUNT,
 };
 use super::io_table::{
-    IOTableChallenges, IOTableInitials, IOTABLE_EXTENSION_CHALLENGE_COUNT, IOTABLE_INITIALS_COUNT,
+    IOTableChallenges, IOTableEndpoints, IOTABLE_EXTENSION_CHALLENGE_COUNT, IOTABLE_INITIALS_COUNT,
 };
 use super::jump_stack_table::{
-    JumpStackTableChallenges, JumpStackTableInitials, JUMP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT,
+    JumpStackTableChallenges, JumpStackTableEndpoints, JUMP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT,
     JUMP_STACK_TABLE_INITIALS_COUNT,
 };
 use super::op_stack_table::{
-    OpStackTableChallenges, OpStackTableInitials, OP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT,
+    OpStackTableChallenges, OpStackTableEndpoints, OP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT,
     OP_STACK_TABLE_INITIALS_COUNT,
 };
 use super::processor_table::{
-    ProcessorTableChallenges, ProcessorTableInitials, PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT,
+    ProcessorTableChallenges, ProcessorTableEndpoints, PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT,
     PROCESSOR_TABLE_INITIALS_COUNT,
 };
 use super::program_table::{
-    ProgramTableChallenges, ProgramTableInitials, PROGRAM_TABLE_EXTENSION_CHALLENGE_COUNT,
+    ProgramTableChallenges, ProgramTableEndpoints, PROGRAM_TABLE_EXTENSION_CHALLENGE_COUNT,
     PROGRAM_TABLE_INITIALS_COUNT,
 };
 use super::ram_table::{
-    RamTableChallenges, RamTableInitials, RAM_TABLE_EXTENSION_CHALLENGE_COUNT,
+    RamTableChallenges, RamTableEndpoints, RAM_TABLE_EXTENSION_CHALLENGE_COUNT,
     RAM_TABLE_INITIALS_COUNT,
 };
 use super::u32_op_table::{
-    U32OpTableChallenges, U32OpTableInitials, U32_OP_TABLE_EXTENSION_CHALLENGE_COUNT,
+    U32OpTableChallenges, U32OpTableEndpoints, U32_OP_TABLE_EXTENSION_CHALLENGE_COUNT,
     U32_OP_TABLE_INITIALS_COUNT,
 };
 use crate::shared_math::b_field_element::BFieldElement;
@@ -58,15 +58,7 @@ pub struct AllChallenges {
 }
 
 impl AllChallenges {
-    pub const TOTAL: usize = PROGRAM_TABLE_EXTENSION_CHALLENGE_COUNT
-        + INSTRUCTION_TABLE_EXTENSION_CHALLENGE_COUNT
-        + 2 * IOTABLE_EXTENSION_CHALLENGE_COUNT
-        + PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT
-        + OP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT
-        + RAM_TABLE_EXTENSION_CHALLENGE_COUNT
-        + JUMP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT
-        + HASH_TABLE_EXTENSION_CHALLENGE_COUNT
-        + U32_OP_TABLE_EXTENSION_CHALLENGE_COUNT;
+    pub const TOTAL: usize = 10;
 
     pub fn new(mut weights: Vec<XFieldElement>) -> Self {
         let program_table_challenges = ProgramTableChallenges {
@@ -227,101 +219,94 @@ impl AllChallenges {
     }
 }
 
+/// An *endpoint* is the collective term for *initials* and *terminals*.
 #[derive(Debug, Clone)]
-pub struct AllInitials {
-    pub program_table_initials: ProgramTableInitials,
-    pub instruction_table_initials: InstructionTableInitials,
-    pub input_table_initials: IOTableInitials,
-    pub output_table_initials: IOTableInitials,
-    pub processor_table_initials: ProcessorTableInitials,
-    pub op_stack_table_initials: OpStackTableInitials,
-    pub ram_table_initials: RamTableInitials,
-    pub jump_stack_table_initials: JumpStackTableInitials,
-    pub hash_table_initials: HashTableInitials,
-    pub u32_op_table_initials: U32OpTableInitials,
+pub struct AllEndpoints {
+    pub program_table_endpoints: ProgramTableEndpoints,
+    pub instruction_table_endpoints: InstructionTableEndpoints,
+    pub input_table_endpoints: IOTableEndpoints,
+    pub output_table_endpoints: IOTableEndpoints,
+    pub processor_table_endpoints: ProcessorTableEndpoints,
+    pub op_stack_table_endpoints: OpStackTableEndpoints,
+    pub ram_table_endpoints: RamTableEndpoints,
+    pub jump_stack_table_endpoints: JumpStackTableEndpoints,
+    pub hash_table_endpoints: HashTableEndpoints,
+    pub u32_op_table_endpoints: U32OpTableEndpoints,
 }
 
-impl AllInitials {
-    pub const TOTAL: usize = PROGRAM_TABLE_INITIALS_COUNT
-        + INSTRUCTION_TABLE_INITIALS_COUNT
-        + 2 * IOTABLE_INITIALS_COUNT
-        + PROCESSOR_TABLE_INITIALS_COUNT
-        + OP_STACK_TABLE_INITIALS_COUNT
-        + RAM_TABLE_INITIALS_COUNT
-        + JUMP_STACK_TABLE_INITIALS_COUNT
-        + HASH_TABLE_INITIALS_COUNT
-        + U32_OP_TABLE_INITIALS_COUNT;
+impl AllEndpoints {
+    pub const TOTAL: usize = 10;
 
     pub fn new(mut weights: Vec<XFieldElement>) -> Self {
-        let program_table_initials = ProgramTableInitials {
-            instruction_eval_initial: weights.pop().unwrap(),
+        let program_table_initials = ProgramTableEndpoints {
+            instruction_eval_sum: weights.pop().unwrap(),
         };
 
-        let instruction_table_initials = InstructionTableInitials {
-            processor_perm_initial: weights.pop().unwrap(),
-            program_eval_initial: weights.pop().unwrap(),
+        let instruction_table_initials = InstructionTableEndpoints {
+            processor_perm_product: weights.pop().unwrap(),
+            program_eval_sum: weights.pop().unwrap(),
         };
 
-        let input_table_initials = IOTableInitials {
-            processor_eval_initial: weights.pop().unwrap(),
+        let input_table_initials = IOTableEndpoints {
+            processor_eval_sum: weights.pop().unwrap(),
         };
 
-        let output_table_initials = IOTableInitials {
-            processor_eval_initial: weights.pop().unwrap(),
+        let output_table_initials = IOTableEndpoints {
+            processor_eval_sum: weights.pop().unwrap(),
         };
 
-        let processor_table_initials = ProcessorTableInitials {
-            input_table_eval_initial: todo!(),
-            output_table_eval_initial: todo!(),
-            instruction_table_perm_initial: todo!(),
-            opstack_table_perm_initial: todo!(),
-            ram_table_perm_initial: todo!(),
-            jump_stack_perm_initial: todo!(),
-            to_hash_table_eval_initial: todo!(),
-            from_hash_table_eval_initial: todo!(),
-            u32_table_lt_perm_initial: todo!(),
-            u32_table_and_perm_initial: todo!(),
-            u32_table_xor_perm_initial: todo!(),
-            u32_table_reverse_perm_initial: todo!(),
-            u32_table_div_perm_initial: todo!(),
+        let processor_table_initials = ProcessorTableEndpoints {
+            input_table_eval_sum: todo!(),
+            output_table_eval_sum: todo!(),
+            instruction_table_perm_product: todo!(),
+            opstack_table_perm_product: todo!(),
+            ram_table_perm_product: todo!(),
+            jump_stack_perm_product: todo!(),
+            to_hash_table_eval_sum: todo!(),
+            from_hash_table_eval_sum: todo!(),
+            u32_table_lt_perm_product: todo!(),
+            u32_table_and_perm_product: todo!(),
+            u32_table_xor_perm_product: todo!(),
+            u32_table_reverse_perm_product: todo!(),
+            u32_table_div_perm_product: todo!(),
         };
 
-        let op_stack_table_initials = OpStackTableInitials {
-            processor_perm_initial: weights.pop().unwrap(),
+        let op_stack_table_initials = OpStackTableEndpoints {
+            processor_perm_product: weights.pop().unwrap(),
         };
 
-        let ram_table_initials = RamTableInitials {
-            processor_perm_initial: weights.pop().unwrap(),
+        let ram_table_initials = RamTableEndpoints {
+            processor_perm_product: weights.pop().unwrap(),
         };
 
-        let jump_stack_table_initials = JumpStackTableInitials {
-            processor_perm_initial: weights.pop().unwrap(),
+        let jump_stack_table_initials = JumpStackTableEndpoints {
+            processor_perm_product: weights.pop().unwrap(),
         };
 
-        let hash_table_initials = HashTableInitials {
-            from_processor_eval_initial: weights.pop().unwrap(),
-            to_processor_eval_initial: weights.pop().unwrap(),
+        let hash_table_initials = HashTableEndpoints {
+            from_processor_eval_sum: weights.pop().unwrap(),
+            to_processor_eval_sum: weights.pop().unwrap(),
         };
 
-        let u32_op_table_initials = U32OpTableInitials {
-            processor_lt_perm_initial: weights.pop().unwrap(),
-            processor_and_perm_initial: weights.pop().unwrap(),
-            processor_xor_perm_initial: weights.pop().unwrap(),
-            processor_reverse_perm_initial: weights.pop().unwrap(),
-            processor_div_perm_initial: weights.pop().unwrap(),
+        let u32_op_table_initials = U32OpTableEndpoints {
+            processor_lt_perm_product: weights.pop().unwrap(),
+            processor_and_perm_product: weights.pop().unwrap(),
+            processor_xor_perm_product: weights.pop().unwrap(),
+            processor_reverse_perm_product: weights.pop().unwrap(),
+            processor_div_perm_product: weights.pop().unwrap(),
         };
 
-        AllInitials {
-            program_table_initials,
-            instruction_table_initials,
-            input_table_initials,
-            output_table_initials,
-            processor_table_initials,
-            op_stack_table_initials,
-            ram_table_initials,
-            jump_stack_table_initials,
-            hash_table_initials,
-            u32_op_table_initials,
+        AllEndpoints {
+            program_table_endpoints: program_table_initials,
+            instruction_table_endpoints: instruction_table_initials,
+            input_table_endpoints: input_table_initials,
+            output_table_endpoints: output_table_initials,
+            processor_table_endpoints: processor_table_initials,
+            op_stack_table_endpoints: op_stack_table_initials,
+            ram_table_endpoints: ram_table_initials,
+            jump_stack_table_endpoints: jump_stack_table_initials,
+            hash_table_endpoints: hash_table_initials,
+            u32_op_table_endpoints: u32_op_table_initials,
         }
     }
 }
