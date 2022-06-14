@@ -43,6 +43,7 @@ type XWord = XFieldElement;
 type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
 type StarkDigest = Vec<BFieldElement>;
 
+#[derive(Debug, Clone)]
 pub struct AllChallenges {
     pub program_table_challenges: ProgramTableChallenges,
     pub instruction_table_challenges: InstructionTableChallenges,
@@ -228,6 +229,7 @@ impl AllChallenges {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AllInitials {
     pub program_table_initials: ProgramTableInitials,
     pub instruction_table_initials: InstructionTableInitials,
