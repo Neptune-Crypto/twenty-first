@@ -36,7 +36,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MmrAccumulator<H: Hasher>
 where
     H: Hasher,
