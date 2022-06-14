@@ -112,7 +112,6 @@ impl Stark {
             &base_matrices,
         );
 
-        // TODO: Add padding to all tables
         base_tables.pad();
 
         let max_degree = base_tables.max_degree();

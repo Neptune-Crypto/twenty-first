@@ -55,13 +55,11 @@ impl Table<BWord> for U32OpTable {
         "U32OpTable".to_string()
     }
 
-    // FIXME: Apply correct padding, not just 0s.
     fn pad(&mut self) {
         let data = self.mut_data();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
-            let _last = data.last().unwrap();
-            let padding = vec![0.into(); BASE_WIDTH];
-            data.push(padding);
+            let padding_row = vec![0.into(); BASE_WIDTH];
+            data.push(padding_row);
         }
     }
 

@@ -4,7 +4,8 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
-use crate::shared_math::stark::triton::state::DIGEST_LEN;
+use crate::shared_math::rescue_prime_xlix::neptune_params;
+use crate::shared_math::stark::triton::state::{AUX_REGISTER_COUNT, DIGEST_LEN};
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const HASH_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 0;
@@ -58,10 +59,12 @@ impl Table<BWord> for HashTable {
 
     fn pad(&mut self) {
         let data = self.mut_data();
+        let rescue_prime = neptune_params();
+        let mut aux = [BFieldElement::ring_zero(); AUX_REGISTER_COUNT];
+        let hash_trace = rescue_prime.rescue_xlix_permutation_trace(&mut aux);
+        let padding = &mut hash_trace.iter().map(|row| row.to_vec()).collect();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
-            let _last = data.last().unwrap();
-            let padding = vec![0.into(); BASE_WIDTH];
-            data.push(padding);
+            data.append(padding);
         }
     }
 
