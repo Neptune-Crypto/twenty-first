@@ -5,7 +5,9 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
+use crate::shared_math::stark::triton::table::base_matrix::U32OpTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
+use itertools::Itertools;
 
 pub const U32_OP_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 5;
 pub const U32_OP_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 0;
@@ -150,7 +152,101 @@ impl U32OpTable {
     }
 
     pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtU32OpTable {
-        todo!()
+        let mut lt_running_product = initials.u32_op_table_initials.processor_lt_perm_initial;
+        let mut and_running_product = initials.u32_op_table_initials.processor_and_perm_initial;
+        let mut xor_running_product = initials.u32_op_table_initials.processor_xor_perm_initial;
+        let mut reverse_running_product = initials
+            .u32_op_table_initials
+            .processor_reverse_perm_initial;
+        let mut div_running_product = initials.u32_op_table_initials.processor_div_perm_initial;
+
+        let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
+        for row in self.data().iter() {
+            let mut extension_row = row.iter().map(|elem| elem.lift()).collect_vec();
+            let lhs = row[U32OpTableColumn::LHS as usize].lift();
+            let rhs = row[U32OpTableColumn::RHS as usize].lift();
+
+            // Compress (lhs, rhs, lt) into single value
+            let lt = row[U32OpTableColumn::LT as usize].lift();
+            let compressed_row_for_lt = lhs * challenges.u32_op_table_challenges.lt_lhs_weight
+                + rhs * challenges.u32_op_table_challenges.lt_rhs_weight
+                + lt * challenges.u32_op_table_challenges.lt_result_weight;
+            extension_row.push(compressed_row_for_lt);
+
+            // Multiply compressed value into running product for lt
+            lt_running_product = lt_running_product
+                * (challenges
+                    .u32_op_table_challenges
+                    .processor_lt_perm_row_weight
+                    - compressed_row_for_lt);
+            extension_row.push(lt_running_product);
+
+            // Compress (lhs, rhs, and) into single value
+            let and = row[U32OpTableColumn::AND as usize].lift();
+            let compressed_row_for_and = lhs * challenges.u32_op_table_challenges.and_lhs_weight
+                + rhs * challenges.u32_op_table_challenges.and_rhs_weight
+                + and * challenges.u32_op_table_challenges.and_result_weight;
+            extension_row.push(compressed_row_for_and);
+
+            // Multiply compressed value into running product for and
+            and_running_product = and_running_product
+                * (challenges
+                    .u32_op_table_challenges
+                    .processor_and_perm_row_weight
+                    - compressed_row_for_and);
+            extension_row.push(and_running_product);
+
+            // Compress (lhs, rhs, xor) into single value
+            let xor = row[U32OpTableColumn::XOR as usize].lift();
+            let compressed_row_for_xor = lhs * challenges.u32_op_table_challenges.xor_lhs_weight
+                + rhs * challenges.u32_op_table_challenges.xor_rhs_weight
+                + xor * challenges.u32_op_table_challenges.xor_result_weight;
+            extension_row.push(compressed_row_for_xor);
+
+            // Multiply compressed value into running product for xor
+            xor_running_product = xor_running_product
+                * (challenges
+                    .u32_op_table_challenges
+                    .processor_xor_perm_row_weight
+                    - compressed_row_for_xor);
+            extension_row.push(xor_running_product);
+
+            // Compress (lhs, rhs, reverse) into single value
+            let reverse = row[U32OpTableColumn::REV as usize].lift();
+            let compressed_row_for_reverse = lhs
+                * challenges.u32_op_table_challenges.reverse_lhs_weight
+                + rhs * challenges.u32_op_table_challenges.reverse_rhs_weight
+                + reverse * challenges.u32_op_table_challenges.reverse_result_weight;
+            extension_row.push(compressed_row_for_reverse);
+
+            // Multiply compressed value into running product for reverse
+            reverse_running_product = reverse_running_product
+                * (challenges
+                    .u32_op_table_challenges
+                    .processor_reverse_perm_row_weight
+                    - compressed_row_for_reverse);
+            extension_row.push(reverse_running_product);
+
+            // Compress (lhs, rhs, lt) into single value for div
+            let lt_for_div = row[U32OpTableColumn::LT as usize].lift();
+            let compressed_row_for_div = lhs * challenges.u32_op_table_challenges.div_lhs_weight
+                + rhs * challenges.u32_op_table_challenges.div_rhs_weight
+                + lt_for_div * challenges.u32_op_table_challenges.div_result_weight;
+            extension_row.push(compressed_row_for_div);
+
+            // Multiply compressed value into running product for div
+            div_running_product = div_running_product
+                * (challenges
+                    .u32_op_table_challenges
+                    .processor_div_perm_row_weight
+                    - compressed_row_for_div);
+            extension_row.push(div_running_product);
+
+            extension_matrix.push(extension_row);
+        }
+
+        let base = self.base.with_lifted_data(extension_matrix);
+        ExtU32OpTable { base }
     }
 }
 
