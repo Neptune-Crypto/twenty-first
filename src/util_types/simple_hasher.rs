@@ -326,18 +326,18 @@ pub mod test_simple_hasher {
         let beyond_bfield0 = u64::MAX as u128;
         let bfields: Vec<BFieldElement> = beyond_bfield0.to_digest();
         assert_eq!(5, bfields.len());
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[0]);
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[1]);
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[2]);
+        assert_eq!(BFieldElement::ring_zero(), bfields[0]);
+        assert_eq!(BFieldElement::ring_zero(), bfields[1]);
+        assert_eq!(BFieldElement::ring_zero(), bfields[2]);
         assert_eq!(BFieldElement::ring_one(), bfields[3]);
         assert_eq!(BFieldElement::new(4294967295u64), bfields[4]);
 
         let beyond_bfield1 = BFieldElement::MAX as u128 + 1;
         let bfields: Vec<BFieldElement> = beyond_bfield1.to_digest();
         assert_eq!(5, bfields.len());
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[0]);
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[1]);
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[2]);
+        assert_eq!(BFieldElement::ring_zero(), bfields[0]);
+        assert_eq!(BFieldElement::ring_zero(), bfields[1]);
+        assert_eq!(BFieldElement::ring_zero(), bfields[2]);
         assert_eq!(BFieldElement::ring_one(), bfields[3]);
         assert_eq!(BFieldElement::ring_one(), bfields[4]);
 
