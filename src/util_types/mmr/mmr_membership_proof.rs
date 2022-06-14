@@ -51,7 +51,17 @@ where
 impl<H> MmrMembershipProof<H>
 where
     H: Hasher,
+    u128: ToDigest<H::Digest>,
 {
+    pub fn hash(&self) -> H::Digest {
+        let data_index_digest: H::Digest = self.data_index.to_digest();
+        let hasher = H::new();
+        let digest_preimage: Vec<H::Digest> =
+            vec![vec![data_index_digest], self.authentication_path.clone()].concat();
+
+        hasher.hash_many(&digest_preimage)
+    }
+
     /**
      * verify
      * Verify a membership proof for an MMR. If verification succeeds, return the final state of the accumulator hash.
@@ -584,7 +594,7 @@ mod mmr_membership_proof_test {
     };
 
     #[test]
-    fn equality_test() {
+    fn equality_and_hash_test() {
         type Hasher = blake3::Hasher;
 
         let mp0: MmrMembershipProof<Hasher> = MmrMembershipProof {
@@ -617,6 +627,13 @@ mod mmr_membership_proof_test {
         assert_ne!(mp2, mp3);
         assert_eq!(mp3, mp4);
         assert_ne!(mp3, mp0);
+
+        // test the digests. This is to verify that both fields are inputs to the hash function
+        assert_eq!(mp0.hash(), mp1.hash());
+        assert_ne!(mp1.hash(), mp2.hash());
+        assert_ne!(mp2.hash(), mp3.hash());
+        assert_eq!(mp3.hash(), mp4.hash());
+        assert_ne!(mp3.hash(), mp0.hash());
     }
 
     #[test]
