@@ -186,6 +186,66 @@ impl From<ProcessorTableColumn> for usize {
     }
 }
 
+pub enum IOTableColumn {
+    IOSymbol,
+}
+
+impl From<IOTableColumn> for usize {
+    fn from(c: IOTableColumn) -> Self {
+        match c {
+            IOTableColumn::IOSymbol => 0,
+        }
+    }
+}
+
+pub enum ProgramTableColum {
+    Address,
+    Instruction,
+}
+
+impl From<ProgramTableColum> for usize {
+    fn from(c: ProgramTableColum) -> Self {
+        match c {
+            ProgramTableColum::Address => 0,
+            ProgramTableColum::Instruction => 1,
+        }
+    }
+}
+
+pub enum InstructionTableColumn {
+    Address,
+    CI,
+    NIA,
+}
+
+impl From<InstructionTableColumn> for usize {
+    fn from(c: InstructionTableColumn) -> Self {
+        match c {
+            InstructionTableColumn::Address => 0,
+            InstructionTableColumn::CI => 1,
+            InstructionTableColumn::NIA => 2,
+        }
+    }
+}
+
+pub enum OpStackTable {
+    CLK,
+    CI,
+    OSV,
+    OSP,
+}
+
+impl From<OpStackTable> for usize {
+    fn from(c: OpStackTable) -> Self {
+        match c {
+            OpStackTable::CLK => 0,
+            OpStackTable::CI => 1,
+            OpStackTable::OSV => 2,
+            OpStackTable::OSP => 3,
+        }
+    }
+}
+
 pub struct ProcessorMatrixRow {
     pub row: [BFieldElement; processor_table::BASE_WIDTH],
 }

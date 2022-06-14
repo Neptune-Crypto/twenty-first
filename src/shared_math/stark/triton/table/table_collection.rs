@@ -159,7 +159,6 @@ impl BaseTableCollection {
     }
 
     pub fn pad(&mut self) {
-        // todo: can we iterate over self and use the trait method `pad`?
         self.program_table.pad();
         self.instruction_table.pad();
         self.processor_table.pad();

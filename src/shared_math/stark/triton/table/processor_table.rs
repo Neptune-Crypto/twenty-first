@@ -191,7 +191,8 @@ impl Table<BWord> for ProcessorTable {
         let data = self.mut_data();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
-            padding_row[0] = padding_row[0] + 1.into();
+            padding_row[ProcessorTableColumn::CLK as usize] =
+                padding_row[ProcessorTableColumn::CLK as usize] + 1.into();
             data.push(padding_row);
         }
     }
