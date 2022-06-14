@@ -4,6 +4,7 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other::{self};
+use crate::shared_math::stark::triton::table::base_matrix::RAMTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const RAM_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 1;
@@ -117,7 +118,7 @@ impl Table<BWord> for RAMTable {
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
             // add same clk padding as in processor table
-            padding_row[0] = ((data.len() - 1) as u32).into();
+            padding_row[RAMTableColumn::CLK as usize] = ((data.len() - 1) as u32).into();
             data.push(padding_row);
         }
     }

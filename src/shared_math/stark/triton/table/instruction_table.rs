@@ -4,6 +4,7 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
+use crate::shared_math::stark::triton::table::base_matrix::InstructionTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const INSTRUCTION_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 1;
@@ -60,7 +61,8 @@ impl Table<BWord> for InstructionTable {
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
             // address keeps increasing
-            padding_row[0] = padding_row[0] + 1.into();
+            padding_row[InstructionTableColumn::Address as usize] =
+                padding_row[InstructionTableColumn::Address as usize] + 1.into();
             data.push(padding_row);
         }
     }
