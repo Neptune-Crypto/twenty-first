@@ -100,8 +100,49 @@ impl RAMTable {
         Self { base }
     }
 
-    pub fn extend(&self, challenges: &AllChallenges, initials: &AllInitials) -> ExtRAMTable {
-        todo!()
+    pub fn extend(
+        &self,
+        all_challenges: &AllChallenges,
+        all_initials: &AllInitials,
+    ) -> ExtRAMTable {
+        let challenges = &all_challenges.ram_table_challenges;
+        let initials = &all_initials.ram_table_initials;
+
+        let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
+        let mut running_product = initials.processor_perm_initial;
+
+        for row in self.data().iter() {
+            let (clk, ramp, ramv) = (
+                row[RAMTableColumn::CLK as usize].lift(),
+                row[RAMTableColumn::RAMP as usize].lift(),
+                row[RAMTableColumn::RAMV as usize].lift(),
+            );
+
+            let (clk_w, ramp_w, ramv_w) = (
+                challenges.clk_weight,
+                challenges.ramp_weight,
+                challenges.ramv_weight,
+            );
+
+            // 1. Compress multiple values within one row so they become one value.
+            let compressed_row_for_permutation_argument =
+                clk * clk_w + ramp * ramp_w + ramv * ramv_w;
+
+            let mut extension_row = Vec::with_capacity(row.len() + 1);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
+            extension_row.push(compressed_row_for_permutation_argument);
+
+            // 2. Compute the running *product* of the compressed column (permutation value)
+            running_product = running_product
+                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_argument);
+            extension_row.push(running_product);
+
+            extension_matrix.push(extension_row);
+        }
+
+        let base = self.base.with_lifted_data(extension_matrix);
+
+        ExtRAMTable { base }
     }
 }
 
