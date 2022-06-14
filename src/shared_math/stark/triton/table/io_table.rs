@@ -165,14 +165,9 @@ impl IOTable {
             let mut extension_row = Vec::with_capacity(row.len() + 1);
             extension_row.extend(row.iter().map(|elem| elem.lift()));
 
-            let iosymbol = row[IOSymbol as usize].lift();
-            // No linear combination because we only have one column and no challenges.
-            extension_row.push(iosymbol);
-
-            // 2. In the case of the permutation value we need to compute the running *product* of the compressed column.
-            //running_product = running_product * (challenges.processor_perm_row_weight - iosymbol);
-            //extension_row.push(running_product);
-
+            // 1. No compression needed for a single column
+            let iosymbol = extension_row[IOSymbol as usize];
+            // 2. Not applicable
             // 3. Not applicable
 
             // 4. In the case of the evalutation arguement we need to compute the running *sum*.
