@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::challenges_initials::{AllChallenges, AllInitials};
 use super::extension_table::ExtensionTable;
@@ -158,7 +160,48 @@ impl JumpStackTable {
         all_challenges: &AllChallenges,
         all_initials: &AllInitials,
     ) -> ExtJumpStackTable {
-        todo!()
+        let challenges = &all_challenges.jump_stack_table_challenges;
+        let initials = &all_initials.jump_stack_table_initials;
+
+        let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
+        let mut running_product = initials.processor_perm_initial;
+
+        for row in self.data().iter() {
+            let (clk, ci, jsp, jso, jsd) = (
+                row[JumpStackTableColumn::CLK as usize].lift(),
+                row[JumpStackTableColumn::CI as usize].lift(),
+                row[JumpStackTableColumn::JSP as usize].lift(),
+                row[JumpStackTableColumn::JSO as usize].lift(),
+                row[JumpStackTableColumn::JSD as usize].lift(),
+            );
+
+            let (clk_w, ci_w, jsp_w, jso_w, jsd_w) = (
+                challenges.clk_weight,
+                challenges.ci_weight,
+                challenges.jsp_weight,
+                challenges.jso_weight,
+                challenges.jsd_weight,
+            );
+
+            // 1. Compress multiple values within one row so they become one value.
+            let compressed_row_for_permutation_argument =
+                clk * clk_w + ci * ci_w + jsp * jsp_w + jso * jso_w + jsd * jsd_w;
+
+            let mut extension_row = Vec::with_capacity(row.len() + 1);
+            extension_row.extend(row.iter().map(|elem| elem.lift()));
+            extension_row.push(compressed_row_for_permutation_argument);
+
+            // 2. Compute the running *product* of the compressed column (permutation value)
+            running_product = running_product
+                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_argument);
+            extension_row.push(running_product);
+
+            extension_matrix.push(extension_row);
+        }
+
+        let base = self.base.with_lifted_data(extension_matrix);
+
+        ExtJumpStackTable { base }
     }
 }
 
