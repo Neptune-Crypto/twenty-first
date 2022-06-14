@@ -210,15 +210,7 @@ impl InstructionTable {
             extension_matrix.push(extension_row);
         }
 
-        let base = BaseTable::<XFieldElement>::new(
-            self.width(),
-            self.padded_height(),
-            self.num_randomizers(),
-            self.omicron().lift(),
-            self.generator().lift(),
-            self.order(),
-            extension_matrix,
-        );
+        let base = self.base.with_lifted_data(extension_matrix);
 
         ExtInstructionTable { base }
     }

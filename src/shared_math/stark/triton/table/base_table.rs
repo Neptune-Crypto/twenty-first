@@ -1,9 +1,14 @@
 use super::super::fri_domain::FriDomain;
+use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::other::{is_power_of_two, roundup_npo2};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{GetRandomElements, PrimeField};
+use crate::shared_math::x_field_element::XFieldElement;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
+type BWord = BFieldElement;
+type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct BaseTable<DataPF> {
@@ -67,6 +72,20 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
             self.num_randomizers,
             self.omicron,
             self.generator,
+            self.order,
+            matrix,
+        )
+    }
+}
+
+impl BaseTable<BWord> {
+    pub fn with_lifted_data(&self, matrix: Vec<Vec<XWord>>) -> BaseTable<XWord> {
+        BaseTable::new(
+            self.width,
+            self.padded_height,
+            self.num_randomizers,
+            self.omicron.lift(),
+            self.generator.lift(),
             self.order,
             matrix,
         )
