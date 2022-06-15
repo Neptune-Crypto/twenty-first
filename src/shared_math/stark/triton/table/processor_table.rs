@@ -572,18 +572,300 @@ impl ProcessorTableTransitionConstraintPolynomialFactory {
         clk_next - clk - one
     }
 
+    pub fn indicator_polynomial(&self, i: usize) -> MPolynomial<BWord> {
+        let one = self.one();
+        let hv0 = self.hv0();
+        let hv1 = self.hv1();
+        let hv2 = self.hv2();
+        let hv3 = self.hv3();
+
+        match i {
+            0 => (one.clone() - hv3) * (one.clone() - hv2) * (one.clone() - hv1) * (one - hv0),
+            1 => (one.clone() - hv3) * (one.clone() - hv2) * (one - hv1) * hv0,
+            2 => (one.clone() - hv3) * (one.clone() - hv2) * hv1 * (one - hv0),
+            3 => (one.clone() - hv3) * (one - hv2) * hv1 * hv0,
+            4 => (one.clone() - hv3) * hv2 * (one.clone() - hv1) * (one - hv0),
+            5 => (one.clone() - hv3) * hv2 * (one - hv1) * hv0,
+            6 => (one.clone() - hv3) * hv2 * hv1 * (one - hv0),
+            7 => (one - hv3) * hv2 * hv1 * hv0,
+            8 => hv3 * (one.clone() - hv2) * (one.clone() - hv1) * (one - hv0),
+            9 => hv3 * (one.clone() - hv2) * (one - hv1) * hv0,
+            10 => hv3 * (one.clone() - hv2) * hv1 * (one - hv0),
+            11 => hv3 * (one - hv2) * hv1 * hv0,
+            12 => hv3 * hv2 * (one.clone() - hv1) * (one - hv0),
+            13 => hv3 * hv2 * (one - hv1) * hv0,
+            14 => hv3 * hv2 * hv1 * (one - hv0),
+            15 => hv3 * hv2 * hv1 * hv0,
+            _ => todo!(), // throw an error
+        }
+    }
+
+    pub fn instruction_pop(&self) -> Vec<MPolynomial<BWord>> {
+        // no further constraints
+        vec![]
+    }
+
+    pub fn instruction_push(&self) -> Vec<MPolynomial<BWord>> {
+        let st0_next = self.st0_next();
+        let nia = self.nia();
+
+        vec![st0_next - nia]
+    }
+
+    pub fn instruction_divine(&self) -> Vec<MPolynomial<BWord>> {
+        // no further constraints
+        vec![]
+    }
+
+    pub fn instruction_dup(&self) -> Vec<MPolynomial<BWord>> {
+        vec![
+            self.indicator_polynomial(0) * (self.st0_next() - self.st0()),
+            self.indicator_polynomial(1) * (self.st0_next() - self.st1()),
+            self.indicator_polynomial(2) * (self.st0_next() - self.st2()),
+            self.indicator_polynomial(3) * (self.st0_next() - self.st3()),
+            self.indicator_polynomial(4) * (self.st0_next() - self.st4()),
+            self.indicator_polynomial(5) * (self.st0_next() - self.st5()),
+            self.indicator_polynomial(6) * (self.st0_next() - self.st6()),
+            self.indicator_polynomial(7) * (self.st0_next() - self.st7()),
+            self.indicator_polynomial(8) * (self.st0_next() - self.st8()),
+            self.indicator_polynomial(9) * (self.st0_next() - self.st9()),
+            self.indicator_polynomial(10) * (self.st0_next() - self.st10()),
+            self.indicator_polynomial(11) * (self.st0_next() - self.st11()),
+            self.indicator_polynomial(12) * (self.st0_next() - self.st12()),
+            self.indicator_polynomial(13) * (self.st0_next() - self.st13()),
+            self.indicator_polynomial(14) * (self.st0_next() - self.st14()),
+            self.indicator_polynomial(15) * (self.st0_next() - self.st15()),
+        ]
+    }
+
+    pub fn instruction_swap(&self) -> Vec<MPolynomial<BWord>> {
+        vec![
+            self.one() - self.indicator_polynomial(0),
+            self.indicator_polynomial(1) * (self.st1_next() - self.st0()),
+            self.indicator_polynomial(2) * (self.st2_next() - self.st0()),
+            self.indicator_polynomial(3) * (self.st3_next() - self.st0()),
+            self.indicator_polynomial(4) * (self.st4_next() - self.st0()),
+            self.indicator_polynomial(5) * (self.st5_next() - self.st0()),
+            self.indicator_polynomial(6) * (self.st6_next() - self.st0()),
+            self.indicator_polynomial(7) * (self.st7_next() - self.st0()),
+            self.indicator_polynomial(8) * (self.st8_next() - self.st0()),
+            self.indicator_polynomial(9) * (self.st9_next() - self.st0()),
+            self.indicator_polynomial(10) * (self.st10_next() - self.st0()),
+            self.indicator_polynomial(11) * (self.st11_next() - self.st0()),
+            self.indicator_polynomial(12) * (self.st12_next() - self.st0()),
+            self.indicator_polynomial(13) * (self.st13_next() - self.st0()),
+            self.indicator_polynomial(14) * (self.st14_next() - self.st0()),
+            self.indicator_polynomial(15) * (self.st15_next() - self.st0()),
+            self.indicator_polynomial(1) * (self.st0_next() - self.st1()),
+            self.indicator_polynomial(2) * (self.st0_next() - self.st2()),
+            self.indicator_polynomial(3) * (self.st0_next() - self.st3()),
+            self.indicator_polynomial(4) * (self.st0_next() - self.st4()),
+            self.indicator_polynomial(5) * (self.st0_next() - self.st5()),
+            self.indicator_polynomial(6) * (self.st0_next() - self.st6()),
+            self.indicator_polynomial(7) * (self.st0_next() - self.st7()),
+            self.indicator_polynomial(8) * (self.st0_next() - self.st8()),
+            self.indicator_polynomial(9) * (self.st0_next() - self.st9()),
+            self.indicator_polynomial(10) * (self.st0_next() - self.st10()),
+            self.indicator_polynomial(11) * (self.st0_next() - self.st11()),
+            self.indicator_polynomial(12) * (self.st0_next() - self.st12()),
+            self.indicator_polynomial(13) * (self.st0_next() - self.st13()),
+            self.indicator_polynomial(14) * (self.st0_next() - self.st14()),
+            self.indicator_polynomial(15) * (self.st0_next() - self.st15()),
+            (self.one() - self.indicator_polynomial(1)) * (self.st1_next() - self.st1()),
+            (self.one() - self.indicator_polynomial(2)) * (self.st2_next() - self.st2()),
+            (self.one() - self.indicator_polynomial(3)) * (self.st3_next() - self.st3()),
+            (self.one() - self.indicator_polynomial(4)) * (self.st4_next() - self.st4()),
+            (self.one() - self.indicator_polynomial(5)) * (self.st5_next() - self.st5()),
+            (self.one() - self.indicator_polynomial(6)) * (self.st6_next() - self.st6()),
+            (self.one() - self.indicator_polynomial(7)) * (self.st7_next() - self.st7()),
+            (self.one() - self.indicator_polynomial(8)) * (self.st8_next() - self.st8()),
+            (self.one() - self.indicator_polynomial(9)) * (self.st9_next() - self.st9()),
+            (self.one() - self.indicator_polynomial(10)) * (self.st10_next() - self.st10()),
+            (self.one() - self.indicator_polynomial(11)) * (self.st11_next() - self.st11()),
+            (self.one() - self.indicator_polynomial(12)) * (self.st12_next() - self.st12()),
+            (self.one() - self.indicator_polynomial(13)) * (self.st13_next() - self.st13()),
+            (self.one() - self.indicator_polynomial(14)) * (self.st14_next() - self.st14()),
+            (self.one() - self.indicator_polynomial(15)) * (self.st15_next() - self.st15()),
+        ]
+    }
+
+    pub fn instruction_nop(&self) -> Vec<MPolynomial<BWord>> {
+        // no further constraints
+        vec![]
+    }
+
+    pub fn instruction_skiz(&self) -> Vec<MPolynomial<BWord>> {
+        let two = self.one() + self.one();
+        vec![
+            self.jsp_next() - self.jsp(),
+            self.jso_next() - self.jso(),
+            self.jsd_next() - self.jsd(),
+            self.nia() - (self.hv0() + two * self.hv1()),
+            self.hv0() * (self.hv0() - self.one()),
+            self.ip_next()
+                - (self.ip() + self.one() + self.st0() * self.inv() * (self.one() + self.hv0())),
+        ]
+    }
+
     // FIXME: Consider caching this on first run (caching computed getter)
     pub fn one(&self) -> MPolynomial<BWord> {
         MPolynomial::from_constant(1.into(), 2 * BASE_WIDTH)
     }
 
     pub fn clk(&self) -> MPolynomial<BWord> {
-        self.variables[usize::from(ProcessorTableColumn::CLK)].clone()
+        self.variables[CLK as usize].clone()
+    }
+    fn ip(&self) -> MPolynomial<BWord> {
+        self.variables[IP as usize].clone()
+    }
+    fn ci(&self) -> MPolynomial<BWord> {
+        self.variables[CI as usize].clone()
+    }
+    fn nia(&self) -> MPolynomial<BWord> {
+        self.variables[NIA as usize].clone()
+    }
+    fn jsp(&self) -> MPolynomial<BWord> {
+        self.variables[JSP as usize].clone()
+    }
+    fn jsd(&self) -> MPolynomial<BWord> {
+        self.variables[JSD as usize].clone()
+    }
+    fn jso(&self) -> MPolynomial<BWord> {
+        self.variables[JSO as usize].clone()
+    }
+    pub fn st0(&self) -> MPolynomial<BWord> {
+        self.variables[ST0 as usize].clone()
+    }
+    pub fn st1(&self) -> MPolynomial<BWord> {
+        self.variables[ST1 as usize].clone()
+    }
+    pub fn st2(&self) -> MPolynomial<BWord> {
+        self.variables[ST2 as usize].clone()
+    }
+    pub fn st3(&self) -> MPolynomial<BWord> {
+        self.variables[ST3 as usize].clone()
+    }
+    pub fn st4(&self) -> MPolynomial<BWord> {
+        self.variables[ST4 as usize].clone()
+    }
+    pub fn st5(&self) -> MPolynomial<BWord> {
+        self.variables[ST5 as usize].clone()
+    }
+    pub fn st6(&self) -> MPolynomial<BWord> {
+        self.variables[ST6 as usize].clone()
+    }
+    pub fn st7(&self) -> MPolynomial<BWord> {
+        self.variables[ST7 as usize].clone()
+    }
+    pub fn st8(&self) -> MPolynomial<BWord> {
+        self.variables[ST8 as usize].clone()
+    }
+    pub fn st9(&self) -> MPolynomial<BWord> {
+        self.variables[ST9 as usize].clone()
+    }
+    pub fn st10(&self) -> MPolynomial<BWord> {
+        self.variables[ST10 as usize].clone()
+    }
+    pub fn st11(&self) -> MPolynomial<BWord> {
+        self.variables[ST11 as usize].clone()
+    }
+    pub fn st12(&self) -> MPolynomial<BWord> {
+        self.variables[ST12 as usize].clone()
+    }
+    pub fn st13(&self) -> MPolynomial<BWord> {
+        self.variables[ST13 as usize].clone()
+    }
+    pub fn st14(&self) -> MPolynomial<BWord> {
+        self.variables[ST14 as usize].clone()
+    }
+    pub fn st15(&self) -> MPolynomial<BWord> {
+        self.variables[ST15 as usize].clone()
+    }
+    pub fn inv(&self) -> MPolynomial<BWord> {
+        self.variables[INV as usize].clone()
+    }
+    fn hv0(&self) -> MPolynomial<BWord> {
+        self.variables[HV0 as usize].clone()
+    }
+    fn hv1(&self) -> MPolynomial<BWord> {
+        self.variables[HV1 as usize].clone()
+    }
+    fn hv2(&self) -> MPolynomial<BWord> {
+        self.variables[HV2 as usize].clone()
+    }
+    fn hv3(&self) -> MPolynomial<BWord> {
+        self.variables[HV3 as usize].clone()
+    }
+    fn hv4(&self) -> MPolynomial<BWord> {
+        self.variables[HV4 as usize].clone()
     }
 
     // Property: All polynomial variables that contain '_next' have the same
     // variable position / value as the one without '_next', +/- BASE_WIDTH.
     pub fn clk_next(&self) -> MPolynomial<BWord> {
-        self.variables[BASE_WIDTH + usize::from(ProcessorTableColumn::CLK)].clone()
+        self.variables[BASE_WIDTH + CLK as usize].clone()
+    }
+    fn ip_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + IP as usize].clone()
+    }
+    fn ci_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + CI as usize].clone()
+    }
+    fn jsp_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + JSP as usize].clone()
+    }
+    fn jsd_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + JSD as usize].clone()
+    }
+    fn jso_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + JSO as usize].clone()
+    }
+    pub fn st0_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST0 as usize].clone()
+    }
+    pub fn st1_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST1 as usize].clone()
+    }
+    pub fn st2_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST2 as usize].clone()
+    }
+    pub fn st3_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST3 as usize].clone()
+    }
+    pub fn st4_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST4 as usize].clone()
+    }
+    pub fn st5_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST5 as usize].clone()
+    }
+    pub fn st6_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST6 as usize].clone()
+    }
+    pub fn st7_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST7 as usize].clone()
+    }
+    pub fn st8_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST8 as usize].clone()
+    }
+    pub fn st9_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST9 as usize].clone()
+    }
+    pub fn st10_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST10 as usize].clone()
+    }
+    pub fn st11_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST11 as usize].clone()
+    }
+    pub fn st12_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST12 as usize].clone()
+    }
+    pub fn st13_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST13 as usize].clone()
+    }
+    pub fn st14_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST14 as usize].clone()
+    }
+    pub fn st15_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + ST15 as usize].clone()
     }
 }
