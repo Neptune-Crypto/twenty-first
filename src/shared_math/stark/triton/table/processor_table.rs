@@ -6,7 +6,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::instruction::{AnInstruction, Instruction};
+use crate::shared_math::stark::triton::instruction::Instruction;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::stark::triton::table::base_matrix::ProcessorTableColumn::*;
 use crate::shared_math::x_field_element::XFieldElement;
@@ -119,7 +119,7 @@ impl ProcessorTable {
             extension_row.extend(row.iter().map(|elem| elem.lift()));
 
             // Input table
-            if let Some(prow) = previous_row {
+            if let Some(prow) = previous_row.clone() {
                 if prow[CI as usize] == Instruction::ReadIo.opcode_b() {
                     let input_symbol = extension_row[ST0 as usize];
                     input_table_running_sum = input_table_running_sum
@@ -156,16 +156,204 @@ impl ProcessorTable {
                     - compressed_row_for_instruction_table_permutation_argument);
             extension_row.push(instruction_table_running_product);
 
-            // Opstack table
-            todo!();
+            // OpStack table
+            let clk = extension_row[CLK as usize];
+            let osv = extension_row[OSV as usize];
+            let osp = extension_row[OSP as usize];
 
+            let compressed_row_for_op_stack_table_permutation_argument = clk
+                * challenges.op_stack_table_clk_weight
+                + ci * challenges.op_stack_table_ci_weight
+                + osv * challenges.op_stack_table_osv_weight
+                + osp * challenges.op_stack_table_osp_weight;
+            extension_row.push(compressed_row_for_op_stack_table_permutation_argument);
+
+            opstack_table_running_product *= challenges.op_stack_perm_row_weight
+                - compressed_row_for_op_stack_table_permutation_argument;
+            extension_row.push(opstack_table_running_product);
+
+            // RAM Table
+            let ramv = extension_row[RAMV as usize];
+            let ramp = extension_row[RAMP as usize];
+
+            let compressed_row_for_ram_table_permutation_argument = clk
+                * challenges.ram_table_clk_weight
+                + ramv * challenges.ram_table_ramv_weight
+                + ramp * challenges.ram_table_ramp_weight;
+            extension_row.push(compressed_row_for_ram_table_permutation_argument);
+
+            ram_table_running_product *=
+                challenges.ram_perm_row_weight - compressed_row_for_ram_table_permutation_argument;
+            extension_row.push(ram_table_running_product);
+
+            // JumpStack Table
+            let jsp = extension_row[JSP as usize];
+            let jso = extension_row[JSO as usize];
+            let jsd = extension_row[JSD as usize];
+            let compressed_row_for_jump_stack_table = clk * challenges.jump_stack_table_clk_weight
+                + ci * challenges.jump_stack_table_ci_weight
+                + jsp * challenges.jump_stack_table_jsp_weight
+                + jso * challenges.jump_stack_table_jso_weight
+                + jsd * challenges.jump_stack_table_jsd_weight;
+            extension_row.push(compressed_row_for_jump_stack_table);
+
+            jump_stack_running_product *=
+                challenges.jump_stack_perm_row_weight - compressed_row_for_jump_stack_table;
+            extension_row.push(jump_stack_running_product);
+
+            // Hash Table – Hash's input from Processor to Hash Coprocessor
+            let st_0_through_11 = [
+                extension_row[ST0 as usize],
+                extension_row[ST1 as usize],
+                extension_row[ST2 as usize],
+                extension_row[ST3 as usize],
+                extension_row[ST4 as usize],
+                extension_row[ST5 as usize],
+                extension_row[ST6 as usize],
+                extension_row[ST7 as usize],
+                extension_row[ST8 as usize],
+                extension_row[ST9 as usize],
+                extension_row[ST10 as usize],
+                extension_row[ST11 as usize],
+            ];
+            let compressed_row_for_hash_input = st_0_through_11
+                .iter()
+                .zip(challenges.hash_table_stack_input_weights.iter())
+                .map(|(st, weight)| *weight * *st)
+                .fold(XWord::ring_zero(), |sum, summand| sum + summand);
+            extension_row.push(compressed_row_for_hash_input);
+
+            if row[CI as usize] == Instruction::Hash.opcode_b() {
+                to_hash_table_running_sum = to_hash_table_running_sum
+                    * challenges.to_hash_table_eval_row_weight
+                    + compressed_row_for_hash_input;
+            }
+            extension_row.push(to_hash_table_running_sum);
+
+            // Hash Table – Hash's output from Hash Coprocessor to Processor
+            let st_0_through_5 = [
+                extension_row[ST0 as usize],
+                extension_row[ST1 as usize],
+                extension_row[ST2 as usize],
+                extension_row[ST3 as usize],
+                extension_row[ST4 as usize],
+                extension_row[ST5 as usize],
+            ];
+            let compressed_row_for_hash_digest = st_0_through_5
+                .iter()
+                .zip(challenges.hash_table_digest_output_weights.iter())
+                .map(|(st, weight)| *weight * *st)
+                .fold(XWord::ring_zero(), |sum, summand| sum + summand);
+            extension_row.push(compressed_row_for_hash_digest);
+
+            if let Some(prow) = previous_row.clone() {
+                if prow[CI as usize] == Instruction::Hash.opcode_b() {
+                    from_hash_table_running_sum = from_hash_table_running_sum
+                        * challenges.to_hash_table_eval_row_weight
+                        + compressed_row_for_hash_digest;
+                }
+            }
+            extension_row.push(from_hash_table_running_sum);
+
+            // U32 Table
+            if let Some(prow) = previous_row {
+                let lhs = prow[ST0 as usize].lift();
+                let rhs = prow[ST1 as usize].lift();
+                let u32_op_result = extension_row[ST0 as usize];
+
+                // less than
+                let compressed_row_for_u32_lt = lhs * challenges.u32_op_table_lt_lhs_weight
+                    + rhs * challenges.u32_op_table_lt_rhs_weight
+                    + u32_op_result * challenges.u32_op_table_lt_result_weight;
+                extension_row.push(compressed_row_for_u32_lt);
+
+                if prow[CI as usize] == Instruction::Lt.opcode_b() {
+                    u32_table_lt_running_prod *=
+                        challenges.u32_lt_perm_row_weight - compressed_row_for_u32_lt;
+                }
+                extension_row.push(u32_table_lt_running_prod);
+
+                // and
+                let compressed_row_for_u32_and = lhs * challenges.u32_op_table_and_lhs_weight
+                    + rhs * challenges.u32_op_table_and_rhs_weight
+                    + u32_op_result * challenges.u32_op_table_and_result_weight;
+                extension_row.push(compressed_row_for_u32_and);
+
+                if prow[CI as usize] == Instruction::And.opcode_b() {
+                    u32_table_and_running_prod *=
+                        challenges.u32_and_perm_row_weight - compressed_row_for_u32_and;
+                }
+                extension_row.push(u32_table_and_running_prod);
+
+                // xor
+                let compressed_row_for_u32_xor = lhs * challenges.u32_op_table_xor_lhs_weight
+                    + rhs * challenges.u32_op_table_xor_rhs_weight
+                    + u32_op_result * challenges.u32_op_table_xor_result_weight;
+                extension_row.push(compressed_row_for_u32_xor);
+
+                if prow[CI as usize] == Instruction::Xor.opcode_b() {
+                    u32_table_xor_running_prod *=
+                        challenges.u32_xor_perm_row_weight - compressed_row_for_u32_xor;
+                }
+                extension_row.push(u32_table_xor_running_prod);
+
+                // reverse
+                let compressed_row_for_u32_reverse = lhs
+                    * challenges.u32_op_table_reverse_lhs_weight
+                    + u32_op_result * challenges.u32_op_table_reverse_result_weight;
+                extension_row.push(compressed_row_for_u32_reverse);
+
+                if prow[CI as usize] == Instruction::Reverse.opcode_b() {
+                    u32_table_reverse_running_prod *=
+                        challenges.u32_reverse_perm_row_weight - compressed_row_for_u32_reverse;
+                }
+                extension_row.push(u32_table_reverse_running_prod);
+
+                // div
+                let divisor = prow[ST0 as usize].lift();
+                let remainder = extension_row[ST0 as usize];
+                let lt_for_div_result = extension_row[HV0 as usize];
+                let compressed_row_for_u32_div = divisor
+                    * challenges.u32_op_table_div_divisor_weight
+                    + remainder * challenges.u32_op_table_div_remainder_weight
+                    + lt_for_div_result * challenges.u32_op_table_div_result_weight;
+                extension_row.push(compressed_row_for_u32_div);
+
+                if prow[CI as usize] == Instruction::Div.opcode_b() {
+                    u32_table_div_running_prod *=
+                        challenges.u32_lt_perm_row_weight - compressed_row_for_u32_div;
+                }
+                extension_row.push(u32_table_div_running_prod);
+            } else {
+                // If there is no previous row, none of the u32 operations make sense. The extension
+                // columns must still be filled in.
+                // todo: Is the following statement true? Can we not push 0s just as well?
+                // The stack in the non-existing previous row can be safely assumed to be all zeros.
+                // A dummy “result” is required for multiplication with the result weight.
+                // The running products can be used as-are, amounting to pushing the initials.
+                let dummy_result = extension_row[ST0 as usize];
+                extension_row.push(dummy_result * challenges.u32_op_table_lt_result_weight);
+                extension_row.push(u32_table_lt_running_prod);
+                extension_row.push(dummy_result * challenges.u32_op_table_and_result_weight);
+                extension_row.push(u32_table_and_running_prod);
+                extension_row.push(dummy_result * challenges.u32_op_table_xor_result_weight);
+                extension_row.push(u32_table_xor_running_prod);
+                extension_row.push(dummy_result * challenges.u32_op_table_reverse_result_weight);
+                extension_row.push(u32_table_reverse_running_prod);
+                extension_row.push(dummy_result * challenges.u32_op_table_div_result_weight);
+                extension_row.push(u32_table_div_running_prod);
+            }
+
+            debug_assert_eq!(
+                FULL_WIDTH,
+                extension_row.len(),
+                "After extending, the row must match the table's full width."
+            );
             previous_row = Some(row.clone());
-            // Build the extension matrix
             extension_matrix.push(extension_row);
         }
 
         let base = self.base.with_lifted_data(extension_matrix);
-
         ExtProcessorTable { base }
     }
 }
