@@ -294,7 +294,7 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
         let mut state = [BFieldElement::ring_zero(); RP_DEFAULT_WIDTH];
 
         // Padding shouldn't be necessary since the total input length is 12, which is the
-        // capacity of this sponge.
+        // capacity of this sponge. Also not needed since the context (length) is clear.
 
         // Copy over left and right into state for hasher
         state[0..RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(left_input);
@@ -386,7 +386,7 @@ pub mod test_simple_hasher {
         println!("hash_digest = {:?}", hash_digest);
         println!("hash_pair_digest = {:?}", hash_pair_digest);
         println!("hash_many_digest = {:?}", hash_many_digest);
-        assert_eq!(hash_digest, hash_pair_digest);
+        assert_ne!(hash_digest, hash_pair_digest);
         assert_eq!(hash_digest, hash_many_digest);
     }
 
