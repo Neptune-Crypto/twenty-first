@@ -7,7 +7,7 @@ use super::traits::PrimeField;
 
 type Word = BFieldElement;
 
-pub const RP_DEFAULT_OUTPUT_SIZE: usize = 5;
+pub const RP_DEFAULT_OUTPUT_SIZE: usize = 6;
 pub const RP_DEFAULT_WIDTH: usize = 16;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -149,6 +149,7 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
         vec![
             BFieldElement::ring_zero(),
             BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
             BFieldElement::new((self >> 126) as u64),
             BFieldElement::new(((self >> 63) % BFieldElement::MAX as u128) as u64),
             BFieldElement::new((self % BFieldElement::MAX as u128) as u64),
@@ -286,11 +287,14 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     }
 
     fn hash<Value: ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
-        self.hash(&input.to_digest(), 5)
+        self.hash(&input.to_digest(), RP_DEFAULT_OUTPUT_SIZE)
     }
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
         let mut state = [BFieldElement::ring_zero(); RP_DEFAULT_WIDTH];
+
+        // Padding shouldn't be necessary since the total input length is 12, which is the
+        // capacity of this sponge.
 
         // Copy over left and right into state for hasher
         state[0..RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(left_input);
@@ -302,7 +306,7 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     }
 
     fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
-        self.hash(&inputs.concat(), 5)
+        self.hash(&inputs.concat(), RP_DEFAULT_OUTPUT_SIZE)
     }
 }
 
@@ -316,30 +320,33 @@ pub mod test_simple_hasher {
     fn u128_to_digest_test() {
         let one = 1u128;
         let bfields_one: Vec<BFieldElement> = one.to_digest();
-        assert_eq!(5, bfields_one.len());
+        assert_eq!(6, bfields_one.len());
         assert_eq!(BFieldElement::ring_zero(), bfields_one[0]);
         assert_eq!(BFieldElement::ring_zero(), bfields_one[1]);
         assert_eq!(BFieldElement::ring_zero(), bfields_one[2]);
         assert_eq!(BFieldElement::ring_zero(), bfields_one[3]);
-        assert_eq!(BFieldElement::ring_one(), bfields_one[4]);
+        assert_eq!(BFieldElement::ring_zero(), bfields_one[4]);
+        assert_eq!(BFieldElement::ring_one(), bfields_one[5]);
 
         let beyond_bfield0 = u64::MAX as u128;
         let bfields: Vec<BFieldElement> = beyond_bfield0.to_digest();
-        assert_eq!(5, bfields.len());
+        assert_eq!(6, bfields.len());
         assert_eq!(BFieldElement::ring_zero(), bfields[0]);
         assert_eq!(BFieldElement::ring_zero(), bfields[1]);
         assert_eq!(BFieldElement::ring_zero(), bfields[2]);
-        assert_eq!(BFieldElement::ring_one(), bfields[3]);
-        assert_eq!(BFieldElement::new(4294967295u64), bfields[4]);
+        assert_eq!(BFieldElement::ring_zero(), bfields[3]);
+        assert_eq!(BFieldElement::ring_one(), bfields[4]);
+        assert_eq!(BFieldElement::new(4294967295u64), bfields[5]);
 
         let beyond_bfield1 = BFieldElement::MAX as u128 + 1;
         let bfields: Vec<BFieldElement> = beyond_bfield1.to_digest();
-        assert_eq!(5, bfields.len());
+        assert_eq!(6, bfields.len());
         assert_eq!(BFieldElement::ring_zero(), bfields[0]);
         assert_eq!(BFieldElement::ring_zero(), bfields[1]);
         assert_eq!(BFieldElement::ring_zero(), bfields[2]);
-        assert_eq!(BFieldElement::ring_one(), bfields[3]);
+        assert_eq!(BFieldElement::ring_zero(), bfields[3]);
         assert_eq!(BFieldElement::ring_one(), bfields[4]);
+        assert_eq!(BFieldElement::ring_one(), bfields[5]);
 
         let big_value = u128::MAX;
         let bfields: Vec<BFieldElement> = big_value.to_digest();
@@ -373,12 +380,14 @@ pub mod test_simple_hasher {
         let digest1: Vec<BFieldElement> = 42.to_digest();
         let digest2: Vec<BFieldElement> = (1 << 70 + 42).to_digest();
         let digests: Vec<BFieldElement> = vec![digest1.clone(), digest2.clone()].concat();
-        let hash_digest = rpp.hash(&digests, 5);
+        let hash_digest = rpp.hash(&digests, 6);
         let hash_pair_digest = rpp.hash_pair(&digest1, &digest2);
         let hash_many_digest = rpp.hash_many(&[digest1, digest2]);
-        assert_ne!(hash_digest, hash_pair_digest);
-        assert_eq!(hash_digest, hash_many_digest);
         println!("hash_digest = {:?}", hash_digest);
+        println!("hash_pair_digest = {:?}", hash_pair_digest);
+        println!("hash_many_digest = {:?}", hash_many_digest);
+        assert_eq!(hash_digest, hash_pair_digest);
+        assert_eq!(hash_digest, hash_many_digest);
     }
 
     #[test]
@@ -395,11 +404,12 @@ pub mod test_simple_hasher {
             BFieldElement::new(17784658070603252681),
             BFieldElement::new(4690418723130302842),
             BFieldElement::new(3079713491308723285),
+            BFieldElement::new(2900784210238372734),
         ];
         assert_eq!(
             expected_output0,
             rpp.hash(&input0),
-            "Hashing a single 1 produces a concrete 5-element output"
+            "Hashing a single 1 produces a concrete 6-element output"
         );
 
         let input2_left: Vec<BFieldElement> = vec![3, 1, 4, 1, 5]
@@ -416,6 +426,7 @@ pub mod test_simple_hasher {
             9660176071866133892,
             575034608412522142,
             13216022346578371396,
+            14835462902680946025,
         ]
         .into_iter()
         .map(BFieldElement::new)
@@ -424,7 +435,7 @@ pub mod test_simple_hasher {
         assert_eq!(
             expected_output2,
             rpp.hash_pair(&input2_left, &input2_right),
-            "Hashing two 5-element inputs produces a concrete 5-element output"
+            "Hashing two 5-element inputs produces a concrete 6-element output"
         );
 
         let inputs_2: Vec<Vec<BFieldElement>> = vec![vec![

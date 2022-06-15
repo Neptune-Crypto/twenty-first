@@ -683,7 +683,9 @@ where
 mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
+    use crate::shared_math::rescue_prime_xlix::{
+        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
+    };
     use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::blake3_wrapper::Blake3Hash;
@@ -2161,10 +2163,9 @@ mod merkle_tree_test {
         let mut rng = rand::thread_rng();
         let hasher = Hasher::new();
         let elements = BFieldElement::random_elements(128, &mut rng);
-        let max_length = 5;
         let leaves: Vec<_> = elements
             .iter()
-            .map(|x| hasher.hash(&[*x], max_length))
+            .map(|x| hasher.hash(&[*x], RP_DEFAULT_OUTPUT_SIZE))
             .collect();
 
         let mt = MerkleTree::<RP>::from_digests(&leaves);

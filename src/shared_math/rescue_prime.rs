@@ -297,9 +297,11 @@ mod rescue_prime_test {
     #[test]
     #[should_panic]
     fn disallow_too_long_input_hash_test() {
-        // Give a RP hasher with max input length 10 an input of length 11
+        // Give a RP hasher with max input length 12 an input of length 13
         let rp = params::rescue_prime_params_bfield_0();
         rp.hash(&vec![
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
             BFieldElement::ring_zero(),
             BFieldElement::ring_zero(),
             BFieldElement::ring_zero(),
@@ -317,9 +319,11 @@ mod rescue_prime_test {
     #[test]
     #[should_panic]
     fn disallow_too_long_input_trace_test() {
-        // Give a RP hasher with max input length 10 an input of length 11
+        // Give a RP hasher with max input length 12 an input of length 13
         let rp = params::rescue_prime_params_bfield_0();
         rp.trace(&vec![
+            BFieldElement::ring_zero(),
+            BFieldElement::ring_zero(),
             BFieldElement::ring_zero(),
             BFieldElement::ring_zero(),
             BFieldElement::ring_zero(),
@@ -364,6 +368,7 @@ mod rescue_prime_test {
             17784658070603252681,
             4690418723130302842,
             3079713491308723285,
+            2900784210238372734,
         ];
         let output1: Vec<u64> = vec![
             15817975225520290566,
@@ -371,6 +376,7 @@ mod rescue_prime_test {
             8434682293988037518,
             16088630906125642382,
             2049996104833593705,
+            994469434754950519,
         ];
         let output2: Vec<u64> = vec![
             8224332136734371881,
@@ -378,6 +384,7 @@ mod rescue_prime_test {
             9660176071866133892,
             575034608412522142,
             13216022346578371396,
+            14835462902680946025,
         ];
 
         let rp = params::rescue_prime_params_bfield_0();
