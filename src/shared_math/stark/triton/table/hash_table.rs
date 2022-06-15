@@ -190,6 +190,7 @@ impl HashTable {
             extension_row.push(compressed_aux_for_input);
 
             // Add compressed input to running sum if round index is 0
+            extension_row.push(from_processor_running_sum);
             if row[HashTableColumn::RoundNumber as usize].is_zero() {
                 from_processor_running_sum = from_processor_running_sum
                     * challenges
@@ -197,7 +198,6 @@ impl HashTable {
                         .from_processor_eval_row_weight
                     + compressed_aux_for_input;
             }
-            extension_row.push(from_processor_running_sum);
 
             // Compress digest values into single value (independent of round index)
             let aux_for_output = [
@@ -221,6 +221,7 @@ impl HashTable {
             extension_row.push(compressed_aux_for_output);
 
             // Add compressed digest to running sum if round index is 7
+            extension_row.push(to_processor_running_sum);
             if row[HashTableColumn::RoundNumber as usize].value() == 7 {
                 to_processor_running_sum = to_processor_running_sum
                     * challenges
@@ -228,7 +229,6 @@ impl HashTable {
                         .to_processor_eval_row_weight
                     + compressed_aux_for_output;
             }
-            extension_row.push(to_processor_running_sum);
 
             extension_matrix.push(extension_row);
         }

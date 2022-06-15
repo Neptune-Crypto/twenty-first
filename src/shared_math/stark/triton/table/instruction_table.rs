@@ -187,9 +187,9 @@ impl InstructionTable {
             extension_row.push(compressed_row_for_permutation_argument);
 
             // 2. In the case of the permutation value we need to compute the running *product* of the compressed column.
+            extension_row.push(running_product);
             running_product = running_product
                 * (challenges.processor_perm_row_weight - compressed_row_for_permutation_argument);
-            extension_row.push(running_product);
 
             // 3. Since we are in the instruction table we compress multiple values for the evaluation arguement.
             let address = row[Address as usize].lift();
@@ -202,9 +202,9 @@ impl InstructionTable {
             extension_row.push(compressed_row_for_evaluation_arguement);
 
             // 4. In the case of the evalutation arguement we need to compute the running *sum*.
+            extension_row.push(running_sum);
             running_sum = running_sum * challenges.program_eval_row_weight
                 + compressed_row_for_evaluation_arguement;
-            extension_row.push(running_sum);
 
             // Build the extension matrix
             extension_matrix.push(extension_row);

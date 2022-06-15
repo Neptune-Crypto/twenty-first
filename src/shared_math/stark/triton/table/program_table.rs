@@ -182,9 +182,9 @@ impl ProgramTable {
             extension_row.push(compressed_row_for_evaluation_argument);
 
             // 2. Compute the running *product* of the compressed column (permutation value)
+            extension_row.push(running_sum);
             running_sum = running_sum * challenges.instruction_eval_row_weight
                 + compressed_row_for_evaluation_argument;
-            extension_row.push(running_sum);
 
             extension_matrix.push(extension_row);
         }

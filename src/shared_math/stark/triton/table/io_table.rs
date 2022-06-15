@@ -167,9 +167,9 @@ impl IOTable {
             // 3. Not applicable
 
             // 4. In the case of the evalutation arguement we need to compute the running *sum*.
+            extension_row.push(running_sum);
             running_sum = running_sum * challenges.input_table_challenges.processor_eval_row_weight
                 + iosymbol;
-            extension_row.push(running_sum);
 
             extension_matrix.push(extension_row);
         }

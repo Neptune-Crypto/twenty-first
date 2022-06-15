@@ -119,6 +119,7 @@ impl ProcessorTable {
             extension_row.extend(row.iter().map(|elem| elem.lift()));
 
             // Input table
+            extension_row.push(input_table_running_sum);
             if let Some(prow) = previous_row.clone() {
                 if prow[CI as usize] == Instruction::ReadIo.opcode_b() {
                     let input_symbol = extension_row[ST0 as usize];
@@ -127,16 +128,15 @@ impl ProcessorTable {
                         + input_symbol;
                 }
             }
-            extension_row.push(input_table_running_sum);
 
             // Output table
+            extension_row.push(output_table_running_sum);
             if row[CI as usize] == Instruction::WriteIo.opcode_b() {
                 let output_symbol = extension_row[ST0 as usize];
                 output_table_running_sum = output_table_running_sum
                     * challenges.output_table_eval_row_weight
                     + output_symbol;
             }
-            extension_row.push(output_table_running_sum);
 
             // Instruction table
             let ip = extension_row[IP as usize];
@@ -151,10 +151,10 @@ impl ProcessorTable {
                 ip * ip_w + ci * ci_w + nia * nia_w;
             extension_row.push(compressed_row_for_instruction_table_permutation_argument);
 
+            extension_row.push(instruction_table_running_product);
             instruction_table_running_product = instruction_table_running_product
                 * (challenges.instruction_perm_row_weight
                     - compressed_row_for_instruction_table_permutation_argument);
-            extension_row.push(instruction_table_running_product);
 
             // OpStack table
             let clk = extension_row[CLK as usize];
@@ -168,9 +168,9 @@ impl ProcessorTable {
                 + osp * challenges.op_stack_table_osp_weight;
             extension_row.push(compressed_row_for_op_stack_table_permutation_argument);
 
+            extension_row.push(opstack_table_running_product);
             opstack_table_running_product *= challenges.op_stack_perm_row_weight
                 - compressed_row_for_op_stack_table_permutation_argument;
-            extension_row.push(opstack_table_running_product);
 
             // RAM Table
             let ramv = extension_row[RAMV as usize];
@@ -182,9 +182,9 @@ impl ProcessorTable {
                 + ramp * challenges.ram_table_ramp_weight;
             extension_row.push(compressed_row_for_ram_table_permutation_argument);
 
+            extension_row.push(ram_table_running_product);
             ram_table_running_product *=
                 challenges.ram_perm_row_weight - compressed_row_for_ram_table_permutation_argument;
-            extension_row.push(ram_table_running_product);
 
             // JumpStack Table
             let jsp = extension_row[JSP as usize];
@@ -197,9 +197,9 @@ impl ProcessorTable {
                 + jsd * challenges.jump_stack_table_jsd_weight;
             extension_row.push(compressed_row_for_jump_stack_table);
 
+            extension_row.push(jump_stack_running_product);
             jump_stack_running_product *=
                 challenges.jump_stack_perm_row_weight - compressed_row_for_jump_stack_table;
-            extension_row.push(jump_stack_running_product);
 
             // Hash Table – Hash's input from Processor to Hash Coprocessor
             let st_0_through_11 = [
@@ -223,12 +223,12 @@ impl ProcessorTable {
                 .fold(XWord::ring_zero(), |sum, summand| sum + summand);
             extension_row.push(compressed_row_for_hash_input);
 
+            extension_row.push(to_hash_table_running_sum);
             if row[CI as usize] == Instruction::Hash.opcode_b() {
                 to_hash_table_running_sum = to_hash_table_running_sum
                     * challenges.to_hash_table_eval_row_weight
                     + compressed_row_for_hash_input;
             }
-            extension_row.push(to_hash_table_running_sum);
 
             // Hash Table – Hash's output from Hash Coprocessor to Processor
             let st_0_through_5 = [
@@ -246,6 +246,7 @@ impl ProcessorTable {
                 .fold(XWord::ring_zero(), |sum, summand| sum + summand);
             extension_row.push(compressed_row_for_hash_digest);
 
+            extension_row.push(from_hash_table_running_sum);
             if let Some(prow) = previous_row.clone() {
                 if prow[CI as usize] == Instruction::Hash.opcode_b() {
                     from_hash_table_running_sum = from_hash_table_running_sum
@@ -253,7 +254,6 @@ impl ProcessorTable {
                         + compressed_row_for_hash_digest;
                 }
             }
-            extension_row.push(from_hash_table_running_sum);
 
             // U32 Table
             if let Some(prow) = previous_row {
@@ -267,11 +267,11 @@ impl ProcessorTable {
                     + u32_op_result * challenges.u32_op_table_lt_result_weight;
                 extension_row.push(compressed_row_for_u32_lt);
 
+                extension_row.push(u32_table_lt_running_prod);
                 if prow[CI as usize] == Instruction::Lt.opcode_b() {
                     u32_table_lt_running_prod *=
                         challenges.u32_lt_perm_row_weight - compressed_row_for_u32_lt;
                 }
-                extension_row.push(u32_table_lt_running_prod);
 
                 // and
                 let compressed_row_for_u32_and = lhs * challenges.u32_op_table_and_lhs_weight
@@ -279,11 +279,11 @@ impl ProcessorTable {
                     + u32_op_result * challenges.u32_op_table_and_result_weight;
                 extension_row.push(compressed_row_for_u32_and);
 
+                extension_row.push(u32_table_and_running_prod);
                 if prow[CI as usize] == Instruction::And.opcode_b() {
                     u32_table_and_running_prod *=
                         challenges.u32_and_perm_row_weight - compressed_row_for_u32_and;
                 }
-                extension_row.push(u32_table_and_running_prod);
 
                 // xor
                 let compressed_row_for_u32_xor = lhs * challenges.u32_op_table_xor_lhs_weight
@@ -291,11 +291,11 @@ impl ProcessorTable {
                     + u32_op_result * challenges.u32_op_table_xor_result_weight;
                 extension_row.push(compressed_row_for_u32_xor);
 
+                extension_row.push(u32_table_xor_running_prod);
                 if prow[CI as usize] == Instruction::Xor.opcode_b() {
                     u32_table_xor_running_prod *=
                         challenges.u32_xor_perm_row_weight - compressed_row_for_u32_xor;
                 }
-                extension_row.push(u32_table_xor_running_prod);
 
                 // reverse
                 let compressed_row_for_u32_reverse = lhs
@@ -303,11 +303,11 @@ impl ProcessorTable {
                     + u32_op_result * challenges.u32_op_table_reverse_result_weight;
                 extension_row.push(compressed_row_for_u32_reverse);
 
+                extension_row.push(u32_table_reverse_running_prod);
                 if prow[CI as usize] == Instruction::Reverse.opcode_b() {
                     u32_table_reverse_running_prod *=
                         challenges.u32_reverse_perm_row_weight - compressed_row_for_u32_reverse;
                 }
-                extension_row.push(u32_table_reverse_running_prod);
 
                 // div
                 let divisor = prow[ST0 as usize].lift();
@@ -319,11 +319,11 @@ impl ProcessorTable {
                     + lt_for_div_result * challenges.u32_op_table_div_result_weight;
                 extension_row.push(compressed_row_for_u32_div);
 
+                extension_row.push(u32_table_div_running_prod);
                 if prow[CI as usize] == Instruction::Div.opcode_b() {
                     u32_table_div_running_prod *=
                         challenges.u32_lt_perm_row_weight - compressed_row_for_u32_div;
                 }
-                extension_row.push(u32_table_div_running_prod);
             } else {
                 // If there is no previous row, none of the u32 operations make sense. The extension
                 // columns must still be filled in. All stack registers are initialized to 0, and
