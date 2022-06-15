@@ -534,7 +534,7 @@ impl ExtensionTable for ExtProcessorTable {
 ///
 /// Working title. This needs to have a good name.
 ///
-/// 2 * BASE_WIDTH because
+/// 2 * BASE_WIDTH because these polynomials covers two consequetive rows.
 pub struct ProcessorTableTransitionConstraintPolynomialFactory {
     variables: [MPolynomial<BWord>; 2 * BASE_WIDTH],
 }
