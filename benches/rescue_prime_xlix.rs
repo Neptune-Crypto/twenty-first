@@ -1,6 +1,8 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::rescue_prime_xlix::{neptune_params, RescuePrimeXlix};
+use twenty_first::shared_math::rescue_prime_xlix::{
+    neptune_params, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE,
+};
 use twenty_first::shared_math::traits::GetRandomElements;
 use twenty_first::util_types::simple_hasher::{Hasher, RescuePrimeProduction};
 
@@ -21,7 +23,7 @@ fn bench_single_elements(c: &mut Criterion) {
     });
 
     group.bench_function(BenchmarkId::new("RescuePrimeXlix", size), |bencher| {
-        bencher.iter(|| hasher_rp_xlix.hash(&single_element, 5));
+        bencher.iter(|| hasher_rp_xlix.hash(&single_element, RP_DEFAULT_OUTPUT_SIZE));
     });
 }
 
@@ -39,14 +41,17 @@ fn bench_many_elements(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("RescuePrime", size), |bencher| {
         bencher.iter(|| {
-            let chunks: Vec<Vec<BFieldElement>> = elements.chunks(5).map(|s| s.to_vec()).collect();
+            let chunks: Vec<Vec<BFieldElement>> = elements
+                .chunks(RP_DEFAULT_OUTPUT_SIZE)
+                .map(|s| s.to_vec())
+                .collect();
             hasher_rp.hash_many(&chunks);
         });
     });
 
     group.bench_function(BenchmarkId::new("RescuePrimeXlix", size), |bencher| {
         bencher.iter(|| {
-            hasher_rp_xlix.hash(&elements, 5);
+            hasher_rp_xlix.hash(&elements, RP_DEFAULT_OUTPUT_SIZE);
         });
     });
 }
@@ -66,13 +71,13 @@ fn rescue_prime_16384_rate_12_15(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("RescuePrimeXlix-12", size), |bencher| {
         bencher.iter(|| {
-            hasher_rp_xlix_12.hash(&elements, 5);
+            hasher_rp_xlix_12.hash(&elements, RP_DEFAULT_OUTPUT_SIZE);
         });
     });
 
     group.bench_function(BenchmarkId::new("RescuePrimeXlix-15", size), |bencher| {
         bencher.iter(|| {
-            hasher_rp_xlix_15.hash(&elements, 5);
+            hasher_rp_xlix_15.hash(&elements, RP_DEFAULT_OUTPUT_SIZE);
         });
     });
 }
@@ -93,11 +98,12 @@ fn bench_pairs(c: &mut Criterion) {
     group.bench_function(
         BenchmarkId::new("RescuePrimeXlix-hash_pair", size),
         |bencher| {
-            let chunks: Vec<_> = elements.chunks_exact(10).collect();
+            let chunks: Vec<_> = elements.chunks_exact(2 * RP_DEFAULT_OUTPUT_SIZE).collect();
             bencher.iter(|| {
                 for chunk in chunks.iter() {
-                    let chunk_a = &chunk[0..5].to_vec();
-                    let chunk_b = &chunk[5..10].to_vec();
+                    let chunk_a = &chunk[0..RP_DEFAULT_OUTPUT_SIZE].to_vec();
+                    let chunk_b =
+                        &chunk[RP_DEFAULT_OUTPUT_SIZE..2 * RP_DEFAULT_OUTPUT_SIZE].to_vec();
                     hasher_rp_xlix.hash_pair(chunk_a, chunk_b);
                 }
             });
