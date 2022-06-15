@@ -596,7 +596,10 @@ impl ProcessorTableTransitionConstraintPolynomialFactory {
             13 => hv3 * hv2 * (one - hv1) * hv0,
             14 => hv3 * hv2 * hv1 * (one - hv0),
             15 => hv3 * hv2 * hv1 * hv0,
-            _ => todo!(), // throw an error
+            _ => panic!(
+                "No indicator polynomial with index {} exists: there are only 16.",
+                i
+            ),
         }
     }
 
