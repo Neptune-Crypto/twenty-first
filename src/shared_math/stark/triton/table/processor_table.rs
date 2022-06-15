@@ -326,21 +326,20 @@ impl ProcessorTable {
                 extension_row.push(u32_table_div_running_prod);
             } else {
                 // If there is no previous row, none of the u32 operations make sense. The extension
-                // columns must still be filled in.
-                // todo: Is the following statement true? Can we not push 0s just as well?
-                // The stack in the non-existing previous row can be safely assumed to be all zeros.
-                // A dummy “result” is required for multiplication with the result weight.
+                // columns must still be filled in. All stack registers are initialized to 0, and
+                // the stack in the non-existing previous row can be safely assumed to be all 0.
+                // Thus, all the compressed_row-values are 0 for the very first extension_row.
                 // The running products can be used as-are, amounting to pushing the initials.
-                let dummy_result = extension_row[ST0 as usize];
-                extension_row.push(dummy_result * challenges.u32_op_table_lt_result_weight);
+                let zero = XFieldElement::ring_zero();
+                extension_row.push(zero);
                 extension_row.push(u32_table_lt_running_prod);
-                extension_row.push(dummy_result * challenges.u32_op_table_and_result_weight);
+                extension_row.push(zero);
                 extension_row.push(u32_table_and_running_prod);
-                extension_row.push(dummy_result * challenges.u32_op_table_xor_result_weight);
+                extension_row.push(zero);
                 extension_row.push(u32_table_xor_running_prod);
-                extension_row.push(dummy_result * challenges.u32_op_table_reverse_result_weight);
+                extension_row.push(zero);
                 extension_row.push(u32_table_reverse_running_prod);
-                extension_row.push(dummy_result * challenges.u32_op_table_div_result_weight);
+                extension_row.push(zero);
                 extension_row.push(u32_table_div_running_prod);
             }
 
