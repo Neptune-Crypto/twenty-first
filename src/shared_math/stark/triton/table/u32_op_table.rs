@@ -210,8 +210,8 @@ impl U32OpTable {
 
             // Compress (lhs, reverse) into single value
             let reverse = extension_row[U32OpTableColumn::REV as usize];
-            let compressed_row_for_reverse = lhs * challenges.reverse_lhs_weight
-                + reverse * challenges.u32_op_table_challenges.reverse_result_weight;
+            let compressed_row_for_reverse =
+                lhs * challenges.reverse_lhs_weight + reverse * challenges.reverse_result_weight;
             extension_row.push(compressed_row_for_reverse);
 
             // Multiply compressed value into running product for reverse
@@ -222,8 +222,8 @@ impl U32OpTable {
 
             // Compress (lhs, rhs, lt) into single value for div
             let lt_for_div = extension_row[U32OpTableColumn::LT as usize];
-            let compressed_row_for_div = lhs * challenges.div_lhs_weight
-                + rhs * challenges.div_rhs_weight
+            let compressed_row_for_div = lhs * challenges.div_divisor_weight
+                + rhs * challenges.div_remainder_weight
                 + lt_for_div * challenges.div_result_weight;
             extension_row.push(compressed_row_for_div);
 

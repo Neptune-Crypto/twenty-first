@@ -264,9 +264,9 @@ impl ProcessorTable {
                     + u32_op_result * challenges.u32_op_table_lt_result_weight;
                 extension_row.push(compressed_row_for_u32_lt);
 
-                extension_row.push(u32_table_lt_running_prod);
+                extension_row.push(u32_table_lt_running_product);
                 if prow[CI as usize] == Instruction::Lt.opcode_b() {
-                    u32_table_lt_running_prod *=
+                    u32_table_lt_running_product *=
                         challenges.u32_lt_perm_row_weight - compressed_row_for_u32_lt;
                 }
 
@@ -276,9 +276,9 @@ impl ProcessorTable {
                     + u32_op_result * challenges.u32_op_table_and_result_weight;
                 extension_row.push(compressed_row_for_u32_and);
 
-                extension_row.push(u32_table_and_running_prod);
+                extension_row.push(u32_table_and_running_product);
                 if prow[CI as usize] == Instruction::And.opcode_b() {
-                    u32_table_and_running_prod *=
+                    u32_table_and_running_product *=
                         challenges.u32_and_perm_row_weight - compressed_row_for_u32_and;
                 }
 
@@ -288,9 +288,9 @@ impl ProcessorTable {
                     + u32_op_result * challenges.u32_op_table_xor_result_weight;
                 extension_row.push(compressed_row_for_u32_xor);
 
-                extension_row.push(u32_table_xor_running_prod);
+                extension_row.push(u32_table_xor_running_product);
                 if prow[CI as usize] == Instruction::Xor.opcode_b() {
-                    u32_table_xor_running_prod *=
+                    u32_table_xor_running_product *=
                         challenges.u32_xor_perm_row_weight - compressed_row_for_u32_xor;
                 }
 
@@ -300,9 +300,9 @@ impl ProcessorTable {
                     + u32_op_result * challenges.u32_op_table_reverse_result_weight;
                 extension_row.push(compressed_row_for_u32_reverse);
 
-                extension_row.push(u32_table_reverse_running_prod);
+                extension_row.push(u32_table_reverse_running_product);
                 if prow[CI as usize] == Instruction::Reverse.opcode_b() {
-                    u32_table_reverse_running_prod *=
+                    u32_table_reverse_running_product *=
                         challenges.u32_reverse_perm_row_weight - compressed_row_for_u32_reverse;
                 }
 
@@ -316,9 +316,9 @@ impl ProcessorTable {
                     + lt_for_div_result * challenges.u32_op_table_div_result_weight;
                 extension_row.push(compressed_row_for_u32_div);
 
-                extension_row.push(u32_table_div_running_prod);
+                extension_row.push(u32_table_div_running_product);
                 if prow[CI as usize] == Instruction::Div.opcode_b() {
-                    u32_table_div_running_prod *=
+                    u32_table_div_running_product *=
                         challenges.u32_lt_perm_row_weight - compressed_row_for_u32_div;
                 }
             } else {
@@ -329,15 +329,15 @@ impl ProcessorTable {
                 // The running products can be used as-are, amounting to pushing the initials.
                 let zero = XFieldElement::ring_zero();
                 extension_row.push(zero);
-                extension_row.push(u32_table_lt_running_prod);
+                extension_row.push(u32_table_lt_running_product);
                 extension_row.push(zero);
-                extension_row.push(u32_table_and_running_prod);
+                extension_row.push(u32_table_and_running_product);
                 extension_row.push(zero);
-                extension_row.push(u32_table_xor_running_prod);
+                extension_row.push(u32_table_xor_running_product);
                 extension_row.push(zero);
-                extension_row.push(u32_table_reverse_running_prod);
+                extension_row.push(u32_table_reverse_running_product);
                 extension_row.push(zero);
-                extension_row.push(u32_table_div_running_prod);
+                extension_row.push(u32_table_div_running_product);
             }
 
             debug_assert_eq!(
