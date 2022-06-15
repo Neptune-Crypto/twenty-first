@@ -16,8 +16,8 @@ pub const PROCESSOR_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 4;
 pub const PROCESSOR_TABLE_INITIALS_COUNT: usize =
     PROCESSOR_TABLE_PERMUTATION_ARGUMENTS_COUNT + PROCESSOR_TABLE_EVALUATION_ARGUMENT_COUNT;
 
-/// This is 48 because it combines all other tables (except program).
-pub const PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 48;
+/// This is 47 because it combines all other tables (except program).
+pub const PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 47;
 
 pub const BASE_WIDTH: usize = 39;
 /// BASE_WIDTH + 2 * INITIALS_COUNT - 2 (because IOSymbols don't need compression)
@@ -235,11 +235,10 @@ pub struct ProcessorTableChallenges {
     pub u32_op_table_xor_result_weight: XFieldElement,
 
     pub u32_op_table_reverse_lhs_weight: XFieldElement,
-    pub u32_op_table_reverse_rhs_weight: XFieldElement,
     pub u32_op_table_reverse_result_weight: XFieldElement,
 
-    pub u32_op_table_div_lhs_weight: XFieldElement,
-    pub u32_op_table_div_rhs_weight: XFieldElement,
+    pub u32_op_table_div_divisor_weight: XFieldElement,
+    pub u32_op_table_div_remainder_weight: XFieldElement,
     pub u32_op_table_div_result_weight: XFieldElement,
 }
 

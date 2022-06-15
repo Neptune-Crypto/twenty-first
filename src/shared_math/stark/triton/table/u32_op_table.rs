@@ -13,8 +13,8 @@ pub const U32_OP_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 0;
 pub const U32_OP_TABLE_INITIALS_COUNT: usize =
     U32_OP_TABLE_PERMUTATION_ARGUMENTS_COUNT + U32_OP_TABLE_EVALUATION_ARGUMENT_COUNT;
 
-/// This is 15 because it combines: (lt, and, xor, reverse, div) x (lhs, rhs, result)
-pub const U32_OP_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 15;
+/// This is 14 because it combines: (lt, and, xor, div) x (lhs, rhs, result) + (rev) x (lhs, result)
+pub const U32_OP_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 14;
 
 pub const BASE_WIDTH: usize = 7;
 pub const FULL_WIDTH: usize = 17; // BASE_WIDTH + 2 * INITIALS_COUNT
@@ -213,11 +213,10 @@ impl U32OpTable {
                     - compressed_row_for_xor);
             extension_row.push(xor_running_product);
 
-            // Compress (lhs, rhs, reverse) into single value
+            // Compress (lhs, reverse) into single value
             let reverse = extension_row[U32OpTableColumn::REV as usize];
             let compressed_row_for_reverse = lhs
                 * challenges.u32_op_table_challenges.reverse_lhs_weight
-                + rhs * challenges.u32_op_table_challenges.reverse_rhs_weight
                 + reverse * challenges.u32_op_table_challenges.reverse_result_weight;
             extension_row.push(compressed_row_for_reverse);
 
@@ -231,8 +230,9 @@ impl U32OpTable {
 
             // Compress (lhs, rhs, lt) into single value for div
             let lt_for_div = extension_row[U32OpTableColumn::LT as usize];
-            let compressed_row_for_div = lhs * challenges.u32_op_table_challenges.div_lhs_weight
-                + rhs * challenges.u32_op_table_challenges.div_rhs_weight
+            let compressed_row_for_div = lhs
+                * challenges.u32_op_table_challenges.div_divisor_weight
+                + rhs * challenges.u32_op_table_challenges.div_remainder_weight
                 + lt_for_div * challenges.u32_op_table_challenges.div_result_weight;
             extension_row.push(compressed_row_for_div);
 
@@ -285,11 +285,10 @@ pub struct U32OpTableChallenges {
     pub xor_result_weight: XFieldElement,
 
     pub reverse_lhs_weight: XFieldElement,
-    pub reverse_rhs_weight: XFieldElement,
     pub reverse_result_weight: XFieldElement,
 
-    pub div_lhs_weight: XFieldElement,
-    pub div_rhs_weight: XFieldElement,
+    pub div_divisor_weight: XFieldElement,
+    pub div_remainder_weight: XFieldElement,
     pub div_result_weight: XFieldElement,
 }
 

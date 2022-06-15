@@ -142,10 +142,9 @@ impl AllChallenges {
             u32_op_table_xor_rhs_weight: weights.pop().unwrap(),
             u32_op_table_xor_result_weight: weights.pop().unwrap(),
             u32_op_table_reverse_lhs_weight: weights.pop().unwrap(),
-            u32_op_table_reverse_rhs_weight: weights.pop().unwrap(),
             u32_op_table_reverse_result_weight: weights.pop().unwrap(),
-            u32_op_table_div_lhs_weight: weights.pop().unwrap(),
-            u32_op_table_div_rhs_weight: weights.pop().unwrap(),
+            u32_op_table_div_divisor_weight: weights.pop().unwrap(),
+            u32_op_table_div_remainder_weight: weights.pop().unwrap(),
             u32_op_table_div_result_weight: weights.pop().unwrap(),
         };
 
@@ -207,10 +206,9 @@ impl AllChallenges {
             xor_rhs_weight: weights.pop().unwrap(),
             xor_result_weight: weights.pop().unwrap(),
             reverse_lhs_weight: weights.pop().unwrap(),
-            reverse_rhs_weight: weights.pop().unwrap(),
             reverse_result_weight: weights.pop().unwrap(),
-            div_lhs_weight: weights.pop().unwrap(),
-            div_rhs_weight: weights.pop().unwrap(),
+            div_divisor_weight: weights.pop().unwrap(),
+            div_remainder_weight: weights.pop().unwrap(),
             div_result_weight: weights.pop().unwrap(),
         };
 
