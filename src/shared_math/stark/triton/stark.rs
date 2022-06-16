@@ -170,13 +170,11 @@ impl Stark {
 
         let seed = proof_stream.prover_fiat_shamir();
 
-        // FIXME: Generate enough weights for both at once.
-
         let challenge_weights =
             Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL_CHALLENGES);
         let challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
 
-        let initial_weights = Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL_CHALLENGES);
+        let initial_weights = Self::sample_weights(&hasher, &seed, AllEndpoints::TOTAL_ENDPOINTS);
         let initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
 
         let (ext_tables, _terminals) =

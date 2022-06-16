@@ -32,30 +32,6 @@ impl AllChallenges {
 
         println!("Challenge weights start: {}", weights.len());
 
-        let program_table_challenges = ProgramTableChallenges {
-            instruction_eval_row_weight: weights.pop().unwrap(),
-            address_weight: weights.pop().unwrap(),
-            instruction_weight: weights.pop().unwrap(),
-        };
-
-        let instruction_table_challenges = InstructionTableChallenges {
-            processor_perm_row_weight: weights.pop().unwrap(),
-            ip_weight: weights.pop().unwrap(),
-            ci_processor_weight: weights.pop().unwrap(),
-            nia_weight: weights.pop().unwrap(),
-            program_eval_row_weight: weights.pop().unwrap(),
-            addr_weight: weights.pop().unwrap(),
-            instruction_weight: weights.pop().unwrap(),
-        };
-
-        let input_table_challenges = IOTableChallenges {
-            processor_eval_row_weight: weights.pop().unwrap(),
-        };
-
-        let output_table_challenges = IOTableChallenges {
-            processor_eval_row_weight: weights.pop().unwrap(),
-        };
-
         let processor_table_challenges = ProcessorTableChallenges {
             input_table_eval_row_weight: weights.pop().unwrap(),
             output_table_eval_row_weight: weights.pop().unwrap(),
@@ -70,21 +46,26 @@ impl AllChallenges {
             u32_xor_perm_row_weight: weights.pop().unwrap(),
             u32_reverse_perm_row_weight: weights.pop().unwrap(),
             u32_div_perm_row_weight: weights.pop().unwrap(),
+
             instruction_table_ip_weight: weights.pop().unwrap(),
             instruction_table_ci_processor_weight: weights.pop().unwrap(),
             instruction_table_nia_weight: weights.pop().unwrap(),
+
             op_stack_table_clk_weight: weights.pop().unwrap(),
             op_stack_table_ci_weight: weights.pop().unwrap(),
             op_stack_table_osv_weight: weights.pop().unwrap(),
             op_stack_table_osp_weight: weights.pop().unwrap(),
+
             ram_table_clk_weight: weights.pop().unwrap(),
             ram_table_ramv_weight: weights.pop().unwrap(),
             ram_table_ramp_weight: weights.pop().unwrap(),
+
             jump_stack_table_clk_weight: weights.pop().unwrap(),
             jump_stack_table_ci_weight: weights.pop().unwrap(),
             jump_stack_table_jsp_weight: weights.pop().unwrap(),
             jump_stack_table_jso_weight: weights.pop().unwrap(),
             jump_stack_table_jsd_weight: weights.pop().unwrap(),
+
             hash_table_stack_input_weights: weights
                 .drain(0..2 * DIGEST_LEN)
                 .collect::<Vec<_>>()
@@ -95,6 +76,7 @@ impl AllChallenges {
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap(),
+
             u32_op_table_lt_lhs_weight: weights.pop().unwrap(),
             u32_op_table_lt_rhs_weight: weights.pop().unwrap(),
             u32_op_table_lt_result_weight: weights.pop().unwrap(),
@@ -111,28 +93,53 @@ impl AllChallenges {
             u32_op_table_div_result_weight: weights.pop().unwrap(),
         };
 
+        let program_table_challenges = ProgramTableChallenges {
+            instruction_eval_row_weight: weights.pop().unwrap(),
+            address_weight: weights.pop().unwrap(),
+            instruction_weight: weights.pop().unwrap(),
+        };
+
+        let instruction_table_challenges = InstructionTableChallenges {
+            processor_perm_row_weight: processor_table_challenges.instruction_perm_row_weight,
+            ip_weight: processor_table_challenges.instruction_table_ip_weight,
+            ci_processor_weight: processor_table_challenges.instruction_table_ci_processor_weight,
+            nia_weight: processor_table_challenges.instruction_table_nia_weight,
+
+            program_eval_row_weight: program_table_challenges.instruction_eval_row_weight,
+            address_weight: program_table_challenges.address_weight,
+            instruction_weight: program_table_challenges.instruction_weight,
+        };
+
+        let input_table_challenges = IOTableChallenges {
+            processor_eval_row_weight: processor_table_challenges.input_table_eval_row_weight,
+        };
+
+        let output_table_challenges = IOTableChallenges {
+            processor_eval_row_weight: processor_table_challenges.output_table_eval_row_weight,
+        };
+
         let op_stack_table_challenges = OpStackTableChallenges {
-            processor_perm_row_weight: weights.pop().unwrap(),
-            clk_weight: weights.pop().unwrap(),
-            ci_weight: weights.pop().unwrap(),
-            osv_weight: weights.pop().unwrap(),
-            osp_weight: weights.pop().unwrap(),
+            processor_perm_row_weight: processor_table_challenges.op_stack_perm_row_weight,
+            clk_weight: processor_table_challenges.op_stack_table_clk_weight,
+            ci_weight: processor_table_challenges.op_stack_table_ci_weight,
+            osv_weight: processor_table_challenges.op_stack_table_osv_weight,
+            osp_weight: processor_table_challenges.op_stack_table_osp_weight,
         };
 
         let ram_table_challenges = RamTableChallenges {
-            processor_perm_row_weight: weights.pop().unwrap(),
-            clk_weight: weights.pop().unwrap(),
-            ramv_weight: weights.pop().unwrap(),
-            ramp_weight: weights.pop().unwrap(),
+            processor_perm_row_weight: processor_table_challenges.ram_perm_row_weight,
+            clk_weight: processor_table_challenges.ram_table_clk_weight,
+            ramv_weight: processor_table_challenges.ram_table_ramv_weight,
+            ramp_weight: processor_table_challenges.ram_table_ramp_weight,
         };
 
         let jump_stack_table_challenges = JumpStackTableChallenges {
-            processor_perm_row_weight: weights.pop().unwrap(),
-            clk_weight: weights.pop().unwrap(),
-            ci_weight: weights.pop().unwrap(),
-            jsp_weight: weights.pop().unwrap(),
-            jso_weight: weights.pop().unwrap(),
-            jsd_weight: weights.pop().unwrap(),
+            processor_perm_row_weight: processor_table_challenges.jump_stack_perm_row_weight,
+            clk_weight: processor_table_challenges.jump_stack_table_clk_weight,
+            ci_weight: processor_table_challenges.jump_stack_table_ci_weight,
+            jsp_weight: processor_table_challenges.jump_stack_table_jsp_weight,
+            jso_weight: processor_table_challenges.jump_stack_table_jso_weight,
+            jsd_weight: processor_table_challenges.jump_stack_table_jsd_weight,
         };
 
         let stack_input_weights = weights
@@ -148,33 +155,41 @@ impl AllChallenges {
             .unwrap();
 
         let hash_table_challenges = HashTableChallenges {
-            from_processor_eval_row_weight: weights.pop().unwrap(),
-            to_processor_eval_row_weight: weights.pop().unwrap(),
+            from_processor_eval_row_weight: processor_table_challenges
+                .to_hash_table_eval_row_weight,
+            to_processor_eval_row_weight: processor_table_challenges
+                .from_hash_table_eval_row_weight,
 
             stack_input_weights,
             digest_output_weights,
         };
 
         let u32_op_table_challenges = U32OpTableChallenges {
-            processor_lt_perm_row_weight: weights.pop().unwrap(),
-            processor_and_perm_row_weight: weights.pop().unwrap(),
-            processor_xor_perm_row_weight: weights.pop().unwrap(),
-            processor_reverse_perm_row_weight: weights.pop().unwrap(),
-            processor_div_perm_row_weight: weights.pop().unwrap(),
-            lt_lhs_weight: weights.pop().unwrap(),
-            lt_rhs_weight: weights.pop().unwrap(),
-            lt_result_weight: weights.pop().unwrap(),
-            and_lhs_weight: weights.pop().unwrap(),
-            and_rhs_weight: weights.pop().unwrap(),
-            and_result_weight: weights.pop().unwrap(),
-            xor_lhs_weight: weights.pop().unwrap(),
-            xor_rhs_weight: weights.pop().unwrap(),
-            xor_result_weight: weights.pop().unwrap(),
-            reverse_lhs_weight: weights.pop().unwrap(),
-            reverse_result_weight: weights.pop().unwrap(),
-            div_divisor_weight: weights.pop().unwrap(),
-            div_remainder_weight: weights.pop().unwrap(),
-            div_result_weight: weights.pop().unwrap(),
+            processor_lt_perm_row_weight: processor_table_challenges.u32_lt_perm_row_weight,
+            processor_and_perm_row_weight: processor_table_challenges.u32_and_perm_row_weight,
+            processor_xor_perm_row_weight: processor_table_challenges.u32_xor_perm_row_weight,
+            processor_reverse_perm_row_weight: processor_table_challenges
+                .u32_reverse_perm_row_weight,
+            processor_div_perm_row_weight: processor_table_challenges.u32_div_perm_row_weight,
+
+            lt_lhs_weight: processor_table_challenges.u32_op_table_lt_lhs_weight,
+            lt_rhs_weight: processor_table_challenges.u32_op_table_lt_rhs_weight,
+            lt_result_weight: processor_table_challenges.u32_op_table_lt_result_weight,
+
+            and_lhs_weight: processor_table_challenges.u32_op_table_and_lhs_weight,
+            and_rhs_weight: processor_table_challenges.u32_op_table_and_rhs_weight,
+            and_result_weight: processor_table_challenges.u32_op_table_and_result_weight,
+
+            xor_lhs_weight: processor_table_challenges.u32_op_table_xor_lhs_weight,
+            xor_rhs_weight: processor_table_challenges.u32_op_table_xor_rhs_weight,
+            xor_result_weight: processor_table_challenges.u32_op_table_xor_result_weight,
+
+            reverse_lhs_weight: processor_table_challenges.u32_op_table_reverse_lhs_weight,
+            reverse_result_weight: processor_table_challenges.u32_op_table_reverse_result_weight,
+
+            div_divisor_weight: processor_table_challenges.u32_op_table_div_divisor_weight,
+            div_remainder_weight: processor_table_challenges.u32_op_table_div_remainder_weight,
+            div_result_weight: processor_table_challenges.u32_op_table_div_result_weight,
         };
 
         println!(

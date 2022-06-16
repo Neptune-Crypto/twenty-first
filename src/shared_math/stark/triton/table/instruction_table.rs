@@ -190,7 +190,7 @@ impl InstructionTable {
             let instruction = row[CI as usize].lift();
 
             let (address_w, instruction_w) =
-                (challenges.addr_weight, challenges.instruction_weight);
+                (challenges.address_weight, challenges.instruction_weight);
             let compressed_row_for_evaluation_arguement =
                 address * address_w + instruction * instruction_w;
             extension_row.push(compressed_row_for_evaluation_arguement);
@@ -240,7 +240,7 @@ pub struct InstructionTableChallenges {
     pub program_eval_row_weight: XFieldElement,
 
     /// Weights for condensing part of a row into a single column. (Related to program table.)
-    pub addr_weight: XFieldElement,
+    pub address_weight: XFieldElement,
     pub instruction_weight: XFieldElement,
 }
 
