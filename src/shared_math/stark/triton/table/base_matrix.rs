@@ -79,7 +79,8 @@ impl BaseMatrices {
 
         self.ram_matrix.push(state.to_ram_row());
 
-        self.jump_stack_matrix.push(state.to_jump_stack_row());
+        self.jump_stack_matrix
+            .push(state.to_jump_stack_row(current_instruction));
 
         if let Ok(Some(word)) = state.read_word() {
             self.input_matrix.push([word])

@@ -17,8 +17,8 @@ pub const JUMP_STACK_TABLE_INITIALS_COUNT: usize =
 /// This is 5 because it combines: clk, ci, jsp, jso, jsd,
 pub const JUMP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 5;
 
-pub const BASE_WIDTH: usize = 4;
-pub const FULL_WIDTH: usize = 6; // BASE_WIDTH + 2 * INITIALS_COUNT
+pub const BASE_WIDTH: usize = 5;
+pub const FULL_WIDTH: usize = 7; // BASE_WIDTH + 2 * INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -235,11 +235,11 @@ pub struct JumpStackTableEndpoints {
     pub processor_perm_product: XFieldElement,
 }
 
-pub struct JumpStackTableTransitionConstraintPolynomialFactory {
+pub struct JumpStackConstraintPolynomialFactory {
     variables: [MPolynomial<BWord>; 2 * BASE_WIDTH],
 }
 
-impl Default for JumpStackTableTransitionConstraintPolynomialFactory {
+impl Default for JumpStackConstraintPolynomialFactory {
     fn default() -> Self {
         let variables = MPolynomial::<BWord>::variables(2 * BASE_WIDTH, 1.into())
             .try_into()
@@ -249,7 +249,7 @@ impl Default for JumpStackTableTransitionConstraintPolynomialFactory {
     }
 }
 
-impl JumpStackTableTransitionConstraintPolynomialFactory {
+impl JumpStackConstraintPolynomialFactory {
     // Boundary Constraint(s)
     pub fn all_registers_initially_zero(&self) -> MPolynomial<BWord> {
         let clk = self.clk();
@@ -258,45 +258,32 @@ impl JumpStackTableTransitionConstraintPolynomialFactory {
         let jso = self.jso();
         let jsd = self.jsd();
 
-        clk.clone() * clk
-            + ci.clone() * ci
-            + jsp.clone() * jsp
-            + jso.clone() * jso
-            + jsd.clone() * jsd
+        clk.square() + ci.square() + jsp.square() + jso.square() + jsd.square()
     }
 
-    // Transition Constrainst
+    // Transition Constraints
     pub fn transition_constraints(&self) -> MPolynomial<BWord> {
-        let one = self.one();
-        let clk = self.clk();
-        let clk_next = self.clk_next();
-        let ci = self.ci();
-        let jsp = self.jsp();
-        let jso = self.jso();
-        let jsd = self.jsd();
-        let jsp_next = self.jsp_next();
-        let jso_next = self.jso_next();
-        let jsd_next = self.jsd_next();
+        let case_1 = self.jsp_next() - self.jsp() - self.one();
 
-        let case_1 = jsp_next.clone() - jsp.clone() - one.clone();
-
-        let case_2 = (clk_next - clk - one)
-            + (jsp.clone() - jsp_next.clone()).square()
-            + (jso.clone() - jso_next.clone()).square()
-            + (jsd.clone() - jsd_next.clone()).square();
+        let case_2 = (self.clk_next() - self.clk() - self.one())
+            + (self.jsp() - self.jsp_next()).square()
+            + (self.jso() - self.jso_next()).square()
+            + (self.jsd() - self.jsd_next()).square();
 
         let call_opcode = Instruction::Call(BFieldElement::ring_zero()).opcode_b();
         debug_assert_eq!(call_opcode, 11.into());
+
         let call_mpol = MPolynomial::from_constant(call_opcode.into(), 2 * BASE_WIDTH);
-        let case_3 = (ci.clone() - call_mpol).square()
-            + (jsp.clone() - jsp_next.clone()).square()
-            + (jso - jso_next).square()
-            + (jsd - jsd_next).square();
+        let case_3 = (self.ci() - call_mpol).square()
+            + (self.jsp() - self.jsp_next()).square()
+            + (self.jso() - self.jso_next()).square()
+            + (self.jsd() - self.jsd_next()).square();
 
         let return_opcode = Instruction::Return.opcode_b();
         debug_assert_eq!(return_opcode, 12.into());
+
         let return_mpol = MPolynomial::from_constant(return_opcode.into(), 2 * BASE_WIDTH);
-        let case_4 = (jsp - jsp_next).square() + (ci - return_mpol).square();
+        let case_4 = (self.jsp() - self.jsp_next()).square() + (self.ci() - return_mpol).square();
 
         case_1 * case_2 * case_3 * case_4
     }
@@ -307,10 +294,6 @@ impl JumpStackTableTransitionConstraintPolynomialFactory {
 
     pub fn clk(&self) -> MPolynomial<BWord> {
         self.variables[CLK as usize].clone()
-    }
-
-    pub fn clk_next(&self) -> MPolynomial<BWord> {
-        self.variables[BASE_WIDTH + CLK as usize].clone()
     }
 
     fn ci(&self) -> MPolynomial<BWord> {
@@ -327,6 +310,14 @@ impl JumpStackTableTransitionConstraintPolynomialFactory {
 
     fn jso(&self) -> MPolynomial<BWord> {
         self.variables[JSO as usize].clone()
+    }
+
+    pub fn clk_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + CLK as usize].clone()
+    }
+
+    pub fn ci_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + CI as usize].clone()
     }
 
     pub fn jsp_next(&self) -> MPolynomial<BWord> {

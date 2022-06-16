@@ -500,10 +500,14 @@ impl<'pgm> VMState<'pgm> {
         [clk, self.ramp, self.ramv]
     }
 
-    pub fn to_jump_stack_row(&self) -> [BFieldElement; jump_stack_table::BASE_WIDTH] {
+    pub fn to_jump_stack_row(
+        &self,
+        current_instruction: Instruction,
+    ) -> [BFieldElement; jump_stack_table::BASE_WIDTH] {
         let clk = self.cycle_count.into();
+        let ci = current_instruction.opcode_b();
 
-        [clk, self.jsp(), self.jso(), self.jsd()]
+        [clk, ci, self.jsp(), self.jso(), self.jsd()]
     }
 
     pub fn u32_op_trace(

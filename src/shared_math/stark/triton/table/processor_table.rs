@@ -535,11 +535,11 @@ impl ExtensionTable for ExtProcessorTable {
 /// Working title. This needs to have a good name.
 ///
 /// 2 * BASE_WIDTH because these polynomials covers two consequetive rows.
-pub struct ProcessorTableTransitionConstraintPolynomialFactory {
+pub struct ProcessorConstraintPolynomialFactory {
     variables: [MPolynomial<BWord>; 2 * BASE_WIDTH],
 }
 
-impl Default for ProcessorTableTransitionConstraintPolynomialFactory {
+impl Default for ProcessorConstraintPolynomialFactory {
     fn default() -> Self {
         let variables = MPolynomial::<BWord>::variables(2 * BASE_WIDTH, 1.into())
             .try_into()
@@ -549,7 +549,7 @@ impl Default for ProcessorTableTransitionConstraintPolynomialFactory {
     }
 }
 
-impl ProcessorTableTransitionConstraintPolynomialFactory {
+impl ProcessorConstraintPolynomialFactory {
     /// ## The cycle counter (`clk`) always increases by one
     ///
     /// $$
