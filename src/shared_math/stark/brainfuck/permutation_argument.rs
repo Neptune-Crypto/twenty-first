@@ -1,70 +1,47 @@
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::mpolynomial::Degree;
-use crate::shared_math::traits::PrimeField;
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::xfri::FriDomain;
+use crate::shared_math::{
+    b_field_element::BFieldElement, mpolynomial::Degree, traits::PrimeField,
+    x_field_element::XFieldElement, xfri::FriDomain,
+};
 
 use super::table_collection::TableCollection;
-use std::cell::RefCell;
-use std::cmp;
-use std::rc::Rc;
+use std::{cell::RefCell, cmp, rc::Rc};
 
 pub struct PermutationArgument {
     tables: Rc<RefCell<TableCollection>>,
-    lhs: ColumnPointer,
-    rhs: ColumnPointer,
-}
-
-struct ColumnPointer {
-    // todo: Change (usize, usize) into something less fickle
-    // table_index could be replaced with an actual reference to a table
-    // column_index might have to stay usize
-    table_index: usize,
-    column_index: usize,
+    lhs: (usize, usize),
+    rhs: (usize, usize),
 }
 
 impl PermutationArgument {
+    // TOOD: Change (usize, usize) into something readable.
+    // The 1st element of the tuple could be replaced with a pointer
+    // to a table, the 2nd can probably stay a usize.
     pub fn new(
         tables: Rc<RefCell<TableCollection>>,
         lhs: (usize, usize),
         rhs: (usize, usize),
     ) -> Self {
-        PermutationArgument {
-            tables,
-            lhs: ColumnPointer {
-                table_index: lhs.0,
-                column_index: lhs.1,
-            },
-            rhs: ColumnPointer {
-                table_index: rhs.0,
-                column_index: rhs.1,
-            },
-        }
+        PermutationArgument { tables, lhs, rhs }
     }
 
     // The linter seems to mistakenly think that a collect is not needed here
     #[allow(clippy::needless_collect)]
     pub fn quotient(&self, fri_domain: &FriDomain) -> Vec<XFieldElement> {
+        let difference_codeword: Vec<XFieldElement> = self
+            .tables
+            .borrow()
+            .get_table_codeword_by_index(self.lhs.0)[self.lhs.1]
+            .iter()
+            .zip(self.tables.borrow().get_table_codeword_by_index(self.rhs.0)[self.rhs.1].iter())
+            .map(|(l, r)| *l - *r)
+            .collect();
         let one: BFieldElement = BFieldElement::ring_one();
-        let zerofier = fri_domain
+        let zerofier: Vec<BFieldElement> = fri_domain
             .b_domain_values()
             .into_iter()
             .map(|x| x - one)
             .collect();
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
-        let difference_codeword: Vec<_> = self
-            .tables
-            .borrow()
-            .get_table_codeword_by_index(self.lhs.table_index)[self.lhs.column_index]
-            .iter()
-            .zip(
-                self.tables
-                    .borrow()
-                    .get_table_codeword_by_index(self.rhs.table_index)[self.rhs.column_index]
-                    .iter(),
-            )
-            .map(|(l, r)| *l - *r)
-            .collect();
         difference_codeword
             .into_iter()
             .zip(zerofier_inverse.into_iter())
@@ -76,17 +53,16 @@ impl PermutationArgument {
         let lhs_interpolant_degree = self
             .tables
             .borrow()
-            .get_table_interpolant_degree_by_index(self.lhs.table_index);
+            .get_table_interpolant_degree_by_index(self.lhs.0);
         let rhs_interpolant_degree = self
             .tables
             .borrow()
-            .get_table_interpolant_degree_by_index(self.rhs.table_index);
+            .get_table_interpolant_degree_by_index(self.rhs.0);
         let degree = cmp::max(lhs_interpolant_degree, rhs_interpolant_degree);
         degree - 1
     }
 
     pub fn evaluate_difference(&self, points: &[Vec<XFieldElement>]) -> XFieldElement {
-        points[self.lhs.table_index][self.lhs.column_index]
-            - points[self.rhs.table_index][self.rhs.column_index]
+        points[self.lhs.0][self.lhs.1] - points[self.rhs.0][self.rhs.1]
     }
 }

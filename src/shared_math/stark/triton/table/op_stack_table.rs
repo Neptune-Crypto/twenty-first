@@ -1,23 +1,12 @@
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
-use super::challenges_endpoints::{AllChallenges, AllEndpoints};
 use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::other;
-use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::table::base_matrix::OpStackTableColumn;
+use crate::shared_math::other::{self};
 use crate::shared_math::x_field_element::XFieldElement;
 
-pub const OP_STACK_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 1;
-pub const OP_STACK_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 0;
-pub const OP_STACK_TABLE_INITIALS_COUNT: usize =
-    OP_STACK_TABLE_PERMUTATION_ARGUMENTS_COUNT + OP_STACK_TABLE_EVALUATION_ARGUMENT_COUNT;
-
-/// This is 4 because it combines: clk, ci, osv, osp
-pub const OP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 4;
-
 pub const BASE_WIDTH: usize = 4;
-pub const FULL_WIDTH: usize = 6; // BASE_WIDTH + 2 * INITIALS_COUNT
+pub const FULL_WIDTH: usize = 0; // FIXME: Should of course be >BASE_WIDTH
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -57,13 +46,13 @@ impl Table<BWord> for OpStackTable {
         "OpStackTable".to_string()
     }
 
+    // FIXME: Apply correct padding, not just 0s.
     fn pad(&mut self) {
         let data = self.mut_data();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
-            let mut padding_row = data.last().unwrap().clone();
-            // add same clk padding as in processor table
-            padding_row[OpStackTableColumn::CLK as usize] = ((data.len() - 1) as u32).into();
-            data.push(padding_row);
+            let _last = data.last().unwrap();
+            let padding = vec![0.into(); BASE_WIDTH];
+            data.push(padding);
         }
     }
 
@@ -87,18 +76,18 @@ impl Table<XFieldElement> for ExtOpStackTable {
 }
 
 impl ExtensionTable for ExtOpStackTable {
-    fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
+    fn ext_boundary_constraints(&self, _challenges: &[XWord]) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
 
-    fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
+    fn ext_transition_constraints(&self, _challenges: &[XWord]) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
 
     fn ext_terminal_constraints(
         &self,
-        _challenges: &AllChallenges,
-        _terminals: &AllEndpoints,
+        _challenges: &[XWord],
+        _terminals: &[XWord],
     ) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
@@ -151,81 +140,4 @@ impl OpStackTable {
 
         Self { base }
     }
-
-    pub fn extend(
-        &self,
-        challenges: &OpStackTableChallenges,
-        initials: &OpStackTableEndpoints,
-    ) -> (ExtOpStackTable, OpStackTableEndpoints) {
-        let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
-        let mut running_product = initials.processor_perm_product;
-
-        for row in self.data().iter() {
-            let mut extension_row = Vec::with_capacity(FULL_WIDTH);
-            extension_row.extend(row.iter().map(|elem| elem.lift()));
-
-            let (clk, ci, osv, osp) = (
-                extension_row[OpStackTableColumn::CLK as usize],
-                extension_row[OpStackTableColumn::CI as usize],
-                extension_row[OpStackTableColumn::OSV as usize],
-                extension_row[OpStackTableColumn::OSP as usize],
-            );
-
-            let (clk_w, ci_w, osp_w, osv_w) = (
-                challenges.clk_weight,
-                challenges.ci_weight,
-                challenges.osv_weight,
-                challenges.osp_weight,
-            );
-
-            // 1. Compress multiple values within one row so they become one value.
-            let compressed_row_for_permutation_argument =
-                clk * clk_w + ci * ci_w + osv * osv_w + osp * osp_w;
-
-            extension_row.push(compressed_row_for_permutation_argument);
-
-            // 2. Compute the running *product* of the compressed column (permutation value)
-            extension_row.push(running_product);
-            running_product = running_product
-                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_argument);
-
-            extension_matrix.push(extension_row);
-        }
-
-        let base = self.base.with_lifted_data(extension_matrix);
-        let table = ExtOpStackTable { base };
-        let terminals = OpStackTableEndpoints {
-            processor_perm_product: running_product,
-        };
-
-        (table, terminals)
-    }
-}
-
-impl ExtOpStackTable {
-    pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
-        let ext_codewords = self.low_degree_extension(fri_domain);
-        let base = self.base.with_data(ext_codewords);
-
-        ExtOpStackTable { base }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct OpStackTableChallenges {
-    /// The weight that combines two consecutive rows in the
-    /// permutation/evaluation column of the op-stack table.
-    pub processor_perm_row_weight: XFieldElement,
-
-    /// Weights for condensing part of a row into a single column. (Related to processor table.)
-    pub clk_weight: XFieldElement,
-    pub ci_weight: XFieldElement,
-    pub osv_weight: XFieldElement,
-    pub osp_weight: XFieldElement,
-}
-
-#[derive(Debug, Clone)]
-pub struct OpStackTableEndpoints {
-    /// Values randomly generated by the prover for zero-knowledge.
-    pub processor_perm_product: XFieldElement,
 }

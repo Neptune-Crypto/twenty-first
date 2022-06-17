@@ -1,6 +1,6 @@
 use super::super::ord_n::Ord16::*;
 use super::{
-    hash_table, instruction_table, io_table, jump_stack_table, op_stack_table, processor_table,
+    aux_table, instruction_table, io_table, jump_stack_table, op_stack_table, processor_table,
     program_table, ram_table, u32_op_table,
 };
 use crate::shared_math::b_field_element::BFieldElement;
@@ -22,7 +22,7 @@ pub struct BaseMatrices {
     pub op_stack_matrix: Vec<[BFieldElement; op_stack_table::BASE_WIDTH]>,
     pub ram_matrix: Vec<[BFieldElement; ram_table::BASE_WIDTH]>,
     pub jump_stack_matrix: Vec<[BFieldElement; jump_stack_table::BASE_WIDTH]>,
-    pub aux_matrix: Vec<[BFieldElement; hash_table::BASE_WIDTH]>,
+    pub aux_matrix: Vec<[BFieldElement; aux_table::BASE_WIDTH]>,
     pub u32_op_matrix: Vec<[BFieldElement; u32_op_table::BASE_WIDTH]>,
 }
 
@@ -79,8 +79,7 @@ impl BaseMatrices {
 
         self.ram_matrix.push(state.to_ram_row());
 
-        self.jump_stack_matrix
-            .push(state.to_jump_stack_row(current_instruction));
+        self.jump_stack_matrix.push(state.to_jump_stack_row());
 
         if let Ok(Some(word)) = state.read_word() {
             self.input_matrix.push([word])
@@ -183,170 +182,6 @@ impl From<ProcessorTableColumn> for usize {
             ProcessorTableColumn::HV4 => 36,
             ProcessorTableColumn::RAMP => 37,
             ProcessorTableColumn::RAMV => 38,
-        }
-    }
-}
-
-pub enum IOTableColumn {
-    IOSymbol,
-}
-
-impl From<IOTableColumn> for usize {
-    fn from(c: IOTableColumn) -> Self {
-        match c {
-            IOTableColumn::IOSymbol => 0,
-        }
-    }
-}
-
-pub enum ProgramTableColumn {
-    Address,
-    Instruction,
-}
-
-impl From<ProgramTableColumn> for usize {
-    fn from(c: ProgramTableColumn) -> Self {
-        match c {
-            ProgramTableColumn::Address => 0,
-            ProgramTableColumn::Instruction => 1,
-        }
-    }
-}
-
-pub enum InstructionTableColumn {
-    Address,
-    CI,
-    NIA,
-}
-
-impl From<InstructionTableColumn> for usize {
-    fn from(c: InstructionTableColumn) -> Self {
-        match c {
-            InstructionTableColumn::Address => 0,
-            InstructionTableColumn::CI => 1,
-            InstructionTableColumn::NIA => 2,
-        }
-    }
-}
-
-pub enum OpStackTableColumn {
-    CLK,
-    CI,
-    OSV,
-    OSP,
-}
-
-impl From<OpStackTableColumn> for usize {
-    fn from(c: OpStackTableColumn) -> Self {
-        match c {
-            OpStackTableColumn::CLK => 0,
-            OpStackTableColumn::CI => 1,
-            OpStackTableColumn::OSV => 2,
-            OpStackTableColumn::OSP => 3,
-        }
-    }
-}
-
-pub enum RAMTableColumn {
-    CLK,
-    RAMP,
-    RAMV,
-}
-
-impl From<RAMTableColumn> for usize {
-    fn from(c: RAMTableColumn) -> Self {
-        match c {
-            RAMTableColumn::CLK => 0,
-            RAMTableColumn::RAMP => 1,
-            RAMTableColumn::RAMV => 2,
-        }
-    }
-}
-
-pub enum JumpStackTableColumn {
-    CLK,
-    CI,
-    JSP,
-    JSO,
-    JSD,
-}
-
-impl From<JumpStackTableColumn> for usize {
-    fn from(c: JumpStackTableColumn) -> Self {
-        match c {
-            JumpStackTableColumn::CLK => 0,
-            JumpStackTableColumn::CI => 1,
-            JumpStackTableColumn::JSP => 2,
-            JumpStackTableColumn::JSO => 3,
-            JumpStackTableColumn::JSD => 4,
-        }
-    }
-}
-
-pub enum HashTableColumn {
-    RoundNumber,
-    AUX0,
-    AUX1,
-    AUX2,
-    AUX3,
-    AUX4,
-    AUX5,
-    AUX6,
-    AUX7,
-    AUX8,
-    AUX9,
-    AUX10,
-    AUX11,
-    AUX12,
-    AUX13,
-    AUX14,
-    AUX15,
-}
-
-impl From<HashTableColumn> for usize {
-    fn from(c: HashTableColumn) -> Self {
-        match c {
-            HashTableColumn::RoundNumber => 0,
-            HashTableColumn::AUX0 => 1,
-            HashTableColumn::AUX1 => 2,
-            HashTableColumn::AUX2 => 3,
-            HashTableColumn::AUX3 => 4,
-            HashTableColumn::AUX4 => 5,
-            HashTableColumn::AUX5 => 6,
-            HashTableColumn::AUX6 => 7,
-            HashTableColumn::AUX7 => 8,
-            HashTableColumn::AUX8 => 9,
-            HashTableColumn::AUX9 => 10,
-            HashTableColumn::AUX10 => 11,
-            HashTableColumn::AUX11 => 12,
-            HashTableColumn::AUX12 => 13,
-            HashTableColumn::AUX13 => 14,
-            HashTableColumn::AUX14 => 15,
-            HashTableColumn::AUX15 => 16,
-        }
-    }
-}
-
-pub enum U32OpTableColumn {
-    IDC,
-    LHS,
-    RHS,
-    LT,
-    AND,
-    XOR,
-    REV,
-}
-
-impl From<U32OpTableColumn> for usize {
-    fn from(c: U32OpTableColumn) -> Self {
-        match c {
-            U32OpTableColumn::IDC => 0,
-            U32OpTableColumn::LHS => 1,
-            U32OpTableColumn::RHS => 2,
-            U32OpTableColumn::LT => 3,
-            U32OpTableColumn::AND => 4,
-            U32OpTableColumn::XOR => 5,
-            U32OpTableColumn::REV => 6,
         }
     }
 }

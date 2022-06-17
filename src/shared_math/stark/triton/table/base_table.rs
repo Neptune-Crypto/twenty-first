@@ -1,14 +1,9 @@
 use super::super::fri_domain::FriDomain;
-use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::other::{is_power_of_two, roundup_npo2};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{GetRandomElements, PrimeField};
-use crate::shared_math::x_field_element::XFieldElement;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
-type BWord = BFieldElement;
-type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct BaseTable<DataPF> {
@@ -44,15 +39,6 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
         order: usize,
         matrix: Vec<Vec<DataPF>>,
     ) -> Self {
-        if !matrix.is_empty() {
-            let actual_padded_height = roundup_npo2(matrix.len() as u64) as usize;
-            assert_eq!(
-                padded_height, actual_padded_height,
-                "Expected padded_height {}, but data pads to {}",
-                padded_height, actual_padded_height,
-            );
-        }
-
         BaseTable {
             width,
             padded_height,
@@ -62,33 +48,6 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
             order,
             matrix,
         }
-    }
-
-    /// Create a `BaseTable<DataPF>` with the same parameters, but new `matrix` data.
-    pub fn with_data(&self, matrix: Vec<Vec<DataPF>>) -> Self {
-        BaseTable::new(
-            self.width,
-            self.padded_height,
-            self.num_randomizers,
-            self.omicron,
-            self.generator,
-            self.order,
-            matrix,
-        )
-    }
-}
-
-impl BaseTable<BWord> {
-    pub fn with_lifted_data(&self, matrix: Vec<Vec<XWord>>) -> BaseTable<XWord> {
-        BaseTable::new(
-            self.width,
-            self.padded_height,
-            self.num_randomizers,
-            self.omicron.lift(),
-            self.generator.lift(),
-            self.order,
-            matrix,
-        )
     }
 }
 

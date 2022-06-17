@@ -1,4 +1,3 @@
-pub mod arguments;
 pub mod error;
 pub mod fri_domain;
 pub mod instruction;
