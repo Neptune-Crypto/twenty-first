@@ -65,7 +65,7 @@ pub trait Hasher: Sized + Send + Sync + Clone {
         let bytes = bincode::serialize(input).unwrap();
         let length_prefix_offset: usize = 8;
         let mut byte_counter: usize = length_prefix_offset;
-        let mut max_bits: usize = other::log_2_floor(max as u64) as usize;
+        let mut max_bits: usize = other::log_2_floor(max as u128) as usize;
         let mut acc: usize = 0;
 
         while max_bits > 0 {

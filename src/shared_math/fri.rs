@@ -72,7 +72,7 @@ impl FriDomain<XFieldElement> {
         ntt(
             &mut polynomial_representation,
             self.omega.unlift().unwrap(),
-            log_2_ceil(self.length as u64) as u32,
+            log_2_ceil(self.length as u128) as u32,
         );
 
         polynomial_representation
@@ -365,7 +365,7 @@ where
         // Note that we don't have to scale the polynomial back to the
         // trace subgroup since we only check its degree and don't use
         // it further.
-        let log_2_of_n = log_2_floor(last_codeword.len() as u64) as u32;
+        let log_2_of_n = log_2_floor(last_codeword.len() as u128) as u32;
         intt::<PF>(&mut last_codeword, last_omega, log_2_of_n);
         let last_poly_degree: isize = (Polynomial::<PF> {
             coefficients: last_codeword,
@@ -477,11 +477,12 @@ where
 
     fn num_rounds(&self) -> (u8, u32) {
         let max_degree = (self.domain.length / self.expansion_factor) - 1;
-        let mut rounds_count = log_2_ceil(max_degree as u64 + 1) as u8;
+        let mut rounds_count = log_2_ceil(max_degree as u128 + 1) as u8;
         let mut max_degree_of_last_round = 0u32;
         if self.expansion_factor < self.colinearity_checks_count {
             let num_missed_rounds = log_2_ceil(
-                (self.colinearity_checks_count as f64 / self.expansion_factor as f64).ceil() as u64,
+                (self.colinearity_checks_count as f64 / self.expansion_factor as f64).ceil()
+                    as u128,
             ) as u8;
             rounds_count -= num_missed_rounds;
             max_degree_of_last_round = 2u32.pow(num_missed_rounds as u32) - 1;

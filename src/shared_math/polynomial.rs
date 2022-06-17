@@ -471,7 +471,7 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
 
         let mut coefficients = self.coefficients.to_vec();
         coefficients.resize(order as usize, root.ring_zero());
-        let log_2_of_n = log_2_floor(coefficients.len() as u64) as u32;
+        let log_2_of_n = log_2_floor(coefficients.len() as u128) as u32;
         ntt::<PFElem>(&mut coefficients, root, log_2_of_n);
 
         for element in coefficients.iter_mut() {
@@ -597,8 +597,8 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             rhs_coefficients.push(root.ring_zero());
         }
 
-        let lhs_log_2_of_n = log_2_floor(lhs_coefficients.len() as u64) as u32;
-        let rhs_log_2_of_n = log_2_floor(rhs_coefficients.len() as u64) as u32;
+        let lhs_log_2_of_n = log_2_floor(lhs_coefficients.len() as u128) as u32;
+        let rhs_log_2_of_n = log_2_floor(rhs_coefficients.len() as u128) as u32;
         ntt::<PFElem>(&mut lhs_coefficients, root, lhs_log_2_of_n);
         ntt::<PFElem>(&mut rhs_coefficients, root, rhs_log_2_of_n);
 
@@ -608,7 +608,7 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             .map(|(r, l)| r * l)
             .collect();
 
-        let log_2_of_n = log_2_floor(hadamard_product.len() as u64) as u32;
+        let log_2_of_n = log_2_floor(hadamard_product.len() as u128) as u32;
         intt::<PFElem>(&mut hadamard_product, root, log_2_of_n);
         hadamard_product.truncate(degree + 1);
 
@@ -791,7 +791,7 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
     ) -> Vec<PFElem> {
         let mut coefficients = self.scale(offset).coefficients;
         coefficients.append(&mut vec![generator.ring_zero(); order - coefficients.len()]);
-        let log_2_of_n = log_2_floor(coefficients.len() as u64) as u32;
+        let log_2_of_n = log_2_floor(coefficients.len() as u128) as u32;
         ntt::<PFElem>(&mut coefficients, generator, log_2_of_n);
         coefficients
     }
@@ -800,7 +800,11 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
     pub fn fast_coset_interpolate(offset: &PFElem, generator: PFElem, values: &[PFElem]) -> Self {
         let length = values.len();
         let mut mut_values = values.to_vec();
-        intt(&mut mut_values, generator, log_2_ceil(length as u64) as u32);
+        intt(
+            &mut mut_values,
+            generator,
+            log_2_ceil(length as u128) as u32,
+        );
         let poly = Polynomial::new(mut_values);
 
         poly.scale(&offset.inverse())
@@ -859,8 +863,8 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         let mut scaled_rhs_coefficients: Vec<PFElem> = rhs.scale(&offset).coefficients;
         scaled_rhs_coefficients.append(&mut vec![zero; order - scaled_rhs_coefficients.len()]);
 
-        let lhs_log_2_of_n = log_2_floor(scaled_lhs_coefficients.len() as u64) as u32;
-        let rhs_log_2_of_n = log_2_floor(scaled_rhs_coefficients.len() as u64) as u32;
+        let lhs_log_2_of_n = log_2_floor(scaled_lhs_coefficients.len() as u128) as u32;
+        let rhs_log_2_of_n = log_2_floor(scaled_rhs_coefficients.len() as u128) as u32;
 
         ntt::<PFElem>(&mut scaled_lhs_coefficients, root, lhs_log_2_of_n);
         ntt::<PFElem>(&mut scaled_rhs_coefficients, root, rhs_log_2_of_n);
@@ -872,7 +876,7 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             .map(|(l, r)| l.to_owned() * r)
             .collect();
 
-        let log_2_of_n = log_2_floor(quotient_codeword.len() as u64) as u32;
+        let log_2_of_n = log_2_floor(quotient_codeword.len() as u128) as u32;
         intt::<PFElem>(&mut quotient_codeword, root, log_2_of_n);
 
         let scaled_quotient = Polynomial {

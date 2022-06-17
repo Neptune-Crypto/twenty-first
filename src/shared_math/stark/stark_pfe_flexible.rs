@@ -64,7 +64,7 @@ impl<'a> StarkPrimeFieldElementFlexible {
         let original_trace_length = cycle_count;
         let randomized_trace_length = original_trace_length + num_randomizers;
         let omicron_domain_length =
-            1usize << log_2_ceil((randomized_trace_length * transition_constraints_degree) as u64);
+            1usize << log_2_ceil((randomized_trace_length * transition_constraints_degree) as u128);
         let fri_domain_length = omicron_domain_length * expansion_factor;
         let omega = generator
             .get_primitive_root_of_unity(fri_domain_length as u64)
@@ -284,7 +284,7 @@ impl StarkPrimeFieldElementFlexible {
         let md_res = tqdbs.iter().max();
         let md = md_res.unwrap();
         // Round up to nearest 2^k - 1
-        let l2 = log_2_ceil(*md as u64);
+        let l2 = log_2_ceil(*md as u128);
         (1 << l2) - 1
     }
 

@@ -194,7 +194,7 @@ impl StarkRp {
             intt::<BFieldElement>(
                 &mut trace_interpolant,
                 omicron,
-                log_2_ceil(omicron_domain_length) as u32,
+                log_2_ceil(omicron_domain_length as u128) as u32,
             );
 
             trace_interpolants.push(Polynomial {

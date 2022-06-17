@@ -938,7 +938,7 @@ mod x_field_element_test {
                 .get_primitive_root_of_unity(i)
                 .0
                 .unwrap();
-            let log_2_of_n = log_2_floor(inputs.len() as u64) as u32;
+            let log_2_of_n = log_2_floor(inputs.len() as u128) as u32;
             let mut rv = inputs.clone();
             ntt::<XFieldElement>(&mut rv, root, log_2_of_n);
 
