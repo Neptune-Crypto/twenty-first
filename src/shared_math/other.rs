@@ -25,6 +25,28 @@ pub fn log_2_ceil(x: u128) -> u64 {
     }
 }
 
+/// Convert a number to an array showing which bits are set in its bit representation
+pub fn bit_representation(x: u128) -> Vec<u8> {
+    // The peak heights in an MMR can be read directly from the bit-decomposition
+    // of the leaf count.
+    if x == 0 {
+        return vec![];
+    }
+
+    let bit_count: u64 = log_2_floor(x);
+    let mut heights = vec![];
+    for i in 0..=bit_count {
+        if ((1 << i) & x) != 0 {
+            heights.push(i as u8);
+        }
+    }
+
+    // Reverse order of heights so we get this highest bit first.
+    heights.reverse();
+
+    heights
+}
+
 /// Check if the number is a power of two: { 1,2,4 .. }
 /// [Bit Twiddling Hacks]: https://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2
 pub fn is_power_of_two<T: Zero + One + Sub<Output = T> + BitAnd<Output = T> + Copy>(n: T) -> bool {
@@ -199,6 +221,17 @@ mod test_other {
 
         // TODO: Test that it can be empty.
         // TODO: Test that no powers of below max are missing.
+    }
+
+    #[test]
+    fn bit_representation_test() {
+        assert_eq!(Vec::<u8>::new(), bit_representation(0));
+        assert_eq!(vec![0], bit_representation(1));
+        assert_eq!(vec![1], bit_representation(2));
+        assert_eq!(vec![1, 0], bit_representation(3));
+
+        // test example made on calculator
+        assert_eq!(vec![23, 7, 5, 4, 3, 2, 1, 0], bit_representation(8388799));
     }
 
     #[test]
