@@ -91,7 +91,7 @@ pub fn right_sibling(node_index: u128, height: u128) -> u128 {
 }
 
 fn get_height_from_data_index(data_index: u128) -> u128 {
-    log_2_floor(data_index as u64 + 1) as u128
+    log_2_floor(data_index + 1) as u128
 }
 
 pub fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
