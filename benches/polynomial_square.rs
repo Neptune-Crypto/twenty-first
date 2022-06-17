@@ -15,7 +15,7 @@ fn polynomial_square(c: &mut Criterion) {
     let log_of_sizes: Vec<usize> = sizes
         .clone()
         .into_iter()
-        .map(|x| log_2_floor(x as u64) as usize)
+        .map(|x| log_2_floor(x as u128) as usize)
         .collect();
     let mut rng = rand::thread_rng();
     for (size, log_of_size) in izip!(sizes, log_of_sizes) {
