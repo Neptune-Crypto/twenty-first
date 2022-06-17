@@ -49,7 +49,7 @@ where
     /// Calculate the root for the entire MMR
     fn bag_peaks(&self) -> H::Digest {
         let peaks: Vec<H::Digest> = self.get_peaks();
-        bag_peaks::<H>(&peaks, self.count_nodes() as u128)
+        bag_peaks::<H>(&peaks)
     }
 
     /// Return the digests of the peaks of the MMR
@@ -267,11 +267,6 @@ where
         peaks_and_heights
     }
 
-    /// Return the number of nodes in all the trees in the MMR
-    fn count_nodes(&self) -> u128 {
-        self.digests.len() as u128 - 1
-    }
-
     /// Append an element to the archival MMR
     pub fn append_raw(&mut self, new_leaf: H::Digest) {
         let node_index = self.digests.len() as u128;
@@ -304,6 +299,13 @@ mod mmr_test {
         },
     };
     use itertools::izip;
+
+    impl<H: Hasher> ArchivalMmr<H> {
+        /// Return the number of nodes in all the trees in the MMR
+        fn count_nodes(&self) -> u128 {
+            self.digests.len() as u128 - 1
+        }
+    }
 
     #[test]
     fn empty_mmr_behavior_test() {
@@ -485,7 +487,7 @@ mod mmr_test {
         );
         assert_eq!(
             archival_mmr_small.bag_peaks(),
-            bag_peaks::<Hasher>(&accumulator_mmr_small.get_peaks(), 4)
+            bag_peaks::<Hasher>(&accumulator_mmr_small.get_peaks())
         );
         assert!(!accumulator_mmr_small
             .get_peaks()

@@ -18,8 +18,8 @@ use super::{
     mmr_membership_proof::MmrMembershipProof,
     mmr_trait::Mmr,
     shared::{
-        bag_peaks, calculate_new_peaks_from_append, data_index_to_node_index,
-        leaf_count_to_node_count, parent, right_child_and_height,
+        bag_peaks, calculate_new_peaks_from_append, data_index_to_node_index, parent,
+        right_child_and_height,
     },
 };
 
@@ -97,7 +97,7 @@ where
     }
 
     fn bag_peaks(&self) -> H::Digest {
-        bag_peaks::<H>(&self.peaks, leaf_count_to_node_count(self.leaf_count))
+        bag_peaks::<H>(&self.peaks)
     }
 
     fn get_peaks(&self) -> Vec<H::Digest> {
