@@ -14,7 +14,7 @@ const fn num_bits<T>() -> u64 {
 
 pub fn log_2_floor(x: u128) -> u64 {
     assert!(x > 0);
-    num_bits::<u64>() - x.leading_zeros() as u64 - 1
+    num_bits::<u128>() - x.leading_zeros() as u64 - 1
 }
 
 pub fn log_2_ceil(x: u128) -> u64 {
