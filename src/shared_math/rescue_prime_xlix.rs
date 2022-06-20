@@ -79,7 +79,7 @@ impl<const M: usize> RescuePrimeXlix<M> {
         debug_assert_eq!(M, state.len());
         let mut states: Vec<[Word; hash_table::BASE_WIDTH]> = Vec::with_capacity(self.n);
 
-        let mut idc: Word = 0.into();
+        let mut idc: Word = 1.into();
         let mut first_row = [idc; hash_table::BASE_WIDTH];
         first_row[1..].copy_from_slice(state);
         states.push(first_row);

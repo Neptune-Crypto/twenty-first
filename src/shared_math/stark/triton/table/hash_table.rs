@@ -62,12 +62,8 @@ impl Table<BWord> for HashTable {
 
     fn pad(&mut self) {
         let data = self.mut_data();
-        let rescue_prime = neptune_params();
-        let mut aux = [BFieldElement::ring_zero(); AUX_REGISTER_COUNT];
-        let hash_trace = rescue_prime.rescue_xlix_permutation_trace(&mut aux);
-        let padding = &mut hash_trace.iter().map(|row| row.to_vec()).collect();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
-            data.append(padding);
+            data.push(vec![BWord::ring_zero(); BASE_WIDTH]);
         }
     }
 
@@ -191,9 +187,9 @@ impl HashTable {
                 .fold(XWord::ring_zero(), |sum, summand| sum + summand);
             extension_row.push(compressed_aux_for_input);
 
-            // Add compressed input to running sum if round index is 0
+            // Add compressed input to running sum if round index marks beginning of hashing
             extension_row.push(from_processor_running_sum);
-            if row[HashTableColumn::RoundNumber as usize].is_zero() {
+            if row[HashTableColumn::RoundNumber as usize].value() == 1 {
                 from_processor_running_sum = from_processor_running_sum
                     * challenges.from_processor_eval_row_weight
                     + compressed_aux_for_input;
@@ -215,9 +211,9 @@ impl HashTable {
                 .fold(XWord::ring_zero(), |sum, summand| sum + summand);
             extension_row.push(compressed_aux_for_output);
 
-            // Add compressed digest to running sum if round index is 7
+            // Add compressed digest to running sum if round index marks end of hashing
             extension_row.push(to_processor_running_sum);
-            if row[HashTableColumn::RoundNumber as usize].value() == 7 {
+            if row[HashTableColumn::RoundNumber as usize].value() == 8 {
                 to_processor_running_sum = to_processor_running_sum
                     * challenges.to_processor_eval_row_weight
                     + compressed_aux_for_output;
