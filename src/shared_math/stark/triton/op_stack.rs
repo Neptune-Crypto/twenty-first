@@ -110,7 +110,7 @@ impl OpStack {
     ///
     /// This register is mainly intended for constraint polynomials.
     pub fn inv(&self) -> BWord {
-        let st0 = self.st(A0);
+        let st0 = self.st(ST0);
         if st0.is_zero() {
             st0
         } else {

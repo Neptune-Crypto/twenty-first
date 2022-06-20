@@ -205,7 +205,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             ReadMem => {
-                self.ramp = self.op_stack.safe_peek(A0);
+                self.ramp = self.op_stack.safe_peek(ST0);
                 self.ramv = self.memory_get(&self.ramp)?;
                 self.op_stack.push(self.ramv);
                 self.instruction_pointer += 1;
@@ -213,7 +213,7 @@ impl<'pgm> VMState<'pgm> {
 
             WriteMem => {
                 self.ramv = self.op_stack.pop()?;
-                self.ramp = self.op_stack.safe_peek(A0);
+                self.ramp = self.op_stack.safe_peek(ST0);
                 self.ram.insert(self.ramp, self.ramv);
                 self.instruction_pointer += 1;
             }
@@ -327,7 +327,7 @@ impl<'pgm> VMState<'pgm> {
                 //
                 // So while `rev` is a unary instruction (does not have a RHS),
                 // it still has a rule about the second-top-most element.
-                let rhs: u32 = self.op_stack.safe_peek(A0).try_into()?;
+                let rhs: u32 = self.op_stack.safe_peek(ST0).try_into()?;
 
                 self.op_stack.push(elem.reverse_bits().into());
                 let trace = self.u32_op_trace(elem, rhs);
@@ -418,22 +418,22 @@ impl<'pgm> VMState<'pgm> {
         let ib3 = current_instruction.ib(IB3);
         let ib4 = current_instruction.ib(IB4);
         let ib5 = current_instruction.ib(IB5);
-        let st0 = self.op_stack.st(A0);
-        let st1 = self.op_stack.st(A1);
-        let st2 = self.op_stack.st(A2);
-        let st3 = self.op_stack.st(A3);
-        let st4 = self.op_stack.st(A4);
-        let st5 = self.op_stack.st(A5);
-        let st6 = self.op_stack.st(A6);
-        let st7 = self.op_stack.st(A7);
-        let st8 = self.op_stack.st(A8);
-        let st9 = self.op_stack.st(A9);
-        let st10 = self.op_stack.st(A10);
-        let st11 = self.op_stack.st(A11);
-        let st12 = self.op_stack.st(A12);
-        let st13 = self.op_stack.st(A13);
-        let st14 = self.op_stack.st(A14);
-        let st15 = self.op_stack.st(A15);
+        let st0 = self.op_stack.st(ST0);
+        let st1 = self.op_stack.st(ST1);
+        let st2 = self.op_stack.st(ST2);
+        let st3 = self.op_stack.st(ST3);
+        let st4 = self.op_stack.st(ST4);
+        let st5 = self.op_stack.st(ST5);
+        let st6 = self.op_stack.st(ST6);
+        let st7 = self.op_stack.st(ST7);
+        let st8 = self.op_stack.st(ST8);
+        let st9 = self.op_stack.st(ST9);
+        let st10 = self.op_stack.st(ST10);
+        let st11 = self.op_stack.st(ST11);
+        let st12 = self.op_stack.st(ST12);
+        let st13 = self.op_stack.st(ST13);
+        let st14 = self.op_stack.st(ST14);
+        let st15 = self.op_stack.st(ST15);
         let inv = self.op_stack.inv();
         let osp = self.op_stack.osp();
         let osv = self.op_stack.osv();
@@ -660,7 +660,7 @@ impl<'pgm> VMState<'pgm> {
     pub fn read_word(&self) -> Result<Option<BFieldElement>, Box<dyn Error>> {
         let current_instruction = self.current_instruction()?;
         if matches!(current_instruction, ReadIo) {
-            Ok(Some(self.op_stack.safe_peek(A0)))
+            Ok(Some(self.op_stack.safe_peek(ST0)))
         } else {
             Ok(None)
         }
@@ -778,7 +778,7 @@ mod vm_state_tests {
         let (trace, _out, _err) = program.run_with_input(&[], &[]);
 
         let last_state = trace.last().unwrap();
-        assert_eq!(BWord::ring_zero(), last_state.op_stack.safe_peek(A0));
+        assert_eq!(BWord::ring_zero(), last_state.op_stack.safe_peek(ST0));
 
         println!("{}", last_state);
     }
@@ -904,7 +904,7 @@ mod vm_state_tests {
         }
 
         let last_state = trace.last().unwrap();
-        assert_eq!(BWord::ring_zero(), last_state.op_stack.st(A0));
+        assert_eq!(BWord::ring_zero(), last_state.op_stack.st(ST0));
     }
 
     #[test]
@@ -920,7 +920,7 @@ mod vm_state_tests {
         }
 
         let last_state = trace.last().unwrap();
-        assert_eq!(BWord::new(21), last_state.op_stack.st(A0));
+        assert_eq!(BWord::new(21), last_state.op_stack.st(ST0));
     }
 
     #[test]
@@ -935,7 +935,7 @@ mod vm_state_tests {
         }
 
         let last_state = trace.last().unwrap();
-        assert_eq!(BWord::new(21), last_state.op_stack.st(A0));
+        assert_eq!(BWord::new(21), last_state.op_stack.st(ST0));
     }
 
     #[test]
@@ -973,7 +973,7 @@ mod vm_state_tests {
         let _last_state = trace.last().unwrap();
 
         let _expected = BFieldElement::new(14);
-        let _actual = _last_state.op_stack.st(A0);
+        let _actual = _last_state.op_stack.st(ST0);
 
         //assert_eq!(expected, actual);
     }
