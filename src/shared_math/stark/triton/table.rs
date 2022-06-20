@@ -1,7 +1,8 @@
-pub mod aux_table;
 pub mod base_matrix;
 pub mod base_table;
+pub mod challenges_endpoints;
 pub mod extension_table;
+pub mod hash_table;
 pub mod instruction_table;
 pub mod io_table;
 pub mod jump_stack_table;
