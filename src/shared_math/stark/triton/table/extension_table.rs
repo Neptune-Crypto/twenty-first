@@ -16,6 +16,8 @@ type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 pub trait ExtensionTable: Table<XWord> + Sync {
+    fn base_width(&self) -> usize;
+
     fn ext_boundary_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>>;
 
     fn ext_transition_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>>;

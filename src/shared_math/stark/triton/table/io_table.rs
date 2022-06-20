@@ -87,6 +87,10 @@ impl Table<XFieldElement> for ExtIOTable {
 }
 
 impl ExtensionTable for ExtIOTable {
+    fn base_width(&self) -> usize {
+        BASE_WIDTH
+    }
+
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }

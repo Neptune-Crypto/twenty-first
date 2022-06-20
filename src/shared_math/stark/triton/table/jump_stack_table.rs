@@ -89,6 +89,10 @@ impl Table<XFieldElement> for ExtJumpStackTable {
 }
 
 impl ExtensionTable for ExtJumpStackTable {
+    fn base_width(&self) -> usize {
+        BASE_WIDTH
+    }
+
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }

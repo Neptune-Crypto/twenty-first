@@ -192,6 +192,10 @@ impl Table<XFieldElement> for ExtRAMTable {
 }
 
 impl ExtensionTable for ExtRAMTable {
+    fn base_width(&self) -> usize {
+        BASE_WIDTH
+    }
+
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }

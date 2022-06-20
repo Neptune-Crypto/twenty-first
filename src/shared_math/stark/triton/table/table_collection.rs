@@ -1,6 +1,7 @@
 use super::base_matrix::BaseMatrices;
 use super::base_table::Table;
 use super::challenges_endpoints::{AllChallenges, AllEndpoints};
+use super::extension_table::ExtensionTable;
 use super::hash_table::{ExtHashTable, HashTable};
 use super::instruction_table::{ExtInstructionTable, InstructionTable};
 use super::io_table::{ExtIOTable, IOTable};
@@ -11,6 +12,7 @@ use super::program_table::{ExtProgramTable, ProgramTable};
 use super::ram_table::{ExtRAMTable, RAMTable};
 use super::u32_op_table::{ExtU32OpTable, U32OpTable};
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::x_field_element::XFieldElement;
 use itertools::Itertools;
@@ -319,7 +321,10 @@ impl ExtTableCollection {
     }
 
     pub fn concat_table_data(&self) -> Vec<Vec<XWord>> {
-        let total_codeword_count = self.into_iter().map(|table| table.data().len()).sum();
+        let total_codeword_count = self
+            .into_iter()
+            .map(|ext_table| ext_table.data().len())
+            .sum();
         let mut all_table_data = Vec::with_capacity(total_codeword_count);
 
         for table in self.into_iter() {
@@ -330,25 +335,57 @@ impl ExtTableCollection {
 
         all_table_data
     }
+
+    pub fn get_all_extension_degree_bounds(&self) -> Vec<i64> {
+        self.into_iter()
+            .map(|ext_table| {
+                let extension_column_count = ext_table.width() - ext_table.base_width();
+                vec![ext_table.interpolant_degree(); extension_column_count]
+            })
+            .concat()
+    }
+
+    pub fn get_all_quotients(
+        &self,
+        fri_domain: &FriDomain<BWord>,
+        all_challenges: &AllChallenges,
+        all_terminals: &AllEndpoints,
+    ) -> Vec<Vec<XWord>> {
+        self.into_iter()
+            .map(|ext_table| {
+                ext_table.all_quotients(fri_domain, ext_table.data(), all_challenges, all_terminals)
+            })
+            .concat()
+    }
+
+    pub fn get_all_quotient_degree_bounds(
+        &self,
+        all_challenges: &AllChallenges,
+        all_terminals: &AllEndpoints,
+    ) -> Vec<Degree> {
+        self.into_iter()
+            .map(|ext_table| ext_table.all_quotient_degree_bounds(all_challenges, all_terminals))
+            .concat()
+    }
 }
 
 impl<'a> IntoIterator for &'a ExtTableCollection {
-    type Item = &'a dyn Table<XWord>;
+    type Item = &'a dyn ExtensionTable;
 
-    type IntoIter = std::array::IntoIter<&'a dyn Table<XWord>, 10>;
+    type IntoIter = std::array::IntoIter<&'a dyn ExtensionTable, 10>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
-            &self.program_table as &'a dyn Table<XWord>,
-            &self.instruction_table as &'a dyn Table<XWord>,
-            &self.processor_table as &'a dyn Table<XWord>,
-            &self.input_table as &'a dyn Table<XWord>,
-            &self.output_table as &'a dyn Table<XWord>,
-            &self.op_stack_table as &'a dyn Table<XWord>,
-            &self.ram_table as &'a dyn Table<XWord>,
-            &self.jump_stack_table as &'a dyn Table<XWord>,
-            &self.hash_table as &'a dyn Table<XWord>,
-            &self.u32_op_table as &'a dyn Table<XWord>,
+            &self.program_table as &'a dyn ExtensionTable,
+            &self.instruction_table as &'a dyn ExtensionTable,
+            &self.processor_table as &'a dyn ExtensionTable,
+            &self.input_table as &'a dyn ExtensionTable,
+            &self.output_table as &'a dyn ExtensionTable,
+            &self.op_stack_table as &'a dyn ExtensionTable,
+            &self.ram_table as &'a dyn ExtensionTable,
+            &self.jump_stack_table as &'a dyn ExtensionTable,
+            &self.hash_table as &'a dyn ExtensionTable,
+            &self.u32_op_table as &'a dyn ExtensionTable,
         ]
         .into_iter()
     }

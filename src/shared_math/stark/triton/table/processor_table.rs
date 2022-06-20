@@ -511,6 +511,10 @@ impl Table<XFieldElement> for ExtProcessorTable {
 }
 
 impl ExtensionTable for ExtProcessorTable {
+    fn base_width(&self) -> usize {
+        BASE_WIDTH
+    }
+
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }

@@ -317,10 +317,12 @@ impl Stark {
         // length is needed since the chunks are hashed two at a time.
         let mut base_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
             Vec::with_capacity(transposed_base_codewords.len());
+
         transposed_base_codewords
             .par_iter()
             .map(|values| hasher.hash(values, RP_DEFAULT_OUTPUT_SIZE))
             .collect_into_vec(&mut base_codeword_digests_by_index);
+
         let base_merkle_tree =
             MerkleTree::<StarkHasher>::from_digests(&base_codeword_digests_by_index);
 

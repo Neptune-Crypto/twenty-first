@@ -85,6 +85,10 @@ impl Table<XFieldElement> for ExtU32OpTable {
 }
 
 impl ExtensionTable for ExtU32OpTable {
+    fn base_width(&self) -> usize {
+        BASE_WIDTH
+    }
+
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }

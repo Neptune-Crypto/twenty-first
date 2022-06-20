@@ -2,11 +2,13 @@ use super::super::triton;
 use super::table::base_matrix::BaseMatrices;
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::rescue_prime_xlix::{neptune_params, RescuePrimeXlix, RP_DEFAULT_WIDTH};
+use crate::shared_math::rescue_prime_xlix::{
+    neptune_params, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
+};
 use crate::shared_math::stark::brainfuck::stark_proof_stream::{Item, StarkProofStream};
-use crate::shared_math::stark::triton::fri_domain::lift_domain;
 use crate::shared_math::stark::triton::instruction::sample_programs;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::stark::triton::table::challenges_endpoints::{AllChallenges, AllEndpoints};
@@ -19,7 +21,10 @@ use crate::shared_math::{other, xfri};
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::MerkleTree;
 use crate::util_types::simple_hasher::Hasher;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use itertools::Itertools;
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -31,7 +36,8 @@ pub struct Stark {
     _padded_height: usize,
     _log_expansion_factor: usize,
     _security_level: usize,
-    fri_domain: triton::fri_domain::FriDomain<BWord>,
+    bfri_domain: triton::fri_domain::FriDomain<BWord>,
+    xfri_domain: triton::fri_domain::FriDomain<XWord>,
     fri: xfri::Fri<StarkHasher>,
 }
 
@@ -114,7 +120,11 @@ impl Stark {
             &base_matrices,
         );
 
+        timer.elapsed("assert, set_matrices");
+
         base_tables.pad();
+
+        timer.elapsed("pad");
 
         let max_degree = base_tables.max_degree();
 
@@ -136,9 +146,11 @@ impl Stark {
         timer.elapsed("randomizer_codewords");
 
         let base_codewords: Vec<Vec<BFieldElement>> =
-            base_tables.all_base_codewords(&self.fri_domain);
+            base_tables.all_base_codewords(&self.bfri_domain);
 
         let all_base_codewords = vec![b_randomizer_codewords.into(), base_codewords].concat();
+
+        timer.elapsed("get_and_set_all_base_codewords");
 
         let transposed_base_codewords: Vec<Vec<BFieldElement>> = (0..all_base_codewords[0].len())
             .map(|i| {
@@ -148,6 +160,8 @@ impl Stark {
                     .collect::<Vec<BFieldElement>>()
             })
             .collect();
+
+        timer.elapsed("transposed_base_codewords");
 
         let hasher = neptune_params();
 
@@ -162,25 +176,94 @@ impl Stark {
         let base_merkle_tree =
             MerkleTree::<StarkHasher>::from_digests(&base_codeword_digests_by_index);
 
+        timer.elapsed("base_merkle_tree");
+
         // Commit to base codewords
 
         let mut proof_stream = StarkProofStream::default();
         let base_merkle_tree_root: Vec<BFieldElement> = base_merkle_tree.get_root();
         proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root));
 
+        timer.elapsed("proof_stream.enqueue");
+
         let seed = proof_stream.prover_fiat_shamir();
+
+        timer.elapsed("prover_fiat_shamir");
 
         let challenge_weights =
             Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL_CHALLENGES);
-        let challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
+        let all_challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
+
+        timer.elapsed("sample_weights");
 
         let initial_weights = Self::sample_weights(&hasher, &seed, AllEndpoints::TOTAL_ENDPOINTS);
-        let initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
+        let all_initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
 
-        let (ext_tables, _terminals) =
-            ExtTableCollection::extend_tables(&base_tables, &challenges, &initials);
-        let ext_codeword_tables = ext_tables.codeword_tables(&lift_domain(&self.fri_domain));
-        let _all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
+        timer.elapsed("initials");
+
+        let (ext_tables, all_terminals) =
+            ExtTableCollection::extend_tables(&base_tables, &all_challenges, &all_initials);
+        let ext_codeword_tables = ext_tables.codeword_tables(&self.xfri_domain);
+        let all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
+
+        timer.elapsed("extend + get_terminals");
+
+        timer.elapsed("get_and_set_all_extension_codewords");
+
+        let transposed_extension_codewords: Vec<Vec<XFieldElement>> = (0..all_ext_codewords[0]
+            .len())
+            .map(|i| {
+                all_ext_codewords
+                    .iter()
+                    .map(|inner| inner[i])
+                    .collect::<Vec<XFieldElement>>()
+            })
+            .collect();
+
+        let mut extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
+            Vec::with_capacity(transposed_extension_codewords.len());
+
+        transposed_extension_codewords
+            .into_par_iter()
+            .map(|xvalues| {
+                let bvalues: Vec<BFieldElement> = xvalues
+                    .into_iter()
+                    .map(|x| x.coefficients.clone().to_vec())
+                    .concat();
+                assert_eq!(
+                    27,
+                    bvalues.len(),
+                    "9 X-field elements must become 27 B-field elements"
+                );
+                hasher.hash(&bvalues, RP_DEFAULT_OUTPUT_SIZE)
+            })
+            .collect_into_vec(&mut extension_codeword_digests_by_index);
+
+        let extension_tree =
+            MerkleTree::<StarkHasher>::from_digests(&extension_codeword_digests_by_index);
+        proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root()));
+
+        timer.elapsed("extension_tree");
+
+        let _extension_degree_bounds: Vec<Degree> = ext_tables.get_all_extension_degree_bounds();
+
+        timer.elapsed("get_all_extension_degree_bounds");
+
+        let mut _quotient_codewords =
+            ext_tables.get_all_quotients(&self.bfri_domain, &all_challenges, &all_terminals);
+
+        timer.elapsed("all_quotients");
+
+        let mut _quotient_degree_bounds =
+            ext_tables.get_all_quotient_degree_bounds(&all_challenges, &all_terminals);
+
+        timer.elapsed("all_quotient_degree_bounds");
+
+        // Prove equal initial values for the permutation-extension column pairs
+        // for pa in self.permutation_arguments.iter() {
+        //     quotient_codewords.push(pa.quotient(&self.fri.domain));
+        //     quotient_degree_bounds.push(pa.quotient_degree_bound());
+        // }
 
         todo!()
     }
