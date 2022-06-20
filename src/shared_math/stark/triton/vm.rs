@@ -255,6 +255,7 @@ mod triton_vm_tests {
     use super::*;
     use crate::shared_math::mpolynomial::MPolynomial;
     use crate::shared_math::other;
+    use crate::shared_math::rescue_prime_xlix::RP_DEFAULT_WIDTH;
     use crate::shared_math::stark::triton::instruction::sample_programs;
     use crate::shared_math::stark::triton::table::base_matrix::ProcessorMatrixRow;
     use crate::shared_math::stark::triton::table::base_table::{HasBaseTable, Table};
@@ -262,13 +263,10 @@ mod triton_vm_tests {
         AllChallenges, AllEndpoints,
     };
     use crate::shared_math::stark::triton::table::extension_table::ExtensionTable;
-    use crate::shared_math::stark::triton::table::processor_table::{
-        ProcessorTable, ProcessorTableChallenges, ProcessorTableEndpoints,
-        PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT, PROCESSOR_TABLE_INITIALS_COUNT,
-    };
-    use crate::shared_math::traits::GetRandomElements;
+    use crate::shared_math::stark::triton::table::processor_table::ProcessorTable;
     use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use crate::shared_math::x_field_element::XFieldElement;
+    use crate::util_types::simple_hasher::{Hasher, ToDigest};
 
     #[test]
     fn initialise_table_test() {
@@ -552,7 +550,8 @@ mod triton_vm_tests {
 
     #[test]
     fn processor_table_constraints_evaluate_to_zero_test() {
-        let mut rng = rand::thread_rng();
+        let mut _rng = rand::thread_rng();
+        let hasher = RescuePrimeXlix::<RP_DEFAULT_WIDTH>::new();
 
         let all_programs = vec![sample_programs::PUSH_PUSH_ADD_POP_S];
         for source_code in all_programs.into_iter() {
@@ -600,13 +599,24 @@ mod triton_vm_tests {
 
             assert_air_constraints_on_matrix(processor_table.data(), &air_constraints);
 
-            return;
-
             // Test the same for the extended matrix
-            let challenges: AllChallenges = todo!();
-            let initials: AllEndpoints = todo!();
 
-            let (ext_processor_table, terminals) = processor_table.extend(
+            let mock_seed = 0u128.to_digest();
+            let mock_sample_weights: Vec<XFieldElement> = hasher
+                .get_n_hash_rounds(&mock_seed, AllChallenges::TOTAL)
+                .iter()
+                .flat_map(|digest| {
+                    vec![
+                        XFieldElement::new([digest[0], digest[1], digest[2]]),
+                        XFieldElement::new([digest[3], digest[4], digest[5]]),
+                    ]
+                })
+                .collect();
+
+            let challenges: AllChallenges = AllChallenges::create_challenges(&mock_sample_weights);
+            let initials: AllEndpoints = AllEndpoints::create_initials(&mock_sample_weights);
+
+            let (ext_processor_table, _terminals) = processor_table.extend(
                 &challenges.processor_table_challenges,
                 &initials.processor_table_endpoints,
             );

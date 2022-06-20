@@ -1,47 +1,14 @@
-use super::hash_table::{
-    HashTableChallenges, HashTableEndpoints, HASH_TABLE_EXTENSION_CHALLENGE_COUNT,
-    HASH_TABLE_INITIALS_COUNT,
-};
-use super::instruction_table::{
-    InstructionTableChallenges, InstructionTableEndpoints,
-    INSTRUCTION_TABLE_EXTENSION_CHALLENGE_COUNT, INSTRUCTION_TABLE_INITIALS_COUNT,
-};
-use super::io_table::{
-    IOTableChallenges, IOTableEndpoints, IOTABLE_EXTENSION_CHALLENGE_COUNT, IOTABLE_INITIALS_COUNT,
-};
-use super::jump_stack_table::{
-    JumpStackTableChallenges, JumpStackTableEndpoints, JUMP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT,
-    JUMP_STACK_TABLE_INITIALS_COUNT,
-};
-use super::op_stack_table::{
-    OpStackTableChallenges, OpStackTableEndpoints, OP_STACK_TABLE_EXTENSION_CHALLENGE_COUNT,
-    OP_STACK_TABLE_INITIALS_COUNT,
-};
-use super::processor_table::{
-    ProcessorTableChallenges, ProcessorTableEndpoints, PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT,
-    PROCESSOR_TABLE_INITIALS_COUNT,
-};
-use super::program_table::{
-    ProgramTableChallenges, ProgramTableEndpoints, PROGRAM_TABLE_EXTENSION_CHALLENGE_COUNT,
-    PROGRAM_TABLE_INITIALS_COUNT,
-};
-use super::ram_table::{
-    RamTableChallenges, RamTableEndpoints, RAM_TABLE_EXTENSION_CHALLENGE_COUNT,
-    RAM_TABLE_INITIALS_COUNT,
-};
-use super::u32_op_table::{
-    U32OpTableChallenges, U32OpTableEndpoints, U32_OP_TABLE_EXTENSION_CHALLENGE_COUNT,
-    U32_OP_TABLE_INITIALS_COUNT,
-};
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
+use super::hash_table::{HashTableChallenges, HashTableEndpoints};
+use super::instruction_table::{InstructionTableChallenges, InstructionTableEndpoints};
+use super::io_table::{IOTableChallenges, IOTableEndpoints};
+use super::jump_stack_table::{JumpStackTableChallenges, JumpStackTableEndpoints};
+use super::op_stack_table::{OpStackTableChallenges, OpStackTableEndpoints};
+use super::processor_table::{ProcessorTableChallenges, ProcessorTableEndpoints};
+use super::program_table::{ProgramTableChallenges, ProgramTableEndpoints};
+use super::ram_table::{RamTableChallenges, RamTableEndpoints};
+use super::u32_op_table::{U32OpTableChallenges, U32OpTableEndpoints};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
-
-type BWord = BFieldElement;
-type XWord = XFieldElement;
-type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
-type StarkDigest = Vec<BFieldElement>;
 
 #[derive(Debug, Clone)]
 pub struct AllChallenges {
@@ -60,7 +27,9 @@ pub struct AllChallenges {
 impl AllChallenges {
     pub const TOTAL: usize = 10;
 
-    pub fn new(mut weights: Vec<XFieldElement>) -> Self {
+    pub fn create_challenges(weights: &[XFieldElement]) -> Self {
+        let mut weights = weights.to_vec();
+
         let program_table_challenges = ProgramTableChallenges {
             instruction_eval_row_weight: weights.pop().unwrap(),
             address_weight: weights.pop().unwrap(),
@@ -237,7 +206,9 @@ pub struct AllEndpoints {
 impl AllEndpoints {
     pub const TOTAL: usize = 10;
 
-    pub fn create_initials(mut weights: Vec<XFieldElement>) -> Self {
+    pub fn create_initials(weights: &[XFieldElement]) -> Self {
+        let mut weights = weights.to_vec();
+
         let processor_table_initials = ProcessorTableEndpoints {
             input_table_eval_sum: weights.pop().unwrap(),
             output_table_eval_sum: weights.pop().unwrap(),

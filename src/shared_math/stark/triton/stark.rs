@@ -103,7 +103,7 @@ impl Stark {
             .0
             .unwrap();
         let unpadded_height = base_matrices.processor_matrix.len();
-        let padded_height = roundup_npo2(unpadded_height as u64);
+        let _padded_height = roundup_npo2(unpadded_height as u64);
 
         // 1. Create base tables based on base matrices
 
@@ -171,19 +171,18 @@ impl Stark {
 
         let seed = proof_stream.prover_fiat_shamir();
 
-        let challenges: AllChallenges =
-            AllChallenges::new(Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL));
+        // FIXME: Generate enough weights for both at once.
 
-        let initials: AllEndpoints = AllEndpoints::create_initials(Self::sample_weights(
-            &hasher,
-            &seed,
-            AllEndpoints::TOTAL,
-        ));
+        let challenge_weights = Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL);
+        let challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
 
-        let (ext_tables, terminals) =
+        let initial_weights = Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL);
+        let initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
+
+        let (ext_tables, _terminals) =
             ExtTableCollection::extend_tables(&base_tables, &challenges, &initials);
         let ext_codeword_tables = ext_tables.codeword_tables(&lift_domain(&self.fri_domain));
-        let all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
+        let _all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
 
         todo!()
     }

@@ -1,5 +1,3 @@
-use itertools::Itertools;
-
 use super::base_matrix::InstructionTableColumn::*;
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::challenges_endpoints::{AllChallenges, AllEndpoints};
@@ -91,11 +89,11 @@ impl Table<XFieldElement> for ExtInstructionTable {
 }
 
 impl ExtensionTable for ExtInstructionTable {
-    fn ext_boundary_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
+    fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
 
-    fn ext_transition_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
+    fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
 

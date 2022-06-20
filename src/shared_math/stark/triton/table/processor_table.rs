@@ -721,7 +721,7 @@ impl ProcessorConstraintPolynomialFactory {
     fn ip(&self) -> MPolynomial<BWord> {
         self.variables[IP as usize].clone()
     }
-    fn ci(&self) -> MPolynomial<BWord> {
+    fn _ci(&self) -> MPolynomial<BWord> {
         self.variables[CI as usize].clone()
     }
     fn nia(&self) -> MPolynomial<BWord> {
@@ -799,7 +799,7 @@ impl ProcessorConstraintPolynomialFactory {
     fn hv3(&self) -> MPolynomial<BWord> {
         self.variables[HV3 as usize].clone()
     }
-    fn hv4(&self) -> MPolynomial<BWord> {
+    fn _hv4(&self) -> MPolynomial<BWord> {
         self.variables[HV4 as usize].clone()
     }
 
@@ -811,7 +811,7 @@ impl ProcessorConstraintPolynomialFactory {
     fn ip_next(&self) -> MPolynomial<BWord> {
         self.variables[BASE_WIDTH + IP as usize].clone()
     }
-    fn ci_next(&self) -> MPolynomial<BWord> {
+    fn _ci_next(&self) -> MPolynomial<BWord> {
         self.variables[BASE_WIDTH + CI as usize].clone()
     }
     fn jsp_next(&self) -> MPolynomial<BWord> {

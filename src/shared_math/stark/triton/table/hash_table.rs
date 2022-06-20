@@ -10,7 +10,6 @@ use crate::shared_math::stark::triton::state::{AUX_REGISTER_COUNT, DIGEST_LEN};
 use crate::shared_math::stark::triton::table::base_matrix::HashTableColumn;
 use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::x_field_element::XFieldElement;
-use itertools::Itertools;
 
 pub const HASH_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 0;
 pub const HASH_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 2;
