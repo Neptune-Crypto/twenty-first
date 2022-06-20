@@ -179,8 +179,7 @@ impl U32OpTable {
 
             // Multiply compressed value into running product for lt
             extension_row.push(lt_running_product);
-            lt_running_product = lt_running_product
-                * (challenges.processor_lt_perm_row_weight - compressed_row_for_lt);
+            lt_running_product *= challenges.processor_lt_perm_row_weight - compressed_row_for_lt;
 
             // Compress (lhs, rhs, and) into single value
             let and = extension_row[U32OpTableColumn::AND as usize];
@@ -191,8 +190,8 @@ impl U32OpTable {
 
             // Multiply compressed value into running product for and
             extension_row.push(and_running_product);
-            and_running_product = and_running_product
-                * (challenges.processor_and_perm_row_weight - compressed_row_for_and);
+            and_running_product *=
+                challenges.processor_and_perm_row_weight - compressed_row_for_and;
 
             // Compress (lhs, rhs, xor) into single value
             let xor = extension_row[U32OpTableColumn::XOR as usize];
@@ -203,8 +202,8 @@ impl U32OpTable {
 
             // Multiply compressed value into running product for xor
             extension_row.push(xor_running_product);
-            xor_running_product = xor_running_product
-                * (challenges.processor_xor_perm_row_weight - compressed_row_for_xor);
+            xor_running_product *=
+                challenges.processor_xor_perm_row_weight - compressed_row_for_xor;
 
             // Compress (lhs, reverse) into single value
             let reverse = extension_row[U32OpTableColumn::REV as usize];
@@ -214,8 +213,8 @@ impl U32OpTable {
 
             // Multiply compressed value into running product for reverse
             extension_row.push(reverse_running_product);
-            reverse_running_product = reverse_running_product
-                * (challenges.processor_reverse_perm_row_weight - compressed_row_for_reverse);
+            reverse_running_product *=
+                challenges.processor_reverse_perm_row_weight - compressed_row_for_reverse;
 
             // Compress (lhs, rhs, lt) into single value for div
             let lt_for_div = extension_row[U32OpTableColumn::LT as usize];
@@ -226,8 +225,8 @@ impl U32OpTable {
 
             // Multiply compressed value into running product for div
             extension_row.push(div_running_product);
-            div_running_product = div_running_product
-                * (challenges.processor_div_perm_row_weight - compressed_row_for_div);
+            div_running_product *=
+                challenges.processor_div_perm_row_weight - compressed_row_for_div;
 
             extension_matrix.push(extension_row);
         }

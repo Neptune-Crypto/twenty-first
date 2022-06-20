@@ -190,8 +190,8 @@ impl JumpStackTable {
 
             // 2. Compute the running *product* of the compressed column (permutation value)
             extension_row.push(running_product);
-            running_product = running_product
-                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_argument);
+            running_product *=
+                challenges.processor_perm_row_weight - compressed_row_for_permutation_argument;
 
             extension_matrix.push(extension_row);
         }
@@ -273,7 +273,7 @@ impl JumpStackConstraintPolynomialFactory {
         let call_opcode = Instruction::Call(BFieldElement::ring_zero()).opcode_b();
         debug_assert_eq!(call_opcode, 11.into());
 
-        let call_mpol = MPolynomial::from_constant(call_opcode.into(), 2 * BASE_WIDTH);
+        let call_mpol = MPolynomial::from_constant(call_opcode, 2 * BASE_WIDTH);
         let case_3 = (self.ci() - call_mpol).square()
             + (self.jsp() - self.jsp_next()).square()
             + (self.jso() - self.jso_next()).square()
@@ -282,7 +282,7 @@ impl JumpStackConstraintPolynomialFactory {
         let return_opcode = Instruction::Return.opcode_b();
         debug_assert_eq!(return_opcode, 12.into());
 
-        let return_mpol = MPolynomial::from_constant(return_opcode.into(), 2 * BASE_WIDTH);
+        let return_mpol = MPolynomial::from_constant(return_opcode, 2 * BASE_WIDTH);
         let case_4 = (self.jsp() - self.jsp_next()).square() + (self.ci() - return_mpol).square();
 
         case_1 * case_2 * case_3 * case_4

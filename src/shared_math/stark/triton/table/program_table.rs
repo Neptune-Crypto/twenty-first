@@ -62,8 +62,7 @@ impl Table<BWord> for ProgramTable {
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
             // address keeps increasing
-            padding_row[ProgramTableColumn::Address as usize] =
-                padding_row[ProgramTableColumn::Address as usize] + 1.into();
+            padding_row[ProgramTableColumn::Address as usize] += 1.into();
             data.push(padding_row);
         }
     }

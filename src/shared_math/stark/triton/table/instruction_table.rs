@@ -63,8 +63,7 @@ impl Table<BWord> for InstructionTable {
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
             // address keeps increasing
-            padding_row[InstructionTableColumn::Address as usize] =
-                padding_row[InstructionTableColumn::Address as usize] + 1.into();
+            padding_row[InstructionTableColumn::Address as usize] += 1.into();
             data.push(padding_row);
         }
     }
@@ -183,8 +182,8 @@ impl InstructionTable {
 
             // 2. In the case of the permutation value we need to compute the running *product* of the compressed column.
             extension_row.push(running_product);
-            running_product = running_product
-                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_argument);
+            running_product *=
+                challenges.processor_perm_row_weight - compressed_row_for_permutation_argument;
 
             // 3. Since we are in the instruction table we compress multiple values for the evaluation arguement.
             let address = row[Address as usize].lift();

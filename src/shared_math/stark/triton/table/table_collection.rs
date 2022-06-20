@@ -203,7 +203,7 @@ impl ExtTableCollection {
     /// own challenges and initials, but `AllChallenges` and `AllInitials`
     /// are passed everywhere to keep each table's `.extend()` homogenous.
     pub fn extend_tables(
-        tables: &BaseTableCollection,
+        base_tables: &BaseTableCollection,
         all_challenges: &AllChallenges,
         all_initials: &AllEndpoints,
     ) -> (Self, AllEndpoints) {
@@ -212,57 +212,58 @@ impl ExtTableCollection {
         // pub hash_table: HashTable,
         // pub u32_op_table: U32OpTable,
 
-        let (program_table, program_table_terminals) = tables.program_table.extend(
+        let (program_table, program_table_terminals) = base_tables.program_table.extend(
             &all_challenges.program_table_challenges,
             &all_initials.program_table_endpoints,
         );
 
-        let (instruction_table, instruction_table_terminals) = tables.instruction_table.extend(
-            &all_challenges.instruction_table_challenges,
-            &all_initials.instruction_table_endpoints,
-        );
+        let (instruction_table, instruction_table_terminals) =
+            base_tables.instruction_table.extend(
+                &all_challenges.instruction_table_challenges,
+                &all_initials.instruction_table_endpoints,
+            );
 
-        let (processor_table, processor_table_terminals) = tables.processor_table.extend(
+        let (processor_table, processor_table_terminals) = base_tables.processor_table.extend(
             &all_challenges.processor_table_challenges,
             &all_initials.processor_table_endpoints,
         );
 
-        let (input_table, input_table_terminals) = tables.input_table.extend(
+        let (input_table, input_table_terminals) = base_tables.input_table.extend(
             &all_challenges.input_table_challenges,
             &all_initials.input_table_endpoints,
         );
 
-        let (output_table, output_table_terminals) = tables.output_table.extend(
+        let (output_table, output_table_terminals) = base_tables.output_table.extend(
             &all_challenges.output_table_challenges,
             &all_initials.output_table_endpoints,
         );
 
-        let (op_stack_table, op_stack_table_terminals) = tables.op_stack_table.extend(
+        let (op_stack_table, op_stack_table_terminals) = base_tables.op_stack_table.extend(
             &all_challenges.op_stack_table_challenges,
             &all_initials.op_stack_table_endpoints,
         );
 
-        let (ram_table, ram_table_terminals) = tables.ram_table.extend(
+        let (ram_table, ram_table_terminals) = base_tables.ram_table.extend(
             &all_challenges.ram_table_challenges,
             &all_initials.ram_table_endpoints,
         );
 
-        let (jump_stack_table, jump_stack_table_terminals) = tables.jump_stack_table.extend(
+        let (jump_stack_table, jump_stack_table_terminals) = base_tables.jump_stack_table.extend(
             &all_challenges.jump_stack_table_challenges,
             &all_initials.jump_stack_table_endpoints,
         );
 
-        let (hash_table, hash_table_terminals) = tables.hash_table.extend(
+        let (hash_table, hash_table_terminals) = base_tables.hash_table.extend(
             &all_challenges.hash_table_challenges,
             &all_initials.hash_table_endpoints,
         );
 
-        let (u32_op_table, u32_op_table_terminals) = tables.u32_op_table.extend(
+        let (u32_op_table, u32_op_table_terminals) = base_tables.u32_op_table.extend(
             &all_challenges.u32_op_table_challenges,
             &all_initials.u32_op_table_endpoints,
         );
 
-        let tables = ExtTableCollection {
+        let ext_tables = ExtTableCollection {
             program_table,
             instruction_table,
             processor_table,
@@ -288,7 +289,7 @@ impl ExtTableCollection {
             u32_op_table_endpoints: u32_op_table_terminals,
         };
 
-        (tables, terminals)
+        (ext_tables, terminals)
     }
 
     pub fn codeword_tables(&self, fri_domain: &FriDomain<XWord>) -> Self {

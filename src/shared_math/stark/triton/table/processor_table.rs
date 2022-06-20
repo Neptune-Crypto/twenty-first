@@ -149,9 +149,8 @@ impl ProcessorTable {
             extension_row.push(compressed_row_for_instruction_table_permutation_argument);
 
             extension_row.push(instruction_table_running_product);
-            instruction_table_running_product = instruction_table_running_product
-                * (challenges.instruction_perm_row_weight
-                    - compressed_row_for_instruction_table_permutation_argument);
+            instruction_table_running_product *= challenges.instruction_perm_row_weight
+                - compressed_row_for_instruction_table_permutation_argument;
 
             // OpStack table
             let clk = extension_row[CLK as usize];
@@ -487,8 +486,7 @@ impl Table<BWord> for ProcessorTable {
         let data = self.mut_data();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
-            padding_row[ProcessorTableColumn::CLK as usize] =
-                padding_row[ProcessorTableColumn::CLK as usize] + 1.into();
+            padding_row[ProcessorTableColumn::CLK as usize] += 1.into();
             data.push(padding_row);
         }
     }

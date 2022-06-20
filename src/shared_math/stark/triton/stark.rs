@@ -138,8 +138,7 @@ impl Stark {
         let base_codewords: Vec<Vec<BFieldElement>> =
             base_tables.all_base_codewords(&self.fri_domain);
 
-        let all_base_codewords =
-            vec![b_randomizer_codewords.into(), base_codewords.clone()].concat();
+        let all_base_codewords = vec![b_randomizer_codewords.into(), base_codewords].concat();
 
         let transposed_base_codewords: Vec<Vec<BFieldElement>> = (0..all_base_codewords[0].len())
             .map(|i| {

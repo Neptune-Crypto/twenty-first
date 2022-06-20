@@ -186,8 +186,8 @@ impl OpStackTable {
 
             // 2. Compute the running *product* of the compressed column (permutation value)
             extension_row.push(running_product);
-            running_product = running_product
-                * (challenges.processor_perm_row_weight - compressed_row_for_permutation_argument);
+            running_product *=
+                challenges.processor_perm_row_weight - compressed_row_for_permutation_argument;
 
             extension_matrix.push(extension_row);
         }
