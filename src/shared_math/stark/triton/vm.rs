@@ -507,8 +507,8 @@ mod triton_vm_tests {
 
         // 2. Each `xlix` operation result in 8 rows in the aux matrix.
         {
-            let aux_rows_count = base_matrices.aux_matrix.len();
             assert_eq!(xlix_instruction_count * 8, aux_rows_count)
+            let aux_rows_count = base_matrices.hash_matrix.len();
         }
 
         //3. noRows(jmpstack_tabel) == noRows(processor_table)

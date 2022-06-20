@@ -22,7 +22,7 @@ pub struct BaseMatrices {
     pub op_stack_matrix: Vec<[BFieldElement; op_stack_table::BASE_WIDTH]>,
     pub ram_matrix: Vec<[BFieldElement; ram_table::BASE_WIDTH]>,
     pub jump_stack_matrix: Vec<[BFieldElement; jump_stack_table::BASE_WIDTH]>,
-    pub aux_matrix: Vec<[BFieldElement; hash_table::BASE_WIDTH]>,
+    pub hash_matrix: Vec<[BFieldElement; hash_table::BASE_WIDTH]>,
     pub u32_op_matrix: Vec<[BFieldElement; u32_op_table::BASE_WIDTH]>,
 }
 
@@ -88,7 +88,7 @@ impl BaseMatrices {
 
         match vm_output {
             Some(VMOutput::WriteIoTrace(written_word)) => self.output_matrix.push([written_word]),
-            Some(VMOutput::XlixTrace(mut aux_trace)) => self.aux_matrix.append(&mut aux_trace),
+            Some(VMOutput::XlixTrace(mut aux_trace)) => self.hash_matrix.append(&mut aux_trace),
             Some(VMOutput::U32OpTrace(mut trace)) => self.u32_op_matrix.append(&mut trace),
             None => (),
         }

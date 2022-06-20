@@ -121,7 +121,7 @@ impl BaseTableCollection {
             generator,
             order,
             num_randomizers,
-            to_vec_vecs(&base_matrices.aux_matrix),
+            to_vec_vecs(&base_matrices.hash_matrix),
         );
 
         let u32_op_table = U32OpTable::new_prover(
