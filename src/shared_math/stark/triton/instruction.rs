@@ -1,4 +1,4 @@
-use super::ord_n::{Ord16, Ord16::*, Ord6, Ord8};
+use super::ord_n::{Ord16, Ord16::*, Ord6};
 use crate::shared_math::b_field_element::BFieldElement;
 use std::collections::HashMap;
 use std::error::Error;
@@ -368,11 +368,6 @@ impl Instruction {
             _ => None,
         }
     }
-}
-
-fn _ord8_to_bfe(n: &Ord8) -> BFieldElement {
-    let n: u32 = n.into();
-    n.into()
 }
 
 fn ord16_to_bfe(n: &Ord16) -> BFieldElement {
