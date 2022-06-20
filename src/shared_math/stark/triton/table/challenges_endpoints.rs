@@ -25,10 +25,12 @@ pub struct AllChallenges {
 }
 
 impl AllChallenges {
-    pub const TOTAL: usize = 10;
+    pub const TOTAL_CHALLENGES: usize = 126;
 
     pub fn create_challenges(weights: &[XFieldElement]) -> Self {
         let mut weights = weights.to_vec();
+
+        println!("Challenge weights start: {}", weights.len());
 
         let program_table_challenges = ProgramTableChallenges {
             instruction_eval_row_weight: weights.pop().unwrap(),
@@ -138,11 +140,13 @@ impl AllChallenges {
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
+
         let digest_output_weights = weights
             .drain(0..DIGEST_LEN)
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
+
         let hash_table_challenges = HashTableChallenges {
             from_processor_eval_row_weight: weights.pop().unwrap(),
             to_processor_eval_row_weight: weights.pop().unwrap(),
@@ -172,6 +176,17 @@ impl AllChallenges {
             div_remainder_weight: weights.pop().unwrap(),
             div_result_weight: weights.pop().unwrap(),
         };
+
+        println!(
+            "Challenge counting: {}, {}",
+            Self::TOTAL_CHALLENGES,
+            weights.len()
+        );
+        assert_eq!(
+            0,
+            weights.len(),
+            "The correct number of weights were used; this number is hardcoded for now"
+        );
 
         AllChallenges {
             program_table_challenges,
@@ -204,10 +219,12 @@ pub struct AllEndpoints {
 }
 
 impl AllEndpoints {
-    pub const TOTAL: usize = 10;
+    pub const TOTAL_ENDPOINTS: usize = 14;
 
     pub fn create_initials(weights: &[XFieldElement]) -> Self {
         let mut weights = weights.to_vec();
+
+        println!("Endpoint weights start: {}", weights.len());
 
         let processor_table_initials = ProcessorTableEndpoints {
             input_table_eval_sum: weights.pop().unwrap(),
@@ -269,6 +286,17 @@ impl AllEndpoints {
             processor_div_perm_product: processor_table_initials.u32_table_div_perm_product,
         };
 
+        println!(
+            "Endpoint counting: {}, {}",
+            Self::TOTAL_ENDPOINTS,
+            weights.len()
+        );
+        assert_eq!(
+            0,
+            weights.len(),
+            "The correct number of weights were used; this number is hardcoded for now"
+        );
+
         AllEndpoints {
             program_table_endpoints: program_table_initials,
             instruction_table_endpoints: instruction_table_initials,
@@ -281,5 +309,22 @@ impl AllEndpoints {
             hash_table_endpoints: hash_table_initials,
             u32_op_table_endpoints: u32_op_table_initials,
         }
+    }
+}
+
+#[cfg(test)]
+mod challenges_endpoints_tests {
+    use crate::shared_math::stark::triton::table::processor_table;
+    use crate::shared_math::stark::triton::table::program_table;
+
+    use super::*;
+
+    #[test]
+    fn total_challenges_equal_permutation_and_evaluation_args_test() {
+        assert_eq!(
+            processor_table::PROCESSOR_TABLE_INITIALS_COUNT
+                + program_table::PROGRAM_TABLE_INITIALS_COUNT,
+            AllEndpoints::TOTAL_ENDPOINTS,
+        );
     }
 }

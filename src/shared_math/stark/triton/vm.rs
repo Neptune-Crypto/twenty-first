@@ -601,9 +601,12 @@ mod triton_vm_tests {
 
             // Test the same for the extended matrix
 
+            // FIXME: This interface leaks abstractions: We want a function that generates a number of weights
+            // that doesn't care about the weights-to-digest ratio (we can make two weights per digest).
+
             let mock_seed = 0u128.to_digest();
-            let mock_sample_weights: Vec<XFieldElement> = hasher
-                .get_n_hash_rounds(&mock_seed, AllChallenges::TOTAL)
+            let mock_challenge_weights: Vec<XFieldElement> = hasher
+                .get_n_hash_rounds(&mock_seed, AllChallenges::TOTAL_CHALLENGES / 2)
                 .iter()
                 .flat_map(|digest| {
                     vec![
@@ -612,9 +615,20 @@ mod triton_vm_tests {
                     ]
                 })
                 .collect();
+            let challenges: AllChallenges =
+                AllChallenges::create_challenges(&mock_challenge_weights);
 
-            let challenges: AllChallenges = AllChallenges::create_challenges(&mock_sample_weights);
-            let initials: AllEndpoints = AllEndpoints::create_initials(&mock_sample_weights);
+            let mock_initial_weights: Vec<XFieldElement> = hasher
+                .get_n_hash_rounds(&mock_seed, AllEndpoints::TOTAL_ENDPOINTS / 2)
+                .iter()
+                .flat_map(|digest| {
+                    vec![
+                        XFieldElement::new([digest[0], digest[1], digest[2]]),
+                        XFieldElement::new([digest[3], digest[4], digest[5]]),
+                    ]
+                })
+                .collect();
+            let initials: AllEndpoints = AllEndpoints::create_initials(&mock_initial_weights);
 
             let (ext_processor_table, _terminals) = processor_table.extend(
                 &challenges.processor_table_challenges,

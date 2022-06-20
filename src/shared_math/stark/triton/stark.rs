@@ -172,10 +172,11 @@ impl Stark {
 
         // FIXME: Generate enough weights for both at once.
 
-        let challenge_weights = Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL);
+        let challenge_weights =
+            Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL_CHALLENGES);
         let challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
 
-        let initial_weights = Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL);
+        let initial_weights = Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL_CHALLENGES);
         let initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
 
         let (ext_tables, _terminals) =
@@ -186,13 +187,15 @@ impl Stark {
         todo!()
     }
 
+    // FIXME: This interface leaks abstractions: We want a function that generates a number of weights
+    // that doesn't care about the weights-to-digest ratio (we can make two weights per digest).
     fn sample_weights(
         hasher: &StarkHasher,
         seed: &StarkDigest,
         count: usize,
     ) -> Vec<XFieldElement> {
         hasher
-            .get_n_hash_rounds(seed, count)
+            .get_n_hash_rounds(seed, count / 2)
             .iter()
             .flat_map(|digest| {
                 vec![
