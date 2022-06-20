@@ -13,8 +13,8 @@ pub const PROGRAM_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 1;
 pub const PROGRAM_TABLE_INITIALS_COUNT: usize =
     PROGRAM_TABLE_PERMUTATION_ARGUMENTS_COUNT + PROGRAM_TABLE_EVALUATION_ARGUMENT_COUNT;
 
-/// This is 2 because it combines: addr, instruction
-pub const PROGRAM_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 2;
+/// This is 3 because it combines: addr, instruction, instruction in next row
+pub const PROGRAM_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 3;
 
 pub const BASE_WIDTH: usize = 2;
 pub const FULL_WIDTH: usize = 4; // BASE_WIDTH + 2 * INITIALS_COUNT
@@ -162,29 +162,36 @@ impl ProgramTable {
         initials: &ProgramTableEndpoints,
     ) -> (ExtProgramTable, ProgramTableEndpoints) {
         let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
-        let mut running_sum = initials.instruction_eval_sum;
+        let mut instruction_table_running_sum = initials.instruction_eval_sum;
 
         for row in self.data().iter() {
-            let (address, instruction) = (
-                row[ProgramTableColumn::Address as usize].lift(),
-                row[ProgramTableColumn::Instruction as usize].lift(),
-            );
-
-            let (address_w, instruction_w) =
-                (challenges.address_weight, challenges.instruction_weight);
-
-            // 1. Compress multiple values within one row so they become one value.
-            let compressed_row_for_evaluation_argument =
-                address * address_w + instruction * instruction_w;
-
             let mut extension_row = Vec::with_capacity(FULL_WIDTH);
             extension_row.extend(row.iter().map(|elem| elem.lift()));
+
+            let address = row[ProgramTableColumn::Address as usize].lift();
+            let instruction = row[ProgramTableColumn::Instruction as usize].lift();
+
+            // 1. Compress multiple values within one row so they become one value.
+            // todo!(
+            //     "Use the next row's instruction (or 0 if the row doesn't exist),\
+            //     multiply it by challenges.next_instruction_weight,\
+            //     and add it to the compressed row."
+            // );
+            let compressed_row_for_evaluation_argument =
+                address * challenges.address_weight + instruction * challenges.instruction_weight;
             extension_row.push(compressed_row_for_evaluation_argument);
 
-            // 2. Compute the running *product* of the compressed column (permutation value)
-            extension_row.push(running_sum);
-            running_sum = running_sum * challenges.instruction_eval_row_weight
+            // Update the Evaluation Argument's running sum with the compressed column
+            extension_row.push(instruction_table_running_sum);
+            instruction_table_running_sum = instruction_table_running_sum
+                * challenges.instruction_eval_row_weight
                 + compressed_row_for_evaluation_argument;
+
+            debug_assert_eq!(
+                FULL_WIDTH,
+                extension_row.len(),
+                "After extending, the row must match the table's full width."
+            );
 
             extension_matrix.push(extension_row);
         }
@@ -192,7 +199,7 @@ impl ProgramTable {
         let base = self.base.with_lifted_data(extension_matrix);
         let table = ExtProgramTable { base };
         let terminals = ProgramTableEndpoints {
-            instruction_eval_sum: running_sum,
+            instruction_eval_sum: instruction_table_running_sum,
         };
 
         (table, terminals)
@@ -217,6 +224,7 @@ pub struct ProgramTableChallenges {
     /// Weights for condensing part of a row into a single column. (Related to program table.)
     pub address_weight: XFieldElement,
     pub instruction_weight: XFieldElement,
+    pub next_instruction_weight: XFieldElement,
 }
 
 #[derive(Debug, Clone)]

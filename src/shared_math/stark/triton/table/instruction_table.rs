@@ -14,8 +14,8 @@ pub const INSTRUCTION_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 1;
 pub const INSTRUCTION_TABLE_INITIALS_COUNT: usize =
     INSTRUCTION_TABLE_PERMUTATION_ARGUMENTS_COUNT + INSTRUCTION_TABLE_EVALUATION_ARGUMENT_COUNT;
 
-/// This is 5 because it combines: (ip, ci, nia) and (addr, instruction).
-pub const INSTRUCTION_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 5;
+/// This is 6 because it combines: (ip, ci, nia) and (addr, instruction, next_instruction).
+pub const INSTRUCTION_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 6;
 
 pub const BASE_WIDTH: usize = 3;
 pub const FULL_WIDTH: usize = 7; // BASE_WIDTH + 2 * INITIALS_COUNT
@@ -163,56 +163,74 @@ impl InstructionTable {
         initials: &InstructionTableEndpoints,
     ) -> (ExtInstructionTable, InstructionTableEndpoints) {
         let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
-
-        let mut running_product = initials.processor_perm_product;
-        let mut running_sum = initials.program_eval_sum;
+        let mut processor_table_running_product = initials.processor_perm_product;
+        let mut program_table_running_sum = initials.program_eval_sum;
+        let mut previous_row: Option<Vec<_>> = None;
 
         for row in self.data().iter() {
             let mut extension_row = Vec::with_capacity(FULL_WIDTH);
             extension_row.extend(row.iter().map(|elem| elem.lift()));
 
-            // 1. Compress multiple values within one row so they become one value.
+            // Is the current row's address different from the previous row's address?
+            // Different: update running sum of Evaluation Argument with Program Table.
+            // Not different: update running product of Permutation Argument with Processor Table.
+            let mut is_duplicate_row = false;
+            if let Some(prow) = previous_row {
+                if prow[Address as usize] == row[Address as usize] {
+                    is_duplicate_row = true;
+                    debug_assert_eq!(prow[CI as usize], row[CI as usize]);
+                    debug_assert_eq!(prow[NIA as usize], row[NIA as usize]);
+                }
+            }
+
+            // Compress values of current row for Permutation Argument with Processor Table
             let ip = row[Address as usize].lift();
             let ci = row[CI as usize].lift();
             let nia = row[NIA as usize].lift();
-
-            let (ip_w, ci_w, nia_w) = (
-                challenges.ip_weight,
-                challenges.ci_processor_weight,
-                challenges.nia_weight,
-            );
-            let compressed_row_for_permutation_argument = ip * ip_w + ci * ci_w + nia * nia_w;
+            let compressed_row_for_permutation_argument = ip * challenges.ip_processor_weight
+                + ci * challenges.ci_processor_weight
+                + nia * challenges.nia_processor_weight;
             extension_row.push(compressed_row_for_permutation_argument);
 
-            // 2. In the case of the permutation value we need to compute the running *product* of the compressed column.
-            extension_row.push(running_product);
-            running_product *=
-                challenges.processor_perm_row_weight - compressed_row_for_permutation_argument;
+            // Update running product for Permutation Argument if same row has been seen before
+            extension_row.push(processor_table_running_product);
+            if is_duplicate_row {
+                processor_table_running_product *=
+                    challenges.processor_perm_row_weight - compressed_row_for_permutation_argument;
+            }
 
-            // 3. Since we are in the instruction table we compress multiple values for the evaluation arguement.
+            // Compress values of current row for Evaluation Argument with Program Table
             let address = row[Address as usize].lift();
             let instruction = row[CI as usize].lift();
+            let next_instruction = row[NIA as usize].lift();
+            let compressed_row_for_evaluation_argument = address * challenges.address_weight
+                + instruction * challenges.instruction_weight
+                + next_instruction * challenges.next_instruction_weight;
+            extension_row.push(compressed_row_for_evaluation_argument);
 
-            let (address_w, instruction_w) =
-                (challenges.address_weight, challenges.instruction_weight);
-            let compressed_row_for_evaluation_arguement =
-                address * address_w + instruction * instruction_w;
-            extension_row.push(compressed_row_for_evaluation_arguement);
+            // Update running sum for Evaluation Argument if same row has _not_ been seen before
+            extension_row.push(program_table_running_sum);
+            if !is_duplicate_row {
+                program_table_running_sum = program_table_running_sum
+                    * challenges.program_eval_row_weight
+                    + compressed_row_for_evaluation_argument;
+            }
 
-            // 4. In the case of the evalutation arguement we need to compute the running *sum*.
-            extension_row.push(running_sum);
-            running_sum = running_sum * challenges.program_eval_row_weight
-                + compressed_row_for_evaluation_arguement;
+            debug_assert_eq!(
+                FULL_WIDTH,
+                extension_row.len(),
+                "After extending, the row must match the table's full width."
+            );
 
-            // Build the extension matrix
+            previous_row = Some(row.clone());
             extension_matrix.push(extension_row);
         }
 
         let base = self.base.with_lifted_data(extension_matrix);
         let table = ExtInstructionTable { base };
         let terminals = InstructionTableEndpoints {
-            processor_perm_product: running_product,
-            program_eval_sum: running_sum,
+            processor_perm_product: processor_table_running_product,
+            program_eval_sum: program_table_running_sum,
         };
 
         (table, terminals)
@@ -235,9 +253,9 @@ pub struct InstructionTableChallenges {
     pub processor_perm_row_weight: XFieldElement,
 
     /// Weights for condensing part of a row into a single column. (Related to processor table.)
-    pub ip_weight: XFieldElement,
+    pub ip_processor_weight: XFieldElement,
     pub ci_processor_weight: XFieldElement,
-    pub nia_weight: XFieldElement,
+    pub nia_processor_weight: XFieldElement,
 
     /// The weight that combines two consecutive rows in the
     /// permutation/evaluation column of the instruction table.
@@ -246,6 +264,7 @@ pub struct InstructionTableChallenges {
     /// Weights for condensing part of a row into a single column. (Related to program table.)
     pub address_weight: XFieldElement,
     pub instruction_weight: XFieldElement,
+    pub next_instruction_weight: XFieldElement,
 }
 
 #[derive(Debug, Clone)]

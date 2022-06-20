@@ -25,7 +25,7 @@ pub struct AllChallenges {
 }
 
 impl AllChallenges {
-    pub const TOTAL_CHALLENGES: usize = 126;
+    pub const TOTAL_CHALLENGES: usize = 127;
 
     pub fn create_challenges(weights: &[XFieldElement]) -> Self {
         let mut weights = weights.to_vec();
@@ -97,17 +97,19 @@ impl AllChallenges {
             instruction_eval_row_weight: weights.pop().unwrap(),
             address_weight: weights.pop().unwrap(),
             instruction_weight: weights.pop().unwrap(),
+            next_instruction_weight: weights.pop().unwrap(),
         };
 
         let instruction_table_challenges = InstructionTableChallenges {
             processor_perm_row_weight: processor_table_challenges.instruction_perm_row_weight,
-            ip_weight: processor_table_challenges.instruction_table_ip_weight,
+            ip_processor_weight: processor_table_challenges.instruction_table_ip_weight,
             ci_processor_weight: processor_table_challenges.instruction_table_ci_processor_weight,
-            nia_weight: processor_table_challenges.instruction_table_nia_weight,
+            nia_processor_weight: processor_table_challenges.instruction_table_nia_weight,
 
             program_eval_row_weight: program_table_challenges.instruction_eval_row_weight,
             address_weight: program_table_challenges.address_weight,
             instruction_weight: program_table_challenges.instruction_weight,
+            next_instruction_weight: program_table_challenges.next_instruction_weight,
         };
 
         let input_table_challenges = IOTableChallenges {
