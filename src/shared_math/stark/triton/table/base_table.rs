@@ -78,6 +78,8 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
     }
 }
 
+/// Create a `BaseTable<XWord` from a `BaseTable<BWord>` with the same parameters lifted from the
+/// B-Field into the X-Field (where applicable), but new `matrix` data.
 impl BaseTable<BWord> {
     pub fn with_lifted_data(&self, matrix: Vec<Vec<XWord>>) -> BaseTable<XWord> {
         BaseTable::new(

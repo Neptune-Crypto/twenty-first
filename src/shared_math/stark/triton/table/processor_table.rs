@@ -571,28 +571,27 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     pub fn indicator_polynomial(&self, i: usize) -> MPolynomial<BWord> {
-        let one = self.one();
         let hv0 = self.hv0();
         let hv1 = self.hv1();
         let hv2 = self.hv2();
         let hv3 = self.hv3();
 
         match i {
-            0 => (one.clone() - hv3) * (one.clone() - hv2) * (one.clone() - hv1) * (one - hv0),
-            1 => (one.clone() - hv3) * (one.clone() - hv2) * (one - hv1) * hv0,
-            2 => (one.clone() - hv3) * (one.clone() - hv2) * hv1 * (one - hv0),
-            3 => (one.clone() - hv3) * (one - hv2) * hv1 * hv0,
-            4 => (one.clone() - hv3) * hv2 * (one.clone() - hv1) * (one - hv0),
-            5 => (one.clone() - hv3) * hv2 * (one - hv1) * hv0,
-            6 => (one.clone() - hv3) * hv2 * hv1 * (one - hv0),
-            7 => (one - hv3) * hv2 * hv1 * hv0,
-            8 => hv3 * (one.clone() - hv2) * (one.clone() - hv1) * (one - hv0),
-            9 => hv3 * (one.clone() - hv2) * (one - hv1) * hv0,
-            10 => hv3 * (one.clone() - hv2) * hv1 * (one - hv0),
-            11 => hv3 * (one - hv2) * hv1 * hv0,
-            12 => hv3 * hv2 * (one.clone() - hv1) * (one - hv0),
-            13 => hv3 * hv2 * (one - hv1) * hv0,
-            14 => hv3 * hv2 * hv1 * (one - hv0),
+            0 => (self.one() - hv3) * (self.one() - hv2) * (self.one() - hv1) * (self.one() - hv0),
+            1 => (self.one() - hv3) * (self.one() - hv2) * (self.one() - hv1) * hv0,
+            2 => (self.one() - hv3) * (self.one() - hv2) * hv1 * (self.one() - hv0),
+            3 => (self.one() - hv3) * (self.one() - hv2) * hv1 * hv0,
+            4 => (self.one() - hv3) * hv2 * (self.one() - hv1) * (self.one() - hv0),
+            5 => (self.one() - hv3) * hv2 * (self.one() - hv1) * hv0,
+            6 => (self.one() - hv3) * hv2 * hv1 * (self.one() - hv0),
+            7 => (self.one() - hv3) * hv2 * hv1 * hv0,
+            8 => hv3 * (self.one() - hv2) * (self.one() - hv1) * (self.one() - hv0),
+            9 => hv3 * (self.one() - hv2) * (self.one() - hv1) * hv0,
+            10 => hv3 * (self.one() - hv2) * hv1 * (self.one() - hv0),
+            11 => hv3 * (self.one() - hv2) * hv1 * hv0,
+            12 => hv3 * hv2 * (self.one() - hv1) * (self.one() - hv0),
+            13 => hv3 * hv2 * (self.one() - hv1) * hv0,
+            14 => hv3 * hv2 * hv1 * (self.one() - hv0),
             15 => hv3 * hv2 * hv1 * hv0,
             _ => panic!(
                 "No indicator polynomial with index {} exists: there are only 16.",

@@ -4,11 +4,9 @@ use super::extension_table::ExtensionTable;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
-use crate::shared_math::rescue_prime_xlix::neptune_params;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::state::{AUX_REGISTER_COUNT, DIGEST_LEN};
+use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::stark::triton::table::base_matrix::HashTableColumn;
-use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const HASH_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 0;
