@@ -382,11 +382,11 @@ mod triton_vm_tests {
             }
         }
 
-        // 2. Each `xlix` operation result in 8 rows.
+        // 2. Each `hash` operation result in 8 rows.
         {
-            let xlix_instruction_count = 0;
+            let hash_instruction_count = 0;
             let prc_rows_count = base_matrices.processor_matrix.len();
-            assert!(xlix_instruction_count <= 8 * prc_rows_count)
+            assert!(hash_instruction_count <= 8 * prc_rows_count)
         }
 
         //3. noRows(jmpstack_tabel) == noRows(processor_table)
@@ -458,7 +458,7 @@ mod triton_vm_tests {
         base_matrices: &BaseMatrices,
         expected_input_rows: usize,
         expected_output_rows: usize,
-        xlix_instruction_count: usize,
+        hash_instruction_count: usize,
     ) {
         // 1. Check `output_matrix`.
         {
@@ -476,10 +476,10 @@ mod triton_vm_tests {
             }
         }
 
-        // 2. Each `xlix` operation result in 8 rows in the aux matrix.
+        // 2. Each `hash` operation result in 8 rows in the aux matrix.
         {
-            assert_eq!(xlix_instruction_count * 8, aux_rows_count)
             let aux_rows_count = base_matrices.hash_matrix.len();
+            assert_eq!(hash_instruction_count * 8, aux_rows_count)
         }
 
         //3. noRows(jmpstack_tabel) == noRows(processor_table)

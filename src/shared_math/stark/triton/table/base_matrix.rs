@@ -1,4 +1,3 @@
-use super::super::ord_n::Ord16::*;
 use super::{
     hash_table, instruction_table, io_table, jump_stack_table, op_stack_table, processor_table,
     program_table, ram_table, u32_op_table,
