@@ -415,40 +415,40 @@ impl Display for ProcessorMatrixRow {
             f,
             format!(
                 "st3-0:    [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.row[A3 as usize].value(),
-                self.row[A2 as usize].value(),
-                self.row[A1 as usize].value(),
-                self.row[A0 as usize].value(),
+                self.row[ST3 as usize].value(),
+                self.row[ST2 as usize].value(),
+                self.row[ST1 as usize].value(),
+                self.row[ST0 as usize].value(),
             ),
         )?;
         row(
             f,
             format!(
                 "st7-4:    [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.row[A7 as usize].value(),
-                self.row[A6 as usize].value(),
-                self.row[A5 as usize].value(),
-                self.row[A4 as usize].value(),
+                self.row[ST7 as usize].value(),
+                self.row[ST6 as usize].value(),
+                self.row[ST5 as usize].value(),
+                self.row[ST4 as usize].value(),
             ),
         )?;
         row(
             f,
             format!(
                 "st11-8:   [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.row[A11 as usize].value(),
-                self.row[A10 as usize].value(),
-                self.row[A9 as usize].value(),
-                self.row[A8 as usize].value(),
+                self.row[ST11 as usize].value(),
+                self.row[ST10 as usize].value(),
+                self.row[ST9 as usize].value(),
+                self.row[ST8 as usize].value(),
             ),
         )?;
         row(
             f,
             format!(
                 "st15-12:  [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
-                self.row[A15 as usize].value(),
-                self.row[A14 as usize].value(),
-                self.row[A13 as usize].value(),
-                self.row[A12 as usize].value(),
+                self.row[ST15 as usize].value(),
+                self.row[ST14 as usize].value(),
+                self.row[ST13 as usize].value(),
+                self.row[ST12 as usize].value(),
             ),
         )?;
 
