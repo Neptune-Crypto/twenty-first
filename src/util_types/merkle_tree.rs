@@ -1,4 +1,7 @@
-use crate::shared_math::other::{self, get_height_of_complete_binary_tree, is_power_of_two};
+use crate::shared_math::other::{
+    self, bit_representation, get_height_of_complete_binary_tree, is_power_of_two,
+};
+use crate::util_types::shared::bag_peaks;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::izip;
 use rayon::iter::{
@@ -57,6 +60,37 @@ impl<H> MerkleTree<H>
 where
     H: Hasher + std::marker::Sync + std::marker::Send,
 {
+    /// Calculate a Merkle root from a list of digests that is not necessarily a power of two.
+    pub fn root_from_arbitrary_number_of_digests(digests: &[H::Digest]) -> H::Digest
+    where
+        u128: ToDigest<H::Digest>,
+    {
+        // This function should preferably construct a whole Merkle tree data structure and not just the root,
+        // but I couldn't figure out how to do that as the indexing for this problem seems hard to me. Perhaps, the
+        // data structure would need to be changed, since some of the nodes will be `None`/null.
+
+        // The main reason this function exists is that I wanted to be able to calculate a Merkle
+        // root from an odd (non-2^k) number of digests in parallel. This will be used when calculating the digest
+        // of a block, where one of the components is a list of MS addition/removal records.
+
+        // Note that this function *does* allow the calculation of a MT root from an empty list of digests
+        // since the number of removal records in a block can be zero.
+
+        let heights = bit_representation(digests.len() as u128);
+        let mut trees: Vec<MerkleTree<H>> = vec![];
+        let mut acc_counter = 0;
+        for height in heights {
+            let sub_tree = Self::from_digests(&digests[acc_counter..acc_counter + (1 << height)]);
+            acc_counter += 1 << height;
+            trees.push(sub_tree);
+        }
+
+        // Calculate the root from a list of Merkle trees
+        let roots: Vec<H::Digest> = trees.iter().map(|t| t.get_root()).collect();
+
+        bag_peaks::<H>(&roots)
+    }
+
     /// Takes an array of digests and builds a MerkleTree over them.
     /// The digests are used copied over as the leaves of the tree.
     pub fn from_digests(digests: &[H::Digest]) -> Self
@@ -2155,7 +2189,7 @@ mod merkle_tree_test {
     }
 
     #[test]
-    fn build_xlix_merkle_tree() {
+    fn root_from_odd_number_of_digests_test() {
         type RP = RescuePrimeProduction;
         type RPXLIX = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
         type Hasher = RPXLIX;
@@ -2173,7 +2207,25 @@ mod merkle_tree_test {
 
         println!("Merkle root (RP 1): {:?}", mt.get_root());
         println!("Merkle root (RP 2): {:?}", mt_xlix.get_root());
-        assert!(true, "If we make it this far, we are good.")
+
+        assert_eq!(
+            mt.get_root(),
+            MerkleTree::<RP>::root_from_arbitrary_number_of_digests(&leaves)
+        );
+        assert_eq!(
+            mt_xlix.get_root(),
+            MerkleTree::<RPXLIX>::root_from_arbitrary_number_of_digests(&leaves)
+        );
+    }
+
+    #[test]
+    fn root_from_arbitrary_number_of_digests_empty_test() {
+        // Ensure that we can calculate a Merkle root from an empty list of digests.
+        // This is needed since a block can contain an empty list of addition or
+        // removal records.
+
+        type RPXLIX = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
+        MerkleTree::<RPXLIX>::root_from_arbitrary_number_of_digests(&[]);
     }
 
     #[test]

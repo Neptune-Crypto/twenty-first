@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use crate::{
     util_types::{
         mmr::mmr_membership_proof::MmrMembershipProof,
+        shared::bag_peaks,
         simple_hasher::{Hasher, ToDigest},
     },
     utils::has_unique_elements,
@@ -13,7 +14,7 @@ use super::{
     mmr_accumulator::MmrAccumulator,
     mmr_trait::Mmr,
     shared::{
-        bag_peaks, data_index_to_node_index, left_child, left_sibling, leftmost_ancestor,
+        data_index_to_node_index, left_child, left_sibling, leftmost_ancestor,
         node_index_to_data_index, parent, right_child_and_height, right_sibling,
     },
 };
@@ -286,6 +287,7 @@ where
 mod mmr_test {
     use super::*;
     use crate::util_types::blake3_wrapper::Blake3Hash;
+    use crate::util_types::merkle_tree::MerkleTree;
     use crate::{
         shared_math::{
             b_field_element::BFieldElement, rescue_prime::RescuePrime, rescue_prime_params,
@@ -319,6 +321,11 @@ mod mmr_test {
         assert_eq!(archival_mmr.get_peaks(), accumulator_mmr.get_peaks());
         assert_eq!(Vec::<Blake3Hash>::new(), accumulator_mmr.get_peaks());
         assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
+        assert_eq!(
+            archival_mmr.bag_peaks(),
+            MerkleTree::<Hasher>::root_from_arbitrary_number_of_digests(&vec![]),
+            "Bagged peaks for empty MMR must agree with MT root finder"
+        );
         assert_eq!(0, archival_mmr.count_nodes());
         assert!(accumulator_mmr.is_empty());
         assert!(archival_mmr.is_empty());
@@ -803,6 +810,15 @@ mod mmr_test {
             assert_eq!(peak_heights_1, peak_heights_2);
             assert_eq!(peak_count, original_peaks_and_heights.len() as u128);
 
+            // Verify that MMR root from odd number of digests and MMR bagged peaks agree
+            let mmra_root = mmr.bag_peaks();
+            let mt_root =
+                MerkleTree::<Hasher>::root_from_arbitrary_number_of_digests(&input_hashes);
+            assert_eq!(
+                mmra_root, mt_root,
+                "MMRA bagged peaks and MT root must agree"
+            );
+
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid
             for index in 0..data_size {
@@ -857,6 +873,15 @@ mod mmr_test {
             let (peak_heights_2, _) = get_peak_heights_and_peak_node_indices(data_size);
             assert_eq!(peak_heights_1, peak_heights_2);
             assert_eq!(peak_count, original_peaks_and_heights.len() as u128);
+
+            // Verify that MMR root from odd number of digests and MMR bagged peaks agree
+            let mmra_root = mmr.bag_peaks();
+            let mt_root =
+                MerkleTree::<Hasher>::root_from_arbitrary_number_of_digests(&input_prehashes);
+            assert_eq!(
+                mmra_root, mt_root,
+                "MMRA bagged peaks and MT root must agree"
+            );
 
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid

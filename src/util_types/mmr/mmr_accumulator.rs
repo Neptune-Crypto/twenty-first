@@ -4,6 +4,7 @@ use std::{collections::HashMap, fmt::Debug};
 use serde::{Deserialize, Serialize};
 
 use crate::util_types::mmr::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
+use crate::util_types::shared::bag_peaks;
 use crate::util_types::simple_hasher;
 use crate::{
     util_types::{
@@ -18,8 +19,7 @@ use super::{
     mmr_membership_proof::MmrMembershipProof,
     mmr_trait::Mmr,
     shared::{
-        bag_peaks, calculate_new_peaks_from_append, data_index_to_node_index, parent,
-        right_child_and_height,
+        calculate_new_peaks_from_append, data_index_to_node_index, parent, right_child_and_height,
     },
 };
 

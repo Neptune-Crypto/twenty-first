@@ -1,5 +1,5 @@
 use super::mmr_membership_proof::MmrMembershipProof;
-use crate::shared_math::other::log_2_floor;
+use crate::shared_math::other::{bit_representation, log_2_floor};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use std::marker::PhantomData;
 
@@ -178,6 +178,13 @@ pub fn get_authentication_path_node_indices(
     }
 }
 
+/// Return a list of the peak heights for a given leaf count
+pub fn get_peak_heights(leaf_count: u128) -> Vec<u8> {
+    // The peak heights in an MMR can be read directly from the bit-decomposition
+    // of the leaf count.
+    bit_representation(leaf_count)
+}
+
 /// Given leaf count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
 pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, Vec<u128>) {
@@ -342,36 +349,6 @@ where
     calculated_peaks[peak_index as usize] = acc_hash;
 
     Some(calculated_peaks)
-}
-
-/// Get a root commitment to the entire MMR
-pub fn bag_peaks<H>(peaks: &[H::Digest]) -> H::Digest
-where
-    H: Hasher,
-    u128: ToDigest<H::Digest>,
-{
-    // Follows the description on
-    // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
-    // to calculate a root from a list of peaks and the size of the MMR. Note, however,
-    // that the node count described on that website is not used here, as we don't need
-    // the extra bits of security that that would provide.
-    let peaks_count: usize = peaks.len();
-    let hasher: H = H::new();
-
-    if peaks_count == 0 {
-        return hasher.hash(&0u128.to_digest());
-    }
-
-    if peaks_count == 1 {
-        return peaks[0].to_owned();
-    }
-
-    let mut acc: H::Digest = hasher.hash_pair(&peaks[peaks_count - 1], &peaks[peaks_count - 2]);
-    for i in 2..peaks_count {
-        acc = hasher.hash_pair(&acc, &peaks[peaks_count - 1 - i]);
-    }
-
-    acc
 }
 
 #[cfg(test)]
@@ -641,8 +618,16 @@ mod mmr_test {
         ];
         for (leaf_count, (expected_heights, expected_indices)) in leaf_count_and_expected {
             assert_eq!(
-                (expected_heights, expected_indices),
+                (expected_heights.clone(), expected_indices),
                 get_peak_heights_and_peak_node_indices(leaf_count)
+            );
+
+            assert_eq!(
+                expected_heights
+                    .iter()
+                    .map(|x| *x as u8)
+                    .collect::<Vec<_>>(),
+                get_peak_heights(leaf_count)
             );
         }
     }
