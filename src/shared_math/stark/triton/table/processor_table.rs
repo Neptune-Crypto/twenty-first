@@ -1,14 +1,13 @@
-use super::base_matrix::ProcessorTableColumn;
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::challenges_endpoints::{AllChallenges, AllEndpoints};
 use super::extension_table::ExtensionTable;
+use super::table_column::BaseProcessorTableColumn::{self, *};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::instruction::Instruction;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
-use crate::shared_math::stark::triton::table::base_matrix::ProcessorTableColumn::*;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const PROCESSOR_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 9;
@@ -486,7 +485,7 @@ impl Table<BWord> for ProcessorTable {
         let data = self.mut_data();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
-            padding_row[ProcessorTableColumn::CLK as usize] += 1.into();
+            padding_row[BaseProcessorTableColumn::CLK as usize] += 1.into();
             data.push(padding_row);
         }
     }

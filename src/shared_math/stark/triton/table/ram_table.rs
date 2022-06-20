@@ -1,11 +1,11 @@
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::challenges_endpoints::{AllChallenges, AllEndpoints};
 use super::extension_table::ExtensionTable;
+use super::table_column::RAMTableColumn::{self, *};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::table::base_matrix::RAMTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const RAM_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 1;
@@ -113,9 +113,9 @@ impl RAMTable {
             extension_row.extend(row.iter().map(|elem| elem.lift()));
 
             let (clk, ramp, ramv) = (
-                extension_row[RAMTableColumn::CLK as usize],
-                extension_row[RAMTableColumn::RAMP as usize],
-                extension_row[RAMTableColumn::RAMV as usize],
+                extension_row[CLK as usize],
+                extension_row[RAMP as usize],
+                extension_row[RAMV as usize],
             );
 
             let (clk_w, ramp_w, ramv_w) = (
