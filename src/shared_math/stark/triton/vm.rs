@@ -418,7 +418,6 @@ mod triton_vm_tests {
     }
 
     #[test]
-    #[ignore = "rewrite this test according to 'hash' instruction"]
     fn hash_hash_hash_test() {
         // 1. Execute program
         let code = sample_programs::HASH_HASH_HASH_HALT;
@@ -434,53 +433,25 @@ mod triton_vm_tests {
         let (base_matrices, err) =
             program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
 
-        println!("{:?}", err);
-        for row in base_matrices.processor_matrix.clone() {
+        let jmp_rows_count = base_matrices.jump_stack_matrix.len();
+        let prc_rows_count = base_matrices.processor_matrix.len();
+
+        for row in base_matrices.processor_matrix {
             println!("{}", ProcessorMatrixRow { row });
         }
+        println!("Errors: {:?}", err);
 
-        // 1. Check that `output_matrix` is equivalent to `stdout`
-        {
-            let expecteds = vec![].into_iter().rev().map(|x| BWord::new(x));
-            let actuals: Vec<BWord> = base_matrices
-                .output_matrix
-                .iter()
-                .map(|&[val]| val)
-                .collect_vec();
+        // 1. Each of three `hash` instructions result in 8 rows.
+        assert_eq!(24, base_matrices.hash_matrix.len());
 
-            assert_eq!(expecteds.len(), actuals.len());
+        // 2. noRows(jmpstack_table) == noRows(processor_table)
+        assert_eq!(jmp_rows_count, prc_rows_count);
 
-            for (expected, actual) in zip(expecteds, actuals) {
-                assert_eq!(expected, actual)
-            }
-        }
+        // 3. The number of input_table rows is equivalent to the number of read_io instructions.
+        assert_eq!(0, base_matrices.input_matrix.len());
 
-        // 2. Each of three `xlix` operations result in 8 rows.
-        {
-            let expected = 24;
-            assert_eq!(expected, base_matrices.aux_matrix.len());
-        }
-
-        //3. noRows(jmpstack_tabel) == noRows(processor_table)
-        {
-            let jmp_rows_count = base_matrices.jump_stack_matrix.len();
-            let prc_rows_count = base_matrices.processor_matrix.len();
-            assert_eq!(jmp_rows_count, prc_rows_count)
-        }
-
-        {
-            // 4.1. The number of input_table rows is equivalent to the number of read_io operations.
-            let expected_input_count = 0;
-            let actual_input_count = base_matrices.input_matrix.len();
-
-            assert_eq!(expected_input_count, actual_input_count);
-
-            // 4.2. The number of output_table rows is equivalent to the number of write_io operations.
-            let expected_output_count = 0;
-            let actual_output_count = base_matrices.output_matrix.len();
-
-            assert_eq!(expected_output_count, actual_output_count);
-        }
+        // 4. The number of output_table rows is equivalent to the number of write_io instructions.
+        assert_eq!(0, base_matrices.output_matrix.len());
     }
 
     fn _check_base_matrices(

@@ -832,9 +832,9 @@ terminate: pop
     ";
 
     pub const HASH_HASH_HASH_HALT: &str = "
-        xlix
-        xlix
-        xlix
+        hash
+        hash
+        hash
         halt
     ";
 
