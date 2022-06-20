@@ -2,9 +2,10 @@
 # Please run `yamllint .drone.yml` after editing this file.
 kind: pipeline
 type: docker
-name: default
+name: linting-and-benchmarks
 
-# Run `rustup check` to see newest version and update here:
+# Run `rustup check` to see newest version and update here *after* running
+# `make test`:
 define: &latest_stable 'rust:1.61'
 
 steps:
@@ -27,7 +28,7 @@ steps:
   - name: Test
     image: *latest_stable
     commands:
-      - cargo test --all-targets
+      - cargo test  # as per issue 132 --all-targets
       # Taget `doc` is not tested by `--all-targets` according to
       # [Target Selection]
       # (https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection)
@@ -35,19 +36,31 @@ steps:
 
   - name: Bench
     image: *latest_stable
+    depends_on:
+      - Check
+      - Clippy
+      - Build
+      - Test
     commands:
       - cargo bench stark_bf
+      # rescueprime {hash, hash_pair}
+      # ntt {bfield, xfield}
 
   - name: Telegram
     image:
       appleboy/drone-telegram@sha256:896707270a77372001b6ed40e895f3f15ef1cfb6ec93463d6f496e96c28aaf7b
+    failure: ignore
+    depends_on:
+      - Bench
     settings:
       to:
         from_secret: telegram_to
       token:
         from_secret: telegram_token
       when:
-        status: [success, failure]
+        status:
+          - failure
+          - success
       format: markdown
       # Reference:
       # https://github.com/appleboy/drone-telegram/blob/master/DOCS.md#parameter-reference
@@ -60,6 +73,7 @@ steps:
         ```
         {{commit.message}}
         ```
+        🕐 Duration: {{duration build.started build.finished}}
 
         🌐 {{ build.link }}
         {{else}}
@@ -70,6 +84,7 @@ steps:
         ```
         {{commit.message}}
         ```
+
 
         🌐 {{ build.link }}
         {{/success}}
