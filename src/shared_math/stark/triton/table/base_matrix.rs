@@ -7,6 +7,7 @@ use crate::shared_math::stark::triton::instruction::Instruction;
 use crate::shared_math::stark::triton::state::{VMOutput, VMState};
 use crate::shared_math::stark::triton::table::base_matrix::ProcessorTableColumn::*;
 use crate::shared_math::stark::triton::vm::Program;
+use itertools::Itertools;
 use std::fmt::Display;
 
 #[derive(Debug, Clone, Default)]
@@ -28,17 +29,16 @@ impl BaseMatrices {
     /// in the program. Note that this does not mean “one row per instruction:” instructions that
     /// take two words (e.g. `push N`) add two rows.
     pub fn initialize(&mut self, program: &Program) {
-        let words = program.to_bwords().into_iter();
         let mut words_with_0 = program.to_bwords();
         words_with_0.push(0.into());
-        let next_words = words_with_0.into_iter().skip(1);
-        debug_assert_eq!(words.len(), next_words.len());
 
-        for (i, (word, next_word)) in words.zip(next_words).enumerate() {
+        for (i, (word, next_word)) in words_with_0.into_iter().tuple_windows().enumerate() {
             let index = (i as u32).into();
             self.program_matrix.push([index, word]);
             self.instruction_matrix.push([index, word, next_word]);
         }
+
+        debug_assert_eq!(program.len(), self.instruction_matrix.len());
     }
 
     pub fn sort_instruction_matrix(&mut self) {
