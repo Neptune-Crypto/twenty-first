@@ -9,8 +9,6 @@ use crate::shared_math::stark::triton::table::base_matrix::ProcessorTableColumn:
 use crate::shared_math::stark::triton::vm::Program;
 use std::fmt::Display;
 
-type BWord = BFieldElement;
-
 #[derive(Debug, Clone, Default)]
 pub struct BaseMatrices {
     pub program_matrix: Vec<[BFieldElement; program_table::BASE_WIDTH]>,
@@ -26,22 +24,20 @@ pub struct BaseMatrices {
 }
 
 impl BaseMatrices {
-    /// Initialize `program_matrix` and `instruction_matrix` so that both
-    /// contain one row per word in the program. Instructions that take two
-    /// words (e.g. `push N`) add two rows.
+    /// Initialize `program_matrix` and `instruction_matrix` so that both contain one row per word
+    /// in the program. Note that this does not mean “one row per instruction:” instructions that
+    /// take two words (e.g. `push N`) add two rows.
     pub fn initialize(&mut self, program: &Program) {
-        let mut words = program.to_bwords().into_iter().enumerate();
-        let (first_i, mut current_word) = words.next().unwrap();
+        let words = program.to_bwords().into_iter();
+        let mut words_with_0 = program.to_bwords();
+        words_with_0.push(0.into());
+        let next_words = words_with_0.into_iter().skip(1);
+        debug_assert_eq!(words.len(), next_words.len());
 
-        let first_index: BWord = (first_i as u32).into();
-        self.program_matrix.push([first_index, current_word]);
-
-        for (i, next_word) in words {
-            let index: BWord = (i as u32).into();
-            self.program_matrix.push([index, current_word]);
-            self.instruction_matrix
-                .push([index, current_word, next_word]);
-            current_word = next_word;
+        for (i, (word, next_word)) in words.zip(next_words).enumerate() {
+            let index = (i as u32).into();
+            self.program_matrix.push([index, word]);
+            self.instruction_matrix.push([index, word, next_word]);
         }
     }
 
