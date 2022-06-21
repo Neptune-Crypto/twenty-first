@@ -7,6 +7,7 @@ use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::table::base_matrix::ProgramTableColumn;
 use crate::shared_math::x_field_element::XFieldElement;
+use itertools::Itertools;
 
 pub const PROGRAM_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 0;
 pub const PROGRAM_TABLE_EVALUATION_ARGUMENT_COUNT: usize = 1;
@@ -164,21 +165,21 @@ impl ProgramTable {
         let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
         let mut instruction_table_running_sum = initials.instruction_eval_sum;
 
-        for row in self.data().iter() {
+        let mut data_with_0 = self.data().clone();
+        data_with_0.push(vec![0.into(); BASE_WIDTH]);
+
+        for (row, next_row) in data_with_0.into_iter().tuple_windows() {
             let mut extension_row = Vec::with_capacity(FULL_WIDTH);
             extension_row.extend(row.iter().map(|elem| elem.lift()));
 
             let address = row[ProgramTableColumn::Address as usize].lift();
             let instruction = row[ProgramTableColumn::Instruction as usize].lift();
+            let next_instruction = next_row[ProgramTableColumn::Instruction as usize].lift();
 
-            // 1. Compress multiple values within one row so they become one value.
-            // todo!(
-            //     "Use the next row's instruction (or 0 if the row doesn't exist),\
-            //     multiply it by challenges.next_instruction_weight,\
-            //     and add it to the compressed row."
-            // );
-            let compressed_row_for_evaluation_argument =
-                address * challenges.address_weight + instruction * challenges.instruction_weight;
+            // Compress address, instruction, and next instruction (or argument) into single value
+            let compressed_row_for_evaluation_argument = address * challenges.address_weight
+                + instruction * challenges.instruction_weight
+                + next_instruction * challenges.next_instruction_weight;
             extension_row.push(compressed_row_for_evaluation_argument);
 
             // Update the Evaluation Argument's running sum with the compressed column
