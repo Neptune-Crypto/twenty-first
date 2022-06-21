@@ -176,6 +176,12 @@ impl BaseTableCollection {
             .concat()
     }
 
+    pub fn get_all_base_degree_bounds(&self) -> Vec<Degree> {
+        self.into_iter()
+            .map(|table| vec![table.interpolant_degree(); table.width()])
+            .concat()
+    }
+
     pub fn pad(&mut self) {
         self.program_table.pad();
         self.instruction_table.pad();
