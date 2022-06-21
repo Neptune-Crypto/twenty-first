@@ -9,11 +9,12 @@ use super::jump_stack_table::{ExtJumpStackTable, JumpStackTable};
 use super::op_stack_table::{ExtOpStackTable, OpStackTable};
 use super::processor_table::{ExtProcessorTable, ProcessorTable};
 use super::program_table::{ExtProgramTable, ProgramTable};
-use super::ram_table::{ExtRAMTable, RAMTable};
+use super::ram_table::{ExtRamTable, RamTable};
 use super::u32_op_table::{ExtU32OpTable, U32OpTable};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
+use crate::shared_math::stark::triton::table::base_table::HasBaseTable;
 use crate::shared_math::x_field_element::XFieldElement;
 use itertools::Itertools;
 
@@ -28,7 +29,7 @@ pub struct BaseTableCollection {
     pub input_table: IOTable,
     pub output_table: IOTable,
     pub op_stack_table: OpStackTable,
-    pub ram_table: RAMTable,
+    pub ram_table: RamTable,
     pub jump_stack_table: JumpStackTable,
     pub hash_table: HashTable,
     pub u32_op_table: U32OpTable,
@@ -42,10 +43,25 @@ pub struct ExtTableCollection {
     pub input_table: ExtIOTable,
     pub output_table: ExtIOTable,
     pub op_stack_table: ExtOpStackTable,
-    pub ram_table: ExtRAMTable,
+    pub ram_table: ExtRamTable,
     pub jump_stack_table: ExtJumpStackTable,
     pub hash_table: ExtHashTable,
     pub u32_op_table: ExtU32OpTable,
+}
+
+/// A `TableId` uniquely determines one of Triton VM's tables.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TableId {
+    ProgramTable,
+    InstructionTable,
+    ProcessorTable,
+    InputTable,
+    OutputTable,
+    OpStackTable,
+    RamTable,
+    JumpStackTable,
+    HashTable,
+    U32OpTable,
 }
 
 /// Convert vector-of-arrays to vector-of-vectors.
@@ -105,7 +121,7 @@ impl BaseTableCollection {
             to_vec_vecs(&base_matrices.op_stack_matrix),
         );
 
-        let ram_table = RAMTable::new_prover(
+        let ram_table = RamTable::new_prover(
             generator,
             order,
             num_randomizers,
@@ -209,11 +225,6 @@ impl ExtTableCollection {
         all_challenges: &AllChallenges,
         all_initials: &AllEndpoints,
     ) -> (Self, AllEndpoints) {
-        // pub ram_table: RAMTable,
-        // pub jump_stack_table: JumpStackTable,
-        // pub hash_table: HashTable,
-        // pub u32_op_table: U32OpTable,
-
         let (program_table, program_table_terminals) = base_tables.program_table.extend(
             &all_challenges.program_table_challenges,
             &all_initials.program_table_endpoints,
@@ -334,6 +345,40 @@ impl ExtTableCollection {
         }
 
         all_table_data
+    }
+
+    pub fn data(&self, table_id: TableId) -> &Vec<Vec<XWord>> {
+        use TableId::*;
+
+        match table_id {
+            ProgramTable => self.program_table.data(),
+            InstructionTable => self.instruction_table.data(),
+            ProcessorTable => self.processor_table.data(),
+            InputTable => self.input_table.data(),
+            OutputTable => self.output_table.data(),
+            OpStackTable => self.op_stack_table.data(),
+            RamTable => self.ram_table.data(),
+            JumpStackTable => self.jump_stack_table.data(),
+            HashTable => self.hash_table.data(),
+            U32OpTable => self.u32_op_table.data(),
+        }
+    }
+
+    pub fn interpolant_degree(&self, table_id: TableId) -> Degree {
+        use TableId::*;
+
+        match table_id {
+            ProgramTable => self.program_table.interpolant_degree(),
+            InstructionTable => self.instruction_table.interpolant_degree(),
+            ProcessorTable => self.processor_table.interpolant_degree(),
+            InputTable => self.input_table.interpolant_degree(),
+            OutputTable => self.output_table.interpolant_degree(),
+            OpStackTable => self.op_stack_table.interpolant_degree(),
+            RamTable => self.ram_table.interpolant_degree(),
+            JumpStackTable => self.jump_stack_table.interpolant_degree(),
+            HashTable => self.hash_table.interpolant_degree(),
+            U32OpTable => self.u32_op_table.interpolant_degree(),
+        }
     }
 
     pub fn get_all_extension_degree_bounds(&self) -> Vec<i64> {

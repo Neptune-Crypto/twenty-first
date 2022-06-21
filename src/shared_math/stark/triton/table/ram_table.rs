@@ -1,7 +1,7 @@
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::challenges_endpoints::{AllChallenges, AllEndpoints};
 use super::extension_table::ExtensionTable;
-use super::table_column::RAMTableColumn::{self, *};
+use super::table_column::RamTableColumn::{self, *};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
@@ -23,11 +23,11 @@ type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
-pub struct RAMTable {
+pub struct RamTable {
     base: BaseTable<BWord>,
 }
 
-impl HasBaseTable<BWord> for RAMTable {
+impl HasBaseTable<BWord> for RamTable {
     fn to_base(&self) -> &BaseTable<BWord> {
         &self.base
     }
@@ -38,11 +38,11 @@ impl HasBaseTable<BWord> for RAMTable {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExtRAMTable {
+pub struct ExtRamTable {
     base: BaseTable<XFieldElement>,
 }
 
-impl HasBaseTable<XFieldElement> for ExtRAMTable {
+impl HasBaseTable<XFieldElement> for ExtRamTable {
     fn to_base(&self) -> &BaseTable<XFieldElement> {
         &self.base
     }
@@ -52,7 +52,7 @@ impl HasBaseTable<XFieldElement> for ExtRAMTable {
     }
 }
 
-impl RAMTable {
+impl RamTable {
     pub fn new_verifier(
         generator: BWord,
         order: usize,
@@ -104,7 +104,7 @@ impl RAMTable {
         &self,
         challenges: &RamTableChallenges,
         initials: &RamTableEndpoints,
-    ) -> (ExtRAMTable, RamTableEndpoints) {
+    ) -> (ExtRamTable, RamTableEndpoints) {
         let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
         let mut running_product = initials.processor_perm_product;
 
@@ -139,7 +139,7 @@ impl RAMTable {
         }
 
         let base = self.base.with_lifted_data(extension_matrix);
-        let table = ExtRAMTable { base };
+        let table = ExtRamTable { base };
         let terminals = RamTableEndpoints {
             processor_perm_product: running_product,
         };
@@ -148,18 +148,18 @@ impl RAMTable {
     }
 }
 
-impl ExtRAMTable {
+impl ExtRamTable {
     pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
         let ext_codewords = self.low_degree_extension(fri_domain);
         let base = self.base.with_data(ext_codewords);
 
-        ExtRAMTable { base }
+        ExtRamTable { base }
     }
 }
 
-impl Table<BWord> for RAMTable {
+impl Table<BWord> for RamTable {
     fn name(&self) -> String {
-        "RAMTable".to_string()
+        "RamTable".to_string()
     }
 
     fn pad(&mut self) {
@@ -167,7 +167,7 @@ impl Table<BWord> for RAMTable {
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
             // add same clk padding as in processor table
-            padding_row[RAMTableColumn::CLK as usize] = ((data.len() - 1) as u32).into();
+            padding_row[RamTableColumn::CLK as usize] = ((data.len() - 1) as u32).into();
             data.push(padding_row);
         }
     }
@@ -177,9 +177,9 @@ impl Table<BWord> for RAMTable {
     }
 }
 
-impl Table<XFieldElement> for ExtRAMTable {
+impl Table<XFieldElement> for ExtRamTable {
     fn name(&self) -> String {
-        "ExtRAMTable".to_string()
+        "ExtRamTable".to_string()
     }
 
     fn pad(&mut self) {
@@ -191,7 +191,7 @@ impl Table<XFieldElement> for ExtRAMTable {
     }
 }
 
-impl ExtensionTable for ExtRAMTable {
+impl ExtensionTable for ExtRamTable {
     fn base_width(&self) -> usize {
         BASE_WIDTH
     }

@@ -1,4 +1,7 @@
-use super::table_column::BaseProcessorTableColumn::*;
+use super::table_column::{
+    InstructionTableColumn, JumpStackTableColumn, OpStackTableColumn, ProcessorTableColumn::*,
+    RamTableColumn,
+};
 use super::{
     hash_table, instruction_table, io_table, jump_stack_table, op_stack_table, processor_table,
     program_table, ram_table, u32_op_table,
@@ -58,8 +61,8 @@ impl BaseMatrices {
     pub fn sort_ram_matrix(&mut self) {
         self.ram_matrix.sort_by_key(|row| {
             (
-                row[RAMTableColumn::RAMP as usize].value(),
-                row[RAMTableColumn::CLK as usize].value(),
+                row[RamTableColumn::RAMP as usize].value(),
+                row[RamTableColumn::CLK as usize].value(),
             )
         })
     }
