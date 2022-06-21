@@ -148,6 +148,8 @@ impl Program {
         }
 
         base_matrices.sort_instruction_matrix();
+        base_matrices.sort_op_stack_matrix();
+        base_matrices.sort_ram_matrix();
         base_matrices.sort_jump_stack_matrix();
 
         (base_matrices, None)

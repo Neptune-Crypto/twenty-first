@@ -45,20 +45,36 @@ impl BaseMatrices {
         }
     }
 
-    // FIXME: We have to name the row's fields here.
-    //
-    // row[0] corresponds to clk
     pub fn sort_instruction_matrix(&mut self) {
-        self.instruction_matrix.sort_by_key(|row| row[0].value());
+        self.instruction_matrix
+            .sort_by_key(|row| row[InstructionTableColumn::Address as usize].value());
     }
 
-    // FIXME: We have to name the row's fields here.
-    //
-    // row[1] corresponds to jsp
-    // row[0] corresponds to clk
+    pub fn sort_op_stack_matrix(&mut self) {
+        self.op_stack_matrix.sort_by_key(|row| {
+            (
+                row[OpStackTableColumn::OSP as usize].value(),
+                row[OpStackTableColumn::CLK as usize].value(),
+            )
+        })
+    }
+
+    pub fn sort_ram_matrix(&mut self) {
+        self.ram_matrix.sort_by_key(|row| {
+            (
+                row[RAMTableColumn::RAMP as usize].value(),
+                row[RAMTableColumn::CLK as usize].value(),
+            )
+        })
+    }
+
     pub fn sort_jump_stack_matrix(&mut self) {
-        self.jump_stack_matrix
-            .sort_by_key(|row| (row[1].value(), row[0].value()))
+        self.jump_stack_matrix.sort_by_key(|row| {
+            (
+                row[JumpStackTableColumn::JSP as usize].value(),
+                row[JumpStackTableColumn::CLK as usize].value(),
+            )
+        })
     }
 
     pub fn append(
