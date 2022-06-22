@@ -822,6 +822,29 @@ mod vm_state_tests {
     }
 
     #[test]
+    fn edgy_ram_writes_test() {
+        let program = Program::from_code(sample_programs::EDGY_RAM_WRITES).unwrap();
+        let (trace, _out, err) = program.run_with_input(&[], &[]);
+
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+        if let Some(e) = err {
+            println!("Error: {}", e);
+        }
+
+        let last_state = trace.last().expect("Execution seems to have failed.");
+        let zero = BFieldElement::new(0);
+        let three = BFieldElement::new(3);
+        let five = BFieldElement::new(5);
+        assert_eq!(three, last_state.op_stack.st(ST0));
+        assert_eq!(five, last_state.op_stack.st(ST1));
+        assert_eq!(three, last_state.op_stack.st(ST2));
+        assert_eq!(last_state.ram[&zero], zero);
+        assert_eq!(last_state.ram[&five], three);
+    }
+
+    #[test]
     fn run_mt_ap_verify_test() {
         let program = Program::from_code(sample_programs::MT_AP_VERIFY).unwrap();
         println!("Successfully parsed the program.");

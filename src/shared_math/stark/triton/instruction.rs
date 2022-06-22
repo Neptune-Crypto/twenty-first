@@ -648,6 +648,14 @@ pub mod sample_programs {
         "halt ",
     );
 
+    pub const EDGY_RAM_WRITES: &str = concat!(
+        "write_mem ",                         // this should write 0 to address 0
+        "push 5 swap2 push 3 swap2 pop pop ", // stack is now of length 16 again
+        "write_mem ",                         // this should write 3 to address 5
+        "swap2 read_mem ",                    // stack's top should now be 3, 5, 3, 0, 0, …
+        "halt ",
+    );
+
     pub const WRITE_42: &str = "
         push 42
         write_io
