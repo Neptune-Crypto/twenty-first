@@ -53,29 +53,6 @@ impl HasBaseTable<XFieldElement> for ExtRamTable {
 }
 
 impl RamTable {
-    pub fn new_verifier(
-        generator: BWord,
-        order: usize,
-        num_randomizers: usize,
-        padded_height: usize,
-    ) -> Self {
-        let matrix: Vec<Vec<BWord>> = vec![];
-
-        let dummy = generator;
-        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
-        let base = BaseTable::new(
-            BASE_WIDTH,
-            padded_height,
-            num_randomizers,
-            omicron,
-            generator,
-            order,
-            matrix,
-        );
-
-        Self { base }
-    }
-
     pub fn new_prover(
         generator: BWord,
         order: usize,
@@ -149,6 +126,29 @@ impl RamTable {
 }
 
 impl ExtRamTable {
+    pub fn with_padded_height(
+        generator: BWord,
+        order: usize,
+        num_randomizers: usize,
+        padded_height: usize,
+    ) -> Self {
+        let matrix: Vec<Vec<BWord>> = vec![];
+
+        let dummy = generator;
+        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
+        let base = BaseTable::new(
+            BASE_WIDTH,
+            padded_height,
+            num_randomizers,
+            omicron,
+            generator,
+            order,
+            matrix,
+        );
+
+        Self { base }
+    }
+
     pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
         let ext_codewords = self.low_degree_extension(fri_domain);
         let base = self.base.with_data(ext_codewords);

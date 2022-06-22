@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use super::super::triton;
 use super::table::base_matrix::BaseMatrices;
 use super::vm::Program;
@@ -36,6 +38,9 @@ type StarkDigest = Vec<BFieldElement>;
 pub struct Stark {
     _padded_height: usize,
     _log_expansion_factor: usize,
+    num_randomizers: usize,
+    order: usize,
+    generator: BFieldElement,
     security_level: usize,
     bfri_domain: triton::fri_domain::FriDomain<BWord>,
     xfri_domain: triton::fri_domain::FriDomain<XWord>,
@@ -114,6 +119,9 @@ impl Stark {
         Stark {
             _padded_height,
             _log_expansion_factor: log_expansion_factor,
+            num_randomizers,
+            order,
+            generator: smooth_generator,
             security_level,
             bfri_domain,
             xfri_domain: dummy_xfri_domain,
@@ -266,6 +274,7 @@ impl Stark {
         let extension_tree =
             MerkleTree::<StarkHasher>::from_digests(&extension_codeword_digests_by_index);
         proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root()));
+        proof_stream.enqueue(&Item::Terminals(all_terminals));
 
         timer.elapsed("extension_tree");
 
@@ -568,6 +577,46 @@ impl Stark {
         );
 
         proof_stream
+    }
+
+    pub fn verify(&self, proof_stream: &mut StarkProofStream) -> Result<bool, Box<dyn Error>> {
+        let mut timer = TimingReporter::start();
+        let hasher = StarkHasher::new();
+
+        let base_merkle_tree_root: Vec<BFieldElement> = proof_stream.dequeue()?.as_merkle_root()?;
+
+        let seed = proof_stream.verifier_fiat_shamir();
+
+        timer.elapsed("verifier_fiat_shamir");
+        // Get coefficients for table extension
+        let challenge_weights: [XFieldElement; AllChallenges::TOTAL_CHALLENGES] =
+            Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL_CHALLENGES)
+                .try_into()
+                .unwrap();
+        let all_challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
+
+        let extension_tree_merkle_root: Vec<BFieldElement> =
+            proof_stream.dequeue()?.as_merkle_root()?;
+
+        let terminals = proof_stream.dequeue()?.as_terminals()?;
+        timer.elapsed("Read from proof stream");
+
+        let max_padded_height = proof_stream.dequeue()?.as_max_padded_height()?.value() as usize;
+        let ext_table_collection = ExtTableCollection::with_padded_height(
+            self.generator,
+            self.order,
+            self.num_randomizers,
+            max_padded_height,
+        );
+
+        let base_degree_bounds: Vec<Degree> = ext_table_collection.get_all_base_degree_bounds();
+        timer.elapsed("Calculated base degree bounds");
+
+        let extension_degree_bounds: Vec<Degree> =
+            ext_table_collection.get_all_extension_degree_bounds();
+        timer.elapsed("Calculated extension degree bounds");
+
+        todo!()
     }
 
     // FIXME: This interface leaks abstractions: We want a function that generates a number of weights

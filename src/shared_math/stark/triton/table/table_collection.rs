@@ -219,6 +219,76 @@ impl<'a> IntoIterator for &'a BaseTableCollection {
 }
 
 impl ExtTableCollection {
+    pub fn with_padded_height(
+        generator: BWord,
+        order: usize,
+        num_randomizers: usize,
+        max_padded_height: usize,
+    ) -> Self {
+        let ext_program_table = ExtProgramTable::with_padded_height(
+            generator,
+            order,
+            num_randomizers,
+            max_padded_height,
+        );
+
+        let ext_processor_table = ExtProcessorTable::with_padded_height(
+            generator,
+            order,
+            num_randomizers,
+            max_padded_height,
+        );
+
+        let ext_instruction_table = ExtInstructionTable::with_padded_height(
+            generator,
+            order,
+            num_randomizers,
+            max_padded_height,
+        );
+
+        let ext_input_table =
+            ExtIOTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
+
+        let ext_output_table =
+            ExtIOTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
+
+        let ext_op_stack_table = ExtOpStackTable::with_padded_height(
+            generator,
+            order,
+            num_randomizers,
+            max_padded_height,
+        );
+
+        let ext_ram_table =
+            ExtRamTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
+
+        let ext_jump_stack_table = ExtJumpStackTable::with_padded_height(
+            generator,
+            order,
+            num_randomizers,
+            max_padded_height,
+        );
+
+        let ext_hash_table =
+            ExtHashTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
+
+        let ext_u32_op_table =
+            ExtU32OpTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
+
+        ExtTableCollection {
+            program_table: ext_program_table,
+            instruction_table: ext_instruction_table,
+            processor_table: ext_processor_table,
+            input_table: ext_input_table,
+            output_table: ext_output_table,
+            op_stack_table: ext_op_stack_table,
+            ram_table: ext_ram_table,
+            jump_stack_table: ext_jump_stack_table,
+            hash_table: ext_hash_table,
+            u32_op_table: ext_u32_op_table,
+        }
+    }
+
     /// Create an ExtTableCollection from a BaseTableCollection by
     /// `.extend()`ing each base table.
     ///
@@ -385,6 +455,12 @@ impl ExtTableCollection {
             HashTable => self.hash_table.interpolant_degree(),
             U32OpTable => self.u32_op_table.interpolant_degree(),
         }
+    }
+
+    pub fn get_all_base_degree_bounds(&self) -> Vec<i64> {
+        self.into_iter()
+            .map(|ext_table| vec![ext_table.interpolant_degree(); ext_table.base_width()])
+            .concat()
     }
 
     pub fn get_all_extension_degree_bounds(&self) -> Vec<i64> {
