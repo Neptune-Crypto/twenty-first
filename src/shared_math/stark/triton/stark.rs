@@ -9,6 +9,7 @@ use crate::shared_math::rescue_prime_xlix::{
     neptune_params, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
 };
 use crate::shared_math::stark::brainfuck::stark_proof_stream::{Item, StarkProofStream};
+use crate::shared_math::stark::triton::arguments::permutation_argument::PermArg;
 use crate::shared_math::stark::triton::instruction::sample_programs;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::stark::triton::table::challenges_endpoints::{AllChallenges, AllEndpoints};
@@ -272,21 +273,21 @@ impl Stark {
 
         timer.elapsed("get_all_extension_degree_bounds");
 
-        let quotient_codewords =
+        let mut quotient_codewords =
             ext_tables.get_all_quotients(&self.bfri_domain, &all_challenges, &all_terminals);
 
         timer.elapsed("all_quotients");
 
-        let quotient_degree_bounds =
+        let mut quotient_degree_bounds =
             ext_tables.get_all_quotient_degree_bounds(&all_challenges, &all_terminals);
 
         timer.elapsed("all_quotient_degree_bounds");
 
         // Prove equal initial values for the permutation-extension column pairs
-        // for pa in self.permutation_arguments.iter() {
-        //     quotient_codewords.push(pa.quotient(&self.fri.domain));
-        //     quotient_degree_bounds.push(pa.quotient_degree_bound());
-        // }
+        for pa in PermArg::all_permutation_arguments().iter() {
+            quotient_codewords.push(pa.quotient(&ext_codeword_tables, &self.fri.domain));
+            quotient_degree_bounds.push(pa.quotient_degree_bound(&ext_codeword_tables));
+        }
 
         // Calculate `num_base_polynomials` and `num_extension_polynomials` for asserting
         let num_base_polynomials: usize = base_tables.into_iter().map(|table| table.width()).sum();

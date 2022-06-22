@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use super::hash_table::{HashTableChallenges, HashTableEndpoints};
 use super::instruction_table::{InstructionTableChallenges, InstructionTableEndpoints};
 use super::io_table::{IOTableChallenges, IOTableEndpoints};
@@ -7,6 +9,7 @@ use super::processor_table::{ProcessorTableChallenges, ProcessorTableEndpoints};
 use super::program_table::{ProgramTableChallenges, ProgramTableEndpoints};
 use super::ram_table::{RamTableChallenges, RamTableEndpoints};
 use super::u32_op_table::{U32OpTableChallenges, U32OpTableEndpoints};
+use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -326,6 +329,55 @@ impl AllEndpoints {
             hash_table_endpoints: hash_table_initials,
             u32_op_table_endpoints: u32_op_table_initials,
         }
+    }
+}
+
+/// Make terminals iterable for ProofStream
+///
+/// In order for `Stark::verify()` to receive all terminals via `ProofStream`,
+/// they must serialise to a stream of `BFieldElement`s.
+impl IntoIterator for AllEndpoints {
+    type Item = BFieldElement;
+
+    type IntoIter = std::vec::IntoIter<BFieldElement>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        vec![
+            &self.program_table_endpoints.instruction_eval_sum,
+            &self.instruction_table_endpoints.processor_perm_product,
+            &self.instruction_table_endpoints.program_eval_sum,
+            &self.input_table_endpoints.processor_eval_sum,
+            &self.output_table_endpoints.processor_eval_sum,
+            &self
+                .processor_table_endpoints
+                .instruction_table_perm_product,
+            &self.processor_table_endpoints.opstack_table_perm_product,
+            &self.processor_table_endpoints.ram_table_perm_product,
+            &self.processor_table_endpoints.jump_stack_perm_product,
+            &self.processor_table_endpoints.to_hash_table_eval_sum,
+            &self.processor_table_endpoints.from_hash_table_eval_sum,
+            &self.processor_table_endpoints.u32_table_lt_perm_product,
+            &self.processor_table_endpoints.u32_table_and_perm_product,
+            &self.processor_table_endpoints.u32_table_xor_perm_product,
+            &self
+                .processor_table_endpoints
+                .u32_table_reverse_perm_product,
+            &self.processor_table_endpoints.u32_table_div_perm_product,
+            &self.op_stack_table_endpoints.processor_perm_product,
+            &self.ram_table_endpoints.processor_perm_product,
+            &self.jump_stack_table_endpoints.processor_perm_product,
+            &self.hash_table_endpoints.from_processor_eval_sum,
+            &self.hash_table_endpoints.to_processor_eval_sum,
+            &self.u32_op_table_endpoints.processor_lt_perm_product,
+            &self.u32_op_table_endpoints.processor_and_perm_product,
+            &self.u32_op_table_endpoints.processor_xor_perm_product,
+            &self.u32_op_table_endpoints.processor_reverse_perm_product,
+            &self.u32_op_table_endpoints.processor_div_perm_product,
+        ]
+        .into_iter()
+        .map(|endpoint| endpoint.coefficients.to_vec())
+        .concat()
+        .into_iter()
     }
 }
 

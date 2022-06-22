@@ -4,6 +4,7 @@ pub mod fri_domain;
 pub mod instruction;
 pub mod op_stack;
 pub mod ord_n;
+pub mod proof_item;
 pub mod stark;
 pub mod state;
 pub mod stdio;
