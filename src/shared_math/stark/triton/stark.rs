@@ -5,24 +5,26 @@ use super::table::base_matrix::BaseMatrices;
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::Degree;
+use crate::shared_math::other;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::rescue_prime_xlix::{
     neptune_params, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
 };
-use crate::shared_math::stark::brainfuck::stark_proof_stream::{Item, StarkProofStream};
 use crate::shared_math::stark::triton::arguments::permutation_argument::PermArg;
 use crate::shared_math::stark::triton::instruction::sample_programs;
+use crate::shared_math::stark::triton::proof_item::{Item, StarkProofStream};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::stark::triton::table::challenges_endpoints::{AllChallenges, AllEndpoints};
 use crate::shared_math::stark::triton::table::table_collection::{
     BaseTableCollection, ExtTableCollection,
 };
+use crate::shared_math::stark::triton::triton_xfri;
 use crate::shared_math::traits::{GetPrimitiveRootOfUnity, GetRandomElements, ModPowU32};
 use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::{other, xfri};
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::util_types::proof_stream_typed::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::Itertools;
 use rayon::iter::{
@@ -40,11 +42,11 @@ pub struct Stark {
     _log_expansion_factor: usize,
     num_randomizers: usize,
     order: usize,
-    generator: BFieldElement,
+    generator: XFieldElement,
     security_level: usize,
     bfri_domain: triton::fri_domain::FriDomain<BWord>,
     xfri_domain: triton::fri_domain::FriDomain<XWord>,
-    fri: xfri::Fri<StarkHasher>,
+    fri: triton_xfri::Fri<StarkHasher>,
 }
 
 impl Stark {
@@ -108,7 +110,7 @@ impl Stark {
             length: fri_domain_length as usize,
         };
 
-        let dummy_xfri = xfri::Fri::new(
+        let dummy_xfri = triton_xfri::Fri::new(
             offset.lift(),
             omega.lift(),
             fri_domain_length,
@@ -121,7 +123,7 @@ impl Stark {
             _log_expansion_factor: log_expansion_factor,
             num_randomizers,
             order,
-            generator: smooth_generator,
+            generator: smooth_generator.lift(),
             security_level,
             bfri_domain,
             xfri_domain: dummy_xfri_domain,
@@ -211,7 +213,7 @@ impl Stark {
 
         // Commit to base codewords
 
-        let mut proof_stream = StarkProofStream::default();
+        let mut proof_stream: ProofStream<Item, StarkHasher> = StarkProofStream::default();
         let base_merkle_tree_root: Vec<BFieldElement> = base_merkle_tree.get_root();
         proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root));
 
@@ -274,7 +276,7 @@ impl Stark {
         let extension_tree =
             MerkleTree::<StarkHasher>::from_digests(&extension_codeword_digests_by_index);
         proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root()));
-        proof_stream.enqueue(&Item::Terminals(all_terminals));
+        proof_stream.enqueue(&Item::Terminals(all_terminals.clone()));
 
         timer.elapsed("extension_tree");
 
@@ -601,7 +603,10 @@ impl Stark {
         let terminals = proof_stream.dequeue()?.as_terminals()?;
         timer.elapsed("Read from proof stream");
 
-        let max_padded_height = proof_stream.dequeue()?.as_max_padded_height()?.value() as usize;
+        let max_padded_height = proof_stream
+            .dequeue()?
+            .as_max_padded_table_height()?
+            .value() as usize;
         let ext_table_collection = ExtTableCollection::with_padded_height(
             self.generator,
             self.order,

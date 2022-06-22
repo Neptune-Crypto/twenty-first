@@ -220,7 +220,7 @@ impl<'a> IntoIterator for &'a BaseTableCollection {
 
 impl ExtTableCollection {
     pub fn with_padded_height(
-        generator: BWord,
+        generator: XWord,
         order: usize,
         num_randomizers: usize,
         max_padded_height: usize,

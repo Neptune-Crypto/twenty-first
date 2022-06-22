@@ -9,4 +9,5 @@ pub mod stark;
 pub mod state;
 pub mod stdio;
 pub mod table;
+pub mod triton_xfri;
 pub mod vm;

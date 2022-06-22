@@ -6,9 +6,9 @@ use crate::shared_math::stark::triton::table::table_column::{
     ExtInstructionTableColumn, ExtJumpStackTableColumn, ExtOpStackTableColumn,
     ExtProcessorTableColumn, ExtRamTableColumn, ExtU32OpTableColumn,
 };
+use crate::shared_math::stark::triton::triton_xfri::FriDomain;
 use crate::shared_math::traits::PrimeField;
 use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::xfri::FriDomain;
 use itertools::{izip, Itertools};
 
 type BWord = BFieldElement;

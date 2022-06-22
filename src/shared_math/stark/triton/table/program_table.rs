@@ -186,12 +186,12 @@ impl ProgramTable {
 
 impl ExtProgramTable {
     pub fn with_padded_height(
-        generator: BWord,
+        generator: XWord,
         order: usize,
         num_randomizers: usize,
         padded_height: usize,
     ) -> Self {
-        let matrix: Vec<Vec<BWord>> = vec![];
+        let matrix: Vec<Vec<XWord>> = vec![];
 
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
