@@ -79,17 +79,10 @@ impl OpStack {
 
     /// Operational stack pointer
     ///
-    /// The first value in op-stack memory (that is, beyond the op-stack registers).
-    ///
-    /// Assumed to be 0 when op-stack memory is empty.
+    /// Contains address of next empty op-stack position.
+    /// Equivalent to the current length of the op-stack.
     pub fn osp(&self) -> BWord {
-        if self.stack.len() <= OP_STACK_REG_COUNT {
-            0.into()
-        } else {
-            let offset = OP_STACK_REG_COUNT + 1;
-            let n = self.stack.len() - offset;
-            BWord::new(n as u64)
-        }
+        BWord::new(self.stack.len() as u64)
     }
 
     /// Operational stack value
