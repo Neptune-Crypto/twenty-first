@@ -34,7 +34,7 @@ type StarkDigest = Vec<BFieldElement>;
 // We use a type-parameterised FriDomain to avoid duplicate `b_*()` and `x_*()` methods.
 pub struct Stark {
     _padded_height: usize,
-    log_expansion_factor: usize,
+    _log_expansion_factor: usize,
     security_level: usize,
     bfri_domain: triton::fri_domain::FriDomain<BWord>,
     xfri_domain: triton::fri_domain::FriDomain<XWord>,
@@ -112,7 +112,7 @@ impl Stark {
 
         Stark {
             _padded_height,
-            log_expansion_factor,
+            _log_expansion_factor: log_expansion_factor,
             security_level,
             bfri_domain,
             xfri_domain: dummy_xfri_domain,
@@ -272,12 +272,12 @@ impl Stark {
 
         timer.elapsed("get_all_extension_degree_bounds");
 
-        let mut quotient_codewords =
+        let quotient_codewords =
             ext_tables.get_all_quotients(&self.bfri_domain, &all_challenges, &all_terminals);
 
         timer.elapsed("all_quotients");
 
-        let mut quotient_degree_bounds =
+        let quotient_degree_bounds =
             ext_tables.get_all_quotient_degree_bounds(&all_challenges, &all_terminals);
 
         timer.elapsed("all_quotient_degree_bounds");
