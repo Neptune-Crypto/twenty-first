@@ -156,7 +156,7 @@ impl Display for ProcessorMatrixRow {
             f,
             format!(
                 "ramp: {:>width$} │ ramv: {:>width$} │",
-                self.row[RAMP as usize].value(),
+                self.row[ST1 as usize].value(),
                 self.row[RAMV as usize].value(),
             ),
         )?;

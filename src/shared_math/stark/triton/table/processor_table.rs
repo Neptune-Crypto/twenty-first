@@ -18,9 +18,9 @@ pub const PROCESSOR_TABLE_INITIALS_COUNT: usize =
 /// This is 47 because it combines all other tables (except program).
 pub const PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 47;
 
-pub const BASE_WIDTH: usize = 39;
+pub const BASE_WIDTH: usize = 38;
 /// BASE_WIDTH + 2 * INITIALS_COUNT - 2 (because IOSymbols don't need compression)
-pub const FULL_WIDTH: usize = 63;
+pub const FULL_WIDTH: usize = 62;
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -169,7 +169,7 @@ impl ProcessorTable {
 
             // RAM Table
             let ramv = extension_row[RAMV as usize];
-            let ramp = extension_row[RAMP as usize];
+            let ramp = extension_row[ST1 as usize];
 
             let compressed_row_for_ram_table_permutation_argument = clk
                 * challenges.ram_table_clk_weight

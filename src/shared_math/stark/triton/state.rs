@@ -41,9 +41,6 @@ pub struct VMState<'pgm> {
     /// 2. **Random-access memory**, to which the VM can read and write field elements
     ram: HashMap<BWord, BWord>,
 
-    ramp: BWord,
-    ramv: BWord,
-
     /// 3. **Op-stack memory**, which stores the part of the operational stack
     ///    that is not represented explicitly by the operational stack registers
     ///
@@ -205,16 +202,17 @@ impl<'pgm> VMState<'pgm> {
             }
 
             ReadMem => {
-                self.ramp = self.op_stack.safe_peek(ST0);
-                self.ramv = self.memory_get(&self.ramp)?;
-                self.op_stack.push(self.ramv);
+                let ramp = self.op_stack.safe_peek(ST1);
+                let ramv = self.memory_get(&ramp)?;
+                self.op_stack.pop()?;
+                self.op_stack.push(ramv);
                 self.instruction_pointer += 1;
             }
 
             WriteMem => {
-                self.ramv = self.op_stack.pop()?;
-                self.ramp = self.op_stack.safe_peek(ST0);
-                self.ram.insert(self.ramp, self.ramv);
+                let ramv = self.op_stack.safe_peek(ST0);
+                let ramp = self.op_stack.safe_peek(ST1);
+                self.ram.insert(ramp, ramv);
                 self.instruction_pointer += 1;
             }
 
@@ -476,8 +474,7 @@ impl<'pgm> VMState<'pgm> {
             self.hv[2],
             self.hv[3],
             self.hv[4],
-            self.ramp,
-            self.ramv,
+            *self.ram.get(&st1).unwrap_or(&BWord::new(0)),
         ]
     }
 
@@ -496,8 +493,9 @@ impl<'pgm> VMState<'pgm> {
 
     pub fn to_ram_row(&self) -> [BFieldElement; ram_table::BASE_WIDTH] {
         let clk = self.cycle_count.into();
+        let st1 = self.op_stack.st(ST1);
 
-        [clk, self.ramp, self.ramv]
+        [clk, st1, *self.ram.get(&st1).unwrap_or(&BWord::new(0))]
     }
 
     pub fn to_jump_stack_row(
@@ -796,6 +794,31 @@ mod vm_state_tests {
         }
 
         // todo check that the VM actually stopped on the halt instruction
+    }
+
+    #[test]
+    fn basic_ram_read_write_test() {
+        let program = Program::from_code(sample_programs::BASIC_RAM_READ_WRITE).unwrap();
+        let (trace, _out, err) = program.run_with_input(&[], &[]);
+
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+        if let Some(e) = err {
+            println!("Error: {}", e);
+        }
+
+        let last_state = trace.last().expect("Execution seems to have failed.");
+        let five = BFieldElement::new(5);
+        let seven = BFieldElement::new(7);
+        let fifteen = BFieldElement::new(15);
+        let sixteen = BFieldElement::new(16);
+        assert_eq!(seven, last_state.op_stack.st(ST0));
+        assert_eq!(five, last_state.op_stack.st(ST1));
+        assert_eq!(sixteen, last_state.op_stack.st(ST2));
+        assert_eq!(fifteen, last_state.op_stack.st(ST3));
+        assert_eq!(last_state.ram[&five], seven);
+        assert_eq!(last_state.ram[&fifteen], sixteen);
     }
 
     #[test]

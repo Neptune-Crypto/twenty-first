@@ -637,6 +637,17 @@ pub mod sample_programs {
 
     pub const HALT_THEN_DO_STUFF: &str = "halt push 1 push 2 add invert write_io";
 
+    pub const BASIC_RAM_READ_WRITE: &str = concat!(
+        "push  5 push  6 write_mem pop pop ",
+        "push 15 push 16 write_mem pop pop ",
+        "push  5 push  0 read_mem  pop pop ",
+        "push 15 push  0 read_mem  pop pop ",
+        "push  5 push  7 write_mem pop pop ",
+        "push 15 push  0 read_mem ",
+        "push  5 push  0 read_mem ",
+        "halt ",
+    );
+
     pub const WRITE_42: &str = "
         push 42
         write_io
