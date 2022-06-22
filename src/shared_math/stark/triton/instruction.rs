@@ -588,25 +588,21 @@ pub mod sample_programs {
 
     pub const MT_AP_VERIFY: &str = concat!(
         "read_io read_io read_io read_io read_io read_io ", // Merkle root
-        "read_io ",                                         // index
-        "read_io read_io read_io ",                         // leaf's value (XField Element)
-        "absorb0 absorb1 absorb2 ",                         // absorb leaf's value into aux
-        "xlix ",                                            // compute leaf's digest
-        "call 19 ",                                         // start Merkle tree traversal
-        "dup0 push 1 eq skiz call 30 ",                     // break loop if index is 1
-        "divine_sibling xlix recurse ",                     // move up one level in the Merkle tree
-        "assert ",                                          // remove remnant of index
-        "assert_digest ",
+        "read_io ",                                         // node index
+        "push 0 push 0 push 0 push 0 push 0 push 0 ",       // prepare stack for hashing
+        "push 0 push 0 push 0 read_io read_io read_io ",    // leaf's value (XField Element)
+        "hash ",                                            // compute leaf's digest
+        "call up_the_tree up_the_tree: ",                   // start Merkle tree traversal
+        "dup12 push 1 eq skiz call at_tree_top ",           // break loop if node index is 1
+        "divine_sibling hash recurse ",                     // move up one level in the Merkle tree
+        "at_tree_top: ",                                    //
+        "swap7 pop swap7 pop swap7 pop ",                   // remove unnecessary “0”s from hashing
+        "swap7 pop swap7 pop swap7 pop pop ",               // and remnant of node index
+        "assert_vector ",
         "halt",
     );
 
-    // pub fn get_colinear_y(p0: (PFElem, PFElem), p1: (PFElem, PFElem), p2_x: PFElem) -> PFElem {
-    //     debug_assert_ne!(p0.x, p1.x, "Line must not be parallel to y-axis");
-    //     let dy = p0.y - p1.y;
-    //     let p2_y_times_dx = dy * (p2_x - p0.x);
-    //     let dx = p0.x - p1.x;
-    //     (p2_y_times_dx / dx) + p0.y
-    // }
+    // see also: get_colinear_y in src/shared_math/polynomial.rs
     pub const GET_COLINEAR_Y: &str = concat!(
         "read_io ",                       // p2_x
         "read_io read_io ",               // p1_y p1_x

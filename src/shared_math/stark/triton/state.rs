@@ -799,7 +799,6 @@ mod vm_state_tests {
     }
 
     #[test]
-    #[ignore = "rewrite this test according to 'hash' instruction"]
     fn run_mt_ap_verify_test() {
         let program = Program::from_code(sample_programs::MT_AP_VERIFY).unwrap();
         println!("Successfully parsed the program.");
