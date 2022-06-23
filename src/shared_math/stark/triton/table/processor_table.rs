@@ -6,7 +6,8 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::instruction::Instruction;
+use crate::shared_math::stark::triton::instruction::{AnInstruction::*, Instruction};
+use crate::shared_math::stark::triton::ord_n::Ord16;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -531,11 +532,6 @@ impl ExtensionTable for ExtProcessorTable {
     }
 }
 
-/// TODO: Move the constraint polynomial boilerplate to a separate section of the code (e.g. a subdirectory for polynomials)
-///
-/// Working title. This needs to have a good name.
-///
-/// 2 * BASE_WIDTH because these polynomials covers two consequetive rows.
 pub struct ProcessorConstraintPolynomialFactory {
     variables: [MPolynomial<BWord>; 2 * BASE_WIDTH],
 }
@@ -721,7 +717,7 @@ impl ProcessorConstraintPolynomialFactory {
     fn ip(&self) -> MPolynomial<BWord> {
         self.variables[IP as usize].clone()
     }
-    fn _ci(&self) -> MPolynomial<BWord> {
+    fn ci(&self) -> MPolynomial<BWord> {
         self.variables[CI as usize].clone()
     }
     fn nia(&self) -> MPolynomial<BWord> {
@@ -870,5 +866,35 @@ impl ProcessorConstraintPolynomialFactory {
     }
     pub fn st15_next(&self) -> MPolynomial<BWord> {
         self.variables[BASE_WIDTH + ST15 as usize].clone()
+    }
+}
+
+impl ProcessorConstraintPolynomialFactory {
+    pub fn deselector_pop(&self) -> MPolynomial<BWord> {
+        todo!()
+    }
+
+    fn selector_pop(&self) -> MPolynomial<BWord> {
+        self.ci() - self.instruction_as_mpoly(Pop)
+    }
+
+    fn selector_push(&self) -> MPolynomial<BWord> {
+        self.ci() - self.instruction_as_mpoly(Push(0.into()))
+    }
+
+    fn selector_divine(&self) -> MPolynomial<BWord> {
+        self.ci() - self.instruction_as_mpoly(Divine)
+    }
+
+    fn selector_dup(&self) -> MPolynomial<BWord> {
+        self.ci() - self.instruction_as_mpoly(Dup(Ord16::ST0))
+    }
+
+    fn selector_swap(&self) -> MPolynomial<BWord> {
+        self.ci() - self.instruction_as_mpoly(Swap(Ord16::ST0))
+    }
+
+    fn instruction_as_mpoly(&self, instruction: Instruction) -> MPolynomial<BWord> {
+        MPolynomial::from_constant(instruction.opcode_b(), self.variables.len())
     }
 }
