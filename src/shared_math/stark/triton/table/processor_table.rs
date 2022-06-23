@@ -877,6 +877,10 @@ impl ProcessorConstraintPolynomialFactory {
         MPolynomial::from_constant(2.into(), 2 * BASE_WIDTH)
     }
 
+    pub fn constant(&self, constant: u32) -> MPolynomial<BWord> {
+        MPolynomial::from_constant(constant.into(), 2 * BASE_WIDTH)
+    }
+
     pub fn clk(&self) -> MPolynomial<BWord> {
         self.variables[CLK as usize].clone()
     }
@@ -946,14 +950,14 @@ impl ProcessorConstraintPolynomialFactory {
     pub fn st15(&self) -> MPolynomial<BWord> {
         self.variables[ST15 as usize].clone()
     }
-    pub fn osv(&self) -> MPolynomial<BWord> {
-        self.variables[OSV as usize].clone()
+    pub fn inv(&self) -> MPolynomial<BWord> {
+        self.variables[INV as usize].clone()
     }
     pub fn osp(&self) -> MPolynomial<BWord> {
         self.variables[OSP as usize].clone()
     }
-    pub fn inv(&self) -> MPolynomial<BWord> {
-        self.variables[INV as usize].clone()
+    pub fn osv(&self) -> MPolynomial<BWord> {
+        self.variables[OSV as usize].clone()
     }
     fn hv0(&self) -> MPolynomial<BWord> {
         self.variables[HV0 as usize].clone()
@@ -967,8 +971,11 @@ impl ProcessorConstraintPolynomialFactory {
     fn hv3(&self) -> MPolynomial<BWord> {
         self.variables[HV3 as usize].clone()
     }
-    fn _hv4(&self) -> MPolynomial<BWord> {
+    fn hv4(&self) -> MPolynomial<BWord> {
         self.variables[HV4 as usize].clone()
+    }
+    fn ramv(&self) -> MPolynomial<BWord> {
+        self.variables[RAMV as usize].clone()
     }
 
     // Property: All polynomial variables that contain '_next' have the same
@@ -1039,11 +1046,14 @@ impl ProcessorConstraintPolynomialFactory {
     pub fn st15_next(&self) -> MPolynomial<BWord> {
         self.variables[BASE_WIDTH + ST15 as usize].clone()
     }
+    pub fn osp_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + OSP as usize].clone()
+    }
     pub fn osv_next(&self) -> MPolynomial<BWord> {
         self.variables[BASE_WIDTH + OSV as usize].clone()
     }
-    pub fn osp_next(&self) -> MPolynomial<BWord> {
-        self.variables[BASE_WIDTH + OSP as usize].clone()
+    fn ramv_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + RAMV as usize].clone()
     }
 
     pub fn decompose_arg(&self) -> MPolynomial<BWord> {
@@ -1099,11 +1109,50 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     pub fn keep_stack(&self) -> Vec<MPolynomial<BWord>> {
-        todo!()
+        vec![
+            self.st0_next() - self.st0(),
+            self.st1_next() - self.st1(),
+            self.st2_next() - self.st2(),
+            self.st3_next() - self.st3(),
+            self.st4_next() - self.st4(),
+            self.st5_next() - self.st5(),
+            self.st6_next() - self.st6(),
+            self.st7_next() - self.st7(),
+            self.st8_next() - self.st8(),
+            self.st9_next() - self.st9(),
+            self.st10_next() - self.st10(),
+            self.st11_next() - self.st11(),
+            self.st12_next() - self.st12(),
+            self.st13_next() - self.st13(),
+            self.st14_next() - self.st14(),
+            self.st15_next() - self.st15(),
+            self.osv_next() - self.osv(),
+            self.osp_next() - self.osp(),
+            self.ramv_next() - self.ramv(),
+        ]
     }
 
     pub fn shrink_stack(&self) -> Vec<MPolynomial<BWord>> {
-        todo!()
+        vec![
+            self.st0_next() - self.st1(),
+            self.st1_next() - self.st2(),
+            self.st2_next() - self.st3(),
+            self.st3_next() - self.st4(),
+            self.st4_next() - self.st5(),
+            self.st5_next() - self.st6(),
+            self.st6_next() - self.st7(),
+            self.st7_next() - self.st8(),
+            self.st8_next() - self.st9(),
+            self.st9_next() - self.st10(),
+            self.st10_next() - self.st11(),
+            self.st11_next() - self.st12(),
+            self.st12_next() - self.st13(),
+            self.st13_next() - self.st14(),
+            self.st14_next() - self.st15(),
+            self.st15_next() - self.osv(),
+            self.osp_next() - (self.osp() - self.one()),
+            (self.osp_next() - self.constant(15)) * self.hv4() - self.one(),
+        ]
     }
 
     pub fn unop(&self) -> Vec<MPolynomial<BWord>> {
