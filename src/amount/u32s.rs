@@ -1,3 +1,4 @@
+use num_bigint::BigUint;
 use serde_big_array;
 use serde_big_array::BigArray;
 use serde_derive::{Deserialize, Serialize};
@@ -81,6 +82,36 @@ impl<const N: usize> U32s<N> {
         }
 
         (quotient, remainder)
+    }
+}
+
+impl<const N: usize> From<U32s<N>> for BigUint {
+    /// Convert a `U32s` to a `BigUInt` using big endian representation
+    fn from(u32s: U32s<N>) -> Self {
+        let mut acc: BigUint = BigUint::zero();
+        for i in (0..N).rev() {
+            acc <<= 32;
+            let element_value: BigUint = u32s.values[i].into();
+            acc += element_value;
+        }
+
+        acc
+    }
+}
+
+impl<const N: usize> From<BigUint> for U32s<N> {
+    /// Convert a `BigUInt` to a `U32s` using big endian representation
+    fn from(bigint: BigUint) -> Self {
+        let mut remaining: BigUint = bigint;
+        let mut ret: Self = U32s::zero();
+        for i in 0..N {
+            ret.values[i] = (remaining.clone() % BigUint::new(vec![0, 1]))
+                .try_into()
+                .unwrap();
+            remaining /= BigUint::new(vec![0, 1]);
+        }
+
+        ret
     }
 }
 
@@ -495,6 +526,36 @@ mod u32s_tests {
             assert!(quot * divisors[i] < vals[i]);
             assert!(rem < divisors[i]);
             assert!(quot > U32s::new([0, 1, 0, 0])); // True with a probability of ~=1 - 2^(-33)
+        }
+    }
+
+    #[test]
+    fn biguinteger_conversion_test() {
+        let a: U32s<4> = U32s::new([2000u32, 0, 0, 0]);
+        let expected_biguint_a: BigUint = 2000u32.into();
+        let converted_biguint_a: BigUint = a.into();
+        assert_eq!(expected_biguint_a, converted_biguint_a);
+
+        let b: U32s<4> = U32s::new([2000u32, 124, 7, 300001]);
+        let expected_biguint_b: BigUint =
+            (2000u128 + 124 * (1u128 << 32) + 7 * (1u128 << 64) + 300001 * (1u128 << 96)).into();
+        let converted_biguint_b: BigUint = b.into();
+        assert_eq!(expected_biguint_b, converted_biguint_b);
+
+        // Converting to BigUint and converting back again is the identity operator
+        assert_eq!(a, converted_biguint_a.into());
+        assert_eq!(b, converted_biguint_b.clone().into());
+        assert_ne!(a, converted_biguint_b.into());
+    }
+
+    #[test]
+    fn biguinteger_conversion_pbt() {
+        let count = 100;
+        let inputs = get_u32s::<5>(count, None);
+        for input in inputs {
+            let biguint: BigUint = input.into();
+            let back_again: U32s<5> = biguint.into();
+            assert_eq!(input, back_again);
         }
     }
 
