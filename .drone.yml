@@ -90,8 +90,9 @@ steps:
         {{/success}}
 
 
-branch:
-  - master
+trigger:
+  branch:
+    - master
 
 # Please run `yamllint .drone.yml` after editing this file.
 ...
