@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::base_table::{self, BaseTable, HasBaseTable, Table};
 use super::challenges_endpoints::{AllChallenges, AllEndpoints};
 use super::extension_table::ExtensionTable;
@@ -873,6 +875,22 @@ impl ProcessorConstraintPolynomialFactory {
 impl ProcessorConstraintPolynomialFactory {
     pub fn deselector_pop(&self) -> MPolynomial<BWord> {
         todo!()
+    }
+
+    fn all_instruction_deselectors(&self) -> HashMap<Instruction, MPolynomial<BWord>> {
+        let mut mapping = HashMap::<Instruction, MPolynomial<BFieldElement>>::new();
+
+        for deselected_instruction in all_instructions().into_iter() {
+            let deselector = all_instructions()
+                .into_iter()
+                .filter(|instruction| *instruction != deselected_instruction)
+                .map(|instruction| self.instruction_as_mpoly(instruction))
+                .fold(self.one(), |a, b| a + b);
+
+            mapping.insert(deselected_instruction, deselector);
+        }
+
+        mapping
     }
 
     fn all_instructions_selector(&self) -> MPolynomial<BWord> {

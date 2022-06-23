@@ -112,7 +112,7 @@ impl TryFrom<usize> for Ord6 {
 }
 
 /// `Ord16` represents numbers that are exactly 0--15.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Ord16 {
     ST0,
     ST1,

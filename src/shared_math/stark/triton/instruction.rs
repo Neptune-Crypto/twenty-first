@@ -37,7 +37,7 @@ impl Display for LabelledInstruction {
 /// https://neptune.builders/core-team/triton-vm/src/branch/master/specification/isa.md
 ///
 /// The type parameter `Dest` describes the type of addresses (absolute or labels).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AnInstruction<Dest> {
     // OpStack manipulation
     Pop,
