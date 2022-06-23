@@ -8,9 +8,8 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::instruction::{
-    all_instructions, AnInstruction::*, Instruction,
-};
+use crate::shared_math::stark::triton::instruction::{AnInstruction::*, Instruction};
+use crate::shared_math::stark::triton::ord_n::Ord16;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 
