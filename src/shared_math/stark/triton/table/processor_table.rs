@@ -946,6 +946,12 @@ impl ProcessorConstraintPolynomialFactory {
     pub fn st15(&self) -> MPolynomial<BWord> {
         self.variables[ST15 as usize].clone()
     }
+    pub fn osv(&self) -> MPolynomial<BWord> {
+        self.variables[OSV as usize].clone()
+    }
+    pub fn osp(&self) -> MPolynomial<BWord> {
+        self.variables[OSP as usize].clone()
+    }
     pub fn inv(&self) -> MPolynomial<BWord> {
         self.variables[INV as usize].clone()
     }
@@ -1032,6 +1038,80 @@ impl ProcessorConstraintPolynomialFactory {
     }
     pub fn st15_next(&self) -> MPolynomial<BWord> {
         self.variables[BASE_WIDTH + ST15 as usize].clone()
+    }
+    pub fn osv_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + OSV as usize].clone()
+    }
+    pub fn osp_next(&self) -> MPolynomial<BWord> {
+        self.variables[BASE_WIDTH + OSP as usize].clone()
+    }
+
+    pub fn decompose_arg(&self) -> MPolynomial<BWord> {
+        todo!()
+    }
+
+    pub fn step_1(&self) -> Vec<MPolynomial<BWord>> {
+        let one = self.one();
+        let ip = self.ip();
+        let ip_next = self.ip_next();
+
+        vec![ip_next - ip - one]
+    }
+
+    pub fn step_2(&self) -> Vec<MPolynomial<BWord>> {
+        let one = self.one();
+        let ip = self.ip();
+        let ip_next = self.ip_next();
+
+        vec![ip_next - ip - (one.clone() + one)]
+    }
+
+    pub fn u32_op(&self) -> Vec<MPolynomial<BWord>> {
+        // This group has no constraints. It is used for the Permutation Argument with the uint32 table.
+        vec![]
+    }
+
+    pub fn grow_stack(&self) -> Vec<MPolynomial<BWord>> {
+        vec![
+            // The stack element in st0 is moved into st1.
+            self.st1_next() - self.st0(),
+            // The stack element in st1 is moved into st2.
+            self.st2_next() - self.st1(),
+            // etc
+            self.st3_next() - self.st2(),
+            self.st4_next() - self.st3(),
+            self.st5_next() - self.st4(),
+            self.st6_next() - self.st5(),
+            self.st7_next() - self.st6(),
+            self.st8_next() - self.st7(),
+            self.st9_next() - self.st8(),
+            self.st10_next() - self.st9(),
+            self.st11_next() - self.st10(),
+            self.st12_next() - self.st11(),
+            self.st13_next() - self.st12(),
+            self.st14_next() - self.st13(),
+            self.st15_next() - self.st14(),
+            // The stack element in st15 is moved to the top of OpStack underflow, i.e., osv.
+            self.osv_next() - self.st15(),
+            // The OpStack pointer is incremented by 1.
+            self.osp_next() - (self.osp_next() + self.one()),
+        ]
+    }
+
+    pub fn keep_stack(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn shrink_stack(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn unop(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn binop(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
     }
 }
 
