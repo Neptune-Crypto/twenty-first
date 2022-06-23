@@ -874,24 +874,12 @@ impl ProcessorConstraintPolynomialFactory {
         todo!()
     }
 
-    fn selector_pop(&self) -> MPolynomial<BWord> {
-        self.ci() - self.instruction_as_mpoly(Pop)
+    fn all_instructions_selector(&self) -> MPolynomial<BWord> {
+        todo!()
     }
 
-    fn selector_push(&self) -> MPolynomial<BWord> {
-        self.ci() - self.instruction_as_mpoly(Push(0.into()))
-    }
-
-    fn selector_divine(&self) -> MPolynomial<BWord> {
-        self.ci() - self.instruction_as_mpoly(Divine)
-    }
-
-    fn selector_dup(&self) -> MPolynomial<BWord> {
-        self.ci() - self.instruction_as_mpoly(Dup(Ord16::ST0))
-    }
-
-    fn selector_swap(&self) -> MPolynomial<BWord> {
-        self.ci() - self.instruction_as_mpoly(Swap(Ord16::ST0))
+    fn instruction_selector(&self, instruction: Instruction) -> MPolynomial<BWord> {
+        self.ci() - self.instruction_as_mpoly(instruction)
     }
 
     fn instruction_as_mpoly(&self, instruction: Instruction) -> MPolynomial<BWord> {
