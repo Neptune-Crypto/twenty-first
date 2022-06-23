@@ -8,7 +8,9 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::instruction::{AnInstruction::*, Instruction};
+use crate::shared_math::stark::triton::instruction::{
+    all_instructions, AnInstruction::*, Instruction,
+};
 use crate::shared_math::stark::triton::ord_n::Ord16;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
@@ -545,7 +547,12 @@ impl Default for ProcessorConstraintPolynomialFactory {
             .try_into()
             .expect("Dynamic conversion of polynomials for each variable to known-width set of variables");
 
-        Self { variables }
+        let deselectors = Self::all_instruction_deselectors();
+
+        Self {
+            variables,
+            deselectors,
+        }
     }
 }
 
@@ -877,16 +884,17 @@ impl ProcessorConstraintPolynomialFactory {
         todo!()
     }
 
-    fn all_instruction_deselectors(&self) -> HashMap<Instruction, MPolynomial<BWord>> {
-        let instructions_as_mpoly = self.all_instructions_as_mpoly();
+    fn all_instruction_deselectors() -> HashMap<Instruction, MPolynomial<BWord>> {
+        let instructions_as_mpoly = Self::all_instructions_as_mpoly();
         let mut deselectors = HashMap::<Instruction, MPolynomial<BFieldElement>>::new();
+        let one = MPolynomial::from_constant(1.into(), 2 * BASE_WIDTH);
 
         for deselected_instruction in all_instructions().into_iter() {
             let deselector = all_instructions()
                 .into_iter()
                 .filter(|instruction| *instruction != deselected_instruction)
                 .map(|instruction| instructions_as_mpoly[&instruction].clone())
-                .fold(self.one(), |a, b| a + b);
+                .fold(one.clone(), |a, b| a + b);
 
             deselectors.insert(deselected_instruction, deselector);
         }
@@ -902,17 +910,17 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     fn instruction_selector(&self, instruction: Instruction) -> MPolynomial<BWord> {
-        self.ci() - self.instruction_as_mpoly(instruction)
+        self.ci() - Self::instruction_as_mpoly(instruction)
     }
 
-    fn instruction_as_mpoly(&self, instruction: Instruction) -> MPolynomial<BWord> {
-        MPolynomial::from_constant(instruction.opcode_b(), self.variables.len())
+    fn instruction_as_mpoly(instruction: Instruction) -> MPolynomial<BWord> {
+        MPolynomial::from_constant(instruction.opcode_b(), 2 * BASE_WIDTH)
     }
 
-    fn all_instructions_as_mpoly(&self) -> HashMap<Instruction, MPolynomial<BWord>> {
+    fn all_instructions_as_mpoly() -> HashMap<Instruction, MPolynomial<BWord>> {
         all_instructions()
             .into_iter()
-            .map(|instruction| (instruction, self.instruction_as_mpoly(instruction)))
+            .map(|instruction| (instruction, Self::instruction_as_mpoly(instruction)))
             .collect()
     }
 }
