@@ -537,6 +537,7 @@ impl ExtensionTable for ExtProcessorTable {
 
 pub struct ProcessorConstraintPolynomialFactory {
     variables: [MPolynomial<BWord>; 2 * BASE_WIDTH],
+    deselectors: HashMap<Instruction, MPolynomial<BWord>>,
 }
 
 impl Default for ProcessorConstraintPolynomialFactory {
