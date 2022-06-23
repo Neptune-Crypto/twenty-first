@@ -878,19 +878,20 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     fn all_instruction_deselectors(&self) -> HashMap<Instruction, MPolynomial<BWord>> {
-        let mut mapping = HashMap::<Instruction, MPolynomial<BFieldElement>>::new();
+        let instructions_as_mpoly = self.all_instructions_as_mpoly();
+        let mut deselectors = HashMap::<Instruction, MPolynomial<BFieldElement>>::new();
 
         for deselected_instruction in all_instructions().into_iter() {
             let deselector = all_instructions()
                 .into_iter()
                 .filter(|instruction| *instruction != deselected_instruction)
-                .map(|instruction| self.instruction_as_mpoly(instruction))
+                .map(|instruction| instructions_as_mpoly[&instruction].clone())
                 .fold(self.one(), |a, b| a + b);
 
-            mapping.insert(deselected_instruction, deselector);
+            deselectors.insert(deselected_instruction, deselector);
         }
 
-        mapping
+        deselectors
     }
 
     fn all_instructions_selector(&self) -> MPolynomial<BWord> {
@@ -906,5 +907,12 @@ impl ProcessorConstraintPolynomialFactory {
 
     fn instruction_as_mpoly(&self, instruction: Instruction) -> MPolynomial<BWord> {
         MPolynomial::from_constant(instruction.opcode_b(), self.variables.len())
+    }
+
+    fn all_instructions_as_mpoly(&self) -> HashMap<Instruction, MPolynomial<BWord>> {
+        all_instructions()
+            .into_iter()
+            .map(|instruction| (instruction, self.instruction_as_mpoly(instruction)))
+            .collect()
     }
 }
