@@ -163,11 +163,11 @@ impl BaseTableCollection {
         }
     }
 
-    pub fn max_degree(&self) -> u64 {
+    pub fn max_degree(&self) -> Degree {
         self.into_iter()
             .map(|table| table.max_degree())
             .max()
-            .unwrap_or(1) as u64
+            .unwrap_or(1)
     }
 
     pub fn all_base_codewords(&self, fri_domain: &FriDomain<BWord>) -> Vec<Vec<BWord>> {
