@@ -1,7 +1,10 @@
 use serde_big_array;
 use serde_big_array::BigArray;
 use serde_derive::{Deserialize, Serialize};
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::{
+    iter::Sum,
+    ops::{Add, Div, Mul, Rem, Sub},
+};
 
 use num_traits::{One, Zero};
 
@@ -250,6 +253,12 @@ impl<const N: usize> Mul for U32s<N> {
     }
 }
 
+impl<const N: usize> Sum for U32s<N> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::zero(), |a, b| a + b)
+    }
+}
+
 #[cfg(test)]
 mod u32s_tests {
     use rand::{thread_rng, RngCore};
@@ -273,6 +282,28 @@ mod u32s_tests {
         let b = U32s::new([1 << 31, 0, 0, 0]);
         let expected = U32s::new([0, 1, 0, 0]);
         assert_eq!(expected, a + b);
+    }
+
+    #[test]
+    fn simple_sum_test() {
+        let a = U32s::new([1 << 31, 0, 0, 0]);
+        let b = U32s::new([1 << 31, 0, 0, 0]);
+        assert_eq!(U32s::new([0, 1, 0, 0]), vec![a, b].into_iter().sum());
+
+        let c = U32s::new([1 << 31, 0, 19876, 0]);
+        assert_eq!(
+            U32s::new([1 << 31, 1, 19876, 0]),
+            vec![a, b, c].into_iter().sum()
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn sum_panic_test() {
+        let a = U32s::new([0, 0, 0, 1 << 31]);
+        let b = U32s::new([0, 0, 0, 1 << 30]);
+        let c = U32s::new([0, 0, 0, 1 << 30]);
+        let _res: U32s<4> = vec![a, b, c].into_iter().sum();
     }
 
     #[test]
