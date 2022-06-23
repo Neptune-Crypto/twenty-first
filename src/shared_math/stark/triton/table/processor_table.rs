@@ -618,6 +618,8 @@ impl ProcessorConstraintPolynomialFactory {
         let st0_next = self.st0_next();
         let nia = self.nia();
 
+        // push'es argument should be on the stack after execution
+        // st0_next == nia  =>  st0_next - nia == 0
         vec![st0_next - nia]
     }
 
@@ -715,6 +717,114 @@ impl ProcessorConstraintPolynomialFactory {
                 - (self.ip() + self.one() + self.st0() * self.inv() * (self.one() + self.hv0())),
         ]
     }
+
+    // 1. Create stubs for all instruction polynomials
+    pub fn instruction_call(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_return(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_recurse(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_assert(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_halt(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_read_mem(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_write_mem(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_hash(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_divine_sibling(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_assert_vector(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_add(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_mul(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_invert(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_split(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_eq(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_lt(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_and(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_xor(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_reverse(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_div(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_xxadd(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_xxmul(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_xinv(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_xbmul(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_read_io(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    pub fn instruction_write_io(&self) -> Vec<MPolynomial<BWord>> {
+        todo!()
+    }
+
+    // 2. Create stubs for all instruction group polynomials
+    // 3. Find out where to combine deselectors, instruction polynomials and instruction group polynomials
 
     // FIXME: Consider caching this on first run (caching computed getter)
     pub fn one(&self) -> MPolynomial<BWord> {
@@ -880,8 +990,8 @@ impl ProcessorConstraintPolynomialFactory {
 }
 
 impl ProcessorConstraintPolynomialFactory {
-    pub fn deselector_pop(&self) -> MPolynomial<BWord> {
-        todo!()
+    pub fn instruction_deselector(&self, instruction: Instruction) -> MPolynomial<BWord> {
+        self.deselectors[&instruction].clone()
     }
 
     fn all_instruction_deselectors() -> HashMap<Instruction, MPolynomial<BWord>> {
