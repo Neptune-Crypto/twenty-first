@@ -565,7 +565,73 @@ fn parse_label(tokens: &mut SplitWhitespace) -> Result<String, Box<dyn Error>> {
     Ok(label)
 }
 
-pub fn all_instructions() -> Vec<LabelledInstruction> {
+pub fn all_instructions() -> Vec<Instruction> {
+    vec![
+        Pop,
+        Push(42.into()),
+        Divine,
+        Dup(ST0),
+        Dup(ST1),
+        Dup(ST2),
+        Dup(ST3),
+        Dup(ST4),
+        Dup(ST5),
+        Dup(ST6),
+        Dup(ST7),
+        Dup(ST8),
+        Dup(ST9),
+        Dup(ST10),
+        Dup(ST11),
+        Dup(ST12),
+        Dup(ST13),
+        Dup(ST14),
+        Dup(ST15),
+        Swap(ST1),
+        Swap(ST2),
+        Swap(ST3),
+        Swap(ST4),
+        Swap(ST5),
+        Swap(ST6),
+        Swap(ST7),
+        Swap(ST8),
+        Swap(ST9),
+        Swap(ST10),
+        Swap(ST11),
+        Swap(ST12),
+        Swap(ST13),
+        Swap(ST14),
+        Swap(ST15),
+        Skiz,
+        Call(0.into()),
+        Return,
+        Recurse,
+        Assert,
+        Halt,
+        ReadMem,
+        WriteMem,
+        Hash,
+        DivineSibling,
+        AssertVector,
+        Add,
+        Mul,
+        Invert,
+        Split,
+        Eq,
+        Lt,
+        And,
+        Xor,
+        Reverse,
+        Div,
+        XxAdd,
+        XxMul,
+        XInvert,
+        XbMul,
+        ReadIo,
+        WriteIo,
+    ]
+}
+
+pub fn all_labelled_instructions() -> Vec<LabelledInstruction> {
     vec![
         Pop,
         Push(42.into()),
@@ -637,7 +703,7 @@ pub fn all_instructions() -> Vec<LabelledInstruction> {
 pub mod sample_programs {
     use super::super::vm::Program;
     use super::Ord16::*;
-    use super::{all_instructions, AnInstruction::*, LabelledInstruction};
+    use super::{all_labelled_instructions, AnInstruction::*, LabelledInstruction};
 
     pub const PUSH_PUSH_ADD_POP_S: &str = "
         push 1
@@ -1006,7 +1072,7 @@ terminate: pop
 
 #[cfg(test)]
 mod instruction_tests {
-    use crate::shared_math::stark::triton::instruction::all_instructions;
+    use crate::shared_math::stark::triton::instruction::all_labelled_instructions;
 
     use super::super::vm::Program;
     use super::parse;
@@ -1033,7 +1099,7 @@ mod instruction_tests {
 
     #[test]
     fn parse_and_display_each_instruction_test() {
-        let expected = all_instructions();
+        let expected = all_labelled_instructions();
         let actual = parse(sample_programs::ALL_INSTRUCTIONS).unwrap();
 
         assert_eq!(expected, actual);

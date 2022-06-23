@@ -6,8 +6,9 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::instruction::{AnInstruction::*, Instruction};
-use crate::shared_math::stark::triton::ord_n::Ord16;
+use crate::shared_math::stark::triton::instruction::{
+    all_instructions, AnInstruction::*, Instruction,
+};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -875,7 +876,10 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     fn all_instructions_selector(&self) -> MPolynomial<BWord> {
-        todo!()
+        all_instructions()
+            .into_iter()
+            .map(|instruction| self.instruction_selector(instruction))
+            .fold(self.one(), |a, b| a + b)
     }
 
     fn instruction_selector(&self, instruction: Instruction) -> MPolynomial<BWord> {
