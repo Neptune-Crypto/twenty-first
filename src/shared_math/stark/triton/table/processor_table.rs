@@ -706,25 +706,66 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     pub fn instruction_skiz(&self) -> Vec<MPolynomial<BWord>> {
+        // The jump stack pointer jsp does not change.
+        let jsp_does_not_change = self.jsp_next() - self.jsp();
+
+        // The last jump's origin jso does not change.
+        let jso_does_not_change = self.jso_next() - self.jso();
+
+        // The last jump's destination jsd does not change.
+        let jsd_does_not_change = self.jsd_next() - self.jsd();
+
+        // The next instruction nia is decomposed into helper variables hv.
+        let nia_decomposes_to_hvs = self.nia() - (self.hv0() + self.two() * self.hv1());
+
+        // The relevant helper variable hv0 is either 0 or 1. Here, hv0 == 1 means that nia takes an argument.
+        let hv0_is_0_or_1 = self.hv0() * (self.hv0() - self.one());
+
+        // Register ip increments by (1 if st0 is non-zero else (2 if nia takes no argument else 3)).
+        let ip_incr_by_1_or_2_or_3 = self.ip_next()
+            - (self.ip() + self.one() + self.st0() * self.inv() * (self.one() + self.hv0()));
+
         let two = self.one() + self.one();
         vec![
-            self.jsp_next() - self.jsp(),
-            self.jso_next() - self.jso(),
-            self.jsd_next() - self.jsd(),
-            self.nia() - (self.hv0() + two * self.hv1()),
-            self.hv0() * (self.hv0() - self.one()),
-            self.ip_next()
-                - (self.ip() + self.one() + self.st0() * self.inv() * (self.one() + self.hv0())),
+            jsp_does_not_change,
+            jso_does_not_change,
+            jsd_does_not_change,
+            nia_decomposes_to_hvs,
+            hv0_is_0_or_1,
+            ip_incr_by_1_or_2_or_3,
         ]
     }
 
     // 1. Create stubs for all instruction polynomials
     pub fn instruction_call(&self) -> Vec<MPolynomial<BWord>> {
-        todo!()
+        // The jump stack pointer jsp is incremented by 1.
+        let jsp_incr_1 = self.jsp_next() - (self.jsp() + self.one());
+
+        // The jump's origin jso is set to the current instruction pointer ip plus 2.
+        let jso_becomes_ip_plus_2 = self.jso_next() - (self.ip() + self.two());
+
+        // The jump's destination jsd is set to the instruction's argument.
+        let jsd_becomes_nia = self.jsd_next() - self.nia();
+
+        // The instruction pointer ip is set to the instruction's argument.
+        let ip_becomes_nia = self.ip_next() - self.nia();
+
+        vec![
+            jsp_incr_1,
+            jso_becomes_ip_plus_2,
+            jsd_becomes_nia,
+            ip_becomes_nia,
+        ]
     }
 
     pub fn instruction_return(&self) -> Vec<MPolynomial<BWord>> {
-        todo!()
+        // The jump stack pointer jsp is decremented by 1.
+        let jsp_incr_1 = self.jsp_next() - (self.jsp() - self.one());
+
+        // The instruction pointer ip is set to the last call's origin jso.
+        let ip_becomes_jso = self.ip_next() - self.jso();
+
+        vec![jsp_incr_1, ip_becomes_jso]
     }
 
     pub fn instruction_recurse(&self) -> Vec<MPolynomial<BWord>> {
@@ -829,6 +870,11 @@ impl ProcessorConstraintPolynomialFactory {
     // FIXME: Consider caching this on first run (caching computed getter)
     pub fn one(&self) -> MPolynomial<BWord> {
         MPolynomial::from_constant(1.into(), 2 * BASE_WIDTH)
+    }
+
+    // FIXME: Consider caching this on first run (caching computed getter)
+    pub fn two(&self) -> MPolynomial<BWord> {
+        MPolynomial::from_constant(2.into(), 2 * BASE_WIDTH)
     }
 
     pub fn clk(&self) -> MPolynomial<BWord> {
