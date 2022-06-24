@@ -1037,13 +1037,19 @@ impl Stark {
 
 #[cfg(test)]
 mod triton_stark_tests {
+    use crate::shared_math::stark::triton::instruction::parse;
     use crate::shared_math::stark::triton::stdio::VecStream;
 
     use super::*;
 
-    fn simulate_pad_extend(
-        program: Program,
-    ) -> (BaseTableCollection, ExtTableCollection, AllEndpoints) {
+    fn parse_simulate_pad_extend(
+        code: &str,
+    ) -> (BaseTableCollection, BaseTableCollection, ExtTableCollection, AllEndpoints) {
+        let program = Program::from_code(code);
+
+        assert!(program.is_ok(), "program parses correctly");
+        let program = program.unwrap();
+
         let mut _rng = rand::thread_rng();
         let mut stdin = VecStream::new(&[]);
         let mut secret_in = VecStream::new(&[]);
@@ -1068,6 +1074,8 @@ mod triton_stark_tests {
             num_randomizers,
             &base_matrices,
         );
+
+        let unpadded_base_tables = base_tables.clone();
 
         base_tables.pad();
 
