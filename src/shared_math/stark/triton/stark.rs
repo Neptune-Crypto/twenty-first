@@ -1109,13 +1109,13 @@ mod triton_stark_tests {
             parse_simulate_pad_extend(FIBONACCI_LT);
 
         let ptie = all_terminals.processor_table_endpoints.input_table_eval_sum;
+        let ine = all_terminals.input_table_endpoints.processor_eval_sum;
+        assert_eq!(ptie, ine, "The input evaluation arguments do not match.");
+
         let ptoe = all_terminals
             .processor_table_endpoints
             .output_table_eval_sum;
-        let ine = all_terminals.input_table_endpoints.processor_eval_sum;
         let oute = all_terminals.output_table_endpoints.processor_eval_sum;
-
-        assert_eq!(ptie, ine, "The input evaluation arguments do not match.");
         assert_eq!(ptoe, oute, "The output evaluation arguments do not match.");
     }
 

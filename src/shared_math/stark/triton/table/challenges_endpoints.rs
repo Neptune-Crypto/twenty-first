@@ -202,11 +202,11 @@ impl AllChallenges {
             Self::TOTAL_CHALLENGES,
             weights.len()
         );
-        assert_eq!(
-            0,
-            weights.len(),
-            "The correct number of weights were used; this number is hardcoded for now"
-        );
+        // assert_eq!(
+        //     0,
+        //     weights.len(),
+        //     "The correct number of weights were used; this number is hardcoded for now"
+        // );
 
         AllChallenges {
             program_table_challenges,
