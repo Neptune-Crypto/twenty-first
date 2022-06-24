@@ -1102,6 +1102,11 @@ mod triton_stark_tests {
     }
 
     // 1. simulate(), pad(), extend(), test terminals
+    #[test]
+    pub fn check_terminals() {
+        todo!()
+    }
+
     // 2. simulate(), test constraints
     // 3. simulate(), pad(), test constraints
     // 3. simulate(), pad(), extend(), test constraints
