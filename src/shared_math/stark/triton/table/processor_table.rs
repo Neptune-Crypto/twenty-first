@@ -493,7 +493,9 @@ impl Table<BWord> for ProcessorTable {
     }
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BWord>> {
-        vec![]
+        let factory = ProcessorConstraintPolynomialFactory::default();
+
+        vec![factory.clk_always_increases_by_one()]
     }
 }
 
@@ -506,8 +508,9 @@ impl Table<XFieldElement> for ExtProcessorTable {
         panic!("Extension tables don't get padded");
     }
 
+    // FIXME: Change trait hierarchy so Ext* tables don't implement base_transition_constraints()
     fn base_transition_constraints(&self) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        panic!("Extension tables don't have base transition constraints")
     }
 }
 

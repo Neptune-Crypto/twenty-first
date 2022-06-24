@@ -1037,9 +1037,11 @@ impl Stark {
 
 #[cfg(test)]
 mod triton_stark_tests {
+    use crate::shared_math::mpolynomial::MPolynomial;
     use crate::shared_math::stark::triton::instruction::sample_programs::READ_WRITE_X3;
     use crate::shared_math::stark::triton::instruction::{parse, Instruction};
     use crate::shared_math::stark::triton::stdio::VecStream;
+    use crate::shared_math::traits::PrimeField;
 
     use super::*;
 
@@ -1051,6 +1053,8 @@ mod triton_stark_tests {
         BaseTableCollection,
         BaseTableCollection,
         ExtTableCollection,
+        AllChallenges,
+        AllEndpoints,
         AllEndpoints,
     ) {
         let program = Program::from_code(code);
@@ -1098,7 +1102,32 @@ mod triton_stark_tests {
         let (ext_tables, all_terminals) =
             ExtTableCollection::extend_tables(&base_tables, &all_challenges, &all_initials);
 
-        (unpadded_base_tables, base_tables, ext_tables, all_terminals)
+        (
+            unpadded_base_tables,
+            base_tables,
+            ext_tables,
+            all_challenges,
+            all_initials,
+            all_terminals,
+        )
+    }
+
+    fn assert_air_constraints_on_table<PF: PrimeField>(
+        table_data: &[Vec<PF>],
+        air_constraints: &[MPolynomial<PF>],
+        message: &str,
+    ) {
+        if table_data.len() > 0 {
+            for step in 0..table_data.len() - 1 {
+                let state: Vec<PF> = table_data[step].clone().into();
+                let next_state: Vec<PF> = table_data[step + 1].clone().into();
+                let air_point: Vec<PF> = vec![state, next_state].concat();
+
+                for air_constraint in air_constraints.iter() {
+                    assert!(air_constraint.evaluate(&air_point).is_zero(), "{}", message);
+                }
+            }
+        }
     }
 
     // 1. simulate(), pad(), extend(), test terminals
@@ -1106,8 +1135,14 @@ mod triton_stark_tests {
     pub fn check_terminals() {
         let stdin = &mut VecStream::new_b(&[3.into(), 5.into(), 7.into()]);
         let stdout = &mut VecStream::new_b(&[]);
-        let (_unpadded_base_tables, _base_tables, _ext_tables, all_terminals) =
-            parse_simulate_pad_extend(READ_WRITE_X3, stdin, stdout);
+        let (
+            _unpadded_base_tables,
+            _base_tables,
+            _ext_tables,
+            _all_challenges,
+            _all_initials,
+            all_terminals,
+        ) = parse_simulate_pad_extend(READ_WRITE_X3, stdin, stdout);
 
         let ptie = all_terminals.processor_table_endpoints.input_table_eval_sum;
         let ine = all_terminals.input_table_endpoints.processor_eval_sum;
@@ -1121,6 +1156,66 @@ mod triton_stark_tests {
     }
 
     // 2. simulate(), test constraints
+    #[test]
+    fn table_constraints_evaluate_to_zero_test() {
+        let mut stdin = VecStream::new_b(&[]);
+        let mut stdout = VecStream::new_b(&[]);
+        let (
+            unpadded_base_tables,
+            padded_base_tables,
+            ext_tables,
+            all_challenges,
+            _all_initials,
+            _all_terminals,
+        ) = parse_simulate_pad_extend(sample_programs::FIBONACCI_LT, &mut stdin, &mut stdout);
+
+        for base_table in (&unpadded_base_tables).into_iter() {
+            let base_air_constraints = base_table.base_transition_constraints();
+
+            let message = format!(
+                "base_transition_constraints on unpadded {}",
+                &base_table.name()
+            );
+            assert_air_constraints_on_table(base_table.data(), &base_air_constraints, &message);
+        }
+
+        for base_table in (&padded_base_tables).into_iter() {
+            let base_air_constraints = base_table.base_transition_constraints();
+
+            let message = format!(
+                "base_transition_constraints on padded {}",
+                &base_table.name()
+            );
+            assert_air_constraints_on_table(base_table.data(), &base_air_constraints, &message);
+        }
+
+        for ext_table in (&ext_tables).into_iter() {
+            let ext_transition_constraints = ext_table.ext_transition_constraints(&all_challenges);
+            let message_1 = format!("ext_transition_constraints on {}", &ext_table.name());
+            assert_air_constraints_on_table(
+                ext_table.data(),
+                &ext_transition_constraints,
+                &message_1,
+            );
+
+            let ext_boundary_consrtaints = ext_table.ext_transition_constraints(&all_challenges);
+            let message_2 = format!("ext_boundary_constraints on {}", &ext_table.name());
+            assert_air_constraints_on_table(
+                ext_table.data(),
+                &ext_boundary_consrtaints,
+                &message_2,
+            );
+
+            let ext_terminal_constraints = ext_table.ext_transition_constraints(&all_challenges);
+            let message_3 = format!("ext_terminal_constraints on {}", &ext_table.name());
+            assert_air_constraints_on_table(
+                ext_table.data(),
+                &ext_terminal_constraints,
+                &message_3,
+            );
+        }
+    }
+
     // 3. simulate(), pad(), test constraints
     // 3. simulate(), pad(), extend(), test constraints
 }
