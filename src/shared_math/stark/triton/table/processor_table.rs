@@ -1057,8 +1057,18 @@ impl ProcessorConstraintPolynomialFactory {
         self.variables[BASE_WIDTH + RAMV as usize].clone()
     }
 
-    pub fn decompose_arg(&self) -> MPolynomial<BWord> {
-        todo!()
+    pub fn decompose_arg(&self) -> Vec<MPolynomial<BWord>> {
+        vec![
+            self.nia()
+                - (self.constant(8) * self.hv3()
+                    + self.constant(4) * self.hv2()
+                    + self.constant(2) * self.hv1()
+                    + self.hv0()),
+            self.hv1() * (self.hv1() - self.one()),
+            self.hv0() * (self.hv0() - self.one()),
+            self.hv2() * (self.hv2() - self.one()),
+            self.hv3() * (self.hv3() - self.one()),
+        ]
     }
 
     pub fn step_1(&self) -> Vec<MPolynomial<BWord>> {
@@ -1157,11 +1167,48 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     pub fn unop(&self) -> Vec<MPolynomial<BWord>> {
-        todo!()
+        vec![
+            self.st1_next() - self.st1(),
+            self.st2_next() - self.st2(),
+            self.st3_next() - self.st3(),
+            self.st4_next() - self.st4(),
+            self.st5_next() - self.st5(),
+            self.st6_next() - self.st6(),
+            self.st7_next() - self.st7(),
+            self.st8_next() - self.st8(),
+            self.st9_next() - self.st9(),
+            self.st10_next() - self.st10(),
+            self.st11_next() - self.st11(),
+            self.st12_next() - self.st12(),
+            self.st13_next() - self.st13(),
+            self.st14_next() - self.st14(),
+            self.st15_next() - self.st15(),
+            self.osv_next() - self.osv(),
+            self.osp_next() - self.osp(),
+            self.ramv_next() - self.ramv(),
+        ]
     }
 
     pub fn binop(&self) -> Vec<MPolynomial<BWord>> {
-        todo!()
+        vec![
+            self.st1_next() - self.st2(),
+            self.st2_next() - self.st3(),
+            self.st3_next() - self.st4(),
+            self.st4_next() - self.st5(),
+            self.st5_next() - self.st6(),
+            self.st6_next() - self.st7(),
+            self.st7_next() - self.st8(),
+            self.st8_next() - self.st9(),
+            self.st9_next() - self.st10(),
+            self.st10_next() - self.st11(),
+            self.st11_next() - self.st12(),
+            self.st12_next() - self.st13(),
+            self.st13_next() - self.st14(),
+            self.st14_next() - self.st15(),
+            self.st15_next() - self.osv(),
+            self.osp_next() - (self.osp() - self.one()),
+            (self.osp_next() -  self.constant(15))*self.hv4() - self.one(),
+        ]
     }
 }
 
