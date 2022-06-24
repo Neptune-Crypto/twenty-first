@@ -1198,20 +1198,28 @@ mod triton_stark_tests {
                 &message_1,
             );
 
-            let ext_boundary_consrtaints = ext_table.ext_transition_constraints(&all_challenges);
-            let message_2 = format!("ext_boundary_constraints on {}", &ext_table.name());
+            let ext_transition_constraints = ext_table.ext_consistency_constraints(&all_challenges);
+            let message_2 = format!("ext_consistency_constraints on {}", &ext_table.name());
             assert_air_constraints_on_table(
                 ext_table.data(),
-                &ext_boundary_consrtaints,
+                &ext_transition_constraints,
                 &message_2,
             );
 
+            let ext_boundary_consrtaints = ext_table.ext_transition_constraints(&all_challenges);
+            let message_3 = format!("ext_boundary_constraints on {}", &ext_table.name());
+            assert_air_constraints_on_table(
+                ext_table.data(),
+                &ext_boundary_consrtaints,
+                &message_3,
+            );
+
             let ext_terminal_constraints = ext_table.ext_transition_constraints(&all_challenges);
-            let message_3 = format!("ext_terminal_constraints on {}", &ext_table.name());
+            let message_4 = format!("ext_terminal_constraints on {}", &ext_table.name());
             assert_air_constraints_on_table(
                 ext_table.data(),
                 &ext_terminal_constraints,
-                &message_3,
+                &message_4,
             );
         }
     }
