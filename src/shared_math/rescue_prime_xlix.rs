@@ -193,12 +193,27 @@ pub fn neptune_params() -> RescuePrimeXlix<RP_DEFAULT_WIDTH> {
 #[cfg(test)]
 mod rescue_prime_xlix_tests {
     use super::*;
+    use crate::shared_math::traits::GetRandomElements;
 
     #[test]
     fn equality_test() {
         let rp0 = neptune_params();
         let rp1 = neptune_params();
         assert_eq!(rp0, rp1, "Two Rescue Prime hashers must be equal");
+    }
+
+    #[test]
+    fn alpha_inverse_is_inverse_of_alpha_test() {
+        let rp = neptune_params();
+        let mut rng = rand::thread_rng();
+        for v in BFieldElement::random_elements(20, &mut rng) {
+            assert_eq!(
+                v,
+                v.mod_pow(rp.alpha).mod_pow(rp.alpha_inv),
+                "Raising {0} to the power of alpha to the power of alpha_inverse must yield {0}",
+                v
+            );
+        }
     }
 
     #[test]
