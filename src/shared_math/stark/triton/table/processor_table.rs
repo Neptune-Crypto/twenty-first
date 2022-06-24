@@ -1258,7 +1258,7 @@ impl ProcessorConstraintPolynomialFactory {
 
     pub fn u32_op(&self) -> Vec<MPolynomial<BWord>> {
         // This group has no constraints. It is used for the Permutation Argument with the uint32 table.
-        vec![]
+        vec![/* intentionally empty */]
     }
 
     pub fn grow_stack(&self) -> Vec<MPolynomial<BWord>> {
