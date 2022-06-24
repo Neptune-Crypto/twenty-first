@@ -266,7 +266,6 @@ mod triton_vm_tests {
     };
     use crate::shared_math::stark::triton::table::extension_table::ExtensionTable;
     use crate::shared_math::stark::triton::table::processor_table::ProcessorTable;
-    use crate::shared_math::stark::triton::table::table_collection::BaseTableCollection;
     use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::simple_hasher::{Hasher, ToDigest};

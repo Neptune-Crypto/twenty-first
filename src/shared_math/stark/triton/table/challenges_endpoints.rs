@@ -247,8 +247,8 @@ impl AllEndpoints {
         println!("Endpoint weights start: {}", weights.len());
 
         let processor_table_initials = ProcessorTableEndpoints {
-            input_table_eval_sum: weights.pop().unwrap(),
-            output_table_eval_sum: weights.pop().unwrap(),
+            input_table_eval_sum: XFieldElement::ring_zero(),
+            output_table_eval_sum: XFieldElement::ring_zero(),
             instruction_table_perm_product: weights.pop().unwrap(),
             opstack_table_perm_product: weights.pop().unwrap(),
             ram_table_perm_product: weights.pop().unwrap(),
@@ -312,7 +312,7 @@ impl AllEndpoints {
             weights.len()
         );
         // assert_eq!(
-        //     0,
+        //     2,      // I/O Tables do not need an initial
         //     weights.len(),
         //     "The correct number of weights were used; this number is hardcoded for now"
         // );

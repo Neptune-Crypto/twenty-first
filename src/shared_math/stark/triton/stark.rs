@@ -13,7 +13,7 @@ use crate::shared_math::rescue_prime_xlix::{
     neptune_params, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
 };
 use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
-use crate::shared_math::stark::triton::arguments::evaluation_argument::all_evaluation_arguments;
+use crate::shared_math::stark::triton::arguments::evaluation_argument::verify_evaluation_argument;
 use crate::shared_math::stark::triton::arguments::permutation_argument::PermArg;
 use crate::shared_math::stark::triton::instruction::sample_programs;
 use crate::shared_math::stark::triton::proof_item::{Item, StarkProofStream};
@@ -51,10 +51,18 @@ pub struct Stark {
     bfri_domain: triton::fri_domain::FriDomain<BWord>,
     xfri_domain: triton::fri_domain::FriDomain<XWord>,
     fri: triton_xfri::Fri<StarkHasher>,
+    input_symbols: Vec<BFieldElement>,
+    output_symbols: Vec<BFieldElement>,
 }
 
 impl Stark {
-    pub fn new(_padded_height: usize, log_expansion_factor: usize, security_level: usize) -> Self {
+    pub fn new(
+        _padded_height: usize,
+        log_expansion_factor: usize,
+        security_level: usize,
+        input_symbols: Vec<BFieldElement>,
+        output_symbols: Vec<BFieldElement>,
+    ) -> Self {
         assert_eq!(
             0,
             security_level % log_expansion_factor,
@@ -134,6 +142,8 @@ impl Stark {
             bfri_domain,
             xfri_domain: dummy_xfri_domain,
             fri: dummy_xfri,
+            input_symbols,
+            output_symbols,
         }
     }
 
@@ -1003,8 +1013,26 @@ impl Stark {
         ));
 
         // Verify external terminals
-        if !all_evaluation_arguments(&[], &[], &all_challenges, &all_terminals) {
+        if !verify_evaluation_argument(
+            &self.input_symbols,
+            all_challenges
+                .processor_table_challenges
+                .input_table_eval_row_weight,
+            all_terminals.processor_table_endpoints.input_table_eval_sum,
+        ) {
             return Err(Box::new(StarkVerifyError::EvaluationArgument(0)));
+        }
+
+        if !verify_evaluation_argument(
+            &self.output_symbols,
+            all_challenges
+                .processor_table_challenges
+                .output_table_eval_row_weight,
+            all_terminals
+                .processor_table_endpoints
+                .output_table_eval_sum,
+        ) {
+            return Err(Box::new(StarkVerifyError::EvaluationArgument(1)));
         }
 
         timer.elapsed("Verified terminals");
@@ -1039,7 +1067,6 @@ impl Stark {
 mod triton_stark_tests {
     use crate::shared_math::mpolynomial::MPolynomial;
     use crate::shared_math::stark::triton::instruction::sample_programs::READ_WRITE_X3;
-    use crate::shared_math::stark::triton::instruction::{parse, Instruction};
     use crate::shared_math::stark::triton::stdio::VecStream;
     use crate::shared_math::traits::PrimeField;
 
@@ -1206,11 +1233,11 @@ mod triton_stark_tests {
                 &message_2,
             );
 
-            let ext_boundary_consrtaints = ext_table.ext_transition_constraints(&all_challenges);
+            let ext_boundary_constraints = ext_table.ext_transition_constraints(&all_challenges);
             let message_3 = format!("ext_boundary_constraints on {}", &ext_table.name());
             assert_air_constraints_on_table(
                 ext_table.data(),
-                &ext_boundary_consrtaints,
+                &ext_boundary_constraints,
                 &message_3,
             );
 

@@ -74,6 +74,17 @@ impl ProcessorTable {
     ) -> (ExtProcessorTable, ProcessorTableEndpoints) {
         let mut extension_matrix: Vec<Vec<XFieldElement>> = Vec::with_capacity(self.data().len());
 
+        assert_eq!(
+            XFieldElement::ring_zero(),
+            initials.input_table_eval_sum,
+            "The Evaluation Argument's initial for the Input Table must be 0."
+        );
+        assert_eq!(
+            XFieldElement::ring_zero(),
+            initials.output_table_eval_sum,
+            "The Evaluation Argument's initial for the Output Table must be 0."
+        );
+
         let mut input_table_running_sum = initials.input_table_eval_sum;
         let mut output_table_running_sum = initials.output_table_eval_sum;
         let mut instruction_table_running_product = initials.instruction_table_perm_product;

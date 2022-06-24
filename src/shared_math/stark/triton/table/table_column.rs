@@ -211,7 +211,6 @@ impl Bounded for IOTableColumn {
 #[derive(Debug, Clone, Copy)]
 pub enum ExtIOTableColumn {
     BaseColumn(IOTableColumn),
-    EvalArgRunningSum,
 }
 
 impl From<ExtIOTableColumn> for usize {
@@ -220,7 +219,6 @@ impl From<ExtIOTableColumn> for usize {
 
         match c {
             BaseColumn(base_column) => base_column.into(),
-            EvalArgRunningSum => 1,
         }
     }
 }
@@ -231,7 +229,7 @@ impl Bounded for ExtIOTableColumn {
     }
 
     fn max_value() -> Self {
-        ExtIOTableColumn::EvalArgRunningSum
+        ExtIOTableColumn::BaseColumn(IOTableColumn::max_value())
     }
 }
 
