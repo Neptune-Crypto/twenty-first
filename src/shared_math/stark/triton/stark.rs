@@ -1034,3 +1034,62 @@ impl Stark {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod triton_stark_tests {
+    use crate::shared_math::stark::triton::stdio::VecStream;
+
+    use super::*;
+
+    fn simulate_pad_extend(
+        program: Program,
+    ) -> (BaseTableCollection, ExtTableCollection, AllEndpoints) {
+        let mut _rng = rand::thread_rng();
+        let mut stdin = VecStream::new(&[]);
+        let mut secret_in = VecStream::new(&[]);
+        let mut stdout = VecStream::new(&[]);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+
+        assert!(err.is_none(), "simulate did not generate errors");
+
+        let num_randomizers = 2;
+        let order: usize = 1 << 32;
+        let smooth_generator = BFieldElement::ring_zero()
+            .get_primitive_root_of_unity(order as u64)
+            .0
+            .unwrap();
+
+        let mut base_tables = BaseTableCollection::from_base_matrices(
+            smooth_generator,
+            order,
+            num_randomizers,
+            &base_matrices,
+        );
+
+        base_tables.pad();
+
+        let hasher = StarkHasher::new();
+        let mock_seed = hasher.hash(&[], DIGEST_LEN);
+
+        let challenge_weights =
+            Stark::sample_weights(&hasher, &mock_seed, AllChallenges::TOTAL_CHALLENGES);
+        let all_challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
+
+        let initial_weights =
+            Stark::sample_weights(&hasher, &mock_seed, AllEndpoints::TOTAL_ENDPOINTS);
+        let all_initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
+
+        let (ext_tables, all_terminals) =
+            ExtTableCollection::extend_tables(&base_tables, &all_challenges, &all_initials);
+
+        (base_tables, ext_tables, all_terminals)
+    }
+
+    // 1. simulate(), pad(), extend(), test terminals
+    // 2. simulate(), test constraints
+    // 3. simulate(), pad(), test constraints
+    // 3. simulate(), pad(), extend(), test constraints
+}
