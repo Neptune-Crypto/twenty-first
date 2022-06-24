@@ -52,42 +52,36 @@ steps:
     failure: ignore
     depends_on:
       - Bench
-    settings:
-      to:
-        from_secret: telegram_to
-      token:
-        from_secret: telegram_token
-      when:
-        status:
-          - failure
-          - success
-      format: markdown
-      # Reference:
-      # https://github.com/appleboy/drone-telegram/blob/master/DOCS.md#parameter-reference
-      message: >
-        {{#success build.status}}
-        ✅ Build #{{build.number}} of `{{repo.name}}` succeeded.
+    secrets: [telegram_to, telegram_token]
+    when:
+      status: [failure, success]
+    format: markdown
+    # Reference:
+    # https://github.com/appleboy/drone-telegram/blob/master/DOCS.md#parameter-reference
+    message: >
+      {{#success build.status}}
+      ✅ Build #{{build.number}} of `{{repo.name}}` succeeded.
 
-        📝 Commit by {{commit.author}} on `{{commit.branch}}`:
+      📝 Commit by {{commit.author}} on `{{commit.branch}}`:
 
-        ```
-        {{commit.message}}
-        ```
-        🕐 Duration: {{duration build.started build.finished}}
+      ```
+      {{commit.message}}
+      ```
+      🕐 Duration: {{duration build.started build.finished}}
 
-        🌐 {{ build.link }}
-        {{else}}
-        ❌ Build #{{build.number}} of `{{repo.name}}` failed.
+      🌐 {{ build.link }}
+      {{else}}
+      ❌ Build #{{build.number}} of `{{repo.name}}` failed.
 
-        📝 Commit by {{commit.author}} on `{{commit.branch}}`:
+      📝 Commit by {{commit.author}} on `{{commit.branch}}`:
 
-        ```
-        {{commit.message}}
-        ```
+      ```
+      {{commit.message}}
+      ```
 
 
-        🌐 {{ build.link }}
-        {{/success}}
+      🌐 {{ build.link }}
+      {{/success}}
 
 
 trigger:
