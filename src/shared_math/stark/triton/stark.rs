@@ -1044,7 +1044,12 @@ mod triton_stark_tests {
 
     fn parse_simulate_pad_extend(
         code: &str,
-    ) -> (BaseTableCollection, BaseTableCollection, ExtTableCollection, AllEndpoints) {
+    ) -> (
+        BaseTableCollection,
+        BaseTableCollection,
+        ExtTableCollection,
+        AllEndpoints,
+    ) {
         let program = Program::from_code(code);
 
         assert!(program.is_ok(), "program parses correctly");
@@ -1093,7 +1098,7 @@ mod triton_stark_tests {
         let (ext_tables, all_terminals) =
             ExtTableCollection::extend_tables(&base_tables, &all_challenges, &all_initials);
 
-        (base_tables, ext_tables, all_terminals)
+        (unpadded_base_tables, base_tables, ext_tables, all_terminals)
     }
 
     // 1. simulate(), pad(), extend(), test terminals
