@@ -702,8 +702,7 @@ pub fn all_labelled_instructions() -> Vec<LabelledInstruction> {
 
 pub mod sample_programs {
     use super::super::vm::Program;
-    use super::Ord16::*;
-    use super::{all_labelled_instructions, AnInstruction::*, LabelledInstruction};
+    use super::{AnInstruction::*, LabelledInstruction};
 
     pub const PUSH_PUSH_ADD_POP_S: &str = "
         push 1
