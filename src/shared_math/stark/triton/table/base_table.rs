@@ -132,7 +132,11 @@ pub trait HasBaseTable<DataPF: PrimeField> {
 }
 
 pub fn derive_omicron<DataPF: PrimeField>(padded_height: u64, dummy: DataPF) -> DataPF {
-    debug_assert!(padded_height == 0 || is_power_of_two(padded_height));
+    debug_assert!(
+        0 == padded_height || is_power_of_two(padded_height),
+        "The padded height was: {}",
+        padded_height
+    );
     dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
 }
 
