@@ -1037,7 +1037,7 @@ impl Stark {
 
 #[cfg(test)]
 mod triton_stark_tests {
-    use crate::shared_math::stark::triton::instruction::sample_programs::FIBONACCI_LT;
+    use crate::shared_math::stark::triton::instruction::sample_programs::READ_WRITE_X3;
     use crate::shared_math::stark::triton::instruction::{parse, Instruction};
     use crate::shared_math::stark::triton::stdio::VecStream;
 
@@ -1045,6 +1045,8 @@ mod triton_stark_tests {
 
     fn parse_simulate_pad_extend(
         code: &str,
+        stdin: &mut VecStream,
+        stdout: &mut VecStream,
     ) -> (
         BaseTableCollection,
         BaseTableCollection,
@@ -1057,13 +1059,10 @@ mod triton_stark_tests {
         let program = program.unwrap();
 
         let mut _rng = rand::thread_rng();
-        let mut stdin = VecStream::new(&[]);
         let mut secret_in = VecStream::new(&[]);
-        let mut stdout = VecStream::new(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, err) =
-            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+        let (base_matrices, err) = program.simulate(stdin, &mut secret_in, stdout, &rescue_prime);
 
         assert!(err.is_none(), "simulate did not generate errors");
 
@@ -1105,8 +1104,10 @@ mod triton_stark_tests {
     // 1. simulate(), pad(), extend(), test terminals
     #[test]
     pub fn check_terminals() {
+        let stdin = &mut VecStream::new_b(&[3.into(), 5.into(), 7.into()]);
+        let stdout = &mut VecStream::new_b(&[]);
         let (_unpadded_base_tables, _base_tables, _ext_tables, all_terminals) =
-            parse_simulate_pad_extend(FIBONACCI_LT);
+            parse_simulate_pad_extend(READ_WRITE_X3, stdin, stdout);
 
         let ptie = all_terminals.processor_table_endpoints.input_table_eval_sum;
         let ine = all_terminals.input_table_endpoints.processor_eval_sum;
