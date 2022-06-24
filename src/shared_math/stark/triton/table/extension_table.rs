@@ -20,6 +20,8 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
     fn ext_boundary_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>>;
 
+    fn ext_consistency_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>>;
+
     fn ext_transition_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>>;
 
     fn ext_terminal_constraints(

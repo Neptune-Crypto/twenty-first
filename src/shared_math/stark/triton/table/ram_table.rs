@@ -200,6 +200,10 @@ impl ExtensionTable for ExtRamTable {
         vec![]
     }
 
+    fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
+        vec![]
+    }
+
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
