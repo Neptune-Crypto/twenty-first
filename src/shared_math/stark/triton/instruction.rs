@@ -47,6 +47,7 @@ pub enum AnInstruction<Dest> {
     Swap(Ord16),
 
     // Control flow
+    Nop,
     Skiz,
     Call(Dest),
     Return,
@@ -94,6 +95,7 @@ impl<Dest: Display> Display for AnInstruction<Dest> {
             Dup(arg) => write!(f, "dup{}", arg),
             Swap(arg) => write!(f, "swap{}", arg),
             // Control flow
+            Nop => write!(f, "nop"),
             Skiz => write!(f, "skiz"),
             Call(arg) => write!(f, "call {}", arg),
             Return => write!(f, "return"),
@@ -145,6 +147,7 @@ impl<Dest> AnInstruction<Dest> {
             Swap(_) => 5,
 
             // Control flow
+            Nop => 7,
             Skiz => 10,
             Call(_) => 11,
             Return => 12,
@@ -189,6 +192,7 @@ impl<Dest> AnInstruction<Dest> {
     /// A modification involves any amount of pushing and/or popping.
     pub fn is_op_stack_instruction(&self) -> bool {
         match self {
+            Nop => false,
             Call(_) => false,
             Return => false,
             Recurse => false,
@@ -245,6 +249,7 @@ impl<Dest> AnInstruction<Dest> {
             Push(_) => false,
             Dup(_) => false,
             Swap(_) => false,
+            Nop => false,
             Skiz => false,
             Assert => false,
             ReadMem => false,
@@ -278,6 +283,7 @@ impl<Dest> AnInstruction<Dest> {
             // Single-word instructions
             Pop => 1,
             Divine => 1,
+            Nop => 1,
             Skiz => 1,
             Return => 1,
             Recurse => 1,
@@ -326,6 +332,7 @@ impl<Dest> AnInstruction<Dest> {
             Divine => Divine,
             Dup(x) => Dup(*x),
             Swap(x) => Swap(*x),
+            Nop => Nop,
             Skiz => Skiz,
             Call(lala) => Call(f(lala)),
             Return => Return,
@@ -496,6 +503,7 @@ fn parse_token(
         "swap15" => vec![Swap(ST15)],
 
         // Control flow
+        "nop" => vec![Nop],
         "skiz" => vec![Skiz],
         "call" => vec![Call(parse_label(tokens)?)],
         "return" => vec![Return],
@@ -667,6 +675,7 @@ pub fn all_labelled_instructions() -> Vec<LabelledInstruction> {
         Swap(ST13),
         Swap(ST14),
         Swap(ST15),
+        Nop,
         Skiz,
         Call("foo".to_string()),
         Return,
@@ -1015,6 +1024,7 @@ terminate: pop
         dup0 dup1 dup2 dup3 dup4 dup5 dup6 dup7 dup8 dup9 dup10 dup11 dup12 dup13 dup14 dup15
         swap1 swap2 swap3 swap4 swap5 swap6 swap7 swap8 swap9 swap10 swap11 swap12 swap13 swap14 swap15
 
+        nop
         skiz
         call foo
 
@@ -1060,6 +1070,7 @@ terminate: pop
             "swap13",
             "swap14",
             "swap15",
+            "nop",
             "skiz",
             "call foo",
             "return",

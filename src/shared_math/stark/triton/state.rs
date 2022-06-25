@@ -162,6 +162,10 @@ impl<'pgm> VMState<'pgm> {
                 self.instruction_pointer += 2;
             }
 
+            Nop => {
+                self.instruction_pointer += 1;
+            }
+
             Skiz => {
                 let elem = self.op_stack.pop()?;
                 self.instruction_pointer += if elem.is_zero() {
