@@ -838,6 +838,23 @@ pub mod sample_programs {
         write_io
     ";
 
+    pub const READ_X3_WRITE_X14: &str = "
+        read_io read_io read_io
+        dup0 dup2 dup4
+        dup0 dup2 dup4
+        dup0 dup2 dup4
+        dup0 dup2
+        write_io write_io write_io write_io
+        write_io write_io write_io write_io
+        write_io write_io write_io write_io
+        write_io write_io
+    ";
+
+    pub const READ_X3_NOP_X2: &str = "
+        read_io read_io read_io
+        nop nop
+    ";
+
     pub const SUBTRACT: &str = "
         push 5
         push 18446744069414584320

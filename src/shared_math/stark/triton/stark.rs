@@ -1066,7 +1066,6 @@ impl Stark {
 #[cfg(test)]
 mod triton_stark_tests {
     use crate::shared_math::mpolynomial::MPolynomial;
-    use crate::shared_math::stark::triton::instruction::sample_programs::READ_WRITE_X3;
     use crate::shared_math::stark::triton::stdio::VecStream;
     use crate::shared_math::traits::PrimeField;
 
@@ -1169,7 +1168,7 @@ mod triton_stark_tests {
             _all_challenges,
             _all_initials,
             all_terminals,
-        ) = parse_simulate_pad_extend(READ_WRITE_X3, stdin, stdout);
+        ) = parse_simulate_pad_extend(sample_programs::READ_X3_NOP_X2, stdin, stdout);
 
         let ptie = all_terminals.processor_table_endpoints.input_table_eval_sum;
         let ine = all_terminals.input_table_endpoints.processor_eval_sum;
