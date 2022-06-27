@@ -168,9 +168,9 @@ impl Program {
             .iter()
             .flat_map(|elem| elem.value().to_be_bytes())
             .collect_vec();
-        let mut stdin = VecStream::new(&input_bytes);
-        let mut secret_in = VecStream::new(&secret_input_bytes);
-        let mut stdout = VecStream::new(&[]);
+        let mut stdin = VecStream::new_bytes(&input_bytes);
+        let mut secret_in = VecStream::new_bytes(&secret_input_bytes);
+        let mut stdout = VecStream::new_bytes(&[]);
         let rescue_prime = neptune_params();
 
         self.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime)
@@ -221,22 +221,14 @@ impl Program {
             .iter()
             .flat_map(|elem| elem.value().to_be_bytes())
             .collect_vec();
-        let mut stdin = VecStream::new(&input_bytes);
-        let mut secret_in = VecStream::new(&secret_input_bytes);
-        let mut stdout = VecStream::new(&[]);
+        let mut stdin = VecStream::new_bytes(&input_bytes);
+        let mut secret_in = VecStream::new_bytes(&secret_input_bytes);
+        let mut stdout = VecStream::new_bytes(&[]);
         let rescue_prime = neptune_params();
 
         let (trace, err) = self.run(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
 
-        const U64SIZE: usize = std::mem::size_of::<u64>();
-        let out = stdout
-            .to_vec()
-            .chunks_exact(U64SIZE)
-            .map(|chunk: &[u8]| -> &[u8; 8] {
-                chunk.try_into().expect("Chunks must have length 8.")
-            }) // force compatible type
-            .map(|&chunk| BFieldElement::new(u64::from_be_bytes(chunk)))
-            .collect_vec();
+        let out = stdout.to_bword_vec();
 
         (trace, out, err)
     }
@@ -278,9 +270,9 @@ mod triton_vm_tests {
 
         println!("{}", program);
 
-        let mut stdin = VecStream::new_b(&[42.into(), 56.into()]);
-        let mut secret_in = VecStream::new_b(&[]);
-        let mut stdout = VecStream::new(&[]);
+        let mut stdin = VecStream::new_bwords(&[42.into(), 56.into()]);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
         let rescue_prime = neptune_params();
 
         // 2. Execute program, convert to base matrices
@@ -306,9 +298,9 @@ mod triton_vm_tests {
 
         println!("{}", program);
 
-        let mut stdin = VecStream::new(&[]);
-        let mut secret_in = VecStream::new(&[]);
-        let mut stdout = VecStream::new(&[]);
+        let mut stdin = VecStream::new_bwords(&[]);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
         let rescue_prime = neptune_params();
 
         let (base_matrices, err) =
@@ -327,9 +319,9 @@ mod triton_vm_tests {
 
         println!("{}", program);
 
-        let mut stdin = VecStream::new_b(&[42.into(), 56.into()]);
-        let mut secret_in = VecStream::new(&[]);
-        let mut stdout = VecStream::new(&[]);
+        let mut stdin = VecStream::new_bwords(&[42.into(), 56.into()]);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
         let rescue_prime = neptune_params();
 
         let (base_matrices, err) =
@@ -350,9 +342,9 @@ mod triton_vm_tests {
 
         println!("{}", program);
 
-        let mut stdin = VecStream::new(&[]);
-        let mut secret_in = VecStream::new(&[]);
-        let mut stdout = VecStream::new(&[]);
+        let mut stdin = VecStream::new_bwords(&[]);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
         let rescue_prime = neptune_params();
 
         let (base_matrices, err) =
@@ -427,9 +419,9 @@ mod triton_vm_tests {
 
         println!("{}", program);
 
-        let mut stdin = VecStream::new(&[]);
-        let mut secret_in = VecStream::new(&[]);
-        let mut stdout = VecStream::new(&[]);
+        let mut stdin = VecStream::new_bwords(&[]);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
         let rescue_prime = neptune_params();
 
         let (base_matrices, err) =
@@ -602,7 +594,7 @@ mod triton_vm_tests {
         }
     }
 
-    fn assert_air_constraints_on_matrix(
+    fn _assert_air_constraints_on_matrix(
         table_data: &[Vec<BFieldElement>],
         air_constraints: &[MPolynomial<BFieldElement>],
     ) {

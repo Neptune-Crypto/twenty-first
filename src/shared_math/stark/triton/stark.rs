@@ -1081,9 +1081,9 @@ mod triton_stark_tests {
         let program = program.unwrap();
 
         let mut _rng = rand::thread_rng();
-        let mut stdin = VecStream::new_b(input_symbols);
-        let mut secret_in = VecStream::new(&[]);
-        let mut stdout = VecStream::new_b(output_symbols);
+        let mut stdin = VecStream::new_bwords(input_symbols);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(output_symbols);
         let rescue_prime = neptune_params();
 
         let (base_matrices, err) =
@@ -1124,7 +1124,7 @@ mod triton_stark_tests {
         let program = program.unwrap();
 
         let mut _rng = rand::thread_rng();
-        let mut secret_in = VecStream::new(&[]);
+        let mut secret_in = VecStream::new_bwords(&[]);
         let rescue_prime = neptune_params();
 
         let (base_matrices, err) = program.simulate(stdin, &mut secret_in, stdout, &rescue_prime);
@@ -1194,8 +1194,8 @@ mod triton_stark_tests {
     // 1. simulate(), pad(), extend(), test terminals
     #[test]
     pub fn check_terminals() {
-        let stdin = &mut VecStream::new_b(&[3.into(), 5.into(), 7.into()]);
-        let stdout = &mut VecStream::new_b(&[]);
+        let stdin = &mut VecStream::new_bwords(&[3.into(), 5.into(), 7.into()]);
+        let stdout = &mut VecStream::new_bwords(&[]);
         let (
             _unpadded_base_tables,
             _base_tables,
@@ -1219,11 +1219,11 @@ mod triton_stark_tests {
     // 2. simulate(), test constraints
     #[test]
     fn triton_table_constraints_evaluate_to_zero_test() {
-        let mut stdin = VecStream::new_b(&[]);
-        let mut stdout = VecStream::new_b(&[]);
+        let mut stdin = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
         let (
-            unpadded_base_tables,
-            padded_base_tables,
+            _unpadded_base_tables,
+            _padded_base_tables,
             ext_tables,
             all_challenges,
             _all_initials,

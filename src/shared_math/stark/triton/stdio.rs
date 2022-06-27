@@ -31,23 +31,33 @@ pub struct VecStream {
 }
 
 impl VecStream {
-    pub fn new(bytes: &[u8]) -> Self {
+    pub fn new_bytes(bytes: &[u8]) -> Self {
         VecStream {
             cursor: Cursor::new(bytes.to_vec()),
         }
     }
 
-    pub fn new_b(bfes: &[BFieldElement]) -> Self {
+    pub fn new_bwords(bfes: &[BFieldElement]) -> Self {
         let bytes: Vec<u8> = bfes
             .iter()
             .map(|bfe| bfe.value().to_be_bytes().to_vec())
             .concat();
-        Self::new(&bytes)
+
+        Self::new_bytes(&bytes)
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
+    pub fn to_bytes_vec(&self) -> Vec<u8> {
         // FIXME: Address cloning as unnecessary.
         self.cursor.clone().into_inner()
+    }
+
+    pub fn to_bword_vec(&self) -> Vec<BFieldElement> {
+        let mut tmp = VecStream::new_bytes(&self.to_bytes_vec());
+        let mut result = vec![];
+        while let Ok(bword) = tmp.read_elem() {
+            result.push(bword);
+        }
+        result
     }
 }
 
