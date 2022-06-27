@@ -528,7 +528,8 @@ impl ExtensionTable for ExtProcessorTable {
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        let factory = ProcessorConstraintPolynomialFactory::default();
+        vec![factory.clk_always_increases_by_one()]
     }
 
     fn ext_terminal_constraints(
@@ -541,17 +542,17 @@ impl ExtensionTable for ExtProcessorTable {
 }
 
 pub struct ProcessorConstraintPolynomialFactory {
-    variables: [MPolynomial<BWord>; 2 * BASE_WIDTH],
-    deselectors: HashMap<Instruction, MPolynomial<BWord>>,
+    variables: [MPolynomial<XWord>; 2 * FULL_WIDTH],
+    deselectors: HashMap<Instruction, MPolynomial<XWord>>,
 }
 
 impl Default for ProcessorConstraintPolynomialFactory {
     fn default() -> Self {
-        let variables = MPolynomial::<BWord>::variables(2 * BASE_WIDTH, 1.into())
+        let variables = MPolynomial::<XWord>::variables(2 * FULL_WIDTH, 1.into())
             .try_into()
             .expect("Dynamic conversion of polynomials for each variable to known-width set of variables");
 
-        let deselectors = Self::all_instruction_deselectors();
+        let deselectors = HashMap::new();
 
         Self {
             variables,
@@ -575,7 +576,7 @@ impl ProcessorConstraintPolynomialFactory {
     ///
     /// So the `clk_increase_by_one` base transition constraint polynomial holds exactly
     /// when every `clk` register $a$ is one less than `clk` register $a + 1$.
-    pub fn clk_always_increases_by_one(&self) -> MPolynomial<BWord> {
+    pub fn clk_always_increases_by_one(&self) -> MPolynomial<XWord> {
         let one = self.one();
         let clk = self.clk();
         let clk_next = self.clk_next();
@@ -583,7 +584,7 @@ impl ProcessorConstraintPolynomialFactory {
         clk_next - clk - one
     }
 
-    pub fn indicator_polynomial(&self, i: usize) -> MPolynomial<BWord> {
+    pub fn indicator_polynomial(&self, i: usize) -> MPolynomial<XWord> {
         let hv0 = self.hv0();
         let hv1 = self.hv1();
         let hv2 = self.hv2();
@@ -613,12 +614,12 @@ impl ProcessorConstraintPolynomialFactory {
         }
     }
 
-    pub fn instruction_pop(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_pop(&self) -> Vec<MPolynomial<XWord>> {
         // no further constraints
         vec![]
     }
 
-    pub fn instruction_push(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_push(&self) -> Vec<MPolynomial<XWord>> {
         let st0_next = self.st0_next();
         let nia = self.nia();
 
@@ -627,12 +628,12 @@ impl ProcessorConstraintPolynomialFactory {
         vec![st0_next - nia]
     }
 
-    pub fn instruction_divine(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_divine(&self) -> Vec<MPolynomial<XWord>> {
         // no further constraints
         vec![]
     }
 
-    pub fn instruction_dup(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_dup(&self) -> Vec<MPolynomial<XWord>> {
         vec![
             self.indicator_polynomial(0) * (self.st0_next() - self.st0()),
             self.indicator_polynomial(1) * (self.st0_next() - self.st1()),
@@ -653,7 +654,7 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    pub fn instruction_swap(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_swap(&self) -> Vec<MPolynomial<XWord>> {
         vec![
             self.one() - self.indicator_polynomial(0),
             self.indicator_polynomial(1) * (self.st1_next() - self.st0()),
@@ -705,12 +706,12 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    pub fn instruction_nop(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_nop(&self) -> Vec<MPolynomial<XWord>> {
         // no further constraints
         vec![]
     }
 
-    pub fn instruction_skiz(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_skiz(&self) -> Vec<MPolynomial<XWord>> {
         // The jump stack pointer jsp does not change.
         let jsp_does_not_change = self.jsp_next() - self.jsp();
 
@@ -741,7 +742,7 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     // 1. Create stubs for all instruction polynomials
-    pub fn instruction_call(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_call(&self) -> Vec<MPolynomial<XWord>> {
         // The jump stack pointer jsp is incremented by 1.
         let jsp_incr_1 = self.jsp_next() - (self.jsp() + self.one());
 
@@ -762,7 +763,7 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    pub fn instruction_return(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_return(&self) -> Vec<MPolynomial<XWord>> {
         // The jump stack pointer jsp is decremented by 1.
         let jsp_incr_1 = self.jsp_next() - (self.jsp() - self.one());
 
@@ -772,7 +773,7 @@ impl ProcessorConstraintPolynomialFactory {
         vec![jsp_incr_1, ip_becomes_jso]
     }
 
-    pub fn instruction_recurse(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_recurse(&self) -> Vec<MPolynomial<XWord>> {
         // The jump stack pointer jsp does not change.
         let jsp_does_not_change = self.jsp_next() - self.jsp();
 
@@ -793,35 +794,35 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    pub fn instruction_assert(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_assert(&self) -> Vec<MPolynomial<XWord>> {
         // The current top of the stack st0 is 1.
         let st_0_is_1 = self.st0() - self.one();
 
         vec![st_0_is_1]
     }
 
-    pub fn instruction_halt(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_halt(&self) -> Vec<MPolynomial<XWord>> {
         // The instruction executed in the following step is instruction halt.
         let halt_is_followed_by_halt = self.ci_next() - self.ci();
 
         vec![halt_is_followed_by_halt]
     }
 
-    pub fn instruction_read_mem(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_read_mem(&self) -> Vec<MPolynomial<XWord>> {
         // The top of the stack is overwritten with the RAM value.
         let st0_becomes_ramv = self.st0_next() - self.ramv();
 
         vec![st0_becomes_ramv]
     }
 
-    pub fn instruction_write_mem(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_write_mem(&self) -> Vec<MPolynomial<XWord>> {
         // The RAM value is overwritten with the top of the stack.
         let ramv_becomes_st0 = self.ramv_next() - self.st0();
 
         vec![ramv_becomes_st0]
     }
 
-    pub fn instruction_hash(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_hash(&self) -> Vec<MPolynomial<XWord>> {
         // This instruction has no additional transition constraints.
         // Two Evaluation Arguments with the Hash Table guarantee correct transition.
         vec![]
@@ -831,7 +832,7 @@ impl ProcessorConstraintPolynomialFactory {
     /// leafs have 0 (respectively 1) as their least significant bit. The first
     /// two polynomials achieve that helper variable hv0 holds the result of
     /// st12 mod 2. The third polynomial sets the new value of st12 to st12 div 2.
-    pub fn instruction_divine_sibling(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_divine_sibling(&self) -> Vec<MPolynomial<XWord>> {
         // Helper variable hv0 is either 0 or 1.
         let hv0_is_0_or_1 = self.hv0() * (self.hv0() - self.one());
 
@@ -914,321 +915,321 @@ impl ProcessorConstraintPolynomialFactory {
         .concat()
     }
 
-    pub fn instruction_assert_vector(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_assert_vector(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_add(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_add(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_mul(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_mul(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_invert(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_invert(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_split(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_split(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_eq(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_eq(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_lt(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_lt(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_and(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_and(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_xor(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_xor(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_reverse(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_reverse(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_div(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_div(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_xxadd(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_xxadd(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_xxmul(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_xxmul(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_xinv(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_xinv(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_xbmul(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_xbmul(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_read_io(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_read_io(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn instruction_write_io(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn instruction_write_io(&self) -> Vec<MPolynomial<XWord>> {
         todo!()
     }
 
-    pub fn one(&self) -> MPolynomial<BWord> {
-        MPolynomial::from_constant(1.into(), 2 * BASE_WIDTH)
+    pub fn one(&self) -> MPolynomial<XWord> {
+        self.constant(1)
     }
 
-    pub fn two(&self) -> MPolynomial<BWord> {
-        MPolynomial::from_constant(2.into(), 2 * BASE_WIDTH)
+    pub fn two(&self) -> MPolynomial<XWord> {
+        self.constant(2)
     }
 
-    pub fn constant(&self, constant: u32) -> MPolynomial<BWord> {
-        MPolynomial::from_constant(constant.into(), 2 * BASE_WIDTH)
+    pub fn constant(&self, constant: u32) -> MPolynomial<XWord> {
+        MPolynomial::from_constant(constant.into(), 2 * FULL_WIDTH)
     }
 
-    pub fn clk(&self) -> MPolynomial<BWord> {
+    pub fn clk(&self) -> MPolynomial<XWord> {
         self.variables[CLK as usize].clone()
     }
 
-    fn ip(&self) -> MPolynomial<BWord> {
+    fn ip(&self) -> MPolynomial<XWord> {
         self.variables[IP as usize].clone()
     }
 
-    fn ci(&self) -> MPolynomial<BWord> {
+    fn ci(&self) -> MPolynomial<XWord> {
         self.variables[CI as usize].clone()
     }
 
-    fn nia(&self) -> MPolynomial<BWord> {
+    fn nia(&self) -> MPolynomial<XWord> {
         self.variables[NIA as usize].clone()
     }
 
-    fn jsp(&self) -> MPolynomial<BWord> {
+    fn jsp(&self) -> MPolynomial<XWord> {
         self.variables[JSP as usize].clone()
     }
 
-    fn jsd(&self) -> MPolynomial<BWord> {
+    fn jsd(&self) -> MPolynomial<XWord> {
         self.variables[JSD as usize].clone()
     }
 
-    fn jso(&self) -> MPolynomial<BWord> {
+    fn jso(&self) -> MPolynomial<XWord> {
         self.variables[JSO as usize].clone()
     }
 
-    pub fn st0(&self) -> MPolynomial<BWord> {
+    pub fn st0(&self) -> MPolynomial<XWord> {
         self.variables[ST0 as usize].clone()
     }
 
-    pub fn st1(&self) -> MPolynomial<BWord> {
+    pub fn st1(&self) -> MPolynomial<XWord> {
         self.variables[ST1 as usize].clone()
     }
 
-    pub fn st2(&self) -> MPolynomial<BWord> {
+    pub fn st2(&self) -> MPolynomial<XWord> {
         self.variables[ST2 as usize].clone()
     }
 
-    pub fn st3(&self) -> MPolynomial<BWord> {
+    pub fn st3(&self) -> MPolynomial<XWord> {
         self.variables[ST3 as usize].clone()
     }
 
-    pub fn st4(&self) -> MPolynomial<BWord> {
+    pub fn st4(&self) -> MPolynomial<XWord> {
         self.variables[ST4 as usize].clone()
     }
 
-    pub fn st5(&self) -> MPolynomial<BWord> {
+    pub fn st5(&self) -> MPolynomial<XWord> {
         self.variables[ST5 as usize].clone()
     }
 
-    pub fn st6(&self) -> MPolynomial<BWord> {
+    pub fn st6(&self) -> MPolynomial<XWord> {
         self.variables[ST6 as usize].clone()
     }
 
-    pub fn st7(&self) -> MPolynomial<BWord> {
+    pub fn st7(&self) -> MPolynomial<XWord> {
         self.variables[ST7 as usize].clone()
     }
 
-    pub fn st8(&self) -> MPolynomial<BWord> {
+    pub fn st8(&self) -> MPolynomial<XWord> {
         self.variables[ST8 as usize].clone()
     }
 
-    pub fn st9(&self) -> MPolynomial<BWord> {
+    pub fn st9(&self) -> MPolynomial<XWord> {
         self.variables[ST9 as usize].clone()
     }
 
-    pub fn st10(&self) -> MPolynomial<BWord> {
+    pub fn st10(&self) -> MPolynomial<XWord> {
         self.variables[ST10 as usize].clone()
     }
 
-    pub fn st11(&self) -> MPolynomial<BWord> {
+    pub fn st11(&self) -> MPolynomial<XWord> {
         self.variables[ST11 as usize].clone()
     }
 
-    pub fn st12(&self) -> MPolynomial<BWord> {
+    pub fn st12(&self) -> MPolynomial<XWord> {
         self.variables[ST12 as usize].clone()
     }
 
-    pub fn st13(&self) -> MPolynomial<BWord> {
+    pub fn st13(&self) -> MPolynomial<XWord> {
         self.variables[ST13 as usize].clone()
     }
 
-    pub fn st14(&self) -> MPolynomial<BWord> {
+    pub fn st14(&self) -> MPolynomial<XWord> {
         self.variables[ST14 as usize].clone()
     }
 
-    pub fn st15(&self) -> MPolynomial<BWord> {
+    pub fn st15(&self) -> MPolynomial<XWord> {
         self.variables[ST15 as usize].clone()
     }
 
-    pub fn inv(&self) -> MPolynomial<BWord> {
+    pub fn inv(&self) -> MPolynomial<XWord> {
         self.variables[INV as usize].clone()
     }
 
-    pub fn osp(&self) -> MPolynomial<BWord> {
+    pub fn osp(&self) -> MPolynomial<XWord> {
         self.variables[OSP as usize].clone()
     }
 
-    pub fn osv(&self) -> MPolynomial<BWord> {
+    pub fn osv(&self) -> MPolynomial<XWord> {
         self.variables[OSV as usize].clone()
     }
 
-    fn hv0(&self) -> MPolynomial<BWord> {
+    fn hv0(&self) -> MPolynomial<XWord> {
         self.variables[HV0 as usize].clone()
     }
 
-    fn hv1(&self) -> MPolynomial<BWord> {
+    fn hv1(&self) -> MPolynomial<XWord> {
         self.variables[HV1 as usize].clone()
     }
 
-    fn hv2(&self) -> MPolynomial<BWord> {
+    fn hv2(&self) -> MPolynomial<XWord> {
         self.variables[HV2 as usize].clone()
     }
 
-    fn hv3(&self) -> MPolynomial<BWord> {
+    fn hv3(&self) -> MPolynomial<XWord> {
         self.variables[HV3 as usize].clone()
     }
 
-    fn hv4(&self) -> MPolynomial<BWord> {
+    fn hv4(&self) -> MPolynomial<XWord> {
         self.variables[HV4 as usize].clone()
     }
 
-    fn ramv(&self) -> MPolynomial<BWord> {
+    fn ramv(&self) -> MPolynomial<XWord> {
         self.variables[RAMV as usize].clone()
     }
 
     // Property: All polynomial variables that contain '_next' have the same
     // variable position / value as the one without '_next', +/- BASE_WIDTH.
-    pub fn clk_next(&self) -> MPolynomial<BWord> {
+    pub fn clk_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + CLK as usize].clone()
     }
 
-    fn ip_next(&self) -> MPolynomial<BWord> {
+    fn ip_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + IP as usize].clone()
     }
 
-    fn ci_next(&self) -> MPolynomial<BWord> {
+    fn ci_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + CI as usize].clone()
     }
 
-    fn jsp_next(&self) -> MPolynomial<BWord> {
+    fn jsp_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + JSP as usize].clone()
     }
 
-    fn jsd_next(&self) -> MPolynomial<BWord> {
+    fn jsd_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + JSD as usize].clone()
     }
 
-    fn jso_next(&self) -> MPolynomial<BWord> {
+    fn jso_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + JSO as usize].clone()
     }
 
-    pub fn st0_next(&self) -> MPolynomial<BWord> {
+    pub fn st0_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST0 as usize].clone()
     }
 
-    pub fn st1_next(&self) -> MPolynomial<BWord> {
+    pub fn st1_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST1 as usize].clone()
     }
 
-    pub fn st2_next(&self) -> MPolynomial<BWord> {
+    pub fn st2_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST2 as usize].clone()
     }
 
-    pub fn st3_next(&self) -> MPolynomial<BWord> {
+    pub fn st3_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST3 as usize].clone()
     }
 
-    pub fn st4_next(&self) -> MPolynomial<BWord> {
+    pub fn st4_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST4 as usize].clone()
     }
 
-    pub fn st5_next(&self) -> MPolynomial<BWord> {
+    pub fn st5_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST5 as usize].clone()
     }
 
-    pub fn st6_next(&self) -> MPolynomial<BWord> {
+    pub fn st6_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST6 as usize].clone()
     }
 
-    pub fn st7_next(&self) -> MPolynomial<BWord> {
+    pub fn st7_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST7 as usize].clone()
     }
 
-    pub fn st8_next(&self) -> MPolynomial<BWord> {
+    pub fn st8_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST8 as usize].clone()
     }
 
-    pub fn st9_next(&self) -> MPolynomial<BWord> {
+    pub fn st9_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST9 as usize].clone()
     }
 
-    pub fn st10_next(&self) -> MPolynomial<BWord> {
+    pub fn st10_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST10 as usize].clone()
     }
 
-    pub fn st11_next(&self) -> MPolynomial<BWord> {
+    pub fn st11_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST11 as usize].clone()
     }
 
-    pub fn st12_next(&self) -> MPolynomial<BWord> {
+    pub fn st12_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST12 as usize].clone()
     }
 
-    pub fn st13_next(&self) -> MPolynomial<BWord> {
+    pub fn st13_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST13 as usize].clone()
     }
 
-    pub fn st14_next(&self) -> MPolynomial<BWord> {
+    pub fn st14_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST14 as usize].clone()
     }
 
-    pub fn st15_next(&self) -> MPolynomial<BWord> {
+    pub fn st15_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + ST15 as usize].clone()
     }
 
-    pub fn inv_next(&self) -> MPolynomial<BWord> {
+    pub fn inv_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + INV as usize].clone()
     }
 
-    pub fn osp_next(&self) -> MPolynomial<BWord> {
+    pub fn osp_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + OSP as usize].clone()
     }
 
-    pub fn osv_next(&self) -> MPolynomial<BWord> {
+    pub fn osv_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + OSV as usize].clone()
     }
 
-    fn ramv_next(&self) -> MPolynomial<BWord> {
+    fn ramv_next(&self) -> MPolynomial<XWord> {
         self.variables[BASE_WIDTH + RAMV as usize].clone()
     }
 
-    pub fn decompose_arg(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn decompose_arg(&self) -> Vec<MPolynomial<XWord>> {
         vec![
             self.nia()
                 - (self.constant(8) * self.hv3()
@@ -1242,7 +1243,7 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    pub fn step_1(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn step_1(&self) -> Vec<MPolynomial<XWord>> {
         let one = self.one();
         let ip = self.ip();
         let ip_next = self.ip_next();
@@ -1250,7 +1251,7 @@ impl ProcessorConstraintPolynomialFactory {
         vec![ip_next - ip - one]
     }
 
-    pub fn step_2(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn step_2(&self) -> Vec<MPolynomial<XWord>> {
         let one = self.one();
         let ip = self.ip();
         let ip_next = self.ip_next();
@@ -1258,12 +1259,12 @@ impl ProcessorConstraintPolynomialFactory {
         vec![ip_next - ip - (one.clone() + one)]
     }
 
-    pub fn u32_op(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn u32_op(&self) -> Vec<MPolynomial<XWord>> {
         // This group has no constraints. It is used for the Permutation Argument with the uint32 table.
         vec![/* intentionally empty */]
     }
 
-    pub fn grow_stack(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn grow_stack(&self) -> Vec<MPolynomial<XWord>> {
         vec![
             // The stack element in st0 is moved into st1.
             self.st1_next() - self.st0(),
@@ -1290,7 +1291,7 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    pub fn keep_stack(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn keep_stack(&self) -> Vec<MPolynomial<XWord>> {
         vec![
             self.st0_next() - self.st0(),
             self.st1_next() - self.st1(),
@@ -1314,7 +1315,7 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    pub fn shrink_stack(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn shrink_stack(&self) -> Vec<MPolynomial<XWord>> {
         vec![
             self.st0_next() - self.st1(),
             self.st1_next() - self.st2(),
@@ -1337,7 +1338,7 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    pub fn unop(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn unop(&self) -> Vec<MPolynomial<XWord>> {
         vec![
             self.st1_next() - self.st1(),
             self.st2_next() - self.st2(),
@@ -1360,7 +1361,7 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    pub fn binop(&self) -> Vec<MPolynomial<BWord>> {
+    pub fn binop(&self) -> Vec<MPolynomial<XWord>> {
         vec![
             self.st1_next() - self.st2(),
             self.st2_next() - self.st3(),
@@ -1384,47 +1385,43 @@ impl ProcessorConstraintPolynomialFactory {
 }
 
 impl ProcessorConstraintPolynomialFactory {
-    pub fn instruction_deselector(&self, instruction: Instruction) -> MPolynomial<BWord> {
+    pub fn instruction_deselector(&mut self, instruction: Instruction) -> MPolynomial<XWord> {
+        if self.deselectors.is_empty() {
+            let instructions_as_mpoly = self.all_instructions_as_mpoly();
+
+            for deselected_instruction in all_instructions().into_iter() {
+                let deselector = all_instructions()
+                    .into_iter()
+                    .filter(|instruction| *instruction != deselected_instruction)
+                    .map(|instruction| instructions_as_mpoly[&instruction].clone())
+                    .fold(self.one(), |a, b| a + b);
+
+                self.deselectors.insert(deselected_instruction, deselector);
+            }
+        }
+
         self.deselectors[&instruction].clone()
     }
 
-    fn all_instruction_deselectors() -> HashMap<Instruction, MPolynomial<BWord>> {
-        let instructions_as_mpoly = Self::all_instructions_as_mpoly();
-        let mut deselectors = HashMap::<Instruction, MPolynomial<BFieldElement>>::new();
-        let one = MPolynomial::from_constant(1.into(), 2 * BASE_WIDTH);
-
-        for deselected_instruction in all_instructions().into_iter() {
-            let deselector = all_instructions()
-                .into_iter()
-                .filter(|instruction| *instruction != deselected_instruction)
-                .map(|instruction| instructions_as_mpoly[&instruction].clone())
-                .fold(one.clone(), |a, b| a + b);
-
-            deselectors.insert(deselected_instruction, deselector);
-        }
-
-        deselectors
-    }
-
-    fn _all_instructions_selector(&self) -> MPolynomial<BWord> {
+    fn _all_instructions_selector(&self) -> MPolynomial<XWord> {
         all_instructions()
             .into_iter()
             .map(|instruction| self._instruction_selector(instruction))
             .fold(self.one(), |a, b| a + b)
     }
 
-    fn _instruction_selector(&self, instruction: Instruction) -> MPolynomial<BWord> {
-        self.ci() - Self::instruction_as_mpoly(instruction)
+    fn _instruction_selector(&self, instruction: Instruction) -> MPolynomial<XWord> {
+        self.ci() - self.instruction_as_mpoly(instruction)
     }
 
-    fn instruction_as_mpoly(instruction: Instruction) -> MPolynomial<BWord> {
-        MPolynomial::from_constant(instruction.opcode_b(), 2 * BASE_WIDTH)
+    fn instruction_as_mpoly(&self, instruction: Instruction) -> MPolynomial<XWord> {
+        self.constant(instruction.opcode())
     }
 
-    fn all_instructions_as_mpoly() -> HashMap<Instruction, MPolynomial<BWord>> {
+    fn all_instructions_as_mpoly(&self) -> HashMap<Instruction, MPolynomial<XWord>> {
         all_instructions()
             .into_iter()
-            .map(|instruction| (instruction, Self::instruction_as_mpoly(instruction)))
+            .map(|instruction| (instruction, self.instruction_as_mpoly(instruction)))
             .collect()
     }
 }

@@ -18,6 +18,12 @@ pub struct XFieldElement {
     pub coefficients: [BFieldElement; 3],
 }
 
+impl From<u32> for XFieldElement {
+    fn from(value: u32) -> Self {
+        XFieldElement::new_const(value.into())
+    }
+}
+
 // TODO: Consider moving this to Polynomial file by untying XFieldElement, and\
 // instead referring to its internals. Not sure though.
 impl From<XFieldElement> for Polynomial<BFieldElement> {
