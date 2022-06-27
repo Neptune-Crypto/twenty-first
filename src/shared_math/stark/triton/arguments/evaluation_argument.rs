@@ -12,7 +12,7 @@ pub fn verify_evaluation_argument(
 /// Compute the running sum for an evaluation argument as specified by `initial`,
 /// This amounts to evaluating polynomial `f(x) = initial·x^n + Σ_i symbols[n-i]·x^i` at position
 /// challenge, i.e., returns `f(challenge)`.
-fn compute_terminal(
+pub fn compute_terminal(
     symbols: &[BFieldElement],
     initial: XFieldElement,
     challenge: XFieldElement,

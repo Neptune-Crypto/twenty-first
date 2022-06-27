@@ -3,7 +3,7 @@ use super::table_column::{
     RamTableColumn,
 };
 use super::{
-    hash_table, instruction_table, io_table, jump_stack_table, op_stack_table, processor_table,
+    hash_table, instruction_table, jump_stack_table, op_stack_table, processor_table,
     program_table, ram_table, u32_op_table,
 };
 use crate::shared_math::b_field_element::BFieldElement;
@@ -18,8 +18,6 @@ pub struct BaseMatrices {
     pub program_matrix: Vec<[BFieldElement; program_table::BASE_WIDTH]>,
     pub processor_matrix: Vec<[BFieldElement; processor_table::BASE_WIDTH]>,
     pub instruction_matrix: Vec<[BFieldElement; instruction_table::BASE_WIDTH]>,
-    pub input_matrix: Vec<[BFieldElement; io_table::BASE_WIDTH]>,
-    pub output_matrix: Vec<[BFieldElement; io_table::BASE_WIDTH]>,
     pub op_stack_matrix: Vec<[BFieldElement; op_stack_table::BASE_WIDTH]>,
     pub ram_matrix: Vec<[BFieldElement; ram_table::BASE_WIDTH]>,
     pub jump_stack_matrix: Vec<[BFieldElement; jump_stack_table::BASE_WIDTH]>,
@@ -96,12 +94,8 @@ impl BaseMatrices {
         self.jump_stack_matrix
             .push(state.to_jump_stack_row(current_instruction));
 
-        if let Ok(Some(word)) = state.read_word() {
-            self.input_matrix.push([word])
-        }
-
         match vm_output {
-            Some(VMOutput::WriteIoTrace(written_word)) => self.output_matrix.push([written_word]),
+            Some(VMOutput::WriteOutputSymbol(_)) => (),
             Some(VMOutput::XlixTrace(mut aux_trace)) => self.hash_matrix.append(&mut aux_trace),
             Some(VMOutput::U32OpTrace(mut trace)) => self.u32_op_matrix.append(&mut trace),
             None => (),

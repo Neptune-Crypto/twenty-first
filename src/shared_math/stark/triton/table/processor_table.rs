@@ -475,6 +475,12 @@ pub struct ProcessorTableEndpoints {
 }
 
 #[derive(Debug, Clone)]
+pub struct IOChallenges {
+    /// The weight that combines the eval arg's running sum with the next i/o symbol in the i/o list
+    pub processor_eval_row_weight: XFieldElement,
+}
+
+#[derive(Debug, Clone)]
 pub struct ExtProcessorTable {
     base: BaseTable<XFieldElement>,
 }

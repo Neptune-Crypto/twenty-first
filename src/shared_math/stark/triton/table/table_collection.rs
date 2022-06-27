@@ -4,7 +4,6 @@ use super::challenges_endpoints::{AllChallenges, AllEndpoints};
 use super::extension_table::ExtensionTable;
 use super::hash_table::{ExtHashTable, HashTable};
 use super::instruction_table::{ExtInstructionTable, InstructionTable};
-use super::io_table::{ExtIOTable, IOTable};
 use super::jump_stack_table::{ExtJumpStackTable, JumpStackTable};
 use super::op_stack_table::{ExtOpStackTable, OpStackTable};
 use super::processor_table::{ExtProcessorTable, ProcessorTable};
@@ -26,8 +25,6 @@ pub struct BaseTableCollection {
     pub program_table: ProgramTable,
     pub instruction_table: InstructionTable,
     pub processor_table: ProcessorTable,
-    pub input_table: IOTable,
-    pub output_table: IOTable,
     pub op_stack_table: OpStackTable,
     pub ram_table: RamTable,
     pub jump_stack_table: JumpStackTable,
@@ -40,8 +37,6 @@ pub struct ExtTableCollection {
     pub program_table: ExtProgramTable,
     pub instruction_table: ExtInstructionTable,
     pub processor_table: ExtProcessorTable,
-    pub input_table: ExtIOTable,
-    pub output_table: ExtIOTable,
     pub op_stack_table: ExtOpStackTable,
     pub ram_table: ExtRamTable,
     pub jump_stack_table: ExtJumpStackTable,
@@ -55,8 +50,6 @@ pub enum TableId {
     ProgramTable,
     InstructionTable,
     ProcessorTable,
-    InputTable,
-    OutputTable,
     OpStackTable,
     RamTable,
     JumpStackTable,
@@ -100,20 +93,6 @@ impl BaseTableCollection {
             to_vec_vecs(&base_matrices.instruction_matrix),
         );
 
-        let input_table = IOTable::new_prover(
-            generator,
-            order,
-            num_randomizers,
-            to_vec_vecs(&base_matrices.input_matrix),
-        );
-
-        let output_table = IOTable::new_prover(
-            generator,
-            order,
-            num_randomizers,
-            to_vec_vecs(&base_matrices.input_matrix),
-        );
-
         let op_stack_table = OpStackTable::new_prover(
             generator,
             order,
@@ -153,8 +132,6 @@ impl BaseTableCollection {
             program_table,
             instruction_table,
             processor_table,
-            input_table,
-            output_table,
             op_stack_table,
             ram_table,
             jump_stack_table,
@@ -179,8 +156,6 @@ impl BaseTableCollection {
         self.program_table.pad();
         self.instruction_table.pad();
         self.processor_table.pad();
-        self.input_table.pad();
-        self.output_table.pad();
         self.op_stack_table.pad();
         self.ram_table.pad();
         self.jump_stack_table.pad();
@@ -192,15 +167,13 @@ impl BaseTableCollection {
 impl<'a> IntoIterator for &'a BaseTableCollection {
     type Item = &'a dyn Table<BWord>;
 
-    type IntoIter = std::array::IntoIter<&'a dyn Table<BWord>, 10>;
+    type IntoIter = std::array::IntoIter<&'a dyn Table<BWord>, 8>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             &self.program_table as &'a dyn Table<BWord>,
             &self.instruction_table as &'a dyn Table<BWord>,
             &self.processor_table as &'a dyn Table<BWord>,
-            &self.input_table as &'a dyn Table<BWord>,
-            &self.output_table as &'a dyn Table<BWord>,
             &self.op_stack_table as &'a dyn Table<BWord>,
             &self.ram_table as &'a dyn Table<BWord>,
             &self.jump_stack_table as &'a dyn Table<BWord>,
@@ -239,12 +212,6 @@ impl ExtTableCollection {
             max_padded_height,
         );
 
-        let ext_input_table =
-            ExtIOTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
-
-        let ext_output_table =
-            ExtIOTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
-
         let ext_op_stack_table = ExtOpStackTable::with_padded_height(
             generator,
             order,
@@ -272,8 +239,6 @@ impl ExtTableCollection {
             program_table: ext_program_table,
             instruction_table: ext_instruction_table,
             processor_table: ext_processor_table,
-            input_table: ext_input_table,
-            output_table: ext_output_table,
             op_stack_table: ext_op_stack_table,
             ram_table: ext_ram_table,
             jump_stack_table: ext_jump_stack_table,
@@ -317,16 +282,6 @@ impl ExtTableCollection {
             &all_initials.processor_table_endpoints,
         );
 
-        let (input_table, input_table_terminals) = base_tables.input_table.extend(
-            &all_challenges.input_table_challenges,
-            &all_initials.input_table_endpoints,
-        );
-
-        let (output_table, output_table_terminals) = base_tables.output_table.extend(
-            &all_challenges.output_table_challenges,
-            &all_initials.output_table_endpoints,
-        );
-
         let (op_stack_table, op_stack_table_terminals) = base_tables.op_stack_table.extend(
             &all_challenges.op_stack_table_challenges,
             &all_initials.op_stack_table_endpoints,
@@ -356,8 +311,6 @@ impl ExtTableCollection {
             program_table,
             instruction_table,
             processor_table,
-            input_table,
-            output_table,
             op_stack_table,
             ram_table,
             jump_stack_table,
@@ -368,8 +321,6 @@ impl ExtTableCollection {
         let terminals = AllEndpoints {
             program_table_endpoints: program_table_terminals,
             instruction_table_endpoints: instruction_table_terminals,
-            input_table_endpoints: input_table_terminals,
-            output_table_endpoints: output_table_terminals,
             processor_table_endpoints: processor_table_terminals,
             op_stack_table_endpoints: op_stack_table_terminals,
             ram_table_endpoints: ram_table_terminals,
@@ -385,8 +336,6 @@ impl ExtTableCollection {
         let program_table = self.program_table.ext_codeword_table(fri_domain);
         let instruction_table = self.instruction_table.ext_codeword_table(fri_domain);
         let processor_table = self.processor_table.ext_codeword_table(fri_domain);
-        let input_table = self.input_table.ext_codeword_table(fri_domain);
-        let output_table = self.output_table.ext_codeword_table(fri_domain);
         let op_stack_table = self.op_stack_table.ext_codeword_table(fri_domain);
         let ram_table = self.ram_table.ext_codeword_table(fri_domain);
         let jump_stack_table = self.jump_stack_table.ext_codeword_table(fri_domain);
@@ -397,8 +346,6 @@ impl ExtTableCollection {
             program_table,
             instruction_table,
             processor_table,
-            input_table,
-            output_table,
             op_stack_table,
             ram_table,
             jump_stack_table,
@@ -430,8 +377,6 @@ impl ExtTableCollection {
             ProgramTable => self.program_table.data(),
             InstructionTable => self.instruction_table.data(),
             ProcessorTable => self.processor_table.data(),
-            InputTable => self.input_table.data(),
-            OutputTable => self.output_table.data(),
             OpStackTable => self.op_stack_table.data(),
             RamTable => self.ram_table.data(),
             JumpStackTable => self.jump_stack_table.data(),
@@ -447,8 +392,6 @@ impl ExtTableCollection {
             ProgramTable => self.program_table.interpolant_degree(),
             InstructionTable => self.instruction_table.interpolant_degree(),
             ProcessorTable => self.processor_table.interpolant_degree(),
-            InputTable => self.input_table.interpolant_degree(),
-            OutputTable => self.output_table.interpolant_degree(),
             OpStackTable => self.op_stack_table.interpolant_degree(),
             RamTable => self.ram_table.interpolant_degree(),
             JumpStackTable => self.jump_stack_table.interpolant_degree(),
@@ -499,15 +442,13 @@ impl ExtTableCollection {
 impl<'a> IntoIterator for &'a ExtTableCollection {
     type Item = &'a dyn ExtensionTable;
 
-    type IntoIter = std::array::IntoIter<&'a dyn ExtensionTable, 10>;
+    type IntoIter = std::array::IntoIter<&'a dyn ExtensionTable, 8>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             &self.program_table as &'a dyn ExtensionTable,
             &self.instruction_table as &'a dyn ExtensionTable,
             &self.processor_table as &'a dyn ExtensionTable,
-            &self.input_table as &'a dyn ExtensionTable,
-            &self.output_table as &'a dyn ExtensionTable,
             &self.op_stack_table as &'a dyn ExtensionTable,
             &self.ram_table as &'a dyn ExtensionTable,
             &self.jump_stack_table as &'a dyn ExtensionTable,

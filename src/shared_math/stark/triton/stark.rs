@@ -1065,6 +1065,7 @@ impl Stark {
 mod triton_stark_tests {
     use super::*;
     use crate::shared_math::mpolynomial::MPolynomial;
+    use crate::shared_math::stark::triton::arguments::evaluation_argument;
     use crate::shared_math::stark::triton::instruction::sample_programs;
     use crate::shared_math::stark::triton::stdio::VecStream;
     use crate::shared_math::stark::triton::vm::Program;
@@ -1200,19 +1201,28 @@ mod triton_stark_tests {
             _unpadded_base_tables,
             _base_tables,
             _ext_tables,
-            _all_challenges,
+            all_challenges,
             _all_initials,
             all_terminals,
         ) = parse_simulate_pad_extend(sample_programs::READ_X3_NOP_X2, stdin, stdout);
 
         let ptie = all_terminals.processor_table_endpoints.input_table_eval_sum;
-        let ine = all_terminals.input_table_endpoints.processor_eval_sum;
+        let ine = evaluation_argument::compute_terminal(
+            &stdin.to_bword_vec(),
+            XFieldElement::ring_zero(),
+            all_challenges.input_challenges.processor_eval_row_weight,
+        );
         assert_eq!(ptie, ine, "The input evaluation arguments do not match.");
 
         let ptoe = all_terminals
             .processor_table_endpoints
             .output_table_eval_sum;
-        let oute = all_terminals.output_table_endpoints.processor_eval_sum;
+
+        let oute = evaluation_argument::compute_terminal(
+            &stdout.to_bword_vec(),
+            XFieldElement::ring_zero(),
+            all_challenges.output_challenges.processor_eval_row_weight,
+        );
         assert_eq!(ptoe, oute, "The output evaluation arguments do not match.");
     }
 

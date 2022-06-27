@@ -2,9 +2,9 @@ use itertools::Itertools;
 
 use super::hash_table::{HashTableChallenges, HashTableEndpoints};
 use super::instruction_table::{InstructionTableChallenges, InstructionTableEndpoints};
-use super::io_table::{IOTableChallenges, IOTableEndpoints};
 use super::jump_stack_table::{JumpStackTableChallenges, JumpStackTableEndpoints};
 use super::op_stack_table::{OpStackTableChallenges, OpStackTableEndpoints};
+use super::processor_table::IOChallenges;
 use super::processor_table::{ProcessorTableChallenges, ProcessorTableEndpoints};
 use super::program_table::{ProgramTableChallenges, ProgramTableEndpoints};
 use super::ram_table::{RamTableChallenges, RamTableEndpoints};
@@ -17,8 +17,8 @@ use crate::shared_math::x_field_element::XFieldElement;
 pub struct AllChallenges {
     pub program_table_challenges: ProgramTableChallenges,
     pub instruction_table_challenges: InstructionTableChallenges,
-    pub input_table_challenges: IOTableChallenges,
-    pub output_table_challenges: IOTableChallenges,
+    pub input_challenges: IOChallenges,
+    pub output_challenges: IOChallenges,
     pub processor_table_challenges: ProcessorTableChallenges,
     pub op_stack_table_challenges: OpStackTableChallenges,
     pub ram_table_challenges: RamTableChallenges,
@@ -115,11 +115,11 @@ impl AllChallenges {
             next_instruction_weight: program_table_challenges.next_instruction_weight,
         };
 
-        let input_table_challenges = IOTableChallenges {
+        let input_challenges = IOChallenges {
             processor_eval_row_weight: processor_table_challenges.input_table_eval_row_weight,
         };
 
-        let output_table_challenges = IOTableChallenges {
+        let output_challenges = IOChallenges {
             processor_eval_row_weight: processor_table_challenges.output_table_eval_row_weight,
         };
 
@@ -211,8 +211,8 @@ impl AllChallenges {
         AllChallenges {
             program_table_challenges,
             instruction_table_challenges,
-            input_table_challenges,
-            output_table_challenges,
+            input_challenges,
+            output_challenges,
             processor_table_challenges,
             op_stack_table_challenges,
             ram_table_challenges,
@@ -235,8 +235,6 @@ impl AllChallenges {
 pub struct AllEndpoints {
     pub program_table_endpoints: ProgramTableEndpoints,
     pub instruction_table_endpoints: InstructionTableEndpoints,
-    pub input_table_endpoints: IOTableEndpoints,
-    pub output_table_endpoints: IOTableEndpoints,
     pub processor_table_endpoints: ProcessorTableEndpoints,
     pub op_stack_table_endpoints: OpStackTableEndpoints,
     pub ram_table_endpoints: RamTableEndpoints,
@@ -276,14 +274,6 @@ impl AllEndpoints {
         let instruction_table_initials = InstructionTableEndpoints {
             processor_perm_product: processor_table_initials.instruction_table_perm_product,
             program_eval_sum: program_table_initials.instruction_eval_sum,
-        };
-
-        let input_table_initials = IOTableEndpoints {
-            processor_eval_sum: processor_table_initials.input_table_eval_sum,
-        };
-
-        let output_table_initials = IOTableEndpoints {
-            processor_eval_sum: processor_table_initials.output_table_eval_sum,
         };
 
         let op_stack_table_initials = OpStackTableEndpoints {
@@ -327,8 +317,6 @@ impl AllEndpoints {
         AllEndpoints {
             program_table_endpoints: program_table_initials,
             instruction_table_endpoints: instruction_table_initials,
-            input_table_endpoints: input_table_initials,
-            output_table_endpoints: output_table_initials,
             processor_table_endpoints: processor_table_initials,
             op_stack_table_endpoints: op_stack_table_initials,
             ram_table_endpoints: ram_table_initials,
@@ -353,8 +341,6 @@ impl IntoIterator for AllEndpoints {
             &self.program_table_endpoints.instruction_eval_sum,
             &self.instruction_table_endpoints.processor_perm_product,
             &self.instruction_table_endpoints.program_eval_sum,
-            &self.input_table_endpoints.processor_eval_sum,
-            &self.output_table_endpoints.processor_eval_sum,
             &self
                 .processor_table_endpoints
                 .instruction_table_perm_product,

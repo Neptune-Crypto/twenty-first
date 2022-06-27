@@ -66,7 +66,7 @@ pub struct VMState<'pgm> {
 #[derive(Debug, PartialEq)]
 pub enum VMOutput {
     /// Trace output from `write_io`
-    WriteIoTrace(BWord),
+    WriteOutputSymbol(BWord),
 
     /// Trace of auxiliary registers for hash coprocessor table
     ///
@@ -376,7 +376,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             WriteIo => {
-                vm_output = Some(VMOutput::WriteIoTrace(self.op_stack.pop()?));
+                vm_output = Some(VMOutput::WriteOutputSymbol(self.op_stack.pop()?));
                 self.instruction_pointer += 1;
             }
 

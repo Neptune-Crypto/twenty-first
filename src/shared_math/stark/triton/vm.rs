@@ -140,8 +140,10 @@ impl Program {
             };
             let current_instruction = state.current_instruction().unwrap_or(Instruction::Halt);
 
-            if let Some(VMOutput::WriteIoTrace(written_word)) = &vm_output {
-                let _written = stdout.write_elem(*written_word);
+            if let Some(VMOutput::WriteOutputSymbol(written_word)) = vm_output {
+                stdout
+                    .write_elem(written_word)
+                    .expect("Writing to stdout failed.");
             }
 
             base_matrices.append(&state, vm_output, current_instruction);
@@ -197,8 +199,10 @@ impl Program {
                 Ok((next_state, vm_output)) => (next_state, vm_output),
             };
 
-            if let Some(VMOutput::WriteIoTrace(written_word)) = vm_output {
-                let _written = stdout.write_elem(written_word);
+            if let Some(VMOutput::WriteOutputSymbol(written_word)) = vm_output {
+                stdout
+                    .write_elem(written_word)
+                    .expect("Writing to stdout failed.");
             }
 
             states.push(next_state);
@@ -284,7 +288,7 @@ mod triton_vm_tests {
             println!("{}", ProcessorMatrixRow { row });
         }
 
-        println!("{:?}", base_matrices.output_matrix);
+        println!("Output: {:?}", stdout.to_bword_vec());
 
         // 3. Extract constraints
         // 4. Check constraints
@@ -324,12 +328,11 @@ mod triton_vm_tests {
         let mut stdout = VecStream::new_bwords(&[]);
         let rescue_prime = neptune_params();
 
-        let (base_matrices, err) =
-            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+        let (_, err) = program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
 
         assert!(err.is_none());
         let expected = BWord::new(14);
-        let actual = base_matrices.output_matrix[0][0];
+        let actual = stdout.to_bword_vec()[0];
 
         assert_eq!(expected, actual);
     }
@@ -363,11 +366,7 @@ mod triton_vm_tests {
             .into_iter()
             .rev()
             .map(|x| BWord::new(x));
-            let actuals: Vec<BWord> = base_matrices
-                .output_matrix
-                .iter()
-                .map(|&[val]| val)
-                .collect_vec();
+            let actuals = stdout.to_bword_vec();
 
             assert_eq!(expecteds.len(), actuals.len());
 
@@ -397,7 +396,7 @@ mod triton_vm_tests {
             // Input
             let expected_input_count = 0;
 
-            let actual_input_count = base_matrices.input_matrix.len();
+            let actual_input_count = stdin.to_bword_vec().len();
 
             assert_eq!(expected_input_count, actual_input_count);
 
@@ -405,7 +404,7 @@ mod triton_vm_tests {
             let expected_output_count = 14;
             //let actual = base_matrices.ram_matrix.len();
 
-            let actual_output_count = base_matrices.output_matrix.len();
+            let actual_output_count = stdout.to_bword_vec().len();
 
             assert_eq!(expected_output_count, actual_output_count);
         }
@@ -442,14 +441,16 @@ mod triton_vm_tests {
         assert_eq!(jmp_rows_count, prc_rows_count);
 
         // 3. The number of input_table rows is equivalent to the number of read_io instructions.
-        assert_eq!(0, base_matrices.input_matrix.len());
+        assert_eq!(0, stdin.to_bword_vec().len());
 
         // 4. The number of output_table rows is equivalent to the number of write_io instructions.
-        assert_eq!(0, base_matrices.output_matrix.len());
+        assert_eq!(0, stdout.to_bword_vec().len());
     }
 
     fn _check_base_matrices(
         base_matrices: &BaseMatrices,
+        input_symbols: &[BFieldElement],
+        output_symbols: &[BFieldElement],
         expected_input_rows: usize,
         expected_output_rows: usize,
         hash_instruction_count: usize,
@@ -457,11 +458,7 @@ mod triton_vm_tests {
         // 1. Check `output_matrix`.
         {
             let expecteds = vec![].into_iter().rev().map(|x| BWord::new(x));
-            let actuals: Vec<BWord> = base_matrices
-                .output_matrix
-                .iter()
-                .map(|&[val]| val)
-                .collect_vec();
+            let actuals = output_symbols.to_vec();
 
             assert_eq!(expecteds.len(), actuals.len());
 
@@ -487,11 +484,11 @@ mod triton_vm_tests {
         // noWriteIO"
         {
             // Input
-            let actual_input_rows = base_matrices.input_matrix.len();
+            let actual_input_rows = input_symbols.len();
             assert_eq!(expected_input_rows, actual_input_rows);
 
             // Output
-            let actual_output_rows = base_matrices.output_matrix.len();
+            let actual_output_rows = output_symbols.len();
 
             assert_eq!(expected_output_rows, actual_output_rows);
         }

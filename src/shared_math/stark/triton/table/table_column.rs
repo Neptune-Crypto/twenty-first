@@ -184,58 +184,6 @@ impl Bounded for ExtProcessorTableColumn {
 // --------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy)]
-pub enum IOTableColumn {
-    IOSymbol,
-}
-
-impl From<IOTableColumn> for usize {
-    fn from(c: IOTableColumn) -> Self {
-        use IOTableColumn::*;
-
-        match c {
-            IOSymbol => 0,
-        }
-    }
-}
-
-impl Bounded for IOTableColumn {
-    fn min_value() -> Self {
-        IOTableColumn::IOSymbol
-    }
-
-    fn max_value() -> Self {
-        IOTableColumn::IOSymbol
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ExtIOTableColumn {
-    BaseColumn(IOTableColumn),
-}
-
-impl From<ExtIOTableColumn> for usize {
-    fn from(c: ExtIOTableColumn) -> Self {
-        use ExtIOTableColumn::*;
-
-        match c {
-            BaseColumn(base_column) => base_column.into(),
-        }
-    }
-}
-
-impl Bounded for ExtIOTableColumn {
-    fn min_value() -> Self {
-        ExtIOTableColumn::BaseColumn(IOTableColumn::min_value())
-    }
-
-    fn max_value() -> Self {
-        ExtIOTableColumn::BaseColumn(IOTableColumn::max_value())
-    }
-}
-
-// --------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy)]
 pub enum ProgramTableColumn {
     Address,
     Instruction,
@@ -720,7 +668,7 @@ impl Bounded for ExtU32OpTableColumn {
 #[cfg(test)]
 mod table_column_tests {
     use crate::shared_math::stark::triton::table::{
-        hash_table, instruction_table, io_table, jump_stack_table, op_stack_table, processor_table,
+        hash_table, instruction_table, jump_stack_table, op_stack_table, processor_table,
         program_table, ram_table, u32_op_table,
     };
 
@@ -775,13 +723,6 @@ mod table_column_tests {
                 ProcessorTableColumn::max_value().into(),
                 ExtProcessorTableColumn::max_value().into(),
                 "ProcessorTable",
-            ),
-            TestCase::new(
-                io_table::BASE_WIDTH,
-                io_table::FULL_WIDTH,
-                IOTableColumn::max_value().into(),
-                ExtIOTableColumn::max_value().into(),
-                "IOTable",
             ),
             TestCase::new(
                 op_stack_table::BASE_WIDTH,
