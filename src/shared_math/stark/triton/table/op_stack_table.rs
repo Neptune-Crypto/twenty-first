@@ -66,10 +66,6 @@ impl Table<BWord> for OpStackTable {
             data.push(padding_row);
         }
     }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<BWord>> {
-        vec![]
-    }
 }
 
 impl Table<XFieldElement> for ExtOpStackTable {
@@ -79,10 +75,6 @@ impl Table<XFieldElement> for ExtOpStackTable {
 
     fn pad(&mut self) {
         panic!("Extension tables don't get padded");
-    }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<XWord>> {
-        vec![]
     }
 }
 

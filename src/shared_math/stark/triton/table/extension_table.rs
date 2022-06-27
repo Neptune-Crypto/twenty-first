@@ -30,6 +30,24 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         terminals: &AllEndpoints,
     ) -> Vec<MPolynomial<XWord>>;
 
+    fn max_degree(&self) -> Degree {
+        let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.width() * 2];
+
+        // 1. Insert dummy challenges
+        // 2. Refactor so we can calculate max_degree without specifying challenges
+        //    (and possibly without even calling ext_transition_constraints).
+        self.ext_transition_constraints(&AllChallenges::dummy())
+            .iter()
+            .map(|air| {
+                let symbolic_degree_bound: Degree = air.symbolic_degree_bound(&degree_bounds);
+                let padded_height: Degree = self.padded_height() as Degree;
+
+                symbolic_degree_bound - padded_height + 1
+            })
+            .max()
+            .unwrap_or(-1)
+    }
+
     fn all_quotient_degree_bounds(
         &self,
         challenges: &AllChallenges,

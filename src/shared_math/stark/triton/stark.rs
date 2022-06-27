@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use super::super::triton;
-use super::stdio::VecStream;
 use super::table::base_matrix::BaseMatrices;
-use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other;
@@ -16,7 +14,6 @@ use crate::shared_math::rescue_prime_xlix::{
 use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
 use crate::shared_math::stark::triton::arguments::evaluation_argument::verify_evaluation_argument;
 use crate::shared_math::stark::triton::arguments::permutation_argument::PermArg;
-use crate::shared_math::stark::triton::instruction::sample_programs;
 use crate::shared_math::stark::triton::proof_item::{Item, StarkProofStream};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::stark::triton::table::challenges_endpoints::{AllChallenges, AllEndpoints};
@@ -152,7 +149,7 @@ impl Stark {
             .0
             .unwrap();
         let unpadded_height = base_matrices.processor_matrix.len();
-        let _padded_height = roundup_npo2(unpadded_height as u64);
+        let padded_height = roundup_npo2(unpadded_height as u64) as usize;
 
         // 1. Create base tables based on base matrices
 
@@ -169,7 +166,17 @@ impl Stark {
 
         timer.elapsed("pad");
 
-        let max_degree = base_tables.max_degree();
+        // FIXME: We calculate max_degree on ExtTableCollection because we don't want to
+        // rely on base_transition_constraints(); max_degree() is the only caller that
+        // depends on this function being present. Alternatively, either calculate max_degree
+        // using ext_transition_constraints(), hardcode it, or calculate it some third way.
+        let max_degree: Degree = ExtTableCollection::with_padded_height(
+            smooth_generator.lift(),
+            order,
+            num_randomizers,
+            padded_height,
+        )
+        .max_degree();
 
         // Randomizer bla bla
         let mut rng = rand::thread_rng();
@@ -1056,11 +1063,12 @@ impl Stark {
 
 #[cfg(test)]
 mod triton_stark_tests {
-    use crate::shared_math::mpolynomial::MPolynomial;
-    use crate::shared_math::stark::triton::stdio::VecStream;
-    use crate::shared_math::traits::PrimeField;
-
     use super::*;
+    use crate::shared_math::mpolynomial::MPolynomial;
+    use crate::shared_math::stark::triton::instruction::sample_programs;
+    use crate::shared_math::stark::triton::stdio::VecStream;
+    use crate::shared_math::stark::triton::vm::Program;
+    use crate::shared_math::traits::PrimeField;
 
     fn parse_simulate_prove(
         code: &str,
@@ -1210,7 +1218,7 @@ mod triton_stark_tests {
 
     // 2. simulate(), test constraints
     #[test]
-    fn table_constraints_evaluate_to_zero_test() {
+    fn triton_table_constraints_evaluate_to_zero_test() {
         let mut stdin = VecStream::new_b(&[]);
         let mut stdout = VecStream::new_b(&[]);
         let (
@@ -1221,26 +1229,6 @@ mod triton_stark_tests {
             _all_initials,
             _all_terminals,
         ) = parse_simulate_pad_extend(sample_programs::FIBONACCI_LT, &mut stdin, &mut stdout);
-
-        for base_table in (&unpadded_base_tables).into_iter() {
-            let base_air_constraints = base_table.base_transition_constraints();
-
-            let message = format!(
-                "base_transition_constraints on unpadded {}",
-                &base_table.name()
-            );
-            assert_air_constraints_on_table(base_table.data(), &base_air_constraints, &message);
-        }
-
-        for base_table in (&padded_base_tables).into_iter() {
-            let base_air_constraints = base_table.base_transition_constraints();
-
-            let message = format!(
-                "base_transition_constraints on padded {}",
-                &base_table.name()
-            );
-            assert_air_constraints_on_table(base_table.data(), &base_air_constraints, &message);
-        }
 
         for ext_table in (&ext_tables).into_iter() {
             let ext_transition_constraints = ext_table.ext_transition_constraints(&all_challenges);
@@ -1281,9 +1269,11 @@ mod triton_stark_tests {
     // 3. simulate(), pad(), extend(), test constraints
 
     #[test]
-    fn prove_verify_test() {
+    fn triton_prove_verify_test() {
         let (stark, mut proof_stream) =
             parse_simulate_prove(sample_programs::FIBONACCI_LT, &[], &[]);
+
+        println!("between prove and verify");
 
         let result = stark.verify(&mut proof_stream);
         assert!(result.is_ok());

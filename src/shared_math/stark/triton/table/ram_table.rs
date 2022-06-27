@@ -171,10 +171,6 @@ impl Table<BWord> for RamTable {
             data.push(padding_row);
         }
     }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<BWord>> {
-        vec![]
-    }
 }
 
 impl Table<XFieldElement> for ExtRamTable {
@@ -184,10 +180,6 @@ impl Table<XFieldElement> for ExtRamTable {
 
     fn pad(&mut self) {
         panic!("Extension tables don't get padded");
-    }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<XWord>> {
-        vec![]
     }
 }
 

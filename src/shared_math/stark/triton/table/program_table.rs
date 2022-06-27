@@ -67,10 +67,6 @@ impl Table<BWord> for ProgramTable {
             data.push(padding_row);
         }
     }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<BWord>> {
-        vec![]
-    }
 }
 
 impl Table<XFieldElement> for ExtProgramTable {
@@ -80,10 +76,6 @@ impl Table<XFieldElement> for ExtProgramTable {
 
     fn pad(&mut self) {
         panic!("Extension tables don't get padded");
-    }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<XWord>> {
-        vec![]
     }
 }
 

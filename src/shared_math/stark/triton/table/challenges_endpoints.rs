@@ -221,6 +221,13 @@ impl AllChallenges {
             u32_op_table_challenges,
         }
     }
+
+    pub fn dummy() -> Self {
+        let zero: XFieldElement = XFieldElement::new_const(0.into());
+        let zeros = vec![zero; Self::TOTAL_CHALLENGES];
+
+        Self::create_challenges(&zeros)
+    }
 }
 
 /// An *endpoint* is the collective term for *initials* and *terminals*.

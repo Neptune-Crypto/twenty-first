@@ -1,6 +1,6 @@
 use super::super::fri_domain::FriDomain;
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::mpolynomial::{Degree, MPolynomial};
+use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::{is_power_of_two, roundup_npo2};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{GetRandomElements, PrimeField};
@@ -159,8 +159,6 @@ where
 
     fn pad(&mut self);
 
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<DataPF>>;
-
     // Generic functions common to all tables
 
     fn interpolant_degree(&self) -> Degree {
@@ -178,21 +176,6 @@ where
         } else {
             omega_order / height
         }
-    }
-
-    fn max_degree(&self) -> Degree {
-        let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.width() * 2];
-
-        self.base_transition_constraints()
-            .iter()
-            .map(|air| {
-                let symbolic_degree_bound: Degree = air.symbolic_degree_bound(&degree_bounds);
-                let padded_height: Degree = self.padded_height() as Degree;
-
-                symbolic_degree_bound - padded_height + 1
-            })
-            .max()
-            .unwrap_or(-1)
     }
 
     fn low_degree_extension(&self, fri_domain: &FriDomain<DataPF>) -> Vec<Vec<DataPF>> {

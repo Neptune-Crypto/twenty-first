@@ -64,10 +64,6 @@ impl Table<BWord> for HashTable {
             data.push(vec![BWord::ring_zero(); BASE_WIDTH]);
         }
     }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<BWord>> {
-        vec![]
-    }
 }
 
 impl Table<XFieldElement> for ExtHashTable {
@@ -77,10 +73,6 @@ impl Table<XFieldElement> for ExtHashTable {
 
     fn pad(&mut self) {
         panic!("Extension tables don't get padded");
-    }
-
-    fn base_transition_constraints(&self) -> Vec<MPolynomial<XWord>> {
-        vec![]
     }
 }
 
