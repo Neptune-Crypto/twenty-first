@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use super::super::triton;
+use super::stdio::VecStream;
 use super::table::base_matrix::BaseMatrices;
 use super::vm::Program;
 use crate::shared_math::b_field_element::BFieldElement;
@@ -41,8 +42,7 @@ type StarkDigest = Vec<BFieldElement>;
 
 // We use a type-parameterised FriDomain to avoid duplicate `b_*()` and `x_*()` methods.
 pub struct Stark {
-    _padded_height: usize,
-    _log_expansion_factor: usize,
+    padded_height: usize,
     num_randomizers: usize,
     order: usize,
     generator: XFieldElement,
@@ -50,18 +50,18 @@ pub struct Stark {
     max_degree: Degree,
     bfri_domain: triton::fri_domain::FriDomain<BWord>,
     xfri_domain: triton::fri_domain::FriDomain<XWord>,
-    fri: triton_xfri::Fri<StarkHasher>,
-    input_symbols: Vec<BFieldElement>,
-    output_symbols: Vec<BFieldElement>,
+    xfri: triton_xfri::Fri<StarkHasher>,
+    input_symbols: Vec<BWord>,
+    output_symbols: Vec<BWord>,
 }
 
 impl Stark {
     pub fn new(
-        _padded_height: usize,
+        padded_height: usize,
         log_expansion_factor: usize,
         security_level: usize,
-        input_symbols: Vec<BFieldElement>,
-        output_symbols: Vec<BFieldElement>,
+        input_symbols: &[BWord],
+        output_symbols: &[BWord],
     ) -> Self {
         assert_eq!(
             0,
@@ -82,27 +82,23 @@ impl Stark {
             "expansion factor must be at least 4."
         );
 
+        // TODO: Parameterise these.
         let num_randomizers = 2;
         let order: usize = 1 << 32;
-        let smooth_generator = BFieldElement::ring_zero()
+        let smooth_generator = BWord::ring_zero()
             .get_primitive_root_of_unity(order as u64)
             .0
             .unwrap();
 
-        let code = sample_programs::HELLO_WORLD_1;
-        let program = Program::from_code(code).unwrap();
-
-        let (base_matrices, _err) = program.simulate_with_input(&[], &[]);
-
-        let base_table_collection = BaseTableCollection::from_base_matrices(
-            smooth_generator,
+        let empty_table_collection = ExtTableCollection::with_padded_height(
+            smooth_generator.lift(),
             order,
             num_randomizers,
-            &base_matrices,
+            padded_height,
         );
 
         let max_degree =
-            (other::roundup_npo2(base_table_collection.max_degree() as u64) - 1) as i64;
+            (other::roundup_npo2(empty_table_collection.max_degree() as u64) - 1) as i64;
         let fri_domain_length = ((max_degree as u64 + 1) * expansion_factor) as usize;
 
         let offset = BWord::generator();
@@ -117,13 +113,13 @@ impl Stark {
             length: fri_domain_length as usize,
         };
 
-        let dummy_xfri_domain = triton::fri_domain::FriDomain::<XFieldElement> {
+        let xfri_domain = triton::fri_domain::FriDomain::<XFieldElement> {
             offset: offset.lift(),
             omega: omega.lift(),
             length: fri_domain_length as usize,
         };
 
-        let dummy_xfri = triton_xfri::Fri::new(
+        let xfri = triton_xfri::Fri::new(
             offset.lift(),
             omega.lift(),
             fri_domain_length,
@@ -132,18 +128,17 @@ impl Stark {
         );
 
         Stark {
-            _padded_height,
-            _log_expansion_factor: log_expansion_factor,
+            padded_height,
             num_randomizers,
             order,
             generator: smooth_generator.lift(),
             security_level,
             max_degree,
             bfri_domain,
-            xfri_domain: dummy_xfri_domain,
-            fri: dummy_xfri,
-            input_symbols,
-            output_symbols,
+            xfri_domain,
+            xfri,
+            input_symbols: input_symbols.to_vec(),
+            output_symbols: output_symbols.to_vec(),
         }
     }
 
@@ -183,7 +178,7 @@ impl Stark {
         let randomizer_polynomial = Polynomial::new(randomizer_coefficients);
 
         let x_randomizer_codeword: Vec<XFieldElement> =
-            self.fri.domain.x_evaluate(&randomizer_polynomial);
+            self.xfri.domain.x_evaluate(&randomizer_polynomial);
         let mut b_randomizer_codewords: [Vec<BFieldElement>; 3] = [vec![], vec![], vec![]];
         for x_elem in x_randomizer_codeword.iter() {
             b_randomizer_codewords[0].push(x_elem.coefficients[0]);
@@ -312,7 +307,7 @@ impl Stark {
 
         // Prove equal initial values for the permutation-extension column pairs
         for pa in PermArg::all_permutation_arguments().iter() {
-            quotient_codewords.push(pa.quotient(&ext_codeword_tables, &self.fri.domain));
+            quotient_codewords.push(pa.quotient(&ext_codeword_tables, &self.xfri.domain));
             quotient_degree_bounds.push(pa.quotient_degree_bound(&ext_codeword_tables));
         }
 
@@ -350,7 +345,7 @@ impl Stark {
             .collect();
         weights_counter += 1;
         assert_eq!(base_codewords.len(), num_base_polynomials);
-        let fri_x_values: Vec<BFieldElement> = self.fri.domain.b_domain_values();
+        let fri_x_values: Vec<BFieldElement> = self.xfri.domain.b_domain_values();
 
         timer.elapsed("b_domain_values");
 
@@ -375,7 +370,7 @@ impl Stark {
                 .collect();
 
             if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.x_interpolate(&bc_shifted);
+                let interpolated = self.xfri.domain.x_interpolate(&bc_shifted);
                 assert!(
                     interpolated.degree() == -1 || interpolated.degree() == max_degree as isize,
                     "The shifted base codeword with index {} must be of maximal degree {}. Got {}.",
@@ -415,7 +410,7 @@ impl Stark {
                 .collect();
 
             if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.x_interpolate(&ec_shifted);
+                let interpolated = self.xfri.domain.x_interpolate(&ec_shifted);
                 assert!(
                     interpolated.degree() == -1
                         || interpolated.degree() == max_degree as isize,
@@ -456,7 +451,7 @@ impl Stark {
 
             // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
             if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.fri.domain.x_interpolate(&qc_shifted);
+                let interpolated = self.xfri.domain.x_interpolate(&qc_shifted);
                 assert!(
                     interpolated.degree() == -1
                         || interpolated.degree() == max_degree as isize,
@@ -499,7 +494,7 @@ impl Stark {
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in verifier
         let mut unit_distances: Vec<usize> = ext_tables // XXX:
             .into_iter()
-            .map(|table| table.unit_distance(self.fri.domain.length))
+            .map(|table| table.unit_distance(self.xfri.domain.length))
             .collect();
         unit_distances.push(0);
         unit_distances.sort_unstable();
@@ -510,7 +505,7 @@ impl Stark {
         // Get indices of leafs to prove nonlinear combination
         let indices_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
         let indices: Vec<usize> =
-            hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
+            hasher.sample_indices(self.security_level, &indices_seed, self.xfri.domain.length);
 
         timer.elapsed("sample_indices");
 
@@ -520,7 +515,7 @@ impl Stark {
         // or mathematician should take a look on this part of the code.
         // prove low degree of combination polynomial
         let (_fri_indices, combination_root_verify) = self
-            .fri
+            .xfri
             .prove(&combination_codeword, &mut proof_stream)
             .unwrap();
         timer.elapsed("fri.prove");
@@ -533,7 +528,7 @@ impl Stark {
         let mut revealed_indices: Vec<usize> = vec![];
         for index in indices.iter() {
             for unit_distance in unit_distances.iter() {
-                let idx: usize = (index + unit_distance) % self.fri.domain.length;
+                let idx: usize = (index + unit_distance) % self.xfri.domain.length;
                 revealed_indices.push(idx);
             }
         }
@@ -670,17 +665,17 @@ impl Stark {
 
         let indices_seed: Vec<BFieldElement> = proof_stream.verifier_fiat_shamir();
         let indices =
-            hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
+            hasher.sample_indices(self.security_level, &indices_seed, self.xfri.domain.length);
         timer.elapsed("Got indices");
 
         // Verify low degree of combination polynomial
-        self.fri.verify(proof_stream, &combination_root)?;
+        self.xfri.verify(proof_stream, &combination_root)?;
         timer.elapsed("Verified FRI proof");
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
         let mut unit_distances: Vec<usize> = ext_table_collection
             .into_iter()
-            .map(|table| table.unit_distance(self.fri.domain.length))
+            .map(|table| table.unit_distance(self.xfri.domain.length))
             .collect();
         unit_distances.push(0);
         unit_distances.sort_unstable();
@@ -695,7 +690,7 @@ impl Stark {
         let mut revealed_indices: Vec<usize> = vec![];
         for index in indices.iter() {
             for unit_distance in unit_distances.iter() {
-                let idx: usize = (index + unit_distance) % self.fri.domain.length;
+                let idx: usize = (index + unit_distance) % self.xfri.domain.length;
                 revealed_indices.push(idx);
             }
         }
@@ -841,7 +836,7 @@ impl Stark {
 
         // verify nonlinear combination
         for (i, &index) in indices.iter().enumerate() {
-            let b_domain_value = self.fri.domain.b_domain_value(index as u32);
+            let b_domain_value = self.xfri.domain.b_domain_value(index as u32);
             // collect terms: randomizer
             let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
                 .map(|j| tuples[&index][j])
@@ -919,8 +914,8 @@ impl Stark {
                 }
 
                 // transition
-                let unit_distance = table.unit_distance(self.fri.domain.length);
-                let next_index = (index + unit_distance) % self.fri.domain.length;
+                let unit_distance = table.unit_distance(self.xfri.domain.length);
+                let next_index = (index + unit_distance) % self.xfri.domain.length;
                 let mut next_point = tuples[&next_index]
                     [base_acc_index..base_acc_index + table.base_width()]
                     .to_vec();
@@ -1070,6 +1065,42 @@ mod triton_stark_tests {
     use crate::shared_math::traits::PrimeField;
 
     use super::*;
+
+    fn parse_simulate_prove(
+        code: &str,
+        input_symbols: &[BWord],
+        output_symbols: &[BWord],
+    ) -> (Stark, ProofStream<Item, RescuePrimeXlix<RP_DEFAULT_WIDTH>>) {
+        let program = Program::from_code(code);
+
+        assert!(program.is_ok(), "program parses correctly");
+        let program = program.unwrap();
+
+        let mut _rng = rand::thread_rng();
+        let mut stdin = VecStream::new_b(input_symbols);
+        let mut secret_in = VecStream::new(&[]);
+        let mut stdout = VecStream::new_b(output_symbols);
+        let rescue_prime = neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+        assert!(err.is_none());
+
+        let padded_height =
+            other::roundup_npo2(base_matrices.processor_matrix.len() as u64) as usize;
+        let log_expansion_factor = 2;
+        let security_level = 2;
+        let stark = Stark::new(
+            padded_height,
+            log_expansion_factor,
+            security_level,
+            input_symbols,
+            output_symbols,
+        );
+        let proof_stream = stark.prove(base_matrices);
+
+        (stark, proof_stream)
+    }
 
     fn parse_simulate_pad_extend(
         code: &str,
@@ -1252,4 +1283,14 @@ mod triton_stark_tests {
 
     // 3. simulate(), pad(), test constraints
     // 3. simulate(), pad(), extend(), test constraints
+
+    #[test]
+    fn prove_verify_test() {
+        let (stark, mut proof_stream) =
+            parse_simulate_prove(sample_programs::FIBONACCI_LT, &[], &[]);
+
+        let result = stark.verify(&mut proof_stream);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
 }
