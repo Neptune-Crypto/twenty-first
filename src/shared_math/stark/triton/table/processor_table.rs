@@ -1124,109 +1124,109 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     // Property: All polynomial variables that contain '_next' have the same
-    // variable position / value as the one without '_next', +/- BASE_WIDTH.
+    // variable position / value as the one without '_next', +/- FULL_WIDTH.
     pub fn clk_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + CLK as usize].clone()
+        self.variables[FULL_WIDTH + CLK as usize].clone()
     }
 
     fn ip_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + IP as usize].clone()
+        self.variables[FULL_WIDTH + IP as usize].clone()
     }
 
     fn ci_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + CI as usize].clone()
+        self.variables[FULL_WIDTH + CI as usize].clone()
     }
 
     fn jsp_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + JSP as usize].clone()
+        self.variables[FULL_WIDTH + JSP as usize].clone()
     }
 
     fn jsd_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + JSD as usize].clone()
+        self.variables[FULL_WIDTH + JSD as usize].clone()
     }
 
     fn jso_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + JSO as usize].clone()
+        self.variables[FULL_WIDTH + JSO as usize].clone()
     }
 
     pub fn st0_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST0 as usize].clone()
+        self.variables[FULL_WIDTH + ST0 as usize].clone()
     }
 
     pub fn st1_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST1 as usize].clone()
+        self.variables[FULL_WIDTH + ST1 as usize].clone()
     }
 
     pub fn st2_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST2 as usize].clone()
+        self.variables[FULL_WIDTH + ST2 as usize].clone()
     }
 
     pub fn st3_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST3 as usize].clone()
+        self.variables[FULL_WIDTH + ST3 as usize].clone()
     }
 
     pub fn st4_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST4 as usize].clone()
+        self.variables[FULL_WIDTH + ST4 as usize].clone()
     }
 
     pub fn st5_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST5 as usize].clone()
+        self.variables[FULL_WIDTH + ST5 as usize].clone()
     }
 
     pub fn st6_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST6 as usize].clone()
+        self.variables[FULL_WIDTH + ST6 as usize].clone()
     }
 
     pub fn st7_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST7 as usize].clone()
+        self.variables[FULL_WIDTH + ST7 as usize].clone()
     }
 
     pub fn st8_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST8 as usize].clone()
+        self.variables[FULL_WIDTH + ST8 as usize].clone()
     }
 
     pub fn st9_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST9 as usize].clone()
+        self.variables[FULL_WIDTH + ST9 as usize].clone()
     }
 
     pub fn st10_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST10 as usize].clone()
+        self.variables[FULL_WIDTH + ST10 as usize].clone()
     }
 
     pub fn st11_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST11 as usize].clone()
+        self.variables[FULL_WIDTH + ST11 as usize].clone()
     }
 
     pub fn st12_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST12 as usize].clone()
+        self.variables[FULL_WIDTH + ST12 as usize].clone()
     }
 
     pub fn st13_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST13 as usize].clone()
+        self.variables[FULL_WIDTH + ST13 as usize].clone()
     }
 
     pub fn st14_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST14 as usize].clone()
+        self.variables[FULL_WIDTH + ST14 as usize].clone()
     }
 
     pub fn st15_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + ST15 as usize].clone()
+        self.variables[FULL_WIDTH + ST15 as usize].clone()
     }
 
     pub fn inv_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + INV as usize].clone()
+        self.variables[FULL_WIDTH + INV as usize].clone()
     }
 
     pub fn osp_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + OSP as usize].clone()
+        self.variables[FULL_WIDTH + OSP as usize].clone()
     }
 
     pub fn osv_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + OSV as usize].clone()
+        self.variables[FULL_WIDTH + OSV as usize].clone()
     }
 
     fn ramv_next(&self) -> MPolynomial<XWord> {
-        self.variables[BASE_WIDTH + RAMV as usize].clone()
+        self.variables[FULL_WIDTH + RAMV as usize].clone()
     }
 
     pub fn decompose_arg(&self) -> Vec<MPolynomial<XWord>> {
@@ -1385,43 +1385,43 @@ impl ProcessorConstraintPolynomialFactory {
 }
 
 impl ProcessorConstraintPolynomialFactory {
+    /// A polynomial that has solutions when `ci` is not `instruction`.
+    ///
+    /// This is naively achieved by constructing a polynomial that has
+    /// a solution when `ci` is any other instruction. This deselector
+    /// can be replaced with an efficient one based on `ib` registers.
     pub fn instruction_deselector(&mut self, instruction: Instruction) -> MPolynomial<XWord> {
         if self.deselectors.is_empty() {
-            let instructions_as_mpoly = self.all_instructions_as_mpoly();
-
-            for deselected_instruction in all_instructions().into_iter() {
-                let deselector = all_instructions()
-                    .into_iter()
-                    .filter(|instruction| *instruction != deselected_instruction)
-                    .map(|instruction| instructions_as_mpoly[&instruction].clone())
-                    .fold(self.one(), |a, b| a + b);
-
-                self.deselectors.insert(deselected_instruction, deselector);
-            }
+            self.memoize_deselectors();
         }
 
         self.deselectors[&instruction].clone()
     }
 
-    fn _all_instructions_selector(&self) -> MPolynomial<XWord> {
+    fn memoize_deselectors(&mut self) {
+        let all_instructions = all_instructions();
+        let instruction_selectors = self.all_instruction_selectors();
+
+        for deselected_instruction in all_instructions.iter() {
+            let deselector = all_instructions
+                .iter()
+                .filter(|instruction| *instruction != deselected_instruction)
+                .map(|instruction| instruction_selectors[instruction].clone())
+                .fold(self.one(), |a, b| a * b);
+
+            self.deselectors.insert(*deselected_instruction, deselector);
+        }
+    }
+
+    /// A polynomial that has solutions when ci is 'instruction'
+    fn instruction_selector(&self, instruction: &Instruction) -> MPolynomial<XWord> {
+        self.ci() - self.constant(instruction.opcode())
+    }
+
+    fn all_instruction_selectors(&self) -> HashMap<Instruction, MPolynomial<XWord>> {
         all_instructions()
             .into_iter()
-            .map(|instruction| self._instruction_selector(instruction))
-            .fold(self.one(), |a, b| a + b)
-    }
-
-    fn _instruction_selector(&self, instruction: Instruction) -> MPolynomial<XWord> {
-        self.ci() - self.instruction_as_mpoly(instruction)
-    }
-
-    fn instruction_as_mpoly(&self, instruction: Instruction) -> MPolynomial<XWord> {
-        self.constant(instruction.opcode())
-    }
-
-    fn all_instructions_as_mpoly(&self) -> HashMap<Instruction, MPolynomial<XWord>> {
-        all_instructions()
-            .into_iter()
-            .map(|instruction| (instruction, self.instruction_as_mpoly(instruction)))
+            .map(|instruction| (instruction, self.instruction_selector(&instruction)))
             .collect()
     }
 }
