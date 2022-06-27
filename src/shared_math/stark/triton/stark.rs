@@ -614,15 +614,11 @@ impl Stark {
         let all_terminals = proof_stream.dequeue()?.as_terminals()?;
         timer.elapsed("Read from proof stream");
 
-        let max_padded_height = proof_stream
-            .dequeue()?
-            .as_max_padded_table_height()?
-            .value() as usize;
         let ext_table_collection = ExtTableCollection::with_padded_height(
             self.generator,
             self.order,
             self.num_randomizers,
-            max_padded_height,
+            self.padded_height,
         );
 
         let base_degree_bounds: Vec<Degree> = ext_table_collection.get_all_base_degree_bounds();

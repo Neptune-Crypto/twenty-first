@@ -26,7 +26,6 @@ pub enum Item {
     RevealedCombinationElements(Vec<XFieldElement>),
     FriCodeword(Vec<XFieldElement>),
     FriProof(FriProof),
-    MaxPaddedTableHeight(BFieldElement),
 }
 
 impl Item {
@@ -153,15 +152,6 @@ impl Item {
             )),
         }
     }
-
-    pub fn as_max_padded_table_height(&self) -> Result<BFieldElement, Box<dyn std::error::Error>> {
-        match self {
-            Self::MaxPaddedTableHeight(max_padded_height) => Ok(max_padded_height.to_owned()),
-            _ => Err(ProofStreamError::boxed(
-                "expected MaxPaddedTableHeight proof, but got something else",
-            )),
-        }
-    }
 }
 
 impl IntoIterator for Item {
@@ -208,7 +198,6 @@ impl IntoIterator for Item {
                 .map(|xs| xs_to_bs(&xs).collect::<Vec<_>>())
                 .concat()
                 .into_iter(),
-            Item::MaxPaddedTableHeight(max_padded_height) => vec![max_padded_height].into_iter(),
         }
     }
 }
