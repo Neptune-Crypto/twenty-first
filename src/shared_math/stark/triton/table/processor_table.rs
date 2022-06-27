@@ -1405,8 +1405,8 @@ impl ProcessorConstraintPolynomialFactory {
         for deselected_instruction in all_instructions.iter() {
             let deselector = all_instructions
                 .iter()
-                .filter(|instruction| *instruction != deselected_instruction)
-                .map(|instruction| instruction_selectors[instruction].clone())
+                .filter(|instr| *instr != deselected_instruction)
+                .map(|instr| instruction_selectors[instr].clone())
                 .fold(self.one(), |a, b| a * b);
 
             self.deselectors.insert(*deselected_instruction, deselector);
