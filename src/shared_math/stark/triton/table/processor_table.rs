@@ -993,15 +993,10 @@ impl ProcessorConstraintPolynomialFactory {
         todo!()
     }
 
-    // 2. Create stubs for all instruction group polynomials
-    // 3. Find out where to combine deselectors, instruction polynomials and instruction group polynomials
-
-    // FIXME: Consider caching this on first run (caching computed getter)
     pub fn one(&self) -> MPolynomial<BWord> {
         MPolynomial::from_constant(1.into(), 2 * BASE_WIDTH)
     }
 
-    // FIXME: Consider caching this on first run (caching computed getter)
     pub fn two(&self) -> MPolynomial<BWord> {
         MPolynomial::from_constant(2.into(), 2 * BASE_WIDTH)
     }
