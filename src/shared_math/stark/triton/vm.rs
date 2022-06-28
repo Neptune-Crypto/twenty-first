@@ -141,9 +141,9 @@ impl Program {
             let current_instruction = state.current_instruction().unwrap_or(Instruction::Halt);
 
             if let Some(VMOutput::WriteOutputSymbol(written_word)) = vm_output {
-                stdout
-                    .write_elem(written_word)
-                    .expect("Writing to stdout failed.");
+                if let Err(error) = stdout.write_elem(written_word) {
+                    return (base_matrices, Some(Box::new(error)));
+                }
             }
 
             base_matrices.append(&state, vm_output, current_instruction);
@@ -200,9 +200,9 @@ impl Program {
             };
 
             if let Some(VMOutput::WriteOutputSymbol(written_word)) = vm_output {
-                stdout
-                    .write_elem(written_word)
-                    .expect("Writing to stdout failed.");
+                if let Err(error) = stdout.write_elem(written_word) {
+                    return (states, Some(Box::new(error)));
+                }
             }
 
             states.push(next_state);
