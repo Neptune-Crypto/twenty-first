@@ -103,10 +103,6 @@ impl BaseMatrices {
     }
 }
 
-pub struct ProcessorMatrix {
-    pub row: [BFieldElement; processor_table::BASE_WIDTH],
-}
-
 pub struct ProcessorMatrixRow {
     pub row: [BFieldElement; processor_table::BASE_WIDTH],
 }
