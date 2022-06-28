@@ -31,7 +31,7 @@ impl OpStack {
         self.stack.push(elem);
     }
 
-    pub fn pushx(&mut self, elem: XWord) {
+    pub fn push_x(&mut self, elem: XWord) {
         self.push(elem.coefficients[2]);
         self.push(elem.coefficients[1]);
         self.push(elem.coefficients[0]);
@@ -41,8 +41,16 @@ impl OpStack {
         self.stack.pop().ok_or_else(|| vm_fail(OpStackTooShallow))
     }
 
-    pub fn popx(&mut self) -> Result<XWord, Box<dyn Error>> {
+    pub fn pop_x(&mut self) -> Result<XWord, Box<dyn Error>> {
         Ok(XWord::new([self.pop()?, self.pop()?, self.pop()?]))
+    }
+
+    pub fn safe_peek_x(&mut self) -> XWord {
+        XWord::new([
+            self.safe_peek(ST0),
+            self.safe_peek(ST1),
+            self.safe_peek(ST2),
+        ])
     }
 
     pub fn safe_peek(&self, arg: Ord16) -> BWord {

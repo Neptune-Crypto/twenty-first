@@ -349,29 +349,29 @@ impl<'pgm> VMState<'pgm> {
             }
 
             XxAdd => {
-                let lhs: XWord = self.op_stack.popx()?;
-                let rhs: XWord = self.op_stack.popx()?;
-                self.op_stack.pushx(lhs + rhs);
+                let lhs: XWord = self.op_stack.pop_x()?;
+                let rhs: XWord = self.op_stack.safe_peek_x();
+                self.op_stack.push_x(lhs + rhs);
                 self.instruction_pointer += 1;
             }
 
             XxMul => {
-                let lhs: XWord = self.op_stack.popx()?;
-                let rhs: XWord = self.op_stack.popx()?;
-                self.op_stack.pushx(lhs + rhs);
+                let lhs: XWord = self.op_stack.pop_x()?;
+                let rhs: XWord = self.op_stack.safe_peek_x();
+                self.op_stack.push_x(lhs * rhs);
                 self.instruction_pointer += 1;
             }
 
             XInvert => {
-                let elem: XWord = self.op_stack.popx()?;
-                self.op_stack.pushx(elem.inverse());
+                let elem: XWord = self.op_stack.pop_x()?;
+                self.op_stack.push_x(elem.inverse());
                 self.instruction_pointer += 1;
             }
 
             XbMul => {
-                let lhs: XWord = self.op_stack.popx()?;
-                let rhs: BWord = self.op_stack.pop()?;
-                self.op_stack.pushx(lhs * rhs.lift());
+                let lhs: BWord = self.op_stack.pop()?;
+                let rhs: XWord = self.op_stack.pop_x()?;
+                self.op_stack.push_x(lhs.lift() * rhs);
                 self.instruction_pointer += 1;
             }
 
