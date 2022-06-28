@@ -526,16 +526,165 @@ impl ExtensionTable for ExtProcessorTable {
     }
 
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        let factory = ProcessorConstraintPolynomialFactory::default();
+
+        // The cycle counter `clk` is 0.
+        // $clk = 0  ⇒  clk - 0 = 0  ⇒  clk - 0  ⇒  clk$
+        let clk_is_0 = factory.clk();
+
+        // The instruction pointer `ip` is 0.
+        // $ip = 0  ⇒  ip - 0 = 0  ⇒  ip - 0  ⇒  ip$
+        let ip_is_0 = factory.ip();
+
+        // The jump address stack pointer `jsp` is 0.
+        // $jsp = 0  ⇒  jsp - 0 == 0  ⇒  jsp - 0  ⇒  jsp$
+        let jsp_is_0 = factory.jsp();
+
+        // The jump address origin `jso` is 0.
+        // $jso = 0  ⇒  jso - 0 = 0  ⇒  jso - 0  ⇒  jso$
+        let jso_is_0 = factory.jso();
+
+        // The jump address destination `jsd` is 0.
+        // $jsd = 0  ⇒  jsd - 0 = 0  ⇒  jsd - 0  ⇒  jsd$
+        let jsd_is_0 = factory.jsd();
+
+        // The operational stack element `st0` is 0.
+        // $st0 = 0  ⇒  st0 - 0 = 0  ⇒  st0 - 0  ⇒  st0$
+        let st0_is_0 = factory.st0();
+
+        // The operational stack element `st1` is 0.
+        // $st1 = 0  ⇒  st1 - 0 = 0  ⇒  st1 - 0  ⇒  st1$
+        let st1_is_0 = factory.st1();
+
+        // The operational stack element `st2` is 0.
+        // $st2 = 0  ⇒  st2 - 0 = 0  ⇒  st2 - 0  ⇒  st2$
+        let st2_is_0 = factory.st2();
+
+        // The operational stack element `st3` is 0.
+        // $st3 = 0  ⇒  st3 - 0 = 0  ⇒  st3 - 0  ⇒  st3$
+        let st3_is_0 = factory.st3();
+
+        // The operational stack element `st4` is 0.
+        // $st4 = 0  ⇒  st4 - 0 = 0  ⇒  st4 - 0  ⇒  st4$
+        let st4_is_0 = factory.st4();
+
+        // The operational stack element `st5` is 0.
+        // $st5 = 0  ⇒  st5 - 0 = 0  ⇒  st5 - 0  ⇒  st5$
+        let st5_is_0 = factory.st5();
+
+        // The operational stack element `st6` is 0.
+        // $st6 = 0  ⇒  st6 - 0 = 0  ⇒  st6 - 0  ⇒  st6$
+        let st6_is_0 = factory.st6();
+
+        // The operational stack element `st7` is 0.
+        // $st7 = 0  ⇒  st7 - 0 = 0  ⇒  st7 - 0  ⇒  st7$
+        let st7_is_0 = factory.st7();
+
+        // The operational stack element `st8` is 0.
+        // $st8 = 0  ⇒  st8 - 0 = 0  ⇒  st8 - 0  ⇒  st8$
+        let st8_is_0 = factory.st8();
+
+        // The operational stack element `st9` is 0.
+        // $st9 = 0  ⇒  st9 - 0 = 0  ⇒  st9 - 0  ⇒  st9$
+        let st9_is_0 = factory.st9();
+
+        // The operational stack element `st10` is 0.
+        // $st10 = 0  ⇒  st10 - 0 = 0  ⇒  st10 - 0  ⇒  st10$
+        let st10_is_0 = factory.st10();
+
+        // The operational stack element `st11` is 0.
+        // $st11 = 0  ⇒  st11 - 0 = 0  ⇒  st11 - 0  ⇒  st11$
+        let st11_is_0 = factory.st11();
+
+        // The operational stack element `st12` is 0.
+        // $st12 = 0  ⇒  st12 - 0 = 0  ⇒  st12 - 0  ⇒  st12$
+        let st12_is_0 = factory.st12();
+
+        // The operational stack element `st13` is 0.
+        // $st13 = 0  ⇒  st13 - 0 = 0  ⇒  st13 - 0  ⇒  st13$
+        let st13_is_0 = factory.st13();
+
+        // The operational stack element `st14` is 0.
+        // $st14 = 0  ⇒  st14 - 0 = 0  ⇒  st14 - 0  ⇒  st14$
+        let st14_is_0 = factory.st14();
+
+        // The operational stack element `st15` is 0.
+        // $st15 = 0  ⇒  st15 - 0 = 0  ⇒  st15 - 0  ⇒  st15$
+        let st15_is_0 = factory.st15();
+
+        // The operational stack pointer `osp` is 16.
+        // $osp = 16  ⇒  osp - 16 == 0  ⇒  osp - 16$
+        let osp_is_16 = factory.osp() - factory.constant(16);
+
+        // The operational stack value `osv` is 0.
+        // $osv = 0  ⇒  osv - 0 = 0  ⇒  osv - 0  ⇒  osv$
+        let osv_is_0 = factory.osv();
+
+        // The RAM value ramv is 0.
+        // $ramv = 0  ⇒  ramv - 0 == 0  ⇒  osp - 16$
+        let ramv_is_0 = factory.osp();
+
+        // TODO: In the last row, current instruction register ci is 0, corresponding to instruction halt.
+
+        vec![
+            clk_is_0, ip_is_0, jsp_is_0, jso_is_0, jsd_is_0, st0_is_0, st1_is_0, st2_is_0,
+            st3_is_0, st4_is_0, st5_is_0, st6_is_0, st7_is_0, st8_is_0, st9_is_0, st10_is_0,
+            st11_is_0, st12_is_0, st13_is_0, st14_is_0, st15_is_0, osp_is_16, osv_is_0, ramv_is_0,
+        ]
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        let factory = ProcessorConstraintPolynomialFactory::default();
+
+        vec![
+            factory.ci_corresponds_to_ib0_thru_ib5(),
+            factory.st0_is_0_or_inverse_of_inv(),
+            factory.inv_is_0_or_inverse_of_inv(),
+        ]
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         let factory = ProcessorConstraintPolynomialFactory::default();
-        vec![factory.clk_always_increases_by_one()]
+
+        // FIXME: `.instruction_pop()` does not include the deselector yet.
+
+        vec![
+            vec![factory.clk_always_increases_by_one()],
+            factory.instruction_pop(),
+            factory.instruction_push(),
+            factory.instruction_divine(),
+            factory.instruction_dup(),
+            factory.instruction_swap(),
+            factory.instruction_nop(),
+            factory.instruction_skiz(),
+            factory.instruction_call(),
+            factory.instruction_return(),
+            factory.instruction_recurse(),
+            factory.instruction_assert(),
+            factory.instruction_halt(),
+            factory.instruction_read_mem(),
+            factory.instruction_write_mem(),
+            factory.instruction_hash(),
+            factory.instruction_divine_sibling(),
+            factory.instruction_assert_vector(),
+            factory.instruction_add(),
+            factory.instruction_mul(),
+            factory.instruction_invert(),
+            factory.instruction_split(),
+            factory.instruction_eq(),
+            factory.instruction_lt(),
+            factory.instruction_and(),
+            factory.instruction_xor(),
+            factory.instruction_reverse(),
+            factory.instruction_div(),
+            factory.instruction_xxadd(),
+            factory.instruction_xxmul(),
+            factory.instruction_xinv(),
+            factory.instruction_xbmul(),
+            factory.instruction_read_io(),
+            factory.instruction_write_io(),
+        ]
+        .concat()
     }
 
     fn ext_terminal_constraints(
@@ -590,6 +739,31 @@ impl ProcessorConstraintPolynomialFactory {
         clk_next - clk - one
     }
 
+    /// The composition of instruction buckets ib0-ib5 corresponds the current instruction ci.
+    // $ci - (2^5·ib5 + 2^4·ib4 + 2^3·ib3 + 2^2·ib2 + 2^1·ib1 + 2^0·ib0) = 0$
+    pub fn ci_corresponds_to_ib0_thru_ib5(&self) -> MPolynomial<XWord> {
+        let mut ib_composition = self.one() * self.ib0();
+        ib_composition += self.constant(2) * self.ib1();
+        ib_composition += self.constant(4) * self.ib2();
+        ib_composition += self.constant(8) * self.ib3();
+        ib_composition += self.constant(16) * self.ib4();
+        ib_composition += self.constant(32) * self.ib5();
+
+        self.ci() - ib_composition
+    }
+
+    /// Register st0 is 0 or inv is the inverse of st0.
+    /// $st0·(st0·inv - 1)$
+    pub fn st0_is_0_or_inverse_of_inv(&self) -> MPolynomial<XWord> {
+        self.st0() * (self.st0() * self.inv() - self.one())
+    }
+
+    /// Register inv is 0 or inv is the inverse of st0.
+    /// $inv·(st0·inv - 1)$
+    pub fn inv_is_0_or_inverse_of_inv(&self) -> MPolynomial<XWord> {
+        self.inv() * (self.st0() * self.inv() - self.one())
+    }
+
     pub fn indicator_polynomial(&self, i: usize) -> MPolynomial<XWord> {
         let hv0 = self.hv0();
         let hv1 = self.hv1();
@@ -625,12 +799,12 @@ impl ProcessorConstraintPolynomialFactory {
         vec![]
     }
 
+    /// push'es argument should be on the stack after execution
+    /// $st0_next == nia  =>  st0_next - nia == 0$
     pub fn instruction_push(&self) -> Vec<MPolynomial<XWord>> {
         let st0_next = self.st0_next();
         let nia = self.nia();
 
-        // push'es argument should be on the stack after execution
-        // st0_next == nia  =>  st0_next - nia == 0
         vec![st0_next - nia]
     }
 
@@ -747,7 +921,6 @@ impl ProcessorConstraintPolynomialFactory {
         ]
     }
 
-    // 1. Create stubs for all instruction polynomials
     pub fn instruction_call(&self) -> Vec<MPolynomial<XWord>> {
         // The jump stack pointer jsp is incremented by 1.
         let jsp_incr_1 = self.jsp_next() - (self.jsp() + self.one());
@@ -828,9 +1001,9 @@ impl ProcessorConstraintPolynomialFactory {
         vec![ramv_becomes_st0]
     }
 
+    /// Two Evaluation Arguments with the Hash Table guarantee correct transition.
     pub fn instruction_hash(&self) -> Vec<MPolynomial<XWord>> {
-        // This instruction has no additional transition constraints.
-        // Two Evaluation Arguments with the Hash Table guarantee correct transition.
+        // no further constraints
         vec![]
     }
 
@@ -922,55 +1095,482 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     pub fn instruction_assert_vector(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        vec![
+            // Register st0 is equal to st6.
+            // $st6 - st0 = 0$
+            self.st6() - self.st0(),
+            // Register st1 is equal to st7.
+            // $st7 - st1 = 0$
+            self.st6() - self.st0(),
+            // Register st2 is equal to st8.
+            // $st8 - st2 = 0$
+            self.st6() - self.st0(),
+            // Register st3 is equal to st9.
+            // $st9 - st3 = 0$
+            self.st6() - self.st0(),
+            // Register st4 is equal to st10.
+            // $st10 - st4 = 0$
+            self.st6() - self.st0(),
+            // Register st5 is equal to st11.
+            // $st11 - st5 = 0$
+            self.st6() - self.st0(),
+        ]
     }
 
+    /// The sum of the top two stack elements is moved into the top of the stack.
+    ///
+    /// $st0' - (st0 + st1) = 0$
     pub fn instruction_add(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        vec![self.st0_next() - (self.st0() + self.st1())]
     }
 
+    /// The product of the top two stack elements is moved into the top of the stack.
+    ///
+    /// $st0' - (st0 * st1) = 0$
     pub fn instruction_mul(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        vec![self.st0_next() - (self.st0() * self.st1())]
     }
 
+    /// The top of the stack's inverse is moved into the top of the stack.
+    ///
+    /// $st0'·st0 - 1 = 0$
     pub fn instruction_invert(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        vec![self.st0_next() * self.st0() - self.one()]
     }
 
     pub fn instruction_split(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        let two_pow_32 = self.constant_b(BWord::new(2u64.pow(32)));
+
+        // The top of the stack is decomposed as 32-bit chunks into the stack's top-most two elements.
+        //
+        // $st0 - (2^32·st0' + st1') = 0$
+        let st0_decomposes_to_two_32_bit_chunks =
+            self.st0() - (two_pow_32.clone() * self.st0_next() + self.st1_next());
+
+        // Helper variable `hv0` = 0 either if `hv0` is the difference between
+        // (2^32 - 1) and the high 32 bits in `st0'`, or if the low 32 bits in
+        // `st1'` are 0.
+        //
+        // $st1'·(hv0·(st0' - (2^32 - 1)) - 1) = 0$
+        let hv0_holds_inverse_of_chunk_difference_or_low_bits_are_0 = {
+            let diff = self.st0_next() - (two_pow_32 - self.one());
+
+            self.st1_next() * (self.hv0() * diff - self.one())
+        };
+
+        // Stack register st1 is moved into st2
+        //
+        // $st2' - st1 = 0$
+        let st2_becomes_st1 = self.st2_next() - self.st1();
+
+        // Stack register st2 is moved into st3
+        //
+        // $st3' - st2 = 0$
+        let st3_becomes_st2 = self.st3_next() - self.st2();
+
+        // Stack register st3 is moved into st4
+        //
+        // $st4' - st3 = 0$
+        let st4_becomes_st3 = self.st4_next() - self.st3();
+
+        // Stack register st4 is moved into st5
+        //
+        // $st5' - st4 = 0$
+        let st5_becomes_st4 = self.st5_next() - self.st4();
+
+        // Stack register st5 is moved into st6
+        //
+        // $st6' - st5 = 0$
+        let st6_becomes_st5 = self.st6_next() - self.st5();
+
+        // Stack register st6 is moved into st7
+        //
+        // $st7' - st6 = 0$
+        let st7_becomes_st6 = self.st7_next() - self.st6();
+
+        // Stack register st7 is moved into osv
+        //
+        // $osv' - st7 = 0$
+        let osv_becomes_st7 = self.osv_next() - self.st7();
+
+        // The stack pointer increases by 1.
+        //
+        // $osp' - (osp + 1) = 0$
+        let osp_is_incremented = self.osp_next() - (self.osp() + self.one());
+
+        vec![
+            st0_decomposes_to_two_32_bit_chunks,
+            hv0_holds_inverse_of_chunk_difference_or_low_bits_are_0,
+            st2_becomes_st1,
+            st3_becomes_st2,
+            st4_becomes_st3,
+            st5_becomes_st4,
+            st6_becomes_st5,
+            st7_becomes_st6,
+            osv_becomes_st7,
+            osp_is_incremented,
+        ]
     }
 
     pub fn instruction_eq(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        // Helper variable hv0 is the inverse of the difference of the stack's two top-most elements or 0.
+        //
+        // hv0·(hv0·(st1 - st0) - 1)
+        let hv0_is_inverse_of_diff_or_0 =
+            self.hv0() * (self.hv0() * (self.st1() - self.st0()) - self.one());
+
+        // Helper variable hv0 is the inverse of the difference of the stack's two top-most elements or the difference is 0.
+        //
+        // (st1 - st0)·(hv0·(st1 - st0) - 1)
+        let hv0_is_inverse_of_diff_or_diff_is_0 =
+            (self.st1() - self.st0()) * (self.hv0() * (self.st1() - self.st0()) - self.one());
+
+        // The new top of the stack is 1 if the difference between the stack's two top-most elements is not invertible, 0 otherwise.
+        //
+        // st0' - (hv0·(st1 - st0) - 1)
+        let st0_becomes_1_if_diff_is_not_invertible =
+            self.st0_next() - (self.hv0() * (self.st1() - self.st0()) - self.one());
+
+        vec![
+            hv0_is_inverse_of_diff_or_0,
+            hv0_is_inverse_of_diff_or_diff_is_0,
+            st0_becomes_1_if_diff_is_not_invertible,
+        ]
     }
 
+    /// This instruction has no additional transition constraints.
+    ///
+    /// A Permutation Argument with the Uint32 Operations Table guarantees correct transition.
     pub fn instruction_lt(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        // no further constraints
+        vec![]
     }
 
+    /// This instruction has no additional transition constraints.
+    ///
+    /// A Permutation Argument with the Uint32 Operations Table guarantees correct transition.
     pub fn instruction_and(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        // no further constraints
+        vec![]
     }
 
+    /// This instruction has no additional transition constraints.
+    ///
+    /// A Permutation Argument with the Uint32 Operations Table guarantees correct transition.
     pub fn instruction_xor(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        // no further constraints
+        vec![]
     }
 
+    /// This instruction has no additional transition constraints.
+    ///
+    /// A Permutation Argument with the Uint32 Operations Table guarantees correct transition.
     pub fn instruction_reverse(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        // no further constraints
+        vec![]
     }
 
+    /// For correct division, it is required that the remainder r is smaller than the divisor d.
+    ///
+    /// The result of comparing r to d is stored in helper variable hv0.
+    ///
+    /// A Permutation Argument with the Uint32 Operations Table guarantees that hv0 = (r < d).
     pub fn instruction_div(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        // Denominator d is not zero.
+        //
+        // $st0·inv - 1 = 0$
+        let denominator_is_not_zero = self.st0() * self.inv() - self.one();
+
+        // Result of division, i.e., quotient q and remainder r, are moved into
+        // st1 and st0 respectively, and match with numerator n and denominator d.
+        //
+        // $st1 - st0·st1' - st0' = 0$
+        let st1_becomes_quotient_and_st0_becomes_remainder =
+            self.st1() - self.st0() * self.st1_next() - self.st0_next();
+
+        // The stack element in st2 does not change.
+        //
+        // $st2' - st2 = 0$
+        let st2_does_not_change = self.st2_next() - self.st2();
+
+        // The stack element in st3 does not change.
+        //
+        // $st3' - st3 = 0$
+        let st3_does_not_change = self.st3_next() - self.st3();
+
+        // The stack element in st4 does not change.
+        //
+        // $st4' - st4 = 0$
+        let st4_does_not_change = self.st4_next() - self.st4();
+
+        // The stack element in st5 does not change.
+        //
+        // $st5' - st5 = 0$
+        let st5_does_not_change = self.st5_next() - self.st5();
+
+        // The stack element in st6 does not change.
+        //
+        // $st6' - st6 = 0$
+        let st6_does_not_change = self.st6_next() - self.st6();
+
+        // The stack element in st7 does not change.
+        //
+        // $st7' - st7 = 0$
+        let st7_does_not_change = self.st7_next() - self.st7();
+
+        // The stack element in st8 does not change.
+        //
+        // $st8' - st8 = 0$
+        let st8_does_not_change = self.st8_next() - self.st8();
+
+        // The stack element in st9 does not change.
+        //
+        // $st9' - st9 = 0$
+        let st9_does_not_change = self.st9_next() - self.st9();
+
+        // The stack element in st10 does not change.
+        //
+        // $st10' - st10 = 0$
+        let st10_does_not_change = self.st10_next() - self.st10();
+
+        // The stack element in st11 does not change.
+        //
+        // $st11' - st11 = 0$
+        let st11_does_not_change = self.st11_next() - self.st11();
+
+        // The stack element in st12 does not change.
+        //
+        // $st12' - st12 = 0$
+        let st12_does_not_change = self.st12_next() - self.st12();
+
+        // The stack element in st13 does not change.
+        //
+        // $st13' - st13 = 0$
+        let st13_does_not_change = self.st13_next() - self.st13();
+
+        // The stack element in st14 does not change.
+        //
+        // $st14' - st14 = 0$
+        let st14_does_not_change = self.st14_next() - self.st14();
+
+        // The stack element in st15 does not change.
+        //
+        // $st15' - st15 = 0$
+        let st15_does_not_change = self.st15_next() - self.st15();
+
+        // The top of the OpStack underflow, i.e., osv, does not change.
+        //
+        // $osv' - osv = 0$
+        let osv_does_not_change = self.osv_next() - self.osv();
+
+        // The OpStack pointer does not change.
+        //
+        // $osp' - osp = 0$
+        let osp_does_not_change = self.osp_next() - self.osp();
+
+        // Helper variable hv0 is 1, indicating that r < d.
+        //
+        // $hv0 - 1 = 0$
+        let hv0_is_1 = self.hv0() - self.one();
+
+        vec![
+            denominator_is_not_zero,
+            st1_becomes_quotient_and_st0_becomes_remainder,
+            st2_does_not_change,
+            st3_does_not_change,
+            st4_does_not_change,
+            st5_does_not_change,
+            st6_does_not_change,
+            st7_does_not_change,
+            st8_does_not_change,
+            st9_does_not_change,
+            st10_does_not_change,
+            st11_does_not_change,
+            st12_does_not_change,
+            st13_does_not_change,
+            st14_does_not_change,
+            st15_does_not_change,
+            osv_does_not_change,
+            osp_does_not_change,
+            hv0_is_1,
+        ]
     }
 
     pub fn instruction_xxadd(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        // The result of adding st0 to st3 is moved into st0.
+        //
+        // $st0' - (st0 + st3)$
+        let st0_becomes_st0_plus_st3 = self.st0_next() - (self.st0() - self.st3());
+
+        // The result of adding st1 to st4 is moved into st1.
+        //
+        // $st1' - (st1 + st4)$
+        let st1_becomes_st1_plus_st4 = self.st1_next() - (self.st1() - self.st4());
+
+        // The result of adding st2 to st5 is moved into st2.
+        //
+        // $st2' - (st2 + st5)$
+        let st2_becomes_st2_plus_st5 = self.st2_next() - (self.st2() - self.st5());
+
+        // The stack element in st3 does not change.
+        //
+        // $st3' - st3 = 0$
+        let st3_does_not_change = self.st3_next() - self.st3();
+
+        // The stack element in st4 does not change.
+        //
+        // $st4' - st4 = 0$
+        let st4_does_not_change = self.st4_next() - self.st4();
+
+        // The stack element in st5 does not change.
+        //
+        // $st5' - st5 = 0$
+        let st5_does_not_change = self.st5_next() - self.st5();
+
+        // The stack element in st6 does not change.
+        //
+        // $st6' - st6 = 0$
+        let st6_does_not_change = self.st6_next() - self.st6();
+
+        // The stack element in st7 does not change.
+        //
+        // $st7' - st7 = 0$
+        let st7_does_not_change = self.st7_next() - self.st7();
+
+        // The stack element in st8 does not change.
+        //
+        // $st8' - st8 = 0$
+        let st8_does_not_change = self.st8_next() - self.st8();
+
+        // The stack element in st9 does not change.
+        //
+        // $st9' - st9 = 0$
+        let st9_does_not_change = self.st9_next() - self.st9();
+
+        // The stack element in st10 does not change.
+        //
+        // $st10' - st10 = 0$
+        let st10_does_not_change = self.st10_next() - self.st10();
+
+        // The stack element in st11 does not change.
+        //
+        // $st11' - st11 = 0$
+        let st11_does_not_change = self.st11_next() - self.st11();
+
+        // The stack element in st12 does not change.
+        //
+        // $st12' - st12 = 0$
+        let st12_does_not_change = self.st12_next() - self.st12();
+
+        // The stack element in st13 does not change.
+        //
+        // $st13' - st13 = 0$
+        let st13_does_not_change = self.st13_next() - self.st13();
+
+        // The stack element in st14 does not change.
+        //
+        // $st14' - st14 = 0$
+        let st14_does_not_change = self.st14_next() - self.st14();
+
+        // The stack element in st15 does not change.
+        //
+        // $st15' - st15 = 0$
+        let st15_does_not_change = self.st15_next() - self.st15();
+
+        // The top of the OpStack underflow, i.e., osv, does not change.
+        let osv_does_not_change = self.osv_next() - self.osv();
+
+        // The OpStack pointer does not change.
+        let osp_does_not_change = self.osp_next() - self.osp();
+
+        vec![
+            st0_becomes_st0_plus_st3,
+            st1_becomes_st1_plus_st4,
+            st2_becomes_st2_plus_st5,
+            st3_does_not_change,
+            st4_does_not_change,
+            st5_does_not_change,
+            st6_does_not_change,
+            st7_does_not_change,
+            st8_does_not_change,
+            st9_does_not_change,
+            st10_does_not_change,
+            st11_does_not_change,
+            st12_does_not_change,
+            st13_does_not_change,
+            st14_does_not_change,
+            st15_does_not_change,
+            osv_does_not_change,
+            osp_does_not_change,
+        ]
     }
 
     pub fn instruction_xxmul(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        // The coefficient of x^0 of multiplying the two X-Field elements on the stack is moved into st0.
+        //
+        // $st0' - (st0·st3 - st2·st4 - st1·st5)$
+        let st0_becomes_coefficient_0 = self.st0_next()
+            // align
+            - (self.st0() * self.st3()
+             - self.st2() * self.st4()
+             - self.st1() * self.st5());
+
+        // The coefficient of x^1 of multiplying the two X-Field elements on the stack is moved into st1.
+        //
+        // st1' - (st1·st3 + st0·st4 - st2·st5 + st2·st4 + st1·st5)
+        let st1_becomes_coefficient_1 = self.st1_next()
+            // align
+            - (self.st1() * self.st3()
+             + self.st0() * self.st4()
+             - self.st2() * self.st5()
+             + self.st2() * self.st4()
+             + self.st1() * self.st5());
+
+        // The coefficient of x^2 of multiplying the two X-Field elements on the stack is moved into st2.
+        //
+        // st2' - (st2·st3 + st1·st4 + st0·st5 + st2·st5)
+        let st2_becomes_coefficient_2 = self.st0_next()
+            // align
+            - (self.st2() * self.st3()
+             + self.st1() * self.st4()
+             + self.st0() * self.st5()
+             + self.st2() * self.st5());
+
+        // The stack element in st3 does not change.
+        //
+        // $st3' - st3 = 0$
+        let st3_does_not_change = self.st3_next() - self.st3();
+
+        // The stack element in st4 does not change.
+        //
+        // $st4' - st4 = 0$
+        let st4_does_not_change = self.st4_next() - self.st4();
+
+        // The stack element in st5 does not change.
+        //
+        // $st5' - st5 = 0$
+        let st5_does_not_change = self.st5_next() - self.st5();
+
+        // The stack element in st6 does not change.
+        //
+        // $st6' - st6 = 0$
+        let st6_does_not_change = self.st6_next() - self.st6();
+
+        // The stack element in st7 does not change.
+        //
+        // $st7' - st7 = 0$
+        let st7_does_not_change = self.st7_next() - self.st7();
+
+        vec![
+            st0_becomes_coefficient_0,
+            st1_becomes_coefficient_1,
+            st2_becomes_coefficient_2,
+            st3_does_not_change,
+            st4_does_not_change,
+            st5_does_not_change,
+            st6_does_not_change,
+            st7_does_not_change,
+        ]
     }
 
     pub fn instruction_xinv(&self) -> Vec<MPolynomial<XWord>> {
@@ -1001,31 +1601,59 @@ impl ProcessorConstraintPolynomialFactory {
         MPolynomial::from_constant(constant.into(), 2 * FULL_WIDTH)
     }
 
+    pub fn constant_b(&self, constant: BFieldElement) -> MPolynomial<XWord> {
+        MPolynomial::from_constant(constant.lift(), 2 * FULL_WIDTH)
+    }
+
     pub fn clk(&self) -> MPolynomial<XWord> {
         self.variables[CLK as usize].clone()
     }
 
-    fn ip(&self) -> MPolynomial<XWord> {
+    pub fn ip(&self) -> MPolynomial<XWord> {
         self.variables[IP as usize].clone()
     }
 
-    fn ci(&self) -> MPolynomial<XWord> {
+    pub fn ci(&self) -> MPolynomial<XWord> {
         self.variables[CI as usize].clone()
     }
 
-    fn nia(&self) -> MPolynomial<XWord> {
+    pub fn nia(&self) -> MPolynomial<XWord> {
         self.variables[NIA as usize].clone()
     }
 
-    fn jsp(&self) -> MPolynomial<XWord> {
+    pub fn ib0(&self) -> MPolynomial<XWord> {
+        self.variables[IB0 as usize].clone()
+    }
+
+    pub fn ib1(&self) -> MPolynomial<XWord> {
+        self.variables[IB1 as usize].clone()
+    }
+
+    pub fn ib2(&self) -> MPolynomial<XWord> {
+        self.variables[IB2 as usize].clone()
+    }
+
+    pub fn ib3(&self) -> MPolynomial<XWord> {
+        self.variables[IB3 as usize].clone()
+    }
+
+    pub fn ib4(&self) -> MPolynomial<XWord> {
+        self.variables[IB4 as usize].clone()
+    }
+
+    pub fn ib5(&self) -> MPolynomial<XWord> {
+        self.variables[IB5 as usize].clone()
+    }
+
+    pub fn jsp(&self) -> MPolynomial<XWord> {
         self.variables[JSP as usize].clone()
     }
 
-    fn jsd(&self) -> MPolynomial<XWord> {
+    pub fn jsd(&self) -> MPolynomial<XWord> {
         self.variables[JSD as usize].clone()
     }
 
-    fn jso(&self) -> MPolynomial<XWord> {
+    pub fn jso(&self) -> MPolynomial<XWord> {
         self.variables[JSO as usize].clone()
     }
 
@@ -1105,27 +1733,27 @@ impl ProcessorConstraintPolynomialFactory {
         self.variables[OSV as usize].clone()
     }
 
-    fn hv0(&self) -> MPolynomial<XWord> {
+    pub fn hv0(&self) -> MPolynomial<XWord> {
         self.variables[HV0 as usize].clone()
     }
 
-    fn hv1(&self) -> MPolynomial<XWord> {
+    pub fn hv1(&self) -> MPolynomial<XWord> {
         self.variables[HV1 as usize].clone()
     }
 
-    fn hv2(&self) -> MPolynomial<XWord> {
+    pub fn hv2(&self) -> MPolynomial<XWord> {
         self.variables[HV2 as usize].clone()
     }
 
-    fn hv3(&self) -> MPolynomial<XWord> {
+    pub fn hv3(&self) -> MPolynomial<XWord> {
         self.variables[HV3 as usize].clone()
     }
 
-    fn hv4(&self) -> MPolynomial<XWord> {
+    pub fn hv4(&self) -> MPolynomial<XWord> {
         self.variables[HV4 as usize].clone()
     }
 
-    fn ramv(&self) -> MPolynomial<XWord> {
+    pub fn ramv(&self) -> MPolynomial<XWord> {
         self.variables[RAMV as usize].clone()
     }
 
@@ -1135,23 +1763,23 @@ impl ProcessorConstraintPolynomialFactory {
         self.variables[FULL_WIDTH + CLK as usize].clone()
     }
 
-    fn ip_next(&self) -> MPolynomial<XWord> {
+    pub fn ip_next(&self) -> MPolynomial<XWord> {
         self.variables[FULL_WIDTH + IP as usize].clone()
     }
 
-    fn ci_next(&self) -> MPolynomial<XWord> {
+    pub fn ci_next(&self) -> MPolynomial<XWord> {
         self.variables[FULL_WIDTH + CI as usize].clone()
     }
 
-    fn jsp_next(&self) -> MPolynomial<XWord> {
+    pub fn jsp_next(&self) -> MPolynomial<XWord> {
         self.variables[FULL_WIDTH + JSP as usize].clone()
     }
 
-    fn jsd_next(&self) -> MPolynomial<XWord> {
+    pub fn jsd_next(&self) -> MPolynomial<XWord> {
         self.variables[FULL_WIDTH + JSD as usize].clone()
     }
 
-    fn jso_next(&self) -> MPolynomial<XWord> {
+    pub fn jso_next(&self) -> MPolynomial<XWord> {
         self.variables[FULL_WIDTH + JSO as usize].clone()
     }
 
@@ -1231,7 +1859,7 @@ impl ProcessorConstraintPolynomialFactory {
         self.variables[FULL_WIDTH + OSV as usize].clone()
     }
 
-    fn ramv_next(&self) -> MPolynomial<XWord> {
+    pub fn ramv_next(&self) -> MPolynomial<XWord> {
         self.variables[FULL_WIDTH + RAMV as usize].clone()
     }
 
@@ -1265,9 +1893,10 @@ impl ProcessorConstraintPolynomialFactory {
         vec![ip_next - ip - (one.clone() + one)]
     }
 
+    /// This group has no constraints. It is used for the Permutation Argument with the uint32 table.
     pub fn u32_op(&self) -> Vec<MPolynomial<XWord>> {
-        // This group has no constraints. It is used for the Permutation Argument with the uint32 table.
-        vec![/* intentionally empty */]
+        // no further constraints
+        vec![]
     }
 
     pub fn grow_stack(&self) -> Vec<MPolynomial<XWord>> {
@@ -1276,7 +1905,7 @@ impl ProcessorConstraintPolynomialFactory {
             self.st1_next() - self.st0(),
             // The stack element in st1 is moved into st2.
             self.st2_next() - self.st1(),
-            // etc
+            // And so on...
             self.st3_next() - self.st2(),
             self.st4_next() - self.st3(),
             self.st5_next() - self.st4(),
@@ -1299,8 +1928,11 @@ impl ProcessorConstraintPolynomialFactory {
 
     pub fn keep_stack(&self) -> Vec<MPolynomial<XWord>> {
         vec![
+            // The stack element st0 does not change
             self.st0_next() - self.st0(),
+            // The stack element st1 does not change
             self.st1_next() - self.st1(),
+            // And so on...
             self.st2_next() - self.st2(),
             self.st3_next() - self.st3(),
             self.st4_next() - self.st4(),
@@ -1315,16 +1947,22 @@ impl ProcessorConstraintPolynomialFactory {
             self.st13_next() - self.st13(),
             self.st14_next() - self.st14(),
             self.st15_next() - self.st15(),
+            // The value of the OpStack underflow, osv, does not change.
             self.osv_next() - self.osv(),
+            // The operational stack pointer, osp, does not change.
             self.osp_next() - self.osp(),
+            // The RAM value, ramv, does not change.
             self.ramv_next() - self.ramv(),
         ]
     }
 
     pub fn shrink_stack(&self) -> Vec<MPolynomial<XWord>> {
         vec![
+            // The stack element in st1 is moved into st0.
             self.st0_next() - self.st1(),
+            // The stack element in st2 is moved into st1.
             self.st1_next() - self.st2(),
+            // And so on...
             self.st2_next() - self.st3(),
             self.st3_next() - self.st4(),
             self.st4_next() - self.st5(),
@@ -1338,16 +1976,22 @@ impl ProcessorConstraintPolynomialFactory {
             self.st12_next() - self.st13(),
             self.st13_next() - self.st14(),
             self.st14_next() - self.st15(),
+            // The stack element at the top of OpStack underflow, i.e., osv, is moved into st15.
             self.st15_next() - self.osv(),
+            // The OpStack pointer, osp, is decremented by 1.
             self.osp_next() - (self.osp() - self.one()),
+            // The helper variable register hv4 holds the inverse of (osp' - 15).
             (self.osp_next() - self.constant(15)) * self.hv4() - self.one(),
         ]
     }
 
     pub fn unop(&self) -> Vec<MPolynomial<XWord>> {
         vec![
+            // The stack element in st1 does not change.
             self.st1_next() - self.st1(),
+            // The stack element in st2 does not change.
             self.st2_next() - self.st2(),
+            // And so on...
             self.st3_next() - self.st3(),
             self.st4_next() - self.st4(),
             self.st5_next() - self.st5(),
@@ -1361,16 +2005,22 @@ impl ProcessorConstraintPolynomialFactory {
             self.st13_next() - self.st13(),
             self.st14_next() - self.st14(),
             self.st15_next() - self.st15(),
+            // The top of the OpStack underflow, i.e., osv, does not change.
             self.osv_next() - self.osv(),
+            // The OpStack pointer, osp, does not change.
             self.osp_next() - self.osp(),
+            // The RAM value, ramv, does not change.
             self.ramv_next() - self.ramv(),
         ]
     }
 
     pub fn binop(&self) -> Vec<MPolynomial<XWord>> {
         vec![
+            // The stack element in st2 is moved into st1.
             self.st1_next() - self.st2(),
+            // The stack element in st3 is moved into st2.
             self.st2_next() - self.st3(),
+            // And so on...
             self.st3_next() - self.st4(),
             self.st4_next() - self.st5(),
             self.st5_next() - self.st6(),
@@ -1383,8 +2033,11 @@ impl ProcessorConstraintPolynomialFactory {
             self.st12_next() - self.st13(),
             self.st13_next() - self.st14(),
             self.st14_next() - self.st15(),
+            // The stack element at the top of OpStack underflow, i.e., osv, is moved into st15.
             self.st15_next() - self.osv(),
+            // The OpStack pointer is decremented by 1.
             self.osp_next() - (self.osp() - self.one()),
+            // The helper variable register hv4 holds the inverse of (osp' - 15).
             (self.osp_next() - self.constant(15)) * self.hv4() - self.one(),
         ]
     }
@@ -1404,7 +2057,7 @@ impl ProcessorConstraintPolynomialFactory {
         self.deselectors[&instruction].clone()
     }
 
-    fn memoize_deselectors(&mut self) {
+    pub fn memoize_deselectors(&mut self) {
         let all_instructions = all_instructions();
         let instruction_selectors = self.all_instruction_selectors();
 
@@ -1420,11 +2073,11 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     /// A polynomial that has solutions when ci is 'instruction'
-    fn instruction_selector(&self, instruction: &Instruction) -> MPolynomial<XWord> {
+    pub fn instruction_selector(&self, instruction: &Instruction) -> MPolynomial<XWord> {
         self.ci() - self.constant(instruction.opcode())
     }
 
-    fn all_instruction_selectors(&self) -> HashMap<Instruction, MPolynomial<XWord>> {
+    pub fn all_instruction_selectors(&self) -> HashMap<Instruction, MPolynomial<XWord>> {
         all_instructions()
             .into_iter()
             .map(|instruction| (instruction, self.instruction_selector(&instruction)))
