@@ -69,6 +69,8 @@ impl Stark {
         let expansion_factor: u64 = 1 << log_expansion_factor;
         let colinearity_checks: usize = security_level / log_expansion_factor;
 
+        println!("expansion_factor: {}", expansion_factor);
+
         assert!(
             colinearity_checks > 0,
             "At least one colinearity check is required"
@@ -198,8 +200,18 @@ impl Stark {
         let base_codewords: Vec<Vec<BFieldElement>> =
             base_tables.all_base_codewords(&self.bfri_domain);
 
+        let _fridomainlength = (max_degree + 1) * (1 << 2);
+        // FIXME: Convert this to a test of `.all_base_codewords()`.
+        //assert_eq!((79, 4096), (base_codewords.len(), base_codewords[0].len()));
+
         let all_base_codewords =
             vec![b_randomizer_codewords.into(), base_codewords.clone()].concat();
+        // TODO:  Convert this to a test that 'sum of all BASE_WIDTHs = 79'
+        // + '3 BFieldElements' used for a vector of XFieldElements.
+        assert_eq!(
+            (82, 4096),
+            (all_base_codewords.len(), all_base_codewords[0].len())
+        );
 
         timer.elapsed("get_and_set_all_base_codewords");
 
@@ -282,10 +294,11 @@ impl Stark {
                     .into_iter()
                     .map(|x| x.coefficients.clone().to_vec())
                     .concat();
+                // FIXME: What is 237 and why do we care?
                 assert_eq!(
-                    27,
+                    237,
                     bvalues.len(),
-                    "9 X-field elements must become 27 B-field elements"
+                    "79 X-field elements must become 237 B-field elements"
                 );
                 hasher.hash(&bvalues, RP_DEFAULT_OUTPUT_SIZE)
             })

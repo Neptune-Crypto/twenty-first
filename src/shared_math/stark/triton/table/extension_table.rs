@@ -106,6 +106,8 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         challenges: &AllChallenges,
         terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {
+        println!("TABLENAME: {}", self.name());
+        println!("Rows: {}, columns: {}", codewords.len(), codewords[0].len());
         let boundary_quotients = self.boundary_quotients(fri_domain, codewords, challenges);
         let transition_quotients = self.transition_quotients(fri_domain, codewords, challenges);
         let terminal_quotients =
@@ -238,7 +240,17 @@ pub trait ExtensionTable: Table<XWord> + Sync {
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
                 .into_par_iter()
                 .map(|i| {
-                    let point: Vec<XWord> = (0..self.width()).map(|j| codewords[j][i]).collect();
+                    println!(
+                        "LOOKATME self.width(): {}, self.name(): {}",
+                        self.width(),
+                        self.name()
+                    );
+                    let point: Vec<XWord> = (0..self.width())
+                        .map(|j| {
+                            println!("i: {}, j: {}", i, j);
+                            codewords[i][j]
+                        })
+                        .collect();
                     bc.evaluate(&point) * zerofier_inverse[i].lift()
                 })
                 .collect();

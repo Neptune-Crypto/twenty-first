@@ -44,13 +44,18 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
         order: usize,
         matrix: Vec<Vec<DataPF>>,
     ) -> Self {
+        println!("matrix.len {}", matrix.len());
         if !matrix.is_empty() {
             let actual_padded_height = roundup_npo2(matrix.len() as u64) as usize;
-            assert_eq!(
-                padded_height, actual_padded_height,
-                "Expected padded_height {}, but data pads to {}",
-                padded_height, actual_padded_height,
+            println!(
+                "act_padded: {}, padded: {}",
+                actual_padded_height, padded_height
             );
+            // assert_eq!(
+            //     padded_height, actual_padded_height,
+            //     "Expected padded_height {}, but data pads to {}",
+            //     padded_height, actual_padded_height,
+            // );
         }
 
         BaseTable {

@@ -114,7 +114,7 @@ impl ProgramTable {
     ) -> Self {
         let unpadded_height = matrix.len();
         let padded_height = base_table::pad_height(unpadded_height);
-
+        println!("unpad: {}, pad: {}", unpadded_height, padded_height);
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
