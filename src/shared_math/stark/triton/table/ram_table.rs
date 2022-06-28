@@ -137,7 +137,7 @@ impl ExtRamTable {
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
-            BASE_WIDTH,
+            FULL_WIDTH,
             padded_height,
             num_randomizers,
             omicron,

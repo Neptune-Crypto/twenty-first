@@ -458,3 +458,59 @@ impl<'a> IntoIterator for &'a ExtTableCollection {
         .into_iter()
     }
 }
+
+#[cfg(test)]
+mod table_collection_tests {
+    use crate::shared_math::stark::triton::table::{
+        hash_table, instruction_table, jump_stack_table, op_stack_table, processor_table,
+        program_table, ram_table, u32_op_table,
+    };
+
+    use super::*;
+
+    #[test]
+    fn base_table_width_is_correct() {
+        let generator = 0.into();
+        let num_randomizers = 2;
+        let order = 1 << 32;
+        let base_matrices = BaseMatrices::default();
+        let t = BaseTableCollection::from_base_matrices(
+            generator,
+            order,
+            num_randomizers,
+            &base_matrices,
+        );
+
+        assert_eq!(program_table::BASE_WIDTH, t.program_table.width());
+        assert_eq!(instruction_table::BASE_WIDTH, t.instruction_table.width());
+        assert_eq!(processor_table::BASE_WIDTH, t.processor_table.width());
+        assert_eq!(op_stack_table::BASE_WIDTH, t.op_stack_table.width());
+        assert_eq!(ram_table::BASE_WIDTH, t.ram_table.width());
+        assert_eq!(jump_stack_table::BASE_WIDTH, t.jump_stack_table.width());
+        assert_eq!(hash_table::BASE_WIDTH, t.hash_table.width());
+        assert_eq!(u32_op_table::BASE_WIDTH, t.u32_op_table.width());
+    }
+
+    #[test]
+    fn ext_table_width_is_correct() {
+        let generator = 0.into();
+        let num_randomizers = 2;
+        let order = 1 << 32;
+        let max_padded_height = 1;
+        let t = ExtTableCollection::with_padded_height(
+            generator,
+            order,
+            num_randomizers,
+            max_padded_height,
+        );
+
+        assert_eq!(program_table::FULL_WIDTH, t.program_table.width());
+        assert_eq!(instruction_table::FULL_WIDTH, t.instruction_table.width());
+        assert_eq!(processor_table::FULL_WIDTH, t.processor_table.width());
+        assert_eq!(op_stack_table::FULL_WIDTH, t.op_stack_table.width());
+        assert_eq!(ram_table::FULL_WIDTH, t.ram_table.width());
+        assert_eq!(jump_stack_table::FULL_WIDTH, t.jump_stack_table.width());
+        assert_eq!(hash_table::FULL_WIDTH, t.hash_table.width());
+        assert_eq!(u32_op_table::FULL_WIDTH, t.u32_op_table.width());
+    }
+}

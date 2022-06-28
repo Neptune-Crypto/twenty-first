@@ -371,7 +371,7 @@ impl ExtProcessorTable {
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
-            BASE_WIDTH,
+            FULL_WIDTH,
             padded_height,
             num_randomizers,
             omicron,
@@ -679,10 +679,10 @@ impl ExtensionTable for ExtProcessorTable {
             factory.instruction_div(),
             factory.instruction_xxadd(),
             factory.instruction_xxmul(),
-            factory.instruction_xinv(),
-            factory.instruction_xbmul(),
-            factory.instruction_read_io(),
-            factory.instruction_write_io(),
+            // factory.instruction_xinv(),
+            // factory.instruction_xbmul(),
+            // factory.instruction_read_io(),
+            // factory.instruction_write_io(),
         ]
         .concat()
     }
