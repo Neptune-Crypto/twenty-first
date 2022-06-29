@@ -605,4 +605,143 @@ mod triton_vm_tests {
             }
         }
     }
+
+    #[test]
+    fn xxadd() {
+        // 1. Execute program
+        let code = sample_programs::XXADD;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut stdin =
+            VecStream::new_bwords(&[2.into(), 3.into(), 5.into(), 7.into(), 11.into(), 13.into()]);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
+        let rescue_prime = neptune_params();
+
+        let (_base_matrices, _err) =
+            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+
+        let mut expected = VecStream::new_bwords(&[9.into(), 14.into(), 18.into()]);
+        // Move the inner cursor to agree.
+        expected.set_position(stdout.position());
+        assert_eq!(expected, stdout);
+    }
+
+    #[test]
+    fn xxmul() {
+        // 1. Execute program
+        let code = sample_programs::XXMUL;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut stdin =
+            VecStream::new_bwords(&[2.into(), 3.into(), 5.into(), 7.into(), 11.into(), 13.into()]);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
+        let rescue_prime = neptune_params();
+
+        let (_base_matrices, _err) =
+            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+
+        let mut expected = VecStream::new_bwords(&[108.into(), 123.into(), 22.into()]);
+        // Move the inner cursor to agree.
+        expected.set_position(stdout.position());
+        assert_eq!(expected, stdout);
+    }
+
+    #[test]
+    fn xinv() {
+        // 1. Execute program
+        let code = sample_programs::XINV;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut stdin = VecStream::new_bwords(&[2.into(), 3.into(), 5.into()]);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
+        let rescue_prime = neptune_params();
+
+        let (_base_matrices, _err) =
+            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+
+        let mut expected = VecStream::new_bytes(&[
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            0.into(),
+            1.into(),
+            227.into(),
+            13.into(),
+            145.into(),
+            162.into(),
+            216.into(),
+            50.into(),
+            168.into(),
+            66.into(),
+            197.into(),
+            51.into(),
+            143.into(),
+            211.into(),
+            207.into(),
+            38.into(),
+            229.into(),
+            197.into(),
+            61.into(),
+            131.into(),
+            42.into(),
+            131.into(),
+            212.into(),
+            148.into(),
+            90.into(),
+            118.into(),
+        ]);
+        // Move the inner cursor to agree.
+        expected.set_position(stdout.position());
+        assert_eq!(expected, stdout);
+    }
+
+    #[test]
+    fn xbmul() {
+        // 1. Execute program
+        let code = sample_programs::XBMUL;
+        let program = Program::from_code(code).unwrap();
+
+        println!("{}", program);
+
+        let mut stdin = VecStream::new_bwords(&[2.into(), 3.into(), 5.into(), 7.into()]);
+        let mut secret_in = VecStream::new_bwords(&[]);
+        let mut stdout = VecStream::new_bwords(&[]);
+        let rescue_prime = neptune_params();
+
+        let (_base_matrices, _err) =
+            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+
+        let mut expected = VecStream::new_bwords(&[14.into(), 21.into(), 35.into()]);
+        // Move the inner cursor to agree.
+        expected.set_position(stdout.position());
+        assert_eq!(expected, stdout);
+    }
 }

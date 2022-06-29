@@ -26,6 +26,7 @@ impl OutputStream for Stdout {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct VecStream {
     cursor: Cursor<Vec<u8>>,
 }
@@ -58,6 +59,14 @@ impl VecStream {
             result.push(bword);
         }
         result
+    }
+
+    pub fn position(&self) -> u64 {
+        self.cursor.position()
+    }
+
+    pub fn set_position(&mut self, pos: u64) {
+        self.cursor.set_position(pos)
     }
 }
 

@@ -1033,6 +1033,73 @@ terminate: pop
         halt
     ";
 
+    pub const XXADD: &str = "
+        read_io
+        read_io
+        read_io
+        read_io
+        read_io
+        read_io
+        xxadd
+        swap2
+        write_io
+        write_io
+        write_io
+        halt
+    ";
+
+    pub const XXMUL: &str = "
+        read_io
+        read_io
+        read_io
+        read_io
+        read_io
+        read_io
+        xxmul
+        swap2
+        write_io
+        write_io
+        write_io
+        halt
+    ";
+
+    pub const XINV: &str = "
+        read_io
+        read_io
+        read_io
+        dup2
+        dup2
+        dup2
+        dup2
+        dup2
+        dup2
+        xinvert
+        xxmul
+        swap2
+        write_io
+        write_io
+        write_io
+        xinvert
+        swap2
+        write_io
+        write_io
+        write_io
+        halt
+    ";
+
+    pub const XBMUL: &str = "
+        read_io
+        read_io
+        read_io
+        read_io
+        xbmul
+        swap2
+        write_io
+        write_io
+        write_io
+        halt
+    ";
+
     pub const ALL_INSTRUCTIONS: &str = "
         pop
         push 42
