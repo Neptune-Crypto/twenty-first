@@ -730,7 +730,7 @@ pub mod sample_programs {
     }
 
     pub const MT_AP_VERIFY: &str = concat!(
-        "push 1 ",                                          // number of APs – should be an argument
+        "push 3 ",                                          // number of APs – should be an argument
         "",                                                 // proper program starts here
         "push 0 swap1 write_mem pop pop ",                  // store number of APs at RAM address 0
         "call read_merkle_root ",                           //

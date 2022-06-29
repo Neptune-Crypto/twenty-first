@@ -865,56 +865,155 @@ mod vm_state_tests {
                 BWord::new(10869446635029787183),
                 BWord::new(3194712170375950680),
                 BWord::new(5350293309391779043),
-                // leaf's index
+                // node index 64, leaf index 0
+                BWord::new(64),
+                // value of leaf with index 0
+                BWord::new(17),
+                BWord::new(22),
+                BWord::new(19),
+                // node index 92, leaf index 28
                 BWord::new(92),
-                // leaf's value
+                // value of leaf with index 28
                 BWord::new(45),
                 BWord::new(50),
                 BWord::new(47),
+                // node index 119, leaf index 55
+                BWord::new(119),
+                // value of leaf with node 55
+                BWord::new(72),
+                BWord::new(77),
+                BWord::new(74),
             ],
             &[
-                // Merkle Authentication Path Element 1
-                BWord::new(9199975892950715767),
-                BWord::new(18392437377232084500),
-                BWord::new(7389509101855274876),
-                BWord::new(13193152724141987884),
-                BWord::new(12764531673520060724),
-                BWord::new(16294749329463136349),
-                // Merkle Authentication Path Element 2
-                BWord::new(13265185672483741593),
-                BWord::new(4801722111881156327),
-                BWord::new(297253697970945484),
-                BWord::new(8955967409623509220),
-                BWord::new(10440367450900769517),
-                BWord::new(10816277785135288164),
-                // Merkle Authentication Path Element 3
-                BWord::new(3378320220263195325),
-                BWord::new(17709073937843856976),
-                BWord::new(3737595776877974498),
-                BWord::new(1050267233733511018),
-                BWord::new(18417031760560110797),
-                BWord::new(13081044610877517462),
-                // Merkle Authentication Path Element 4
-                BWord::new(11029368221459961736),
-                BWord::new(2601431810170510531),
-                BWord::new(3845091993529784163),
-                BWord::new(18440963282863373173),
-                BWord::new(15782363319704900162),
-                BWord::new(5649168943621408804),
-                // Merkle Authentication Path Element 5
-                BWord::new(10193657868364591231),
-                BWord::new(10099674955292945516),
-                BWord::new(11861368391420694868),
-                BWord::new(12281343418175235418),
-                BWord::new(4979963636183136673),
-                BWord::new(18369998622044683261),
-                // Merkle Authentication Path Element 6
+                // Merkle Authentication Path 0
+                // Merkle Authentication Path 0 Element 0
+                BWord::new(7433611961471031299),
+                BWord::new(10663067815302282105),
+                BWord::new(11189271637150912214),
+                BWord::new(6731301558776007763),
+                BWord::new(12404371806864851196),
+                BWord::new(4001338418445453888),
+                // Merkle Authentication Path 0 Element 1
+                BWord::new(15447170459020364568),
+                BWord::new(13311771520545451802),
+                BWord::new(4832613912751814227),
+                BWord::new(16118512681346800136),
+                BWord::new(11903034542985100612),
+                BWord::new(8722502554058837902),
+                // Merkle Authentication Path 0 Element 2
+                BWord::new(927166763011592563),
+                BWord::new(1017721141586418898),
+                BWord::new(14149577177119432718),
+                BWord::new(11112535232426569259),
+                BWord::new(6770923340167310082),
+                BWord::new(6635263622554958787),
+                // Merkle Authentication Path 0 Element 3
+                BWord::new(11997402720255929816),
+                BWord::new(7083119985125877931),
+                BWord::new(3583918993470398367),
+                BWord::new(12665589384229632447),
+                BWord::new(4869924221127107207),
+                BWord::new(2205377658620204174),
+                // Merkle Authentication Path 0 Element 4
+                BWord::new(4108830855587634814),
+                BWord::new(11363551275926927759),
+                BWord::new(8897943612193465442),
+                BWord::new(18175199505544299571),
+                BWord::new(5933081913383911549),
+                BWord::new(11963915458141697161),
+                // Merkle Authentication Path 0 Element 5
                 BWord::new(239086846863014618),
                 BWord::new(18353654918351264251),
                 BWord::new(1162413056004073118),
                 BWord::new(63172233802162855),
                 BWord::new(15287652336563130555),
                 BWord::new(6615623432715966135),
+                // Merkle Authentication Path 1
+                // Merkle Authentication Path 1 Element 0
+                BWord::new(9199975892950715767),
+                BWord::new(18392437377232084500),
+                BWord::new(7389509101855274876),
+                BWord::new(13193152724141987884),
+                BWord::new(12764531673520060724),
+                BWord::new(16294749329463136349),
+                // Merkle Authentication Path 1 Element 1
+                BWord::new(13265185672483741593),
+                BWord::new(4801722111881156327),
+                BWord::new(297253697970945484),
+                BWord::new(8955967409623509220),
+                BWord::new(10440367450900769517),
+                BWord::new(10816277785135288164),
+                // Merkle Authentication Path 1 Element 2
+                BWord::new(3378320220263195325),
+                BWord::new(17709073937843856976),
+                BWord::new(3737595776877974498),
+                BWord::new(1050267233733511018),
+                BWord::new(18417031760560110797),
+                BWord::new(13081044610877517462),
+                // Merkle Authentication Path 1 Element 3
+                BWord::new(11029368221459961736),
+                BWord::new(2601431810170510531),
+                BWord::new(3845091993529784163),
+                BWord::new(18440963282863373173),
+                BWord::new(15782363319704900162),
+                BWord::new(5649168943621408804),
+                // Merkle Authentication Path 1 Element 4
+                BWord::new(10193657868364591231),
+                BWord::new(10099674955292945516),
+                BWord::new(11861368391420694868),
+                BWord::new(12281343418175235418),
+                BWord::new(4979963636183136673),
+                BWord::new(18369998622044683261),
+                // Merkle Authentication Path 1 Element 5
+                BWord::new(239086846863014618),
+                BWord::new(18353654918351264251),
+                BWord::new(1162413056004073118),
+                BWord::new(63172233802162855),
+                BWord::new(15287652336563130555),
+                BWord::new(6615623432715966135),
+                // Merkle Authentication Path 2
+                // Merkle Authentication Path 2 Element 0
+                BWord::new(4481571126490316833),
+                BWord::new(8911895412157369567),
+                BWord::new(5835492500982839536),
+                BWord::new(7582358620718112504),
+                BWord::new(17844368221186872833),
+                BWord::new(17133435817149957052),
+                // Merkle Authentication Path 2 Element 1
+                BWord::new(14881877338661058963),
+                BWord::new(13193566745649419854),
+                BWord::new(6162692737252551562),
+                BWord::new(11371203176785325596),
+                BWord::new(9217246242682535563),
+                BWord::new(6324769433519982629),
+                // Merkle Authentication Path 2 Element 2
+                BWord::new(13364374456634379783),
+                BWord::new(11904780360815341732),
+                BWord::new(13838542444368435771),
+                BWord::new(3920552087776628004),
+                BWord::new(11527431398195960804),
+                BWord::new(9866681327490442483),
+                // Merkle Authentication Path 2 Element 3
+                BWord::new(1435791031511559365),
+                BWord::new(15545210664684920678),
+                BWord::new(3431133792584929176),
+                BWord::new(8726944733794952298),
+                BWord::new(16054902179813715844),
+                BWord::new(4961109724612073173),
+                // Merkle Authentication Path 2 Element 4
+                BWord::new(6120454613508763402),
+                BWord::new(13046522894794631380),
+                BWord::new(12811925518855679797),
+                BWord::new(17271969057789657726),
+                BWord::new(9660251638518579939),
+                BWord::new(4505728643179916723),
+                // Merkle Authentication Path 2 Element 5
+                BWord::new(15982248888191274947),
+                BWord::new(16924250102716460133),
+                BWord::new(10777256019074274502),
+                BWord::new(5171550821485636583),
+                BWord::new(1372154037340399671),
+                BWord::new(13169355684141832888),
             ],
         );
 
