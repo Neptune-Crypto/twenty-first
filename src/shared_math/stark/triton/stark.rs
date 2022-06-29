@@ -289,18 +289,22 @@ impl Stark {
         let transposed_extension_codewords_clone = transposed_extension_codewords.clone();
         transposed_extension_codewords_clone
             .into_par_iter()
-            .map(|xvalues| {
-                let bvalues: Vec<BFieldElement> = xvalues
+            .map(|transposed_ext_codeword| {
+                let transposed_ext_codeword_coeffs: Vec<BFieldElement> = transposed_ext_codeword
                     .into_iter()
                     .map(|x| x.coefficients.clone().to_vec())
                     .concat();
-                // FIXME: What is 237 and why do we care?
+
+                let sum_of_base_widths: usize =
+                    base_tables.into_iter().map(|table| table.base_width()).sum();
+
                 assert_eq!(
-                    237,
-                    bvalues.len(),
-                    "79 X-field elements must become 237 B-field elements"
+                    3 * sum_of_base_widths,
+                    transposed_ext_codeword_coeffs.len(),
+                    "Transposed extension codeword coefficients count should equal the sum of all table base widths"
                 );
-                hasher.hash(&bvalues, RP_DEFAULT_OUTPUT_SIZE)
+
+                hasher.hash(&transposed_ext_codeword_coeffs, RP_DEFAULT_OUTPUT_SIZE)
             })
             .collect_into_vec(&mut extension_codeword_digests_by_index);
 
@@ -332,10 +336,13 @@ impl Stark {
         }
 
         // Calculate `num_base_polynomials` and `num_extension_polynomials` for asserting
-        let num_base_polynomials: usize = base_tables.into_iter().map(|table| table.width()).sum();
+        let num_base_polynomials: usize = base_tables
+            .into_iter()
+            .map(|table| table.base_width())
+            .sum();
         let num_extension_polynomials: usize = ext_tables
             .into_iter()
-            .map(|ext_table| ext_table.width() - ext_table.base_width())
+            .map(|ext_table| ext_table.full_width() - ext_table.base_width())
             .sum();
 
         timer.elapsed("num_(base+extension)_polynomials");
@@ -900,7 +907,7 @@ impl Stark {
             );
 
             for (point, table) in points.iter_mut().zip(ext_table_collection.into_iter()) {
-                let step_size = table.width() - table.base_width();
+                let step_size = table.full_width() - table.base_width();
                 point.extend_from_slice(&tuples[&index][acc_index..acc_index + step_size]);
                 acc_index += step_size;
             }
@@ -937,10 +944,10 @@ impl Stark {
                     .to_vec();
                 next_point.extend_from_slice(
                     &tuples[&next_index]
-                        [ext_acc_index..ext_acc_index + table.width() - table.base_width()],
+                        [ext_acc_index..ext_acc_index + table.full_width() - table.base_width()],
                 );
                 base_acc_index += table.base_width();
-                ext_acc_index += table.width() - table.base_width();
+                ext_acc_index += table.full_width() - table.base_width();
                 for (constraint, bound) in table
                     .ext_transition_constraints(&all_challenges)
                     .iter()

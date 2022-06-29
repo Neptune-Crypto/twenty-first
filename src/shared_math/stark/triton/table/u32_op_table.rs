@@ -77,10 +77,6 @@ impl Table<XFieldElement> for ExtU32OpTable {
 }
 
 impl ExtensionTable for ExtU32OpTable {
-    fn base_width(&self) -> usize {
-        BASE_WIDTH
-    }
-
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
@@ -116,6 +112,7 @@ impl U32OpTable {
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
             BASE_WIDTH,
+            FULL_WIDTH,
             padded_height,
             num_randomizers,
             omicron,
@@ -234,6 +231,7 @@ impl ExtU32OpTable {
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
+            BASE_WIDTH,
             FULL_WIDTH,
             padded_height,
             num_randomizers,
@@ -247,7 +245,7 @@ impl ExtU32OpTable {
     }
 
     pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
-        let ext_codewords = self.low_degree_extension(fri_domain);
+        let ext_codewords = self.low_degree_extension(fri_domain, self.full_width());
         let base = self.base.with_data(ext_codewords);
 
         ExtU32OpTable { base }

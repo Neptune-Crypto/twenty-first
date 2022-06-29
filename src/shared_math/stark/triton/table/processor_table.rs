@@ -55,6 +55,7 @@ impl ProcessorTable {
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
             BASE_WIDTH,
+            FULL_WIDTH,
             padded_height,
             num_randomizers,
             omicron,
@@ -370,6 +371,7 @@ impl ExtProcessorTable {
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
+            BASE_WIDTH,
             FULL_WIDTH,
             padded_height,
             num_randomizers,
@@ -383,7 +385,7 @@ impl ExtProcessorTable {
     }
 
     pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
-        let ext_codewords = self.low_degree_extension(fri_domain);
+        let ext_codewords = self.low_degree_extension(fri_domain, self.full_width());
         let base = self.base.with_data(ext_codewords);
 
         ExtProcessorTable { base }
@@ -520,109 +522,128 @@ impl Table<XFieldElement> for ExtProcessorTable {
 }
 
 impl ExtensionTable for ExtProcessorTable {
-    fn base_width(&self) -> usize {
-        BASE_WIDTH
-    }
-
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = ProcessorConstraintPolynomialFactory::default();
+        let factory = ConsistencyBoundaryConstraints::default();
 
         // The cycle counter `clk` is 0.
+        //
         // $clk = 0  ⇒  clk - 0 = 0  ⇒  clk - 0  ⇒  clk$
-        let clk_is_0 = factory.other_constraint_variables[CLK as usize].clone();
+        let clk_is_0 = factory.clk();
 
         // The instruction pointer `ip` is 0.
+        //
         // $ip = 0  ⇒  ip - 0 = 0  ⇒  ip - 0  ⇒  ip$
-        let ip_is_0 = factory.other_constraint_variables[IP as usize].clone();
+        let ip_is_0 = factory.ip();
 
         // The jump address stack pointer `jsp` is 0.
+        //
         // $jsp = 0  ⇒  jsp - 0 == 0  ⇒  jsp - 0  ⇒  jsp$
-        let jsp_is_0 = factory.other_constraint_variables[JSP as usize].clone();
+        let jsp_is_0 = factory.jsp();
 
         // The jump address origin `jso` is 0.
+        //
         // $jso = 0  ⇒  jso - 0 = 0  ⇒  jso - 0  ⇒  jso$
-        let jso_is_0 = factory.other_constraint_variables[JSO as usize].clone();
+        let jso_is_0 = factory.jso();
 
         // The jump address destination `jsd` is 0.
+        //
         // $jsd = 0  ⇒  jsd - 0 = 0  ⇒  jsd - 0  ⇒  jsd$
-        let jsd_is_0 = factory.other_constraint_variables[JSD as usize].clone();
+        let jsd_is_0 = factory.jsd();
 
         // The operational stack element `st0` is 0.
+        //
         // $st0 = 0  ⇒  st0 - 0 = 0  ⇒  st0 - 0  ⇒  st0$
-        let st0_is_0 = factory.other_constraint_variables[ST0 as usize].clone();
+        let st0_is_0 = factory.st0();
 
         // The operational stack element `st1` is 0.
+        //
         // $st1 = 0  ⇒  st1 - 0 = 0  ⇒  st1 - 0  ⇒  st1$
-        let st1_is_0 = factory.other_constraint_variables[ST1 as usize].clone();
+        let st1_is_0 = factory.st1();
 
         // The operational stack element `st2` is 0.
+        //
         // $st2 = 0  ⇒  st2 - 0 = 0  ⇒  st2 - 0  ⇒  st2$
-        let st2_is_0 = factory.other_constraint_variables[ST2 as usize].clone();
+        let st2_is_0 = factory.st2();
 
         // The operational stack element `st3` is 0.
+        //
         // $st3 = 0  ⇒  st3 - 0 = 0  ⇒  st3 - 0  ⇒  st3$
-        let st3_is_0 = factory.other_constraint_variables[ST3 as usize].clone();
+        let st3_is_0 = factory.st3();
 
         // The operational stack element `st4` is 0.
+        //
         // $st4 = 0  ⇒  st4 - 0 = 0  ⇒  st4 - 0  ⇒  st4$
-        let st4_is_0 = factory.other_constraint_variables[ST4 as usize].clone();
+        let st4_is_0 = factory.st4();
 
         // The operational stack element `st5` is 0.
+        //
         // $st5 = 0  ⇒  st5 - 0 = 0  ⇒  st5 - 0  ⇒  st5$
-        let st5_is_0 = factory.other_constraint_variables[ST5 as usize].clone();
+        let st5_is_0 = factory.st5();
 
         // The operational stack element `st6` is 0.
+        //
         // $st6 = 0  ⇒  st6 - 0 = 0  ⇒  st6 - 0  ⇒  st6$
-        let st6_is_0 = factory.other_constraint_variables[ST6 as usize].clone();
+        let st6_is_0 = factory.st6();
 
         // The operational stack element `st7` is 0.
+        //
         // $st7 = 0  ⇒  st7 - 0 = 0  ⇒  st7 - 0  ⇒  st7$
-        let st7_is_0 = factory.other_constraint_variables[ST7 as usize].clone();
+        let st7_is_0 = factory.st7();
 
         // The operational stack element `st8` is 0.
+        //
         // $st8 = 0  ⇒  st8 - 0 = 0  ⇒  st8 - 0  ⇒  st8$
-        let st8_is_0 = factory.other_constraint_variables[ST8 as usize].clone();
+        let st8_is_0 = factory.st8();
 
         // The operational stack element `st9` is 0.
+        //
         // $st9 = 0  ⇒  st9 - 0 = 0  ⇒  st9 - 0  ⇒  st9$
-        let st9_is_0 = factory.other_constraint_variables[ST9 as usize].clone();
+        let st9_is_0 = factory.st9();
 
         // The operational stack element `st10` is 0.
+        //
         // $st10 = 0  ⇒  st10 - 0 = 0  ⇒  st10 - 0  ⇒  st10$
-        let st10_is_0 = factory.other_constraint_variables[ST10 as usize].clone();
+        let st10_is_0 = factory.st10();
 
         // The operational stack element `st11` is 0.
+        //
         // $st11 = 0  ⇒  st11 - 0 = 0  ⇒  st11 - 0  ⇒  st11$
-        let st11_is_0 = factory.other_constraint_variables[ST11 as usize].clone();
+        let st11_is_0 = factory.st11();
 
         // The operational stack element `st12` is 0.
+        //
         // $st12 = 0  ⇒  st12 - 0 = 0  ⇒  st12 - 0  ⇒  st12$
-        let st12_is_0 = factory.other_constraint_variables[ST12 as usize].clone();
+        let st12_is_0 = factory.st12();
 
         // The operational stack element `st13` is 0.
+        //
         // $st13 = 0  ⇒  st13 - 0 = 0  ⇒  st13 - 0  ⇒  st13$
-        let st13_is_0 = factory.other_constraint_variables[ST13 as usize].clone();
+        let st13_is_0 = factory.st13();
 
         // The operational stack element `st14` is 0.
+        //
         // $st14 = 0  ⇒  st14 - 0 = 0  ⇒  st14 - 0  ⇒  st14$
-        let st14_is_0 = factory.other_constraint_variables[ST14 as usize].clone();
+        let st14_is_0 = factory.st14();
 
         // The operational stack element `st15` is 0.
+        //
         // $st15 = 0  ⇒  st15 - 0 = 0  ⇒  st15 - 0  ⇒  st15$
-        let st15_is_0 = factory.other_constraint_variables[ST15 as usize].clone();
+        let st15_is_0 = factory.st15();
 
         // The operational stack pointer `osp` is 16.
+        //
         // $osp = 16  ⇒  osp - 16 == 0  ⇒  osp - 16$
-        let osp_is_16 = factory.other_constraint_variables[OSP as usize].clone()
-            - MPolynomial::from_constant(XWord::new_const(16.into()), FULL_WIDTH);
+        let osp_is_16 = factory.osp() - factory.constant(16);
 
         // The operational stack value `osv` is 0.
+        //
         // $osv = 0  ⇒  osv - 0 = 0  ⇒  osv - 0  ⇒  osv$
-        let osv_is_0 = factory.other_constraint_variables[OSV as usize].clone();
+        let osv_is_0 = factory.osv();
 
         // The RAM value ramv is 0.
-        // $ramv = 0  ⇒  ramv - 0 == 0  ⇒  osp - 16$
-        let ramv_is_0 = factory.other_constraint_variables[OSP as usize].clone();
+        //
+        // $ramv = 0  ⇒  ramv - 0 = 0  ⇒  ramv$
+        let ramv_is_0 = factory.ramv();
 
         vec![
             clk_is_0, ip_is_0, jsp_is_0, jso_is_0, jsd_is_0, st0_is_0, st1_is_0, st2_is_0,
@@ -632,18 +653,44 @@ impl ExtensionTable for ExtProcessorTable {
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = ProcessorConstraintPolynomialFactory::default();
+        let factory = ConsistencyBoundaryConstraints::default();
+
+        // The composition of instruction buckets ib0-ib5 corresponds the current instruction ci.
+        //
+        // $ci - (2^5·ib5 + 2^4·ib4 + 2^3·ib3 + 2^2·ib2 + 2^1·ib1 + 2^0·ib0) = 0$
+        let ci_corresponds_to_ib0_thru_ib5 = {
+            let mut ib_composition = factory.one() * factory.ib0();
+            ib_composition += factory.constant(2) * factory.ib1();
+            ib_composition += factory.constant(4) * factory.ib2();
+            ib_composition += factory.constant(8) * factory.ib3();
+            ib_composition += factory.constant(16) * factory.ib4();
+            ib_composition += factory.constant(32) * factory.ib5();
+
+            factory.ci() - ib_composition
+        };
+
+        // Register st0 is 0 or inv is the inverse of st0.
+        //
+        // $st0·(st0·inv - 1)$
+        let st0_is_0_or_inverse_of_inv =
+            { factory.st0() * (factory.st0() * factory.inv() - factory.one()) };
+
+        // Register inv is 0 or inv is the inverse of st0.
+        //
+        // $inv·(st0·inv - 1)$
+        let inv_is_0_or_inverse_of_inv =
+            { factory.inv() * (factory.st0() * factory.inv() - factory.one()) };
 
         // TODO: These constraints still use the wrong number of variables (2 * FULL_WIDTH as opposed to FULL_WIDTH).
         vec![
-            factory.ci_corresponds_to_ib0_thru_ib5(),
-            factory.st0_is_0_or_inverse_of_inv(),
-            factory.inv_is_0_or_inverse_of_inv(),
+            ci_corresponds_to_ib0_thru_ib5,
+            st0_is_0_or_inverse_of_inv,
+            inv_is_0_or_inverse_of_inv,
         ]
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = ProcessorConstraintPolynomialFactory::default();
+        let factory = TransitionConstraints::default();
 
         // FIXME: `.instruction_pop()` etc. do not include the deselector yet.
 
@@ -695,33 +742,207 @@ impl ExtensionTable for ExtProcessorTable {
     }
 }
 
-pub struct ProcessorConstraintPolynomialFactory {
-    transition_constraint_variables: [MPolynomial<XWord>; 2 * FULL_WIDTH],
-    other_constraint_variables: [MPolynomial<XWord>; FULL_WIDTH],
+pub struct ConsistencyBoundaryConstraints {
+    variables: [MPolynomial<XWord>; FULL_WIDTH],
+}
+
+impl Default for ConsistencyBoundaryConstraints {
+    fn default() -> Self {
+        let variables = MPolynomial::variables(FULL_WIDTH, 1.into())
+            .try_into()
+            .expect("Create variables for boundary/consistency constraints");
+
+        Self { variables }
+    }
+}
+
+impl ConsistencyBoundaryConstraints {
+    pub fn constant(&self, constant: u32) -> MPolynomial<XWord> {
+        MPolynomial::from_constant(constant.into(), FULL_WIDTH)
+    }
+
+    pub fn one(&self) -> MPolynomial<XWord> {
+        self.constant(1)
+    }
+
+    pub fn two(&self) -> MPolynomial<XWord> {
+        self.constant(2)
+    }
+
+    pub fn clk(&self) -> MPolynomial<XWord> {
+        self.variables[CLK as usize].clone()
+    }
+
+    pub fn ip(&self) -> MPolynomial<XWord> {
+        self.variables[IP as usize].clone()
+    }
+
+    pub fn ci(&self) -> MPolynomial<XWord> {
+        self.variables[CI as usize].clone()
+    }
+
+    pub fn nia(&self) -> MPolynomial<XWord> {
+        self.variables[NIA as usize].clone()
+    }
+
+    pub fn ib0(&self) -> MPolynomial<XWord> {
+        self.variables[IB0 as usize].clone()
+    }
+
+    pub fn ib1(&self) -> MPolynomial<XWord> {
+        self.variables[IB1 as usize].clone()
+    }
+
+    pub fn ib2(&self) -> MPolynomial<XWord> {
+        self.variables[IB2 as usize].clone()
+    }
+
+    pub fn ib3(&self) -> MPolynomial<XWord> {
+        self.variables[IB3 as usize].clone()
+    }
+
+    pub fn ib4(&self) -> MPolynomial<XWord> {
+        self.variables[IB4 as usize].clone()
+    }
+
+    pub fn ib5(&self) -> MPolynomial<XWord> {
+        self.variables[IB5 as usize].clone()
+    }
+
+    pub fn jsp(&self) -> MPolynomial<XWord> {
+        self.variables[JSP as usize].clone()
+    }
+
+    pub fn jsd(&self) -> MPolynomial<XWord> {
+        self.variables[JSD as usize].clone()
+    }
+
+    pub fn jso(&self) -> MPolynomial<XWord> {
+        self.variables[JSO as usize].clone()
+    }
+
+    pub fn st0(&self) -> MPolynomial<XWord> {
+        self.variables[ST0 as usize].clone()
+    }
+
+    pub fn st1(&self) -> MPolynomial<XWord> {
+        self.variables[ST1 as usize].clone()
+    }
+
+    pub fn st2(&self) -> MPolynomial<XWord> {
+        self.variables[ST2 as usize].clone()
+    }
+
+    pub fn st3(&self) -> MPolynomial<XWord> {
+        self.variables[ST3 as usize].clone()
+    }
+
+    pub fn st4(&self) -> MPolynomial<XWord> {
+        self.variables[ST4 as usize].clone()
+    }
+
+    pub fn st5(&self) -> MPolynomial<XWord> {
+        self.variables[ST5 as usize].clone()
+    }
+
+    pub fn st6(&self) -> MPolynomial<XWord> {
+        self.variables[ST6 as usize].clone()
+    }
+
+    pub fn st7(&self) -> MPolynomial<XWord> {
+        self.variables[ST7 as usize].clone()
+    }
+
+    pub fn st8(&self) -> MPolynomial<XWord> {
+        self.variables[ST8 as usize].clone()
+    }
+
+    pub fn st9(&self) -> MPolynomial<XWord> {
+        self.variables[ST9 as usize].clone()
+    }
+
+    pub fn st10(&self) -> MPolynomial<XWord> {
+        self.variables[ST10 as usize].clone()
+    }
+
+    pub fn st11(&self) -> MPolynomial<XWord> {
+        self.variables[ST11 as usize].clone()
+    }
+
+    pub fn st12(&self) -> MPolynomial<XWord> {
+        self.variables[ST12 as usize].clone()
+    }
+
+    pub fn st13(&self) -> MPolynomial<XWord> {
+        self.variables[ST13 as usize].clone()
+    }
+
+    pub fn st14(&self) -> MPolynomial<XWord> {
+        self.variables[ST14 as usize].clone()
+    }
+
+    pub fn st15(&self) -> MPolynomial<XWord> {
+        self.variables[ST15 as usize].clone()
+    }
+
+    pub fn inv(&self) -> MPolynomial<XWord> {
+        self.variables[INV as usize].clone()
+    }
+
+    pub fn osp(&self) -> MPolynomial<XWord> {
+        self.variables[OSP as usize].clone()
+    }
+
+    pub fn osv(&self) -> MPolynomial<XWord> {
+        self.variables[OSV as usize].clone()
+    }
+
+    pub fn hv0(&self) -> MPolynomial<XWord> {
+        self.variables[HV0 as usize].clone()
+    }
+
+    pub fn hv1(&self) -> MPolynomial<XWord> {
+        self.variables[HV1 as usize].clone()
+    }
+
+    pub fn hv2(&self) -> MPolynomial<XWord> {
+        self.variables[HV2 as usize].clone()
+    }
+
+    pub fn hv3(&self) -> MPolynomial<XWord> {
+        self.variables[HV3 as usize].clone()
+    }
+
+    pub fn hv4(&self) -> MPolynomial<XWord> {
+        self.variables[HV4 as usize].clone()
+    }
+
+    pub fn ramv(&self) -> MPolynomial<XWord> {
+        self.variables[RAMV as usize].clone()
+    }
+}
+
+pub struct TransitionConstraints {
+    variables: [MPolynomial<XWord>; 2 * FULL_WIDTH],
     deselectors: HashMap<Instruction, MPolynomial<XWord>>,
 }
 
-impl Default for ProcessorConstraintPolynomialFactory {
+impl Default for TransitionConstraints {
     fn default() -> Self {
         let transition_constraint_variables = MPolynomial::variables(2 * FULL_WIDTH, 1.into())
             .try_into()
-            .expect("");
-
-        let other_constraint_variables = MPolynomial::variables(FULL_WIDTH, 1.into())
-            .try_into()
-            .expect("");
+            .expect("Create variables for transition constraints");
 
         let deselectors = HashMap::new();
 
         Self {
-            transition_constraint_variables,
-            other_constraint_variables,
+            variables: transition_constraint_variables,
             deselectors,
         }
     }
 }
 
-impl ProcessorConstraintPolynomialFactory {
+impl TransitionConstraints {
     /// ## The cycle counter (`clk`) always increases by one
     ///
     /// $$
@@ -742,31 +963,6 @@ impl ProcessorConstraintPolynomialFactory {
         let clk_next = self.clk_next();
 
         clk_next - clk - one
-    }
-
-    /// The composition of instruction buckets ib0-ib5 corresponds the current instruction ci.
-    // $ci - (2^5·ib5 + 2^4·ib4 + 2^3·ib3 + 2^2·ib2 + 2^1·ib1 + 2^0·ib0) = 0$
-    pub fn ci_corresponds_to_ib0_thru_ib5(&self) -> MPolynomial<XWord> {
-        let mut ib_composition = self.one() * self.ib0();
-        ib_composition += self.constant(2) * self.ib1();
-        ib_composition += self.constant(4) * self.ib2();
-        ib_composition += self.constant(8) * self.ib3();
-        ib_composition += self.constant(16) * self.ib4();
-        ib_composition += self.constant(32) * self.ib5();
-
-        self.ci() - ib_composition
-    }
-
-    /// Register st0 is 0 or inv is the inverse of st0.
-    /// $st0·(st0·inv - 1)$
-    pub fn st0_is_0_or_inverse_of_inv(&self) -> MPolynomial<XWord> {
-        self.st0() * (self.st0() * self.inv() - self.one())
-    }
-
-    /// Register inv is 0 or inv is the inverse of st0.
-    /// $inv·(st0·inv - 1)$
-    pub fn inv_is_0_or_inverse_of_inv(&self) -> MPolynomial<XWord> {
-        self.inv() * (self.st0() * self.inv() - self.one())
     }
 
     pub fn indicator_polynomial(&self, i: usize) -> MPolynomial<XWord> {
@@ -1620,261 +1816,261 @@ impl ProcessorConstraintPolynomialFactory {
     }
 
     pub fn clk(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[CLK as usize].clone()
+        self.variables[CLK as usize].clone()
     }
 
     pub fn ip(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[IP as usize].clone()
+        self.variables[IP as usize].clone()
     }
 
     pub fn ci(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[CI as usize].clone()
+        self.variables[CI as usize].clone()
     }
 
     pub fn nia(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[NIA as usize].clone()
+        self.variables[NIA as usize].clone()
     }
 
     pub fn ib0(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[IB0 as usize].clone()
+        self.variables[IB0 as usize].clone()
     }
 
     pub fn ib1(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[IB1 as usize].clone()
+        self.variables[IB1 as usize].clone()
     }
 
     pub fn ib2(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[IB2 as usize].clone()
+        self.variables[IB2 as usize].clone()
     }
 
     pub fn ib3(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[IB3 as usize].clone()
+        self.variables[IB3 as usize].clone()
     }
 
     pub fn ib4(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[IB4 as usize].clone()
+        self.variables[IB4 as usize].clone()
     }
 
     pub fn ib5(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[IB5 as usize].clone()
+        self.variables[IB5 as usize].clone()
     }
 
     pub fn jsp(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[JSP as usize].clone()
+        self.variables[JSP as usize].clone()
     }
 
     pub fn jsd(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[JSD as usize].clone()
+        self.variables[JSD as usize].clone()
     }
 
     pub fn jso(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[JSO as usize].clone()
+        self.variables[JSO as usize].clone()
     }
 
     pub fn st0(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST0 as usize].clone()
+        self.variables[ST0 as usize].clone()
     }
 
     pub fn st1(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST1 as usize].clone()
+        self.variables[ST1 as usize].clone()
     }
 
     pub fn st2(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST2 as usize].clone()
+        self.variables[ST2 as usize].clone()
     }
 
     pub fn st3(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST3 as usize].clone()
+        self.variables[ST3 as usize].clone()
     }
 
     pub fn st4(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST4 as usize].clone()
+        self.variables[ST4 as usize].clone()
     }
 
     pub fn st5(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST5 as usize].clone()
+        self.variables[ST5 as usize].clone()
     }
 
     pub fn st6(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST6 as usize].clone()
+        self.variables[ST6 as usize].clone()
     }
 
     pub fn st7(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST7 as usize].clone()
+        self.variables[ST7 as usize].clone()
     }
 
     pub fn st8(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST8 as usize].clone()
+        self.variables[ST8 as usize].clone()
     }
 
     pub fn st9(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST9 as usize].clone()
+        self.variables[ST9 as usize].clone()
     }
 
     pub fn st10(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST10 as usize].clone()
+        self.variables[ST10 as usize].clone()
     }
 
     pub fn st11(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST11 as usize].clone()
+        self.variables[ST11 as usize].clone()
     }
 
     pub fn st12(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST12 as usize].clone()
+        self.variables[ST12 as usize].clone()
     }
 
     pub fn st13(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST13 as usize].clone()
+        self.variables[ST13 as usize].clone()
     }
 
     pub fn st14(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST14 as usize].clone()
+        self.variables[ST14 as usize].clone()
     }
 
     pub fn st15(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[ST15 as usize].clone()
+        self.variables[ST15 as usize].clone()
     }
 
     pub fn inv(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[INV as usize].clone()
+        self.variables[INV as usize].clone()
     }
 
     pub fn osp(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[OSP as usize].clone()
+        self.variables[OSP as usize].clone()
     }
 
     pub fn osv(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[OSV as usize].clone()
+        self.variables[OSV as usize].clone()
     }
 
     pub fn hv0(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[HV0 as usize].clone()
+        self.variables[HV0 as usize].clone()
     }
 
     pub fn hv1(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[HV1 as usize].clone()
+        self.variables[HV1 as usize].clone()
     }
 
     pub fn hv2(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[HV2 as usize].clone()
+        self.variables[HV2 as usize].clone()
     }
 
     pub fn hv3(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[HV3 as usize].clone()
+        self.variables[HV3 as usize].clone()
     }
 
     pub fn hv4(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[HV4 as usize].clone()
+        self.variables[HV4 as usize].clone()
     }
 
     pub fn ramv(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[RAMV as usize].clone()
+        self.variables[RAMV as usize].clone()
     }
 
     // Property: All polynomial variables that contain '_next' have the same
     // variable position / value as the one without '_next', +/- FULL_WIDTH.
     pub fn clk_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + CLK as usize].clone()
+        self.variables[FULL_WIDTH + CLK as usize].clone()
     }
 
     pub fn ip_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + IP as usize].clone()
+        self.variables[FULL_WIDTH + IP as usize].clone()
     }
 
     pub fn ci_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + CI as usize].clone()
+        self.variables[FULL_WIDTH + CI as usize].clone()
     }
 
     pub fn jsp_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + JSP as usize].clone()
+        self.variables[FULL_WIDTH + JSP as usize].clone()
     }
 
     pub fn jsd_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + JSD as usize].clone()
+        self.variables[FULL_WIDTH + JSD as usize].clone()
     }
 
     pub fn jso_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + JSO as usize].clone()
+        self.variables[FULL_WIDTH + JSO as usize].clone()
     }
 
     pub fn st0_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST0 as usize].clone()
+        self.variables[FULL_WIDTH + ST0 as usize].clone()
     }
 
     pub fn st1_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST1 as usize].clone()
+        self.variables[FULL_WIDTH + ST1 as usize].clone()
     }
 
     pub fn st2_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST2 as usize].clone()
+        self.variables[FULL_WIDTH + ST2 as usize].clone()
     }
 
     pub fn st3_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST3 as usize].clone()
+        self.variables[FULL_WIDTH + ST3 as usize].clone()
     }
 
     pub fn st4_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST4 as usize].clone()
+        self.variables[FULL_WIDTH + ST4 as usize].clone()
     }
 
     pub fn st5_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST5 as usize].clone()
+        self.variables[FULL_WIDTH + ST5 as usize].clone()
     }
 
     pub fn st6_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST6 as usize].clone()
+        self.variables[FULL_WIDTH + ST6 as usize].clone()
     }
 
     pub fn st7_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST7 as usize].clone()
+        self.variables[FULL_WIDTH + ST7 as usize].clone()
     }
 
     pub fn st8_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST8 as usize].clone()
+        self.variables[FULL_WIDTH + ST8 as usize].clone()
     }
 
     pub fn st9_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST9 as usize].clone()
+        self.variables[FULL_WIDTH + ST9 as usize].clone()
     }
 
     pub fn st10_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST10 as usize].clone()
+        self.variables[FULL_WIDTH + ST10 as usize].clone()
     }
 
     pub fn st11_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST11 as usize].clone()
+        self.variables[FULL_WIDTH + ST11 as usize].clone()
     }
 
     pub fn st12_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST12 as usize].clone()
+        self.variables[FULL_WIDTH + ST12 as usize].clone()
     }
 
     pub fn st13_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST13 as usize].clone()
+        self.variables[FULL_WIDTH + ST13 as usize].clone()
     }
 
     pub fn st14_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST14 as usize].clone()
+        self.variables[FULL_WIDTH + ST14 as usize].clone()
     }
 
     pub fn st15_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + ST15 as usize].clone()
+        self.variables[FULL_WIDTH + ST15 as usize].clone()
     }
 
     pub fn inv_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + INV as usize].clone()
+        self.variables[FULL_WIDTH + INV as usize].clone()
     }
 
     pub fn osp_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + OSP as usize].clone()
+        self.variables[FULL_WIDTH + OSP as usize].clone()
     }
 
     pub fn osv_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + OSV as usize].clone()
+        self.variables[FULL_WIDTH + OSV as usize].clone()
     }
 
     pub fn ramv_next(&self) -> MPolynomial<XWord> {
-        self.transition_constraint_variables[FULL_WIDTH + RAMV as usize].clone()
+        self.variables[FULL_WIDTH + RAMV as usize].clone()
     }
 
     pub fn decompose_arg(&self) -> Vec<MPolynomial<XWord>> {
@@ -2057,7 +2253,7 @@ impl ProcessorConstraintPolynomialFactory {
     }
 }
 
-impl ProcessorConstraintPolynomialFactory {
+impl TransitionConstraints {
     /// A polynomial that has solutions when `ci` is not `instruction`.
     ///
     /// This is naively achieved by constructing a polynomial that has

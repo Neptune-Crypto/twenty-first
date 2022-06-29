@@ -16,8 +16,6 @@ type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 pub trait ExtensionTable: Table<XWord> + Sync {
-    fn base_width(&self) -> usize;
-
     fn ext_boundary_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>>;
 
     fn ext_consistency_constraints(&self, challenges: &AllChallenges) -> Vec<MPolynomial<XWord>>;
@@ -31,7 +29,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
     ) -> Vec<MPolynomial<XWord>>;
 
     fn max_degree(&self) -> Degree {
-        let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.width() * 2];
+        let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.full_width() * 2];
 
         // 1. Insert dummy challenges
         // 2. Refactor so we can calculate max_degree without specifying challenges
@@ -62,7 +60,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
     }
 
     fn boundary_quotient_degree_bounds(&self, challenges: &AllChallenges) -> Vec<Degree> {
-        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.width()];
+        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.full_width()];
 
         let degree_bounds: Vec<Degree> = self
             .ext_boundary_constraints(challenges)
@@ -74,7 +72,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
     }
 
     fn transition_quotient_degree_bounds(&self, challenges: &AllChallenges) -> Vec<Degree> {
-        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); 2 * self.width()];
+        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); 2 * self.full_width()];
 
         let transition_constraints = self.ext_transition_constraints(challenges);
 
@@ -92,7 +90,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         challenges: &AllChallenges,
         terminals: &AllEndpoints,
     ) -> Vec<Degree> {
-        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.width()];
+        let max_degrees: Vec<Degree> = vec![self.interpolant_degree(); self.full_width()];
         self.ext_terminal_constraints(challenges, terminals)
             .iter()
             .map(|mpo| mpo.symbolic_degree_bound(&max_degrees) - 1)
@@ -150,10 +148,13 @@ pub trait ExtensionTable: Table<XWord> + Sync {
                 .par_iter()
                 .enumerate()
                 .map(|(i, z_inverse)| {
-                    let current: Vec<XWord> = (0..self.width()).map(|j| codewords[j][i]).collect();
-                    let next: Vec<XWord> = (0..self.width())
+                    let current: Vec<XWord> =
+                        (0..self.full_width()).map(|j| codewords[j][i]).collect();
+
+                    let next: Vec<XWord> = (0..self.full_width())
                         .map(|j| codewords[j][(i + unit_distance) % fri_domain.length])
                         .collect();
+
                     let point = vec![current, next].concat();
                     let composition_evaluation = tc.evaluate(&point);
                     composition_evaluation * z_inverse.lift()
@@ -201,7 +202,9 @@ pub trait ExtensionTable: Table<XWord> + Sync {
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
                 .into_par_iter()
                 .map(|i| {
-                    let point: Vec<XWord> = (0..self.width()).map(|j| codewords[j][i]).collect();
+                    let point: Vec<XWord> =
+                        (0..self.full_width()).map(|j| codewords[j][i]).collect();
+
                     termc.evaluate(&point) * zerofier_inverse[i].lift()
                 })
                 .collect();
@@ -238,20 +241,31 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
         for bc in boundary_constraints {
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
-                .into_par_iter()
+                .into_iter()
                 .map(|i| {
                     println!(
-                        "LOOKATME self.width(): {}, self.name(): {}",
-                        self.width(),
+                        "LOOKATME self.base_width() = {}, self.full_width() = {}, self.name() = {}",
+                        self.base_width(),
+                        self.full_width(),
                         self.name()
                     );
-                    let point: Vec<XWord> = (0..self.width())
+
+                    let point: Vec<XWord> = (0..self.full_width())
                         .map(|j| {
                             println!("i: {}, j: {}", i, j);
                             codewords[i][j]
                         })
                         .collect();
-                    bc.evaluate(&point) * zerofier_inverse[i].lift()
+
+                    println!(
+                        "before evaluate, {}: points.len() = {}",
+                        self.name(),
+                        self.full_width()
+                    );
+
+                    let e = bc.evaluate(&point) * zerofier_inverse[i].lift();
+                    println!("after evaluate");
+                    e
                 })
                 .collect();
             quotient_codewords.push(quotient_codeword);

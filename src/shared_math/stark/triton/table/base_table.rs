@@ -12,8 +12,11 @@ type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct BaseTable<DataPF> {
-    // The width of each `data` row
-    width: usize,
+    // The width of each `data` row in the base version of the table
+    base_width: usize,
+
+    // The width of each `data` row in the extended version of the table
+    full_width: usize,
 
     // The number of `data` rows after padding
     padded_height: usize,
@@ -34,9 +37,11 @@ pub struct BaseTable<DataPF> {
     matrix: Vec<Vec<DataPF>>,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl<DataPF: PrimeField> BaseTable<DataPF> {
     pub fn new(
-        width: usize,
+        base_width: usize,
+        full_width: usize,
         padded_height: usize,
         num_randomizers: usize,
         omicron: DataPF,
@@ -59,7 +64,8 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
         }
 
         BaseTable {
-            width,
+            base_width,
+            full_width,
             padded_height,
             num_randomizers,
             omicron,
@@ -72,7 +78,8 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
     /// Create a `BaseTable<DataPF>` with the same parameters, but new `matrix` data.
     pub fn with_data(&self, matrix: Vec<Vec<DataPF>>) -> Self {
         BaseTable::new(
-            self.width,
+            self.base_width,
+            self.full_width,
             self.padded_height,
             self.num_randomizers,
             self.omicron,
@@ -88,7 +95,8 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
 impl BaseTable<BWord> {
     pub fn with_lifted_data(&self, matrix: Vec<Vec<XWord>>) -> BaseTable<XWord> {
         BaseTable::new(
-            self.width,
+            self.base_width,
+            self.full_width,
             self.padded_height,
             self.num_randomizers,
             self.omicron.lift(),
@@ -103,8 +111,12 @@ pub trait HasBaseTable<DataPF: PrimeField> {
     fn to_base(&self) -> &BaseTable<DataPF>;
     fn to_mut_base(&mut self) -> &mut BaseTable<DataPF>;
 
-    fn width(&self) -> usize {
-        self.to_base().width
+    fn base_width(&self) -> usize {
+        self.to_base().base_width
+    }
+
+    fn full_width(&self) -> usize {
+        self.to_base().full_width
     }
 
     fn padded_height(&self) -> usize {
@@ -183,9 +195,13 @@ where
         }
     }
 
-    fn low_degree_extension(&self, fri_domain: &FriDomain<DataPF>) -> Vec<Vec<DataPF>> {
+    fn low_degree_extension(
+        &self,
+        fri_domain: &FriDomain<DataPF>,
+        current_width: usize,
+    ) -> Vec<Vec<DataPF>> {
         // FIXME: Table<> supports Vec<[DataPF; WIDTH]>, but FriDomain does not (yet).
-        self.interpolate_columns(fri_domain.omega, fri_domain.length)
+        self.interpolate_columns(fri_domain.omega, fri_domain.length, current_width)
             .par_iter()
             .map(|polynomial| fri_domain.evaluate(polynomial))
             .collect()
@@ -194,7 +210,12 @@ where
     /// Return the interpolation of columns. The `column_indices` variable
     /// must be called with *all* the column indices for this particular table,
     /// if it is called with a subset, it *will* fail.
-    fn interpolate_columns(&self, omega: DataPF, omega_order: usize) -> Vec<Polynomial<DataPF>> {
+    fn interpolate_columns(
+        &self,
+        omega: DataPF,
+        omega_order: usize,
+        current_width: usize,
+    ) -> Vec<Polynomial<DataPF>> {
         // FIXME: Inject `rng` instead.
         let mut rng = rand::thread_rng();
 
@@ -216,7 +237,7 @@ where
         );
 
         if self.padded_height() == 0 {
-            return vec![Polynomial::ring_zero(); self.width()];
+            return vec![Polynomial::ring_zero(); current_width];
         }
 
         assert!(
@@ -238,7 +259,7 @@ where
         let mut valuess: Vec<Vec<DataPF>> = vec![];
 
         let data = self.data();
-        for c in 0..self.width() {
+        for c in 0..current_width {
             let trace: Vec<DataPF> = data.iter().map(|row| row[c]).collect();
             let randomizers: Vec<DataPF> =
                 DataPF::random_elements(self.num_randomizers(), &mut rng);

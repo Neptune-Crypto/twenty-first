@@ -80,10 +80,6 @@ impl Table<XFieldElement> for ExtProgramTable {
 }
 
 impl ExtensionTable for ExtProgramTable {
-    fn base_width(&self) -> usize {
-        BASE_WIDTH
-    }
-
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         vec![]
     }
@@ -119,6 +115,7 @@ impl ProgramTable {
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
             BASE_WIDTH,
+            FULL_WIDTH,
             padded_height,
             num_randomizers,
             omicron,
@@ -192,6 +189,7 @@ impl ExtProgramTable {
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
         let base = BaseTable::new(
+            BASE_WIDTH,
             FULL_WIDTH,
             padded_height,
             num_randomizers,
@@ -205,7 +203,7 @@ impl ExtProgramTable {
     }
 
     pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
-        let ext_codewords = self.low_degree_extension(fri_domain);
+        let ext_codewords = self.low_degree_extension(fri_domain, self.full_width());
         let base = self.base.with_data(ext_codewords);
 
         ExtProgramTable { base }
