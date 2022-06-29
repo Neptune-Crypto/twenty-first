@@ -6,9 +6,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::instruction::{
-    all_instructions, AnInstruction::*, Instruction,
-};
+use crate::shared_math::stark::triton::instruction::{all_instructions, Instruction};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 use std::collections::HashMap;
@@ -811,7 +809,7 @@ impl ProcessorConstraintPolynomialFactory {
     pub fn instruction_push(&self) -> Vec<MPolynomial<XWord>> {
         let st0_next = self.st0_next();
         let nia = self.nia();
-        let deselector = self.instruction_deselector(Pop);
+        // let deselector = self.instruction_deselector(Pop);
 
         vec![st0_next - nia]
     }
@@ -1520,8 +1518,8 @@ impl ProcessorConstraintPolynomialFactory {
         let st0_becomes_coefficient_0 = self.st0_next()
             // align
             - (self.st0() * self.st3()
-             - self.st2() * self.st4()
-             - self.st1() * self.st5());
+            - self.st2() * self.st4()
+            - self.st1() * self.st5());
 
         // The coefficient of x^1 of multiplying the two X-Field elements on the stack is moved into st1.
         //
@@ -1529,10 +1527,10 @@ impl ProcessorConstraintPolynomialFactory {
         let st1_becomes_coefficient_1 = self.st1_next()
             // align
             - (self.st1() * self.st3()
-             + self.st0() * self.st4()
-             - self.st2() * self.st5()
-             + self.st2() * self.st4()
-             + self.st1() * self.st5());
+            + self.st0() * self.st4()
+            - self.st2() * self.st5()
+            + self.st2() * self.st4()
+            + self.st1() * self.st5());
 
         // The coefficient of x^2 of multiplying the two X-Field elements on the stack is moved into st2.
         //
@@ -1540,9 +1538,9 @@ impl ProcessorConstraintPolynomialFactory {
         let st2_becomes_coefficient_2 = self.st0_next()
             // align
             - (self.st2() * self.st3()
-             + self.st1() * self.st4()
-             + self.st0() * self.st5()
-             + self.st2() * self.st5());
+            + self.st1() * self.st4()
+            + self.st0() * self.st5()
+            + self.st2() * self.st5());
 
         // The stack element in st3 does not change.
         //
