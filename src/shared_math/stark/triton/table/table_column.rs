@@ -372,6 +372,7 @@ pub enum RamTableColumn {
     CLK,
     RAMP,
     RAMV,
+    InverseOfRampDifference,
 }
 
 impl From<RamTableColumn> for usize {
@@ -382,6 +383,7 @@ impl From<RamTableColumn> for usize {
             CLK => 0,
             RAMP => 1,
             RAMV => 2,
+            InverseOfRampDifference => 3,
         }
     }
 }
@@ -392,7 +394,7 @@ impl Bounded for RamTableColumn {
     }
 
     fn max_value() -> Self {
-        RamTableColumn::RAMV
+        RamTableColumn::InverseOfRampDifference
     }
 }
 
@@ -409,8 +411,8 @@ impl From<ExtRamTableColumn> for usize {
 
         match c {
             BaseColumn(base_column) => base_column.into(),
-            PermArgCompressedRow => 3,
-            RunningProductPermArg => 4,
+            PermArgCompressedRow => 4,
+            RunningProductPermArg => 5,
         }
     }
 }

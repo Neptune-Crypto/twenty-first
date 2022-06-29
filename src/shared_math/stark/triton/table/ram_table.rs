@@ -16,8 +16,8 @@ pub const RAM_TABLE_INITIALS_COUNT: usize =
 /// This is 3 because it combines: clk, ramv, ramp
 pub const RAM_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 3;
 
-pub const BASE_WIDTH: usize = 3;
-pub const FULL_WIDTH: usize = 5; // BASE_WIDTH + 2 * INITIALS_COUNT
+pub const BASE_WIDTH: usize = 4;
+pub const FULL_WIDTH: usize = 6; // BASE_WIDTH + 2 * INITIALS_COUNT
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;

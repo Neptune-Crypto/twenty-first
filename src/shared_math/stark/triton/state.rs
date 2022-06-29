@@ -497,9 +497,13 @@ impl<'pgm> VMState<'pgm> {
 
     pub fn to_ram_row(&self) -> [BFieldElement; ram_table::BASE_WIDTH] {
         let clk = self.cycle_count.into();
-        let st1 = self.op_stack.st(ST1);
+        let ramp = self.op_stack.st(ST1);
+        let ramv = *self.ram.get(&ramp).unwrap_or(&BWord::new(0));
 
-        [clk, st1, *self.ram.get(&st1).unwrap_or(&BWord::new(0))]
+        // placeholder value – actual value only known after sorting the RAM Table
+        let inverse_of_ramp_diff = BWord::new(0);
+
+        [clk, ramp, ramv, inverse_of_ramp_diff]
     }
 
     pub fn to_jump_stack_row(

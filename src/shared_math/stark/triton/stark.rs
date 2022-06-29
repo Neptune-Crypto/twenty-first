@@ -202,14 +202,14 @@ impl Stark {
 
         let _fridomainlength = (max_degree + 1) * (1 << 2);
         // FIXME: Convert this to a test of `.all_base_codewords()`.
-        //assert_eq!((79, 4096), (base_codewords.len(), base_codewords[0].len()));
+        //assert_eq!((80, 4096), (base_codewords.len(), base_codewords[0].len()));
 
         let all_base_codewords =
             vec![b_randomizer_codewords.into(), base_codewords.clone()].concat();
-        // TODO:  Convert this to a test that 'sum of all BASE_WIDTHs = 79'
+        // TODO:  Convert this to a test that 'sum of all BASE_WIDTHs = 80'
         // + '3 BFieldElements' used for a vector of XFieldElements.
         assert_eq!(
-            (82, 4096),
+            (83, 4096),
             (all_base_codewords.len(), all_base_codewords[0].len())
         );
 

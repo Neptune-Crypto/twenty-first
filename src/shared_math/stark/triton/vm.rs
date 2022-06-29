@@ -154,6 +154,8 @@ impl Program {
         base_matrices.sort_ram_matrix();
         base_matrices.sort_jump_stack_matrix();
 
+        base_matrices.set_ram_matrix_inverse_of_ramp_diff();
+
         (base_matrices, None)
     }
 
