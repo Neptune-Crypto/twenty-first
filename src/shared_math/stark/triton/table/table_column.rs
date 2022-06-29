@@ -494,22 +494,22 @@ impl Bounded for ExtJumpStackTableColumn {
 #[derive(Debug, Clone, Copy)]
 pub enum HashTableColumn {
     RoundNumber,
-    AUX0,
-    AUX1,
-    AUX2,
-    AUX3,
-    AUX4,
-    AUX5,
-    AUX6,
-    AUX7,
-    AUX8,
-    AUX9,
-    AUX10,
-    AUX11,
-    AUX12,
-    AUX13,
-    AUX14,
-    AUX15,
+    STATE0,
+    STATE1,
+    STATE2,
+    STATE3,
+    STATE4,
+    STATE5,
+    STATE6,
+    STATE7,
+    STATE8,
+    STATE9,
+    STATE10,
+    STATE11,
+    STATE12,
+    STATE13,
+    STATE14,
+    STATE15,
 }
 
 impl From<HashTableColumn> for usize {
@@ -518,22 +518,22 @@ impl From<HashTableColumn> for usize {
 
         match c {
             RoundNumber => 0,
-            AUX0 => 1,
-            AUX1 => 2,
-            AUX2 => 3,
-            AUX3 => 4,
-            AUX4 => 5,
-            AUX5 => 6,
-            AUX6 => 7,
-            AUX7 => 8,
-            AUX8 => 9,
-            AUX9 => 10,
-            AUX10 => 11,
-            AUX11 => 12,
-            AUX12 => 13,
-            AUX13 => 14,
-            AUX14 => 15,
-            AUX15 => 16,
+            STATE0 => 1,
+            STATE1 => 2,
+            STATE2 => 3,
+            STATE3 => 4,
+            STATE4 => 5,
+            STATE5 => 6,
+            STATE6 => 7,
+            STATE7 => 8,
+            STATE8 => 9,
+            STATE9 => 10,
+            STATE10 => 11,
+            STATE11 => 12,
+            STATE12 => 13,
+            STATE13 => 14,
+            STATE14 => 15,
+            STATE15 => 16,
         }
     }
 }
@@ -544,16 +544,16 @@ impl Bounded for HashTableColumn {
     }
 
     fn max_value() -> Self {
-        HashTableColumn::AUX15
+        HashTableColumn::STATE15
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum ExtHashTableColumn {
     BaseColumn(HashTableColumn),
-    CompressedAuxForInput,
+    CompressedStateForInput,
     ToProcessorRunningSum,
-    CompressedAuxForOutput,
+    CompressedStateForOutput,
     FromProcessorRunningSum,
 }
 
@@ -563,9 +563,9 @@ impl From<ExtHashTableColumn> for usize {
 
         match c {
             BaseColumn(base_column) => base_column.into(),
-            CompressedAuxForInput => 17,
+            CompressedStateForInput => 17,
             ToProcessorRunningSum => 18,
-            CompressedAuxForOutput => 19,
+            CompressedStateForOutput => 19,
             FromProcessorRunningSum => 20,
         }
     }

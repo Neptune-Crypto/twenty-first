@@ -1,6 +1,6 @@
 use super::instruction;
 use super::instruction::{parse, Instruction, LabelledInstruction};
-use super::state::{VMOutput, VMState, AUX_REGISTER_COUNT};
+use super::state::{VMOutput, VMState, STATE_REGISTER_COUNT};
 use super::stdio::{InputStream, OutputStream, VecStream};
 use super::table::base_matrix::BaseMatrices;
 use crate::shared_math::b_field_element::BFieldElement;
@@ -119,7 +119,7 @@ impl Program {
         stdin: &mut In,
         secret_in: &mut In,
         stdout: &mut Out,
-        rescue_prime: &RescuePrimeXlix<{ AUX_REGISTER_COUNT }>,
+        rescue_prime: &RescuePrimeXlix<{ STATE_REGISTER_COUNT }>,
     ) -> (BaseMatrices, Option<Box<dyn Error>>)
     where
         In: InputStream,
@@ -183,7 +183,7 @@ impl Program {
         stdin: &mut In,
         secret_in: &mut In,
         stdout: &mut Out,
-        rescue_prime: &RescuePrimeXlix<{ AUX_REGISTER_COUNT }>,
+        rescue_prime: &RescuePrimeXlix<{ STATE_REGISTER_COUNT }>,
     ) -> (Vec<VMState>, Option<Box<dyn Error>>)
     where
         In: InputStream,
@@ -467,10 +467,10 @@ mod triton_vm_tests {
             }
         }
 
-        // 2. Each `hash` operation result in 8 rows in the aux matrix.
+        // 2. Each `hash` operation result in 8 rows in the state matrix.
         {
-            let aux_rows_count = base_matrices.hash_matrix.len();
-            assert_eq!(hash_instruction_count * 8, aux_rows_count)
+            let hash_state_rows_count = base_matrices.hash_matrix.len();
+            assert_eq!(hash_instruction_count * 8, hash_state_rows_count)
         }
 
         //3. noRows(jmpstack_tabel) == noRows(processor_table)

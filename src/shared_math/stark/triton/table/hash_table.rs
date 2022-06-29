@@ -141,57 +141,57 @@ impl HashTable {
             extension_row.extend(row.iter().map(|elem| elem.lift()));
 
             // Compress input values into single value (independent of round index)
-            let aux_for_input = [
-                extension_row[HashTableColumn::AUX0 as usize],
-                extension_row[HashTableColumn::AUX1 as usize],
-                extension_row[HashTableColumn::AUX2 as usize],
-                extension_row[HashTableColumn::AUX3 as usize],
-                extension_row[HashTableColumn::AUX4 as usize],
-                extension_row[HashTableColumn::AUX5 as usize],
-                extension_row[HashTableColumn::AUX6 as usize],
-                extension_row[HashTableColumn::AUX7 as usize],
-                extension_row[HashTableColumn::AUX8 as usize],
-                extension_row[HashTableColumn::AUX9 as usize],
-                extension_row[HashTableColumn::AUX10 as usize],
-                extension_row[HashTableColumn::AUX11 as usize],
+            let state_for_input = [
+                extension_row[HashTableColumn::STATE0 as usize],
+                extension_row[HashTableColumn::STATE1 as usize],
+                extension_row[HashTableColumn::STATE2 as usize],
+                extension_row[HashTableColumn::STATE3 as usize],
+                extension_row[HashTableColumn::STATE4 as usize],
+                extension_row[HashTableColumn::STATE5 as usize],
+                extension_row[HashTableColumn::STATE6 as usize],
+                extension_row[HashTableColumn::STATE7 as usize],
+                extension_row[HashTableColumn::STATE8 as usize],
+                extension_row[HashTableColumn::STATE9 as usize],
+                extension_row[HashTableColumn::STATE10 as usize],
+                extension_row[HashTableColumn::STATE11 as usize],
             ];
-            let compressed_aux_for_input = aux_for_input
+            let compressed_state_for_input = state_for_input
                 .iter()
                 .zip(challenges.stack_input_weights.iter())
-                .map(|(aux, weight)| *weight * *aux)
+                .map(|(state, weight)| *weight * *state)
                 .fold(XWord::ring_zero(), |sum, summand| sum + summand);
-            extension_row.push(compressed_aux_for_input);
+            extension_row.push(compressed_state_for_input);
 
             // Add compressed input to running sum if round index marks beginning of hashing
             extension_row.push(from_processor_running_sum);
             if row[HashTableColumn::RoundNumber as usize].value() == 1 {
                 from_processor_running_sum = from_processor_running_sum
                     * challenges.from_processor_eval_row_weight
-                    + compressed_aux_for_input;
+                    + compressed_state_for_input;
             }
 
             // Compress digest values into single value (independent of round index)
-            let aux_for_output = [
-                extension_row[HashTableColumn::AUX0 as usize],
-                extension_row[HashTableColumn::AUX1 as usize],
-                extension_row[HashTableColumn::AUX2 as usize],
-                extension_row[HashTableColumn::AUX3 as usize],
-                extension_row[HashTableColumn::AUX4 as usize],
-                extension_row[HashTableColumn::AUX5 as usize],
+            let state_for_output = [
+                extension_row[HashTableColumn::STATE0 as usize],
+                extension_row[HashTableColumn::STATE1 as usize],
+                extension_row[HashTableColumn::STATE2 as usize],
+                extension_row[HashTableColumn::STATE3 as usize],
+                extension_row[HashTableColumn::STATE4 as usize],
+                extension_row[HashTableColumn::STATE5 as usize],
             ];
-            let compressed_aux_for_output = aux_for_output
+            let compressed_state_for_output = state_for_output
                 .iter()
                 .zip(challenges.digest_output_weights.iter())
-                .map(|(aux, weight)| *weight * *aux)
+                .map(|(state, weight)| *weight * *state)
                 .fold(XWord::ring_zero(), |sum, summand| sum + summand);
-            extension_row.push(compressed_aux_for_output);
+            extension_row.push(compressed_state_for_output);
 
             // Add compressed digest to running sum if round index marks end of hashing
             extension_row.push(to_processor_running_sum);
             if row[HashTableColumn::RoundNumber as usize].value() == 8 {
                 to_processor_running_sum = to_processor_running_sum
                     * challenges.to_processor_eval_row_weight
-                    + compressed_aux_for_output;
+                    + compressed_state_for_output;
             }
 
             extension_matrix.push(extension_row);

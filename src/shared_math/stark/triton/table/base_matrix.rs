@@ -96,7 +96,7 @@ impl BaseMatrices {
 
         match vm_output {
             Some(VMOutput::WriteOutputSymbol(_)) => (),
-            Some(VMOutput::XlixTrace(mut aux_trace)) => self.hash_matrix.append(&mut aux_trace),
+            Some(VMOutput::XlixTrace(mut hash_trace)) => self.hash_matrix.append(&mut hash_trace),
             Some(VMOutput::U32OpTrace(mut trace)) => self.u32_op_matrix.append(&mut trace),
             None => (),
         }

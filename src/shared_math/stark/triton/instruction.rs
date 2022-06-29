@@ -59,7 +59,7 @@ pub enum AnInstruction<Dest> {
     ReadMem,
     WriteMem,
 
-    // Auxiliary register instructions
+    // Hashing-related instructions
     Hash,
     DivineSibling,
     AssertVector,
@@ -159,7 +159,7 @@ impl<Dest> AnInstruction<Dest> {
             ReadMem => 20,
             WriteMem => 21,
 
-            // Auxiliary register instructions
+            // Hashing-related instructions
             Hash => 30,
             DivineSibling => 34,
             AssertVector => 36,
@@ -515,7 +515,7 @@ fn parse_token(
         "read_mem" => vec![ReadMem],
         "write_mem" => vec![WriteMem],
 
-        // Auxiliary register instructions
+        // Hashing-related instructions
         "hash" => vec![Hash],
         "divine_sibling" => vec![DivineSibling],
         "assert_vector" => vec![AssertVector],

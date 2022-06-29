@@ -24,8 +24,8 @@ type XWord = XFieldElement;
 /// The number of `BFieldElement`s in a Rescue-Prime digest for Triton VM.
 pub const DIGEST_LEN: usize = 6;
 
-/// The number of auxiliary registers for hashing-specific instructions.
-pub const AUX_REGISTER_COUNT: usize = 16;
+/// The number of state registers for hashing-specific instructions.
+pub const STATE_REGISTER_COUNT: usize = 16;
 
 /// The number of helper variable registers
 pub const HV_REGISTER_COUNT: usize = 5;
@@ -68,7 +68,7 @@ pub enum VMOutput {
     /// Trace output from `write_io`
     WriteOutputSymbol(BWord),
 
-    /// Trace of auxiliary registers for hash coprocessor table
+    /// Trace of state registers for hash coprocessor table
     ///
     /// One row per round in the XLIX permutation
     XlixTrace(Vec<[BWord; hash_table::BASE_WIDTH]>),
@@ -104,7 +104,7 @@ impl<'pgm> VMState<'pgm> {
         &self,
         stdin: &mut In,
         secret_in: &mut In,
-        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
+        rescue_prime: &RescuePrimeXlix<STATE_REGISTER_COUNT>,
     ) -> Result<(VMState<'pgm>, Option<VMOutput>), Box<dyn Error>>
     where
         In: InputStream,
@@ -120,7 +120,7 @@ impl<'pgm> VMState<'pgm> {
         &mut self,
         stdin: &mut In,
         secret_in: &mut In,
-        rescue_prime: &RescuePrimeXlix<AUX_REGISTER_COUNT>,
+        rescue_prime: &RescuePrimeXlix<STATE_REGISTER_COUNT>,
     ) -> Result<Option<VMOutput>, Box<dyn Error>>
     where
         In: InputStream,
@@ -221,20 +221,20 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Hash => {
-                let mut aux = [BWord::new(0); AUX_REGISTER_COUNT];
+                let mut state = [BWord::new(0); STATE_REGISTER_COUNT];
                 for i in 0..2 * DIGEST_LEN {
-                    aux[i] = self.op_stack.pop()?;
+                    state[i] = self.op_stack.pop()?;
                 }
 
-                let aux_trace = rescue_prime.rescue_xlix_permutation_trace(&mut aux);
-                vm_output = Some(VMOutput::XlixTrace(aux_trace));
+                let hash_trace = rescue_prime.rescue_xlix_permutation_trace(&mut state);
+                vm_output = Some(VMOutput::XlixTrace(hash_trace));
 
                 for _ in 0..DIGEST_LEN {
                     self.op_stack.push(0.into());
                 }
 
                 for i in (0..DIGEST_LEN).rev() {
-                    self.op_stack.push(aux[i]);
+                    self.op_stack.push(state[i]);
                 }
 
                 self.instruction_pointer += 1;
