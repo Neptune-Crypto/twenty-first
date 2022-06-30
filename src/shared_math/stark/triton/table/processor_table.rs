@@ -537,7 +537,7 @@ impl Table<XFieldElement> for ExtProcessorTable {
 
 impl ExtensionTable for ExtProcessorTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = ConsistencyBoundaryConstraints::default();
+        let factory = &self.tc;
 
         // The cycle counter `clk` is 0.
         //
@@ -667,7 +667,7 @@ impl ExtensionTable for ExtProcessorTable {
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = ConsistencyBoundaryConstraints::default();
+        let factory = &self.cbs;
 
         // The composition of instruction buckets ib0-ib5 corresponds the current instruction ci.
         //
@@ -703,7 +703,8 @@ impl ExtensionTable for ExtProcessorTable {
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = TransitionConstraints::default();
+        let factory = &self.tc;
+        let deselectors = &self.ids;
 
         // FIXME: `.instruction_pop()` etc. do not include the deselector yet.
 
@@ -2288,7 +2289,7 @@ impl InstructionDeselectors {
     /// This is naively achieved by constructing a polynomial that has
     /// a solution when `ci` is any other instruction. This deselector
     /// can be replaced with an efficient one based on `ib` registers.
-    pub fn get(&mut self, instruction: Instruction) -> MPolynomial<XWord> {
+    pub fn get(&self, instruction: Instruction) -> MPolynomial<XWord> {
         self.deselectors[&instruction].clone()
     }
 
