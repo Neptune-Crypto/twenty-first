@@ -241,7 +241,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
         for bc in boundary_constraints {
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
-                .into_iter()
+                .into_par_iter()
                 .map(|i| {
                     println!(
                         "LOOKATME self.base_width() = {}, self.full_width() = {}, self.name() = {}",

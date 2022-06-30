@@ -6,7 +6,9 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
-use crate::shared_math::stark::triton::instruction::{all_instructions, Instruction};
+use crate::shared_math::stark::triton::instruction::{
+    all_instructions, AnInstruction::*, Instruction,
+};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 use std::collections::HashMap;
@@ -338,7 +340,7 @@ impl ProcessorTable {
         }
 
         let base = self.base.with_lifted_data(extension_matrix);
-        let table = ExtProcessorTable { base };
+        let table = ExtProcessorTable::new(base);
         let terminals = ProcessorTableEndpoints {
             input_table_eval_sum: input_table_running_sum,
             output_table_eval_sum: output_table_running_sum,
@@ -381,14 +383,23 @@ impl ExtProcessorTable {
             matrix,
         );
 
-        Self { base }
+        Self::new(base)
     }
 
     pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
         let ext_codewords = self.low_degree_extension(fri_domain, self.full_width());
         let base = self.base.with_data(ext_codewords);
 
-        ExtProcessorTable { base }
+        Self::new(base)
+    }
+
+    pub fn new(base: BaseTable<XFieldElement>) -> ExtProcessorTable {
+        Self {
+            base,
+            tc: TransitionConstraints::default(),
+            cbs: ConsistencyBoundaryConstraints::default(),
+            ids: InstructionDeselectors::default(),
+        }
     }
 }
 
@@ -484,6 +495,9 @@ pub struct IOChallenges {
 #[derive(Debug, Clone)]
 pub struct ExtProcessorTable {
     base: BaseTable<XFieldElement>,
+    tc: TransitionConstraints,
+    cbs: ConsistencyBoundaryConstraints,
+    ids: InstructionDeselectors,
 }
 
 impl HasBaseTable<XFieldElement> for ExtProcessorTable {
@@ -673,19 +687,18 @@ impl ExtensionTable for ExtProcessorTable {
         //
         // $st0·(st0·inv - 1)$
         let st0_is_0_or_inverse_of_inv =
-            { factory.st0() * (factory.st0() * factory.inv() - factory.one()) };
+            factory.st0() * (factory.st0() * factory.inv() - factory.one());
 
         // Register inv is 0 or inv is the inverse of st0.
         //
         // $inv·(st0·inv - 1)$
-        let inv_is_0_or_inverse_of_inv =
-            { factory.inv() * (factory.st0() * factory.inv() - factory.one()) };
+        let inv_is_0_or_inverse_of_st0 =
+            factory.inv() * (factory.st0() * factory.inv() - factory.one());
 
-        // TODO: These constraints still use the wrong number of variables (2 * FULL_WIDTH as opposed to FULL_WIDTH).
         vec![
             ci_corresponds_to_ib0_thru_ib5,
             st0_is_0_or_inverse_of_inv,
-            inv_is_0_or_inverse_of_inv,
+            inv_is_0_or_inverse_of_st0,
         ]
     }
 
@@ -738,10 +751,18 @@ impl ExtensionTable for ExtProcessorTable {
         _challenges: &AllChallenges,
         _terminals: &AllEndpoints,
     ) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        let factory = ConsistencyBoundaryConstraints::default();
+
+        // In the last row, current instruction register ci is 0, corresponding to instruction halt.
+        //
+        // $ci - halt = 0  =>  ci - 0 = 0  =>  ci$
+        let last_ci_is_halt = factory.ci();
+
+        vec![last_ci_is_halt]
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ConsistencyBoundaryConstraints {
     variables: [MPolynomial<XWord>; FULL_WIDTH],
 }
@@ -922,23 +943,18 @@ impl ConsistencyBoundaryConstraints {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TransitionConstraints {
     variables: [MPolynomial<XWord>; 2 * FULL_WIDTH],
-    deselectors: HashMap<Instruction, MPolynomial<XWord>>,
 }
 
 impl Default for TransitionConstraints {
     fn default() -> Self {
-        let transition_constraint_variables = MPolynomial::variables(2 * FULL_WIDTH, 1.into())
+        let variables = MPolynomial::variables(2 * FULL_WIDTH, 1.into())
             .try_into()
             .expect("Create variables for transition constraints");
 
-        let deselectors = HashMap::new();
-
-        Self {
-            variables: transition_constraint_variables,
-            deselectors,
-        }
+        Self { variables }
     }
 }
 
@@ -1005,7 +1021,6 @@ impl TransitionConstraints {
     pub fn instruction_push(&self) -> Vec<MPolynomial<XWord>> {
         let st0_next = self.st0_next();
         let nia = self.nia();
-        // let deselector = self.instruction_deselector(Pop);
 
         vec![st0_next - nia]
     }
@@ -1714,8 +1729,8 @@ impl TransitionConstraints {
         let st0_becomes_coefficient_0 = self.st0_next()
             // align
             - (self.st0() * self.st3()
-            - self.st2() * self.st4()
-            - self.st1() * self.st5());
+                - self.st2() * self.st4()
+                - self.st1() * self.st5());
 
         // The coefficient of x^1 of multiplying the two X-Field elements on the stack is moved into st1.
         //
@@ -1723,10 +1738,10 @@ impl TransitionConstraints {
         let st1_becomes_coefficient_1 = self.st1_next()
             // align
             - (self.st1() * self.st3()
-            + self.st0() * self.st4()
-            - self.st2() * self.st5()
-            + self.st2() * self.st4()
-            + self.st1() * self.st5());
+                + self.st0() * self.st4()
+                - self.st2() * self.st5()
+                + self.st2() * self.st4()
+                + self.st1() * self.st5());
 
         // The coefficient of x^2 of multiplying the two X-Field elements on the stack is moved into st2.
         //
@@ -1734,9 +1749,9 @@ impl TransitionConstraints {
         let st2_becomes_coefficient_2 = self.st0_next()
             // align
             - (self.st2() * self.st3()
-            + self.st1() * self.st4()
-            + self.st0() * self.st5()
-            + self.st2() * self.st5());
+                + self.st1() * self.st4()
+                + self.st0() * self.st5()
+                + self.st2() * self.st5());
 
         // The stack element in st3 does not change.
         //
@@ -2253,44 +2268,67 @@ impl TransitionConstraints {
     }
 }
 
-impl TransitionConstraints {
+#[derive(Debug, Clone)]
+pub struct InstructionDeselectors {
+    deselectors: HashMap<Instruction, MPolynomial<XWord>>,
+}
+
+impl Default for InstructionDeselectors {
+    fn default() -> Self {
+        let factory = TransitionConstraints::default();
+        let deselectors = Self::create(&factory);
+
+        Self { deselectors }
+    }
+}
+
+impl InstructionDeselectors {
     /// A polynomial that has solutions when `ci` is not `instruction`.
     ///
     /// This is naively achieved by constructing a polynomial that has
     /// a solution when `ci` is any other instruction. This deselector
     /// can be replaced with an efficient one based on `ib` registers.
-    pub fn instruction_deselector(&mut self, instruction: Instruction) -> MPolynomial<XWord> {
-        if self.deselectors.is_empty() {
-            self.memoize_deselectors();
-        }
-
+    pub fn get(&mut self, instruction: Instruction) -> MPolynomial<XWord> {
         self.deselectors[&instruction].clone()
     }
 
-    pub fn memoize_deselectors(&mut self) {
+    pub fn create(factory: &TransitionConstraints) -> HashMap<Instruction, MPolynomial<XWord>> {
         let all_instructions = all_instructions();
-        let instruction_selectors = self.all_instruction_selectors();
+        let instruction_selectors = Self::all_instruction_selectors(factory);
+        let mut deselectors = HashMap::<Instruction, MPolynomial<XWord>>::new();
 
         for deselected_instruction in all_instructions.iter() {
             let deselector = all_instructions
                 .iter()
                 .filter(|instr| *instr != deselected_instruction)
                 .map(|instr| instruction_selectors[instr].clone())
-                .fold(self.one(), |a, b| a * b);
+                .fold(factory.one(), |a, b| a * b);
 
-            self.deselectors.insert(*deselected_instruction, deselector);
+            deselectors.insert(*deselected_instruction, deselector);
         }
+
+        deselectors
     }
 
     /// A polynomial that has solutions when ci is 'instruction'
-    pub fn instruction_selector(&self, instruction: &Instruction) -> MPolynomial<XWord> {
-        self.ci() - self.constant(instruction.opcode())
+    pub fn instruction_selector(
+        factory: &TransitionConstraints,
+        instruction: Instruction,
+    ) -> MPolynomial<XWord> {
+        factory.ci() - factory.constant(instruction.opcode())
     }
 
-    pub fn all_instruction_selectors(&self) -> HashMap<Instruction, MPolynomial<XWord>> {
+    pub fn all_instruction_selectors(
+        factory: &TransitionConstraints,
+    ) -> HashMap<Instruction, MPolynomial<XWord>> {
         all_instructions()
             .into_iter()
-            .map(|instruction| (instruction, self.instruction_selector(&instruction)))
+            .map(|instruction| {
+                (
+                    instruction,
+                    Self::instruction_selector(factory, instruction),
+                )
+            })
             .collect()
     }
 }
