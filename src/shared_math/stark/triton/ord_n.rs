@@ -162,6 +162,33 @@ impl From<Ord16> for u32 {
     }
 }
 
+impl From<u32> for Ord16 {
+    fn from(n: u32) -> Self {
+        match n {
+            1 => ST1,
+            2 => ST2,
+            3 => ST3,
+            4 => ST4,
+            0 => ST0,
+            5 => ST5,
+            6 => ST6,
+            7 => ST7,
+            8 => ST8,
+            9 => ST9,
+            10 => ST10,
+            11 => ST11,
+            12 => ST12,
+            13 => ST13,
+            14 => ST14,
+            15 => ST15,
+            _ => panic!(
+                "Tried to cast `{}: u32` into type `Ord16` which is too small.",
+                n
+            ),
+        }
+    }
+}
+
 impl From<&Ord16> for u32 {
     fn from(n: &Ord16) -> Self {
         (*n).into()

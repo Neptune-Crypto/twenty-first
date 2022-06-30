@@ -11,6 +11,7 @@ use crate::shared_math::stark::triton::instruction::{
 };
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
+use itertools::Itertools;
 use std::collections::HashMap;
 
 pub const PROCESSOR_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 9;
@@ -708,43 +709,55 @@ impl ExtensionTable for ExtProcessorTable {
 
         // FIXME: `.instruction_pop()` etc. do not include the deselector yet.
 
+        let helper = |
+            (instruction, polynomials): (Instruction, Vec<MPolynomial<XWord>>)| -> Vec<MPolynomial<XWord>> {
+            polynomials
+                .iter()
+                .map(|polynomial| deselectors.get(instruction) * polynomial.clone())
+                .collect_vec()
+
+        };
+
+        let dummy_argument = 0;
         vec![
-            vec![factory.clk_always_increases_by_one()],
-            factory.instruction_pop(),
-            factory.instruction_push(),
-            factory.instruction_divine(),
-            factory.instruction_dup(),
-            factory.instruction_swap(),
-            factory.instruction_nop(),
-            factory.instruction_skiz(),
-            factory.instruction_call(),
-            factory.instruction_return(),
-            factory.instruction_recurse(),
-            factory.instruction_assert(),
-            factory.instruction_halt(),
-            factory.instruction_read_mem(),
-            factory.instruction_write_mem(),
-            factory.instruction_hash(),
-            factory.instruction_divine_sibling(),
-            factory.instruction_assert_vector(),
-            factory.instruction_add(),
-            factory.instruction_mul(),
-            factory.instruction_invert(),
-            factory.instruction_split(),
-            factory.instruction_eq(),
-            factory.instruction_lt(),
-            factory.instruction_and(),
-            factory.instruction_xor(),
-            factory.instruction_reverse(),
-            factory.instruction_div(),
-            factory.instruction_xxadd(),
-            factory.instruction_xxmul(),
-            // factory.instruction_xinv(),
-            // factory.instruction_xbmul(),
-            factory.instruction_read_io(),
-            factory.instruction_write_io(),
+            //(Clk, factory.clk_always_increases_by_one()),
+            (Pop, factory.instruction_pop()),
+            (Push(dummy_argument.into()), factory.instruction_push()),
+            (Divine, factory.instruction_divine()),
+            (Dup(dummy_argument.into()), factory.instruction_dup()),
+            (Swap(dummy_argument.into()), factory.instruction_swap()),
+            (Nop, factory.instruction_nop()),
+            (Skiz, factory.instruction_skiz()),
+            (Call(dummy_argument.into()), factory.instruction_call()),
+            (Return, factory.instruction_return()),
+            (Recurse, factory.instruction_recurse()),
+            (Assert, factory.instruction_assert()),
+            (Halt, factory.instruction_halt()),
+            (ReadMem, factory.instruction_read_mem()),
+            (WriteMem, factory.instruction_write_mem()),
+            (Hash, factory.instruction_hash()),
+            (DivineSibling, factory.instruction_divine_sibling()),
+            (AssertVector, factory.instruction_assert_vector()),
+            (Add, factory.instruction_add()),
+            (Mul, factory.instruction_mul()),
+            (Invert, factory.instruction_invert()),
+            (Split, factory.instruction_split()),
+            (Eq, factory.instruction_eq()),
+            (Lt, factory.instruction_lt()),
+            (And, factory.instruction_and()),
+            (Xor, factory.instruction_xor()),
+            (Reverse, factory.instruction_reverse()),
+            (Div, factory.instruction_div()),
+            (XxAdd, factory.instruction_xxadd()),
+            (XxMul, factory.instruction_xxmul()),
+            (XInvert, factory.instruction_xinv()),
+            (XbMul, factory.instruction_xbmul()),
+            (ReadIo, factory.instruction_read_io()),
+            (WriteIo, factory.instruction_write_io()),
         ]
-        .concat()
+        .into_iter()
+        .flat_map(helper)
+        .collect_vec()
     }
 
     fn ext_terminal_constraints(
