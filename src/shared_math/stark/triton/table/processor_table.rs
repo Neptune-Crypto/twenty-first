@@ -1805,11 +1805,58 @@ impl TransitionConstraints {
     }
 
     pub fn instruction_xinv(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        vec![
+            self.st0() * self.st0_next()
+                - self.st2() * self.st1_next()
+                - self.st1() * self.st2_next()
+                - self.one(),
+            self.st1() * self.st0_next() + self.st0() * self.st1_next()
+                - self.st2() * self.st2_next()
+                + self.st2() * self.st1_next()
+                + self.st1() * self.st2_next(),
+            self.st2() * self.st0_next()
+                + self.st1() * self.st1_next()
+                + self.st0() * self.st2_next()
+                + self.st2() * self.st2_next(),
+            self.st3_next() - self.st3(),
+            self.st4_next() - self.st4(),
+            self.st5_next() - self.st5(),
+            self.st6_next() - self.st6(),
+            self.st7_next() - self.st7(),
+            self.st8_next() - self.st8(),
+            self.st9_next() - self.st9(),
+            self.st10_next() - self.st10(),
+            self.st11_next() - self.st11(),
+            self.st12_next() - self.st12(),
+            self.st13_next() - self.st13(),
+            self.st14_next() - self.st14(),
+            self.st15_next() - self.st15(),
+            self.osv_next() - self.osv(),
+            self.osp_next() - self.osp(),
+        ]
     }
 
     pub fn instruction_xbmul(&self) -> Vec<MPolynomial<XWord>> {
-        todo!()
+        vec![
+            self.st0_next() - self.st0() * self.st1_next(),
+            self.st1_next() - self.st0() * self.st2_next(),
+            self.st2_next() - self.st0() * self.st3_next(),
+            self.st3_next() - self.st4_next(),
+            self.st4_next() - self.st5_next(),
+            self.st5_next() - self.st6_next(),
+            self.st6_next() - self.st7_next(),
+            self.st7_next() - self.st8_next(),
+            self.st8_next() - self.st9_next(),
+            self.st9_next() - self.st10_next(),
+            self.st10_next() - self.st11_next(),
+            self.st11_next() - self.st12_next(),
+            self.st12_next() - self.st13_next(),
+            self.st13_next() - self.st14_next(),
+            self.st14_next() - self.st15_next(),
+            self.st15_next() - self.osv(),
+            self.osp_next() - (self.osp() - self.one()),
+            (self.osp_next() - self.constant(15)) * self.hv4() - self.one(),
+        ]
     }
 
     /// This instruction has no additional transition constraints.
