@@ -1805,19 +1805,35 @@ impl TransitionConstraints {
     }
 
     pub fn instruction_xinv(&self) -> Vec<MPolynomial<XWord>> {
-        vec![
-            self.st0() * self.st0_next()
-                - self.st2() * self.st1_next()
-                - self.st1() * self.st2_next()
-                - self.one(),
+        // The coefficient of x^0 of multiplying X-Field element on top of the current stack and on top of the next stack is 1.
+        //
+        // $st0·st0' - st2·st1' - st1·st2' - 1 = 0$
+        let first_coefficient_of_product_of_element_and_inverse_is_1 = self.st0() * self.st0_next()
+            - self.st2() * self.st1_next()
+            - self.st1() * self.st2_next()
+            - self.one();
+
+        // The coefficient of x^1 of multiplying X-Field element on top of the current stack and on top of the next stack is 0.
+        //
+        // $st1·st0' + st0·st1' - st2·st2' + st2·st1' + st1·st2' = 0$
+        let second_coefficient_of_product_of_element_and_inverse_is_0 =
             self.st1() * self.st0_next() + self.st0() * self.st1_next()
                 - self.st2() * self.st2_next()
                 + self.st2() * self.st1_next()
-                + self.st1() * self.st2_next(),
-            self.st2() * self.st0_next()
-                + self.st1() * self.st1_next()
-                + self.st0() * self.st2_next()
-                + self.st2() * self.st2_next(),
+                + self.st1() * self.st2_next();
+
+        // The coefficient of x^2 of multiplying X-Field element on top of the current stack and on top of the next stack is 0.
+        //
+        // $st2·st0' + st1·st1' + st0·st2' + st2·st2' = 0$
+        let third_coefficient_of_product_of_element_and_inverse_is_0 = self.st2() * self.st0_next()
+            + self.st1() * self.st1_next()
+            + self.st0() * self.st2_next()
+            + self.st2() * self.st2_next();
+        vec![
+            first_coefficient_of_product_of_element_and_inverse_is_1,
+            second_coefficient_of_product_of_element_and_inverse_is_0,
+            third_coefficient_of_product_of_element_and_inverse_is_0,
+            // st3 -- st15 do not change
             self.st3_next() - self.st3(),
             self.st4_next() - self.st4(),
             self.st5_next() - self.st5(),
@@ -1831,16 +1847,35 @@ impl TransitionConstraints {
             self.st13_next() - self.st13(),
             self.st14_next() - self.st14(),
             self.st15_next() - self.st15(),
+            // osv and osp do not change
             self.osv_next() - self.osv(),
             self.osp_next() - self.osp(),
         ]
     }
 
     pub fn instruction_xbmul(&self) -> Vec<MPolynomial<XWord>> {
+        // The result of multiplying the top of the stack with the X-Field element's coefficient for x^0 is moved into st0.
+        //
+        // st0' - st0·st1
+        let first_coefficient_becomes_scalar_multiplied =
+            self.st0_next() - self.st0() * self.st1_next();
+
+        // The result of multiplying the top of the stack with the X-Field element's coefficient for x^1 is moved into st1.
+        //
+        // st1' - st0·st2
+        let second_coefficient_becomes_scalar_multiplied =
+            self.st1_next() - self.st0() * self.st2_next();
+
+        // The result of multiplying the top of the stack with the X-Field element's coefficient for x^2 is moved into st2.
+        //
+        // st2' - st0·st3
+        let third_coefficient_becomes_scalar_multiplied =
+            self.st2_next() - self.st0() * self.st3_next();
+
         vec![
-            self.st0_next() - self.st0() * self.st1_next(),
-            self.st1_next() - self.st0() * self.st2_next(),
-            self.st2_next() - self.st0() * self.st3_next(),
+            first_coefficient_becomes_scalar_multiplied,
+            second_coefficient_becomes_scalar_multiplied,
+            third_coefficient_becomes_scalar_multiplied,
             self.st3_next() - self.st4_next(),
             self.st4_next() - self.st5_next(),
             self.st5_next() - self.st6_next(),
