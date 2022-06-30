@@ -162,29 +162,28 @@ impl From<Ord16> for u32 {
     }
 }
 
-impl From<u32> for Ord16 {
-    fn from(n: u32) -> Self {
+impl TryFrom<u32> for Ord16 {
+    type Error = String;
+
+    fn try_from(n: u32) -> Result<Self, Self::Error> {
         match n {
-            1 => ST1,
-            2 => ST2,
-            3 => ST3,
-            4 => ST4,
-            0 => ST0,
-            5 => ST5,
-            6 => ST6,
-            7 => ST7,
-            8 => ST8,
-            9 => ST9,
-            10 => ST10,
-            11 => ST11,
-            12 => ST12,
-            13 => ST13,
-            14 => ST14,
-            15 => ST15,
-            _ => panic!(
-                "Tried to cast `{}: u32` into type `Ord16` which is too small.",
-                n
-            ),
+            0 => Ok(ST0),
+            1 => Ok(ST1),
+            2 => Ok(ST2),
+            3 => Ok(ST3),
+            4 => Ok(ST4),
+            5 => Ok(ST5),
+            6 => Ok(ST6),
+            7 => Ok(ST7),
+            8 => Ok(ST8),
+            9 => Ok(ST9),
+            10 => Ok(ST10),
+            11 => Ok(ST11),
+            12 => Ok(ST12),
+            13 => Ok(ST13),
+            14 => Ok(ST14),
+            15 => Ok(ST15),
+            _ => Err(format!("{} is out of range for Ord16", n)),
         }
     }
 }

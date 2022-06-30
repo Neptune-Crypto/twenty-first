@@ -9,6 +9,7 @@ use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::instruction::{
     all_instructions, AnInstruction::*, Instruction,
 };
+use crate::shared_math::stark::triton::ord_n::Ord16;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 use itertools::Itertools;
@@ -718,17 +719,19 @@ impl ExtensionTable for ExtProcessorTable {
 
         };
 
-        let dummy_argument = 0;
+        let dummy_bfield_element = BFieldElement::ring_zero();
+        let dummy_ord16 = Ord16::ST0;
+
         vec![
             //(Clk, factory.clk_always_increases_by_one()),
             (Pop, factory.instruction_pop()),
-            (Push(dummy_argument.into()), factory.instruction_push()),
+            (Push(dummy_bfield_element), factory.instruction_push()),
             (Divine, factory.instruction_divine()),
-            (Dup(dummy_argument.into()), factory.instruction_dup()),
-            (Swap(dummy_argument.into()), factory.instruction_swap()),
+            (Dup(dummy_ord16), factory.instruction_dup()),
+            (Swap(dummy_ord16), factory.instruction_swap()),
             (Nop, factory.instruction_nop()),
             (Skiz, factory.instruction_skiz()),
-            (Call(dummy_argument.into()), factory.instruction_call()),
+            (Call(dummy_bfield_element), factory.instruction_call()),
             (Return, factory.instruction_return()),
             (Recurse, factory.instruction_recurse()),
             (Assert, factory.instruction_assert()),

@@ -574,9 +574,10 @@ fn parse_label(tokens: &mut SplitWhitespace) -> Result<String, Box<dyn Error>> {
 }
 
 pub fn all_instructions() -> Vec<Instruction> {
+    let dummy_bfield_element = BFieldElement::ring_zero();
     vec![
         Pop,
-        Push(42.into()),
+        Push(dummy_bfield_element),
         Divine,
         Dup(ST0),
         Dup(ST1),
@@ -610,7 +611,7 @@ pub fn all_instructions() -> Vec<Instruction> {
         Swap(ST14),
         Swap(ST15),
         Skiz,
-        Call(0.into()),
+        Call(dummy_bfield_element),
         Return,
         Recurse,
         Assert,
