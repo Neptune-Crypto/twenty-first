@@ -741,7 +741,7 @@ mod triton_vm_tests {
         let (_base_matrices, _err) =
             program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
 
-        let mut expected = VecStream::new_bwords(&[14.into(), 21.into(), 35.into()]);
+        let expected = VecStream::new_bwords(&[14.into(), 21.into(), 35.into()]);
 
         // Discard disagreeing cursor values and compare.
         assert_eq!(expected.to_bword_vec(), stdout.to_bword_vec());
