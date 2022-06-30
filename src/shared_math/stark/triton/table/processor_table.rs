@@ -7,7 +7,7 @@ use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::instruction::{
-    all_instructions, AnInstruction::*, Instruction,
+    all_instructions_without_args, AnInstruction::*, Instruction,
 };
 use crate::shared_math::stark::triton::ord_n::Ord16;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
@@ -2392,7 +2392,7 @@ impl InstructionDeselectors {
     }
 
     pub fn create(factory: &TransitionConstraints) -> HashMap<Instruction, MPolynomial<XWord>> {
-        let all_instructions = all_instructions();
+        let all_instructions = all_instructions_without_args();
         let instruction_selectors = Self::all_instruction_selectors(factory);
         let mut deselectors = HashMap::<Instruction, MPolynomial<XWord>>::new();
 
@@ -2420,7 +2420,7 @@ impl InstructionDeselectors {
     pub fn all_instruction_selectors(
         factory: &TransitionConstraints,
     ) -> HashMap<Instruction, MPolynomial<XWord>> {
-        all_instructions()
+        all_instructions_without_args()
             .into_iter()
             .map(|instruction| {
                 (

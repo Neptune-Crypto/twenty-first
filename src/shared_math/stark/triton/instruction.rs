@@ -573,43 +573,15 @@ fn parse_label(tokens: &mut SplitWhitespace) -> Result<String, Box<dyn Error>> {
     Ok(label)
 }
 
-pub fn all_instructions() -> Vec<Instruction> {
+pub fn all_instructions_without_args() -> Vec<Instruction> {
     let dummy_bfield_element = BFieldElement::ring_zero();
+    let dummy_ord16 = Ord16::ST0;
     vec![
         Pop,
         Push(dummy_bfield_element),
         Divine,
-        Dup(ST0),
-        Dup(ST1),
-        Dup(ST2),
-        Dup(ST3),
-        Dup(ST4),
-        Dup(ST5),
-        Dup(ST6),
-        Dup(ST7),
-        Dup(ST8),
-        Dup(ST9),
-        Dup(ST10),
-        Dup(ST11),
-        Dup(ST12),
-        Dup(ST13),
-        Dup(ST14),
-        Dup(ST15),
-        Swap(ST1),
-        Swap(ST2),
-        Swap(ST3),
-        Swap(ST4),
-        Swap(ST5),
-        Swap(ST6),
-        Swap(ST7),
-        Swap(ST8),
-        Swap(ST9),
-        Swap(ST10),
-        Swap(ST11),
-        Swap(ST12),
-        Swap(ST13),
-        Swap(ST14),
-        Swap(ST15),
+        Dup(dummy_ord16),
+        Swap(dummy_ord16),
         Skiz,
         Call(dummy_bfield_element),
         Return,
@@ -640,7 +612,7 @@ pub fn all_instructions() -> Vec<Instruction> {
     ]
 }
 
-pub fn all_labelled_instructions() -> Vec<LabelledInstruction> {
+pub fn all_labelled_instructions_with_args() -> Vec<LabelledInstruction> {
     vec![
         Pop,
         Push(42.into()),
@@ -1192,7 +1164,7 @@ terminate: pop
 
 #[cfg(test)]
 mod instruction_tests {
-    use crate::shared_math::stark::triton::instruction::all_labelled_instructions;
+    use crate::shared_math::stark::triton::instruction::all_labelled_instructions_with_args;
 
     use super::super::vm::Program;
     use super::parse;
@@ -1219,7 +1191,7 @@ mod instruction_tests {
 
     #[test]
     fn parse_and_display_each_instruction_test() {
-        let expected = all_labelled_instructions();
+        let expected = all_labelled_instructions_with_args();
         let actual = parse(sample_programs::ALL_INSTRUCTIONS).unwrap();
 
         assert_eq!(expected, actual);
