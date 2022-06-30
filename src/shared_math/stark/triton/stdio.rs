@@ -60,14 +60,6 @@ impl VecStream {
         }
         result
     }
-
-    pub fn position(&self) -> u64 {
-        self.cursor.position()
-    }
-
-    pub fn set_position(&mut self, pos: u64) {
-        self.cursor.set_position(pos)
-    }
 }
 
 impl InputStream for VecStream {

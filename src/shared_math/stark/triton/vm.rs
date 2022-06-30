@@ -625,10 +625,10 @@ mod triton_vm_tests {
         let (_base_matrices, _err) =
             program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
 
-        let mut expected = VecStream::new_bwords(&[9.into(), 14.into(), 18.into()]);
-        // Move the inner cursor to agree.
-        expected.set_position(stdout.position());
-        assert_eq!(expected, stdout);
+        let expected = VecStream::new_bwords(&[9.into(), 14.into(), 18.into()]);
+
+        // Discard disagreeing cursor values and compare.
+        assert_eq!(expected.to_bword_vec(), stdout.to_bword_vec());
     }
 
     #[test]
@@ -648,10 +648,10 @@ mod triton_vm_tests {
         let (_base_matrices, _err) =
             program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
 
-        let mut expected = VecStream::new_bwords(&[108.into(), 123.into(), 22.into()]);
-        // Move the inner cursor to agree.
-        expected.set_position(stdout.position());
-        assert_eq!(expected, stdout);
+        let expected = VecStream::new_bwords(&[108.into(), 123.into(), 22.into()]);
+
+        // Discard disagreeing cursor values and compare.
+        assert_eq!(expected.to_bword_vec(), stdout.to_bword_vec());
     }
 
     #[test]
@@ -670,7 +670,7 @@ mod triton_vm_tests {
         let (_base_matrices, _err) =
             program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
 
-        let mut expected = VecStream::new_bytes(&[
+        let expected = VecStream::new_bytes(&[
             0.into(),
             0.into(),
             0.into(),
@@ -720,9 +720,9 @@ mod triton_vm_tests {
             90.into(),
             118.into(),
         ]);
-        // Move the inner cursor to agree.
-        expected.set_position(stdout.position());
-        assert_eq!(expected, stdout);
+
+        // Discard disagreeing cursor values and compare.
+        assert_eq!(expected.to_bword_vec(), stdout.to_bword_vec());
     }
 
     #[test]
@@ -742,8 +742,8 @@ mod triton_vm_tests {
             program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
 
         let mut expected = VecStream::new_bwords(&[14.into(), 21.into(), 35.into()]);
-        // Move the inner cursor to agree.
-        expected.set_position(stdout.position());
-        assert_eq!(expected, stdout);
+
+        // Discard disagreeing cursor values and compare.
+        assert_eq!(expected.to_bword_vec(), stdout.to_bword_vec());
     }
 }
