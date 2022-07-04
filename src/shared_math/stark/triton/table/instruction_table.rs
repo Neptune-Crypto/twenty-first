@@ -80,15 +80,30 @@ impl Table<XFieldElement> for ExtInstructionTable {
 
 impl ExtensionTable for ExtInstructionTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into());
+        let addr = variables[usize::from(Address)].clone();
+
+        // The first address is 0.
+        let fst_addr_is_zero = addr;
+
+        vec![fst_addr_is_zero]
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
+        // None.
         vec![]
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into());
+        let addr = variables[usize::from(Address)].clone();
+        let addr_next = variables[FULL_WIDTH + usize::from(Address)].clone();
+        let one = MPolynomial::<XFieldElement>::from_constant(1.into(), 2 * FULL_WIDTH);
+
+        // The address increases by 1.
+        let addr_incr_by_one = addr_next - (addr + one);
+
+        vec![addr_incr_by_one]
     }
 
     fn ext_terminal_constraints(
