@@ -6,6 +6,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
+use crate::shared_math::stark::triton::instruction::{AnInstruction, Instruction};
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const OP_STACK_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 1;
@@ -80,15 +81,82 @@ impl Table<XFieldElement> for ExtOpStackTable {
 
 impl ExtensionTable for ExtOpStackTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        use OpStackTableColumn::*;
+
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into());
+        let clk = variables[usize::from(CLK)].clone();
+        let osv = variables[usize::from(OSV)].clone();
+        let osp = variables[usize::from(OSP)].clone();
+        let sixteen = MPolynomial::from_constant(16.into(), FULL_WIDTH);
+
+        // 1. clk is 0.
+        let clk_is_0 = clk;
+
+        // 2. osv is 0.
+        let osv_is_0 = osv;
+
+        // 3. osp is the number of available stack registers, i.e., 16.
+        let osp_is_16 = osp - sixteen;
+
+        vec![clk_is_0, osv_is_0, osp_is_16]
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
+        // no further constraints
         vec![]
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        use AnInstruction::*;
+        use OpStackTableColumn::*;
+
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
+        // let clk = variables[usize::from(CLK)].clone();
+        let ci = variables[usize::from(CI)].clone();
+        let osv = variables[usize::from(OSV)].clone();
+        let osp = variables[usize::from(OSP)].clone();
+        let osp_next = variables[FULL_WIDTH + usize::from(OSP)].clone();
+        let osv_next = variables[FULL_WIDTH + usize::from(OSV)].clone();
+        let one = MPolynomial::from_constant(1.into(), FULL_WIDTH);
+
+        // the osp increases by 1 or the osp does not change
+        //
+        // $(osp' - (osp + 1))·(osp' - osp) = 0$
+        let osp_increases_by_1_or_does_not_change =
+            (osp_next.clone() - (osp.clone() + one.clone())) * (osp_next.clone() - osp.clone());
+
+        // FIXME: Replace with instruction group selectors for `shrink_stack` group + `binop` group + `xbmul` instruction
+
+        // the osp increases by 1 or the osv does not change OR the ci shrinks the OpStack
+        //
+        // $ (osp' - (osp + 1)) · (osv' - osv)
+        //                      · (ci - op_code(pop))
+        //                      · (ci - op_code(skiz))
+        //                      · (ci - op_code(assert))
+        //                      · (ci - op_code(add))
+        //                      · (ci - op_code(mul))
+        //                      · (ci - op_code(eq))
+        //                      · (ci - op_code(lt))
+        //                      · (ci - op_code(and))
+        //                      · (ci - op_code(xor))
+        //                      · (ci - op_code(xbmul))
+        //                      · (ci - op_code(write_io)) = 0 $
+        let osp_increases_by_1_or_osv_does_not_change =
+            (osp_next - (osp + one.clone())) * (osv_next - osv);
+
+        let ci_shrinks_opstack = [
+            Pop, Skiz, Assert, Add, Mul, Eq, Lt, And, Xor, XbMul, WriteIo,
+        ]
+        .into_iter()
+        .fold(one, |acc, instr: Instruction| {
+            let opcode = MPolynomial::from_constant(instr.opcode_b().lift(), 2 * FULL_WIDTH);
+            acc * (ci.clone() - opcode)
+        });
+
+        vec![
+            osp_increases_by_1_or_does_not_change,
+            osp_increases_by_1_or_osv_does_not_change * ci_shrinks_opstack,
+        ]
     }
 
     fn ext_terminal_constraints(
@@ -96,6 +164,7 @@ impl ExtensionTable for ExtOpStackTable {
         _challenges: &AllChallenges,
         _terminals: &AllEndpoints,
     ) -> Vec<MPolynomial<XWord>> {
+        // no further constraints
         vec![]
     }
 }

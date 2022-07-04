@@ -357,6 +357,7 @@ impl Stark {
             .into_iter()
             .map(|table| table.base_width())
             .sum();
+
         let num_extension_polynomials: usize = ext_tables
             .into_iter()
             .map(|ext_table| ext_table.full_width() - ext_table.base_width())
@@ -1318,9 +1319,6 @@ pub(crate) mod triton_stark_tests {
             );
         }
     }
-
-    // 3. simulate(), pad(), test constraints
-    // 3. simulate(), pad(), extend(), test constraints
 
     #[test]
     fn triton_prove_verify_test() {

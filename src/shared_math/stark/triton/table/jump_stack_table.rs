@@ -100,6 +100,7 @@ impl ExtensionTable for ExtJumpStackTable {
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
+        // no further constraints
         vec![]
     }
 
