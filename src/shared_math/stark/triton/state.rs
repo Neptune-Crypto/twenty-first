@@ -1039,7 +1039,7 @@ mod vm_state_tests {
             println!("{}", state);
         }
         if let Some(e) = err {
-            println!("Error: {}", e);
+            panic!("The VM encountered an error: {}", e);
         }
 
         let _last_state = trace.last().unwrap();

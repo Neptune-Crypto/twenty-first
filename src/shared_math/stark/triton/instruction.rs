@@ -730,11 +730,16 @@ pub mod sample_programs {
         "recurse ",                     // repeat
     );
 
+    /// TVM assembly to verify Merkle authentication paths
+    ///
+    /// input: merkle root, number of leafs, leaf values, APs
+    ///
+    /// output: Result<(), VMFail>
     pub const MT_AP_VERIFY: &str = concat!(
         "push 3 ",                                          // number of APs – should be an argument
-        "",                                                 // proper program starts here
+        "mt_ap_verify: ",                                   // proper program starts here
         "push 0 swap1 write_mem pop pop ",                  // store number of APs at RAM address 0
-        "call read_merkle_root ",                           //
+        "read_io read_io read_io read_io read_io read_io ", // read Merkle root
         "call check_aps ",                                  //
         "pop pop ",                                         // leave clean stack: number APs
         "pop pop pop pop pop pop ",                         // leave clean stack: Merkle root
@@ -748,10 +753,6 @@ pub mod sample_programs {
         "call traverse_tree ",                              //
         "call at_tree_top ",                                //
         "recurse ",                                         // check next AP
-        "",                                                 //
-        "read_merkle_root: ",                               // subroutine: put Merkle root on stack
-        "read_io read_io read_io read_io read_io read_io ", // read Merkle root
-        "return ",                                          //
         "",                                                 //
         "get_idx_and_hash_leaf: ",                          // subroutine: read index & hash leaf
         "read_io ",                                         // node index
