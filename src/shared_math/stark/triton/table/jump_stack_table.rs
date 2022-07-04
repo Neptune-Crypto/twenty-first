@@ -129,31 +129,39 @@ impl ExtensionTable for ExtJumpStackTable {
             2 * FULL_WIDTH,
         );
 
-        // 1. The jump stack pointer jsp increases by 1, or
-        let jsp_increases_by_one =
+        // 1. The jump stack pointer jsp increases by 1
+        //      or the jump stack pointer jsp does not change
+        let jsp_inc_or_stays =
             (jsp_next.clone() - (jsp.clone() + one.clone())) * (jsp_next.clone() - jsp.clone());
 
-        // 2. (jsp does not change and jso does not change and jsd does not change and the cycle counter clk increases by 1), or
-        let jsp_jso_jsd_stuck = (jsp_next.clone() - (jsp.clone() + one.clone()))
+        // 2. The jump stack pointer jsp increases by 1
+        //      or the jump stack origin jso does not change
+        //      or current instruction ci is return
+        let jsp_inc_or_jso_stays_or_ci_is_ret = (jsp_next.clone() - (jsp.clone() + one.clone()))
             * (jso_next - jso)
             * (ci.clone() - return_opcode.clone());
 
-        // 3. (jsp does not change and jso does not change and jsd does not change and the current instruction ci is call), or
-        let jsp_jso_jsd_stuck_call = (jsp_next.clone() - (jsp.clone() + one.clone()))
+        // 3. The jump stack pointer jsp increases by 1
+        //      or the jump stack destination jsd does not change
+        //      or current instruction ci is return
+        let jsp_inc_or_jsd_stays_or_ci_ret = (jsp_next.clone() - (jsp.clone() + one.clone()))
             * (jsd_next - jsd)
             * (ci.clone() - return_opcode.clone());
 
-        // 4. (jsp does not change and the current instruction ci is return).
-        let jsp_stuck_ci_is_return = (jsp_next - (jsp + one.clone()))
+        // 4. The jump stack pointer jsp increases by 1
+        //      or the cycle count clk increases by 1
+        //      or current instruction ci is call
+        //      or current instruction ci is return
+        let jsp_inc_or_clk_inc_or_ci_call_or_ci_ret = (jsp_next - (jsp + one.clone()))
             * (clk_next - (clk + one))
             * (ci.clone() - call_opcode)
             * (ci - return_opcode);
 
         vec![
-            jsp_increases_by_one,
-            jsp_jso_jsd_stuck,
-            jsp_jso_jsd_stuck_call,
-            jsp_stuck_ci_is_return,
+            jsp_inc_or_stays,
+            jsp_inc_or_jso_stays_or_ci_is_ret,
+            jsp_inc_or_jsd_stays_or_ci_ret,
+            jsp_inc_or_clk_inc_or_ci_call_or_ci_ret,
         ]
     }
 
