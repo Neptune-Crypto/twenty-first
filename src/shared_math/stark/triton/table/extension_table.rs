@@ -6,6 +6,7 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::stark::triton::fri_domain::{lift_domain, FriDomain};
 use crate::shared_math::traits::{Inverse, ModPowU32, PrimeField};
 use crate::shared_math::x_field_element::XFieldElement;
+use crate::timing_reporter::TimingReporter;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -105,10 +106,18 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {
         // println!("TABLENAME: {}", self.name());
+        let mut timer = TimingReporter::start();
+
+        timer.elapsed("Start calculating boundary quotients: {}");
         let boundary_quotients = self.boundary_quotients(fri_domain, codewords, challenges);
+        timer.elapsed("Stop calculating boundary quotients: {}");
+        timer.elapsed("Start calculating transition quotients: {}");
         let transition_quotients = self.transition_quotients(fri_domain, codewords, challenges);
+        timer.elapsed("Stop calculating transition quotients: {}");
+        timer.elapsed("Start calculating terminal quotients: {}");
         let terminal_quotients =
             self.terminal_quotients(fri_domain, codewords, challenges, terminals);
+        timer.elapsed("Stop calculating terminal quotients: {}");
 
         vec![boundary_quotients, transition_quotients, terminal_quotients].concat()
     }
@@ -116,11 +125,14 @@ pub trait ExtensionTable: Table<XWord> + Sync {
     fn transition_quotients(
         &self,
         fri_domain: &FriDomain<BWord>,
-        codewords: &[Vec<XWord>],
+        codewords_transposed: &[Vec<XWord>],
         challenges: &AllChallenges,
     ) -> Vec<Vec<XWord>> {
+        let mut timer = TimingReporter::start();
+        timer.elapsed("Start transition quotients");
         let one = BFieldElement::ring_one();
         let x_values: Vec<BFieldElement> = fri_domain.domain_values();
+        timer.elapsed("Domain values");
         let subgroup_zerofier: Vec<BFieldElement> = x_values
             .iter()
             .map(|x| x.mod_pow_u32(self.padded_height() as u32) - one)
@@ -130,38 +142,51 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         } else {
             BFieldElement::batch_inversion(subgroup_zerofier)
         };
-
+        timer.elapsed("Batch Inversion");
         let omicron_inverse = self.omicron().unlift().unwrap().inverse();
         let zerofier_inverse: Vec<BFieldElement> = x_values
             .into_iter()
             .enumerate()
             .map(|(i, x)| subgroup_zerofier_inverse[i] * (x - omicron_inverse))
             .collect();
-
+        timer.elapsed("Zerofier Inverse");
         let transition_constraints = self.ext_transition_constraints(challenges);
+        timer.elapsed("Transition Constraints");
 
         let mut quotients: Vec<Vec<XWord>> = vec![];
         let unit_distance = self.unit_distance(fri_domain.length);
+
+        println!("#transition_constraints: {}", transition_constraints.len());
+        println!("#zerofiers: {}", zerofier_inverse.len());
+        println!("#codewords: {}", codewords_transposed.len());
+        println!(
+            "#transition_constraints x #codewords: {}",
+            transition_constraints.len() * codewords_transposed.len()
+        );
         for tc in transition_constraints.iter() {
+            //timer.elapsed(&format!("START for-loop for tc of {}", tc.degree()));
             let quotient_codeword: Vec<XWord> = zerofier_inverse
                 .par_iter()
                 .enumerate()
                 .map(|(i, z_inverse)| {
-                    let current: Vec<XWord> =
-                        (0..self.full_width()).map(|j| codewords[j][i]).collect();
-
-                    let next: Vec<XWord> = (0..self.full_width())
-                        .map(|j| codewords[j][(i + unit_distance) % fri_domain.length])
+                    let current_row: Vec<XWord> = (0..self.full_width())
+                        .map(|j| codewords_transposed[j][i])
                         .collect();
 
-                    let point = vec![current, next].concat();
+                    let next_row: Vec<XWord> = (0..self.full_width())
+                        .map(|j| codewords_transposed[j][(i + unit_distance) % fri_domain.length])
+                        .collect();
+
+                    let point = vec![current_row, next_row].concat();
                     let composition_evaluation = tc.evaluate(&point);
                     composition_evaluation * z_inverse.lift()
                 })
                 .collect();
 
             quotients.push(quotient_codeword);
+            timer.elapsed(&format!("END for-loop for tc of {}", tc.degree()));
         }
+        timer.elapsed("DONE Transition Constraints");
         // If the `DEBUG` environment variable is set, interpolate the quotient and check the degree
 
         if std::env::var("DEBUG").is_ok() {

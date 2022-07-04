@@ -45,7 +45,7 @@ impl TimingReporter {
                     .unwrap_or(&Duration::ZERO),
             );
 
-            println!("{} in {:.2?}", label, rel_duration);
+            println!("EVENT: {} in {:.2?}", label, rel_duration);
         }
 
         self.durations.push((label, duration));

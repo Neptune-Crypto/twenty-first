@@ -835,6 +835,10 @@ pub mod sample_programs {
         halt
     ";
 
+    pub const HALT: &str = "
+        halt
+";
+
     pub const COUNTDOWN_FROM_10: &str = "
         push 10
         call foo

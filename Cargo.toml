@@ -108,11 +108,11 @@ codegen-units = 16
 rpath = false
 
 [profile.test]
-opt-level = 0
-debug = 2
+opt-level = 3
+debug = true
 split-debuginfo = '...'
 debug-assertions = true
-overflow-checks = true
+overflow-checks = false
 lto = false
 incremental = true
 codegen-units = 256

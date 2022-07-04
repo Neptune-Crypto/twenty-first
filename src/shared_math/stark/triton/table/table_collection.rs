@@ -15,6 +15,7 @@ use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::table::base_table::HasBaseTable;
 use crate::shared_math::x_field_element::XFieldElement;
+use crate::timing_reporter::TimingReporter;
 use itertools::Itertools;
 
 type BWord = BFieldElement;
@@ -421,11 +422,28 @@ impl ExtTableCollection {
         all_challenges: &AllChallenges,
         all_terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {
-        self.into_iter()
-            .map(|ext_table| {
-                ext_table.all_quotients(fri_domain, ext_table.data(), all_challenges, all_terminals)
+        let mut timer = TimingReporter::start();
+        let rv = self
+            .into_iter()
+            .map(|ext_codeword_table| {
+                timer.elapsed(&format!(
+                    "Start calculating quotient: {}",
+                    ext_codeword_table.name()
+                ));
+                let res = ext_codeword_table.all_quotients(
+                    fri_domain,
+                    ext_codeword_table.data(),
+                    all_challenges,
+                    all_terminals,
+                );
+                timer.elapsed(&format!(
+                    "Ended calculating quotient: {}",
+                    ext_codeword_table.name()
+                ));
+                res
             })
-            .concat()
+            .concat();
+        rv
     }
 
     pub fn get_all_quotient_degree_bounds(
