@@ -83,9 +83,7 @@ impl ExtensionTable for ExtProgramTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         use ProgramTableColumn::*;
 
-        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into())
-            .try_into()
-            .expect("Create variables for boundary constraints");
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into());
 
         let addr = variables[Address as usize].clone();
 
@@ -103,9 +101,7 @@ impl ExtensionTable for ExtProgramTable {
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         use ProgramTableColumn::*;
 
-        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into())
-            .try_into()
-            .expect("Create variables for consistency constraints");
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
 
         let addr = variables[Address as usize].clone();
         let addr_next = variables[FULL_WIDTH + Address as usize].clone();

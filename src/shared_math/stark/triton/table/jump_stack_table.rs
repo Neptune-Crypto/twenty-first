@@ -82,9 +82,7 @@ impl Table<XFieldElement> for ExtJumpStackTable {
 
 impl ExtensionTable for ExtJumpStackTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into())
-            .try_into()
-            .expect("Create variables for boundary constraints");
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into());
 
         // 1. Cycle count clk is 0.
         let clk = variables[usize::from(CLK)].clone();
@@ -106,9 +104,7 @@ impl ExtensionTable for ExtJumpStackTable {
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into())
-            .try_into()
-            .expect("Create variables for consistency constraints");
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
         let one = MPolynomial::<XFieldElement>::from_constant(1.into(), 2 * FULL_WIDTH);
 
         let clk = variables[usize::from(CLK)].clone();
@@ -139,7 +135,7 @@ impl ExtensionTable for ExtJumpStackTable {
 
         // 2. (jsp does not change and jso does not change and jsd does not change and the cycle counter clk increases by 1), or
         let jsp_jso_jsd_stuck = (jsp_next.clone() - (jsp.clone() + one.clone()))
-            * (jso_next.clone() - jso)
+            * (jso_next - jso)
             * (ci.clone() - return_opcode.clone());
 
         // 3. (jsp does not change and jso does not change and jsd does not change and the current instruction ci is call), or
