@@ -702,6 +702,34 @@ pub mod sample_programs {
         Program::new(&instructions)
     }
 
+    /// TVM assembly to sample weights for the recursive verifier
+    ///
+    /// input: seed, num_weights
+    ///
+    /// output: num_weights-many random weights
+    pub const SAMPLE_WEIGHTS: &str = concat!(
+        "push 17 push 13 push 11 ",     // get seed – should be an argument
+        "read_io ",                     // number of weights – should be argument
+        "sample_weights: ",             // proper program starts here
+        "call sample_weights_loop ",    // setup done, start sampling loop
+        "pop pop ",                     // clean up stack: RAM value & pointer
+        "pop pop pop pop ",             // clean up stack: seed & countdown
+        "halt ",                        // done – should be return
+        "",                             //
+        "sample_weights_loop: ",        // subroutine: loop until all weights are sampled
+        "dup0 push 0 eq skiz return ",  // no weights left
+        "push -1 add ",                 // decrease number of weights to still sample
+        "push 0 push 0 push 0 push 0 ", // prepare for hashing
+        "push 0 push 0 push 0 push 0 ", // prepare for hashing
+        "dup11 dup11 dup11 dup11 ",     // prepare for hashing
+        "hash ",                        // hash seed & countdown
+        "swap13 swap10 pop ",           // re-organize stack
+        "swap13 swap10 pop ",           // re-organize stack
+        "swap13 swap10 swap7 ",         // re-organize stack
+        "pop pop pop pop pop pop pop ", // remove unnecessary remnants of digest
+        "recurse ",                     // repeat
+    );
+
     pub const MT_AP_VERIFY: &str = concat!(
         "push 3 ",                                          // number of APs – should be an argument
         "",                                                 // proper program starts here

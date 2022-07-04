@@ -853,6 +853,24 @@ mod vm_state_tests {
     }
 
     #[test]
+    fn run_tvm_sample_weights() {
+        let program = Program::from_code(sample_programs::SAMPLE_WEIGHTS).unwrap();
+        println!("Successfully parsed the program.");
+        let (trace, _out, err) = program.run_with_input(&[11.into()], &[]);
+
+        for state in trace.iter() {
+            println!("{}", state);
+        }
+        if let Some(e) = err {
+            panic!("The VM encountered an error: {}", e);
+        }
+
+        let _last_state = trace.last().unwrap();
+        // todo check that VM terminated gracefully
+        // assert_eq!(last_state.current_instruction().unwrap(), Halt);
+    }
+
+    #[test]
     fn run_mt_ap_verify_test() {
         let program = Program::from_code(sample_programs::MT_AP_VERIFY).unwrap();
         println!("Successfully parsed the program.");
