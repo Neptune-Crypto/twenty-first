@@ -543,6 +543,7 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
             point.len(),
             "Dimensionality of multivariate polynomial, {}, and dimensionality of point, {}, must agree in evaluate", self.variable_count, point.len()
         );
+
         let mut acc = point[0].ring_zero();
         for (k, v) in self.coefficients.iter() {
             let mut prod = point[0].ring_one();

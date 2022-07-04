@@ -539,7 +539,7 @@ impl Table<XFieldElement> for ExtProcessorTable {
 
 impl ExtensionTable for ExtProcessorTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = &self.tc;
+        let factory = &self.cbs;
 
         // The cycle counter `clk` is 0.
         //

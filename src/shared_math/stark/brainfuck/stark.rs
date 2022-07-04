@@ -1423,7 +1423,7 @@ mod brainfuck_stark_tests {
     }
 
     #[test]
-    fn prove_verify_test() {
+    fn bf_prove_verify_test() {
         for source_code in [
             brainfuck::vm::sample_programs::VERY_SIMPLE_PROGRAM,
             brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT,

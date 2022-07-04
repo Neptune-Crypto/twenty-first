@@ -104,8 +104,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         challenges: &AllChallenges,
         terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {
-        println!("TABLENAME: {}", self.name());
-        println!("Rows: {}, columns: {}", codewords.len(), codewords[0].len());
+        // println!("TABLENAME: {}", self.name());
         let boundary_quotients = self.boundary_quotients(fri_domain, codewords, challenges);
         let transition_quotients = self.transition_quotients(fri_domain, codewords, challenges);
         let terminal_quotients =
@@ -231,7 +230,18 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         challenges: &AllChallenges,
     ) -> Vec<Vec<XWord>> {
         assert!(!codewords.is_empty(), "Codewords must be non-empty");
+        for row in codewords.iter() {
+            debug_assert_eq!(
+                fri_domain.length,
+                row.len(),
+                "Codewords have fri_domain.length columns ({}), not {}.",
+                fri_domain.length,
+                row.len()
+            );
+        }
+
         let mut quotient_codewords: Vec<Vec<XWord>> = vec![];
+
         let boundary_constraints: Vec<MPolynomial<XWord>> =
             self.ext_boundary_constraints(challenges);
         let one = BFieldElement::ring_one();
@@ -239,33 +249,34 @@ pub trait ExtensionTable: Table<XWord> + Sync {
             .map(|i| fri_domain.domain_value(i as u32) - one)
             .collect();
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
+
         for bc in boundary_constraints {
+            // println!("rows: {}, columns: {}", codewords.len(), codewords[0].len());
+            // println!("fri_domain.length = {}", fri_domain.length);
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
-                .into_par_iter()
-                .map(|i| {
-                    println!(
-                        "LOOKATME self.base_width() = {}, self.full_width() = {}, self.name() = {}",
-                        self.base_width(),
-                        self.full_width(),
-                        self.name()
-                    );
+                .into_iter()
+                .map(|fri_dom_i| {
+                    // println!(
+                    //     "LOOKATME self.base_width() = {}, self.full_width() = {}, self.name() = {}",
+                    //     self.base_width(),
+                    //     self.full_width(),
+                    //     self.name()
+                    // );
 
                     let point: Vec<XWord> = (0..self.full_width())
                         .map(|j| {
-                            println!("i: {}, j: {}", i, j);
-                            codewords[i][j]
+                            // println!("i: {}, j: {}", fri_dom_i, j);
+                            codewords[j][fri_dom_i]
                         })
                         .collect();
 
-                    println!(
-                        "before evaluate, {}: points.len() = {}",
-                        self.name(),
-                        self.full_width()
-                    );
+                    // println!(
+                    //     "before evaluate, {}: points.len() = {}",
+                    //     self.name(),
+                    //     self.full_width()
+                    // );
 
-                    let e = bc.evaluate(&point) * zerofier_inverse[i].lift();
-                    println!("after evaluate");
-                    e
+                    bc.evaluate(&point) * zerofier_inverse[fri_dom_i].lift()
                 })
                 .collect();
             quotient_codewords.push(quotient_codeword);

@@ -499,7 +499,11 @@ pub trait TableTrait {
             .collect();
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
         let own_width = self.full_width();
+
         for bc in boundary_constraints {
+            println!("rows: {}, columns: {}", codewords.len(), codewords[0].len());
+            println!("fri_domain.length = {}", fri_domain.length);
+
             let quotient_codeword: Vec<XFieldElement> = (0..fri_domain.length)
                 .into_par_iter()
                 .map(|i| {

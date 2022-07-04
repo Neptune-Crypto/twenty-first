@@ -16,6 +16,7 @@ use crate::shared_math::stark::triton::arguments::evaluation_argument::verify_ev
 use crate::shared_math::stark::triton::arguments::permutation_argument::PermArg;
 use crate::shared_math::stark::triton::proof_item::{Item, StarkProofStream};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
+use crate::shared_math::stark::triton::table::base_table::HasBaseTable;
 use crate::shared_math::stark::triton::table::challenges_endpoints::{AllChallenges, AllEndpoints};
 use crate::shared_math::stark::triton::table::table_collection::{
     BaseTableCollection, ExtTableCollection,
@@ -208,10 +209,11 @@ impl Stark {
             vec![b_randomizer_codewords.into(), base_codewords.clone()].concat();
         // TODO:  Convert this to a test that 'sum of all BASE_WIDTHs = 80'
         // + '3 BFieldElements' used for a vector of XFieldElements.
-        assert_eq!(
-            (83, 4096),
-            (all_base_codewords.len(), all_base_codewords[0].len())
-        );
+
+        // assert_eq!(
+        //     (83, 4096),
+        //     (all_base_codewords.len(), all_base_codewords[0].len())
+        // );
 
         timer.elapsed("get_and_set_all_base_codewords");
 
@@ -269,6 +271,15 @@ impl Stark {
         let ext_codeword_tables = ext_tables.codeword_tables(&self.xfri_domain);
         let all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
 
+        let progdata = ext_codeword_tables.program_table.data();
+        for row in progdata.iter() {
+            debug_assert_eq!(
+                self.xfri_domain.length,
+                row.len(),
+                "each codeword has length of fri_domain"
+            );
+        }
+
         timer.elapsed("extend + get_terminals");
 
         timer.elapsed("get_and_set_all_extension_codewords");
@@ -286,22 +297,23 @@ impl Stark {
         let mut extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
             Vec::with_capacity(transposed_extension_codewords.len());
 
-        let transposed_extension_codewords_clone = transposed_extension_codewords.clone();
-        transposed_extension_codewords_clone
+        (&transposed_extension_codewords)
             .into_par_iter()
             .map(|transposed_ext_codeword| {
                 let transposed_ext_codeword_coeffs: Vec<BFieldElement> = transposed_ext_codeword
-                    .into_iter()
+                    .iter()
                     .map(|x| x.coefficients.clone().to_vec())
                     .concat();
 
-                let sum_of_base_widths: usize =
-                    base_tables.into_iter().map(|table| table.base_width()).sum();
+                let sum_of_full_widths: usize = base_tables
+                    .into_iter()
+                    .map(|table| table.full_width())
+                    .sum();
 
                 assert_eq!(
-                    3 * sum_of_base_widths,
+                    3 * sum_of_full_widths,
                     transposed_ext_codeword_coeffs.len(),
-                    "Transposed extension codeword coefficients count should equal the sum of all table base widths"
+                    "There are just as many coefficients as there are BFieldElements in the full width of all extension tables."
                 );
 
                 hasher.hash(&transposed_ext_codeword_coeffs, RP_DEFAULT_OUTPUT_SIZE)
@@ -319,13 +331,18 @@ impl Stark {
 
         timer.elapsed("get_all_extension_degree_bounds");
 
-        let mut quotient_codewords =
-            ext_tables.get_all_quotients(&self.bfri_domain, &all_challenges, &all_terminals);
+        // XXX: Culprit!
+        let mut quotient_codewords = ext_codeword_tables.get_all_quotients(
+            &self.bfri_domain,
+            &all_challenges,
+            &all_terminals,
+        );
 
         timer.elapsed("all_quotients");
 
+        // XXX: Culprit!
         let mut quotient_degree_bounds =
-            ext_tables.get_all_quotient_degree_bounds(&all_challenges, &all_terminals);
+            ext_codeword_tables.get_all_quotient_degree_bounds(&all_challenges, &all_terminals);
 
         timer.elapsed("all_quotient_degree_bounds");
 
@@ -349,6 +366,8 @@ impl Stark {
 
         let num_randomizer_polynomials: usize = 1;
         let num_quotient_polynomials: usize = quotient_degree_bounds.len();
+
+        // XXX: Hmm.
         let base_degree_bounds = base_tables.get_all_base_degree_bounds();
 
         timer.elapsed("get_all_base_degree_bounds");
@@ -1082,7 +1101,7 @@ impl Stark {
 }
 
 #[cfg(test)]
-mod triton_stark_tests {
+pub(crate) mod triton_stark_tests {
     use super::*;
     use crate::shared_math::mpolynomial::MPolynomial;
     use crate::shared_math::stark::triton::arguments::evaluation_argument;
@@ -1090,6 +1109,21 @@ mod triton_stark_tests {
     use crate::shared_math::stark::triton::stdio::VecStream;
     use crate::shared_math::stark::triton::vm::Program;
     use crate::shared_math::traits::PrimeField;
+
+    pub(crate) fn dummy_challenges_initials() -> (AllChallenges, AllEndpoints) {
+        let hasher = StarkHasher::new();
+        let mock_seed = hasher.hash(&[], DIGEST_LEN);
+
+        let challenge_weights =
+            Stark::sample_weights(&hasher, &mock_seed, AllChallenges::TOTAL_CHALLENGES);
+        let dummy_challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
+
+        let initial_weights =
+            Stark::sample_weights(&hasher, &mock_seed, AllEndpoints::TOTAL_ENDPOINTS);
+        let dummy_initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
+
+        (dummy_challenges, dummy_initials)
+    }
 
     fn parse_simulate_prove(
         code: &str,
@@ -1170,17 +1204,7 @@ mod triton_stark_tests {
 
         base_tables.pad();
 
-        let hasher = StarkHasher::new();
-        let mock_seed = hasher.hash(&[], DIGEST_LEN);
-
-        let challenge_weights =
-            Stark::sample_weights(&hasher, &mock_seed, AllChallenges::TOTAL_CHALLENGES);
-        let all_challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
-
-        let initial_weights =
-            Stark::sample_weights(&hasher, &mock_seed, AllEndpoints::TOTAL_ENDPOINTS);
-        let all_initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
-
+        let (all_challenges, all_initials) = dummy_challenges_initials();
         let (ext_tables, all_terminals) =
             ExtTableCollection::extend_tables(&base_tables, &all_challenges, &all_initials);
 
