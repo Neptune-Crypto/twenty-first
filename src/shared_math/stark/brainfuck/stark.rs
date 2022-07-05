@@ -520,7 +520,12 @@ impl Stark {
 
         timer.elapsed("...shift and collect base codewords");
 
-        assert_eq!(extension_codewords.len(), num_extension_polynomials);
+        assert_eq!(
+            extension_codewords.len(),
+            num_extension_polynomials,
+            "The number of extension columns is equal to the number extension polynomials"
+        );
+
         for (i, (ec, edb)) in extension_codewords
             .iter()
             .zip(extension_degree_bounds.iter())

@@ -368,7 +368,6 @@ impl Stark {
         let num_randomizer_polynomials: usize = 1;
         let num_quotient_polynomials: usize = quotient_degree_bounds.len();
 
-        // XXX: Hmm.
         let base_degree_bounds = base_tables.get_all_base_degree_bounds();
 
         timer.elapsed("get_all_base_degree_bounds");
@@ -379,18 +378,21 @@ impl Stark {
         timer.elapsed("prover_fiat_shamir (again)");
 
         let weights_count = num_randomizer_polynomials
-            + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials);
+            + 2 * (num_base_polynomials
+                + num_extension_polynomials
+                + num_quotient_polynomials
+                + 1000); // FIXME: How many weights do we actually need?
         let weights = Self::sample_weights(&hasher, &weights_seed, weights_count);
 
         timer.elapsed("sample_weights");
 
-        // let mut terms: Vec<Vec<XFieldElement>> = vec![x_randomizer_codeword];
         let mut weights_counter = 0;
         let mut combination_codeword: Vec<XFieldElement> = x_randomizer_codeword
             .into_iter()
             .map(|elem| elem * weights[weights_counter])
             .collect();
         weights_counter += 1;
+
         assert_eq!(base_codewords.len(), num_base_polynomials);
         let fri_x_values: Vec<BFieldElement> = self.xfri.domain.b_domain_values();
 
@@ -437,7 +439,12 @@ impl Stark {
 
         timer.elapsed("...shift and collect base codewords");
 
-        //assert_eq!(all_ext_codewords.len(), num_extension_polynomials);
+        // assert_eq!(
+        //     all_ext_codewords.len(),
+        //     num_extension_polynomials,
+        //     "The number of extension columns is equal to the number extension polynomials"
+        // );
+
         for (i, (ec, edb)) in all_ext_codewords
             .iter()
             .zip(extension_degree_bounds.iter())
@@ -1089,7 +1096,7 @@ impl Stark {
         count: usize,
     ) -> Vec<XFieldElement> {
         hasher
-            .get_n_hash_rounds(seed, count / 2)
+            .get_n_hash_rounds(seed, (count + 1) / 2)
             .iter()
             .flat_map(|digest| {
                 vec![
@@ -1097,6 +1104,7 @@ impl Stark {
                     XFieldElement::new([digest[3], digest[4], digest[5]]),
                 ]
             })
+            .take(count)
             .collect()
     }
 }
