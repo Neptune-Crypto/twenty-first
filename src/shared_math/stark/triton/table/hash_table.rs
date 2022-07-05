@@ -76,6 +76,10 @@ impl Table<XFieldElement> for ExtHashTable {
     }
 }
 
+fn constant(constant: u32) -> MPolynomial<XWord> {
+    MPolynomial::from_constant(constant.into(), 2 * FULL_WIDTH)
+}
+
 impl ExtensionTable for ExtHashTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
@@ -98,10 +102,6 @@ impl ExtensionTable for ExtHashTable {
         let state14 = variables[usize::from(HashTableColumn::STATE14)].clone();
         let state15 = variables[usize::from(HashTableColumn::STATE15)].clone();
 
-        pub fn constant(constant: u32) -> MPolynomial<XWord> {
-            MPolynomial::from_constant(constant.into(), 2 * FULL_WIDTH)
-        }
-
         // Common factor:
         /*
             (rnd_nmbr.clone() - constant(0))
@@ -121,27 +121,138 @@ impl ExtensionTable for ExtHashTable {
             .fold(constant(1), |acc, x| acc * x);
 
         // 1. If the round number is 1, register state12 is 0.
-        let if_rnd_nmbr_is_1_then_state12_is_zero = common_factor.clone() * state12;
+        let if_rnd_nmbr_is_1_then_state12_is_0 = common_factor.clone() * state12;
 
         // 2. If the round number is 1, register state13 is 0.
-        let if_rnd_nmbr_is_1_then_state13_is_zero = common_factor.clone() * state13;
+        let if_rnd_nmbr_is_1_then_state13_is_0 = common_factor.clone() * state13;
 
         // 3. If the round number is 1, register state14 is 0.
-        let if_rnd_nmbr_is_1_then_state14_is_zero = common_factor.clone() * state14;
+        let if_rnd_nmbr_is_1_then_state14_is_0 = common_factor.clone() * state14;
 
         // 4. If the round number is 1, register state15 is 0.
-        let if_rnd_nmbr_is_1_then_state15_is_zero = common_factor.clone() * state15;
+        let if_rnd_nmbr_is_1_then_state15_is_0 = common_factor.clone() * state15;
 
         vec![
-            if_rnd_nmbr_is_1_then_state12_is_zero,
-            if_rnd_nmbr_is_1_then_state13_is_zero,
-            if_rnd_nmbr_is_1_then_state14_is_zero,
-            if_rnd_nmbr_is_1_then_state15_is_zero,
+            if_rnd_nmbr_is_1_then_state12_is_0,
+            if_rnd_nmbr_is_1_then_state13_is_0,
+            if_rnd_nmbr_is_1_then_state14_is_0,
+            if_rnd_nmbr_is_1_then_state15_is_0,
         ]
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
+
+        let rnd_nmbr = variables[usize::from(HashTableColumn::ROUNDNUMBER)].clone();
+        let rnd_nmbr_next =
+            variables[FULL_WIDTH + usize::from(HashTableColumn::ROUNDNUMBER)].clone();
+
+        // 1. If the round number is 0, the next round number is 0.
+        let if_rnd_nmbr_is_0_then_next_rnd_nmbr_is_0 = (rnd_nmbr.clone() - constant(1))
+            * (rnd_nmbr.clone() - constant(2))
+            * (rnd_nmbr.clone() - constant(3))
+            * (rnd_nmbr.clone() - constant(4))
+            * (rnd_nmbr.clone() - constant(5))
+            * (rnd_nmbr.clone() - constant(6))
+            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr.clone() - constant(8))
+            * (rnd_nmbr_next.clone() - constant(0));
+        // 2. If the round number is 1, the next round number is 2.
+        let if_rnd_nmbr_is_1_then_next_rnd_nmbr_is_2 = (rnd_nmbr.clone() - constant(0))
+            * (rnd_nmbr.clone() - constant(2))
+            * (rnd_nmbr.clone() - constant(3))
+            * (rnd_nmbr.clone() - constant(4))
+            * (rnd_nmbr.clone() - constant(5))
+            * (rnd_nmbr.clone() - constant(6))
+            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr.clone() - constant(8))
+            * (rnd_nmbr_next.clone() - constant(2));
+        // 3. If the round number is 2, the next round number is 3.
+        let if_rnd_nmbr_is_2_then_next_rnd_nmbr_is_3 = (rnd_nmbr.clone() - constant(0))
+            * (rnd_nmbr.clone() - constant(1))
+            * (rnd_nmbr.clone() - constant(3))
+            * (rnd_nmbr.clone() - constant(4))
+            * (rnd_nmbr.clone() - constant(5))
+            * (rnd_nmbr.clone() - constant(6))
+            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr.clone() - constant(8))
+            * (rnd_nmbr_next.clone() - constant(3));
+        // 4. If the round number is 3, the next round number is 4.
+        let if_rnd_nmbr_is_3_then_next_rnd_nmbr_is_4 = (rnd_nmbr.clone() - constant(0))
+            * (rnd_nmbr.clone() - constant(1))
+            * (rnd_nmbr.clone() - constant(2))
+            * (rnd_nmbr.clone() - constant(4))
+            * (rnd_nmbr.clone() - constant(5))
+            * (rnd_nmbr.clone() - constant(6))
+            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr.clone() - constant(8))
+            * (rnd_nmbr_next.clone() - constant(4));
+        // 5. If the round number is 4, the next round number is 5.
+        let if_rnd_nmbr_is_4_then_next_rnd_nmbr_is_5 = (rnd_nmbr.clone() - constant(0))
+            * (rnd_nmbr.clone() - constant(1))
+            * (rnd_nmbr.clone() - constant(2))
+            * (rnd_nmbr.clone() - constant(3))
+            * (rnd_nmbr.clone() - constant(5))
+            * (rnd_nmbr.clone() - constant(6))
+            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr.clone() - constant(8))
+            * (rnd_nmbr_next.clone() - constant(5));
+        // 6. If the round number is 5, the next round number is 6.
+        let if_rnd_nmbr_is_5_then_next_rnd_nmbr_is_6 = (rnd_nmbr.clone() - constant(0))
+            * (rnd_nmbr.clone() - constant(1))
+            * (rnd_nmbr.clone() - constant(2))
+            * (rnd_nmbr.clone() - constant(3))
+            * (rnd_nmbr.clone() - constant(4))
+            * (rnd_nmbr.clone() - constant(6))
+            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr.clone() - constant(8))
+            * (rnd_nmbr_next.clone() - constant(6));
+        // 7. If the round number is 6, the next round number is 7.
+        let if_rnd_nmbr_is_6_then_next_rnd_nmbr_is_7 = (rnd_nmbr.clone() - constant(0))
+            * (rnd_nmbr.clone() - constant(1))
+            * (rnd_nmbr.clone() - constant(2))
+            * (rnd_nmbr.clone() - constant(3))
+            * (rnd_nmbr.clone() - constant(4))
+            * (rnd_nmbr.clone() - constant(5))
+            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr.clone() - constant(8))
+            * (rnd_nmbr_next.clone() - constant(7));
+        // 8. If the round number is 7, the next round number is 8.
+        let if_rnd_nmbr_is_7_then_next_rnd_nmbr_is_8 = (rnd_nmbr.clone() - constant(0))
+            * (rnd_nmbr.clone() - constant(1))
+            * (rnd_nmbr.clone() - constant(2))
+            * (rnd_nmbr.clone() - constant(3))
+            * (rnd_nmbr.clone() - constant(4))
+            * (rnd_nmbr.clone() - constant(5))
+            * (rnd_nmbr.clone() - constant(6))
+            * (rnd_nmbr.clone() - constant(8))
+            * (rnd_nmbr_next.clone() - constant(8));
+        // 9. If the round number is 8, the next round number is either 0 or 1.
+        let if_rnd_nmbr_is_8_then_next_rnd_nmbr_is_0_or_1 = (rnd_nmbr.clone() - constant(0))
+            * (rnd_nmbr.clone() - constant(1))
+            * (rnd_nmbr.clone() - constant(2))
+            * (rnd_nmbr.clone() - constant(3))
+            * (rnd_nmbr.clone() - constant(4))
+            * (rnd_nmbr.clone() - constant(5))
+            * (rnd_nmbr.clone() - constant(6))
+            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr_next.clone() - constant(0))
+            * (rnd_nmbr_next.clone() - constant(1));
+        // 10. The remaining 7·16 = 112 constraints are left as an exercise to the reader.
+        // TODO
+        //let _remaining = todo!();
+
+        vec![
+            if_rnd_nmbr_is_0_then_next_rnd_nmbr_is_0,
+            if_rnd_nmbr_is_1_then_next_rnd_nmbr_is_2,
+            if_rnd_nmbr_is_2_then_next_rnd_nmbr_is_3,
+            if_rnd_nmbr_is_3_then_next_rnd_nmbr_is_4,
+            if_rnd_nmbr_is_4_then_next_rnd_nmbr_is_5,
+            if_rnd_nmbr_is_5_then_next_rnd_nmbr_is_6,
+            if_rnd_nmbr_is_6_then_next_rnd_nmbr_is_7,
+            if_rnd_nmbr_is_7_then_next_rnd_nmbr_is_8,
+            if_rnd_nmbr_is_8_then_next_rnd_nmbr_is_0_or_1,
+        ]
     }
 
     fn ext_terminal_constraints(
