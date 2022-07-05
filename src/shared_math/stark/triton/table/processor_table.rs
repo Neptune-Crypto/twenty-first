@@ -2426,3 +2426,49 @@ impl InstructionDeselectors {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod instruction_deselectors_tests {
+    use crate::shared_math::traits::IdentityValues;
+
+    use super::*;
+
+    // 1. The deselector for a given instruction is 0 for all other instructions and non-zero for that instruction
+
+    #[test]
+    fn instruction_deselector_gives_0_for_all_other_instructions_test() {
+        let deselectors = InstructionDeselectors::default();
+
+        let mut row = vec![0.into(); 2 * FULL_WIDTH];
+
+        for instruction in all_instructions_without_args() {
+            let deselector = deselectors.get(instruction);
+
+            // Negative tests
+            for other_instruction in all_instructions_without_args()
+                .into_iter()
+                .filter(|other_instruction| *other_instruction != instruction)
+            {
+                row[usize::from(ProcessorTableColumn::CI)] = other_instruction.opcode_b().lift();
+                let result = deselector.evaluate(&row);
+
+                assert!(
+                    result.is_zero(),
+                    "Deselector for {} should return 0 for all other instructions, including {}",
+                    instruction,
+                    other_instruction
+                )
+            }
+
+            // Positive tests
+            row[usize::from(ProcessorTableColumn::CI)] = instruction.opcode_b().lift();
+            let result = deselector.evaluate(&row);
+            assert!(
+                !result.is_zero(),
+                "Deselector for {} should be non-zero when CI is {}",
+                instruction,
+                instruction.opcode()
+            )
+        }
+    }
+}
