@@ -760,7 +760,7 @@ mod vm_state_tests {
     // Property: Most instructions increase the instruction pointer by 1.
 
     #[test]
-    fn op_stack_big_enough_test() {
+    fn tvm_op_stack_big_enough_test() {
         assert!(
             DIGEST_LEN <= OP_STACK_REG_COUNT,
             "The OpStack must be large enough to hold a single Rescue-Prime digest"
@@ -768,7 +768,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_parse_pop_p() {
+    fn run_tvm_parse_pop_p_test() {
         let program = sample_programs::push_push_add_pop_p();
         let (trace, _out, _err) = program.run_with_input(&[], &[]);
 
@@ -778,7 +778,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_hello_world_1() {
+    fn run_tvm_hello_world_1_test() {
         let code = sample_programs::HELLO_WORLD_1;
         let program = Program::from_code(code).unwrap();
         let (trace, _out, _err) = program.run_with_input(&[], &[]);
@@ -790,7 +790,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_halt_then_do_stuff_test() {
+    fn run_tvm_halt_then_do_stuff_test() {
         let program = Program::from_code(sample_programs::HALT_THEN_DO_STUFF).unwrap();
         let (trace, _out, err) = program.run_with_input(&[], &[]);
 
@@ -801,11 +801,13 @@ mod vm_state_tests {
             println!("Error: {}", e);
         }
 
-        // todo check that the VM actually stopped on the halt instruction
+        // check for graceful termination
+        let last_state = trace.get(trace.len() - 2).unwrap();
+        assert_eq!(last_state.current_instruction().unwrap(), Halt);
     }
 
     #[test]
-    fn basic_ram_read_write_test() {
+    fn run_tvm_basic_ram_read_write_test() {
         let program = Program::from_code(sample_programs::BASIC_RAM_READ_WRITE).unwrap();
         let (trace, _out, err) = program.run_with_input(&[], &[]);
 
@@ -830,7 +832,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn edgy_ram_writes_test() {
+    fn run_tvm_edgy_ram_writes_test() {
         let program = Program::from_code(sample_programs::EDGY_RAM_WRITES).unwrap();
         let (trace, _out, err) = program.run_with_input(&[], &[]);
 
@@ -853,7 +855,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_tvm_sample_weights() {
+    fn run_tvm_sample_weights_test() {
         let program = Program::from_code(sample_programs::SAMPLE_WEIGHTS).unwrap();
         println!("Successfully parsed the program.");
         let (trace, _out, err) = program.run_with_input(&[11.into()], &[]);
@@ -865,13 +867,13 @@ mod vm_state_tests {
             panic!("The VM encountered an error: {}", e);
         }
 
-        let _last_state = trace.last().unwrap();
-        // todo check that VM terminated gracefully
-        // assert_eq!(last_state.current_instruction().unwrap(), Halt);
+        // check for graceful termination
+        let last_state = trace.get(trace.len() - 2).unwrap();
+        assert_eq!(last_state.current_instruction().unwrap(), Halt);
     }
 
     #[test]
-    fn run_mt_ap_verify_test() {
+    fn run_tvm_mt_ap_verify_test() {
         let program = Program::from_code(sample_programs::MT_AP_VERIFY).unwrap();
         println!("Successfully parsed the program.");
         let (trace, _out, err) = program.run_with_input(
@@ -1042,13 +1044,13 @@ mod vm_state_tests {
             panic!("The VM encountered an error: {}", e);
         }
 
-        let _last_state = trace.last().unwrap();
-        // todo check that VM terminated gracefully
-        // assert_eq!(last_state.current_instruction().unwrap(), Halt);
+        // check for graceful termination
+        let last_state = trace.get(trace.len() - 2).unwrap();
+        assert_eq!(last_state.current_instruction().unwrap(), Halt);
     }
 
     #[test]
-    fn run_get_colinear_y_tvmasm_test() {
+    fn run_tvm_get_colinear_y_test() {
         let program = Program::from_code(sample_programs::GET_COLINEAR_Y).unwrap();
         println!("Successfully parsed the program.");
         let (trace, out, err) =
@@ -1058,12 +1060,16 @@ mod vm_state_tests {
             println!("{}", state);
         }
         if let Some(e) = err {
-            println!("Error: {}", e);
+            panic!("The VM encountered an error: {}", e);
         }
+
+        // check for graceful termination
+        let last_state = trace.get(trace.len() - 2).unwrap();
+        assert_eq!(last_state.current_instruction().unwrap(), Halt);
     }
 
     #[test]
-    fn run_countdown_from_10_test() {
+    fn run_tvm_countdown_from_10_test() {
         let code = sample_programs::COUNTDOWN_FROM_10;
         let program = Program::from_code(code).unwrap();
         let (trace, _out, _err) = program.run_with_input(&[], &[]);
@@ -1078,7 +1084,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_fibonacci_vit() {
+    fn run_tvm_fibonacci_vit_tvm() {
         let code = sample_programs::FIBONACCI_VIT;
         let program = Program::from_code(code).unwrap();
 
@@ -1094,7 +1100,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_fibonacci_lt() {
+    fn run_tvm_fibonacci_lt_test() {
         let code = sample_programs::FIBONACCI_LT;
         let program = Program::from_code(code).unwrap();
         let (trace, _out, _err) = program.run_with_input(&[], &[]);
@@ -1109,7 +1115,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_gcd() {
+    fn run_tvm_gcd_test() {
         let code = sample_programs::GCD_X_Y;
         let program = Program::from_code(code).unwrap();
 
@@ -1127,7 +1133,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn run_xgcd() {
+    fn run_tvm_xgcd_test() {
         // The XGCD program is work in progress.
         let code = sample_programs::XGCD;
         let program = Program::from_code(code).unwrap();
@@ -1149,7 +1155,7 @@ mod vm_state_tests {
     }
 
     #[test]
-    fn swap_test() {
+    fn run_tvm_swap_test() {
         let code = "push 1 push 2 swap1 halt";
         let program = Program::from_code(code).unwrap();
         let (trace, _out, _err) = program.run_with_input(&[], &[]);

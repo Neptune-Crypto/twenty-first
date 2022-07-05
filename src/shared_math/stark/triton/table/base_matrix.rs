@@ -186,7 +186,7 @@ impl Display for ProcessorMatrixRow {
         )?;
         writeln!(
             f,
-            "│ {:>72} ╶╯ inv: {:>width$}   │",
+            "│ {:>72}  ╵ inv: {:>width$}   │",
             " ",
             self.row[INV as usize].value()
         )?;
