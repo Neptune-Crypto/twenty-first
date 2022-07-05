@@ -423,8 +423,7 @@ impl ExtTableCollection {
         all_terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {
         let mut timer = TimingReporter::start();
-        let rv = self
-            .into_iter()
+        self.into_iter()
             .map(|ext_codeword_table| {
                 timer.elapsed(&format!(
                     "Start calculating quotient: {}",
@@ -442,8 +441,7 @@ impl ExtTableCollection {
                 ));
                 res
             })
-            .concat();
-        rv
+            .concat()
     }
 
     pub fn get_all_quotient_degree_bounds(
