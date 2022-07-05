@@ -495,7 +495,7 @@ impl Bounded for ExtJumpStackTableColumn {
 
 #[derive(Debug, Clone, Copy)]
 pub enum HashTableColumn {
-    RoundNumber,
+    ROUNDNUMBER,
     STATE0,
     STATE1,
     STATE2,
@@ -519,7 +519,7 @@ impl From<HashTableColumn> for usize {
         use HashTableColumn::*;
 
         match c {
-            RoundNumber => 0,
+            ROUNDNUMBER => 0,
             STATE0 => 1,
             STATE1 => 2,
             STATE2 => 3,
@@ -542,7 +542,7 @@ impl From<HashTableColumn> for usize {
 
 impl Bounded for HashTableColumn {
     fn min_value() -> Self {
-        HashTableColumn::RoundNumber
+        HashTableColumn::ROUNDNUMBER
     }
 
     fn max_value() -> Self {

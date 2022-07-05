@@ -795,6 +795,7 @@ impl Default for ConsistencyBoundaryConstraints {
 }
 
 impl ConsistencyBoundaryConstraints {
+    // FIXME: This does not need a self reference.
     pub fn constant(&self, constant: u32) -> MPolynomial<XWord> {
         MPolynomial::from_constant(constant.into(), FULL_WIDTH)
     }

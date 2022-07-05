@@ -78,11 +78,66 @@ impl Table<XFieldElement> for ExtHashTable {
 
 impl ExtensionTable for ExtHashTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
+        let one = MPolynomial::<XFieldElement>::from_constant(1.into(), 2 * FULL_WIDTH);
+
+        let rnd_nmbr = variables[usize::from(HashTableColumn::ROUNDNUMBER)].clone();
+
+        // 1. The round number rnd_nmbr starts at 1.
+        let rnd_nmbr_starts_at_one = rnd_nmbr - one;
+
+        vec![rnd_nmbr_starts_at_one]
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
+
+        let rnd_nmbr = variables[usize::from(HashTableColumn::ROUNDNUMBER)].clone();
+        let state12 = variables[usize::from(HashTableColumn::STATE12)].clone();
+        let state13 = variables[usize::from(HashTableColumn::STATE13)].clone();
+        let state14 = variables[usize::from(HashTableColumn::STATE14)].clone();
+        let state15 = variables[usize::from(HashTableColumn::STATE15)].clone();
+
+        pub fn constant(constant: u32) -> MPolynomial<XWord> {
+            MPolynomial::from_constant(constant.into(), 2 * FULL_WIDTH)
+        }
+
+        // Common factor:
+        /*
+            (rnd_nmbr.clone() - constant(0))
+            * (rnd_nmbr.clone() - constant(2))
+            * (rnd_nmbr.clone() - constant(3))
+            * (rnd_nmbr.clone() - constant(4))
+            * (rnd_nmbr.clone() - constant(5))
+            * (rnd_nmbr.clone() - constant(6))
+            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr.clone() - constant(8));
+        */
+
+        let common_factor = (0..=0)
+            .chain(2..=8)
+            .into_iter()
+            .map(|n| rnd_nmbr.clone() - constant(n))
+            .fold(constant(1), |acc, x| acc * x);
+
+        // 1. If the round number is 1, register state12 is 0.
+        let if_rnd_nmbr_is_1_then_state12_is_zero = common_factor.clone() * state12;
+
+        // 2. If the round number is 1, register state13 is 0.
+        let if_rnd_nmbr_is_1_then_state13_is_zero = common_factor.clone() * state13;
+
+        // 3. If the round number is 1, register state14 is 0.
+        let if_rnd_nmbr_is_1_then_state14_is_zero = common_factor.clone() * state14;
+
+        // 4. If the round number is 1, register state15 is 0.
+        let if_rnd_nmbr_is_1_then_state15_is_zero = common_factor.clone() * state15;
+
+        vec![
+            if_rnd_nmbr_is_1_then_state12_is_zero,
+            if_rnd_nmbr_is_1_then_state13_is_zero,
+            if_rnd_nmbr_is_1_then_state14_is_zero,
+            if_rnd_nmbr_is_1_then_state15_is_zero,
+        ]
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
@@ -161,7 +216,7 @@ impl HashTable {
 
             // Add compressed input to running sum if round index marks beginning of hashing
             extension_row.push(from_processor_running_sum);
-            if row[HashTableColumn::RoundNumber as usize].value() == 1 {
+            if row[HashTableColumn::ROUNDNUMBER as usize].value() == 1 {
                 from_processor_running_sum = from_processor_running_sum
                     * challenges.from_processor_eval_row_weight
                     + compressed_state_for_input;
@@ -185,7 +240,7 @@ impl HashTable {
 
             // Add compressed digest to running sum if round index marks end of hashing
             extension_row.push(to_processor_running_sum);
-            if row[HashTableColumn::RoundNumber as usize].value() == 8 {
+            if row[HashTableColumn::ROUNDNUMBER as usize].value() == 8 {
                 to_processor_running_sum = to_processor_running_sum
                     * challenges.to_processor_eval_row_weight
                     + compressed_state_for_output;
