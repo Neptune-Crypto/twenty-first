@@ -9,7 +9,7 @@ use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::instruction::{
     all_instructions_without_args, AnInstruction::*, Instruction,
 };
-use crate::shared_math::stark::triton::ord_n::Ord16;
+use crate::shared_math::stark::triton::ord_n::{Ord16, Ord6};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 use itertools::Itertools;
@@ -2391,43 +2391,38 @@ impl InstructionDeselectors {
         self.deselectors[&instruction].clone()
     }
 
-    pub fn create(factory: &TransitionConstraints) -> HashMap<Instruction, MPolynomial<XWord>> {
-        let all_instructions = all_instructions_without_args();
-        let instruction_selectors = Self::all_instruction_selectors(factory);
-        let mut deselectors = HashMap::<Instruction, MPolynomial<XWord>>::new();
-
-        for deselected_instruction in all_instructions.iter() {
-            let deselector = all_instructions
-                .iter()
-                .filter(|instr| *instr != deselected_instruction)
-                .map(|instr| instruction_selectors[instr].clone())
-                .fold(factory.one(), |a, b| a * b);
-
-            deselectors.insert(*deselected_instruction, deselector);
-        }
-
-        deselectors
-    }
-
-    /// A polynomial that has solutions when ci is 'instruction'
-    pub fn instruction_selector(
+    /// A polynomial that has no solutions when ci is 'instruction'
+    pub fn instruction_deselector(
         factory: &TransitionConstraints,
         instruction: Instruction,
     ) -> MPolynomial<XWord> {
-        factory.ci() - factory.constant(instruction.opcode())
+        let one = XWord::ring_one();
+        let num_vars = factory.variables.len();
+
+        let ib0 = instruction.ib(Ord6::IB0).lift();
+        let ib1 = instruction.ib(Ord6::IB1).lift();
+        let ib2 = instruction.ib(Ord6::IB2).lift();
+        let ib3 = instruction.ib(Ord6::IB3).lift();
+        let ib4 = instruction.ib(Ord6::IB4).lift();
+        let ib5 = instruction.ib(Ord6::IB5).lift();
+        let deselect_ib0 = MPolynomial::from_constant(one - ib0, num_vars);
+        let deselect_ib1 = MPolynomial::from_constant(one - ib1, num_vars);
+        let deselect_ib2 = MPolynomial::from_constant(one - ib2, num_vars);
+        let deselect_ib3 = MPolynomial::from_constant(one - ib3, num_vars);
+        let deselect_ib4 = MPolynomial::from_constant(one - ib4, num_vars);
+        let deselect_ib5 = MPolynomial::from_constant(one - ib5, num_vars);
+        (factory.ib0() - deselect_ib0)
+            * (factory.ib1() - deselect_ib1)
+            * (factory.ib2() - deselect_ib2)
+            * (factory.ib3() - deselect_ib3)
+            * (factory.ib4() - deselect_ib4)
+            * (factory.ib5() - deselect_ib5)
     }
 
-    pub fn all_instruction_selectors(
-        factory: &TransitionConstraints,
-    ) -> HashMap<Instruction, MPolynomial<XWord>> {
+    pub fn create(factory: &TransitionConstraints) -> HashMap<Instruction, MPolynomial<XWord>> {
         all_instructions_without_args()
             .into_iter()
-            .map(|instruction| {
-                (
-                    instruction,
-                    Self::instruction_selector(factory, instruction),
-                )
-            })
+            .map(|instrctn| (instrctn, Self::instruction_deselector(factory, instrctn)))
             .collect()
     }
 }
