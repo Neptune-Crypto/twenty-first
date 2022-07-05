@@ -187,15 +187,77 @@ impl Table<XFieldElement> for ExtRamTable {
 
 impl ExtensionTable for ExtRamTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        use RamTableColumn::*;
+
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into());
+        let clk = variables[usize::from(CLK)].clone();
+        let ramp = variables[usize::from(RAMP)].clone();
+        let ramv = variables[usize::from(RAMV)].clone();
+
+        // Cycle count clk is 0.
+        let clk_is_0 = clk;
+
+        // RAM pointer ramp is 0.
+        let ramp_is_0 = ramp;
+
+        // RAM value ramv is 0.
+        let ramv_is_0 = ramv;
+
+        vec![clk_is_0, ramp_is_0, ramv_is_0]
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
+        // no further constraints
         vec![]
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        vec![]
+        use RamTableColumn::*;
+
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
+        let one = MPolynomial::from_constant(1.into(), 2 * FULL_WIDTH);
+
+        let clk = variables[usize::from(CLK)].clone();
+        let ramp = variables[usize::from(RAMP)].clone();
+        let ramv = variables[usize::from(RAMV)].clone();
+        let hv6 = variables[usize::from(InverseOfRampDifference)].clone();
+
+        let clk_next = variables[FULL_WIDTH + usize::from(CLK)].clone();
+        let ramp_next = variables[FULL_WIDTH + usize::from(RAMP)].clone();
+        let ramv_next = variables[FULL_WIDTH + usize::from(RAMV)].clone();
+
+        // hv6 is 0 or hv6 is the inverse of (ramp' - ramp).
+        //
+        // $ hv6·(hv6·(ramp' - ramp) - 1) = 0 $
+        let hv6_is_0_or_hv6_is_inverse_of_ramp_diff =
+            hv6.clone() * (hv6.clone() * (ramp_next.clone() - ramp.clone()) - one.clone());
+
+        // (ramp' - ramp) is zero or hv6 is the inverse of (ramp' - ramp).
+        //
+        // $ (ramp' - ramp)·(hv6·(ramp' - ramp) - 1) = 0 $
+        let ramp_diff_is_0_or_hv6_is_inverse_of_ramp_diff = (ramp_next.clone() - ramp.clone())
+            * (hv6.clone() * (ramp_next.clone() - ramp.clone()) - one.clone());
+
+        // The ramp does not change or the new ramv is 0.
+        //
+        // (ramp' - ramp)·ramv'
+        let ramp_does_not_change_or_ramv_becomes_0 =
+            (ramp_next.clone() - ramp.clone()) * ramv_next.clone();
+
+        // The ramp does change or the ramv does not change or the clk increases by 1.
+        //
+        // $ (hv6·(ramp' - ramp) - 1)·(ramv' - ramv)·(clk' - (clk + 1)) = 0 $
+        let ramp_does_not_change_or_ramv_does_not_change_or_clk_increases_by_1 =
+            (hv6 * (ramp_next - ramp) - one.clone())
+                * (ramv_next - ramv)
+                * (clk_next - (clk + one));
+
+        vec![
+            hv6_is_0_or_hv6_is_inverse_of_ramp_diff,
+            ramp_diff_is_0_or_hv6_is_inverse_of_ramp_diff,
+            ramp_does_not_change_or_ramv_becomes_0,
+            ramp_does_not_change_or_ramv_does_not_change_or_clk_increases_by_1,
+        ]
     }
 
     fn ext_terminal_constraints(
@@ -203,6 +265,7 @@ impl ExtensionTable for ExtRamTable {
         _challenges: &AllChallenges,
         _terminals: &AllEndpoints,
     ) -> Vec<MPolynomial<XWord>> {
+        // no further constraints
         vec![]
     }
 }
