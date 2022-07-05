@@ -147,43 +147,43 @@ impl<Dest> AnInstruction<Dest> {
             Swap(_) => 5,
 
             // Control flow
-            Nop => 7,
-            Skiz => 10,
-            Call(_) => 11,
-            Return => 12,
-            Recurse => 13,
-            Assert => 14,
+            Nop => 6,
+            Skiz => 7,
+            Call(_) => 8,
+            Return => 9,
+            Recurse => 10,
+            Assert => 11,
             Halt => 0,
 
             // Memory access
-            ReadMem => 20,
-            WriteMem => 21,
+            ReadMem => 12,
+            WriteMem => 13,
 
             // Hashing-related instructions
-            Hash => 30,
-            DivineSibling => 34,
-            AssertVector => 36,
+            Hash => 14,
+            DivineSibling => 15,
+            AssertVector => 16,
 
             // Arithmetic on stack instructions
-            Add => 40,
-            Mul => 41,
-            Invert => 42,
-            Split => 43,
-            Eq => 44,
-            Lt => 45,
-            And => 46,
-            Xor => 47,
-            Reverse => 48,
-            Div => 49,
+            Add => 17,
+            Mul => 18,
+            Invert => 19,
+            Split => 20,
+            Eq => 21,
+            Lt => 22,
+            And => 23,
+            Xor => 24,
+            Reverse => 25,
+            Div => 26,
 
-            XxAdd => 50,
-            XxMul => 51,
-            XInvert => 52,
-            XbMul => 53,
+            XxAdd => 27,
+            XxMul => 28,
+            XInvert => 29,
+            XbMul => 30,
 
             // Read/write
-            ReadIo => 60,
-            WriteIo => 61,
+            ReadIo => 31,
+            WriteIo => 32,
         }
     }
 
@@ -319,7 +319,7 @@ impl<Dest> AnInstruction<Dest> {
         let bit_number: usize = arg.into();
         let bit_mask: u32 = 1 << bit_number;
 
-        (opcode & bit_mask).into()
+        ((opcode & bit_mask) >> bit_number).into()
     }
 
     fn map_call_address<F, NewDest>(&self, f: F) -> AnInstruction<NewDest>
@@ -1197,11 +1197,12 @@ terminate: pop
 
 #[cfg(test)]
 mod instruction_tests {
-    use crate::shared_math::stark::triton::instruction::all_labelled_instructions_with_args;
-
     use super::super::vm::Program;
-    use super::parse;
     use super::sample_programs;
+    use super::{all_instructions_without_args, parse};
+    use crate::shared_math::stark::triton::instruction::all_labelled_instructions_with_args;
+    use crate::shared_math::stark::triton::ord_n::Ord6;
+    use crate::shared_math::traits::IdentityValues;
 
     #[test]
     fn parse_display_push_pop_test() {
@@ -1235,6 +1236,24 @@ mod instruction_tests {
             .zip(sample_programs::all_instructions_displayed())
         {
             assert_eq!(expected, actual);
+        }
+    }
+
+    #[test]
+    fn ib_registers_are_binary_test() {
+        use Ord6::*;
+
+        for instruction in all_instructions_without_args() {
+            for ib in [IB0, IB1, IB2, IB3, IB4, IB5] {
+                let ib_value = instruction.ib(ib);
+                assert!(
+                    ib_value.is_zero() || ib_value.is_one(),
+                    "IB{} for instruction {} is 0 or 1 ({})",
+                    ib,
+                    instruction,
+                    ib_value
+                );
+            }
         }
     }
 }
