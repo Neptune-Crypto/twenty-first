@@ -90,12 +90,12 @@ impl ExtensionTable for ExtInstructionTable {
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        // None.
+        // no further constraints
         vec![]
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into());
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
         let addr = variables[usize::from(Address)].clone();
         let addr_next = variables[FULL_WIDTH + usize::from(Address)].clone();
         let one = MPolynomial::<XFieldElement>::from_constant(1.into(), 2 * FULL_WIDTH);
@@ -111,6 +111,7 @@ impl ExtensionTable for ExtInstructionTable {
         _challenges: &AllChallenges,
         _terminals: &AllEndpoints,
     ) -> Vec<MPolynomial<XWord>> {
+        // no further constraints
         vec![]
     }
 }
