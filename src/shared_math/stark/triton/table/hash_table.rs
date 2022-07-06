@@ -82,8 +82,8 @@ fn constant(constant: u32) -> MPolynomial<XWord> {
 
 impl ExtensionTable for ExtHashTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
-        let one = MPolynomial::<XFieldElement>::from_constant(1.into(), 2 * FULL_WIDTH);
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into());
+        let one = MPolynomial::<XFieldElement>::from_constant(1.into(), FULL_WIDTH);
 
         let rnd_nmbr = variables[usize::from(HashTableColumn::ROUNDNUMBER)].clone();
 
@@ -94,7 +94,7 @@ impl ExtensionTable for ExtHashTable {
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
+        let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(FULL_WIDTH, 1.into());
 
         let rnd_nmbr = variables[usize::from(HashTableColumn::ROUNDNUMBER)].clone();
         let state12 = variables[usize::from(HashTableColumn::STATE12)].clone();
