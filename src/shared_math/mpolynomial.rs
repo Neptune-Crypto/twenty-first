@@ -238,6 +238,7 @@ impl<PFElem: PrimeField> Display for MPolynomial<PFElem> {
             }
             coefficients_iter
                 .map(|(k, v)| Self::term_print(k, v))
+                .filter(|s| !s.is_empty())
                 .join(" + ")
         };
 
