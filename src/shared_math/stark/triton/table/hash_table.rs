@@ -130,7 +130,7 @@ impl ExtensionTable for ExtHashTable {
         let if_rnd_nmbr_is_1_then_state14_is_0 = common_factor.clone() * state14;
 
         // 4. If the round number is 1, register state15 is 0.
-        let if_rnd_nmbr_is_1_then_state15_is_0 = common_factor.clone() * state15;
+        let if_rnd_nmbr_is_1_then_state15_is_0 = common_factor * state15;
 
         vec![
             if_rnd_nmbr_is_1_then_state12_is_0,
@@ -235,9 +235,9 @@ impl ExtensionTable for ExtHashTable {
             * (rnd_nmbr.clone() - constant(4))
             * (rnd_nmbr.clone() - constant(5))
             * (rnd_nmbr.clone() - constant(6))
-            * (rnd_nmbr.clone() - constant(7))
+            * (rnd_nmbr - constant(7))
             * (rnd_nmbr_next.clone() - constant(0))
-            * (rnd_nmbr_next.clone() - constant(1));
+            * (rnd_nmbr_next - constant(1));
         // 10. The remaining 7·16 = 112 constraints are left as an exercise to the reader.
         // TODO
         //let _remaining = todo!();
