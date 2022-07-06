@@ -587,9 +587,14 @@ pub fn rescue_prime_params_bfield_0() -> RescuePrime {
 
     // Each round has two round constants: `fst_rc` and `snd_rc`.
     // `fst_rc` values are indexed in the below array as:
-    // `2 * round_number * register_counter + register_index`
+    // `2 * round_number * register_count + register_index`
     // `snd_rc` values are indexed in the below array as:
-    // `2 * round_number * register_counter + register_index + 1`
+    // `(2 * round_number + 1) * register_count + register_index`
+    // See second last line in Algorithm 3 in the SoK paper.
+
+    // Layout:
+    // [r0_x0_fst|r0_x1_fst|..|r0_xN_fst|r0_x0_snd|r0_x1_snd|..|r0_xN_snd|r1_x0_fst|..|rM_xN_snd]
+    // e.g.: r0_x1_snd means round 0, register 1, second round constant
     let round_constants_u64: Vec<u64> = vec![
         15139912583685767368,
         8372387753867525709,
@@ -848,14 +853,15 @@ pub fn rescue_prime_params_bfield_0() -> RescuePrime {
         3646572817684127401,
         2916928929409428212,
     ];
+
     let round_constants: Vec<BFieldElement> = round_constants_u64
         .iter()
         .map(|elem| BFieldElement::new(*elem))
         .collect();
 
-    RescuePrime {
+    let res = RescuePrime {
         m: 16,
-        steps_count: 7,
+        round_count: 7,
         alpha: 7,
         alpha_inv: 10540996611094048183,
         max_input_length: 12,
@@ -863,7 +869,14 @@ pub fn rescue_prime_params_bfield_0() -> RescuePrime {
         mds,
         mds_inv,
         round_constants,
-    }
+    };
+
+    debug_assert!(
+        round_constants_u64.len() >= 2 * res.round_count * res.m,
+        "The supplied number of round constants is inconsistent with spec."
+    );
+
+    res
 }
 
 pub fn rescue_prime_medium_test_params() -> RescuePrime {
@@ -1119,7 +1132,7 @@ pub fn rescue_prime_medium_test_params() -> RescuePrime {
 
     RescuePrime {
         m: 8,
-        steps_count: 5,
+        round_count: 5,
         alpha: 7,
         alpha_inv: 10540996611094048183,
         max_input_length: 1,
@@ -1159,7 +1172,7 @@ pub fn rescue_prime_small_test_params() -> RescuePrime {
 
     RescuePrime {
         m: 2,
-        steps_count: 3,
+        round_count: 3,
         alpha: 7,
         alpha_inv: 10540996611094048183,
         max_input_length: 1,

@@ -13,7 +13,7 @@ pub struct RescuePrime {
     pub m: usize,
     // rate: usize,
     // capacity: usize,
-    pub steps_count: usize,
+    pub round_count: usize,
     pub alpha: u64,
     pub alpha_inv: u64,
     pub max_input_length: usize,
@@ -84,7 +84,7 @@ impl RescuePrime {
         let mut state = input.to_vec();
         state.resize(self.m, BFieldElement::ring_zero());
 
-        state = (0..self.steps_count).fold(state, |intermediate_state, i| {
+        state = (0..self.round_count).fold(state, |intermediate_state, i| {
             self.hash_round(intermediate_state, i)
         });
 
@@ -98,11 +98,11 @@ impl RescuePrime {
             input.len(),
             self.max_input_length
         );
-        let mut trace: Vec<Vec<BFieldElement>> = Vec::with_capacity(self.steps_count + 1);
+        let mut trace: Vec<Vec<BFieldElement>> = Vec::with_capacity(self.round_count + 1);
         let mut state = input.to_vec();
         state.resize(self.m, BFieldElement::ring_zero());
         trace.push(state.clone());
-        for i in 0..self.steps_count {
+        for i in 0..self.round_count {
             let next_state = self.hash_round(state, i);
             trace.push(next_state.clone());
             state = next_state;
@@ -266,7 +266,7 @@ impl RescuePrime {
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.output_length {
             let end_constraint = BoundaryConstraint {
-                cycle: self.steps_count,
+                cycle: self.round_count,
                 register: i,
                 value: output_elements[i].to_owned(),
             };
@@ -282,7 +282,7 @@ impl Display for RescuePrime {
         write!(
             f,
             "m = {}, N = {}, alpha = {}",
-            self.m, self.steps_count, self.alpha
+            self.m, self.round_count, self.alpha
         )
     }
 }
@@ -416,7 +416,7 @@ mod rescue_prime_test {
 
         // Verify that the round constants polynomials are correct
         let (fst_rc_pol, snd_rc_pol) = rp.get_round_constant_polynomials(omicron);
-        for step in 0..rp.steps_count {
+        for step in 0..rp.round_count {
             let mut point = vec![omicron.mod_pow(step as u64)];
             point.append(&mut vec![BFieldElement::ring_zero(); 2 * rp.m]);
 
@@ -442,7 +442,7 @@ mod rescue_prime_test {
         let elapsed = now.elapsed();
         println!("Completed get_air_constraints(omicron) in {:?}!", elapsed);
 
-        for step in 0..rp.steps_count - 1 {
+        for step in 0..rp.round_count - 1 {
             println!("Step {}", step);
             for air_constraint in air_constraints.iter() {
                 let mut point = vec![omicron.mod_pow(step as u64)];

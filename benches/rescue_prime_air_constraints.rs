@@ -9,7 +9,7 @@ use twenty_first::shared_math::traits::GetPrimitiveRootOfUnity;
 fn rescue_prime_air_constraints(criterion: &mut Criterion) {
     // let mut rp_bench = rescue_prime_params_bfield_0();
     let mut rp_bench: RescuePrime = params::rescue_prime_small_test_params();
-    rp_bench.steps_count = 1;
+    rp_bench.round_count = 1;
     rp_bench.alpha = 4;
     let omicron = BFieldElement::ring_zero()
         .get_primitive_root_of_unity(1 << 5)

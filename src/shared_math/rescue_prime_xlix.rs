@@ -172,7 +172,7 @@ pub fn neptune_params() -> RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     let params = rescue_prime_params::rescue_prime_params_bfield_0();
 
     let capacity = 4;
-    let n = params.steps_count;
+    let n = params.round_count;
     let alpha = params.alpha;
     let alpha_inv = params.alpha_inv;
     let mds = params.mds;
