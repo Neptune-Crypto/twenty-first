@@ -321,18 +321,10 @@ impl<'pgm> VMState<'pgm> {
 
             Reverse => {
                 let elem: u32 = self.op_stack.pop()?.try_into()?;
-
-                // `rev` needs to constrain that the second-top-most element
-                // fits within u32, since otherwise the u32 op table constraint
-                // polynomials cannot account for the 'rhs' column going to 0 in
-                // at most 32 steps (rows).
-                //
-                // So while `rev` is a unary instruction (does not have a RHS),
-                // it still has a rule about the second-top-most element.
-                let rhs: u32 = self.op_stack.safe_peek(ST0).try_into()?;
-
                 self.op_stack.push(elem.reverse_bits().into());
-                let trace = self.u32_op_trace(elem, rhs);
+
+                // for instruction `reverse`, the Uint32 Table's RHS is (arbitrarily) set to 0
+                let trace = self.u32_op_trace(elem, 0);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
                 self.instruction_pointer += 1;
             }
