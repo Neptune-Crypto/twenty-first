@@ -603,7 +603,7 @@ mod fri_domain_tests {
 }
 
 #[cfg(test)]
-mod xfri_tests {
+mod triton_xfri_tests {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::rescue_prime_xlix::{

@@ -12,7 +12,6 @@ use crate::shared_math::stark::triton::instruction::{
 use crate::shared_math::stark::triton::ord_n::{Ord16, Ord6};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
-use itertools::Itertools;
 use std::collections::HashMap;
 
 pub const PROCESSOR_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 9;
@@ -398,10 +397,58 @@ impl ExtProcessorTable {
     pub fn new(base: BaseTable<XFieldElement>) -> ExtProcessorTable {
         Self {
             base,
-            tc: TransitionConstraints::default(),
-            cbs: ConsistencyBoundaryConstraints::default(),
-            ids: InstructionDeselectors::default(),
+            transition_constraints: TransitionConstraints::default(),
+            consistency_boundary_constraints: ConsistencyBoundaryConstraints::default(),
+            instruction_deselectors: InstructionDeselectors::default(),
         }
+    }
+
+    /// Transition constraints are combined with deselectors in such a way
+    /// that arbitrary sets of mutually exclusive combinations are summed, i.e.
+    ///
+    /// ```norun
+    /// [ deselector_pop * tc_pop_0 + deselector_push * tc_push_0 + ...,
+    ///   deselector_pop * tc_pop_1 + deselector_push * tc_push_1 + ...,
+    ///   ...,
+    ///   deselector_pop * tc_pop_n + deselector_push * tc_push_n + ...
+    /// ]
+    /// ```
+    ///
+    /// For instructions that have fewer transition constraints, the deselector
+    /// is multiplied with a zero, causing no additional terms in the final sets
+    /// of combined transition constraint polynomials.
+    fn combine_transition_constraints_with_deselectors(
+        &self,
+        stuff: Vec<(Instruction, Vec<MPolynomial<XWord>>)>,
+    ) -> Vec<MPolynomial<XWord>> {
+        let mut all_instruction_deselectors = Vec::with_capacity(stuff.len());
+        let mut all_tc_polynomials_for_processor_table = Vec::with_capacity(stuff.len());
+
+        for (instr, poly) in stuff.into_iter() {
+            all_instruction_deselectors.push(self.instruction_deselectors.get(instr));
+            all_tc_polynomials_for_processor_table.push(poly);
+        }
+
+        let mut result = vec![];
+        while all_tc_polynomials_for_processor_table
+            .iter()
+            .all(|polys| !polys.is_empty())
+        {
+            let sum_of_mutually_exclusive_transition_constraints: MPolynomial<XFieldElement> =
+                all_tc_polynomials_for_processor_table
+                    .iter_mut()
+                    .map(|instruction_polys| {
+                        instruction_polys
+                            .pop()
+                            .unwrap_or_else(|| self.transition_constraints.zero())
+                    })
+                    .zip(all_instruction_deselectors.clone())
+                    .map(|(instruction_poly, deselector)| instruction_poly * deselector)
+                    .sum();
+            result.push(sum_of_mutually_exclusive_transition_constraints);
+        }
+
+        result
     }
 }
 
@@ -497,9 +544,9 @@ pub struct IOChallenges {
 #[derive(Debug, Clone)]
 pub struct ExtProcessorTable {
     base: BaseTable<XFieldElement>,
-    tc: TransitionConstraints,
-    cbs: ConsistencyBoundaryConstraints,
-    ids: InstructionDeselectors,
+    transition_constraints: TransitionConstraints,
+    consistency_boundary_constraints: ConsistencyBoundaryConstraints,
+    instruction_deselectors: InstructionDeselectors,
 }
 
 impl HasBaseTable<XFieldElement> for ExtProcessorTable {
@@ -539,7 +586,7 @@ impl Table<XFieldElement> for ExtProcessorTable {
 
 impl ExtensionTable for ExtProcessorTable {
     fn ext_boundary_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = &self.cbs;
+        let factory = &self.consistency_boundary_constraints;
 
         // The cycle counter `clk` is 0.
         //
@@ -669,7 +716,7 @@ impl ExtensionTable for ExtProcessorTable {
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = &self.cbs;
+        let factory = &self.consistency_boundary_constraints;
 
         // The composition of instruction buckets ib0-ib5 corresponds the current instruction ci.
         //
@@ -705,25 +752,11 @@ impl ExtensionTable for ExtProcessorTable {
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
-        let factory = &self.tc;
-        let deselectors = &self.ids;
-
-        // FIXME: `.instruction_pop()` etc. do not include the deselector yet.
-
-        let helper = |
-            (instruction, polynomials): (Instruction, Vec<MPolynomial<XWord>>)| -> Vec<MPolynomial<XWord>> {
-            polynomials
-                .iter()
-                .map(|polynomial| deselectors.get(instruction) * polynomial.clone())
-                .collect_vec()
-
-        };
-
+        let factory = &self.transition_constraints;
         let dummy_bfield_element = BFieldElement::ring_zero();
         let dummy_ord16 = Ord16::ST0;
 
-        vec![
-            //(Clk, factory.clk_always_increases_by_one()),
+        let all_instruction_transition_constraints = vec![
             (Pop, factory.instruction_pop()),
             (Push(dummy_bfield_element), factory.instruction_push()),
             (Divine, factory.instruction_divine()),
@@ -757,10 +790,13 @@ impl ExtensionTable for ExtProcessorTable {
             (XbMul, factory.instruction_xbmul()),
             (ReadIo, factory.instruction_read_io()),
             (WriteIo, factory.instruction_write_io()),
-        ]
-        .into_iter()
-        .flat_map(helper)
-        .collect_vec()
+        ];
+
+        let mut transition_constraints = self.combine_transition_constraints_with_deselectors(
+            all_instruction_transition_constraints,
+        );
+        transition_constraints.insert(0, factory.clk_always_increases_by_one());
+        transition_constraints
     }
 
     fn ext_terminal_constraints(
@@ -1916,6 +1952,10 @@ impl TransitionConstraints {
     pub fn instruction_write_io(&self) -> Vec<MPolynomial<XWord>> {
         // no further constraints
         vec![]
+    }
+
+    pub fn zero(&self) -> MPolynomial<XWord> {
+        self.constant(0)
     }
 
     pub fn one(&self) -> MPolynomial<XWord> {
