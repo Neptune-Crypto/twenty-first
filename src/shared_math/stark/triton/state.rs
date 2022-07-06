@@ -299,8 +299,8 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Lt => {
-                let lhs: u32 = self.op_stack.pop()?.try_into()?;
-                let rhs: u32 = self.op_stack.pop()?.try_into()?;
+                let lhs: u32 = self.op_stack.pop_u32()?;
+                let rhs: u32 = self.op_stack.pop_u32()?;
                 self.op_stack.push(Self::lt(lhs, rhs));
                 let trace = self.u32_op_trace(lhs, rhs);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
@@ -308,8 +308,8 @@ impl<'pgm> VMState<'pgm> {
             }
 
             And => {
-                let lhs: u32 = self.op_stack.pop()?.try_into()?;
-                let rhs: u32 = self.op_stack.pop()?.try_into()?;
+                let lhs: u32 = self.op_stack.pop_u32()?;
+                let rhs: u32 = self.op_stack.pop_u32()?;
                 self.op_stack.push((lhs & rhs).into());
                 let trace = self.u32_op_trace(lhs, rhs);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
@@ -317,8 +317,8 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Xor => {
-                let lhs: u32 = self.op_stack.pop()?.try_into()?;
-                let rhs: u32 = self.op_stack.pop()?.try_into()?;
+                let lhs: u32 = self.op_stack.pop_u32()?;
+                let rhs: u32 = self.op_stack.pop_u32()?;
                 self.op_stack.push((lhs ^ rhs).into());
                 let trace = self.u32_op_trace(lhs, rhs);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
@@ -326,7 +326,7 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Reverse => {
-                let elem: u32 = self.op_stack.pop()?.try_into()?;
+                let elem: u32 = self.op_stack.pop_u32()?;
                 self.op_stack.push(elem.reverse_bits().into());
 
                 // for instruction `reverse`, the Uint32 Table's RHS is (arbitrarily) set to 0
@@ -336,8 +336,8 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Div => {
-                let denom: u32 = self.op_stack.pop()?.try_into()?;
-                let numerator: u32 = self.op_stack.pop()?.try_into()?;
+                let denom: u32 = self.op_stack.pop_u32()?;
+                let numerator: u32 = self.op_stack.pop_u32()?;
                 let (quot, rem) = other::div_rem(numerator, denom);
                 self.op_stack.push(quot.into());
                 self.op_stack.push(rem.into());

@@ -1,3 +1,4 @@
+use crate::shared_math::b_field_element::BFieldElement;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use InstructionError::*;
@@ -12,6 +13,7 @@ pub enum InstructionError {
     InverseOfZero,
     RunawayInstructionArg,
     UngracefulTermination,
+    FailedU32Conversion(BFieldElement),
 }
 
 impl Display for InstructionError {
@@ -52,6 +54,14 @@ impl Display for InstructionError {
                 write!(
                     f,
                     "The Virtual Machine must terminate using instruction Halt"
+                )
+            }
+
+            FailedU32Conversion(word) => {
+                write!(
+                    f,
+                    "Failed to convert BFieldElement {} into u32",
+                    word.value()
                 )
             }
         }

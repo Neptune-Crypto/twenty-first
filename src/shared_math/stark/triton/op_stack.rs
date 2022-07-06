@@ -45,6 +45,12 @@ impl OpStack {
         Ok(XWord::new([self.pop()?, self.pop()?, self.pop()?]))
     }
 
+    pub fn pop_u32(&mut self) -> Result<u32, Box<dyn Error>> {
+        let elem = self.pop()?;
+        elem.try_into()
+            .map_err(|_| vm_fail(FailedU32Conversion(elem)))
+    }
+
     pub fn safe_peek_x(&mut self) -> XWord {
         XWord::new([
             self.safe_peek(ST0),
