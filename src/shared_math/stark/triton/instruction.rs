@@ -140,16 +140,16 @@ impl<Dest> AnInstruction<Dest> {
     pub fn opcode(&self) -> u32 {
         match self {
             // OpStack manipulation
-            Pop => 1,
-            Push(_) => 2,
+            Pop => 2,
+            Push(_) => 4,
             Divine => 3,
-            Dup(_) => 4,
-            Swap(_) => 5,
+            Dup(_) => 5,
+            Swap(_) => 6,
 
             // Control flow
-            Nop => 6,
-            Skiz => 7,
-            Call(_) => 8,
+            Nop => 1,
+            Skiz => 8,
+            Call(_) => 7,
             Return => 9,
             Recurse => 10,
             Assert => 11,

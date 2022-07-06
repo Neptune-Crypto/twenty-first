@@ -173,7 +173,13 @@ impl<'pgm> VMState<'pgm> {
                     1 + next_instruction.size()
                 } else {
                     1
-                }
+                };
+
+                // set helper variables to help verify correct transition of instruction pointer
+                let next_instruction = self.nia().value();
+                self.hv[0] = BWord::new(next_instruction % 4);
+                self.hv[1] = BWord::new((next_instruction >> 2) % 2);
+                self.hv[2] = BWord::new(next_instruction >> 3);
             }
 
             Call(addr) => {
