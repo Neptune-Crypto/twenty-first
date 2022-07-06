@@ -501,12 +501,47 @@ mod triton_vm_tests {
         let mut _rng = rand::thread_rng();
         let hasher = RescuePrimeXlix::<RP_DEFAULT_WIDTH>::new();
 
-        let all_programs = vec![sample_programs::PUSH_PUSH_ADD_POP_S];
+        // TODO: make this vec into vec of tuples (str, input_vec) to test divine, read_io, etc.
+        let all_programs = vec![
+            "push 0 pop halt ",
+            // "divine pop halt ",
+            "push 1 dup0 pop halt ",
+            "push 1 push 2 swap1 halt ",
+            "nop nop nop halt ",
+            "push 1 skiz push 0 skiz assert push 1 skiz halt ",
+            "push 2 call label halt label: push -1 add skiz return recurse ",
+            "push 1 assert halt ",
+            "push 2 push 1 write_mem pop push 0 read_mem assert halt ",
+            "push 1 push 2 push 3 hash halt ",
+            // "push 1 push 2 push 3 swap12 divine_sibling halt ",
+            "push 1 push 2 push 3 push 4 push 5 push 6 \
+             push 1 push 2 push 3 push 4 push 5 push 6 assert_vector halt ",
+            "push 2 push -1 add assert halt ",
+            "push -1 push -1 mul assert halt ",
+            "push 3 dup0 invert mul assert halt ",
+            "push -1 split lt assert halt ",
+            "push 3 push 3 eq assert halt ",
+            "push 2 push 3 lt assert halt ",
+            "push 5 push 3 and assert halt ",
+            "push 7 push 6 xor assert halt ",
+            "push 2147483648 reverse assert halt ",
+            "push 9 push 2 div assert halt ",
+            "push 5 push 6 push 7 push 8 push 9 push 10 xxadd halt ",
+            "push 5 push 6 push 7 push 8 push 9 push 10 xxmul halt ",
+            "push 5 push 6 push 7 xinvert halt ",
+            "push 5 push 6 push 7 push 8 xbmul halt ",
+        ];
         for source_code in all_programs.into_iter() {
+            println!(
+                "\n\nChecking transition constraints for program: \"{}\"",
+                source_code
+            );
             let program = Program::from_code(source_code).expect("Could not load source code.");
             let (base_matrices, err) = program.simulate_with_input(&[], &[]);
 
-            assert!(err.is_none());
+            if let Some(e) = err {
+                panic!("The VM is not happy: {}", e);
+            }
 
             let number_of_randomizers = 2;
             let order = 1 << 32;
@@ -577,18 +612,13 @@ mod triton_vm_tests {
                 &initials.processor_table_endpoints,
             );
             let x_air_constraints = ext_processor_table.ext_transition_constraints(&challenges);
-            let ext_data = ext_processor_table.data();
 
-            for step in 0..ext_processor_table.padded_height() - 1 {
-                let row = ext_data[step].clone();
-                let next_register = ext_data[step + 1].clone();
-                let xpoint: Vec<XFieldElement> = vec![row.clone(), next_register.clone()].concat();
+            for (row, next_row) in ext_processor_table.data().iter().tuple_windows() {
+                let xpoint: Vec<XFieldElement> = vec![row.clone(), next_row.clone()].concat();
 
                 for x_air_constraint in x_air_constraints.iter() {
                     assert!(x_air_constraint.evaluate(&xpoint).is_zero());
                 }
-
-                // TODO: Can we add a negative test here?
             }
         }
     }
