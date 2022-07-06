@@ -1157,7 +1157,7 @@ pub(crate) mod triton_stark_tests {
         let padded_height =
             other::roundup_npo2(base_matrices.processor_matrix.len() as u64) as usize;
         let log_expansion_factor = 2;
-        let security_level = 2;
+        let security_level = 32;
         let stark = Stark::new(
             padded_height,
             log_expansion_factor,
@@ -1335,7 +1335,9 @@ pub(crate) mod triton_stark_tests {
         println!("between prove and verify");
 
         let result = stark.verify(&mut proof_stream);
-        assert!(result.is_ok());
+        if let Err(e) = result {
+            panic!("The Verifier is unhappy! {}", e);
+        }
         assert!(result.unwrap());
     }
 }
