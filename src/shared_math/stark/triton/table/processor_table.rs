@@ -1117,6 +1117,8 @@ impl TransitionConstraints {
             (self.one() - self.indicator_polynomial(13)) * (self.st13_next() - self.st13()),
             (self.one() - self.indicator_polynomial(14)) * (self.st14_next() - self.st14()),
             (self.one() - self.indicator_polynomial(15)) * (self.st15_next() - self.st15()),
+            self.osv_next() - self.osv(),
+            self.osp_next() - self.osp(),
             (self.one() - self.indicator_polynomial(1)) * (self.ramv_next() - self.ramv()),
         ]
     }
