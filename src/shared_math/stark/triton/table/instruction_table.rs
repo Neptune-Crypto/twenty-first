@@ -98,12 +98,23 @@ impl ExtensionTable for ExtInstructionTable {
         let variables: Vec<MPolynomial<XWord>> = MPolynomial::variables(2 * FULL_WIDTH, 1.into());
         let addr = variables[usize::from(Address)].clone();
         let addr_next = variables[FULL_WIDTH + usize::from(Address)].clone();
+        let current_instruction = variables[CI as usize].clone();
+        let current_instruction_next = variables[FULL_WIDTH + CI as usize].clone();
+        let next_instruction = variables[NIA as usize].clone();
+        let next_instruction_next = variables[FULL_WIDTH + NIA as usize].clone();
         let one = MPolynomial::<XFieldElement>::from_constant(1.into(), 2 * FULL_WIDTH);
 
-        // The address increases by 1.
         let addr_incr_by_one = addr_next - (addr + one);
 
-        vec![addr_incr_by_one]
+        // The address increases by 1 or `current_instruction` does not change.
+        let addr_incr_by_one_or_ci_stays =
+            addr_incr_by_one.clone() * (current_instruction_next - current_instruction);
+
+        // The address increases by 1 or `next_instruction_or_arg` does not change.
+        let addr_incr_by_one_or_nia_stays =
+            addr_incr_by_one * (next_instruction_next - next_instruction);
+
+        vec![addr_incr_by_one_or_ci_stays, addr_incr_by_one_or_nia_stays]
     }
 
     fn ext_terminal_constraints(
