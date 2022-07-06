@@ -2491,14 +2491,25 @@ mod instruction_deselectors_tests {
         let mut row = vec![0.into(); 2 * FULL_WIDTH];
 
         for instruction in all_instructions_without_args() {
+            use ProcessorTableColumn::*;
             let deselector = deselectors.get(instruction);
+
+            println!(
+                "\n\nThe Deselector for instruction {} is:\n{}",
+                instruction, deselector
+            );
 
             // Negative tests
             for other_instruction in all_instructions_without_args()
                 .into_iter()
                 .filter(|other_instruction| *other_instruction != instruction)
             {
-                row[usize::from(ProcessorTableColumn::CI)] = other_instruction.opcode_b().lift();
+                row[usize::from(IB0)] = other_instruction.ib(Ord6::IB0).lift();
+                row[usize::from(IB1)] = other_instruction.ib(Ord6::IB1).lift();
+                row[usize::from(IB2)] = other_instruction.ib(Ord6::IB2).lift();
+                row[usize::from(IB3)] = other_instruction.ib(Ord6::IB3).lift();
+                row[usize::from(IB4)] = other_instruction.ib(Ord6::IB4).lift();
+                row[usize::from(IB5)] = other_instruction.ib(Ord6::IB5).lift();
                 let result = deselector.evaluate(&row);
 
                 assert!(
@@ -2510,7 +2521,12 @@ mod instruction_deselectors_tests {
             }
 
             // Positive tests
-            row[usize::from(ProcessorTableColumn::CI)] = instruction.opcode_b().lift();
+            row[usize::from(IB0)] = instruction.ib(Ord6::IB0).lift();
+            row[usize::from(IB1)] = instruction.ib(Ord6::IB1).lift();
+            row[usize::from(IB2)] = instruction.ib(Ord6::IB2).lift();
+            row[usize::from(IB3)] = instruction.ib(Ord6::IB3).lift();
+            row[usize::from(IB4)] = instruction.ib(Ord6::IB4).lift();
+            row[usize::from(IB5)] = instruction.ib(Ord6::IB5).lift();
             let result = deselector.evaluate(&row);
             assert!(
                 !result.is_zero(),
