@@ -582,6 +582,7 @@ pub fn all_instructions_without_args() -> Vec<Instruction> {
         Divine,
         Dup(dummy_ord16),
         Swap(dummy_ord16),
+        Nop,
         Skiz,
         Call(dummy_bfield_element),
         Return,

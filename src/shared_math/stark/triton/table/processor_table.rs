@@ -2433,7 +2433,11 @@ impl InstructionDeselectors {
     /// a solution when `ci` is any other instruction. This deselector
     /// can be replaced with an efficient one based on `ib` registers.
     pub fn get(&self, instruction: Instruction) -> MPolynomial<XWord> {
-        self.deselectors[&instruction].clone()
+        self.deselectors
+            .get(&instruction)
+            .unwrap_or_else(|| panic!("The instruction {} does not exist!", instruction))
+            .clone()
+        // self.deselectors[&instruction].clone()
     }
 
     /// A polynomial that has no solutions when ci is 'instruction'
