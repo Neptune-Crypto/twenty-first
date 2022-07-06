@@ -12,7 +12,7 @@ use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::iter::Sum;
-use std::ops::{Add, AddAssign, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub};
 use std::rc::Rc;
 use std::{cmp, fmt};
 
@@ -1230,6 +1230,12 @@ impl<PFElem: PrimeField> Mul for MPolynomial<PFElem> {
             coefficients: output_coefficients,
             variable_count,
         }
+    }
+}
+
+impl<PFElem: PrimeField> MulAssign for MPolynomial<PFElem> {
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = self.clone() * rhs
     }
 }
 

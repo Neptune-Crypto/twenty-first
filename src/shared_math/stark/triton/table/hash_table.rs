@@ -147,97 +147,35 @@ impl ExtensionTable for ExtHashTable {
         let rnd_nmbr_next =
             variables[FULL_WIDTH + usize::from(HashTableColumn::ROUNDNUMBER)].clone();
 
+        let helper = |rnd_nmbr_arg, rnd_nmbr_next_arg| -> MPolynomial<XFieldElement> {
+            let mut prod = rnd_nmbr_next.clone() - constant(rnd_nmbr_next_arg);
+            for i in 0..=8 {
+                if i != rnd_nmbr_arg {
+                    prod *= rnd_nmbr.clone() - constant(i)
+                }
+            }
+            prod
+        };
+
         // 1. If the round number is 0, the next round number is 0.
-        let if_rnd_nmbr_is_0_then_next_rnd_nmbr_is_0 = (rnd_nmbr.clone() - constant(1))
-            * (rnd_nmbr.clone() - constant(2))
-            * (rnd_nmbr.clone() - constant(3))
-            * (rnd_nmbr.clone() - constant(4))
-            * (rnd_nmbr.clone() - constant(5))
-            * (rnd_nmbr.clone() - constant(6))
-            * (rnd_nmbr.clone() - constant(7))
-            * (rnd_nmbr.clone() - constant(8))
-            * (rnd_nmbr_next.clone() - constant(0));
+        let if_rnd_nmbr_is_0_then_next_rnd_nmbr_is_0 = helper(0, 0);
         // 2. If the round number is 1, the next round number is 2.
-        let if_rnd_nmbr_is_1_then_next_rnd_nmbr_is_2 = (rnd_nmbr.clone() - constant(0))
-            * (rnd_nmbr.clone() - constant(2))
-            * (rnd_nmbr.clone() - constant(3))
-            * (rnd_nmbr.clone() - constant(4))
-            * (rnd_nmbr.clone() - constant(5))
-            * (rnd_nmbr.clone() - constant(6))
-            * (rnd_nmbr.clone() - constant(7))
-            * (rnd_nmbr.clone() - constant(8))
-            * (rnd_nmbr_next.clone() - constant(2));
+        let if_rnd_nmbr_is_1_then_next_rnd_nmbr_is_2 = helper(1, 2);
         // 3. If the round number is 2, the next round number is 3.
-        let if_rnd_nmbr_is_2_then_next_rnd_nmbr_is_3 = (rnd_nmbr.clone() - constant(0))
-            * (rnd_nmbr.clone() - constant(1))
-            * (rnd_nmbr.clone() - constant(3))
-            * (rnd_nmbr.clone() - constant(4))
-            * (rnd_nmbr.clone() - constant(5))
-            * (rnd_nmbr.clone() - constant(6))
-            * (rnd_nmbr.clone() - constant(7))
-            * (rnd_nmbr.clone() - constant(8))
-            * (rnd_nmbr_next.clone() - constant(3));
+        let if_rnd_nmbr_is_2_then_next_rnd_nmbr_is_3 = helper(2, 3);
         // 4. If the round number is 3, the next round number is 4.
-        let if_rnd_nmbr_is_3_then_next_rnd_nmbr_is_4 = (rnd_nmbr.clone() - constant(0))
-            * (rnd_nmbr.clone() - constant(1))
-            * (rnd_nmbr.clone() - constant(2))
-            * (rnd_nmbr.clone() - constant(4))
-            * (rnd_nmbr.clone() - constant(5))
-            * (rnd_nmbr.clone() - constant(6))
-            * (rnd_nmbr.clone() - constant(7))
-            * (rnd_nmbr.clone() - constant(8))
-            * (rnd_nmbr_next.clone() - constant(4));
+        let if_rnd_nmbr_is_3_then_next_rnd_nmbr_is_4 = helper(3, 4);
         // 5. If the round number is 4, the next round number is 5.
-        let if_rnd_nmbr_is_4_then_next_rnd_nmbr_is_5 = (rnd_nmbr.clone() - constant(0))
-            * (rnd_nmbr.clone() - constant(1))
-            * (rnd_nmbr.clone() - constant(2))
-            * (rnd_nmbr.clone() - constant(3))
-            * (rnd_nmbr.clone() - constant(5))
-            * (rnd_nmbr.clone() - constant(6))
-            * (rnd_nmbr.clone() - constant(7))
-            * (rnd_nmbr.clone() - constant(8))
-            * (rnd_nmbr_next.clone() - constant(5));
+        let if_rnd_nmbr_is_4_then_next_rnd_nmbr_is_5 = helper(4, 5);
         // 6. If the round number is 5, the next round number is 6.
-        let if_rnd_nmbr_is_5_then_next_rnd_nmbr_is_6 = (rnd_nmbr.clone() - constant(0))
-            * (rnd_nmbr.clone() - constant(1))
-            * (rnd_nmbr.clone() - constant(2))
-            * (rnd_nmbr.clone() - constant(3))
-            * (rnd_nmbr.clone() - constant(4))
-            * (rnd_nmbr.clone() - constant(6))
-            * (rnd_nmbr.clone() - constant(7))
-            * (rnd_nmbr.clone() - constant(8))
-            * (rnd_nmbr_next.clone() - constant(6));
+        let if_rnd_nmbr_is_5_then_next_rnd_nmbr_is_6 = helper(5, 6);
         // 7. If the round number is 6, the next round number is 7.
-        let if_rnd_nmbr_is_6_then_next_rnd_nmbr_is_7 = (rnd_nmbr.clone() - constant(0))
-            * (rnd_nmbr.clone() - constant(1))
-            * (rnd_nmbr.clone() - constant(2))
-            * (rnd_nmbr.clone() - constant(3))
-            * (rnd_nmbr.clone() - constant(4))
-            * (rnd_nmbr.clone() - constant(5))
-            * (rnd_nmbr.clone() - constant(7))
-            * (rnd_nmbr.clone() - constant(8))
-            * (rnd_nmbr_next.clone() - constant(7));
+        let if_rnd_nmbr_is_6_then_next_rnd_nmbr_is_7 = helper(6, 7);
         // 8. If the round number is 7, the next round number is 8.
-        let if_rnd_nmbr_is_7_then_next_rnd_nmbr_is_8 = (rnd_nmbr.clone() - constant(0))
-            * (rnd_nmbr.clone() - constant(1))
-            * (rnd_nmbr.clone() - constant(2))
-            * (rnd_nmbr.clone() - constant(3))
-            * (rnd_nmbr.clone() - constant(4))
-            * (rnd_nmbr.clone() - constant(5))
-            * (rnd_nmbr.clone() - constant(6))
-            * (rnd_nmbr.clone() - constant(8))
-            * (rnd_nmbr_next.clone() - constant(8));
+        let if_rnd_nmbr_is_7_then_next_rnd_nmbr_is_8 = helper(7, 8);
         // 9. If the round number is 8, the next round number is either 0 or 1.
-        let if_rnd_nmbr_is_8_then_next_rnd_nmbr_is_0_or_1 = (rnd_nmbr.clone() - constant(0))
-            * (rnd_nmbr.clone() - constant(1))
-            * (rnd_nmbr.clone() - constant(2))
-            * (rnd_nmbr.clone() - constant(3))
-            * (rnd_nmbr.clone() - constant(4))
-            * (rnd_nmbr.clone() - constant(5))
-            * (rnd_nmbr.clone() - constant(6))
-            * (rnd_nmbr - constant(7))
-            * (rnd_nmbr_next.clone() - constant(0))
-            * (rnd_nmbr_next - constant(1));
+        let if_rnd_nmbr_is_8_then_next_rnd_nmbr_is_0_or_1 =
+            helper(8, 0) * (rnd_nmbr_next - constant(1));
         // 10. The remaining 7·16 = 112 constraints are left as an exercise to the reader.
         // TODO
         //let _remaining = todo!();
