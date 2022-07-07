@@ -141,49 +141,49 @@ impl<Dest> AnInstruction<Dest> {
         match self {
             // OpStack manipulation
             Pop => 2,
-            Push(_) => 4,
-            Divine => 3,
-            Dup(_) => 5,
-            Swap(_) => 6,
+            Push(_) => 1,
+            Divine => 4,
+            Dup(_) => 3,
+            Swap(_) => 5,
 
             // Control flow
-            Nop => 1,
+            Nop => 6,
             Skiz => 8,
             Call(_) => 7,
-            Return => 9,
-            Recurse => 10,
-            Assert => 11,
+            Return => 10,
+            Recurse => 12,
+            Assert => 14,
             Halt => 0,
 
             // Memory access
-            ReadMem => 12,
-            WriteMem => 13,
+            ReadMem => 16,
+            WriteMem => 18,
 
             // Hashing-related instructions
-            Hash => 14,
-            DivineSibling => 15,
-            AssertVector => 16,
+            Hash => 20,
+            DivineSibling => 22,
+            AssertVector => 24,
 
             // Arithmetic on stack instructions
-            Add => 17,
-            Mul => 18,
-            Invert => 19,
-            Split => 20,
-            Eq => 21,
-            Lt => 22,
-            And => 23,
-            Xor => 24,
-            Reverse => 25,
-            Div => 26,
+            Add => 26,
+            Mul => 28,
+            Invert => 30,
+            Split => 32,
+            Eq => 34,
+            Lt => 36,
+            And => 38,
+            Xor => 40,
+            Reverse => 42,
+            Div => 44,
 
-            XxAdd => 27,
-            XxMul => 28,
-            XInvert => 29,
-            XbMul => 30,
+            XxAdd => 46,
+            XxMul => 48,
+            XInvert => 50,
+            XbMul => 52,
 
             // Read/write
-            ReadIo => 31,
-            WriteIo => 32,
+            ReadIo => 54,
+            WriteIo => 56,
         }
     }
 

@@ -1175,23 +1175,22 @@ impl TransitionConstraints {
         let jsd_does_not_change = self.jsd_next() - self.jsd();
 
         // The next instruction nia is decomposed into helper variables hv.
-        let nia_decomposes_to_hvs = self.nia()
-            - (self.hv0() + self.constant(4) * self.hv1() + self.constant(8) * self.hv2());
+        let nia_decomposes_to_hvs = self.nia() - (self.hv0() + self.two() * self.hv1());
 
         // The relevant helper variable hv1 is either 0 or 1.
-        // Here, hv1 == 1 means that nia takes an argument.
-        let hv1_is_0_or_1 = self.hv1() * (self.hv1() - self.one());
+        // Here, hv0 == 1 means that nia takes an argument.
+        let hv0_is_0_or_1 = self.hv0() * (self.hv0() - self.one());
 
         // Register ip increments by (1 if st0 is non-zero else (2 if nia takes no argument else 3)).
         let ip_incr_by_1_or_2_or_3 = self.ip_next()
-            - (self.ip() + self.one() + self.st0() * self.inv() * (self.one() + self.hv1()));
+            - (self.ip() + self.one() + self.st0() * self.inv() * (self.one() + self.hv0()));
 
         vec![
             jsp_does_not_change,
             jso_does_not_change,
             jsd_does_not_change,
             nia_decomposes_to_hvs,
-            hv1_is_0_or_1,
+            hv0_is_0_or_1,
             ip_incr_by_1_or_2_or_3,
         ]
     }
