@@ -200,32 +200,7 @@ impl<Dest> AnInstruction<Dest> {
             Hash => false,
             AssertVector => false,
 
-            Divine => true,
-            Pop => true,
-            Push(_) => true,
-            Dup(_) => true,
-            Swap(_) => true,
-            Skiz => true,
-            Assert => true,
-            ReadMem => true,
-            WriteMem => true,
-            DivineSibling => true,
-            Add => true,
-            Mul => true,
-            Invert => true,
-            Split => true,
-            Eq => true,
-            Lt => true,
-            And => true,
-            Xor => true,
-            Reverse => true,
-            Div => true,
-            XxAdd => true,
-            XxMul => true,
-            XInvert => true,
-            XbMul => true,
-            ReadIo => true,
-            WriteIo => true,
+            _ => true,
         }
     }
 
@@ -237,34 +212,7 @@ impl<Dest> AnInstruction<Dest> {
             Reverse => true,
             Div => true,
 
-            Divine => false,
-            Split => false,
-            Call(_) => false,
-            Return => false,
-            Recurse => false,
-            Halt => false,
-            Hash => false,
-            AssertVector => false,
-            Pop => false,
-            Push(_) => false,
-            Dup(_) => false,
-            Swap(_) => false,
-            Nop => false,
-            Skiz => false,
-            Assert => false,
-            ReadMem => false,
-            WriteMem => false,
-            DivineSibling => false,
-            Add => false,
-            Mul => false,
-            Invert => false,
-            Eq => false,
-            XxAdd => false,
-            XxMul => false,
-            XInvert => false,
-            XbMul => false,
-            ReadIo => false,
-            WriteIo => false,
+            _ => false,
         }
     }
 
@@ -280,36 +228,8 @@ impl<Dest> AnInstruction<Dest> {
             Swap(_) => 2,
             Call(_) => 2,
 
-            // Single-word instructions
-            Pop => 1,
-            Divine => 1,
-            Nop => 1,
-            Skiz => 1,
-            Return => 1,
-            Recurse => 1,
-            Assert => 1,
-            Halt => 1,
-            ReadMem => 1,
-            WriteMem => 1,
-            Hash => 1,
-            DivineSibling => 1,
-            AssertVector => 1,
-            Add => 1,
-            Mul => 1,
-            Invert => 1,
-            Split => 1,
-            Eq => 1,
-            Lt => 1,
-            And => 1,
-            Xor => 1,
-            Reverse => 1,
-            Div => 1,
-            XxAdd => 1,
-            XxMul => 1,
-            XInvert => 1,
-            XbMul => 1,
-            WriteIo => 1,
-            ReadIo => 1,
+            // Everything else is a Single-word instruction
+            _ => 1,
         }
     }
 
@@ -317,9 +237,8 @@ impl<Dest> AnInstruction<Dest> {
     pub fn ib(&self, arg: Ord6) -> BFieldElement {
         let opcode = self.opcode();
         let bit_number: usize = arg.into();
-        let bit_mask: u32 = 1 << bit_number;
 
-        ((opcode & bit_mask) >> bit_number).into()
+        ((opcode >> bit_number) & 1).into()
     }
 
     fn map_call_address<F, NewDest>(&self, f: F) -> AnInstruction<NewDest>
