@@ -12,6 +12,7 @@ use crate::shared_math::stark::triton::instruction::{
 use crate::shared_math::stark::triton::ord_n::{Ord16, Ord6};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
+use itertools::Itertools;
 use std::collections::HashMap;
 
 pub const PROCESSOR_TABLE_PERMUTATION_ARGUMENTS_COUNT: usize = 9;
@@ -404,51 +405,59 @@ impl ExtProcessorTable {
     }
 
     /// Transition constraints are combined with deselectors in such a way
-    /// that arbitrary sets of mutually exclusive combinations are summed, i.e.
+    /// that arbitrary sets of mutually exclusive combinations are summed, i.e.,
     ///
     /// ```norun
     /// [ deselector_pop * tc_pop_0 + deselector_push * tc_push_0 + ...,
     ///   deselector_pop * tc_pop_1 + deselector_push * tc_push_1 + ...,
     ///   ...,
-    ///   deselector_pop * tc_pop_n + deselector_push * tc_push_n + ...
+    ///   deselector_pop * tc_pop_i + deselector_push * tc_push_i + ...,
+    ///   deselector_pop * 0        + deselector_push * tc_push_{i+1} + ...,
+    ///   ...,
     /// ]
     /// ```
-    ///
-    /// For instructions that have fewer transition constraints, the deselector
-    /// is multiplied with a zero, causing no additional terms in the final sets
-    /// of combined transition constraint polynomials.
+    /// For instructions that have fewer transition constraints than the maximal number of
+    /// transition constraints among all instructions, the deselector is multiplied with a zero,
+    /// causing no additional terms in the final sets of combined transition constraint polynomials.
     fn combine_transition_constraints_with_deselectors(
         &self,
-        stuff: Vec<(Instruction, Vec<MPolynomial<XWord>>)>,
+        instr_tc_polys_tuples: Vec<(Instruction, Vec<MPolynomial<XWord>>)>,
     ) -> Vec<MPolynomial<XWord>> {
-        let mut all_instruction_deselectors = Vec::with_capacity(stuff.len());
-        let mut all_tc_polynomials_for_processor_table = Vec::with_capacity(stuff.len());
+        let (all_instructions, all_tc_polys_for_all_instructions): (Vec<_>, Vec<Vec<_>>) =
+            instr_tc_polys_tuples.into_iter().unzip();
 
-        for (instr, poly) in stuff.into_iter() {
-            all_instruction_deselectors.push(self.instruction_deselectors.get(instr));
-            all_tc_polynomials_for_processor_table.push(poly);
-        }
+        let all_instruction_deselectors = all_instructions
+            .into_iter()
+            .map(|instr| self.instruction_deselectors.get(instr))
+            .collect_vec();
 
-        let mut result = vec![];
-        while all_tc_polynomials_for_processor_table
+        let max_number_of_constraints = all_tc_polys_for_all_instructions
             .iter()
-            .all(|polys| !polys.is_empty())
-        {
-            let sum_of_mutually_exclusive_transition_constraints: MPolynomial<XFieldElement> =
-                all_tc_polynomials_for_processor_table
-                    .iter_mut()
-                    .map(|instruction_polys| {
-                        instruction_polys
-                            .pop()
-                            .unwrap_or_else(|| self.transition_constraints.zero())
-                    })
-                    .zip(all_instruction_deselectors.clone())
-                    .map(|(instruction_poly, deselector)| instruction_poly * deselector)
-                    .sum();
-            result.push(sum_of_mutually_exclusive_transition_constraints);
-        }
+            .map(|tc_polys_for_instr| tc_polys_for_instr.len())
+            .max()
+            .unwrap();
+        let zero_poly = self.transition_constraints.zero();
 
-        result
+        let all_tc_polys_for_all_instructions_transposed = (0..max_number_of_constraints)
+            .map(|idx| {
+                all_tc_polys_for_all_instructions
+                    .iter()
+                    .map(|tc_polys_for_instr| tc_polys_for_instr.get(idx).unwrap_or(&zero_poly))
+                    .collect_vec()
+            })
+            .collect_vec();
+
+        all_tc_polys_for_all_instructions_transposed
+            .into_iter()
+            .map(|row| {
+                all_instruction_deselectors
+                    .clone()
+                    .into_iter()
+                    .zip(row)
+                    .map(|(deselector, instruction_tc)| deselector * instruction_tc.to_owned())
+                    .sum()
+            })
+            .collect_vec()
     }
 }
 
