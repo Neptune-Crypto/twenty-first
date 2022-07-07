@@ -292,9 +292,8 @@ impl ProcessorTable {
         let mut acc = mpol_one;
         for c in INSTRUCTIONS.iter() {
             if *c != instruction {
-                acc = acc
-                    * (indeterminate.to_owned()
-                        - MPolynomial::from_constant(one.new_from_usize(*c as usize), 14));
+                acc *= indeterminate.to_owned()
+                    - MPolynomial::from_constant(one.new_from_usize(*c as usize), 14);
             }
         }
 

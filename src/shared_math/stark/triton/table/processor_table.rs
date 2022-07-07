@@ -1785,19 +1785,13 @@ impl TransitionConstraints {
         //
         // $st0' - (st0·st3 - st2·st4 - st1·st5)$
         let st0_becomes_coefficient_0 = self.st0_next()
-            // align
-            - (self.st0() * self.st3()
-                - self.st2() * self.st4()
-                - self.st1() * self.st5());
+            - (self.st0() * self.st3() - self.st2() * self.st4() - self.st1() * self.st5());
 
         // The coefficient of x^1 of multiplying the two X-Field elements on the stack is moved into st1.
         //
         // st1' - (st1·st3 + st0·st4 - st2·st5 + st2·st4 + st1·st5)
         let st1_becomes_coefficient_1 = self.st1_next()
-            // align
-            - (self.st1() * self.st3()
-                + self.st0() * self.st4()
-                - self.st2() * self.st5()
+            - (self.st1() * self.st3() + self.st0() * self.st4() - self.st2() * self.st5()
                 + self.st2() * self.st4()
                 + self.st1() * self.st5());
 
@@ -1805,7 +1799,6 @@ impl TransitionConstraints {
         //
         // st2' - (st2·st3 + st1·st4 + st0·st5 + st2·st5)
         let st2_becomes_coefficient_2 = self.st0_next()
-            // align
             - (self.st2() * self.st3()
                 + self.st1() * self.st4()
                 + self.st0() * self.st5()

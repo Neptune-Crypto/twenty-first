@@ -948,7 +948,7 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
             let set: bool =
                 !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
             if set {
-                acc = acc * self.clone();
+                acc *= self.clone();
             }
         }
 
@@ -1242,6 +1242,7 @@ impl<PFElem: PrimeField> MulAssign for MPolynomial<PFElem> {
 #[cfg(test)]
 mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
+
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
@@ -1588,7 +1589,7 @@ mod test_mpolynomials {
                 &[x.clone(), x.clone(), x.clone()],
                 &mut empty_mod_pow_memoization.clone(),
                 &mut empty_mul_memoization.clone(),
-                &mut empty_intermediate_results.clone()
+                &mut empty_intermediate_results.clone(),
             )
         );
         assert_eq!(
@@ -1597,14 +1598,14 @@ mod test_mpolynomials {
                 &[x.clone(), x.clone(), x.clone()],
                 &mut empty_mod_pow_memoization.clone(),
                 &mut empty_mul_memoization.clone(),
-                &mut precalculated_intermediate_results.clone()
+                &mut precalculated_intermediate_results.clone(),
             )
         );
         assert_eq!(
             x_cubed,
             xyz_m.evaluate_symbolic_with_memoization_precalculated(
                 &[x.clone(), x.clone(), x],
-                &mut precalculated_intermediate_results.clone()
+                &mut precalculated_intermediate_results.clone(),
             )
         );
 
@@ -1642,7 +1643,7 @@ mod test_mpolynomials {
                 ],
                 &mut empty_mod_pow_memoization,
                 &mut empty_mul_memoization,
-                &mut empty_intermediate_results
+                &mut empty_intermediate_results,
             )
         );
 
@@ -1668,7 +1669,7 @@ mod test_mpolynomials {
             expected_result,
             pol_m.evaluate_symbolic_with_memoization_precalculated(
                 &[univariate_pol_1.clone(), univariate_pol_1, univariate_pol_2,],
-                &mut new_precalculated_intermediate_results
+                &mut new_precalculated_intermediate_results,
             )
         );
     }
@@ -1706,7 +1707,7 @@ mod test_mpolynomials {
                 &[xu.clone(), zero_upol.clone(), zero_upol],
                 &mut empty_mod_pow_memoization,
                 &mut empty_mul_memoization,
-                &mut empty_intermediate_results
+                &mut empty_intermediate_results,
             )
         );
     }
@@ -1805,7 +1806,7 @@ mod test_mpolynomials {
                     + x_squared_s.scalar_mul(pfb(4, q))
                     + xs.scalar_mul(pfb(3, q)),
                 0,
-                3
+                3,
             )
         );
     }
