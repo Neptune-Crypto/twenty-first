@@ -153,12 +153,14 @@ impl<'pgm> VMState<'pgm> {
             Dup(arg) => {
                 let elem = self.op_stack.safe_peek(arg);
                 self.op_stack.push(elem);
+                self.set_helper_variables_for_indicator_polynomials(arg as u64);
                 self.instruction_pointer += 2;
             }
 
             Swap(arg) => {
                 // st[0] ... st[n] -> st[n] ... st[0]
                 self.op_stack.safe_swap(arg);
+                self.set_helper_variables_for_indicator_polynomials(arg as u64);
                 self.instruction_pointer += 2;
             }
 
@@ -737,6 +739,16 @@ impl<'pgm> VMState<'pgm> {
         self.hv[1] = node_index_msbs.into();
 
         Ok(())
+    }
+
+    /// Helper method for instructions making use of indicator polynomials, i.e., `dup` and `swap`.
+    /// Sets the corresponding helper variables to the bit-decomposed argument such that the
+    /// indicator polynomials of the AIR actually evaluate to 0.
+    fn set_helper_variables_for_indicator_polynomials(&mut self, arg: u64) {
+        self.hv[0] = BWord::new(arg % 2);
+        self.hv[1] = BWord::new((arg >> 1) % 2);
+        self.hv[2] = BWord::new((arg >> 2) % 2);
+        self.hv[3] = BWord::new((arg >> 3) % 2);
     }
 
     fn set_hv4_to_inverse_of_osp_with_offset(&mut self) {
