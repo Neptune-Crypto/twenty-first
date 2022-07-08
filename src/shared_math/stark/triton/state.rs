@@ -136,6 +136,7 @@ impl<'pgm> VMState<'pgm> {
         match instruction {
             Pop => {
                 self.op_stack.pop()?;
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -173,6 +174,7 @@ impl<'pgm> VMState<'pgm> {
                 let nia = self.nia().value();
                 self.hv[0] = BWord::new(nia % 2);
                 self.hv[1] = BWord::new(nia / 2);
+                self.set_hv4_to_inverse_of_osp_with_offset();
 
                 // set instruction pointer according to st0 and size of current instruction
                 let elem = self.op_stack.pop()?;
@@ -206,6 +208,7 @@ impl<'pgm> VMState<'pgm> {
                 if !elem.is_one() {
                     return vm_err(AssertionFailed);
                 }
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -264,6 +267,7 @@ impl<'pgm> VMState<'pgm> {
                 let lhs = self.op_stack.pop()?;
                 let rhs = self.op_stack.pop()?;
                 self.op_stack.push(lhs + rhs);
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -271,6 +275,7 @@ impl<'pgm> VMState<'pgm> {
                 let lhs = self.op_stack.pop()?;
                 let rhs = self.op_stack.pop()?;
                 self.op_stack.push(lhs * rhs);
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -304,6 +309,7 @@ impl<'pgm> VMState<'pgm> {
                     self.hv[0] = (rhs - lhs).inverse();
                 }
                 self.op_stack.push(Self::eq(lhs, rhs));
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -313,6 +319,7 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push(Self::lt(lhs, rhs));
                 let trace = self.u32_op_trace(lhs, rhs);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -322,6 +329,7 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push((lhs & rhs).into());
                 let trace = self.u32_op_trace(lhs, rhs);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -331,6 +339,7 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push((lhs ^ rhs).into());
                 let trace = self.u32_op_trace(lhs, rhs);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -386,6 +395,7 @@ impl<'pgm> VMState<'pgm> {
 
             WriteIo => {
                 vm_output = Some(VMOutput::WriteOutputSymbol(self.op_stack.pop()?));
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
