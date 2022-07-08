@@ -167,6 +167,12 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Skiz => {
+                // set helper variables to help verify correct transition of instruction pointer
+                let nia = self.nia().value();
+                self.hv[0] = BWord::new(nia % 2);
+                self.hv[1] = BWord::new(nia / 2);
+
+                // set instruction pointer according to st0 and size of current instruction
                 let elem = self.op_stack.pop()?;
                 self.instruction_pointer += if elem.is_zero() {
                     let next_instruction = self.next_instruction()?;
@@ -174,11 +180,6 @@ impl<'pgm> VMState<'pgm> {
                 } else {
                     1
                 };
-
-                // set helper variables to help verify correct transition of instruction pointer
-                let nia = self.nia().value();
-                self.hv[0] = BWord::new(nia % 2);
-                self.hv[1] = BWord::new(nia / 2);
             }
 
             Call(addr) => {
