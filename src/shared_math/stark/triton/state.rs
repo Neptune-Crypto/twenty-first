@@ -58,9 +58,6 @@ pub struct VMState<'pgm> {
 
     /// Current instruction's address in program memory
     pub instruction_pointer: usize,
-
-    /// Helper Variable Registers
-    pub hv: [BWord; HV_REGISTER_COUNT],
 }
 
 #[derive(Debug, PartialEq)]
@@ -115,6 +112,72 @@ impl<'pgm> VMState<'pgm> {
             .map(|vm_output| (next_state, vm_output))
     }
 
+    pub fn derive_helper_variables(&self) -> [BWord; HV_REGISTER_COUNT] {
+        let mut hvs = [0.into(); HV_REGISTER_COUNT];
+
+        let current_instruction = self.current_instruction();
+        if current_instruction.is_err() {
+            return hvs;
+        }
+        let current_instruction = current_instruction.unwrap();
+
+        // Helps preventing OpStack Underflow
+        match current_instruction {
+            Pop | Skiz | Assert | Add | Mul | Eq | Lt | And | Xor | XbMul | WriteIo => {
+                hvs[4] = (self.op_stack.osp() - 15.into()).inverse()
+            }
+            _ => (),
+        }
+
+        match current_instruction {
+            // For instructions making use of indicator polynomials, i.e., `dup` and `swap`.
+            // Sets the corresponding helper variables to the bit-decomposed argument such that the
+            // indicator polynomials of the AIR actually evaluate to 0.
+            Dup(arg) | Swap(arg) => {
+                let arg_val: u64 = arg.into();
+                hvs[0] = BWord::new(arg_val % 2);
+                hvs[1] = BWord::new((arg_val >> 1) % 2);
+                hvs[2] = BWord::new((arg_val >> 2) % 2);
+                hvs[3] = BWord::new((arg_val >> 3) % 2);
+            }
+            Skiz => {
+                let nia = self.nia().value();
+                hvs[0] = BWord::new(nia % 2);
+                hvs[1] = BWord::new(nia / 2);
+            }
+            DivineSibling => {
+                let node_index = self.op_stack.safe_peek(ST12).value();
+                // lsb = least significant bit
+                let node_index_lsb = node_index % 2;
+                let node_index_msbs = node_index / 2;
+                // set hv registers to correct decomposition of node_index
+                hvs[0] = BWord::new(node_index_lsb);
+                hvs[1] = BWord::new(node_index_msbs);
+            }
+            Split => {
+                let elem = self.op_stack.safe_peek(ST0);
+                let n: u64 = elem.value();
+                let lo = BWord::new(n & 0xffff_ffff);
+                let hi = BWord::new(n >> 32);
+                if !lo.is_zero() {
+                    let max_val_of_hi = BWord::new(2_u64.pow(32) - 1);
+                    hvs[0] = (hi - max_val_of_hi).inverse();
+                }
+            }
+            Eq => {
+                let lhs = self.op_stack.safe_peek(ST0);
+                let rhs = self.op_stack.safe_peek(ST1);
+                if !(rhs - lhs).is_zero() {
+                    hvs[0] = (rhs - lhs).inverse();
+                }
+            }
+            Div => hvs[0] = 1.into(),
+            _ => (),
+        }
+
+        hvs
+    }
+
     /// Perform the state transition as a mutable operation on `self`.
     pub fn step_mut<In>(
         &mut self,
@@ -129,14 +192,9 @@ impl<'pgm> VMState<'pgm> {
         self.cycle_count += 1;
         let mut vm_output = None;
 
-        // Instructions set their helper variables if needed
-        self.hv = [0.into(); HV_REGISTER_COUNT];
-
-        let instruction = self.current_instruction()?;
-        match instruction {
+        match self.current_instruction()? {
             Pop => {
                 self.op_stack.pop()?;
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -154,14 +212,12 @@ impl<'pgm> VMState<'pgm> {
             Dup(arg) => {
                 let elem = self.op_stack.safe_peek(arg);
                 self.op_stack.push(elem);
-                self.set_helper_variables_for_indicator_polynomials(arg as u64);
                 self.instruction_pointer += 2;
             }
 
             Swap(arg) => {
                 // st[0] ... st[n] -> st[n] ... st[0]
                 self.op_stack.safe_swap(arg);
-                self.set_helper_variables_for_indicator_polynomials(arg as u64);
                 self.instruction_pointer += 2;
             }
 
@@ -170,13 +226,6 @@ impl<'pgm> VMState<'pgm> {
             }
 
             Skiz => {
-                // set helper variables to help verify correct transition of instruction pointer
-                let nia = self.nia().value();
-                self.hv[0] = BWord::new(nia % 2);
-                self.hv[1] = BWord::new(nia / 2);
-                self.set_hv4_to_inverse_of_osp_with_offset();
-
-                // set instruction pointer according to st0 and size of current instruction
                 let elem = self.op_stack.pop()?;
                 self.instruction_pointer += if elem.is_zero() {
                     let next_instruction = self.next_instruction()?;
@@ -208,7 +257,6 @@ impl<'pgm> VMState<'pgm> {
                 if !elem.is_one() {
                     return vm_err(AssertionFailed);
                 }
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -267,7 +315,6 @@ impl<'pgm> VMState<'pgm> {
                 let lhs = self.op_stack.pop()?;
                 let rhs = self.op_stack.pop()?;
                 self.op_stack.push(lhs + rhs);
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -275,7 +322,6 @@ impl<'pgm> VMState<'pgm> {
                 let lhs = self.op_stack.pop()?;
                 let rhs = self.op_stack.pop()?;
                 self.op_stack.push(lhs * rhs);
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -293,10 +339,6 @@ impl<'pgm> VMState<'pgm> {
                 let n: u64 = elem.value();
                 let lo = BWord::new(n & 0xffff_ffff);
                 let hi = BWord::new(n >> 32);
-                if !lo.is_zero() {
-                    let max_val_of_hi = BWord::new(2_u64.pow(32) - 1);
-                    self.hv[0] = (hi - max_val_of_hi).inverse();
-                }
                 self.op_stack.push(lo);
                 self.op_stack.push(hi);
                 self.instruction_pointer += 1;
@@ -305,11 +347,7 @@ impl<'pgm> VMState<'pgm> {
             Eq => {
                 let lhs = self.op_stack.pop()?;
                 let rhs = self.op_stack.pop()?;
-                if !(rhs - lhs).is_zero() {
-                    self.hv[0] = (rhs - lhs).inverse();
-                }
                 self.op_stack.push(Self::eq(lhs, rhs));
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -319,7 +357,6 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push(Self::lt(lhs, rhs));
                 let trace = self.u32_op_trace(lhs, rhs);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -329,7 +366,6 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push((lhs & rhs).into());
                 let trace = self.u32_op_trace(lhs, rhs);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -339,7 +375,6 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push((lhs ^ rhs).into());
                 let trace = self.u32_op_trace(lhs, rhs);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -361,7 +396,6 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push(rem.into());
                 let trace = self.u32_op_trace(denom, numerator);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
-                self.hv[0] = 1.into();
                 self.instruction_pointer += 1;
             }
 
@@ -389,13 +423,11 @@ impl<'pgm> VMState<'pgm> {
                 let lhs: BWord = self.op_stack.pop()?;
                 let rhs: XWord = self.op_stack.pop_x()?;
                 self.op_stack.push_x(lhs.lift() * rhs);
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
             WriteIo => {
                 vm_output = Some(VMOutput::WriteOutputSymbol(self.op_stack.pop()?));
-                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -459,6 +491,8 @@ impl<'pgm> VMState<'pgm> {
         let osp = self.op_stack.osp();
         let osv = self.op_stack.osv();
 
+        let hvs = self.derive_helper_variables();
+
         [
             clk,
             ip,
@@ -492,11 +526,11 @@ impl<'pgm> VMState<'pgm> {
             inv,
             osp,
             osv,
-            self.hv[0],
-            self.hv[1],
-            self.hv[2],
-            self.hv[3],
-            self.hv[4],
+            hvs[0],
+            hvs[1],
+            hvs[2],
+            hvs[3],
+            hvs[4],
             *self.ram.get(&st1).unwrap_or(&BWord::new(0)),
         ]
     }
@@ -744,25 +778,7 @@ impl<'pgm> VMState<'pgm> {
             self.op_stack.push(*word);
         }
 
-        // set hv registers to correct decomposition of node_index
-        self.hv[0] = node_index_lsb.into();
-        self.hv[1] = node_index_msbs.into();
-
         Ok(())
-    }
-
-    /// Helper method for instructions making use of indicator polynomials, i.e., `dup` and `swap`.
-    /// Sets the corresponding helper variables to the bit-decomposed argument such that the
-    /// indicator polynomials of the AIR actually evaluate to 0.
-    fn set_helper_variables_for_indicator_polynomials(&mut self, arg: u64) {
-        self.hv[0] = BWord::new(arg % 2);
-        self.hv[1] = BWord::new((arg >> 1) % 2);
-        self.hv[2] = BWord::new((arg >> 2) % 2);
-        self.hv[3] = BWord::new((arg >> 3) % 2);
-    }
-
-    fn set_hv4_to_inverse_of_osp_with_offset(&mut self) {
-        self.hv[4] = (self.op_stack.osp() - 15.into()).inverse();
     }
 }
 

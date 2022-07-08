@@ -162,6 +162,13 @@ impl From<Ord16> for u32 {
     }
 }
 
+impl From<Ord16> for u64 {
+    fn from(n: Ord16) -> Self {
+        let v: u32 = n.into();
+        v.into()
+    }
+}
+
 impl TryFrom<u32> for Ord16 {
     type Error = String;
 
