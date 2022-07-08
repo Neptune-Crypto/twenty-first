@@ -191,29 +191,14 @@ impl<Dest> AnInstruction<Dest> {
     ///
     /// A modification involves any amount of pushing and/or popping.
     pub fn is_op_stack_instruction(&self) -> bool {
-        match self {
-            Nop => false,
-            Call(_) => false,
-            Return => false,
-            Recurse => false,
-            Halt => false,
-            Hash => false,
-            AssertVector => false,
-
-            _ => true,
-        }
+        !matches!(
+            self,
+            Nop | Call(_) | Return | Recurse | Halt | Hash | AssertVector
+        )
     }
 
     pub fn is_u32_op(&self) -> bool {
-        match self {
-            Lt => true,
-            And => true,
-            Xor => true,
-            Reverse => true,
-            Div => true,
-
-            _ => false,
-        }
+        matches!(self, Lt | And | Xor | Reverse | Div)
     }
 
     pub fn opcode_b(&self) -> BFieldElement {
@@ -221,15 +206,10 @@ impl<Dest> AnInstruction<Dest> {
     }
 
     pub fn size(&self) -> usize {
-        match self {
-            // Double-word instructions (instructions that take arguments)
-            Push(_) => 2,
-            Dup(_) => 2,
-            Swap(_) => 2,
-            Call(_) => 2,
-
-            // Everything else is a Single-word instruction
-            _ => 1,
+        if matches!(self, Push(_) | Dup(_) | Swap(_) | Call(_)) {
+            2
+        } else {
+            1
         }
     }
 
