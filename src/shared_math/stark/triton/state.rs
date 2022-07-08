@@ -298,6 +298,9 @@ impl<'pgm> VMState<'pgm> {
             Eq => {
                 let lhs = self.op_stack.pop()?;
                 let rhs = self.op_stack.pop()?;
+                if !(rhs - lhs).is_zero() {
+                    self.hv[0] = (rhs - lhs).inverse();
+                }
                 self.op_stack.push(Self::eq(lhs, rhs));
                 self.instruction_pointer += 1;
             }
@@ -347,6 +350,7 @@ impl<'pgm> VMState<'pgm> {
                 self.op_stack.push(rem.into());
                 let trace = self.u32_op_trace(denom, numerator);
                 vm_output = Some(VMOutput::U32OpTrace(trace));
+                self.hv[0] = 1.into();
                 self.instruction_pointer += 1;
             }
 
@@ -374,6 +378,7 @@ impl<'pgm> VMState<'pgm> {
                 let lhs: BWord = self.op_stack.pop()?;
                 let rhs: XWord = self.op_stack.pop_x()?;
                 self.op_stack.push_x(lhs.lift() * rhs);
+                self.set_hv4_to_inverse_of_osp_with_offset();
                 self.instruction_pointer += 1;
             }
 
@@ -732,6 +737,10 @@ impl<'pgm> VMState<'pgm> {
         self.hv[1] = node_index_msbs.into();
 
         Ok(())
+    }
+
+    fn set_hv4_to_inverse_of_osp_with_offset(&mut self) {
+        self.hv[4] = (self.op_stack.osp() - 15.into()).inverse();
     }
 }
 
