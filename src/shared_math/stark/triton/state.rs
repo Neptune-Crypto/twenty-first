@@ -284,10 +284,14 @@ impl<'pgm> VMState<'pgm> {
             Split => {
                 let elem = self.op_stack.pop()?;
                 let n: u64 = elem.value();
-                let lo = n & 0xffff_ffff;
-                let hi = n >> 32;
-                self.op_stack.push(BWord::new(lo as u64));
-                self.op_stack.push(BWord::new(hi as u64));
+                let lo = BWord::new(n & 0xffff_ffff);
+                let hi = BWord::new(n >> 32);
+                if !lo.is_zero() {
+                    let max_val_of_hi = BWord::new(2_u64.pow(32) - 1);
+                    self.hv[0] = (hi - max_val_of_hi).inverse();
+                }
+                self.op_stack.push(lo);
+                self.op_stack.push(hi);
                 self.instruction_pointer += 1;
             }
 
