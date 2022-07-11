@@ -501,7 +501,7 @@ mod triton_vm_tests {
             "push 1 push 2 swap1 halt ",
             "nop nop nop halt ",
             "push 1 skiz push 0 skiz assert push 1 skiz halt ",
-            "push 2 call label halt label: push -1 add skiz return recurse ",
+            "push 2 call label halt label: push -1 add dup0 skiz recurse return ",
             "push 1 assert halt ",
             "push 2 push 1 write_mem pop push 0 read_mem assert halt ",
             "push 1 push 2 push 3 hash halt ",
