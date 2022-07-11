@@ -613,11 +613,24 @@ mod triton_vm_tests {
             );
             let x_air_constraints = ext_processor_table.ext_transition_constraints(&challenges);
 
-            for (row, next_row) in ext_processor_table.data().iter().tuple_windows() {
+            for (row_idx, (row, next_row)) in ext_processor_table
+                .data()
+                .iter()
+                .tuple_windows()
+                .enumerate()
+            {
                 let xpoint: Vec<XFieldElement> = vec![row.clone(), next_row.clone()].concat();
 
-                for x_air_constraint in x_air_constraints.iter() {
-                    assert!(x_air_constraint.evaluate(&xpoint).is_zero());
+                for (constr_idx, x_air_constraint) in x_air_constraints.iter().enumerate() {
+                    let x_air_evaluation = x_air_constraint.evaluate(&xpoint);
+                    if !x_air_evaluation.is_zero() {
+                        panic!(
+                            "In row {}, the constraint with index {} evaluates to {}.\
+                            \nFailing Polynomial: {}\
+                            \nEvaluation Point:   {:?}",
+                            row_idx, constr_idx, x_air_evaluation, x_air_constraint, xpoint,
+                        );
+                    }
                 }
             }
         }
