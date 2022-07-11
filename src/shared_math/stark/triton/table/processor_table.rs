@@ -1190,9 +1190,22 @@ impl TransitionConstraints {
         // Here, hv0 == 1 means that nia takes an argument.
         let hv0_is_0_or_1 = self.hv0() * (self.hv0() - self.one());
 
-        // Register ip increments by (1 if st0 is non-zero else (2 if nia takes no argument else 3)).
-        let ip_incr_by_1_or_2_or_3 = self.ip_next()
-            - (self.ip() + self.one() + self.st0() * self.inv() * (self.one() + self.hv0()));
+        // If `st0` is non-zero, register `ip` is incremented by 1.
+        // If `st0` is 0 and `nia` takes no argument, register `ip` is incremented by 2.
+        // If `st0` is 0 and `nia` takes an argument, register `ip` is incremented by 3.
+        //
+        // Written as Disjunctive Normal Form, the last constraint can be expressed as:
+        // 6. (Register `st0` is 0 or `ip` is incremented by 1), and
+        // (`st0` has a multiplicative inverse or `hv` is 1 or `ip` is incremented by 2), and
+        // (`st0` has a multiplicative inverse or `hv0` is 0 or `ip` is incremented by 3).
+        let ip_case_1 = (self.ip_next() - (self.ip() + self.one())) * self.st0();
+        let ip_case_2 = (self.ip_next() - (self.ip() + self.two()))
+            * (self.st0() * self.inv() - self.one())
+            * (self.hv0() - self.one());
+        let ip_case_3 = (self.ip_next() - (self.ip() + self.constant(3)))
+            * (self.st0() * self.inv() - self.one())
+            * self.hv0();
+        let ip_incr_by_1_or_2_or_3 = ip_case_1 + ip_case_2 + ip_case_3;
 
         vec![
             jsp_does_not_change,
