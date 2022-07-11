@@ -463,6 +463,7 @@ impl<'pgm> VMState<'pgm> {
     ) -> [BFieldElement; processor_table::BASE_WIDTH] {
         let clk = self.cycle_count.into();
         let ip = (self.instruction_pointer as u32).try_into().unwrap();
+        // FIXME either have `nia()` use the argument `current_instruction` or derive `ci` from `ip`
         let ci = current_instruction.opcode_b();
         let nia = self.nia();
         let ib0 = current_instruction.ib(IB0);

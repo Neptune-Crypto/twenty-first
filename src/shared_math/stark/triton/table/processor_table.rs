@@ -2478,12 +2478,58 @@ impl InstructionDeselectors {
 }
 
 #[cfg(test)]
-mod instruction_deselectors_tests {
+mod constraint_polynomial_tests {
+    use super::*;
+    use crate::shared_math::stark::triton::table::processor_table;
+    use crate::shared_math::stark::triton::vm::Program;
     use crate::shared_math::traits::IdentityValues;
 
-    use super::*;
+    fn get_test_row_from_source_code(source_code: &str, row_num: usize) -> Vec<XWord> {
+        let fake_extension_columns = [BFieldElement::ring_zero();
+            processor_table::FULL_WIDTH - processor_table::BASE_WIDTH]
+            .to_vec();
 
-    // 1. The deselector for a given instruction is 0 for all other instructions and non-zero for that instruction
+        let program = Program::from_code(source_code).unwrap();
+        let (base_matrices, err) = program.simulate_with_input(&[], &[]);
+        assert!(err.is_none());
+
+        let test_row = [
+            base_matrices.processor_matrix[row_num].to_vec(),
+            fake_extension_columns.clone(),
+            base_matrices.processor_matrix[row_num + 1].to_vec(),
+            fake_extension_columns,
+        ]
+        .concat();
+        test_row.into_iter().map(|belem| belem.lift()).collect()
+    }
+
+    #[test]
+    fn transition_constraints_for_instruction_skiz_test() {
+        // Case 0: ST0 is non-zero
+        // Case 1: ST0 is zero, nia is instruction of size 1
+        // Case 2: ST0 is zero, nia is instruction of size 2
+        let test_rows = vec![
+            get_test_row_from_source_code("push 1 skiz halt", 1),
+            get_test_row_from_source_code("push 0 skiz assert halt", 1),
+            get_test_row_from_source_code("push 0 skiz push 1 halt", 1),
+        ];
+
+        for (case_idx, test_row) in test_rows.iter().enumerate() {
+            for (poly_idx, poly) in TransitionConstraints::default()
+                .instruction_skiz()
+                .iter()
+                .enumerate()
+            {
+                assert_eq!(
+                    XFieldElement::ring_zero(),
+                    poly.evaluate(&test_row),
+                    "For case {}, polynomial with index {} must evaluate to zero.",
+                    case_idx,
+                    poly_idx,
+                );
+            }
+        }
+    }
 
     #[test]
     fn instruction_deselector_gives_0_for_all_other_instructions_test() {
