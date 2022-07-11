@@ -2579,6 +2579,30 @@ mod constraint_polynomial_tests {
     }
 
     #[test]
+    fn transition_constraints_for_instruction_eq_test() {
+        let test_rows = vec![get_test_row_from_source_code(
+            "push 3 push 3 eq assert halt",
+            3,
+        )];
+
+        for (case_idx, test_row) in test_rows.iter().enumerate() {
+            for (poly_idx, poly) in TransitionConstraints::default()
+                .instruction_eq()
+                .iter()
+                .enumerate()
+            {
+                assert_eq!(
+                    XFieldElement::ring_zero(),
+                    poly.evaluate(&test_row),
+                    "For case {}, polynomial with index {} must evaluate to zero.",
+                    case_idx,
+                    poly_idx,
+                );
+            }
+        }
+    }
+
+    #[test]
     fn instruction_deselector_gives_0_for_all_other_instructions_test() {
         let deselectors = InstructionDeselectors::default();
 
