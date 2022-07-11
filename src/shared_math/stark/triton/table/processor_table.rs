@@ -1116,7 +1116,7 @@ impl TransitionConstraints {
 
     pub fn instruction_swap(&self) -> Vec<MPolynomial<XWord>> {
         vec![
-            self.one() - self.indicator_polynomial(0),
+            self.indicator_polynomial(0),
             self.indicator_polynomial(1) * (self.st1_next() - self.st0()),
             self.indicator_polynomial(2) * (self.st2_next() - self.st0()),
             self.indicator_polynomial(3) * (self.st3_next() - self.st0()),
@@ -2514,6 +2514,40 @@ mod constraint_polynomial_tests {
         ]
         .concat();
         test_row.into_iter().map(|belem| belem.lift()).collect()
+    }
+
+    #[test]
+    fn transition_constraints_for_instruction_dup_test() {
+        let test_row = get_test_row_from_source_code("push 1 dup0 halt", 1);
+        for (poly_idx, poly) in TransitionConstraints::default()
+            .instruction_dup()
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(
+                XFieldElement::ring_zero(),
+                poly.evaluate(&test_row),
+                "Polynomial with index {} must evaluate to zero.",
+                poly_idx,
+            );
+        }
+    }
+
+    #[test]
+    fn transition_constraints_for_instruction_swap_test() {
+        let test_row = get_test_row_from_source_code("push 1 push 2 swap1 halt", 2);
+        for (poly_idx, poly) in TransitionConstraints::default()
+            .instruction_swap()
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(
+                XFieldElement::ring_zero(),
+                poly.evaluate(&test_row),
+                "Polynomial with index {} must evaluate to zero.",
+                poly_idx,
+            );
+        }
     }
 
     #[test]
