@@ -2591,13 +2591,17 @@ mod constraint_polynomial_tests {
                 .iter()
                 .enumerate()
             {
-                print!("st0 = {}, ", test_row[ST0 as usize]);
-                print!("st1 = {}, ", test_row[ST1 as usize]);
-                print!("hv0 = {}, ", test_row[HV0 as usize]);
-                println!(
-                    "st0' = {}",
-                    test_row[ST0 as usize + processor_table::FULL_WIDTH]
-                );
+                for col in vec![ST0, ST1, HV0] {
+                    print!("{} = {}, ", col, test_row[col as usize]);
+                }
+                for col in vec![ST0] {
+                    print!(
+                        "{}' = {}, ",
+                        col,
+                        test_row[col as usize + processor_table::FULL_WIDTH]
+                    );
+                }
+                println!();
 
                 assert_eq!(
                     XFieldElement::ring_zero(),

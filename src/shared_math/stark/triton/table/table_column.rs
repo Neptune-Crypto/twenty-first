@@ -5,6 +5,7 @@
 // --------------------------------------------------------------------
 
 use num_traits::Bounded;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Copy)]
 pub enum ProcessorTableColumn {
@@ -46,6 +47,53 @@ pub enum ProcessorTableColumn {
     HV3,
     HV4,
     RAMV,
+}
+
+impl Display for ProcessorTableColumn {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use ProcessorTableColumn::*;
+
+        match self {
+            CLK => write!(f, "CLK"),
+            IP => write!(f, "IP"),
+            CI => write!(f, "CI"),
+            NIA => write!(f, "NIA"),
+            IB0 => write!(f, "IB0"),
+            IB1 => write!(f, "IB1"),
+            IB2 => write!(f, "IB2"),
+            IB3 => write!(f, "IB3"),
+            IB4 => write!(f, "IB4"),
+            IB5 => write!(f, "IB5"),
+            JSP => write!(f, "JSP"),
+            JSO => write!(f, "JSO"),
+            JSD => write!(f, "JSD"),
+            ST0 => write!(f, "ST0"),
+            ST1 => write!(f, "ST1"),
+            ST2 => write!(f, "ST2"),
+            ST3 => write!(f, "ST3"),
+            ST4 => write!(f, "ST4"),
+            ST5 => write!(f, "ST5"),
+            ST6 => write!(f, "ST6"),
+            ST7 => write!(f, "ST7"),
+            ST8 => write!(f, "ST8"),
+            ST9 => write!(f, "ST9"),
+            ST10 => write!(f, "ST10"),
+            ST11 => write!(f, "ST11"),
+            ST12 => write!(f, "ST12"),
+            ST13 => write!(f, "ST13"),
+            ST14 => write!(f, "ST14"),
+            ST15 => write!(f, "ST15"),
+            INV => write!(f, "INV"),
+            OSP => write!(f, "OSP"),
+            OSV => write!(f, "OSV"),
+            HV0 => write!(f, "HV0"),
+            HV1 => write!(f, "HV1"),
+            HV2 => write!(f, "HV2"),
+            HV3 => write!(f, "HV3"),
+            HV4 => write!(f, "HV4"),
+            RAMV => write!(f, "RAMV"),
+        }
+    }
 }
 
 impl From<ProcessorTableColumn> for usize {
@@ -135,6 +183,40 @@ pub enum ExtProcessorTableColumn {
     ReverseU32OpTablePermArg,
     CompressedRowDivU32Op,
     DivU32OpTablePermArg,
+}
+
+impl std::fmt::Display for ExtProcessorTableColumn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ExtProcessorTableColumn::*;
+
+        match self {
+            BaseColumn(base_column) => write!(f, "{}", *base_column),
+            InputTableEvalArg => write!(f, "InputTableEvalArg"),
+            OutputTableEvalArg => write!(f, "OutputTableEvalArg"),
+            CompressedRowInstructionTable => write!(f, "CompressedRowInstructionTable"),
+            InstructionTablePermArg => write!(f, "InstructionTablePermArg"),
+            CompressedRowOpStackTable => write!(f, "CompressedRowOpStackTable"),
+            OpStackTablePermArg => write!(f, "OpStackTablePermArg"),
+            CompressedRowRamTable => write!(f, "CompressedRowRamTable"),
+            RamTablePermArg => write!(f, "RamTablePermArg"),
+            CompressedRowJumpStackTable => write!(f, "CompressedRowJumpStackTable"),
+            JumpStackTablePermArg => write!(f, "JumpStackTablePermArg"),
+            CompressedRowForHashInput => write!(f, "CompressedRowForHashInput"),
+            ToHashTableEvalArg => write!(f, "ToHashTableEvalArg"),
+            CompressedRowForHashDigest => write!(f, "CompressedRowForHashDigest"),
+            FromHashTableEvalArg => write!(f, "FromHashTableEvalArg"),
+            CompressedRowLtU32Op => write!(f, "CompressedRowLtU32Op"),
+            LtU32OpTablePermArg => write!(f, "LtU32OpTablePermArg"),
+            CompressedRowAndU32Op => write!(f, "CompressedRowAndU32Op"),
+            AndU32OpTablePermArg => write!(f, "AndU32OpTablePermArg"),
+            CompressedRowXorU32Op => write!(f, "CompressedRowXorU32Op"),
+            XorU32OpTablePermArg => write!(f, "XorU32OpTablePermArg"),
+            CompressedRowReverseU32Op => write!(f, "CompressedRowReverseU32Op"),
+            ReverseU32OpTablePermArg => write!(f, "ReverseU32OpTablePermArg"),
+            CompressedRowDivU32Op => write!(f, "CompressedRowDivU32Op"),
+            DivU32OpTablePermArg => write!(f, "DivU32OpTablePermArg"),
+        }
+    }
 }
 
 impl From<ExtProcessorTableColumn> for usize {
