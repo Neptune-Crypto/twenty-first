@@ -2527,6 +2527,11 @@ mod constraint_polynomial_tests {
             .enumerate()
         {
             assert_eq!(
+                Instruction::Dup(Ord16::ST0).opcode_b().lift(),
+                test_row[CI as usize],
+                "The test is trying to check the wrong constraint polynomials."
+            );
+            assert_eq!(
                 XFieldElement::ring_zero(),
                 poly.evaluate(&test_row),
                 "Polynomial with index {} must evaluate to zero.",
@@ -2543,6 +2548,11 @@ mod constraint_polynomial_tests {
             .iter()
             .enumerate()
         {
+            assert_eq!(
+                Instruction::Swap(Ord16::ST0).opcode_b().lift(),
+                test_row[CI as usize],
+                "The test is trying to check the wrong constraint polynomials."
+            );
             assert_eq!(
                 XFieldElement::ring_zero(),
                 poly.evaluate(&test_row),
@@ -2570,6 +2580,11 @@ mod constraint_polynomial_tests {
                 .enumerate()
             {
                 assert_eq!(
+                    Instruction::Skiz.opcode_b().lift(),
+                    test_row[CI as usize],
+                    "The test is trying to check the wrong constraint polynomials."
+                );
+                assert_eq!(
                     XFieldElement::ring_zero(),
                     poly.evaluate(&test_row),
                     "For case {}, polynomial with index {} must evaluate to zero.",
@@ -2585,22 +2600,28 @@ mod constraint_polynomial_tests {
         let test_rows = vec![get_test_row_from_source_code("call label label: halt", 0)];
 
         for (case_idx, test_row) in test_rows.iter().enumerate() {
+            println!("Testing all constraint polynomials for case {}…", case_idx);
+            for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
+                print!("{} = {}, ", col, test_row[col as usize]);
+            }
+            for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
+                print!(
+                    "{}' = {}, ",
+                    col,
+                    test_row[col as usize + processor_table::FULL_WIDTH]
+                );
+            }
+            println!();
             for (poly_idx, poly) in TransitionConstraints::default()
                 .instruction_call()
                 .iter()
                 .enumerate()
             {
-                for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
-                    print!("{} = {}, ", col, test_row[col as usize]);
-                }
-                for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
-                    print!(
-                        "{}' = {}, ",
-                        col,
-                        test_row[col as usize + processor_table::FULL_WIDTH]
-                    );
-                }
-                println!();
+                assert_eq!(
+                    Instruction::Call(Default::default()).opcode_b().lift(),
+                    test_row[CI as usize],
+                    "The test is trying to check the wrong constraint polynomials."
+                );
                 assert_eq!(
                     XFieldElement::ring_zero(),
                     poly.evaluate(&test_row),
@@ -2625,6 +2646,11 @@ mod constraint_polynomial_tests {
                 .iter()
                 .enumerate()
             {
+                assert_eq!(
+                    Instruction::Return.opcode_b().lift(),
+                    test_row[CI as usize],
+                    "The test is trying to check the wrong constraint polynomials."
+                );
                 assert_eq!(
                     XFieldElement::ring_zero(),
                     poly.evaluate(&test_row),
@@ -2685,23 +2711,28 @@ mod constraint_polynomial_tests {
         ];
 
         for (case_idx, test_row) in test_rows.iter().enumerate() {
+            println!("Testing all constraint polynomials for case {}…", case_idx);
+            for col in vec![ST0, ST1, HV0] {
+                print!("{} = {}, ", col, test_row[col as usize]);
+            }
+            for col in vec![ST0] {
+                print!(
+                    "{}' = {}, ",
+                    col,
+                    test_row[col as usize + processor_table::FULL_WIDTH]
+                );
+            }
+            println!();
             for (poly_idx, poly) in TransitionConstraints::default()
                 .instruction_eq()
                 .iter()
                 .enumerate()
             {
-                for col in vec![ST0, ST1, HV0] {
-                    print!("{} = {}, ", col, test_row[col as usize]);
-                }
-                for col in vec![ST0] {
-                    print!(
-                        "{}' = {}, ",
-                        col,
-                        test_row[col as usize + processor_table::FULL_WIDTH]
-                    );
-                }
-                println!();
-
+                assert_eq!(
+                    Instruction::Eq.opcode_b().lift(),
+                    test_row[CI as usize],
+                    "The test is trying to check the wrong constraint polynomials."
+                );
                 assert_eq!(
                     XFieldElement::ring_zero(),
                     poly.evaluate(&test_row),
