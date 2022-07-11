@@ -2610,6 +2610,67 @@ mod constraint_polynomial_tests {
         }
     }
 
+    #[test]
+    fn transition_constraints_for_instruction_return_test() {
+        let test_rows = vec![get_test_row_from_source_code(
+            "call label halt label: return",
+            1,
+        )];
+
+        for (case_idx, test_row) in test_rows.iter().enumerate() {
+            for (poly_idx, poly) in TransitionConstraints::default()
+                .instruction_return()
+                .iter()
+                .enumerate()
+            {
+                assert_eq!(
+                    XFieldElement::ring_zero(),
+                    poly.evaluate(&test_row),
+                    "For case {}, polynomial with index {} must evaluate to zero.",
+                    case_idx,
+                    poly_idx,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn transition_constraints_for_instruction_recurse_test() {
+        let test_rows = vec![get_test_row_from_source_code(
+            "push 2 call label halt label: push -1 add skiz return recurse ",
+            5,
+        )];
+
+        for (case_idx, test_row) in test_rows.iter().enumerate() {
+            for (poly_idx, poly) in TransitionConstraints::default()
+                .instruction_recurse()
+                .iter()
+                .enumerate()
+            {
+                for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
+                    print!("{} = {}, ", col, test_row[col as usize]);
+                }
+                for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
+                    print!(
+                        "{}' = {}, ",
+                        col,
+                        test_row[col as usize + processor_table::FULL_WIDTH]
+                    );
+                }
+                println!();
+
+                assert_eq!(
+                    XFieldElement::ring_zero(),
+                    poly.evaluate(&test_row),
+                    "For case {}, polynomial with index {} must evaluate to zero.",
+                    case_idx,
+                    poly_idx,
+                );
+            }
+        }
+    }
+
+    #[test]
     fn transition_constraints_for_instruction_eq_test() {
         let test_rows = vec![
             get_test_row_from_source_code("push 3 push 3 eq assert halt", 2),
