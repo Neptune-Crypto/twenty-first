@@ -164,16 +164,8 @@ impl Program {
         input: &[BFieldElement],
         secret_input: &[BFieldElement],
     ) -> (BaseMatrices, Option<Box<dyn Error>>) {
-        let input_bytes = input
-            .iter()
-            .flat_map(|elem| elem.value().to_be_bytes())
-            .collect_vec();
-        let secret_input_bytes = secret_input
-            .iter()
-            .flat_map(|elem| elem.value().to_be_bytes())
-            .collect_vec();
-        let mut stdin = VecStream::new_bytes(&input_bytes);
-        let mut secret_in = VecStream::new_bytes(&secret_input_bytes);
+        let mut stdin = VecStream::new_bwords(input);
+        let mut secret_in = VecStream::new_bwords(secret_input);
         let mut stdout = VecStream::new_bytes(&[]);
         let rescue_prime = neptune_params();
 
