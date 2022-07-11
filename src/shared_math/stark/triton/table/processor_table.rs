@@ -1511,21 +1511,21 @@ impl TransitionConstraints {
     pub fn instruction_eq(&self) -> Vec<MPolynomial<XWord>> {
         // Helper variable hv0 is the inverse of the difference of the stack's two top-most elements or 0.
         //
-        // hv0·(hv0·(st1 - st0) - 1)
+        // $ hv0·(hv0·(st1 - st0) - 1) = 0 $
         let hv0_is_inverse_of_diff_or_0 =
             self.hv0() * (self.hv0() * (self.st1() - self.st0()) - self.one());
 
         // Helper variable hv0 is the inverse of the difference of the stack's two top-most elements or the difference is 0.
         //
-        // (st1 - st0)·(hv0·(st1 - st0) - 1)
+        // $ (st1 - st0)·(hv0·(st1 - st0) - 1) = 0 $
         let hv0_is_inverse_of_diff_or_diff_is_0 =
             (self.st1() - self.st0()) * (self.hv0() * (self.st1() - self.st0()) - self.one());
 
         // The new top of the stack is 1 if the difference between the stack's two top-most elements is not invertible, 0 otherwise.
         //
-        // st0' - (hv0·(st1 - st0) - 1)
+        // $ st0' - (1 - hv0·(st1 - st0)) = 0 $
         let st0_becomes_1_if_diff_is_not_invertible =
-            self.st0_next() - (self.hv0() * (self.st1() - self.st0()) - self.one());
+            self.st0_next() - (self.one() - self.hv0() * (self.st1() - self.st0()));
 
         vec![
             hv0_is_inverse_of_diff_or_0,
@@ -2580,10 +2580,10 @@ mod constraint_polynomial_tests {
 
     #[test]
     fn transition_constraints_for_instruction_eq_test() {
-        let test_rows = vec![get_test_row_from_source_code(
-            "push 3 push 3 eq assert halt",
-            3,
-        )];
+        let test_rows = vec![
+            get_test_row_from_source_code("push 3 push 3 eq assert halt", 2),
+            get_test_row_from_source_code("push 3 push 2 eq push 0 eq assert halt", 2),
+        ];
 
         for (case_idx, test_row) in test_rows.iter().enumerate() {
             for (poly_idx, poly) in TransitionConstraints::default()
@@ -2591,6 +2591,14 @@ mod constraint_polynomial_tests {
                 .iter()
                 .enumerate()
             {
+                print!("st0 = {}, ", test_row[ST0 as usize]);
+                print!("st1 = {}, ", test_row[ST1 as usize]);
+                print!("hv0 = {}, ", test_row[HV0 as usize]);
+                println!(
+                    "st0' = {}",
+                    test_row[ST0 as usize + processor_table::FULL_WIDTH]
+                );
+
                 assert_eq!(
                     XFieldElement::ring_zero(),
                     poly.evaluate(&test_row),
