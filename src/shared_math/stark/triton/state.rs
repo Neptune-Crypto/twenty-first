@@ -628,12 +628,7 @@ impl<'pgm> VMState<'pgm> {
 
     /// Jump-stack pointer
     fn jsp(&self) -> BWord {
-        let height = self.jump_stack.len();
-        if height == 0 {
-            0.into()
-        } else {
-            BWord::new((height - 1) as u64)
-        }
+        BWord::new(self.jump_stack.len() as u64)
     }
 
     /// Jump-stack origin
