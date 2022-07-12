@@ -124,7 +124,7 @@ impl<'pgm> VMState<'pgm> {
         // Helps preventing OpStack Underflow
         match current_instruction {
             Pop | Skiz | Assert | Add | Mul | Eq | Lt | And | Xor | XbMul | WriteIo => {
-                hvs[4] = (self.op_stack.osp() - 15.into()).inverse()
+                hvs[4] = (self.op_stack.osp() - 16.into()).inverse()
             }
             _ => (),
         }

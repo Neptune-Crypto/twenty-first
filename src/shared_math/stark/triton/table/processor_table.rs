@@ -1915,25 +1915,22 @@ impl TransitionConstraints {
         // The result of multiplying the top of the stack with the X-Field element's coefficient for x^0 is moved into st0.
         //
         // st0' - st0·st1
-        let first_coefficient_becomes_scalar_multiplied =
-            self.st0_next() - self.st0() * self.st1_next();
+        let first_coeff_scalar_multiplication = self.st0_next() - self.st0() * self.st1();
 
         // The result of multiplying the top of the stack with the X-Field element's coefficient for x^1 is moved into st1.
         //
         // st1' - st0·st2
-        let second_coefficient_becomes_scalar_multiplied =
-            self.st1_next() - self.st0() * self.st2_next();
+        let secnd_coeff_scalar_multiplication = self.st1_next() - self.st0() * self.st2();
 
         // The result of multiplying the top of the stack with the X-Field element's coefficient for x^2 is moved into st2.
         //
         // st2' - st0·st3
-        let third_coefficient_becomes_scalar_multiplied =
-            self.st2_next() - self.st0() * self.st3_next();
+        let third_coeff_scalar_multiplication = self.st2_next() - self.st0() * self.st3();
 
         vec![
-            first_coefficient_becomes_scalar_multiplied,
-            second_coefficient_becomes_scalar_multiplied,
-            third_coefficient_becomes_scalar_multiplied,
+            first_coeff_scalar_multiplication,
+            secnd_coeff_scalar_multiplication,
+            third_coeff_scalar_multiplication,
             self.st3_next() - self.st4_next(),
             self.st4_next() - self.st5_next(),
             self.st5_next() - self.st6_next(),
@@ -1948,7 +1945,7 @@ impl TransitionConstraints {
             self.st14_next() - self.st15_next(),
             self.st15_next() - self.osv(),
             self.osp_next() - (self.osp() - self.one()),
-            (self.osp_next() - self.constant(15)) * self.hv4() - self.one(),
+            (self.osp() - self.constant(16)) * self.hv4() - self.one(),
         ]
     }
 
@@ -2363,8 +2360,8 @@ impl TransitionConstraints {
             self.st15_next() - self.osv(),
             // The OpStack pointer, osp, is decremented by 1.
             self.osp_next() - (self.osp() - self.one()),
-            // The helper variable register hv4 holds the inverse of (osp' - 15).
-            (self.osp_next() - self.constant(15)) * self.hv4() - self.one(),
+            // The helper variable register hv4 holds the inverse of (osp - 16).
+            (self.osp() - self.constant(16)) * self.hv4() - self.one(),
         ]
     }
 
@@ -2420,8 +2417,8 @@ impl TransitionConstraints {
             self.st15_next() - self.osv(),
             // The OpStack pointer is decremented by 1.
             self.osp_next() - (self.osp() - self.one()),
-            // The helper variable register hv4 holds the inverse of (osp' - 15).
-            (self.osp_next() - self.constant(15)) * self.hv4() - self.one(),
+            // The helper variable register hv4 holds the inverse of (osp - 16).
+            (self.osp() - self.constant(16)) * self.hv4() - self.one(),
         ]
     }
 }
@@ -2731,6 +2728,20 @@ mod constraint_polynomial_tests {
             &test_rows,
             &[ST0, ST1, ST2],
             &[ST0, ST1, ST2],
+        );
+    }
+
+    #[test]
+    fn transition_constraints_for_instruction_xbmul_test() {
+        let test_rows = [
+            get_test_row_from_source_code("push 5 push 6 push 7 push 2 xbmul halt", 4),
+            get_test_row_from_source_code("push 2 push 3 push 4 push -2 xbmul halt", 4),
+        ];
+        test_constraints_for_rows_with_debug_info(
+            XbMul,
+            &test_rows,
+            &[ST0, ST1, ST2, ST3, OSP, HV4],
+            &[ST0, ST1, ST2, ST3, OSP, HV4],
         );
     }
 
