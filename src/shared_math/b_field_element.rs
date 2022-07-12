@@ -244,7 +244,11 @@ impl BFieldElement {
 
 impl fmt::Display for BFieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.canonical_representation())
+        if self.value() >= Self::QUOTIENT - 256 {
+            write!(f, "-{}", Self::QUOTIENT - self.value())
+        } else {
+            write!(f, "{}", self.canonical_representation())
+        }
     }
 }
 
@@ -650,6 +654,12 @@ mod b_prime_field_element_test {
         let seven_alt: BFieldElement = BFieldElement(7 + BFieldElement::QUOTIENT);
         assert_eq!("7", format!("{}", seven));
         assert_eq!("7", format!("{}", seven_alt));
+
+        let minus_one: BFieldElement = BFieldElement(BFieldElement::QUOTIENT - 1);
+        assert_eq!("-1", format!("{}", minus_one));
+
+        let minus_fifteen: BFieldElement = BFieldElement(BFieldElement::QUOTIENT - 15);
+        assert_eq!("-15", format!("{}", minus_fifteen));
     }
 
     #[test]

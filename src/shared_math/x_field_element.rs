@@ -213,11 +213,17 @@ impl CyclicGroupGenerator for XFieldElement {
 
 impl Display for XFieldElement {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "({}x^2 + {}x + {})",
-            self.coefficients[2], self.coefficients[1], self.coefficients[0]
-        )
+        if self.coefficients[2].is_zero() && self.coefficients[1].is_zero() {
+            write!(f, "{}_xfe", self.coefficients[0])
+        } else {
+            write!(
+                f,
+                "({:>020}·x² + {:>020}·x + {:>020})",
+                self.coefficients[2].value(),
+                self.coefficients[1].value(),
+                self.coefficients[0].value(),
+            )
+        }
     }
 }
 
