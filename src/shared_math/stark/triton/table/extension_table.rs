@@ -156,13 +156,6 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         let mut quotients: Vec<Vec<XWord>> = vec![];
         let unit_distance = self.unit_distance(fri_domain.length);
 
-        println!("#transition_constraints: {}", transition_constraints.len());
-        println!("#zerofiers: {}", zerofier_inverse.len());
-        println!("#codewords: {}", codewords_transposed.len());
-        println!(
-            "#transition_constraints x #codewords: {}",
-            transition_constraints.len() * codewords_transposed.len()
-        );
         for tc in transition_constraints.iter() {
             //timer.elapsed(&format!("START for-loop for tc of {}", tc.degree()));
             let quotient_codeword: Vec<XWord> = zerofier_inverse

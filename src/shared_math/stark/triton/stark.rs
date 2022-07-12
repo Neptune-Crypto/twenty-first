@@ -70,8 +70,6 @@ impl Stark {
         let expansion_factor: u64 = 1 << log_expansion_factor;
         let colinearity_checks: usize = security_level / log_expansion_factor;
 
-        println!("expansion_factor: {}", expansion_factor);
-
         assert!(
             colinearity_checks > 0,
             "At least one colinearity check is required"

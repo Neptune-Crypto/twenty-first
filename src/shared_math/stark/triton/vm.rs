@@ -555,9 +555,6 @@ mod triton_vm_tests {
                 processor_matrix,
             );
 
-            // let air_constraints = processor_table.base_transition_constraints();
-            // assert_air_constraints_on_matrix(processor_table.data(), &air_constraints);
-
             // Test air constraints after padding as well
             processor_table.pad();
 
@@ -565,13 +562,6 @@ mod triton_vm_tests {
                 other::is_power_of_two(processor_table.data().len()),
                 "Matrix length must be power of 2 after padding"
             );
-
-            // assert_air_constraints_on_matrix(processor_table.data(), &air_constraints);
-
-            // Test the same for the extended matrix
-
-            // FIXME: This interface leaks abstractions: We want a function that generates a number of weights
-            // that doesn't care about the weights-to-digest ratio (we can make two weights per digest).
 
             let mock_seed = 0u128.to_digest();
             let mock_challenge_weights: Vec<XFieldElement> = hasher
@@ -617,7 +607,7 @@ mod triton_vm_tests {
                     let x_air_evaluation = x_air_constraint.evaluate(&xpoint);
                     if !x_air_evaluation.is_zero() {
                         panic!(
-                            "In row {}, the constraint with index {} evaluates to {}.\
+                            "In row {}, the constraint with index {} evaluates to {} but must be 0.\
                             \nFailing Polynomial: {}\
                             \nEvaluation Point:   {:?}",
                             row_idx, constr_idx, x_air_evaluation, x_air_constraint, xpoint,

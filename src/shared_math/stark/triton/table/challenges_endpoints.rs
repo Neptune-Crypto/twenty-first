@@ -33,8 +33,6 @@ impl AllChallenges {
     pub fn create_challenges(weights: &[XFieldElement]) -> Self {
         let mut weights = weights.to_vec();
 
-        println!("Challenge weights start: {}", weights.len());
-
         let processor_table_challenges = ProcessorTableChallenges {
             input_table_eval_row_weight: weights.pop().unwrap(),
             output_table_eval_row_weight: weights.pop().unwrap(),
@@ -197,17 +195,6 @@ impl AllChallenges {
             div_result_weight: processor_table_challenges.u32_op_table_div_result_weight,
         };
 
-        println!(
-            "Challenge counting: {}, {}",
-            Self::TOTAL_CHALLENGES,
-            weights.len()
-        );
-        // assert_eq!(
-        //     0,
-        //     weights.len(),
-        //     "The correct number of weights were used; this number is hardcoded for now"
-        // );
-
         AllChallenges {
             program_table_challenges,
             instruction_table_challenges,
@@ -248,8 +235,6 @@ impl AllEndpoints {
 
     pub fn create_initials(weights: &[XFieldElement]) -> Self {
         let mut weights = weights.to_vec();
-
-        println!("Endpoint weights start: {}", weights.len());
 
         let processor_table_initials = ProcessorTableEndpoints {
             input_table_eval_sum: XFieldElement::ring_zero(),
@@ -302,17 +287,6 @@ impl AllEndpoints {
             processor_reverse_perm_product: processor_table_initials.u32_table_reverse_perm_product,
             processor_div_perm_product: processor_table_initials.u32_table_div_perm_product,
         };
-
-        println!(
-            "Endpoint counting: {}, {}",
-            Self::TOTAL_ENDPOINTS,
-            weights.len()
-        );
-        // assert_eq!(
-        //     2,      // I/O Tables do not need an initial
-        //     weights.len(),
-        //     "The correct number of weights were used; this number is hardcoded for now"
-        // );
 
         AllEndpoints {
             program_table_endpoints: program_table_initials,
