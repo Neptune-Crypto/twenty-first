@@ -2518,48 +2518,105 @@ mod constraint_polynomial_tests {
         test_row.into_iter().map(|belem| belem.lift()).collect()
     }
 
-    #[test]
-    fn transition_constraints_for_instruction_dup_test() {
-        let test_row = get_test_row_from_source_code("push 1 dup0 halt", 1);
-        for (poly_idx, poly) in TransitionConstraints::default()
-            .instruction_dup()
-            .iter()
-            .enumerate()
-        {
-            assert_eq!(
-                Instruction::Dup(Ord16::ST0).opcode_b().lift(),
-                test_row[CI as usize],
-                "The test is trying to check the wrong constraint polynomials."
+    fn get_constraints_for_instruction(instruction: Instruction) -> Vec<MPolynomial<XWord>> {
+        let tc = TransitionConstraints::default();
+        match instruction {
+            Pop => tc.instruction_pop(),
+            Push(_) => tc.instruction_push(),
+            Divine => tc.instruction_divine(),
+            Dup(_) => tc.instruction_dup(),
+            Swap(_) => tc.instruction_swap(),
+            Nop => tc.instruction_nop(),
+            Skiz => tc.instruction_skiz(),
+            Call(_) => tc.instruction_call(),
+            Return => tc.instruction_return(),
+            Recurse => tc.instruction_recurse(),
+            Assert => tc.instruction_assert(),
+            Halt => tc.instruction_halt(),
+            ReadMem => tc.instruction_read_mem(),
+            WriteMem => tc.instruction_write_mem(),
+            Hash => tc.instruction_hash(),
+            DivineSibling => tc.instruction_divine_sibling(),
+            AssertVector => tc.instruction_assert_vector(),
+            Add => tc.instruction_add(),
+            Mul => tc.instruction_mul(),
+            Invert => tc.instruction_invert(),
+            Split => tc.instruction_split(),
+            Eq => tc.instruction_eq(),
+            Lt => tc.instruction_lt(),
+            And => tc.instruction_and(),
+            Xor => tc.instruction_xor(),
+            Reverse => tc.instruction_reverse(),
+            Div => tc.instruction_div(),
+            XxAdd => tc.instruction_xxadd(),
+            XxMul => tc.instruction_xxmul(),
+            XInvert => tc.instruction_xinv(),
+            XbMul => tc.instruction_xbmul(),
+            ReadIo => tc.instruction_read_io(),
+            WriteIo => tc.instruction_write_io(),
+        }
+    }
+
+    fn test_constraints_for_rows_with_debug_info(
+        instruction: Instruction,
+        test_rows: &[Vec<XWord>],
+        debug_cols_curr_row: &[ProcessorTableColumn],
+        debug_cols_next_row: &[ProcessorTableColumn],
+    ) {
+        for (case_idx, test_row) in test_rows.iter().enumerate() {
+            // Print debug information
+            println!(
+                "Testing all constraint polynomials of {} for test row with index {}…",
+                instruction, case_idx
             );
-            assert_eq!(
-                XFieldElement::ring_zero(),
-                poly.evaluate(&test_row),
-                "Polynomial with index {} must evaluate to zero.",
-                poly_idx,
-            );
+            for c in debug_cols_curr_row {
+                print!("{} = {}, ", c, test_row[*c as usize]);
+            }
+            for c in debug_cols_next_row {
+                print!("{}' = {}, ", c, test_row[*c as usize + FULL_WIDTH]);
+            }
+            println!();
+
+            for (poly_idx, poly) in get_constraints_for_instruction(instruction)
+                .iter()
+                .enumerate()
+            {
+                assert_eq!(
+                    instruction.opcode_b().lift(),
+                    test_row[CI as usize],
+                    "The test is trying to check the wrong constraint polynomials."
+                );
+                assert_eq!(
+                    XFieldElement::ring_zero(),
+                    poly.evaluate(&test_row),
+                    "For case {}, polynomial with index {} must evaluate to zero.",
+                    case_idx,
+                    poly_idx,
+                );
+            }
         }
     }
 
     #[test]
+    fn transition_constraints_for_instruction_dup_test() {
+        let test_rows = [get_test_row_from_source_code("push 1 dup0 halt", 1)];
+        test_constraints_for_rows_with_debug_info(
+            Dup(Ord16::ST0),
+            &test_rows,
+            &[ST0, ST1, ST2],
+            &[ST0, ST1, ST2],
+        );
+    }
+
+    #[test]
     fn transition_constraints_for_instruction_swap_test() {
-        let test_row = get_test_row_from_source_code("push 1 push 2 swap1 halt", 2);
-        for (poly_idx, poly) in TransitionConstraints::default()
-            .instruction_swap()
-            .iter()
-            .enumerate()
-        {
-            assert_eq!(
-                Instruction::Swap(Ord16::ST0).opcode_b().lift(),
-                test_row[CI as usize],
-                "The test is trying to check the wrong constraint polynomials."
-            );
-            assert_eq!(
-                XFieldElement::ring_zero(),
-                poly.evaluate(&test_row),
-                "Polynomial with index {} must evaluate to zero.",
-                poly_idx,
-            );
-        }
+        let test_rows = [get_test_row_from_source_code("push 1 push 2 swap1 halt", 2)];
+        test_constraints_for_rows_with_debug_info(
+            Swap(Ord16::ST0),
+            &test_rows,
+            &[ST0, ST1, ST2],
+            &[ST0, ST1, ST2],
+        );
     }
 
     #[test]
@@ -2567,181 +2624,60 @@ mod constraint_polynomial_tests {
         // Case 0: ST0 is non-zero
         // Case 1: ST0 is zero, nia is instruction of size 1
         // Case 2: ST0 is zero, nia is instruction of size 2
-        let test_rows = vec![
+        let test_rows = [
             get_test_row_from_source_code("push 1 skiz halt", 1),
             get_test_row_from_source_code("push 0 skiz assert halt", 1),
             get_test_row_from_source_code("push 0 skiz push 1 halt", 1),
         ];
-
-        for (case_idx, test_row) in test_rows.iter().enumerate() {
-            for (poly_idx, poly) in TransitionConstraints::default()
-                .instruction_skiz()
-                .iter()
-                .enumerate()
-            {
-                assert_eq!(
-                    Instruction::Skiz.opcode_b().lift(),
-                    test_row[CI as usize],
-                    "The test is trying to check the wrong constraint polynomials."
-                );
-                assert_eq!(
-                    XFieldElement::ring_zero(),
-                    poly.evaluate(&test_row),
-                    "For case {}, polynomial with index {} must evaluate to zero.",
-                    case_idx,
-                    poly_idx,
-                );
-            }
-        }
+        test_constraints_for_rows_with_debug_info(Skiz, &test_rows, &[IP, ST0, HV0, HV1], &[IP]);
     }
 
     #[test]
     fn transition_constraints_for_instruction_call_test() {
-        let test_rows = vec![get_test_row_from_source_code("call label label: halt", 0)];
-
-        for (case_idx, test_row) in test_rows.iter().enumerate() {
-            println!("Testing all constraint polynomials for case {}…", case_idx);
-            for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
-                print!("{} = {}, ", col, test_row[col as usize]);
-            }
-            for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
-                print!(
-                    "{}' = {}, ",
-                    col,
-                    test_row[col as usize + processor_table::FULL_WIDTH]
-                );
-            }
-            println!();
-            for (poly_idx, poly) in TransitionConstraints::default()
-                .instruction_call()
-                .iter()
-                .enumerate()
-            {
-                assert_eq!(
-                    Instruction::Call(Default::default()).opcode_b().lift(),
-                    test_row[CI as usize],
-                    "The test is trying to check the wrong constraint polynomials."
-                );
-                assert_eq!(
-                    XFieldElement::ring_zero(),
-                    poly.evaluate(&test_row),
-                    "For case {}, polynomial with index {} must evaluate to zero.",
-                    case_idx,
-                    poly_idx,
-                );
-            }
-        }
+        let test_rows = [get_test_row_from_source_code("call label label: halt", 0)];
+        test_constraints_for_rows_with_debug_info(
+            Call(Default::default()),
+            &test_rows,
+            &[IP, CI, NIA, JSP, JSO, JSD],
+            &[IP, CI, NIA, JSP, JSO, JSD],
+        );
     }
 
     #[test]
     fn transition_constraints_for_instruction_return_test() {
-        let test_rows = vec![get_test_row_from_source_code(
+        let test_rows = [get_test_row_from_source_code(
             "call label halt label: return",
             1,
         )];
-
-        for (case_idx, test_row) in test_rows.iter().enumerate() {
-            for (poly_idx, poly) in TransitionConstraints::default()
-                .instruction_return()
-                .iter()
-                .enumerate()
-            {
-                assert_eq!(
-                    Instruction::Return.opcode_b().lift(),
-                    test_row[CI as usize],
-                    "The test is trying to check the wrong constraint polynomials."
-                );
-                assert_eq!(
-                    XFieldElement::ring_zero(),
-                    poly.evaluate(&test_row),
-                    "For case {}, polynomial with index {} must evaluate to zero.",
-                    case_idx,
-                    poly_idx,
-                );
-            }
-        }
+        test_constraints_for_rows_with_debug_info(
+            Return,
+            &test_rows,
+            &[IP, JSP, JSO, JSD],
+            &[IP, JSP, JSO, JSD],
+        );
     }
 
     #[test]
     fn transition_constraints_for_instruction_recurse_test() {
-        let test_rows = vec![get_test_row_from_source_code(
+        let test_rows = [get_test_row_from_source_code(
             "push 2 call label halt label: push -1 add dup0 skiz recurse return ",
             6,
         )];
-
-        for (case_idx, test_row) in test_rows.iter().enumerate() {
-            println!("Testing all constraint polynomials for case {}…", case_idx);
-            for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
-                print!("{} = {}, ", col, test_row[col as usize]);
-            }
-            for col in vec![IP, CI, NIA, JSP, JSO, JSD] {
-                print!(
-                    "{}' = {}, ",
-                    col,
-                    test_row[col as usize + processor_table::FULL_WIDTH]
-                );
-            }
-            println!();
-            for (poly_idx, poly) in TransitionConstraints::default()
-                .instruction_recurse()
-                .iter()
-                .enumerate()
-            {
-                assert_eq!(
-                    Instruction::Recurse.opcode_b().lift(),
-                    test_row[CI as usize],
-                    "The test is trying to check the wrong constraint polynomials."
-                );
-                assert_eq!(
-                    XFieldElement::ring_zero(),
-                    poly.evaluate(&test_row),
-                    "For case {}, polynomial with index {} must evaluate to zero.",
-                    case_idx,
-                    poly_idx,
-                );
-            }
-        }
+        test_constraints_for_rows_with_debug_info(
+            Recurse,
+            &test_rows,
+            &[IP, JSP, JSO, JSD],
+            &[IP, JSP, JSO, JSD],
+        );
     }
 
     #[test]
     fn transition_constraints_for_instruction_eq_test() {
-        let test_rows = vec![
+        let test_rows = [
             get_test_row_from_source_code("push 3 push 3 eq assert halt", 2),
             get_test_row_from_source_code("push 3 push 2 eq push 0 eq assert halt", 2),
         ];
-
-        for (case_idx, test_row) in test_rows.iter().enumerate() {
-            println!("Testing all constraint polynomials for case {}…", case_idx);
-            for col in vec![ST0, ST1, HV0] {
-                print!("{} = {}, ", col, test_row[col as usize]);
-            }
-            for col in vec![ST0] {
-                print!(
-                    "{}' = {}, ",
-                    col,
-                    test_row[col as usize + processor_table::FULL_WIDTH]
-                );
-            }
-            println!();
-            for (poly_idx, poly) in TransitionConstraints::default()
-                .instruction_eq()
-                .iter()
-                .enumerate()
-            {
-                assert_eq!(
-                    Instruction::Eq.opcode_b().lift(),
-                    test_row[CI as usize],
-                    "The test is trying to check the wrong constraint polynomials."
-                );
-                assert_eq!(
-                    XFieldElement::ring_zero(),
-                    poly.evaluate(&test_row),
-                    "For case {}, polynomial with index {} must evaluate to zero.",
-                    case_idx,
-                    poly_idx,
-                );
-            }
-        }
+        test_constraints_for_rows_with_debug_info(Eq, &test_rows, &[ST0, ST1, HV0], &[ST0]);
     }
 
     #[test]
