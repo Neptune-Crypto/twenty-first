@@ -28,7 +28,7 @@ pub const DIGEST_LEN: usize = 6;
 pub const STATE_REGISTER_COUNT: usize = 16;
 
 /// The number of helper variable registers
-pub const HV_REGISTER_COUNT: usize = 5;
+pub const HV_REGISTER_COUNT: usize = 4;
 
 #[derive(Debug, Default, Clone)]
 pub struct VMState<'pgm> {
@@ -124,7 +124,7 @@ impl<'pgm> VMState<'pgm> {
         // Helps preventing OpStack Underflow
         match current_instruction {
             Pop | Skiz | Assert | Add | Mul | Eq | Lt | And | Xor | XbMul | WriteIo => {
-                hvs[4] = (self.op_stack.osp() - 16.into()).inverse()
+                hvs[3] = (self.op_stack.osp() - 16.into()).inverse()
             }
             _ => (),
         }
@@ -531,7 +531,6 @@ impl<'pgm> VMState<'pgm> {
             hvs[1],
             hvs[2],
             hvs[3],
-            hvs[4],
             *self.ram.get(&st1).unwrap_or(&BWord::new(0)),
         ]
     }

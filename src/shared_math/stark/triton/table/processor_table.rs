@@ -23,9 +23,9 @@ pub const PROCESSOR_TABLE_INITIALS_COUNT: usize =
 /// This is 47 because it combines all other tables (except program).
 pub const PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 47;
 
-pub const BASE_WIDTH: usize = 38;
+pub const BASE_WIDTH: usize = 37;
 /// BASE_WIDTH + 2 * INITIALS_COUNT - 2 (because IOSymbols don't need compression)
-pub const FULL_WIDTH: usize = 62;
+pub const FULL_WIDTH: usize = 61;
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -997,10 +997,6 @@ impl ConsistencyBoundaryConstraints {
         self.variables[HV3 as usize].clone()
     }
 
-    pub fn hv4(&self) -> MPolynomial<XWord> {
-        self.variables[HV4 as usize].clone()
-    }
-
     pub fn ramv(&self) -> MPolynomial<XWord> {
         self.variables[RAMV as usize].clone()
     }
@@ -1945,7 +1941,7 @@ impl TransitionConstraints {
             self.st14_next() - self.st15_next(),
             self.st15_next() - self.osv(),
             self.osp_next() - (self.osp() - self.one()),
-            (self.osp() - self.constant(16)) * self.hv4() - self.one(),
+            (self.osp() - self.constant(16)) * self.hv3() - self.one(),
         ]
     }
 
@@ -2127,10 +2123,6 @@ impl TransitionConstraints {
 
     pub fn hv3(&self) -> MPolynomial<XWord> {
         self.variables[HV3 as usize].clone()
-    }
-
-    pub fn hv4(&self) -> MPolynomial<XWord> {
-        self.variables[HV4 as usize].clone()
     }
 
     pub fn ramv(&self) -> MPolynomial<XWord> {
@@ -2361,7 +2353,7 @@ impl TransitionConstraints {
             // The OpStack pointer, osp, is decremented by 1.
             self.osp_next() - (self.osp() - self.one()),
             // The helper variable register hv4 holds the inverse of (osp - 16).
-            (self.osp() - self.constant(16)) * self.hv4() - self.one(),
+            (self.osp() - self.constant(16)) * self.hv3() - self.one(),
         ]
     }
 
@@ -2418,7 +2410,7 @@ impl TransitionConstraints {
             // The OpStack pointer is decremented by 1.
             self.osp_next() - (self.osp() - self.one()),
             // The helper variable register hv4 holds the inverse of (osp - 16).
-            (self.osp() - self.constant(16)) * self.hv4() - self.one(),
+            (self.osp() - self.constant(16)) * self.hv3() - self.one(),
         ]
     }
 }
@@ -2740,8 +2732,8 @@ mod constraint_polynomial_tests {
         test_constraints_for_rows_with_debug_info(
             XbMul,
             &test_rows,
-            &[ST0, ST1, ST2, ST3, OSP, HV4],
-            &[ST0, ST1, ST2, ST3, OSP, HV4],
+            &[ST0, ST1, ST2, ST3, OSP, HV3],
+            &[ST0, ST1, ST2, ST3, OSP, HV3],
         );
     }
 

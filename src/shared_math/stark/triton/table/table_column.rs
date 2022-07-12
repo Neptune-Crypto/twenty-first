@@ -45,7 +45,6 @@ pub enum ProcessorTableColumn {
     HV1,
     HV2,
     HV3,
-    HV4,
     RAMV,
 }
 
@@ -90,7 +89,6 @@ impl Display for ProcessorTableColumn {
             HV1 => write!(f, "HV1"),
             HV2 => write!(f, "HV2"),
             HV3 => write!(f, "HV3"),
-            HV4 => write!(f, "HV4"),
             RAMV => write!(f, "RAMV"),
         }
     }
@@ -137,8 +135,7 @@ impl From<ProcessorTableColumn> for usize {
             HV1 => 33,
             HV2 => 34,
             HV3 => 35,
-            HV4 => 36,
-            RAMV => 37,
+            RAMV => 36,
         }
     }
 }
@@ -225,30 +222,30 @@ impl From<ExtProcessorTableColumn> for usize {
 
         match c {
             BaseColumn(base_column) => base_column.into(),
-            InputTableEvalArg => 38,
-            OutputTableEvalArg => 39,
-            CompressedRowInstructionTable => 40,
-            InstructionTablePermArg => 41,
-            CompressedRowOpStackTable => 42,
-            OpStackTablePermArg => 43,
-            CompressedRowRamTable => 44,
-            RamTablePermArg => 45,
-            CompressedRowJumpStackTable => 46,
-            JumpStackTablePermArg => 47,
-            CompressedRowForHashInput => 48,
-            ToHashTableEvalArg => 49,
-            CompressedRowForHashDigest => 50,
-            FromHashTableEvalArg => 51,
-            CompressedRowLtU32Op => 52,
-            LtU32OpTablePermArg => 53,
-            CompressedRowAndU32Op => 54,
-            AndU32OpTablePermArg => 55,
-            CompressedRowXorU32Op => 56,
-            XorU32OpTablePermArg => 57,
-            CompressedRowReverseU32Op => 58,
-            ReverseU32OpTablePermArg => 59,
-            CompressedRowDivU32Op => 60,
-            DivU32OpTablePermArg => 61,
+            InputTableEvalArg => 37,
+            OutputTableEvalArg => 38,
+            CompressedRowInstructionTable => 39,
+            InstructionTablePermArg => 40,
+            CompressedRowOpStackTable => 41,
+            OpStackTablePermArg => 42,
+            CompressedRowRamTable => 43,
+            RamTablePermArg => 44,
+            CompressedRowJumpStackTable => 45,
+            JumpStackTablePermArg => 46,
+            CompressedRowForHashInput => 47,
+            ToHashTableEvalArg => 48,
+            CompressedRowForHashDigest => 49,
+            FromHashTableEvalArg => 50,
+            CompressedRowLtU32Op => 51,
+            LtU32OpTablePermArg => 52,
+            CompressedRowAndU32Op => 53,
+            AndU32OpTablePermArg => 54,
+            CompressedRowXorU32Op => 55,
+            XorU32OpTablePermArg => 56,
+            CompressedRowReverseU32Op => 57,
+            ReverseU32OpTablePermArg => 58,
+            CompressedRowDivU32Op => 59,
+            DivU32OpTablePermArg => 60,
         }
     }
 }

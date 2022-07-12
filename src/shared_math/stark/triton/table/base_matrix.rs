@@ -238,8 +238,7 @@ impl Display for ProcessorMatrixRow {
         row(
             f,
             format!(
-                "hv4-0: [ {:>16} | {:>16} | {:>16} | {:>16} | {:>16} ]",
-                self.row[HV4 as usize].value(),
+                "hv3-0:    [ {:>width$} | {:>width$} | {:>width$} | {:>width$} ]",
                 self.row[HV3 as usize].value(),
                 self.row[HV2 as usize].value(),
                 self.row[HV1 as usize].value(),
