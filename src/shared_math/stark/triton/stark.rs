@@ -1225,20 +1225,39 @@ pub(crate) mod triton_stark_tests {
         )
     }
 
-    fn assert_air_constraints_on_table<PF: PrimeField>(
+    fn assert_transition_constraints_on_table<PF: PrimeField>(
         table_data: &[Vec<PF>],
         air_constraints: &[MPolynomial<PF>],
         message: &str,
     ) {
-        if table_data.len() > 0 {
-            for step in 0..table_data.len() - 1 {
-                let state: Vec<PF> = table_data[step].clone().into();
-                let next_state: Vec<PF> = table_data[step + 1].clone().into();
-                let air_point: Vec<PF> = vec![state, next_state].concat();
+        for (row_idx, (curr_row, next_row)) in table_data.iter().tuple_windows().enumerate() {
+            let air_point = [curr_row.to_vec(), next_row.to_vec()].concat();
+            for (constraint_idx, air_constraint) in air_constraints.iter().enumerate() {
+                assert!(
+                    air_constraint.evaluate(&air_point).is_zero(),
+                    "{}. Constraint index: {}. Row index: {}",
+                    message,
+                    constraint_idx,
+                    row_idx,
+                );
+            }
+        }
+    }
 
-                for air_constraint in air_constraints.iter() {
-                    assert!(air_constraint.evaluate(&air_point).is_zero(), "{}", message);
-                }
+    fn assert_consistency_boundary_constraints_on_table<PF: PrimeField>(
+        table_data: &[Vec<PF>],
+        air_constraints: &[MPolynomial<PF>],
+        message: &str,
+    ) {
+        for (row_idx, curr_row) in table_data.iter().enumerate() {
+            for (constraint_idx, air_constraint) in air_constraints.iter().enumerate() {
+                assert!(
+                    air_constraint.evaluate(&curr_row).is_zero(),
+                    "{}. Constraint index: {}. Row index: {}",
+                    message,
+                    constraint_idx,
+                    row_idx,
+                );
             }
         }
     }
@@ -1288,38 +1307,40 @@ pub(crate) mod triton_stark_tests {
             ext_tables,
             all_challenges,
             _all_initials,
-            _all_terminals,
+            all_terminals,
         ) = parse_simulate_pad_extend(sample_programs::FIBONACCI_LT, &mut stdin, &mut stdout);
 
         for ext_table in (&ext_tables).into_iter() {
             let ext_transition_constraints = ext_table.ext_transition_constraints(&all_challenges);
             let message_1 = format!("ext_transition_constraints on {}", &ext_table.name());
-            assert_air_constraints_on_table(
+            assert_transition_constraints_on_table(
                 ext_table.data(),
                 &ext_transition_constraints,
                 &message_1,
             );
 
-            let ext_transition_constraints = ext_table.ext_consistency_constraints(&all_challenges);
+            let ext_consistency_constraints =
+                ext_table.ext_consistency_constraints(&all_challenges);
             let message_2 = format!("ext_consistency_constraints on {}", &ext_table.name());
-            assert_air_constraints_on_table(
+            assert_consistency_boundary_constraints_on_table(
                 ext_table.data(),
-                &ext_transition_constraints,
+                &ext_consistency_constraints,
                 &message_2,
             );
 
-            let ext_boundary_constraints = ext_table.ext_transition_constraints(&all_challenges);
+            let ext_boundary_constraints = ext_table.ext_boundary_constraints(&all_challenges);
             let message_3 = format!("ext_boundary_constraints on {}", &ext_table.name());
-            assert_air_constraints_on_table(
-                ext_table.data(),
+            assert_consistency_boundary_constraints_on_table(
+                &[ext_table.data()[0].clone()],
                 &ext_boundary_constraints,
                 &message_3,
             );
 
-            let ext_terminal_constraints = ext_table.ext_transition_constraints(&all_challenges);
+            let ext_terminal_constraints =
+                ext_table.ext_terminal_constraints(&all_challenges, &all_terminals);
             let message_4 = format!("ext_terminal_constraints on {}", &ext_table.name());
-            assert_air_constraints_on_table(
-                ext_table.data(),
+            assert_consistency_boundary_constraints_on_table(
+                &[ext_table.data().last().unwrap().to_vec()],
                 &ext_terminal_constraints,
                 &message_4,
             );
