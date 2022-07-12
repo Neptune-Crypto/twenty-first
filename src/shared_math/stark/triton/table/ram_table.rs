@@ -226,31 +226,30 @@ impl ExtensionTable for ExtRamTable {
         let ramp_next = variables[FULL_WIDTH + usize::from(RAMP)].clone();
         let ramv_next = variables[FULL_WIDTH + usize::from(RAMV)].clone();
 
+        let ramp_diff = ramp_next - ramp;
+
         // hv6 is 0 or hv6 is the inverse of (ramp' - ramp).
         //
         // $ hv6·(hv6·(ramp' - ramp) - 1) = 0 $
         let hv6_is_0_or_hv6_is_inverse_of_ramp_diff =
-            hv6.clone() * (hv6.clone() * (ramp_next.clone() - ramp.clone()) - one.clone());
+            hv6.clone() * (hv6.clone() * ramp_diff.clone() - one.clone());
 
         // (ramp' - ramp) is zero or hv6 is the inverse of (ramp' - ramp).
         //
         // $ (ramp' - ramp)·(hv6·(ramp' - ramp) - 1) = 0 $
-        let ramp_diff_is_0_or_hv6_is_inverse_of_ramp_diff = (ramp_next.clone() - ramp.clone())
-            * (hv6.clone() * (ramp_next.clone() - ramp.clone()) - one.clone());
+        let ramp_diff_is_0_or_hv6_is_inverse_of_ramp_diff =
+            ramp_diff.clone() * (hv6.clone() * ramp_diff.clone() - one.clone());
 
         // The ramp does not change or the new ramv is 0.
         //
         // (ramp' - ramp)·ramv'
-        let ramp_does_not_change_or_ramv_becomes_0 =
-            (ramp_next.clone() - ramp.clone()) * ramv_next.clone();
+        let ramp_does_not_change_or_ramv_becomes_0 = ramp_diff.clone() * ramv_next.clone();
 
         // The ramp does change or the ramv does not change or the clk increases by 1.
         //
         // $ (hv6·(ramp' - ramp) - 1)·(ramv' - ramv)·(clk' - (clk + 1)) = 0 $
         let ramp_does_not_change_or_ramv_does_not_change_or_clk_increases_by_1 =
-            (hv6 * (ramp_next - ramp) - one.clone())
-                * (ramv_next - ramv)
-                * (clk_next - (clk + one));
+            (hv6 * ramp_diff - one.clone()) * (ramv_next - ramv) * (clk_next - (clk + one));
 
         vec![
             hv6_is_0_or_hv6_is_inverse_of_ramp_diff,
