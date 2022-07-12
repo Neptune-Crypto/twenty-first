@@ -1696,17 +1696,17 @@ impl TransitionConstraints {
         // The result of adding st0 to st3 is moved into st0.
         //
         // $st0' - (st0 + st3)$
-        let st0_becomes_st0_plus_st3 = self.st0_next() - (self.st0() - self.st3());
+        let st0_becomes_st0_plus_st3 = self.st0_next() - (self.st0() + self.st3());
 
         // The result of adding st1 to st4 is moved into st1.
         //
         // $st1' - (st1 + st4)$
-        let st1_becomes_st1_plus_st4 = self.st1_next() - (self.st1() - self.st4());
+        let st1_becomes_st1_plus_st4 = self.st1_next() - (self.st1() + self.st4());
 
         // The result of adding st2 to st5 is moved into st2.
         //
         // $st2' - (st2 + st5)$
-        let st2_becomes_st2_plus_st5 = self.st2_next() - (self.st2() - self.st5());
+        let st2_becomes_st2_plus_st5 = self.st2_next() - (self.st2() + self.st5());
 
         // The stack element in st3 does not change.
         //
@@ -1819,7 +1819,7 @@ impl TransitionConstraints {
         // The coefficient of x^2 of multiplying the two X-Field elements on the stack is moved into st2.
         //
         // st2' - (st2·st3 + st1·st4 + st0·st5 + st2·st5)
-        let st2_becomes_coefficient_2 = self.st0_next()
+        let st2_becomes_coefficient_2 = self.st2_next()
             - (self.st2() * self.st3()
                 + self.st1() * self.st4()
                 + self.st0() * self.st5()
@@ -2678,6 +2678,46 @@ mod constraint_polynomial_tests {
             get_test_row_from_source_code("push 3 push 2 eq push 0 eq assert halt", 2),
         ];
         test_constraints_for_rows_with_debug_info(Eq, &test_rows, &[ST0, ST1, HV0], &[ST0]);
+    }
+
+    #[test]
+    fn transition_constraints_for_instruction_xxadd_test() {
+        let test_rows = [
+            get_test_row_from_source_code(
+                "push 5 push 6 push 7 push 8 push 9 push 10 xxadd halt",
+                6,
+            ),
+            get_test_row_from_source_code(
+                "push 2 push 3 push 4 push -2 push -3 push -4 xxadd halt",
+                6,
+            ),
+        ];
+        test_constraints_for_rows_with_debug_info(
+            XxAdd,
+            &test_rows,
+            &[ST0, ST1, ST2, ST3, ST4, ST5],
+            &[ST0, ST1, ST2, ST3, ST4, ST5],
+        );
+    }
+
+    #[test]
+    fn transition_constraints_for_instruction_xxmul_test() {
+        let test_rows = [
+            get_test_row_from_source_code(
+                "push 5 push 6 push 7 push 8 push 9 push 10 xxmul halt",
+                6,
+            ),
+            get_test_row_from_source_code(
+                "push 2 push 3 push 4 push -2 push -3 push -4 xxmul halt",
+                6,
+            ),
+        ];
+        test_constraints_for_rows_with_debug_info(
+            XxMul,
+            &test_rows,
+            &[ST0, ST1, ST2, ST3, ST4, ST5],
+            &[ST0, ST1, ST2, ST3, ST4, ST5],
+        );
     }
 
     #[test]
