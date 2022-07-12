@@ -2721,6 +2721,20 @@ mod constraint_polynomial_tests {
     }
 
     #[test]
+    fn transition_constraints_for_instruction_xinvert_test() {
+        let test_rows = [
+            get_test_row_from_source_code("push 5 push 6 push 7 xinvert halt", 3),
+            get_test_row_from_source_code("push -2 push -3 push -4 xinvert halt", 3),
+        ];
+        test_constraints_for_rows_with_debug_info(
+            XInvert,
+            &test_rows,
+            &[ST0, ST1, ST2],
+            &[ST0, ST1, ST2],
+        );
+    }
+
+    #[test]
     fn instruction_deselector_gives_0_for_all_other_instructions_test() {
         let deselectors = InstructionDeselectors::default();
 
