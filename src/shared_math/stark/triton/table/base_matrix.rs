@@ -9,7 +9,9 @@ use super::{
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::stark::triton::instruction::Instruction;
 use crate::shared_math::stark::triton::state::{VMOutput, VMState};
-use crate::shared_math::stark::triton::table::table_column::RamTableColumn::InverseOfRampDifference;
+use crate::shared_math::stark::triton::table::table_column::RamTableColumn::{
+    InverseOfRampDifference, RAMP,
+};
 use crate::shared_math::stark::triton::vm::Program;
 use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::traits::Inverse;
@@ -81,8 +83,7 @@ impl BaseMatrices {
         let mut iord_column = Vec::with_capacity(self.ram_matrix.len());
 
         for (curr_row, next_row) in self.ram_matrix.iter().tuple_windows() {
-            let ramp_difference = next_row[InverseOfRampDifference as usize]
-                - curr_row[InverseOfRampDifference as usize];
+            let ramp_difference = next_row[RAMP as usize] - curr_row[RAMP as usize];
             let inverse_of_ramp_difference = if ramp_difference.is_zero() {
                 ramp_difference
             } else {
