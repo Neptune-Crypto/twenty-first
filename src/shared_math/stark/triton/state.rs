@@ -144,6 +144,10 @@ impl<'pgm> VMState<'pgm> {
                 let nia = self.nia().value();
                 hvs[0] = BWord::new(nia % 2);
                 hvs[1] = BWord::new(nia / 2);
+                let st0 = self.op_stack.safe_peek(ST0);
+                if !st0.is_zero() {
+                    hvs[2] = st0.inverse();
+                }
             }
             DivineSibling => {
                 let node_index = self.op_stack.safe_peek(ST12).value();
@@ -171,7 +175,13 @@ impl<'pgm> VMState<'pgm> {
                     hvs[0] = (rhs - lhs).inverse();
                 }
             }
-            Div => hvs[0] = 1.into(),
+            Div => {
+                hvs[0] = 1.into();
+                let st0 = self.op_stack.safe_peek(ST0);
+                if !st0.is_zero() {
+                    hvs[2] = st0.inverse();
+                }
+            }
             _ => (),
         }
 
@@ -488,7 +498,6 @@ impl<'pgm> VMState<'pgm> {
         let st13 = self.op_stack.st(ST13);
         let st14 = self.op_stack.st(ST14);
         let st15 = self.op_stack.st(ST15);
-        let inv = self.op_stack.inv();
         let osp = self.op_stack.osp();
         let osv = self.op_stack.osv();
 
@@ -524,7 +533,6 @@ impl<'pgm> VMState<'pgm> {
             st13,
             st14,
             st15,
-            inv,
             osp,
             osv,
             hvs[0],

@@ -177,19 +177,17 @@ impl Display for ProcessorMatrixRow {
                 self.row[RAMV as usize].value(),
             ),
         )?;
-        writeln!(
+        row(
             f,
-            "│ osp:  {:>width$} ╵ osv:  {:>width$} ╵                 \
-            ╭─────────────────────────────┤",
-            self.row[OSP as usize].value(),
-            self.row[OSV as usize].value(),
+            format!(
+                "osp:  {:>width$} │ osv:  {:>width$} ╵",
+                self.row[OSP as usize].value(),
+                self.row[OSV as usize].value(),
+            ),
         )?;
-        writeln!(
-            f,
-            "│ {:>72}  ╵ inv: {:>width$}   │",
-            " ",
-            self.row[INV as usize].value()
-        )?;
+
+        row_blank(f)?;
+
         row(
             f,
             format!(
@@ -232,8 +230,6 @@ impl Display for ProcessorMatrixRow {
         )?;
 
         row_blank(f)?;
-
-        row(f, "".into())?;
 
         row(
             f,

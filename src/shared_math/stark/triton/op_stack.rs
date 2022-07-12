@@ -1,7 +1,6 @@
 use super::error::{vm_fail, InstructionError::*};
 use super::ord_n::{Ord16, Ord16::*};
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::traits::{IdentityValues, Inverse};
 use crate::shared_math::x_field_element::XFieldElement;
 use std::error::Error;
 
@@ -110,18 +109,6 @@ impl OpStack {
         } else {
             let n = self.stack.len() - OP_STACK_REG_COUNT;
             self.stack.get(n).copied().unwrap_or_else(|| 0.into())
-        }
-    }
-
-    /// Inverse of st0, with the inverse of 0 being 0 instead of failure.
-    ///
-    /// This register is mainly intended for constraint polynomials.
-    pub fn inv(&self) -> BWord {
-        let st0 = self.st(ST0);
-        if st0.is_zero() {
-            st0
-        } else {
-            st0.inverse()
         }
     }
 }

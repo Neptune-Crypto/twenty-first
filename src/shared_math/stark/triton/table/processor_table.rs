@@ -23,9 +23,9 @@ pub const PROCESSOR_TABLE_INITIALS_COUNT: usize =
 /// This is 47 because it combines all other tables (except program).
 pub const PROCESSOR_TABLE_EXTENSION_CHALLENGE_COUNT: usize = 47;
 
-pub const BASE_WIDTH: usize = 37;
+pub const BASE_WIDTH: usize = 36;
 /// BASE_WIDTH + 2 * INITIALS_COUNT - 2 (because IOSymbols don't need compression)
-pub const FULL_WIDTH: usize = 61;
+pub const FULL_WIDTH: usize = 60;
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -741,23 +741,7 @@ impl ExtensionTable for ExtProcessorTable {
             factory.ci() - ib_composition
         };
 
-        // Register st0 is 0 or inv is the inverse of st0.
-        //
-        // $st0·(st0·inv - 1)$
-        let st0_is_0_or_inverse_of_inv =
-            factory.st0() * (factory.st0() * factory.inv() - factory.one());
-
-        // Register inv is 0 or inv is the inverse of st0.
-        //
-        // $inv·(st0·inv - 1)$
-        let inv_is_0_or_inverse_of_st0 =
-            factory.inv() * (factory.st0() * factory.inv() - factory.one());
-
-        vec![
-            ci_corresponds_to_ib0_thru_ib5,
-            st0_is_0_or_inverse_of_inv,
-            inv_is_0_or_inverse_of_st0,
-        ]
+        vec![ci_corresponds_to_ib0_thru_ib5]
     }
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
@@ -967,10 +951,6 @@ impl ConsistencyBoundaryConstraints {
 
     pub fn st15(&self) -> MPolynomial<XWord> {
         self.variables[ST15 as usize].clone()
-    }
-
-    pub fn inv(&self) -> MPolynomial<XWord> {
-        self.variables[INV as usize].clone()
     }
 
     pub fn osp(&self) -> MPolynomial<XWord> {
@@ -1196,10 +1176,10 @@ impl TransitionConstraints {
         // (`st0` has a multiplicative inverse or `hv0` is 0 or `ip` is incremented by 3).
         let ip_case_1 = (self.ip_next() - (self.ip() + self.one())) * self.st0();
         let ip_case_2 = (self.ip_next() - (self.ip() + self.two()))
-            * (self.st0() * self.inv() - self.one())
+            * (self.st0() * self.hv2() - self.one())
             * (self.hv0() - self.one());
         let ip_case_3 = (self.ip_next() - (self.ip() + self.constant(3)))
-            * (self.st0() * self.inv() - self.one())
+            * (self.st0() * self.hv2() - self.one())
             * self.hv0();
         let ip_incr_by_1_or_2_or_3 = ip_case_1 + ip_case_2 + ip_case_3;
 
@@ -1570,8 +1550,8 @@ impl TransitionConstraints {
     pub fn instruction_div(&self) -> Vec<MPolynomial<XWord>> {
         // Denominator d is not zero.
         //
-        // $st0·inv - 1 = 0$
-        let denominator_is_not_zero = self.st0() * self.inv() - self.one();
+        // $st0·hv2 - 1 = 0$
+        let denominator_is_not_zero = self.st0() * self.hv2() - self.one();
 
         // Result of division, i.e., quotient q and remainder r, are moved into
         // st1 and st0 respectively, and match with numerator n and denominator d.
@@ -2097,10 +2077,6 @@ impl TransitionConstraints {
         self.variables[ST15 as usize].clone()
     }
 
-    pub fn inv(&self) -> MPolynomial<XWord> {
-        self.variables[INV as usize].clone()
-    }
-
     pub fn osp(&self) -> MPolynomial<XWord> {
         self.variables[OSP as usize].clone()
     }
@@ -2217,10 +2193,6 @@ impl TransitionConstraints {
 
     pub fn st15_next(&self) -> MPolynomial<XWord> {
         self.variables[FULL_WIDTH + ST15 as usize].clone()
-    }
-
-    pub fn inv_next(&self) -> MPolynomial<XWord> {
-        self.variables[FULL_WIDTH + INV as usize].clone()
     }
 
     pub fn osp_next(&self) -> MPolynomial<XWord> {
