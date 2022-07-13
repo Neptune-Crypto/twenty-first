@@ -51,7 +51,7 @@ pub struct StarkPrimeFieldElementFlexible {
     preprocessed_values: Option<StarkPreprocessedValues>,
 }
 
-impl<'a> StarkPrimeFieldElementFlexible {
+impl StarkPrimeFieldElementFlexible {
     pub fn new(
         expansion_factor: usize,
         colinearity_check_count: usize,

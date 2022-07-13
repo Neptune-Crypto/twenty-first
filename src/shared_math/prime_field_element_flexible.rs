@@ -311,7 +311,7 @@ impl Neg for PrimeFieldElementFlexible {
     }
 }
 
-impl<'a> Div for PrimeFieldElementFlexible {
+impl Div for PrimeFieldElementFlexible {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {

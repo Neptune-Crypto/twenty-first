@@ -36,7 +36,7 @@ pub struct PolynomialEvaluationDataNode {
     // index: usize,
 }
 
-impl<'a, T: Sized> Node<T> {
+impl<T: Sized> Node<T> {
     fn traverse_tree<PFElem: PrimeField>(
         nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>>,
         point: &[Polynomial<PFElem>],
