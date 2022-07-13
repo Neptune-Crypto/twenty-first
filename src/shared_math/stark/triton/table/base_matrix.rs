@@ -17,7 +17,7 @@ use crate::shared_math::stark::triton::vm::Program;
 use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::traits::Inverse;
 use itertools::Itertools;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Default)]
 pub struct BaseMatrices {
@@ -270,6 +270,26 @@ impl Display for ProcessorMatrixRow {
             f,
             "╰─────────────────────────────────────────────────────────────────\
             ────────────────────────────────────────╯"
+        )
+    }
+}
+
+pub struct JumpStackMatrixRow {
+    pub row: [BFieldElement; jump_stack_table::BASE_WIDTH],
+}
+
+impl Display for JumpStackMatrixRow {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let width = 5;
+        write!(
+            f,
+            "│ CLK: {:>width$} │ CI:  {:>width$} │ \
+            JSP: {:>width$} │ JSO: {:>width$} │ JSD: {:>width$} │",
+            self.row[JumpStackTableColumn::CLK as usize].value(),
+            self.row[JumpStackTableColumn::CI as usize].value(),
+            self.row[JumpStackTableColumn::JSP as usize].value(),
+            self.row[JumpStackTableColumn::JSO as usize].value(),
+            self.row[JumpStackTableColumn::JSD as usize].value(),
         )
     }
 }
