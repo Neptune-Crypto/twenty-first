@@ -180,14 +180,21 @@ pub trait ExtensionTable: Table<XWord> + Sync {
             timer.elapsed(&format!("END for-loop for tc of {}", tc.degree()));
         }
         timer.elapsed("DONE Transition Constraints");
-        // If the `DEBUG` environment variable is set, interpolate the quotient and check the degree
 
         if std::env::var("DEBUG").is_ok() {
+            // interpolate the quotient and check the degree
             for (i, qc) in quotients.iter().enumerate() {
                 let interpolated: Polynomial<XWord> = lift_domain(fri_domain).interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
-                    "Degree of transition quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}. Unsatisfied constraint: {}", i, self.name(), interpolated.degree(), fri_domain.length, transition_constraints[i]
+                    "Degree of transition quotient number {} in {} must not be maximal. \
+                    Got degree {}, and FRI domain length was {}. \
+                    Unsatisfied constraint: {}",
+                    i,
+                    self.name(),
+                    interpolated.degree(),
+                    fri_domain.length,
+                    transition_constraints[i]
                 );
             }
         }

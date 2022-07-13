@@ -118,9 +118,8 @@ impl ExtensionTable for ExtJumpStackTable {
         let jso_next = variables[FULL_WIDTH + usize::from(JSO)].clone();
         let jsd_next = variables[FULL_WIDTH + usize::from(JSD)].clone();
 
-        let dummy_call_argument = BFieldElement::ring_zero();
         let call_opcode = MPolynomial::<XFieldElement>::from_constant(
-            Instruction::Call(dummy_call_argument).opcode_b().lift(),
+            Instruction::Call(Default::default()).opcode_b().lift(),
             2 * FULL_WIDTH,
         );
 

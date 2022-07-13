@@ -1232,13 +1232,15 @@ pub(crate) mod triton_stark_tests {
     ) {
         for (row_idx, (curr_row, next_row)) in table_data.iter().tuple_windows().enumerate() {
             let air_point = [curr_row.to_vec(), next_row.to_vec()].concat();
+
             for (constraint_idx, air_constraint) in air_constraints.iter().enumerate() {
                 assert!(
                     air_constraint.evaluate(&air_point).is_zero(),
-                    "{}. Constraint index: {}. Row index: {}",
+                    "{}. Constraint index: {}. Row index: {}\n{}",
                     message,
                     constraint_idx,
                     row_idx,
+                    air_constraint,
                 );
             }
         }
