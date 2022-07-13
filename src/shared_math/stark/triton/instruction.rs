@@ -233,7 +233,7 @@ impl<Dest> AnInstruction<Dest> {
             Swap(x) => Swap(*x),
             Nop => Nop,
             Skiz => Skiz,
-            Call(lala) => Call(f(lala)),
+            Call(label) => Call(f(label)),
             Return => Return,
             Recurse => Recurse,
             Assert => Assert,
@@ -273,6 +273,65 @@ impl Instruction {
             Call(arg) => Some(*arg),
             _ => None,
         }
+    }
+}
+
+impl TryFrom<u32> for Instruction {
+    type Error = String;
+
+    fn try_from(opcode: u32) -> Result<Self, Self::Error> {
+        match opcode {
+            2 => Ok(Pop),
+            1 => Ok(Push(Default::default())),
+            4 => Ok(Divine),
+            3 => Ok(Dup(ST0)),
+            5 => Ok(Swap(ST0)),
+            6 => Ok(Nop),
+            8 => Ok(Skiz),
+            7 => Ok(Call(Default::default())),
+            10 => Ok(Return),
+            12 => Ok(Recurse),
+            14 => Ok(Assert),
+            0 => Ok(Halt),
+            16 => Ok(ReadMem),
+            18 => Ok(WriteMem),
+            20 => Ok(Hash),
+            22 => Ok(DivineSibling),
+            24 => Ok(AssertVector),
+            26 => Ok(Add),
+            28 => Ok(Mul),
+            30 => Ok(Invert),
+            32 => Ok(Split),
+            34 => Ok(Eq),
+            36 => Ok(Lt),
+            38 => Ok(And),
+            40 => Ok(Xor),
+            42 => Ok(Reverse),
+            44 => Ok(Div),
+            46 => Ok(XxAdd),
+            48 => Ok(XxMul),
+            50 => Ok(XInvert),
+            52 => Ok(XbMul),
+            54 => Ok(ReadIo),
+            56 => Ok(WriteIo),
+            _ => Err(format!("No instruction with opcode {} exists.", opcode)),
+        }
+    }
+}
+
+impl TryFrom<u64> for Instruction {
+    type Error = String;
+
+    fn try_from(opcode: u64) -> Result<Self, Self::Error> {
+        (opcode as u32).try_into()
+    }
+}
+
+impl TryFrom<usize> for Instruction {
+    type Error = String;
+
+    fn try_from(opcode: usize) -> Result<Self, Self::Error> {
+        (opcode as u32).try_into()
     }
 }
 
@@ -1154,6 +1213,13 @@ mod instruction_tests {
                     ib_value
                 );
             }
+        }
+    }
+
+    #[test]
+    fn instruction_to_opcode_to_instruction_is_consistent_test() {
+        for instr in all_instructions_without_args() {
+            assert_eq!(instr, instr.opcode().try_into().unwrap());
         }
     }
 }
