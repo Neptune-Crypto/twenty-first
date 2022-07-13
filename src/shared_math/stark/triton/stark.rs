@@ -1328,22 +1328,24 @@ pub(crate) mod triton_stark_tests {
                 &message_2,
             );
 
-            let ext_boundary_constraints = ext_table.ext_boundary_constraints(&all_challenges);
-            let message_3 = format!("ext_boundary_constraints on {}", &ext_table.name());
-            assert_consistency_boundary_constraints_on_table(
-                &[ext_table.data()[0].clone()],
-                &ext_boundary_constraints,
-                &message_3,
-            );
+            if ext_table.data().len() > 0 {
+                let ext_boundary_constraints = ext_table.ext_boundary_constraints(&all_challenges);
+                let message_3 = format!("ext_boundary_constraints on {}", &ext_table.name());
+                assert_consistency_boundary_constraints_on_table(
+                    &[ext_table.data()[0].clone()],
+                    &ext_boundary_constraints,
+                    &message_3,
+                );
 
-            let ext_terminal_constraints =
-                ext_table.ext_terminal_constraints(&all_challenges, &all_terminals);
-            let message_4 = format!("ext_terminal_constraints on {}", &ext_table.name());
-            assert_consistency_boundary_constraints_on_table(
-                &[ext_table.data().last().unwrap().to_vec()],
-                &ext_terminal_constraints,
-                &message_4,
-            );
+                let ext_terminal_constraints =
+                    ext_table.ext_terminal_constraints(&all_challenges, &all_terminals);
+                let message_4 = format!("ext_terminal_constraints on {}", &ext_table.name());
+                assert_consistency_boundary_constraints_on_table(
+                    &[ext_table.data().last().unwrap().to_vec()],
+                    &ext_terminal_constraints,
+                    &message_4,
+                );
+            }
         }
     }
 
