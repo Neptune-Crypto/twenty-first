@@ -58,13 +58,12 @@ impl Table<BWord> for JumpStackTable {
         "JumpStackTable".to_string()
     }
 
-    // FIXME: Apply correct padding, not just 0s.
     fn pad(&mut self) {
         let data = self.mut_data();
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
             // add same clk padding as in processor table
-            padding_row[CLK as usize] = ((data.len() - 1) as u32).into();
+            padding_row[CLK as usize] = (data.len() as u32).into();
             data.push(padding_row);
         }
     }
