@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::{collections::HashMap, fmt::Debug};
 
 use serde::{Deserialize, Serialize};
@@ -31,7 +30,6 @@ where
         MmrAccumulator {
             leaf_count: ammr.count_leaves(),
             peaks: ammr.get_peaks(),
-            _hasher: PhantomData,
         }
     }
 }
@@ -43,7 +41,6 @@ where
 {
     leaf_count: u128,
     peaks: Vec<H::Digest>,
-    _hasher: PhantomData<H>,
 }
 
 impl<H> From<&ArchivalMmr<H>> for MmrAccumulator<H>
@@ -55,7 +52,6 @@ where
         Self {
             leaf_count: archive.count_leaves(),
             peaks: archive.get_peaks(),
-            _hasher: PhantomData,
         }
     }
 }
@@ -66,11 +62,7 @@ where
     H: Hasher,
 {
     pub fn init(peaks: Vec<H::Digest>, leaf_count: u128) -> Self {
-        Self {
-            leaf_count,
-            peaks,
-            _hasher: PhantomData,
-        }
+        Self { leaf_count, peaks }
     }
 }
 
@@ -90,7 +82,6 @@ where
         let archival = ArchivalMmr::<H>::new(digests);
         let peaks_and_heights = archival.get_peaks_with_heights();
         Self {
-            _hasher: PhantomData,
             leaf_count,
             peaks: peaks_and_heights.iter().map(|x| x.0.clone()).collect(),
         }

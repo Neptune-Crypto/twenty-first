@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::marker::PhantomData;
 
 // Chosen from a very small number of benchmark runs, optimized for a slow
 // hash function (the original Rescue Prime implementation). It should probably
@@ -24,7 +23,6 @@ where
     H: Hasher,
 {
     pub nodes: Vec<H::Digest>,
-    _hasher: PhantomData<H>,
 }
 
 impl<H> Clone for MerkleTree<H>
@@ -34,7 +32,6 @@ where
     fn clone(&self) -> Self {
         Self {
             nodes: self.nodes.clone(),
-            _hasher: PhantomData,
         }
     }
 }
@@ -138,9 +135,7 @@ where
             nodes[i] = hasher.hash_pair(&nodes[i * 2], &nodes[i * 2 + 1]);
         }
 
-        let _hasher = PhantomData;
-
-        Self { nodes, _hasher }
+        Self { nodes }
     }
 
     // Similar to `get_proof', but instead of returning a `Vec<Node<T>>`, we only
@@ -573,9 +568,7 @@ where
             nodes[i] = hasher.hash_pair(&left, &right);
         }
 
-        let _hasher = PhantomData;
-
-        let internal_merkle_tree: MerkleTree<H> = MerkleTree { nodes, _hasher };
+        let internal_merkle_tree: MerkleTree<H> = MerkleTree { nodes };
 
         Self {
             internal_merkle_tree,
