@@ -1,69 +1,6 @@
 use std::fmt::Display;
 use Ord16::*;
-use Ord5::*;
 use Ord6::*;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Ord5 {
-    HV0,
-    HV1,
-    HV2,
-    HV3,
-    HV4,
-}
-
-impl Display for Ord5 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let n: usize = (*self).into();
-        write!(f, "{}", n)
-    }
-}
-
-impl From<Ord5> for u32 {
-    fn from(n: Ord5) -> Self {
-        match n {
-            HV0 => 0,
-            HV1 => 1,
-            HV2 => 2,
-            HV3 => 3,
-            HV4 => 4,
-        }
-    }
-}
-
-impl From<&Ord5> for u32 {
-    fn from(n: &Ord5) -> Self {
-        (*n).into()
-    }
-}
-
-impl From<Ord5> for usize {
-    fn from(n: Ord5) -> Self {
-        let n: u32 = n.into();
-        n as usize
-    }
-}
-
-impl From<&Ord5> for usize {
-    fn from(n: &Ord5) -> Self {
-        (*n).into()
-    }
-}
-
-impl TryFrom<usize> for Ord5 {
-    type Error = String;
-
-    fn try_from(value: usize) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(HV0),
-            1 => Ok(HV1),
-            2 => Ok(HV2),
-            3 => Ok(HV3),
-            4 => Ok(HV4),
-            _ => Err(format!("{} is out of range for Ord5", value)),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ord6 {
