@@ -63,7 +63,7 @@ impl Table<BWord> for OpStackTable {
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
             // add same clk padding as in processor table
-            padding_row[OpStackTableColumn::CLK as usize] = ((data.len() - 1) as u32).into();
+            padding_row[OpStackTableColumn::CLK as usize] = (data.len() as u32).into();
             data.push(padding_row);
         }
     }

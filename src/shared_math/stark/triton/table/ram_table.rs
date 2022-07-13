@@ -169,7 +169,7 @@ impl Table<BWord> for RamTable {
         while !data.is_empty() && !other::is_power_of_two(data.len()) {
             let mut padding_row = data.last().unwrap().clone();
             // add same clk padding as in processor table
-            padding_row[RamTableColumn::CLK as usize] = ((data.len() - 1) as u32).into();
+            padding_row[RamTableColumn::CLK as usize] = (data.len() as u32).into();
             data.push(padding_row);
         }
     }
