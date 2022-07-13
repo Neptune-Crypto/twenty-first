@@ -364,6 +364,10 @@ where
         let hasher = H::new();
 
         let (num_rounds, degree_of_last_round) = self.num_rounds();
+        println!(
+            "(num_rounds, degree_of_last_round) = {:?}",
+            (num_rounds, degree_of_last_round)
+        );
         let num_rounds = num_rounds as usize;
         let mut timer = TimingReporter::start();
 
@@ -409,14 +413,25 @@ where
         // trace subgroup since we only check its degree and don't use
         // it further.
         let log_2_of_n = log_2_floor(last_codeword.len() as u128) as u32;
+        println!(
+            "last_codeword.len() = {}, log_2_floor(last_codeword.len()) = {}",
+            last_codeword.len(),
+            log_2_of_n
+        );
         let mut last_polynomial = last_codeword.clone();
         let last_omega = self.domain.omega.mod_pow_u32(2u32.pow(num_rounds as u32));
         intt::<XFieldElement>(&mut last_polynomial, last_omega, log_2_of_n);
+
         let last_poly_degree: isize = (Polynomial::<XFieldElement> {
             coefficients: last_polynomial,
         })
         .degree();
+
         if last_poly_degree > degree_of_last_round as isize {
+            println!(
+                "last_poly_degree is {}, degree_of_last_round is {}",
+                last_poly_degree, degree_of_last_round
+            );
             return Err(Box::new(ValidationError::LastIterationTooHighDegree));
         }
         timer.elapsed("Verified last round");
