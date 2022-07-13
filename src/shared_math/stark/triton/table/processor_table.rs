@@ -2454,9 +2454,20 @@ impl InstructionDeselectors {
 #[cfg(test)]
 mod constraint_polynomial_tests {
     use super::*;
+    use crate::shared_math::stark::triton::table::base_matrix::ProcessorMatrixRow;
     use crate::shared_math::stark::triton::table::processor_table;
     use crate::shared_math::stark::triton::vm::Program;
     use crate::shared_math::traits::IdentityValues;
+
+    #[test]
+    /// helps identifying whether the printing causes an infinite loop
+    fn print_simple_processor_table_row_test() {
+        let program = Program::from_code("push 2 push -1 add assert halt").unwrap();
+        let (base_matrices, _) = program.simulate_with_input(&[], &[]);
+        for row in base_matrices.processor_matrix {
+            println!("{}", ProcessorMatrixRow { row });
+        }
+    }
 
     fn get_test_row_from_source_code(source_code: &str, row_num: usize) -> Vec<XWord> {
         let fake_extension_columns = [BFieldElement::ring_zero();

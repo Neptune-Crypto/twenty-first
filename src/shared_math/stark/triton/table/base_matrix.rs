@@ -7,6 +7,7 @@ use super::{
     program_table, ram_table, u32_op_table,
 };
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::stark::triton::instruction::AnInstruction::*;
 use crate::shared_math::stark::triton::instruction::Instruction;
 use crate::shared_math::stark::triton::state::{VMOutput, VMState};
 use crate::shared_math::stark::triton::table::table_column::RamTableColumn::{
@@ -145,9 +146,20 @@ impl Display for ProcessorMatrixRow {
             row(f, "".into())
         }
 
+        let instruction = self.row[CI as usize].value().try_into().unwrap();
+        let instruction_with_arg = match instruction {
+            Push(_) => Push(self.row[NIA as usize]),
+            Call(_) => Call(self.row[NIA as usize]),
+            Dup(_) => Dup((self.row[NIA as usize].value() as u32).try_into().unwrap()),
+            Swap(_) => Swap((self.row[NIA as usize].value() as u32).try_into().unwrap()),
+            _ => instruction,
+        };
+
+        writeln!(f, " ╭───────────────────────────╮")?;
+        writeln!(f, " │ {: <25} │", format!("{}", instruction_with_arg))?;
         writeln!(
             f,
-            "╭┴────────────────┴───────────────────────────────────────────────\
+            "╭┴───────────────────────────┴────────────────────────────────────\
             ────────────────────┬───────────────────╮"
         )?;
 
@@ -254,11 +266,10 @@ impl Display for ProcessorMatrixRow {
                 self.row[IB0 as usize].value(),
             ),
         )?;
-        writeln!(
+        write!(
             f,
             "╰─────────────────────────────────────────────────────────────────\
             ────────────────────────────────────────╯"
-        )?;
-        Ok(())
+        )
     }
 }

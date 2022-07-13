@@ -787,18 +787,13 @@ impl<'pgm> VMState<'pgm> {
 
 impl<'pgm> Display for VMState<'pgm> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let res = self.current_instruction().map(|instruction| {
-            writeln!(f, " ╭────────────────╮")?;
-            writeln!(f, " │ {: <14} │", format!("{}", instruction))?;
-            write!(
-                f,
-                "{}",
-                ProcessorMatrixRow {
-                    row: self.to_processor_row(instruction)
-                }
-            )
-        });
-        res.unwrap_or_else(|_| write!(f, "END-OF-FILE"))
+        match self.current_instruction() {
+            Ok(instruction) => {
+                let row = self.to_processor_row(instruction);
+                write!(f, "{}", ProcessorMatrixRow { row })
+            }
+            Err(_) => write!(f, "END-OF-FILE"),
+        }
     }
 }
 
