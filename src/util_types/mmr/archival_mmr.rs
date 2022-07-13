@@ -26,7 +26,6 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct ArchivalMmr<H: Hasher> {
     digests: Vec<H::Digest>,
-    _hasher: PhantomData<H>,
 }
 
 impl<H> Mmr<H> for ArchivalMmr<H>
@@ -38,7 +37,6 @@ where
         let dummy_digest = 0u128.to_digest();
         let mut new_mmr: Self = Self {
             digests: vec![dummy_digest],
-            _hasher: PhantomData,
         };
         for digest in digests {
             new_mmr.append(digest);
