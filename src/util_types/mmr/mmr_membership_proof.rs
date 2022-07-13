@@ -5,7 +5,6 @@ use std::{
     collections::{hash_map::RandomState, hash_set::Intersection, HashMap, HashSet},
     fmt::Debug,
     iter::FromIterator,
-    marker::PhantomData,
 };
 
 use super::shared::{
@@ -21,7 +20,6 @@ where
 {
     pub data_index: u128,
     pub authentication_path: Vec<H::Digest>,
-    pub _hasher: PhantomData<H>,
 }
 
 impl<H> Clone for MmrMembershipProof<H>
@@ -32,7 +30,6 @@ where
         Self {
             data_index: self.data_index,
             authentication_path: self.authentication_path.clone(),
-            _hasher: PhantomData,
         }
     }
 }
@@ -600,27 +597,22 @@ mod mmr_membership_proof_test {
         let mp0: MmrMembershipProof<Hasher> = MmrMembershipProof {
             authentication_path: vec![],
             data_index: 4,
-            _hasher: PhantomData,
         };
         let mp1: MmrMembershipProof<Hasher> = MmrMembershipProof {
             authentication_path: vec![],
             data_index: 4,
-            _hasher: PhantomData,
         };
         let mp2: MmrMembershipProof<Hasher> = MmrMembershipProof {
             authentication_path: vec![],
             data_index: 3,
-            _hasher: PhantomData,
         };
         let mp3: MmrMembershipProof<Hasher> = MmrMembershipProof {
             authentication_path: vec![blake3_wrapper::hash(b"foobarbaz")],
             data_index: 4,
-            _hasher: PhantomData,
         };
         let mp4: MmrMembershipProof<Hasher> = MmrMembershipProof {
             authentication_path: vec![blake3_wrapper::hash(b"foobarbaz")],
             data_index: 4,
-            _hasher: PhantomData,
         };
         assert_eq!(mp0, mp1);
         assert_ne!(mp1, mp2);

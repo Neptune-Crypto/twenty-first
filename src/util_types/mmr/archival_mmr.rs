@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::marker::PhantomData;
 
 use crate::{
     util_types::{
@@ -225,7 +224,6 @@ where
         let membership_proof = MmrMembershipProof {
             authentication_path,
             data_index,
-            _hasher: PhantomData,
         };
 
         (membership_proof, peaks)

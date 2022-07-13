@@ -1,7 +1,6 @@
 use super::mmr_membership_proof::MmrMembershipProof;
 use crate::shared_math::other::{bit_representation, log_2_floor};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
-use std::marker::PhantomData;
 
 #[inline]
 pub fn left_child(node_index: u128, height: u128) -> u128 {
@@ -292,7 +291,6 @@ pub fn calculate_new_peaks_from_append<H: Hasher>(
     let mut membership_proof: MmrMembershipProof<H> = MmrMembershipProof {
         authentication_path: vec![],
         data_index: old_leaf_count,
-        _hasher: PhantomData,
     };
     while new_node_is_right_child {
         let new_hash = peaks.pop().unwrap();
