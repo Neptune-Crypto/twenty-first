@@ -2,6 +2,7 @@ use rusty_leveldb::DB;
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
+/// This is the key for the storage of the length of the vector
 const LENGTH_KEY: Vec<u8> = vec![];
 
 // pub struct DatabaseVector(RustyLevelDB<u128, Digest>);
@@ -135,6 +136,18 @@ mod database_vector_tests {
         assert_eq!(Some(14442), db_vector.pop());
         assert_eq!(0, db_vector.len());
         assert!(db_vector.is_empty());
+    }
+
+    #[test]
+    fn push_many_test() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("mydatabase", opt).unwrap();
+        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        for _ in 0..1000 {
+            db_vector.push(17);
+        }
+
+        assert_eq!(1000, db_vector.len());
     }
 
     #[should_panic = "Cannot get outside of length. Length: 0, index: 0"]
