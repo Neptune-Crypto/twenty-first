@@ -228,7 +228,11 @@ where
 
         assert!(
             self.padded_height() >= self.num_trace_randomizers(),
-            "Temporary restriction that number of randomizers must not exceed table height"
+            "Number of randomizers must not exceed table height. \
+            {} height: {} Num trace randomizers: {}",
+            self.name(),
+            self.padded_height(),
+            self.num_trace_randomizers()
         );
 
         // FIXME: Unfold with multiplication instead of mapping with power.
