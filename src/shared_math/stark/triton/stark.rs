@@ -145,17 +145,21 @@ impl Stark {
             .get_primitive_root_of_unity(order as u64)
             .0
             .unwrap();
-        let unpadded_height = base_matrices.processor_matrix.len();
-        let padded_height = roundup_npo2(unpadded_height as u64) as usize;
 
         // 1. Create base tables based on base matrices
-
         let mut base_tables = BaseTableCollection::from_base_matrices(
             smooth_generator,
             order,
             num_randomizers,
             &base_matrices,
         );
+
+        let unpadded_height = (&base_tables)
+            .into_iter()
+            .map(|table| table.data().len())
+            .max()
+            .unwrap_or(0);
+        let padded_height = roundup_npo2(unpadded_height as u64) as usize;
 
         timer.elapsed("assert, set_matrices");
 
