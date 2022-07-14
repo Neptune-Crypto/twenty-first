@@ -2,8 +2,9 @@ use std::fmt::Display;
 use Ord16::*;
 use Ord6::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Ord6 {
+    #[default]
     IB0,
     IB1,
     IB2,
@@ -49,8 +50,9 @@ impl TryFrom<usize> for Ord6 {
 }
 
 /// `Ord16` represents numbers that are exactly 0--15.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Ord16 {
+    #[default]
     ST0,
     ST1,
     ST2,

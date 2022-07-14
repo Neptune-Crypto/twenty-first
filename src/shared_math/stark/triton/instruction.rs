@@ -532,17 +532,15 @@ fn parse_label(tokens: &mut SplitWhitespace) -> Result<String, Box<dyn Error>> {
 }
 
 pub fn all_instructions_without_args() -> Vec<Instruction> {
-    let dummy_bfield_element = BFieldElement::ring_zero();
-    let dummy_ord16 = Ord16::ST0;
     vec![
         Pop,
-        Push(dummy_bfield_element),
+        Push(Default::default()),
         Divine,
-        Dup(dummy_ord16),
-        Swap(dummy_ord16),
+        Dup(Default::default()),
+        Swap(Default::default()),
         Nop,
         Skiz,
-        Call(dummy_bfield_element),
+        Call(Default::default()),
         Return,
         Recurse,
         Assert,

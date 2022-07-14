@@ -9,7 +9,7 @@ use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::instruction::{
     all_instructions_without_args, AnInstruction::*, Instruction,
 };
-use crate::shared_math::stark::triton::ord_n::{Ord16, Ord6};
+use crate::shared_math::stark::triton::ord_n::Ord6;
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
 use crate::shared_math::x_field_element::XFieldElement;
 use itertools::Itertools;
@@ -746,18 +746,16 @@ impl ExtensionTable for ExtProcessorTable {
 
     fn ext_transition_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {
         let factory = &self.transition_constraints;
-        let dummy_bfield_element = BFieldElement::ring_zero();
-        let dummy_ord16 = Ord16::ST0;
 
         let all_instruction_transition_constraints = vec![
             (Pop, factory.instruction_pop()),
-            (Push(dummy_bfield_element), factory.instruction_push()),
+            (Push(Default::default()), factory.instruction_push()),
             (Divine, factory.instruction_divine()),
-            (Dup(dummy_ord16), factory.instruction_dup()),
-            (Swap(dummy_ord16), factory.instruction_swap()),
+            (Dup(Default::default()), factory.instruction_dup()),
+            (Swap(Default::default()), factory.instruction_swap()),
             (Nop, factory.instruction_nop()),
             (Skiz, factory.instruction_skiz()),
-            (Call(dummy_bfield_element), factory.instruction_call()),
+            (Call(Default::default()), factory.instruction_call()),
             (Return, factory.instruction_return()),
             (Recurse, factory.instruction_recurse()),
             (Assert, factory.instruction_assert()),
@@ -2454,6 +2452,7 @@ impl InstructionDeselectors {
 #[cfg(test)]
 mod constraint_polynomial_tests {
     use super::*;
+    use crate::shared_math::stark::triton::ord_n::Ord16;
     use crate::shared_math::stark::triton::table::base_matrix::ProcessorMatrixRow;
     use crate::shared_math::stark::triton::table::processor_table;
     use crate::shared_math::stark::triton::vm::Program;
