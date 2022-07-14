@@ -14,17 +14,17 @@ where
     // fn new(digests: Vec<H::Digest>) -> Self;
 
     /// Calculate a single hash digest committing to the entire MMR.
-    fn bag_peaks(&self) -> H::Digest;
+    fn bag_peaks(&mut self) -> H::Digest;
 
     /// Returns the peaks of the MMR, which are roots of the Merkle trees that constitute
     /// the MMR
-    fn get_peaks(&self) -> Vec<H::Digest>;
+    fn get_peaks(&mut self) -> Vec<H::Digest>;
 
     /// Returns `true` iff the MMR has no leaves
-    fn is_empty(&self) -> bool;
+    fn is_empty(&mut self) -> bool;
 
     /// Returns the number of leaves in the MMR
-    fn count_leaves(&self) -> u128;
+    fn count_leaves(&mut self) -> u128;
 
     /// Append a hash digest to the MMR
     fn append(&mut self, new_leaf: H::Digest) -> MmrMembershipProof<H>;
@@ -34,23 +34,23 @@ where
     /// will end up in a broken state.
     fn mutate_leaf(&mut self, old_membership_proof: &MmrMembershipProof<H>, new_leaf: &H::Digest);
 
-    /// Batch mutate an MMR while updating a list of membership proofs. Returns the indices into
-    /// the list of membership proofs that where given as argument.
+    /// Batch mutate an MMR while updating a list of membership proofs. Returns the indices of the
+    /// membership proofs that have changed as a result of this operation.
     fn batch_mutate_leaf_and_update_mps(
         &mut self,
-        membership_proofs: &mut Vec<MmrMembershipProof<H>>,
+        membership_proofs: &mut [MmrMembershipProof<H>],
         mutation_data: Vec<(MmrMembershipProof<H>, H::Digest)>,
     ) -> Vec<usize>;
 
     /// Returns true if a list of leaf mutations and a list of appends results in the expected
     /// `new_peaks`.
     fn verify_batch_update(
-        &self,
+        &mut self,
         new_peaks: &[H::Digest],
         appended_leafs: &[H::Digest],
         leaf_mutations: &[(H::Digest, MmrMembershipProof<H>)],
     ) -> bool;
 
     /// Return an MMR accumulator containing only peaks and leaf count
-    fn to_accumulator(&self) -> MmrAccumulator<H>;
+    fn to_accumulator(&mut self) -> MmrAccumulator<H>;
 }
