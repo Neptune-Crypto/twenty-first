@@ -1,6 +1,6 @@
 use super::table_column::{
-    InstructionTableColumn, JumpStackTableColumn, OpStackTableColumn, ProcessorTableColumn::*,
-    RamTableColumn,
+    ExtProcessorTableColumn, InstructionTableColumn, JumpStackTableColumn, OpStackTableColumn,
+    ProcessorTableColumn::*, RamTableColumn,
 };
 use super::{
     hash_table, instruction_table, jump_stack_table, op_stack_table, processor_table,
@@ -10,13 +10,16 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::stark::triton::instruction::AnInstruction::*;
 use crate::shared_math::stark::triton::instruction::Instruction;
 use crate::shared_math::stark::triton::state::{VMOutput, VMState};
+use crate::shared_math::stark::triton::table::table_column::ExtProcessorTableColumn::*;
 use crate::shared_math::stark::triton::table::table_column::RamTableColumn::{
     InverseOfRampDifference, RAMP,
 };
 use crate::shared_math::stark::triton::vm::Program;
 use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::traits::Inverse;
+use crate::shared_math::x_field_element::XFieldElement;
 use itertools::Itertools;
+use std::borrow::BorrowMut;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Default)]
@@ -269,6 +272,69 @@ impl Display for ProcessorMatrixRow {
         write!(
             f,
             "╰─────────────────────────────────────────────────────────────────\
+            ────────────────────────────────────────╯"
+        )
+    }
+}
+
+pub struct ExtProcessorMatrixRow {
+    pub row: [XFieldElement; processor_table::FULL_WIDTH],
+}
+
+impl Display for ExtProcessorMatrixRow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The pretty printer is only pretty on the outside.
+        // Also, clippy thinks that `base_col` is never used. May be true, but it's still useful.
+        let mut base_row = [0.into(); processor_table::BASE_WIDTH];
+        #[allow(unused_variables)]
+        #[allow(unused_assignments)]
+        for (mut base_col, ext_col) in base_row.iter_mut().zip(self.row.iter()) {
+            base_col = ext_col.unlift().unwrap().borrow_mut();
+        }
+        let base_row = ProcessorMatrixRow { row: base_row };
+
+        let row = |form: &mut std::fmt::Formatter<'_>,
+                   desc: &str,
+                   col: ExtProcessorTableColumn|
+         -> std::fmt::Result {
+            // without the extra `format!()`, alignment in `writeln!()` fails
+            let formatted_col_elem = format!("{}", self.row[usize::from(col)]);
+            writeln!(form, "     │ {: <18}  {:>73} │", desc, formatted_col_elem,)
+        };
+
+        writeln!(f, "{}", base_row)?;
+        writeln!(
+            f,
+            "     ╭───────────────────────────────────────────────────────\
+            ────────────────────────────────────────╮"
+        )?;
+        row(f, "input_table_ea", InputTableEvalArg)?;
+        row(f, "output_table_ea", OutputTableEvalArg)?;
+        row(f, "cr_instr_table", CompressedRowInstructionTable)?;
+        row(f, "instr_table_pa", InstructionTablePermArg)?;
+        row(f, "cr_opstack_table", CompressedRowOpStackTable)?;
+        row(f, "opstack_table_pa", OpStackTablePermArg)?;
+        row(f, "cr_ram_table", CompressedRowRamTable)?;
+        row(f, "ram_table_pa", RamTablePermArg)?;
+        row(f, "cr_jumpstack_table", CompressedRowJumpStackTable)?;
+        row(f, "jumpstack_table_pa", JumpStackTablePermArg)?;
+        row(f, "cr_to_hash_table", CompressedRowForHashInput)?;
+        row(f, "to_hash_table_ea", ToHashTableEvalArg)?;
+        row(f, "cr_from_hash_table", CompressedRowForHashDigest)?;
+        row(f, "from_hash_table_ea", FromHashTableEvalArg)?;
+        row(f, "cr_u32_lt", CompressedRowLtU32Op)?;
+        row(f, "u32_lt_pa", LtU32OpTablePermArg)?;
+        row(f, "cr_u32_and", CompressedRowAndU32Op)?;
+        row(f, "u32_and_pa", AndU32OpTablePermArg)?;
+        row(f, "cr_u32_xor", CompressedRowXorU32Op)?;
+        row(f, "u32_xor_pa", XorU32OpTablePermArg)?;
+        row(f, "cr_u32_rev", CompressedRowReverseU32Op)?;
+        row(f, "u32_rev_pa", ReverseU32OpTablePermArg)?;
+        row(f, "cr_u32_div", CompressedRowDivU32Op)?;
+        row(f, "u32_div_pa", DivU32OpTablePermArg)?;
+        write!(
+            f,
+            "     ╰───────────────────────────────────────────────────────\
             ────────────────────────────────────────╯"
         )
     }
