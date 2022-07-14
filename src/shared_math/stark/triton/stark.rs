@@ -16,7 +16,6 @@ use crate::shared_math::stark::triton::arguments::evaluation_argument::verify_ev
 use crate::shared_math::stark::triton::arguments::permutation_argument::PermArg;
 use crate::shared_math::stark::triton::proof_item::{Item, StarkProofStream};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
-use crate::shared_math::stark::triton::table::base_table::HasBaseTable;
 use crate::shared_math::stark::triton::table::challenges_endpoints::{AllChallenges, AllEndpoints};
 use crate::shared_math::stark::triton::table::table_collection::{
     BaseTableCollection, ExtTableCollection,
@@ -26,7 +25,6 @@ use crate::shared_math::traits::{GetPrimitiveRootOfUnity, GetRandomElements, Inv
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
-use crate::util_types::proof_stream_typed::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::Itertools;
 use rayon::iter::{
@@ -172,24 +170,13 @@ impl Stark {
         timer.elapsed("transposed_base_codewords");
 
         let hasher = neptune_params();
-
-        let mut base_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
-            Vec::with_capacity(transposed_base_codewords.len());
-
-        transposed_base_codewords
-            .par_iter()
-            .map(|values| hasher.hash(values, DIGEST_LEN))
-            .collect_into_vec(&mut base_codeword_digests_by_index);
-
-        let base_merkle_tree =
-            MerkleTree::<StarkHasher>::from_digests(&base_codeword_digests_by_index);
+        let base_merkle_tree = Self::get_merkle_tree(&transposed_base_codewords, &hasher);
+        let base_merkle_tree_root = base_merkle_tree.get_root();
 
         timer.elapsed("base_merkle_tree");
 
         // Commit to base codewords
-
-        let mut proof_stream: ProofStream<Item, StarkHasher> = StarkProofStream::default();
-        let base_merkle_tree_root: Vec<BFieldElement> = base_merkle_tree.get_root();
+        let mut proof_stream = StarkProofStream::default();
         proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root));
 
         timer.elapsed("proof_stream.enqueue");
@@ -200,7 +187,7 @@ impl Stark {
 
         let challenge_weights =
             Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL_CHALLENGES);
-        let all_challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
+        let all_challenges = AllChallenges::create_challenges(&challenge_weights);
 
         timer.elapsed("sample_weights");
 
@@ -214,49 +201,15 @@ impl Stark {
         let ext_codeword_tables = ext_tables.codeword_tables(&self.xfri_domain);
         let all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
 
-        let progdata = ext_codeword_tables.program_table.data();
-        for row in progdata.iter() {
-            debug_assert_eq!(
-                self.xfri_domain.length,
-                row.len(),
-                "each codeword has length of fri_domain"
-            );
-        }
-
         timer.elapsed("extend + get_terminals");
 
-        timer.elapsed("get_and_set_all_extension_codewords");
+        timer.elapsed("get_all_extension_codewords");
 
         let transposed_extension_codewords = Self::transpose_codewords(&all_ext_codewords);
 
-        let mut extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
-            Vec::with_capacity(transposed_extension_codewords.len());
-
-        (&transposed_extension_codewords)
-            .into_par_iter()
-            .map(|transposed_ext_codeword| {
-                let transposed_ext_codeword_coeffs: Vec<BFieldElement> = transposed_ext_codeword
-                    .iter()
-                    .map(|x| x.coefficients.clone().to_vec())
-                    .concat();
-
-                let sum_of_full_widths: usize = base_tables
-                    .into_iter()
-                    .map(|table| table.full_width())
-                    .sum();
-
-                assert_eq!(
-                    3 * sum_of_full_widths,
-                    transposed_ext_codeword_coeffs.len(),
-                    "There are just as many coefficients as there are BFieldElements in the full width of all extension tables."
-                );
-
-                hasher.hash(&transposed_ext_codeword_coeffs, RP_DEFAULT_OUTPUT_SIZE)
-            })
-            .collect_into_vec(&mut extension_codeword_digests_by_index);
-
         let extension_tree =
-            MerkleTree::<StarkHasher>::from_digests(&extension_codeword_digests_by_index);
+            Self::get_extension_merkle_tree(&transposed_extension_codewords, &hasher);
+
         proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root()));
         proof_stream.enqueue(&Item::Terminals(all_terminals.clone()));
 
@@ -578,6 +531,52 @@ impl Stark {
         );
 
         proof_stream
+    }
+
+    fn get_extension_merkle_tree(
+        transposed_extension_codewords: &Vec<Vec<XWord>>,
+        hasher: &RescuePrimeXlix<16>,
+    ) -> MerkleTree<StarkHasher> {
+        let mut extension_codeword_digests_by_index =
+            Vec::with_capacity(transposed_extension_codewords.len());
+
+        transposed_extension_codewords
+            .into_par_iter()
+            .map(|transposed_ext_codeword| {
+                let transposed_ext_codeword_coeffs: Vec<BFieldElement> = transposed_ext_codeword
+                    .iter()
+                    .map(|x| x.coefficients.clone().to_vec())
+                    .concat();
+
+                // DEBUG CODE BELOW
+                // let sum_of_full_widths: usize = base_tables
+                //     .into_iter()
+                //     .map(|table| table.full_width())
+                //     .sum();
+                //
+                // assert_eq!(
+                //     3 * sum_of_full_widths,
+                //     transposed_ext_codeword_coeffs.len(),
+                //     "There are just as many coefficients as there are BFieldElements in the full width of all extension tables."
+                // );
+
+                hasher.hash(&transposed_ext_codeword_coeffs, RP_DEFAULT_OUTPUT_SIZE)
+            })
+            .collect_into_vec(&mut extension_codeword_digests_by_index);
+
+        MerkleTree::<StarkHasher>::from_digests(&extension_codeword_digests_by_index)
+    }
+
+    fn get_merkle_tree(
+        codewords: &Vec<Vec<BWord>>,
+        hasher: &RescuePrimeXlix<RP_DEFAULT_WIDTH>,
+    ) -> MerkleTree<StarkHasher> {
+        let mut codeword_digests_by_index = Vec::with_capacity(codewords.len());
+        codewords
+            .par_iter()
+            .map(|values| hasher.hash(values, DIGEST_LEN))
+            .collect_into_vec(&mut codeword_digests_by_index);
+        MerkleTree::<StarkHasher>::from_digests(&codeword_digests_by_index)
     }
 
     /// Essentially a matrix transpose. Given
@@ -1078,8 +1077,6 @@ impl Stark {
         Ok(true)
     }
 
-    // FIXME: This interface leaks abstractions: We want a function that generates a number of weights
-    // that doesn't care about the weights-to-digest ratio (we can make two weights per digest).
     fn sample_weights(
         hasher: &StarkHasher,
         seed: &StarkDigest,
