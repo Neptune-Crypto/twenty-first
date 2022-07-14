@@ -19,7 +19,6 @@ use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::traits::Inverse;
 use crate::shared_math::x_field_element::XFieldElement;
 use itertools::Itertools;
-use std::borrow::BorrowMut;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Default)]
@@ -283,14 +282,12 @@ pub struct ExtProcessorMatrixRow {
 
 impl Display for ExtProcessorMatrixRow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // The pretty printer is only pretty on the outside.
-        // Also, clippy thinks that `base_col` is never used. May be true, but it's still useful.
-        let mut base_row = [0.into(); processor_table::BASE_WIDTH];
-        #[allow(unused_variables)]
-        #[allow(unused_assignments)]
-        for (mut base_col, ext_col) in base_row.iter_mut().zip(self.row.iter()) {
-            base_col = ext_col.unlift().unwrap().borrow_mut();
-        }
+        let base_row = self.row[0..processor_table::BASE_WIDTH]
+            .iter()
+            .map(|xfe| xfe.unlift().unwrap())
+            .collect_vec()
+            .try_into()
+            .unwrap();
         let base_row = ProcessorMatrixRow { row: base_row };
 
         let row = |form: &mut std::fmt::Formatter<'_>,
