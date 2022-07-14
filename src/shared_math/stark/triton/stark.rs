@@ -42,8 +42,9 @@ type StarkDigest = Vec<BFieldElement>;
 pub struct Stark {
     padded_height: usize,
     num_trace_randomizers: usize,
+    num_randomizer_polynomials: usize,
     order: usize,
-    generator: XFieldElement,
+    generator: BFieldElement,
     security_level: usize,
     max_degree: Degree,
     bfri_domain: triton::fri_domain::FriDomain<BWord>,
@@ -81,8 +82,9 @@ impl Stark {
             "expansion factor must be at least 4."
         );
 
-        // TODO: Parameterise these.
+        // TODO: Parameterize these.
         let num_trace_randomizers = 2;
+        let num_randomizer_polynomials = 1;
         let order: usize = 1 << 32;
         let smooth_generator = BWord::ring_zero()
             .get_primitive_root_of_unity(order as u64)
@@ -124,8 +126,9 @@ impl Stark {
         Stark {
             padded_height,
             num_trace_randomizers,
+            num_randomizer_polynomials,
             order,
-            generator: smooth_generator.lift(),
+            generator: smooth_generator,
             security_level,
             max_degree,
             bfri_domain,
@@ -139,31 +142,7 @@ impl Stark {
     pub fn prove(&self, base_matrices: BaseMatrices) -> StarkProofStream {
         let mut timer = TimingReporter::start();
 
-        let num_trace_randomizers = 1;
-        let order: usize = 1 << 32;
-        let smooth_generator = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(order as u64)
-            .0
-            .unwrap();
-
-        // 1. Create base tables based on base matrices
-        let mut base_tables = BaseTableCollection::from_base_matrices(
-            smooth_generator,
-            order,
-            num_trace_randomizers,
-            &base_matrices,
-        );
-
-        let unpadded_height = (&base_tables)
-            .into_iter()
-            .map(|table| table.data().len())
-            .max()
-            .unwrap_or(0);
-        let padded_height = roundup_npo2(unpadded_height as u64) as usize;
-
-        timer.elapsed("assert, set_matrices");
-
-        base_tables.pad();
+        let (base_tables, padded_height) = self.get_padded_base_tables(&base_matrices);
 
         timer.elapsed("pad");
 
@@ -172,57 +151,23 @@ impl Stark {
         // depends on this function being present. Alternatively, either calculate max_degree
         // using ext_transition_constraints(), hardcode it, or calculate it some third way.
         let max_degree: Degree = ExtTableCollection::with_padded_height(
-            smooth_generator.lift(),
-            order,
-            num_trace_randomizers,
+            self.generator.lift(),
+            self.order,
+            self.num_trace_randomizers,
             padded_height,
         )
         .max_degree();
 
-        // Randomizer bla bla
-        let mut rng = rand::thread_rng();
-        let randomizer_coefficients =
-            XFieldElement::random_elements(max_degree as usize + 1, &mut rng);
-        let randomizer_polynomial = Polynomial::new(randomizer_coefficients);
-
-        let x_randomizer_codeword: Vec<XFieldElement> =
-            self.xfri.domain.x_evaluate(&randomizer_polynomial);
-        let mut b_randomizer_codewords: [Vec<BFieldElement>; 3] = [vec![], vec![], vec![]];
-        for x_elem in x_randomizer_codeword.iter() {
-            b_randomizer_codewords[0].push(x_elem.coefficients[0]);
-            b_randomizer_codewords[1].push(x_elem.coefficients[1]);
-            b_randomizer_codewords[2].push(x_elem.coefficients[2]);
-        }
+        let (x_rand_codeword, b_rand_codewords) = self.get_randomizer_codewords(max_degree);
 
         timer.elapsed("randomizer_codewords");
 
-        let base_codewords: Vec<Vec<BFieldElement>> =
-            base_tables.all_base_codewords(&self.bfri_domain);
+        let base_codewords = base_tables.all_base_codewords(&self.bfri_domain);
+        let all_base_codewords = vec![b_rand_codewords, base_codewords.clone()].concat();
 
-        let _fridomainlength = (max_degree + 1) * (1 << 2);
-        // FIXME: Convert this to a test of `.all_base_codewords()`.
-        //assert_eq!((80, 4096), (base_codewords.len(), base_codewords[0].len()));
+        timer.elapsed("get_all_base_codewords");
 
-        let all_base_codewords =
-            vec![b_randomizer_codewords.into(), base_codewords.clone()].concat();
-        // TODO:  Convert this to a test that 'sum of all BASE_WIDTHs = 80'
-        // + '3 BFieldElements' used for a vector of XFieldElements.
-
-        // assert_eq!(
-        //     (83, 4096),
-        //     (all_base_codewords.len(), all_base_codewords[0].len())
-        // );
-
-        timer.elapsed("get_and_set_all_base_codewords");
-
-        let transposed_base_codewords: Vec<Vec<BFieldElement>> = (0..all_base_codewords[0].len())
-            .map(|i| {
-                all_base_codewords
-                    .iter()
-                    .map(|inner| inner[i])
-                    .collect::<Vec<BFieldElement>>()
-            })
-            .collect();
+        let transposed_base_codewords = Self::transpose_codewords(&all_base_codewords);
 
         timer.elapsed("transposed_base_codewords");
 
@@ -282,15 +227,7 @@ impl Stark {
 
         timer.elapsed("get_and_set_all_extension_codewords");
 
-        let transposed_extension_codewords: Vec<Vec<XFieldElement>> = (0..all_ext_codewords[0]
-            .len())
-            .map(|i| {
-                all_ext_codewords
-                    .iter()
-                    .map(|inner| inner[i])
-                    .collect::<Vec<XFieldElement>>()
-            })
-            .collect();
+        let transposed_extension_codewords = Self::transpose_codewords(&all_ext_codewords);
 
         let mut extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
             Vec::with_capacity(transposed_extension_codewords.len());
@@ -363,8 +300,7 @@ impl Stark {
 
         timer.elapsed("num_(base+extension)_polynomials");
 
-        let num_randomizer_polynomials: usize = 1;
-        let num_quotient_polynomials: usize = quotient_degree_bounds.len();
+        let num_quotient_polynomials = quotient_degree_bounds.len();
 
         let base_degree_bounds = base_tables.get_all_base_degree_bounds();
 
@@ -375,7 +311,7 @@ impl Stark {
 
         timer.elapsed("prover_fiat_shamir (again)");
 
-        let weights_count = num_randomizer_polynomials
+        let weights_count = self.num_randomizer_polynomials
             + 2 * (num_base_polynomials
                 + num_extension_polynomials
                 + num_quotient_polynomials
@@ -385,7 +321,7 @@ impl Stark {
         timer.elapsed("sample_weights");
 
         let mut weights_counter = 0;
-        let mut combination_codeword: Vec<XFieldElement> = x_randomizer_codeword
+        let mut combination_codeword: Vec<XFieldElement> = x_rand_codeword
             .into_iter()
             .map(|elem| elem * weights[weights_counter])
             .collect();
@@ -644,6 +580,62 @@ impl Stark {
         proof_stream
     }
 
+    /// Essentially a matrix transpose. Given
+    ///
+    /// ```norun
+    /// [a b c]
+    /// [d e f]
+    /// ```
+    ///
+    /// returns
+    ///
+    /// ```norun
+    /// [a d]
+    /// [b e]
+    /// [c f]
+    /// ```
+    /// Assumes that input is of rectangular shape.
+    fn transpose_codewords<P: Copy>(codewords: &[Vec<P>]) -> Vec<Vec<P>> {
+        (0..codewords[0].len())
+            .map(|col_idx| codewords.iter().map(|row| row[col_idx]).collect())
+            .collect()
+    }
+
+    fn get_padded_base_tables(&self, base_matrices: &BaseMatrices) -> (BaseTableCollection, usize) {
+        let mut base_tables = BaseTableCollection::from_base_matrices(
+            self.generator,
+            self.order,
+            self.num_trace_randomizers,
+            base_matrices,
+        );
+
+        let unpadded_height = (&base_tables)
+            .into_iter()
+            .map(|table| table.data().len())
+            .max()
+            .unwrap_or(0);
+        let padded_height = roundup_npo2(unpadded_height as u64) as usize;
+
+        base_tables.pad();
+
+        (base_tables, padded_height)
+    }
+
+    fn get_randomizer_codewords(&self, max_degree: Degree) -> (Vec<XWord>, Vec<Vec<BWord>>) {
+        let mut rng = rand::thread_rng();
+        let randomizer_coefficients = XWord::random_elements(max_degree as usize + 1, &mut rng);
+        let randomizer_polynomial = Polynomial::new(randomizer_coefficients);
+
+        let x_randomizer_codeword = self.xfri.domain.x_evaluate(&randomizer_polynomial);
+        let mut b_randomizer_codewords = vec![vec![], vec![], vec![]];
+        for x_elem in x_randomizer_codeword.iter() {
+            b_randomizer_codewords[0].push(x_elem.coefficients[0]);
+            b_randomizer_codewords[1].push(x_elem.coefficients[1]);
+            b_randomizer_codewords[2].push(x_elem.coefficients[2]);
+        }
+        (x_randomizer_codeword, b_randomizer_codewords)
+    }
+
     pub fn verify(&self, proof_stream: &mut StarkProofStream) -> Result<bool, Box<dyn Error>> {
         let mut timer = TimingReporter::start();
         let hasher = StarkHasher::new();
@@ -667,7 +659,7 @@ impl Stark {
         timer.elapsed("Read from proof stream");
 
         let ext_table_collection = ExtTableCollection::with_padded_height(
-            self.generator,
+            self.generator.lift(),
             self.order,
             self.num_trace_randomizers,
             self.padded_height,
@@ -685,7 +677,6 @@ impl Stark {
         //  - 2 for every other polynomial (base, extension, quotients)
         let num_base_polynomials = base_degree_bounds.len();
         let num_extension_polynomials = extension_degree_bounds.len();
-        let num_randomizer_polynomials = 1;
         let num_quotient_polynomials: usize = ext_table_collection
             .into_iter()
             .map(|table| {
@@ -700,7 +691,7 @@ impl Stark {
         let weights_seed: Vec<BFieldElement> = proof_stream.verifier_fiat_shamir();
 
         timer.elapsed("verifier_fiat_shamir (again)");
-        let weights_count = num_randomizer_polynomials
+        let weights_count = self.num_randomizer_polynomials
             + 2 * num_base_polynomials
             + 2 * num_extension_polynomials
             + 2 * num_quotient_polynomials
@@ -829,14 +820,14 @@ impl Stark {
                 revealed_base_elements[i][2],
             ]);
             debug_assert_eq!(
-                1, num_randomizer_polynomials,
+                1, self.num_randomizer_polynomials,
                 "For now number of randomizers must be 1"
             );
             let mut values: Vec<XFieldElement> = vec![randomizer];
             values.extend_from_slice(
                 &revealed_base_elements[i]
                     .iter()
-                    .skip(3 * num_randomizer_polynomials)
+                    .skip(3 * self.num_randomizer_polynomials)
                     .map(|bfe| bfe.lift())
                     .collect::<Vec<XFieldElement>>(),
             );
@@ -886,25 +877,27 @@ impl Stark {
         for (i, &index) in indices.iter().enumerate() {
             let b_domain_value = self.xfri.domain.b_domain_value(index as u32);
             // collect terms: randomizer
-            let mut terms: Vec<XFieldElement> = (0..num_randomizer_polynomials)
+            let mut terms: Vec<XFieldElement> = (0..self.num_randomizer_polynomials)
                 .map(|j| tuples[&index][j])
                 .collect();
 
             // collect terms: base
-            for j in num_randomizer_polynomials..num_randomizer_polynomials + num_base_polynomials {
+            for j in self.num_randomizer_polynomials
+                ..self.num_randomizer_polynomials + num_base_polynomials
+            {
                 terms.push(tuples[&index][j]);
                 let shift: u32 = (self.max_degree as i64
-                    - base_degree_bounds[j - num_randomizer_polynomials])
+                    - base_degree_bounds[j - self.num_randomizer_polynomials])
                     as u32;
                 terms.push(tuples[&index][j] * b_domain_value.mod_pow_u32(shift).lift());
             }
 
             // collect terms: extension
-            let extension_offset = num_randomizer_polynomials + num_base_polynomials;
+            let extension_offset = self.num_randomizer_polynomials + num_base_polynomials;
 
             assert_eq!(
                 terms.len(),
-                2 * extension_offset - num_randomizer_polynomials,
+                2 * extension_offset - self.num_randomizer_polynomials,
                 "number of terms does not match with extension offset"
             );
 
@@ -918,7 +911,7 @@ impl Stark {
             }
 
             // collect terms: quotients, quotients need to be computed
-            let mut acc_index = num_randomizer_polynomials;
+            let mut acc_index = self.num_randomizer_polynomials;
             let mut points: Vec<Vec<XFieldElement>> = vec![];
             for table in ext_table_collection.into_iter() {
                 let table_base_width = table.base_width();
@@ -943,7 +936,7 @@ impl Stark {
                 "Column count in verifier must match until end"
             );
 
-            let mut base_acc_index = num_randomizer_polynomials;
+            let mut base_acc_index = self.num_randomizer_polynomials;
             let mut ext_acc_index = extension_offset;
             for (point, table) in points.iter().zip(ext_table_collection.into_iter()) {
                 // boundary
@@ -990,7 +983,6 @@ impl Stark {
                     let quotient = if table.padded_height() == 0 {
                         XFieldElement::ring_zero()
                     } else {
-                        // TODO: This is probably wrong
                         let num = b_domain_value.lift() - table.omicron().inverse();
                         let denom = b_domain_value
                             .mod_pow_u32(table.padded_height() as u32)
