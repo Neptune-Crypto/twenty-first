@@ -22,7 +22,7 @@ pub struct BaseTable<DataPF> {
     padded_height: usize,
 
     // The number of randomizers...?
-    num_randomizers: usize,
+    num_trace_randomizers: usize,
 
     // The omicron...?
     omicron: DataPF,
@@ -43,7 +43,7 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
         base_width: usize,
         full_width: usize,
         padded_height: usize,
-        num_randomizers: usize,
+        num_trace_randomizers: usize,
         omicron: DataPF,
         generator: DataPF,
         order: usize,
@@ -53,7 +53,7 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
             base_width,
             full_width,
             padded_height,
-            num_randomizers,
+            num_trace_randomizers,
             omicron,
             generator,
             order,
@@ -67,7 +67,7 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
             self.base_width,
             self.full_width,
             self.padded_height,
-            self.num_randomizers,
+            self.num_trace_randomizers,
             self.omicron,
             self.generator,
             self.order,
@@ -84,7 +84,7 @@ impl BaseTable<BWord> {
             self.base_width,
             self.full_width,
             self.padded_height,
-            self.num_randomizers,
+            self.num_trace_randomizers,
             self.omicron.lift(),
             self.generator.lift(),
             self.order,
@@ -109,8 +109,8 @@ pub trait HasBaseTable<DataPF: PrimeField> {
         self.to_base().padded_height
     }
 
-    fn num_randomizers(&self) -> usize {
-        self.to_base().num_randomizers
+    fn num_trace_randomizers(&self) -> usize {
+        self.to_base().num_trace_randomizers
     }
 
     fn omicron(&self) -> DataPF {
@@ -165,10 +165,10 @@ where
     // Generic functions common to all tables
 
     fn interpolant_degree(&self) -> Degree {
-        let height: Degree = self.padded_height().try_into().unwrap_or(0);
-        let num_randomizers: Degree = self.num_randomizers().try_into().unwrap_or(0);
+        let padded_height: Degree = self.padded_height().try_into().unwrap_or(0);
+        let num_trace_randomizers: Degree = self.num_trace_randomizers().try_into().unwrap_or(0);
 
-        height + num_randomizers - 1
+        padded_height + num_trace_randomizers - 1
     }
 
     /// Returns the relation between the FRI domain and the omicron domain
@@ -227,7 +227,7 @@ where
         }
 
         assert!(
-            self.padded_height() >= self.num_randomizers(),
+            self.padded_height() >= self.num_trace_randomizers(),
             "Temporary restriction that number of randomizers must not exceed table height"
         );
 
@@ -236,7 +236,7 @@ where
             .map(|i| self.omicron().mod_pow_u32(i as u32))
             .collect();
 
-        let randomizer_domain: Vec<DataPF> = (0..self.num_randomizers())
+        let randomizer_domain: Vec<DataPF> = (0..self.num_trace_randomizers())
             .map(|i| omega * omicron_domain[i])
             .collect();
 
@@ -248,7 +248,7 @@ where
         for c in 0..current_width {
             let trace: Vec<DataPF> = data.iter().map(|row| row[c]).collect();
             let randomizers: Vec<DataPF> =
-                DataPF::random_elements(self.num_randomizers(), &mut rng);
+                DataPF::random_elements(self.num_trace_randomizers(), &mut rng);
             let values = vec![trace, randomizers].concat();
             assert_eq!(
                 values.len(),

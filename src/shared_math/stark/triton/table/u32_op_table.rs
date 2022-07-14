@@ -102,7 +102,7 @@ impl U32OpTable {
     pub fn new_prover(
         generator: BWord,
         order: usize,
-        num_randomizers: usize,
+        num_trace_randomizers: usize,
         matrix: Vec<Vec<BWord>>,
     ) -> Self {
         let unpadded_height = matrix.len();
@@ -114,7 +114,7 @@ impl U32OpTable {
             BASE_WIDTH,
             FULL_WIDTH,
             padded_height,
-            num_randomizers,
+            num_trace_randomizers,
             omicron,
             generator,
             order,
@@ -223,7 +223,7 @@ impl ExtU32OpTable {
     pub fn with_padded_height(
         generator: XWord,
         order: usize,
-        num_randomizers: usize,
+        num_trace_randomizers: usize,
         padded_height: usize,
     ) -> Self {
         let matrix: Vec<Vec<XWord>> = vec![];
@@ -234,7 +234,7 @@ impl ExtU32OpTable {
             BASE_WIDTH,
             FULL_WIDTH,
             padded_height,
-            num_randomizers,
+            num_trace_randomizers,
             omicron,
             generator,
             order,

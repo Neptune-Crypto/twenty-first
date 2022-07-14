@@ -70,62 +70,62 @@ impl BaseTableCollection {
     pub fn from_base_matrices(
         generator: BWord,
         order: usize,
-        num_randomizers: usize,
+        num_trace_randomizers: usize,
         base_matrices: &BaseMatrices,
     ) -> Self {
         let program_table = ProgramTable::new_prover(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             to_vec_vecs(&base_matrices.program_matrix),
         );
 
         let processor_table = ProcessorTable::new_prover(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             to_vec_vecs(&base_matrices.processor_matrix),
         );
 
         let instruction_table = InstructionTable::new_prover(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             to_vec_vecs(&base_matrices.instruction_matrix),
         );
 
         let op_stack_table = OpStackTable::new_prover(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             to_vec_vecs(&base_matrices.op_stack_matrix),
         );
 
         let ram_table = RamTable::new_prover(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             to_vec_vecs(&base_matrices.ram_matrix),
         );
 
         let jump_stack_table = JumpStackTable::new_prover(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             to_vec_vecs(&base_matrices.jump_stack_matrix),
         );
 
         let hash_table = HashTable::new_prover(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             to_vec_vecs(&base_matrices.hash_matrix),
         );
 
         let u32_op_table = U32OpTable::new_prover(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             to_vec_vecs(&base_matrices.u32_op_matrix),
         );
 
@@ -189,52 +189,64 @@ impl ExtTableCollection {
     pub fn with_padded_height(
         generator: XWord,
         order: usize,
-        num_randomizers: usize,
+        num_trace_randomizers: usize,
         max_padded_height: usize,
     ) -> Self {
         let ext_program_table = ExtProgramTable::with_padded_height(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             max_padded_height,
         );
 
         let ext_processor_table = ExtProcessorTable::with_padded_height(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             max_padded_height,
         );
 
         let ext_instruction_table = ExtInstructionTable::with_padded_height(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             max_padded_height,
         );
 
         let ext_op_stack_table = ExtOpStackTable::with_padded_height(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             max_padded_height,
         );
 
-        let ext_ram_table =
-            ExtRamTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
+        let ext_ram_table = ExtRamTable::with_padded_height(
+            generator,
+            order,
+            num_trace_randomizers,
+            max_padded_height,
+        );
 
         let ext_jump_stack_table = ExtJumpStackTable::with_padded_height(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             max_padded_height,
         );
 
-        let ext_hash_table =
-            ExtHashTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
+        let ext_hash_table = ExtHashTable::with_padded_height(
+            generator,
+            order,
+            num_trace_randomizers,
+            max_padded_height,
+        );
 
-        let ext_u32_op_table =
-            ExtU32OpTable::with_padded_height(generator, order, num_randomizers, max_padded_height);
+        let ext_u32_op_table = ExtU32OpTable::with_padded_height(
+            generator,
+            order,
+            num_trace_randomizers,
+            max_padded_height,
+        );
 
         ExtTableCollection {
             program_table: ext_program_table,
@@ -486,23 +498,28 @@ mod table_collection_tests {
 
     fn dummy_ext_table_collection() -> ExtTableCollection {
         let generator = 0.into();
-        let num_randomizers = 2;
+        let num_trace_randomizers = 2;
         let order = 1 << 32;
         let max_padded_height = 1;
 
-        ExtTableCollection::with_padded_height(generator, order, num_randomizers, max_padded_height)
+        ExtTableCollection::with_padded_height(
+            generator,
+            order,
+            num_trace_randomizers,
+            max_padded_height,
+        )
     }
 
     #[test]
     fn base_table_width_is_correct() {
         let generator = 0.into();
-        let num_randomizers = 2;
+        let num_trace_randomizers = 2;
         let order = 1 << 32;
         let base_matrices = BaseMatrices::default();
         let base_tables = BaseTableCollection::from_base_matrices(
             generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             &base_matrices,
         );
 

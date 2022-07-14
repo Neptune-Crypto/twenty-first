@@ -41,7 +41,7 @@ type StarkDigest = Vec<BFieldElement>;
 // We use a type-parameterised FriDomain to avoid duplicate `b_*()` and `x_*()` methods.
 pub struct Stark {
     padded_height: usize,
-    num_randomizers: usize,
+    num_trace_randomizers: usize,
     order: usize,
     generator: XFieldElement,
     security_level: usize,
@@ -82,7 +82,7 @@ impl Stark {
         );
 
         // TODO: Parameterise these.
-        let num_randomizers = 2;
+        let num_trace_randomizers = 2;
         let order: usize = 1 << 32;
         let smooth_generator = BWord::ring_zero()
             .get_primitive_root_of_unity(order as u64)
@@ -92,7 +92,7 @@ impl Stark {
         let empty_table_collection = ExtTableCollection::with_padded_height(
             smooth_generator.lift(),
             order,
-            num_randomizers,
+            num_trace_randomizers,
             padded_height,
         );
 
@@ -123,7 +123,7 @@ impl Stark {
 
         Stark {
             padded_height,
-            num_randomizers,
+            num_trace_randomizers,
             order,
             generator: smooth_generator.lift(),
             security_level,
@@ -139,7 +139,7 @@ impl Stark {
     pub fn prove(&self, base_matrices: BaseMatrices) -> StarkProofStream {
         let mut timer = TimingReporter::start();
 
-        let num_randomizers = 1;
+        let num_trace_randomizers = 1;
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(order as u64)
@@ -150,7 +150,7 @@ impl Stark {
         let mut base_tables = BaseTableCollection::from_base_matrices(
             smooth_generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             &base_matrices,
         );
 
@@ -174,7 +174,7 @@ impl Stark {
         let max_degree: Degree = ExtTableCollection::with_padded_height(
             smooth_generator.lift(),
             order,
-            num_randomizers,
+            num_trace_randomizers,
             padded_height,
         )
         .max_degree();
@@ -669,7 +669,7 @@ impl Stark {
         let ext_table_collection = ExtTableCollection::with_padded_height(
             self.generator,
             self.order,
-            self.num_randomizers,
+            self.num_trace_randomizers,
             self.padded_height,
         );
 
@@ -1195,7 +1195,7 @@ pub(crate) mod triton_stark_tests {
 
         assert!(err.is_none(), "simulate did not generate errors");
 
-        let num_randomizers = 2;
+        let num_trace_randomizers = 2;
         let order: usize = 1 << 32;
         let smooth_generator = BFieldElement::ring_zero()
             .get_primitive_root_of_unity(order as u64)
@@ -1205,7 +1205,7 @@ pub(crate) mod triton_stark_tests {
         let mut base_tables = BaseTableCollection::from_base_matrices(
             smooth_generator,
             order,
-            num_randomizers,
+            num_trace_randomizers,
             &base_matrices,
         );
 
