@@ -1,5 +1,5 @@
-// pub mod merkle_mountain_range;
 pub mod blake3_wrapper;
+pub mod database_vector;
 pub mod merkle_tree;
 pub mod mmr;
 pub mod mutator_set;
