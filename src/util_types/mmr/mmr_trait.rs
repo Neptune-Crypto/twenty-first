@@ -7,7 +7,11 @@ where
 {
     /// Create a new MMR instanc from a list of hash digests. The supplied digests
     /// are the leaves of the MMR.
-    fn new(digests: Vec<H::Digest>) -> Self;
+
+    // constructors cannot be part of the interface sicne the archival version requires a
+    // database which we want the caller to create, and the accumulator does not need a
+    // constructor.
+    // fn new(digests: Vec<H::Digest>) -> Self;
 
     /// Calculate a single hash digest committing to the entire MMR.
     fn bag_peaks(&self) -> H::Digest;

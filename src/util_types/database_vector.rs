@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 
 /// This is the key for the storage of the length of the vector
 const LENGTH_KEY: Vec<u8> = vec![];
+const INDEX_ZERO: u128 = 0u128;
 
-// pub struct DatabaseVector(RustyLevelDB<u128, Digest>);
 pub struct DatabaseVector<T: Serialize + DeserializeOwned> {
     db: DB,
     _type: PhantomData<T>,
@@ -26,6 +26,13 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             .expect("Deleting element must succeed");
     }
 
+    /// Return true if the database vector looks empty. Used for sanity check when creating
+    /// a new database vector.
+    fn attempt_verify_empty(&mut self) -> bool {
+        let index_bytes: Vec<u8> = bincode::serialize(&INDEX_ZERO).unwrap();
+        self.db.get(&index_bytes).is_none()
+    }
+
     pub fn is_empty(&mut self) -> bool {
         self.len() == 0
     }
@@ -35,7 +42,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         bincode::deserialize(&length_as_bytes).unwrap()
     }
 
-    /// given a database struct
+    /// given a database containing a database vector, restore it into a database vector struct
     pub fn restore(db: DB) -> Self {
         let mut ret = Self {
             _type: PhantomData,
@@ -47,12 +54,18 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         ret
     }
 
+    /// Create a new, empty database vector
     pub fn new(db: DB) -> Self {
         let mut ret = DatabaseVector {
             db,
             _type: PhantomData,
         };
+        assert!(
+            ret.attempt_verify_empty(),
+            "Database must be empty when instantiating database vector with `new`"
+        );
         ret.set_length(0);
+
         ret
     }
 
@@ -98,6 +111,11 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         let value_bytes = bincode::serialize(&value).unwrap();
         self.db.put(&index_bytes, &value_bytes).unwrap();
         self.set_length(length + 1);
+    }
+
+    /// Dispose of the vector and return the database. You should probably only use this for testing.
+    pub fn extract_db(self) -> DB {
+        self.db
     }
 }
 
