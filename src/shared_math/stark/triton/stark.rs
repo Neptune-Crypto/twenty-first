@@ -58,6 +58,7 @@ impl Stark {
         padded_height: usize,
         log_expansion_factor: usize,
         security_level: usize,
+        co_set_fri_offset: BWord,
         input_symbols: &[BWord],
         output_symbols: &[BWord],
     ) -> Self {
@@ -99,26 +100,21 @@ impl Stark {
             (other::roundup_npo2(empty_table_collection.max_degree() as u64) - 1) as i64;
         let fri_domain_length = ((max_degree as u64 + 1) * expansion_factor) as usize;
 
-        let offset = BWord::generator();
         let omega = BWord::ring_zero()
             .get_primitive_root_of_unity(fri_domain_length as u64)
             .0
             .unwrap();
 
         let bfri_domain = triton::fri_domain::FriDomain {
-            offset,
+            offset: co_set_fri_offset,
             omega,
             length: fri_domain_length as usize,
         };
 
-        let xfri_domain = triton::fri_domain::FriDomain::<XFieldElement> {
-            offset: offset.lift(),
-            omega: omega.lift(),
-            length: fri_domain_length as usize,
-        };
+        let xfri_domain = triton::fri_domain::lift_domain(&bfri_domain);
 
         let xfri = triton_xfri::Fri::new(
-            offset.lift(),
+            co_set_fri_offset.lift(),
             omega.lift(),
             fri_domain_length,
             expansion_factor as usize,
@@ -1134,6 +1130,7 @@ pub(crate) mod triton_stark_tests {
 
     fn parse_simulate_prove(
         code: &str,
+        co_set_fri_offset: BWord,
         input_symbols: &[BWord],
         output_symbols: &[BWord],
     ) -> (Stark, ProofStream<Item, RescuePrimeXlix<RP_DEFAULT_WIDTH>>) {
@@ -1160,6 +1157,7 @@ pub(crate) mod triton_stark_tests {
             padded_height,
             log_expansion_factor,
             security_level,
+            co_set_fri_offset,
             input_symbols,
             output_symbols,
         );
@@ -1353,7 +1351,9 @@ pub(crate) mod triton_stark_tests {
 
     #[test]
     fn triton_prove_verify_test() {
-        let (stark, mut proof_stream) = parse_simulate_prove(sample_programs::HALT, &[], &[]);
+        let co_set_fri_offset = BWord::generator();
+        let (stark, mut proof_stream) =
+            parse_simulate_prove(sample_programs::HALT, co_set_fri_offset, &[], &[]);
 
         println!("between prove and verify");
 
