@@ -398,7 +398,7 @@ impl Stark {
         timer: &mut TimingReporter,
         x_rand_codeword: Vec<XFieldElement>,
         base_codewords: Vec<Vec<BFieldElement>>,
-        all_ext_codewords: Vec<Vec<XFieldElement>>,
+        extension_codewords: Vec<Vec<XFieldElement>>,
         quotient_codewords: Vec<Vec<XFieldElement>>,
         weights: Vec<XFieldElement>,
         base_degree_bounds: Vec<i64>,
@@ -433,6 +433,7 @@ impl Stark {
             let base_codeword_shifted =
                 Self::shift_codeword(&fri_x_values, &base_codeword_lifted, shift);
 
+            // TODO this pattern is biscally the same thing 6 times. DRY!
             combination_codeword = combination_codeword
                 .into_par_iter()
                 .zip(base_codeword_lifted.into_par_iter())
@@ -460,79 +461,80 @@ impl Stark {
             }
         }
         timer.elapsed("...shift and collect base codewords");
-        // assert_eq!(
-        //     all_ext_codewords.len(),
-        //     num_extension_polynomials,
-        //     "The number of extension columns is equal to the number extension polynomials"
-        // );
-        for (i, (ec, edb)) in all_ext_codewords
+
+        for (idx, (extension_codeword, extension_degree_bound)) in extension_codewords
             .iter()
             .zip(extension_degree_bounds.iter())
             .enumerate()
         {
+            let shift = (self.max_degree as Degree - extension_degree_bound) as u32;
+            let extension_codeword_shifted =
+                Self::shift_codeword(&fri_x_values, extension_codeword, shift);
+
             combination_codeword = combination_codeword
                 .into_par_iter()
-                .zip(ec.par_iter())
-                .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
+                .zip(extension_codeword.into_par_iter())
+                .map(|(cc_elem, ec_elem)| cc_elem + *ec_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
-            let shift = (self.max_degree as Degree - edb) as u32;
-            let ec_shifted = Self::shift_codeword(&fri_x_values, ec, shift);
+
+            combination_codeword = combination_codeword
+                .into_par_iter()
+                .zip((&extension_codeword_shifted).into_par_iter())
+                .map(|(cc_elem, ecs_elem)| cc_elem + *ecs_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
 
             if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.xfri.domain.x_interpolate(&ec_shifted);
+                let interpolated = self.xfri.domain.x_interpolate(&extension_codeword_shifted);
                 assert!(
                     interpolated.degree() == -1
                         || interpolated.degree() == self.max_degree as isize,
-                    "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
-                    i,
+                    "The shifted ext codeword with index {} must be of maximal degree {}. Got {}.",
+                    idx,
                     self.max_degree,
                     interpolated.degree()
                 );
             }
-
-            combination_codeword = combination_codeword
-                .into_par_iter()
-                .zip(ec_shifted.into_par_iter())
-                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
-                .collect();
-            weights_counter += 1;
         }
         timer.elapsed("...shift and collect extension codewords");
-        for (_i, (qc, qdb)) in quotient_codewords
+
+        for (idx, (quotient_codeword, quotient_degree_bound)) in quotient_codewords
             .iter()
             .zip(quotient_degree_bounds.iter())
             .enumerate()
         {
+            let shift = (self.max_degree as Degree - quotient_degree_bound) as u32;
+            let qc_shifted = Self::shift_codeword(&fri_x_values, quotient_codeword, shift);
+
             combination_codeword = combination_codeword
                 .into_par_iter()
-                .zip(qc.par_iter())
+                .zip(quotient_codeword.par_iter())
                 .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
                 .collect();
             weights_counter += 1;
-            let shift = (self.max_degree as Degree - qdb) as u32;
-            let qc_shifted = Self::shift_codeword(&fri_x_values, qc, shift);
+
+            combination_codeword = combination_codeword
+                .into_par_iter()
+                .zip((&qc_shifted).into_par_iter())
+                .map(|(cc_elem, new_elem)| cc_elem + *new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
 
             if std::env::var("DEBUG").is_ok() {
                 let interpolated = self.xfri.domain.x_interpolate(&qc_shifted);
                 assert!(
                     interpolated.degree() == -1
                         || interpolated.degree() == self.max_degree as isize,
-                    "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. . Shift = {}",
-                    _i,
+                    "The shifted quotient codeword with index {} must be of maximal degree {}. \
+                    Got {}. Predicted degree of unshifted codeword: {}. Shift = {}.",
+                    idx,
                     self.max_degree,
                     interpolated.degree(),
-                    qdb,
+                    quotient_degree_bound,
                     shift
                 );
             }
-
-            combination_codeword = combination_codeword
-                .into_par_iter()
-                .zip(qc_shifted.into_par_iter())
-                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
-                .collect();
-            weights_counter += 1;
         }
         combination_codeword
     }
