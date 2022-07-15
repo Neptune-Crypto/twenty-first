@@ -113,7 +113,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         }
 
         self.db
-            .write(batch_write, false)
+            .write(batch_write, true)
             .expect("Failed to batch-write to database");
     }
 

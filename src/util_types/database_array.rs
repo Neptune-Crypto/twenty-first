@@ -43,7 +43,7 @@ impl<const N: u128, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, 
         }
 
         self.db
-            .write(batch_write, false)
+            .write(batch_write, true)
             .expect("Failed to batch-write to database");
     }
 
