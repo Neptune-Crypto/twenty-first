@@ -95,10 +95,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     }
 
     pub fn batch_set(&mut self, indices_and_vals: &[(u128, T)]) {
-        let indices: Vec<u128> = indices_and_vals
-            .into_iter()
-            .map(|(index, _)| *index)
-            .collect();
+        let indices: Vec<u128> = indices_and_vals.iter().map(|(index, _)| *index).collect();
         let length = self.len();
         assert!(
             indices.iter().all(|index| *index < length),
@@ -106,7 +103,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             indices
         );
         let mut batch_write = WriteBatch::new();
-        for (index, val) in indices_and_vals.into_iter() {
+        for (index, val) in indices_and_vals.iter() {
             let index_bytes: Vec<u8> = bincode::serialize(index).unwrap();
             let value_bytes: Vec<u8> = bincode::serialize(val).unwrap();
             batch_write.put(&index_bytes, &value_bytes);

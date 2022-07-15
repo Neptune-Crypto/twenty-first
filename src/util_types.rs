@@ -1,4 +1,5 @@
 pub mod blake3_wrapper;
+pub mod database_array;
 pub mod database_vector;
 pub mod merkle_tree;
 pub mod mmr;
