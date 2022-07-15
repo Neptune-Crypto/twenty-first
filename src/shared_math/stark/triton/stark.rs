@@ -6,10 +6,9 @@ use super::table::base_matrix::BaseMatrices;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other;
-use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::rescue_prime_xlix::{
-    neptune_params, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
+    self, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
 };
 use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
 use crate::shared_math::stark::triton::arguments::evaluation_argument::verify_evaluation_argument;
@@ -27,6 +26,7 @@ use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::Itertools;
+use rand::{thread_rng, Rng};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -34,7 +34,6 @@ use rayon::iter::{
 type BWord = BFieldElement;
 type XWord = XFieldElement;
 type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
-type StarkDigest = Vec<BFieldElement>;
 
 // We use a type-parameterised FriDomain to avoid duplicate `b_*()` and `x_*()` methods.
 pub struct Stark {
@@ -140,59 +139,41 @@ impl Stark {
     pub fn prove(&self, base_matrices: BaseMatrices) -> StarkProofStream {
         let mut timer = TimingReporter::start();
 
-        let (base_tables, padded_height) = self.get_padded_base_tables(&base_matrices);
-
+        let base_tables = self.get_padded_base_tables(&base_matrices);
         timer.elapsed("pad");
 
-        // FIXME: We calculate max_degree on ExtTableCollection because we don't want to
-        // rely on base_transition_constraints(); max_degree() is the only caller that
-        // depends on this function being present. Alternatively, either calculate max_degree
-        // using ext_transition_constraints(), hardcode it, or calculate it some third way.
-        let max_degree: Degree = ExtTableCollection::with_padded_height(
-            self.generator.lift(),
-            self.order,
-            self.num_trace_randomizers,
-            padded_height,
-        )
-        .max_degree();
-
-        let (x_rand_codeword, b_rand_codewords) = self.get_randomizer_codewords(max_degree);
-
+        let (x_rand_codeword, b_rand_codewords) = self.get_randomizer_codewords();
         timer.elapsed("randomizer_codewords");
 
         let base_codewords = base_tables.all_base_codewords(&self.bfri_domain);
         let all_base_codewords = vec![b_rand_codewords, base_codewords.clone()].concat();
-
         timer.elapsed("get_all_base_codewords");
 
         let transposed_base_codewords = Self::transpose_codewords(&all_base_codewords);
-
         timer.elapsed("transposed_base_codewords");
 
-        let hasher = neptune_params();
-        let base_merkle_tree = Self::get_merkle_tree(&transposed_base_codewords, &hasher);
+        let hasher = rescue_prime_xlix::neptune_params();
+        let base_merkle_tree = Self::get_merkle_tree(&hasher, &transposed_base_codewords);
         let base_merkle_tree_root = base_merkle_tree.get_root();
-
         timer.elapsed("base_merkle_tree");
 
         // Commit to base codewords
         let mut proof_stream = StarkProofStream::default();
         proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root));
-
         timer.elapsed("proof_stream.enqueue");
 
-        let seed = proof_stream.prover_fiat_shamir();
-
+        let challenges_seed = proof_stream.prover_fiat_shamir();
         timer.elapsed("prover_fiat_shamir");
 
         let challenge_weights =
-            Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL_CHALLENGES);
+            hasher.sample_n_weights(&challenges_seed, AllChallenges::TOTAL_CHALLENGES);
         let all_challenges = AllChallenges::create_challenges(&challenge_weights);
+        timer.elapsed("challenges");
 
-        timer.elapsed("sample_weights");
-
-        let initial_weights = Self::sample_weights(&hasher, &seed, AllEndpoints::TOTAL_ENDPOINTS);
-        let all_initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
+        let initials_seed = Self::get_initials_seed();
+        let initial_weights =
+            hasher.sample_n_weights(&initials_seed, AllEndpoints::TOTAL_ENDPOINTS);
+        let all_initials = AllEndpoints::create_initials(&initial_weights);
 
         timer.elapsed("initials");
 
@@ -208,15 +189,13 @@ impl Stark {
         let transposed_extension_codewords = Self::transpose_codewords(&all_ext_codewords);
 
         let extension_tree =
-            Self::get_extension_merkle_tree(&transposed_extension_codewords, &hasher);
+            Self::get_extension_merkle_tree(&hasher, &transposed_extension_codewords);
 
         proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root()));
         proof_stream.enqueue(&Item::Terminals(all_terminals.clone()));
-
         timer.elapsed("extension_tree");
 
         let extension_degree_bounds: Vec<Degree> = ext_tables.get_all_extension_degree_bounds();
-
         timer.elapsed("get_all_extension_degree_bounds");
 
         // XXX: Culprit!
@@ -225,13 +204,11 @@ impl Stark {
             &all_challenges,
             &all_terminals,
         );
-
         timer.elapsed("all_quotients");
 
         // XXX: Culprit!
         let mut quotient_degree_bounds =
             ext_codeword_tables.get_all_quotient_degree_bounds(&all_challenges, &all_terminals);
-
         timer.elapsed("all_quotient_degree_bounds");
 
         // Prove equal initial values for the permutation-extension column pairs
@@ -240,20 +217,20 @@ impl Stark {
             quotient_degree_bounds.push(pa.quotient_degree_bound(&ext_codeword_tables));
         }
 
-        // Calculate `num_base_polynomials` and `num_extension_polynomials` for asserting
+        // Calculate `num_base_polynomials`, `num_extension_polynomials`, `num_quotient_polynomials` for asserting
         let num_base_polynomials: usize = base_tables
             .into_iter()
             .map(|table| table.base_width())
             .sum();
+        assert_eq!(base_codewords.len(), num_base_polynomials);
 
         let num_extension_polynomials: usize = ext_tables
             .into_iter()
             .map(|ext_table| ext_table.full_width() - ext_table.base_width())
             .sum();
 
-        timer.elapsed("num_(base+extension)_polynomials");
-
         let num_quotient_polynomials = quotient_degree_bounds.len();
+        assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
 
         let base_degree_bounds = base_tables.get_all_base_degree_bounds();
 
@@ -269,149 +246,20 @@ impl Stark {
                 + num_extension_polynomials
                 + num_quotient_polynomials
                 + 1000); // FIXME: How many weights do we actually need?
-        let weights = Self::sample_weights(&hasher, &weights_seed, weights_count);
-
+        let weights = hasher.sample_n_weights(&weights_seed, weights_count);
         timer.elapsed("sample_weights");
 
-        let mut weights_counter = 0;
-        let mut combination_codeword: Vec<XFieldElement> = x_rand_codeword
-            .into_iter()
-            .map(|elem| elem * weights[weights_counter])
-            .collect();
-        weights_counter += 1;
-
-        assert_eq!(base_codewords.len(), num_base_polynomials);
-        let fri_x_values: Vec<BFieldElement> = self.xfri.domain.b_domain_values();
-
-        timer.elapsed("b_domain_values");
-
-        for (i, (bc, bdb)) in base_codewords
-            .iter()
-            .zip(base_degree_bounds.iter())
-            .enumerate()
-        {
-            let bc_lifted: Vec<XFieldElement> = bc.iter().map(|bfe| bfe.lift()).collect();
-
-            combination_codeword = combination_codeword
-                .into_par_iter()
-                .zip(bc_lifted.into_par_iter())
-                .map(|(c, bcl)| c + bcl * weights[weights_counter])
-                .collect();
-            weights_counter += 1;
-            let shift = (max_degree as Degree - bdb) as u32;
-            let bc_shifted: Vec<XFieldElement> = fri_x_values
-                .par_iter()
-                .zip(bc.par_iter())
-                .map(|(x, &bce)| (bce * x.mod_pow_u32(shift)).lift())
-                .collect();
-
-            if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.xfri.domain.x_interpolate(&bc_shifted);
-                assert!(
-                    interpolated.degree() == -1 || interpolated.degree() == max_degree as isize,
-                    "The shifted base codeword with index {} must be of maximal degree {}. Got {}.",
-                    i,
-                    max_degree,
-                    interpolated.degree()
-                );
-            }
-
-            combination_codeword = combination_codeword
-                .into_par_iter()
-                .zip(bc_shifted.into_par_iter())
-                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
-                .collect();
-            weights_counter += 1;
-        }
-
-        timer.elapsed("...shift and collect base codewords");
-
-        // assert_eq!(
-        //     all_ext_codewords.len(),
-        //     num_extension_polynomials,
-        //     "The number of extension columns is equal to the number extension polynomials"
-        // );
-
-        for (i, (ec, edb)) in all_ext_codewords
-            .iter()
-            .zip(extension_degree_bounds.iter())
-            .enumerate()
-        {
-            combination_codeword = combination_codeword
-                .into_par_iter()
-                .zip(ec.par_iter())
-                .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
-                .collect();
-            weights_counter += 1;
-            let shift = (max_degree as Degree - edb) as u32;
-            let ec_shifted: Vec<XFieldElement> = fri_x_values
-                .par_iter()
-                .zip(ec.into_par_iter())
-                .map(|(x, &ece)| ece * x.mod_pow_u32(shift).lift())
-                .collect();
-
-            if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.xfri.domain.x_interpolate(&ec_shifted);
-                assert!(
-                    interpolated.degree() == -1
-                        || interpolated.degree() == max_degree as isize,
-                    "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
-                    i,
-                    max_degree,
-                    interpolated.degree()
-                );
-            }
-
-            combination_codeword = combination_codeword
-                .into_par_iter()
-                .zip(ec_shifted.into_par_iter())
-                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
-                .collect();
-            weights_counter += 1;
-        }
-        timer.elapsed("...shift and collect extension codewords");
-
-        assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
-        for (_i, (qc, qdb)) in quotient_codewords
-            .iter()
-            .zip(quotient_degree_bounds.iter())
-            .enumerate()
-        {
-            combination_codeword = combination_codeword
-                .into_par_iter()
-                .zip(qc.par_iter())
-                .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
-                .collect();
-            weights_counter += 1;
-            let shift = (max_degree as Degree - qdb) as u32;
-            let qc_shifted: Vec<XFieldElement> = fri_x_values
-                .par_iter()
-                .zip(qc.into_par_iter())
-                .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift())
-                .collect();
-
-            // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
-            if std::env::var("DEBUG").is_ok() {
-                let interpolated = self.xfri.domain.x_interpolate(&qc_shifted);
-                assert!(
-                    interpolated.degree() == -1
-                        || interpolated.degree() == max_degree as isize,
-                    "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. . Shift = {}",
-                    _i,
-                    max_degree,
-                    interpolated.degree(),
-                    qdb,
-                    shift
-                );
-            }
-
-            combination_codeword = combination_codeword
-                .into_par_iter()
-                .zip(qc_shifted.into_par_iter())
-                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
-                .collect();
-            weights_counter += 1;
-        }
+        let combination_codeword: Vec<XFieldElement> = self.create_combination_codeword(
+            &mut timer,
+            x_rand_codeword,
+            base_codewords,
+            all_ext_codewords,
+            quotient_codewords,
+            weights,
+            base_degree_bounds,
+            extension_degree_bounds,
+            quotient_degree_bounds,
+        );
 
         timer.elapsed("...shift and collect quotient codewords");
 
@@ -533,9 +381,177 @@ impl Stark {
         proof_stream
     }
 
+    fn get_initials_seed() -> Vec<BFieldElement> {
+        let mut rng = thread_rng();
+        let initials_seed_u64: [u64; 12] = rng.gen();
+        let initials_seed: Vec<BFieldElement> = initials_seed_u64
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect();
+        initials_seed
+    }
+
+    // TODO try to reduce the number of arguments
+    #[allow(clippy::too_many_arguments)]
+    fn create_combination_codeword(
+        &self,
+        timer: &mut TimingReporter,
+        x_rand_codeword: Vec<XFieldElement>,
+        base_codewords: Vec<Vec<BFieldElement>>,
+        all_ext_codewords: Vec<Vec<XFieldElement>>,
+        quotient_codewords: Vec<Vec<XFieldElement>>,
+        weights: Vec<XFieldElement>,
+        base_degree_bounds: Vec<i64>,
+        extension_degree_bounds: Vec<i64>,
+        quotient_degree_bounds: Vec<i64>,
+    ) -> Vec<XFieldElement> {
+        let mut weights_counter = 0;
+        let mut combination_codeword: Vec<XFieldElement> = x_rand_codeword
+            .into_iter()
+            .map(|elem| elem * weights[weights_counter])
+            .collect();
+
+        weights_counter += 1;
+
+        // TODO don't keep the entire domain's values in memory, create them lazily when needed
+        let fri_x_values = self
+            .xfri
+            .domain
+            .b_domain_values()
+            .into_iter()
+            .map(|bfe| bfe.lift())
+            .collect_vec();
+        timer.elapsed("x_domain_values");
+
+        for (idx, (base_codeword, base_codeword_degree_bound)) in base_codewords
+            .iter()
+            .zip(base_degree_bounds.iter())
+            .enumerate()
+        {
+            let shift = (self.max_degree as Degree - base_codeword_degree_bound) as u32;
+            let base_codeword_lifted = base_codeword.iter().map(|bfe| bfe.lift()).collect_vec();
+            let base_codeword_shifted =
+                Self::shift_codeword(&fri_x_values, &base_codeword_lifted, shift);
+
+            combination_codeword = combination_codeword
+                .into_par_iter()
+                .zip(base_codeword_lifted.into_par_iter())
+                .map(|(cc_elem, bcl_elem)| cc_elem + bcl_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
+
+            combination_codeword = combination_codeword
+                .into_par_iter()
+                .zip((&base_codeword_shifted).into_par_iter())
+                .map(|(cc_elem, bcs_elem)| cc_elem + *bcs_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
+
+            if std::env::var("DEBUG").is_ok() {
+                let interpolated = self.xfri.domain.x_interpolate(&base_codeword_shifted);
+                assert!(
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted base codeword with index {} must be of maximal degree {}. Got {}.",
+                    idx,
+                    self.max_degree,
+                    interpolated.degree()
+                );
+            }
+        }
+        timer.elapsed("...shift and collect base codewords");
+        // assert_eq!(
+        //     all_ext_codewords.len(),
+        //     num_extension_polynomials,
+        //     "The number of extension columns is equal to the number extension polynomials"
+        // );
+        for (i, (ec, edb)) in all_ext_codewords
+            .iter()
+            .zip(extension_degree_bounds.iter())
+            .enumerate()
+        {
+            combination_codeword = combination_codeword
+                .into_par_iter()
+                .zip(ec.par_iter())
+                .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
+            let shift = (self.max_degree as Degree - edb) as u32;
+            let ec_shifted = Self::shift_codeword(&fri_x_values, ec, shift);
+
+            if std::env::var("DEBUG").is_ok() {
+                let interpolated = self.xfri.domain.x_interpolate(&ec_shifted);
+                assert!(
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted extension codeword with index {} must be of maximal degree {}. Got {}.",
+                    i,
+                    self.max_degree,
+                    interpolated.degree()
+                );
+            }
+
+            combination_codeword = combination_codeword
+                .into_par_iter()
+                .zip(ec_shifted.into_par_iter())
+                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
+        }
+        timer.elapsed("...shift and collect extension codewords");
+        for (_i, (qc, qdb)) in quotient_codewords
+            .iter()
+            .zip(quotient_degree_bounds.iter())
+            .enumerate()
+        {
+            combination_codeword = combination_codeword
+                .into_par_iter()
+                .zip(qc.par_iter())
+                .map(|(c, new_elem)| c + *new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
+            let shift = (self.max_degree as Degree - qdb) as u32;
+            let qc_shifted = Self::shift_codeword(&fri_x_values, qc, shift);
+
+            if std::env::var("DEBUG").is_ok() {
+                let interpolated = self.xfri.domain.x_interpolate(&qc_shifted);
+                assert!(
+                    interpolated.degree() == -1
+                        || interpolated.degree() == self.max_degree as isize,
+                    "The shifted quotient codeword with index {} must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: {}. . Shift = {}",
+                    _i,
+                    self.max_degree,
+                    interpolated.degree(),
+                    qdb,
+                    shift
+                );
+            }
+
+            combination_codeword = combination_codeword
+                .into_par_iter()
+                .zip(qc_shifted.into_par_iter())
+                .map(|(c, new_elem)| c + new_elem * weights[weights_counter])
+                .collect();
+            weights_counter += 1;
+        }
+        combination_codeword
+    }
+
+    fn shift_codeword(
+        fri_x_values: &Vec<XFieldElement>,
+        codeword: &Vec<XFieldElement>,
+        shift: u32,
+    ) -> Vec<XFieldElement> {
+        fri_x_values
+            .par_iter()
+            .zip(codeword.par_iter())
+            .map(|(x, &codeword_element)| (codeword_element * x.mod_pow_u32(shift)))
+            .collect()
+    }
+
     fn get_extension_merkle_tree(
-        transposed_extension_codewords: &Vec<Vec<XWord>>,
         hasher: &RescuePrimeXlix<16>,
+        transposed_extension_codewords: &Vec<Vec<XWord>>,
     ) -> MerkleTree<StarkHasher> {
         let mut extension_codeword_digests_by_index =
             Vec::with_capacity(transposed_extension_codewords.len());
@@ -568,8 +584,8 @@ impl Stark {
     }
 
     fn get_merkle_tree(
-        codewords: &Vec<Vec<BWord>>,
         hasher: &RescuePrimeXlix<RP_DEFAULT_WIDTH>,
+        codewords: &Vec<Vec<BWord>>,
     ) -> MerkleTree<StarkHasher> {
         let mut codeword_digests_by_index = Vec::with_capacity(codewords.len());
         codewords
@@ -600,29 +616,21 @@ impl Stark {
             .collect()
     }
 
-    fn get_padded_base_tables(&self, base_matrices: &BaseMatrices) -> (BaseTableCollection, usize) {
+    fn get_padded_base_tables(&self, base_matrices: &BaseMatrices) -> BaseTableCollection {
         let mut base_tables = BaseTableCollection::from_base_matrices(
             self.generator,
             self.order,
             self.num_trace_randomizers,
             base_matrices,
         );
-
-        let unpadded_height = (&base_tables)
-            .into_iter()
-            .map(|table| table.data().len())
-            .max()
-            .unwrap_or(0);
-        let padded_height = roundup_npo2(unpadded_height as u64) as usize;
-
         base_tables.pad();
-
-        (base_tables, padded_height)
+        base_tables
     }
 
-    fn get_randomizer_codewords(&self, max_degree: Degree) -> (Vec<XWord>, Vec<Vec<BWord>>) {
+    fn get_randomizer_codewords(&self) -> (Vec<XWord>, Vec<Vec<BWord>>) {
         let mut rng = rand::thread_rng();
-        let randomizer_coefficients = XWord::random_elements(max_degree as usize + 1, &mut rng);
+        let randomizer_coefficients =
+            XWord::random_elements(self.max_degree as usize + 1, &mut rng);
         let randomizer_polynomial = Polynomial::new(randomizer_coefficients);
 
         let x_randomizer_codeword = self.xfri.domain.x_evaluate(&randomizer_polynomial);
@@ -645,10 +653,10 @@ impl Stark {
 
         timer.elapsed("verifier_fiat_shamir");
         // Get coefficients for table extension
-        let challenge_weights: [XFieldElement; AllChallenges::TOTAL_CHALLENGES] =
-            Self::sample_weights(&hasher, &seed, AllChallenges::TOTAL_CHALLENGES)
-                .try_into()
-                .unwrap();
+        let challenge_weights: [XFieldElement; AllChallenges::TOTAL_CHALLENGES] = hasher
+            .sample_n_weights(&seed, AllChallenges::TOTAL_CHALLENGES)
+            .try_into()
+            .unwrap();
         let all_challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
 
         let extension_tree_merkle_root: Vec<BFieldElement> =
@@ -695,8 +703,7 @@ impl Stark {
             + 2 * num_extension_polynomials
             + 2 * num_quotient_polynomials
             + 2 * num_difference_quotients;
-        let weights: Vec<XFieldElement> =
-            Self::sample_weights(&hasher, &weights_seed, weights_count);
+        let weights: Vec<XFieldElement> = hasher.sample_n_weights(&weights_seed, weights_count);
         timer.elapsed("Calculated weights");
 
         let combination_root: Vec<BFieldElement> = proof_stream.dequeue()?.as_merkle_root()?;
@@ -1076,24 +1083,6 @@ impl Stark {
 
         Ok(true)
     }
-
-    fn sample_weights(
-        hasher: &StarkHasher,
-        seed: &StarkDigest,
-        count: usize,
-    ) -> Vec<XFieldElement> {
-        hasher
-            .get_n_hash_rounds(seed, (count + 1) / 2)
-            .iter()
-            .flat_map(|digest| {
-                vec![
-                    XFieldElement::new([digest[0], digest[1], digest[2]]),
-                    XFieldElement::new([digest[3], digest[4], digest[5]]),
-                ]
-            })
-            .take(count)
-            .collect()
-    }
 }
 
 #[cfg(test)]
@@ -1105,17 +1094,17 @@ pub(crate) mod triton_stark_tests {
     use crate::shared_math::stark::triton::stdio::VecStream;
     use crate::shared_math::stark::triton::vm::Program;
     use crate::shared_math::traits::PrimeField;
+    use crate::util_types::proof_stream_typed::ProofStream;
 
     pub(crate) fn dummy_challenges_initials() -> (AllChallenges, AllEndpoints) {
         let hasher = StarkHasher::new();
         let mock_seed = hasher.hash(&[], DIGEST_LEN);
 
         let challenge_weights =
-            Stark::sample_weights(&hasher, &mock_seed, AllChallenges::TOTAL_CHALLENGES);
+            hasher.sample_n_weights(&mock_seed, AllChallenges::TOTAL_CHALLENGES);
         let dummy_challenges: AllChallenges = AllChallenges::create_challenges(&challenge_weights);
 
-        let initial_weights =
-            Stark::sample_weights(&hasher, &mock_seed, AllEndpoints::TOTAL_ENDPOINTS);
+        let initial_weights = hasher.sample_n_weights(&mock_seed, AllEndpoints::TOTAL_ENDPOINTS);
         let dummy_initials: AllEndpoints = AllEndpoints::create_initials(&initial_weights);
 
         (dummy_challenges, dummy_initials)
@@ -1136,7 +1125,7 @@ pub(crate) mod triton_stark_tests {
         let mut stdin = VecStream::new_bwords(input_symbols);
         let mut secret_in = VecStream::new_bwords(&[]);
         let mut stdout = VecStream::new_bwords(output_symbols);
-        let rescue_prime = neptune_params();
+        let rescue_prime = rescue_prime_xlix::neptune_params();
 
         let (base_matrices, err) =
             program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
@@ -1178,7 +1167,7 @@ pub(crate) mod triton_stark_tests {
 
         let mut _rng = rand::thread_rng();
         let mut secret_in = VecStream::new_bwords(&[]);
-        let rescue_prime = neptune_params();
+        let rescue_prime = rescue_prime_xlix::neptune_params();
 
         let (base_matrices, err) = program.simulate(stdin, &mut secret_in, stdout, &rescue_prime);
 

@@ -1,8 +1,3 @@
-use itertools::Itertools;
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-};
-
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::other::{log_2_ceil, log_2_floor};
@@ -14,6 +9,10 @@ use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use itertools::Itertools;
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
@@ -500,7 +499,7 @@ where
                     )
                 })
                 .collect();
-            timer.elapsed(&format!("Computed colinear c-values for current round equal to a-values for next round ({})", r + 1 ));
+            timer.elapsed(&format!("Computed colinear c-values for current round equal to a-values for next round ({})", r + 1));
 
             // Notice that next rounds "A"s correspond to current rounds "C":
             a_indices = c_indices;
