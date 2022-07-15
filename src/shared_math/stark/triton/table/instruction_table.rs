@@ -4,7 +4,6 @@ use super::extension_table::ExtensionTable;
 use super::table_column::InstructionTableColumn::{self, *};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -57,14 +56,11 @@ impl Table<BWord> for InstructionTable {
         "InstructionTable".to_string()
     }
 
-    fn pad(&mut self) {
-        let data = self.mut_data();
-        while !data.is_empty() && !other::is_power_of_two(data.len()) {
-            let mut padding_row = data.last().unwrap().clone();
-            // address keeps increasing
-            padding_row[InstructionTableColumn::Address as usize] += 1.into();
-            data.push(padding_row);
-        }
+    fn get_padding_row(&self) -> Vec<BWord> {
+        let mut padding_row = self.data().last().unwrap().clone();
+        // address keeps increasing
+        padding_row[InstructionTableColumn::Address as usize] += 1.into();
+        padding_row
     }
 }
 
@@ -73,7 +69,7 @@ impl Table<XFieldElement> for ExtInstructionTable {
         "ExtInstructionTable".to_string()
     }
 
-    fn pad(&mut self) {
+    fn get_padding_row(&self) -> Vec<XFieldElement> {
         panic!("Extension tables don't get padded");
     }
 }
@@ -135,7 +131,7 @@ impl InstructionTable {
         matrix: Vec<Vec<BWord>>,
     ) -> Self {
         let unpadded_height = matrix.len();
-        let padded_height = base_table::pad_height(unpadded_height);
+        let padded_height = base_table::pad_height(unpadded_height, num_trace_randomizers);
 
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);

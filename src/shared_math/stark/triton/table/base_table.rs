@@ -6,6 +6,7 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{GetRandomElements, PrimeField};
 use crate::shared_math::x_field_element::XFieldElement;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use std::cmp::max;
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -143,11 +144,11 @@ pub fn derive_omicron<DataPF: PrimeField>(padded_height: u64, dummy: DataPF) -> 
     dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
 }
 
-pub fn pad_height(height: usize) -> usize {
+pub fn pad_height(height: usize, num_trace_randomizers: usize) -> usize {
     if height == 0 {
         0
     } else {
-        roundup_npo2(height as u64) as usize
+        max(roundup_npo2(height as u64) as usize, num_trace_randomizers)
     }
 }
 
@@ -160,9 +161,16 @@ where
 
     fn name(&self) -> String;
 
-    fn pad(&mut self);
+    fn get_padding_row(&self) -> Vec<DataPF>;
 
     // Generic functions common to all tables
+
+    fn pad(&mut self) {
+        while self.data().len() != pad_height(self.data().len(), self.num_trace_randomizers()) {
+            let padding_row = self.get_padding_row();
+            self.mut_data().push(padding_row);
+        }
+    }
 
     fn interpolant_degree(&self) -> Degree {
         let padded_height: Degree = self.padded_height().try_into().unwrap_or(0);
@@ -228,7 +236,7 @@ where
 
         assert!(
             self.padded_height() >= self.num_trace_randomizers(),
-            "Number of randomizers must not exceed table height. \
+            "Number of trace randomizers must not exceed padded table height. \
             {} height: {} Num trace randomizers: {}",
             self.name(),
             self.padded_height(),
@@ -278,13 +286,14 @@ mod test_base_table {
 
     #[ignore]
     #[test]
-    /// padding should be idempotent.
+    /// padding should be idempotent if number of trace randomizers is <= 1
     fn pad_height_test() {
-        assert_eq!(0, pad_height(0));
+        let num_trace_randomizers = 1;
+        assert_eq!(0, pad_height(0, num_trace_randomizers));
         for x in 1..=1025 {
-            let padded_x = pad_height(x);
+            let padded_x = pad_height(x, num_trace_randomizers);
             assert_eq!(other::roundup_npo2(x as u64) as usize, padded_x);
-            assert_eq!(padded_x, pad_height(padded_x))
+            assert_eq!(padded_x, pad_height(padded_x, num_trace_randomizers))
         }
     }
 }

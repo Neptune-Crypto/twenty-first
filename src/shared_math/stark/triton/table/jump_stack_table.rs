@@ -4,7 +4,6 @@ use super::extension_table::ExtensionTable;
 use super::table_column::JumpStackTableColumn::*;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::other;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::instruction::Instruction;
 use crate::shared_math::x_field_element::XFieldElement;
@@ -58,14 +57,11 @@ impl Table<BWord> for JumpStackTable {
         "JumpStackTable".to_string()
     }
 
-    fn pad(&mut self) {
-        let data = self.mut_data();
-        while !data.is_empty() && !other::is_power_of_two(data.len()) {
-            let mut padding_row = data.last().unwrap().clone();
-            // add same clk padding as in processor table
-            padding_row[CLK as usize] = (data.len() as u32).into();
-            data.push(padding_row);
-        }
+    fn get_padding_row(&self) -> Vec<BWord> {
+        let mut padding_row = self.data().last().unwrap().clone();
+        // add same clk padding as in processor table
+        padding_row[CLK as usize] = (self.data().len() as u32).into();
+        padding_row
     }
 }
 
@@ -74,7 +70,7 @@ impl Table<XFieldElement> for ExtJumpStackTable {
         "ExtJumpStackTable".to_string()
     }
 
-    fn pad(&mut self) {
+    fn get_padding_row(&self) -> Vec<XFieldElement> {
         panic!("Extension tables don't get padded");
     }
 }
@@ -181,7 +177,7 @@ impl JumpStackTable {
         matrix: Vec<Vec<BWord>>,
     ) -> Self {
         let unpadded_height = matrix.len();
-        let padded_height = base_table::pad_height(unpadded_height);
+        let padded_height = base_table::pad_height(unpadded_height, num_trace_randomizers);
 
         let dummy = generator;
         let omicron = base_table::derive_omicron(padded_height as u64, dummy);
