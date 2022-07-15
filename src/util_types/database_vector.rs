@@ -1,4 +1,4 @@
-use rusty_leveldb::DB;
+use rusty_leveldb::{WriteBatch, DB};
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
@@ -60,6 +60,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             db,
             _type: PhantomData,
         };
+        // TODO: It might be possible to check this more rigorously using a DBIterator
         assert!(
             ret.attempt_verify_empty(),
             "Database must be empty when instantiating database vector with `new`"
@@ -91,6 +92,29 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
         let value_bytes: Vec<u8> = bincode::serialize(&value).unwrap();
         self.db.put(&index_bytes, &value_bytes).unwrap();
+    }
+
+    pub fn batch_set(&mut self, indices_and_vals: &[(u128, T)]) {
+        let indices: Vec<u128> = indices_and_vals
+            .into_iter()
+            .map(|(index, _)| *index)
+            .collect();
+        let length = self.len();
+        assert!(
+            indices.iter().all(|index| *index < length),
+            "All indices must be lower than length of array. Got: {:?}",
+            indices
+        );
+        let mut batch_write = WriteBatch::new();
+        for (index, val) in indices_and_vals.into_iter() {
+            let index_bytes: Vec<u8> = bincode::serialize(index).unwrap();
+            let value_bytes: Vec<u8> = bincode::serialize(val).unwrap();
+            batch_write.put(&index_bytes, &value_bytes);
+        }
+
+        self.db
+            .write(batch_write, false)
+            .expect("Failed to batch-write to database");
     }
 
     pub fn pop(&mut self) -> Option<T> {
@@ -154,6 +178,23 @@ mod database_vector_tests {
         assert_eq!(Some(14442), db_vector.pop());
         assert_eq!(0, db_vector.len());
         assert!(db_vector.is_empty());
+    }
+
+    #[test]
+    fn batch_set_test() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("mydatabase", opt).unwrap();
+        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        for _ in 0..100 {
+            db_vector.push(17);
+        }
+
+        // Batch-write and verify that the values are set correctly
+        db_vector.batch_set(&vec![(40, 4040), (41, 4141), (44, 4444)]);
+        assert_eq!(4040, db_vector.get(40));
+        assert_eq!(4141, db_vector.get(41));
+        assert_eq!(4444, db_vector.get(44));
+        assert_eq!(17, db_vector.get(39));
     }
 
     #[test]
