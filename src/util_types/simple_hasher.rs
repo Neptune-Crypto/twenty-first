@@ -311,14 +311,19 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
 }
 
 impl RescuePrimeXlix<RP_DEFAULT_WIDTH> {
-    // FIXME: This function cannot live on the trait because it assumes relation
-    // between length of digest (6) and size of weight (3).
+    /// FIXME: This function cannot live on the trait because it assumes
+    /// relation between length of digest (6) and size (3) and type (XFE)
+    /// of weight.
     pub fn sample_n_weights(
         &self,
         seed: &<RescuePrimeXlix<RP_DEFAULT_WIDTH> as Hasher>::Digest,
         count: usize,
     ) -> Vec<XFieldElement> {
-        // For
+        // To generate `count` XFieldElements, generate `count / 2` digests.
+        // When `count` is odd, generate `(count + 1) / 2` digests in order
+        // to generate enough BFieldElements (rather one XFieldElement too
+        // many than one too few). This can be done nicer when revisiting
+        // the `simple_hasher::Hasher` interface design.
         self.get_n_hash_rounds(seed, (count + 1) / 2)
             .iter()
             .flat_map(|digest| {
