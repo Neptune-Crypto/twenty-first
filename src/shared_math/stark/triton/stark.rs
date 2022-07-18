@@ -379,7 +379,7 @@ impl Stark {
 
     fn get_initials_seed() -> Vec<BFieldElement> {
         let mut rng = thread_rng();
-        let initials_seed_u64: [u64; 12] = rng.gen();
+        let initials_seed_u64: [u64; RP_DEFAULT_OUTPUT_SIZE] = rng.gen();
         let initials_seed: Vec<BFieldElement> = initials_seed_u64
             .into_iter()
             .map(BFieldElement::new)
