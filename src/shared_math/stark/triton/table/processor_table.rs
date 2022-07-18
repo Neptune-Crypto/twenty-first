@@ -2565,6 +2565,28 @@ mod constraint_polynomial_tests {
     }
 
     #[test]
+    fn transition_constraints_for_instruction_pop_test() {
+        let test_rows = [get_test_row_from_source_code("push 1 pop halt", 1)];
+        test_constraints_for_rows_with_debug_info(
+            Pop,
+            &test_rows,
+            &[ST0, ST1, ST2],
+            &[ST0, ST1, ST2],
+        );
+    }
+
+    #[test]
+    fn transition_constraints_for_instruction_push_test() {
+        let test_rows = [get_test_row_from_source_code("push 1 halt", 0)];
+        test_constraints_for_rows_with_debug_info(
+            Push(1.into()),
+            &test_rows,
+            &[ST0, ST1, ST2],
+            &[ST0, ST1, ST2],
+        );
+    }
+
+    #[test]
     fn transition_constraints_for_instruction_dup_test() {
         let test_rows = [get_test_row_from_source_code("push 1 dup0 halt", 1)];
         test_constraints_for_rows_with_debug_info(
