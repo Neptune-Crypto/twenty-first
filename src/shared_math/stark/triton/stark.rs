@@ -1083,6 +1083,8 @@ impl Stark {
 pub(crate) mod triton_stark_tests {
     use super::*;
     use crate::shared_math::mpolynomial::MPolynomial;
+    use crate::shared_math::ntt::ntt;
+    use crate::shared_math::other::log_2_floor;
     use crate::shared_math::stark::triton::arguments::evaluation_argument;
     use crate::shared_math::stark::triton::instruction::sample_programs;
     use crate::shared_math::stark::triton::stdio::VecStream;
@@ -1235,6 +1237,36 @@ pub(crate) mod triton_stark_tests {
                     row_idx,
                 );
             }
+        }
+    }
+
+    #[test]
+    pub fn shift_codeword_test() {
+        let stark = Stark::new(2, 2, 32, 1.into(), &[], &[]);
+        let fri_x_values = stark.xfri.domain.domain_values();
+
+        let mut test_codeword: Vec<XFieldElement> = vec![0.into(); stark.xfri.domain.length];
+        let poly_degree = 4;
+        test_codeword[0..poly_degree + 1].copy_from_slice(&[
+            2.into(),
+            42.into(),
+            1.into(),
+            3.into(),
+            17.into(),
+        ]);
+
+        ntt(
+            &mut test_codeword,
+            stark.xfri.domain.omega,
+            log_2_floor(stark.xfri.domain.length as u128) as u32,
+        );
+        for shift in [0, 1, 5, 17, 63, 121, 128] {
+            let shifted_codeword = Stark::shift_codeword(&fri_x_values, &test_codeword, shift);
+            let interpolated_shifted_codeword = stark.xfri.domain.interpolate(&shifted_codeword);
+            assert_eq!(
+                (poly_degree + shift as usize) as isize,
+                interpolated_shifted_codeword.degree()
+            );
         }
     }
 
