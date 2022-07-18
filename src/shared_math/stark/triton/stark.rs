@@ -421,26 +421,29 @@ impl Stark {
             let base_codeword_lifted = base_codeword.iter().map(|bfe| bfe.lift()).collect_vec();
             let base_codeword_shifted =
                 Self::shift_codeword(&fri_x_values, &base_codeword_lifted, shift);
-            let base_codeword_shifted_clone = base_codeword_shifted.clone(); // DEBUG DEBUG DEBUG
 
             combination_codeword = Self::non_linearly_add_to_codeword(
-                combination_codeword,
-                base_codeword_lifted,
-                weights_iterator.next().unwrap(),
-                base_codeword_shifted,
-                weights_iterator.next().unwrap(),
+                &combination_codeword,
+                &base_codeword_lifted,
+                &weights_iterator.next().unwrap(),
+                &base_codeword_shifted,
+                &weights_iterator.next().unwrap(),
             );
 
             // TODO figure out how to do this nicely
             // DEBUG CODE BELOW
-            let interpolated = self.xfri.domain.interpolate(&base_codeword_shifted_clone);
-            assert!(
-                interpolated.degree() == -1 || interpolated.degree() == self.max_degree as isize,
-                "The shifted base codeword with index {} must be of maximal degree {}. Got {}.",
-                idx,
-                self.max_degree,
-                interpolated.degree()
-            );
+            let interpolated = self.xfri.domain.interpolate(&base_codeword_shifted);
+            if !(interpolated.degree() == -1 || interpolated.degree() == self.max_degree as isize) {
+                println!(
+                    "!!! The shifted base codeword with index {} must be of maximal degree {}. \
+                    Got {}. Predicted degree of unshifted codeword: {}. Shift = {}.",
+                    idx,
+                    self.max_degree,
+                    interpolated.degree(),
+                    base_codeword_degree_bound,
+                    shift
+                );
+            }
         }
         timer.elapsed("...shift and collect base codewords");
 
@@ -452,25 +455,28 @@ impl Stark {
             let shift = (self.max_degree as Degree - extension_degree_bound) as u32;
             let extension_codeword_shifted =
                 Self::shift_codeword(&fri_x_values, &extension_codeword, shift);
-            let ecs_clone = extension_codeword_shifted.clone(); // DEBUG DEBUG DEBUG
 
             combination_codeword = Self::non_linearly_add_to_codeword(
-                combination_codeword,
-                extension_codeword,
-                weights_iterator.next().unwrap(),
-                extension_codeword_shifted,
-                weights_iterator.next().unwrap(),
+                &combination_codeword,
+                &extension_codeword,
+                &weights_iterator.next().unwrap(),
+                &extension_codeword_shifted,
+                &weights_iterator.next().unwrap(),
             );
 
             // TODO see above
-            let interpolated = self.xfri.domain.interpolate(&ecs_clone);
-            assert!(
-                interpolated.degree() == -1 || interpolated.degree() == self.max_degree as isize,
-                "The shifted ext codeword with index {} must be of maximal degree {}. Got {}.",
-                idx,
-                self.max_degree,
-                interpolated.degree()
-            );
+            let interpolated = self.xfri.domain.interpolate(&extension_codeword_shifted);
+            if !(interpolated.degree() == -1 || interpolated.degree() == self.max_degree as isize) {
+                println!(
+                    "!!! The shifted ext codeword with index {} must be of maximal degree {}. \
+                    Got {}. Predicted degree of unshifted codeword: {}. Shift = {}.",
+                    idx,
+                    self.max_degree,
+                    interpolated.degree(),
+                    extension_degree_bound,
+                    shift
+                );
+            }
         }
         timer.elapsed("...shift and collect extension codewords");
 
@@ -482,46 +488,49 @@ impl Stark {
             let shift = (self.max_degree as Degree - quotient_degree_bound) as u32;
             let quotient_codeword_shifted =
                 Self::shift_codeword(&fri_x_values, &quotient_codeword, shift);
-            let qcs_clone = quotient_codeword_shifted.clone(); // DEBUG DEBUG DEBUG
 
             combination_codeword = Self::non_linearly_add_to_codeword(
-                combination_codeword,
-                quotient_codeword,
-                weights_iterator.next().unwrap(),
-                quotient_codeword_shifted,
-                weights_iterator.next().unwrap(),
+                &combination_codeword,
+                &quotient_codeword,
+                &weights_iterator.next().unwrap(),
+                &quotient_codeword_shifted,
+                &weights_iterator.next().unwrap(),
             );
 
             // TODO see above
-            let interpolated = self.xfri.domain.interpolate(&qcs_clone);
-            assert!(
-                interpolated.degree() == -1 || interpolated.degree() == self.max_degree as isize,
-                "The shifted quotient codeword with index {} must be of maximal degree {}. \
+            let interpolated = self.xfri.domain.interpolate(&quotient_codeword_shifted);
+            if !(interpolated.degree() == -1 || interpolated.degree() == self.max_degree as isize) {
+                println!(
+                    "!!! The shifted quotient codeword with index {} must be of maximal degree {}. \
                     Got {}. Predicted degree of unshifted codeword: {}. Shift = {}.",
-                idx,
-                self.max_degree,
-                interpolated.degree(),
-                quotient_degree_bound,
-                shift
-            );
+                    idx,
+                    self.max_degree,
+                    interpolated.degree(),
+                    quotient_degree_bound,
+                    shift
+                );
+            }
         }
         combination_codeword
     }
 
     fn non_linearly_add_to_codeword(
-        combination_codeword: Vec<XFieldElement>,
-        summand: Vec<XFieldElement>,
-        weight: XFieldElement,
-        summand_shifted: Vec<XFieldElement>,
-        weight_shifted: XFieldElement,
+        combination_codeword: &Vec<XFieldElement>,
+        summand: &Vec<XFieldElement>,
+        weight: &XFieldElement,
+        summand_shifted: &Vec<XFieldElement>,
+        weight_shifted: &XFieldElement,
     ) -> Vec<XFieldElement> {
         debug_assert_eq!(combination_codeword.len(), summand.len());
+        debug_assert_eq!(combination_codeword.len(), summand_shifted.len());
         combination_codeword
-            .into_par_iter()
-            .zip(summand.into_par_iter())
-            .map(|(cc_elem, summand_elem)| cc_elem + weight * summand_elem)
-            .zip(summand_shifted.into_par_iter())
-            .map(|(cc_elem, summand_shifted_elem)| cc_elem + weight_shifted * summand_shifted_elem)
+            .par_iter()
+            .zip(summand.par_iter())
+            .map(|(cc_elem, &summand_elem)| *cc_elem + *weight * summand_elem)
+            .zip(summand_shifted.par_iter())
+            .map(|(cc_elem, &summand_shifted_elem)| {
+                cc_elem + *weight_shifted * summand_shifted_elem
+            })
             .collect()
     }
 
