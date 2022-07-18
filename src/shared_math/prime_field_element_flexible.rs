@@ -34,6 +34,16 @@ pub struct PrimeFieldElementFlexible {
     pub value: U512,
 }
 
+// In the museum of dead starks, 2 may be the prime you are looking for.
+impl Default for PrimeFieldElementFlexible {
+    fn default() -> Self {
+        Self {
+            q: 2.into(),
+            value: 1.into(),
+        }
+    }
+}
+
 // Implemented by just displaying the value. If you want the prime, you should call
 // the Debug print with `{:?}`.
 impl Display for PrimeFieldElementFlexible {
@@ -441,6 +451,7 @@ impl GetPrimitiveRootOfUnity for PrimeFieldElementFlexible {
 #[cfg(test)]
 mod test_modular_arithmetic_flexible {
     #![allow(clippy::just_underscores_and_digits)]
+
     use super::*;
     use crate::utils::generate_random_numbers;
     use itertools::izip;
@@ -601,7 +612,7 @@ mod test_modular_arithmetic_flexible {
         for i in 2..primes.len() {
             assert!(PrimeFieldElementFlexible::is_prime(
                 expected[i].into(),
-                &bi_primes[0..i]
+                &bi_primes[0..i],
             ));
         }
     }

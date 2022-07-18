@@ -104,6 +104,7 @@ pub trait PrimeField:
     + Copy
     + Hash
     + Inverse
+    + Default
 {
     /// Montgomery Batch Inversion
     // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion

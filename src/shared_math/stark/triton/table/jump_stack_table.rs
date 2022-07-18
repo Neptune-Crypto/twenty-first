@@ -170,25 +170,17 @@ impl ExtensionTable for ExtJumpStackTable {
 }
 
 impl JumpStackTable {
-    pub fn new_prover(
-        generator: BWord,
-        order: usize,
-        num_trace_randomizers: usize,
-        matrix: Vec<Vec<BWord>>,
-    ) -> Self {
+    pub fn new_prover(num_trace_randomizers: usize, matrix: Vec<Vec<BWord>>) -> Self {
         let unpadded_height = matrix.len();
         let padded_height = base_table::pad_height(unpadded_height, num_trace_randomizers);
 
-        let dummy = generator;
-        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
+        let omicron = base_table::derive_omicron(padded_height as u64);
         let base = BaseTable::new(
             BASE_WIDTH,
             FULL_WIDTH,
             padded_height,
             num_trace_randomizers,
             omicron,
-            generator,
-            order,
             matrix,
         );
 
@@ -248,24 +240,16 @@ impl JumpStackTable {
 }
 
 impl ExtJumpStackTable {
-    pub fn with_padded_height(
-        generator: XWord,
-        order: usize,
-        num_trace_randomizers: usize,
-        padded_height: usize,
-    ) -> Self {
+    pub fn with_padded_height(num_trace_randomizers: usize, padded_height: usize) -> Self {
         let matrix: Vec<Vec<XWord>> = vec![];
 
-        let dummy = generator;
-        let omicron = base_table::derive_omicron(padded_height as u64, dummy);
+        let omicron = base_table::derive_omicron(padded_height as u64);
         let base = BaseTable::new(
             BASE_WIDTH,
             FULL_WIDTH,
             padded_height,
             num_trace_randomizers,
             omicron,
-            generator,
-            order,
             matrix,
         );
 

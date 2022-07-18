@@ -18,6 +18,14 @@ pub struct XFieldElement {
     pub coefficients: [BFieldElement; 3],
 }
 
+impl Default for XFieldElement {
+    fn default() -> Self {
+        Self {
+            coefficients: [1.into(), 0.into(), 0.into()],
+        }
+    }
+}
+
 impl From<u32> for XFieldElement {
     fn from(value: u32) -> Self {
         XFieldElement::new_const(value.into())

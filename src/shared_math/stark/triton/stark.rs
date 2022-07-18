@@ -40,8 +40,6 @@ pub struct Stark {
     padded_height: usize,
     num_trace_randomizers: usize,
     num_randomizer_polynomials: usize,
-    order: usize,
-    generator: BFieldElement,
     security_level: usize,
     max_degree: Degree,
     bfri_domain: triton::fri_domain::FriDomain<BWord>,
@@ -81,18 +79,9 @@ impl Stark {
         // TODO: Parameterize these.
         let num_trace_randomizers = 2;
         let num_randomizer_polynomials = 1;
-        let order: usize = 1 << 32;
-        let smooth_generator = BWord::ring_zero()
-            .get_primitive_root_of_unity(order as u64)
-            .0
-            .unwrap();
 
-        let empty_table_collection = ExtTableCollection::with_padded_height(
-            smooth_generator.lift(),
-            order,
-            num_trace_randomizers,
-            padded_height,
-        );
+        let empty_table_collection =
+            ExtTableCollection::with_padded_height(num_trace_randomizers, padded_height);
 
         let max_degree =
             (other::roundup_npo2(empty_table_collection.max_degree() as u64) - 1) as i64;
@@ -121,8 +110,6 @@ impl Stark {
             padded_height,
             num_trace_randomizers,
             num_randomizer_polynomials,
-            order,
-            generator: smooth_generator,
             security_level,
             max_degree,
             bfri_domain,
@@ -614,12 +601,8 @@ impl Stark {
     }
 
     fn get_padded_base_tables(&self, base_matrices: &BaseMatrices) -> BaseTableCollection {
-        let mut base_tables = BaseTableCollection::from_base_matrices(
-            self.generator,
-            self.order,
-            self.num_trace_randomizers,
-            base_matrices,
-        );
+        let mut base_tables =
+            BaseTableCollection::from_base_matrices(self.num_trace_randomizers, base_matrices);
         base_tables.pad();
         base_tables
     }
@@ -662,12 +645,8 @@ impl Stark {
         let all_terminals = proof_stream.dequeue()?.as_terminals()?;
         timer.elapsed("Read from proof stream");
 
-        let ext_table_collection = ExtTableCollection::with_padded_height(
-            self.generator.lift(),
-            self.order,
-            self.num_trace_randomizers,
-            self.padded_height,
-        );
+        let ext_table_collection =
+            ExtTableCollection::with_padded_height(self.num_trace_randomizers, self.padded_height);
 
         let base_degree_bounds: Vec<Degree> = ext_table_collection.get_all_base_degree_bounds();
         timer.elapsed("Calculated base degree bounds");
@@ -1170,18 +1149,9 @@ pub(crate) mod triton_stark_tests {
         assert!(err.is_none(), "simulate did not generate errors");
 
         let num_trace_randomizers = 2;
-        let order: usize = 1 << 32;
-        let smooth_generator = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(order as u64)
-            .0
-            .unwrap();
 
-        let mut base_tables = BaseTableCollection::from_base_matrices(
-            smooth_generator,
-            order,
-            num_trace_randomizers,
-            &base_matrices,
-        );
+        let mut base_tables =
+            BaseTableCollection::from_base_matrices(num_trace_randomizers, &base_matrices);
 
         let unpadded_base_tables = base_tables.clone();
 

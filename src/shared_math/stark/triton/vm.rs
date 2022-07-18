@@ -256,7 +256,7 @@ mod triton_vm_tests {
     };
     use crate::shared_math::stark::triton::table::extension_table::ExtensionTable;
     use crate::shared_math::stark::triton::table::processor_table::ProcessorTable;
-    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
+    use crate::shared_math::traits::IdentityValues;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::simple_hasher::{Hasher, ToDigest};
 
@@ -536,11 +536,6 @@ mod triton_vm_tests {
             }
 
             let number_of_randomizers = 2;
-            let order = 1 << 32;
-            let smooth_generator = BFieldElement::ring_zero()
-                .get_primitive_root_of_unity(order)
-                .0
-                .unwrap();
 
             let processor_matrix = base_matrices
                 .processor_matrix
@@ -548,12 +543,8 @@ mod triton_vm_tests {
                 .map(|row| row.to_vec())
                 .collect_vec();
 
-            let mut processor_table: ProcessorTable = ProcessorTable::new_prover(
-                smooth_generator,
-                order as usize,
-                number_of_randomizers,
-                processor_matrix,
-            );
+            let mut processor_table: ProcessorTable =
+                ProcessorTable::new_prover(number_of_randomizers, processor_matrix);
 
             // Test air constraints after padding as well
             processor_table.pad();

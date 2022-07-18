@@ -13,28 +13,22 @@ type XWord = XFieldElement;
 
 #[derive(Debug, Clone)]
 pub struct BaseTable<DataPF> {
-    // The width of each `data` row in the base version of the table
+    /// The width of each `data` row in the base version of the table
     base_width: usize,
 
-    // The width of each `data` row in the extended version of the table
+    /// The width of each `data` row in the extended version of the table
     full_width: usize,
 
-    // The number of `data` rows after padding
+    /// The number of `data` rows after padding
     padded_height: usize,
 
-    // The number of randomizers...?
+    /// The number of random rows added for each row in the execution trace.
     num_trace_randomizers: usize,
 
-    // The omicron...?
+    /// The generator of the ο-domain, which is used to interpolate the trace data.
     omicron: DataPF,
 
-    // The generator...?
-    generator: DataPF,
-
-    // The order...?
-    order: usize,
-
-    // The table data (trace data)
+    /// The table data (trace data). Represents every intermediate
     matrix: Vec<Vec<DataPF>>,
 }
 
@@ -46,8 +40,6 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
         padded_height: usize,
         num_trace_randomizers: usize,
         omicron: DataPF,
-        generator: DataPF,
-        order: usize,
         matrix: Vec<Vec<DataPF>>,
     ) -> Self {
         BaseTable {
@@ -56,8 +48,6 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
             padded_height,
             num_trace_randomizers,
             omicron,
-            generator,
-            order,
             matrix,
         }
     }
@@ -70,8 +60,6 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
             self.padded_height,
             self.num_trace_randomizers,
             self.omicron,
-            self.generator,
-            self.order,
             matrix,
         )
     }
@@ -87,8 +75,6 @@ impl BaseTable<BWord> {
             self.padded_height,
             self.num_trace_randomizers,
             self.omicron.lift(),
-            self.generator.lift(),
-            self.order,
             matrix,
         )
     }
@@ -118,14 +104,6 @@ pub trait HasBaseTable<DataPF: PrimeField> {
         self.to_base().omicron
     }
 
-    fn generator(&self) -> DataPF {
-        self.to_base().generator
-    }
-
-    fn order(&self) -> usize {
-        self.to_base().order
-    }
-
     fn data(&self) -> &Vec<Vec<DataPF>> {
         &self.to_base().matrix
     }
@@ -135,13 +113,16 @@ pub trait HasBaseTable<DataPF: PrimeField> {
     }
 }
 
-pub fn derive_omicron<DataPF: PrimeField>(padded_height: u64, dummy: DataPF) -> DataPF {
+pub fn derive_omicron<DataPF: PrimeField>(padded_height: u64) -> DataPF {
     debug_assert!(
         0 == padded_height || is_power_of_two(padded_height),
         "The padded height was: {}",
         padded_height
     );
-    dummy.get_primitive_root_of_unity(padded_height).0.unwrap()
+    DataPF::default()
+        .get_primitive_root_of_unity(padded_height)
+        .0
+        .unwrap()
 }
 
 pub fn pad_height(height: usize, num_trace_randomizers: usize) -> usize {
