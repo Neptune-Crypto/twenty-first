@@ -45,7 +45,6 @@ pub struct Stark {
     security_level: usize,
     max_degree: Degree,
     bfri_domain: triton::fri_domain::FriDomain<BWord>,
-    xfri_domain: triton::fri_domain::FriDomain<XWord>,
     xfri: triton_xfri::Fri<StarkHasher>,
     input_symbols: Vec<BWord>,
     output_symbols: Vec<BWord>,
@@ -110,8 +109,6 @@ impl Stark {
             length: fri_domain_length as usize,
         };
 
-        let xfri_domain = triton::fri_domain::lift_domain(&bfri_domain);
-
         let xfri = triton_xfri::Fri::new(
             co_set_fri_offset.lift(),
             omega.lift(),
@@ -129,7 +126,6 @@ impl Stark {
             security_level,
             max_degree,
             bfri_domain,
-            xfri_domain,
             xfri,
             input_symbols: input_symbols.to_vec(),
             output_symbols: output_symbols.to_vec(),
@@ -179,7 +175,7 @@ impl Stark {
 
         let (ext_tables, all_terminals) =
             ExtTableCollection::extend_tables(&base_tables, &all_challenges, &all_initials);
-        let ext_codeword_tables = ext_tables.codeword_tables(&self.xfri_domain);
+        let ext_codeword_tables = ext_tables.codeword_tables(&self.xfri.domain);
         let all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
 
         timer.elapsed("extend + get_terminals");
@@ -213,7 +209,7 @@ impl Stark {
 
         // Prove equal initial values for the permutation-extension column pairs
         for pa in PermArg::all_permutation_arguments().iter() {
-            quotient_codewords.push(pa.quotient(&ext_codeword_tables, &self.xfri.domain));
+            quotient_codewords.push(pa.quotient(&ext_codeword_tables, &self.bfri_domain));
             quotient_degree_bounds.push(pa.quotient_degree_bound(&ext_codeword_tables));
         }
 
@@ -412,13 +408,7 @@ impl Stark {
             .collect();
 
         // TODO don't keep the entire domain's values in memory, create them lazily when needed
-        let fri_x_values: Vec<XFieldElement> = self
-            .xfri
-            .domain
-            .b_domain_values()
-            .into_par_iter()
-            .map(|bfe| bfe.lift())
-            .collect();
+        let fri_x_values = self.xfri.domain.domain_values();
         timer.elapsed("x_domain_values");
 
         // TODO with the DEBUG CODE and `enumerate` removed, these iterators can be `into_par_iter`
@@ -443,7 +433,7 @@ impl Stark {
 
             // TODO figure out how to do this nicely
             // DEBUG CODE BELOW
-            let interpolated = self.xfri.domain.x_interpolate(&base_codeword_shifted_clone);
+            let interpolated = self.xfri.domain.interpolate(&base_codeword_shifted_clone);
             assert!(
                 interpolated.degree() == -1 || interpolated.degree() == self.max_degree as isize,
                 "The shifted base codeword with index {} must be of maximal degree {}. Got {}.",
@@ -473,7 +463,7 @@ impl Stark {
             );
 
             // TODO see above
-            let interpolated = self.xfri.domain.x_interpolate(&ecs_clone);
+            let interpolated = self.xfri.domain.interpolate(&ecs_clone);
             assert!(
                 interpolated.degree() == -1 || interpolated.degree() == self.max_degree as isize,
                 "The shifted ext codeword with index {} must be of maximal degree {}. Got {}.",
@@ -503,7 +493,7 @@ impl Stark {
             );
 
             // TODO see above
-            let interpolated = self.xfri.domain.x_interpolate(&qcs_clone);
+            let interpolated = self.xfri.domain.interpolate(&qcs_clone);
             assert!(
                 interpolated.degree() == -1 || interpolated.degree() == self.max_degree as isize,
                 "The shifted quotient codeword with index {} must be of maximal degree {}. \
@@ -631,7 +621,7 @@ impl Stark {
             XWord::random_elements(self.max_degree as usize + 1, &mut rng);
         let randomizer_polynomial = Polynomial::new(randomizer_coefficients);
 
-        let x_randomizer_codeword = self.xfri.domain.x_evaluate(&randomizer_polynomial);
+        let x_randomizer_codeword = self.xfri.domain.evaluate(&randomizer_polynomial);
         let mut b_randomizer_codewords = vec![vec![], vec![], vec![]];
         for x_elem in x_randomizer_codeword.iter() {
             b_randomizer_codewords[0].push(x_elem.coefficients[0]);
@@ -879,7 +869,7 @@ impl Stark {
 
         // verify nonlinear combination
         for (i, &index) in indices.iter().enumerate() {
-            let b_domain_value = self.xfri.domain.b_domain_value(index as u32);
+            let b_domain_value = self.xfri.domain.domain_value(index as u32);
             // collect terms: randomizer
             let mut terms: Vec<XFieldElement> = (0..self.num_randomizer_polynomials)
                 .map(|j| tuples[&index][j])
@@ -893,7 +883,7 @@ impl Stark {
                 let shift: u32 = (self.max_degree as i64
                     - base_degree_bounds[j - self.num_randomizer_polynomials])
                     as u32;
-                terms.push(tuples[&index][j] * b_domain_value.mod_pow_u32(shift).lift());
+                terms.push(tuples[&index][j] * b_domain_value.mod_pow_u32(shift));
             }
 
             // collect terms: extension
@@ -911,7 +901,7 @@ impl Stark {
                 let extension_element: XFieldElement = tuples[&index][extension_offset + j];
                 terms.push(extension_element);
                 let shift = (self.max_degree as i64 - edb) as u32;
-                terms.push(extension_element * b_domain_value.mod_pow_u32(shift).lift())
+                terms.push(extension_element * b_domain_value.mod_pow_u32(shift))
             }
 
             // collect terms: quotients, quotients need to be computed
@@ -952,10 +942,10 @@ impl Stark {
                     )
                 {
                     let eval = constraint.evaluate(point);
-                    let quotient = eval / (b_domain_value.lift() - XFieldElement::ring_one());
+                    let quotient = eval / (b_domain_value - 1.into());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
+                    terms.push(quotient * b_domain_value.mod_pow_u32(shift));
                 }
 
                 // transition
@@ -985,18 +975,16 @@ impl Stark {
                     // The fast zerofier (based on group theory) needs a non-empty group.
                     // Forcing it on an empty group generates a division by zero error.
                     let quotient = if table.padded_height() == 0 {
-                        XFieldElement::ring_zero()
+                        0.into()
                     } else {
-                        let num = b_domain_value.lift() - table.omicron().inverse();
-                        let denom = b_domain_value
-                            .mod_pow_u32(table.padded_height() as u32)
-                            .lift()
-                            - XFieldElement::ring_one();
+                        let num = b_domain_value - table.omicron().inverse();
+                        let denom =
+                            b_domain_value.mod_pow_u32(table.padded_height() as u32) - 1.into();
                         eval * num / denom
                     };
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
+                    terms.push(quotient * b_domain_value.mod_pow_u32(shift));
                 }
 
                 // terminal
@@ -1011,20 +999,19 @@ impl Stark {
                 {
                     let eval = constraint.evaluate(point);
                     // TODO: Removed lift()
-                    let quotient = eval / (b_domain_value.lift() - table.omicron().inverse());
+                    let quotient = eval / (b_domain_value - table.omicron().inverse());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift())
+                    terms.push(quotient * b_domain_value.mod_pow_u32(shift))
                 }
             }
 
             for arg in PermArg::all_permutation_arguments().iter() {
-                let quotient = arg.evaluate_difference(&points)
-                    / (b_domain_value.lift() - XFieldElement::ring_one());
+                let quotient = arg.evaluate_difference(&points) / (b_domain_value - 1.into());
                 terms.push(quotient);
                 let degree_bound = arg.quotient_degree_bound(&ext_table_collection);
                 let shift = (self.max_degree as i64 - degree_bound) as u32;
-                terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
+                terms.push(quotient * b_domain_value.mod_pow_u32(shift));
             }
 
             assert_eq!(
