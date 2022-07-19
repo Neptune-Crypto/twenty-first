@@ -129,7 +129,7 @@ pub fn pad_height(height: usize, num_trace_randomizers: usize) -> usize {
     if height == 0 {
         0
     } else {
-        max(roundup_npo2(height as u64) as usize, num_trace_randomizers)
+        roundup_npo2(max(height as u64, num_trace_randomizers as u64)) as usize
     }
 }
 
