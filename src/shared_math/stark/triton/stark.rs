@@ -66,8 +66,8 @@ impl Stark {
             "security_level/log_expansion_factor must be a positive integer"
         );
 
-        let expansion_factor: u64 = 1 << log_expansion_factor;
-        let colinearity_checks: usize = security_level / log_expansion_factor;
+        let expansion_factor = 1 << log_expansion_factor;
+        let colinearity_checks = security_level / log_expansion_factor;
 
         assert!(
             colinearity_checks > 0,
@@ -131,6 +131,9 @@ impl Stark {
         let all_base_codewords = vec![b_rand_codewords, base_codewords.clone()].concat();
         timer.elapsed("get_all_base_codewords");
 
+        let base_degree_bounds = base_tables.get_all_base_degree_bounds();
+        timer.elapsed("get_all_base_degree_bounds");
+
         let transposed_base_codewords = Self::transpose_codewords(&all_base_codewords);
         timer.elapsed("transposed_base_codewords");
 
@@ -165,8 +168,10 @@ impl Stark {
         let all_ext_codewords: Vec<Vec<XWord>> = ext_codeword_tables.concat_table_data();
 
         timer.elapsed("extend + get_terminals");
-
         timer.elapsed("get_all_extension_codewords");
+
+        let extension_degree_bounds = ext_tables.get_all_extension_degree_bounds();
+        timer.elapsed("get_all_extension_degree_bounds");
 
         let transposed_extension_codewords = Self::transpose_codewords(&all_ext_codewords);
 
@@ -176,9 +181,6 @@ impl Stark {
         proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root()));
         proof_stream.enqueue(&Item::Terminals(all_terminals.clone()));
         timer.elapsed("extension_tree");
-
-        let extension_degree_bounds: Vec<Degree> = ext_tables.get_all_extension_degree_bounds();
-        timer.elapsed("get_all_extension_degree_bounds");
 
         // XXX: Culprit!
         let mut quotient_codewords = ext_codeword_tables.get_all_quotients(
@@ -199,24 +201,19 @@ impl Stark {
             quotient_degree_bounds.push(pa.quotient_degree_bound(&ext_codeword_tables));
         }
 
-        // Calculate `num_base_polynomials`, `num_extension_polynomials`, `num_quotient_polynomials` for asserting
         let num_base_polynomials: usize = base_tables
             .into_iter()
             .map(|table| table.base_width())
             .sum();
-        assert_eq!(base_codewords.len(), num_base_polynomials);
-
         let num_extension_polynomials: usize = ext_tables
             .into_iter()
             .map(|ext_table| ext_table.full_width() - ext_table.base_width())
             .sum();
-
         let num_quotient_polynomials = quotient_degree_bounds.len();
-        assert_eq!(quotient_codewords.len(), num_quotient_polynomials);
 
-        let base_degree_bounds = base_tables.get_all_base_degree_bounds();
-
-        timer.elapsed("get_all_base_degree_bounds");
+        assert_eq!(num_base_polynomials, base_codewords.len());
+        assert_eq!(num_extension_polynomials, all_ext_codewords.len());
+        assert_eq!(num_quotient_polynomials, quotient_codewords.len());
 
         // Get weights for nonlinear combination
         let weights_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
@@ -245,6 +242,7 @@ impl Stark {
 
         timer.elapsed("...shift and collect quotient codewords");
 
+        // TODO use Self::get_extension_merkle_tree (or similar) here?
         let mut combination_codeword_digests: Vec<Vec<BFieldElement>> =
             Vec::with_capacity(combination_codeword.len());
         combination_codeword
@@ -258,6 +256,7 @@ impl Stark {
         let combination_tree =
             MerkleTree::<StarkHasher>::from_digests(&combination_codeword_digests);
         let combination_root: Vec<BFieldElement> = combination_tree.get_root();
+
         proof_stream.enqueue(&Item::MerkleRoot(combination_root.clone()));
 
         timer.elapsed("combination_tree");
@@ -281,10 +280,10 @@ impl Stark {
         timer.elapsed("sample_indices");
 
         // TODO: I don't like that we're calling FRI right after getting the indices through
-        // the Fiat-Shamir public oracle above. The reason I don't like this is that it implies
-        // using Fiat-Shamir twice with somewhat similar proof stream content. A cryptographer
-        // or mathematician should take a look on this part of the code.
-        // prove low degree of combination polynomial
+        //  the Fiat-Shamir public oracle above. The reason I don't like this is that it implies
+        //  using Fiat-Shamir twice with somewhat similar proof stream content. A cryptographer
+        //  or mathematician should take a look on this part of the code.
+        //  prove low degree of combination polynomial
         let (_fri_indices, combination_root_verify) = self
             .xfri
             .prove(&combination_codeword, &mut proof_stream)
