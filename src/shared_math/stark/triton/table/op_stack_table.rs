@@ -53,10 +53,6 @@ impl HasBaseTable<XFieldElement> for ExtOpStackTable {
 }
 
 impl Table<BWord> for OpStackTable {
-    fn name(&self) -> String {
-        "OpStackTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<BWord> {
         let mut padding_row = self.data().last().unwrap().clone();
         // add same clk padding as in processor table
@@ -66,10 +62,6 @@ impl Table<BWord> for OpStackTable {
 }
 
 impl Table<XFieldElement> for ExtOpStackTable {
-    fn name(&self) -> String {
-        "ExtOpStackTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<XFieldElement> {
         panic!("Extension tables don't get padded");
     }
@@ -178,6 +170,7 @@ impl OpStackTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "OpStackTable".to_string(),
         );
 
         Self { base }
@@ -245,6 +238,7 @@ impl ExtOpStackTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "ExtOpStackTable".to_string(),
         );
 
         Self { base }

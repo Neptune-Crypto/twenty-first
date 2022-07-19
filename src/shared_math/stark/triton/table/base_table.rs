@@ -30,6 +30,9 @@ pub struct BaseTable<DataPF> {
 
     /// The table data (trace data). Represents every intermediate
     matrix: Vec<Vec<DataPF>>,
+
+    /// The name of the table. Mostly for debugging purpose.
+    name: String,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -41,6 +44,7 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
         num_trace_randomizers: usize,
         omicron: DataPF,
         matrix: Vec<Vec<DataPF>>,
+        name: String,
     ) -> Self {
         BaseTable {
             base_width,
@@ -49,6 +53,7 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
             num_trace_randomizers,
             omicron,
             matrix,
+            name,
         }
     }
 
@@ -61,6 +66,7 @@ impl<DataPF: PrimeField> BaseTable<DataPF> {
             self.num_trace_randomizers,
             self.omicron,
             matrix,
+            format!("{} with data", self.name),
         )
     }
 }
@@ -76,6 +82,7 @@ impl BaseTable<BWord> {
             self.num_trace_randomizers,
             self.omicron.lift(),
             matrix,
+            format!("{} with lifted data", self.name),
         )
     }
 }
@@ -140,11 +147,13 @@ where
 {
     // Abstract functions that individual structs implement
 
-    fn name(&self) -> String;
-
     fn get_padding_row(&self) -> Vec<DataPF>;
 
     // Generic functions common to all tables
+
+    fn name(&self) -> String {
+        self.to_base().name.clone()
+    }
 
     fn pad(&mut self) {
         while self.data().len() != pad_height(self.data().len(), self.num_trace_randomizers()) {

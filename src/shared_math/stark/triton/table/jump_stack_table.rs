@@ -53,10 +53,6 @@ impl HasBaseTable<XFieldElement> for ExtJumpStackTable {
 }
 
 impl Table<BWord> for JumpStackTable {
-    fn name(&self) -> String {
-        "JumpStackTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<BWord> {
         let mut padding_row = self.data().last().unwrap().clone();
         // add same clk padding as in processor table
@@ -66,10 +62,6 @@ impl Table<BWord> for JumpStackTable {
 }
 
 impl Table<XFieldElement> for ExtJumpStackTable {
-    fn name(&self) -> String {
-        "ExtJumpStackTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<XFieldElement> {
         panic!("Extension tables don't get padded");
     }
@@ -182,6 +174,7 @@ impl JumpStackTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "JumpStackTable".to_string(),
         );
 
         Self { base }
@@ -251,6 +244,7 @@ impl ExtJumpStackTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "ExtJumpStackTable".to_string(),
         );
 
         Self { base }

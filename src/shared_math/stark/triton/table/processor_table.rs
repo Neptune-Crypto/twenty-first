@@ -57,6 +57,7 @@ impl ProcessorTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "ProcessorTable".to_string(),
         );
 
         Self { base }
@@ -366,6 +367,7 @@ impl ExtProcessorTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "ExtProcessorTable".to_string(),
         );
 
         Self::new(base)
@@ -552,10 +554,6 @@ impl HasBaseTable<XFieldElement> for ExtProcessorTable {
 }
 
 impl Table<BWord> for ProcessorTable {
-    fn name(&self) -> String {
-        "ProcessorTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<BWord> {
         let mut padding_row = self.data().last().unwrap().clone();
         padding_row[ProcessorTableColumn::CLK as usize] += 1.into();
@@ -564,10 +562,6 @@ impl Table<BWord> for ProcessorTable {
 }
 
 impl Table<XFieldElement> for ExtProcessorTable {
-    fn name(&self) -> String {
-        "ExtProcessorTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<XFieldElement> {
         panic!("Extension tables don't get padded");
     }

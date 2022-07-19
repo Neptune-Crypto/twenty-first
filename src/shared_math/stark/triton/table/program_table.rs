@@ -53,10 +53,6 @@ impl HasBaseTable<XFieldElement> for ExtProgramTable {
 }
 
 impl Table<BWord> for ProgramTable {
-    fn name(&self) -> String {
-        "ProgramTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<BWord> {
         let mut padding_row = self.data().last().unwrap().clone();
         // address keeps increasing
@@ -66,10 +62,6 @@ impl Table<BWord> for ProgramTable {
 }
 
 impl Table<XFieldElement> for ExtProgramTable {
-    fn name(&self) -> String {
-        "ExtProgramTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<XFieldElement> {
         panic!("Extension tables don't get padded");
     }
@@ -132,6 +124,7 @@ impl ProgramTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "ProgramTable".to_string(),
         );
 
         Self { base }
@@ -199,6 +192,7 @@ impl ExtProgramTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "ExtProgramTable".to_string(),
         );
 
         Self { base }

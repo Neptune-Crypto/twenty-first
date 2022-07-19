@@ -64,6 +64,7 @@ impl RamTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "RamTable".to_string(),
         );
 
         Self { base }
@@ -129,6 +130,7 @@ impl ExtRamTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "ExtRamTable".to_string(),
         );
 
         Self { base }
@@ -143,10 +145,6 @@ impl ExtRamTable {
 }
 
 impl Table<BWord> for RamTable {
-    fn name(&self) -> String {
-        "RamTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<BWord> {
         let mut padding_row = self.data().last().unwrap().clone();
         // add same clk padding as in processor table
@@ -156,10 +154,6 @@ impl Table<BWord> for RamTable {
 }
 
 impl Table<XFieldElement> for ExtRamTable {
-    fn name(&self) -> String {
-        "ExtRamTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<XFieldElement> {
         panic!("Extension tables don't get padded");
     }

@@ -53,20 +53,12 @@ impl HasBaseTable<XFieldElement> for ExtHashTable {
 }
 
 impl Table<BWord> for HashTable {
-    fn name(&self) -> String {
-        "HashTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<BWord> {
         vec![0.into(); BASE_WIDTH]
     }
 }
 
 impl Table<XFieldElement> for ExtHashTable {
-    fn name(&self) -> String {
-        "ExtHashTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<XFieldElement> {
         panic!("Extension tables don't get padded");
     }
@@ -211,6 +203,7 @@ impl HashTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "HashTable".to_string(),
         );
 
         Self { base }
@@ -309,6 +302,7 @@ impl ExtHashTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "ExtHashTable".to_string(),
         );
 
         Self { base }

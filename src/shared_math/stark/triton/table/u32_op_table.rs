@@ -52,20 +52,12 @@ impl HasBaseTable<XFieldElement> for ExtU32OpTable {
 }
 
 impl Table<BWord> for U32OpTable {
-    fn name(&self) -> String {
-        "U32OpTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<BWord> {
         vec![0.into(); BASE_WIDTH]
     }
 }
 
 impl Table<XFieldElement> for ExtU32OpTable {
-    fn name(&self) -> String {
-        "ExtU32OpTable".to_string()
-    }
-
     fn get_padding_row(&self) -> Vec<XFieldElement> {
         panic!("Extension tables don't get padded");
     }
@@ -106,6 +98,7 @@ impl U32OpTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "U32OpTable".to_string(),
         );
 
         Self { base }
@@ -218,6 +211,7 @@ impl ExtU32OpTable {
             num_trace_randomizers,
             omicron,
             matrix,
+            "ExtU32OpTable".to_string(),
         );
 
         Self { base }
