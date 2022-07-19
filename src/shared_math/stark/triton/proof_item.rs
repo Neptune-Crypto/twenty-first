@@ -15,13 +15,13 @@ type CompressedAuthenticationPaths = Vec<PartialAuthenticationPath<Vec<BFieldEle
 #[allow(clippy::large_enum_variant)]
 pub enum Item {
     CompressedAuthenticationPaths(CompressedAuthenticationPaths),
-    TransposedBaseElementVectors(Vec<Vec<BFieldElement>>),
-    TransposedExtensionElementVectors(Vec<Vec<XFieldElement>>),
+    TransposedElementVectors(Vec<Vec<XFieldElement>>),
     MerkleRoot(Vec<BFieldElement>),
     Terminals(AllEndpoints),
     TransposedBaseElements(Vec<BFieldElement>),
     TransposedExtensionElements(Vec<XFieldElement>),
     AuthenticationPath(Vec<Vec<BFieldElement>>),
+    // FIXME: Redundancy.
     RevealedCombinationElement(XFieldElement),
     RevealedCombinationElements(Vec<XFieldElement>),
     FriCodeword(Vec<XFieldElement>),
@@ -40,24 +40,13 @@ impl Item {
         }
     }
 
-    pub fn as_transposed_base_element_vectors(
-        &self,
-    ) -> Result<Vec<Vec<BFieldElement>>, Box<dyn std::error::Error>> {
-        match self {
-            Self::TransposedBaseElementVectors(bss) => Ok(bss.to_owned()),
-            _ => Err(ProofStreamError::boxed(
-                "expected transposed base element vectors, but got something else",
-            )),
-        }
-    }
-
-    pub fn as_transposed_extension_element_vectors(
+    pub fn as_transposed_element_vectors(
         &self,
     ) -> Result<Vec<Vec<XFieldElement>>, Box<dyn std::error::Error>> {
         match self {
-            Self::TransposedExtensionElementVectors(xss) => Ok(xss.to_owned()),
+            Self::TransposedElementVectors(xss) => Ok(xss.to_owned()),
             _ => Err(ProofStreamError::boxed(
-                "expected transposed extension element vectors, but got something else",
+                "expected transposed element vectors, but got something else",
             )),
         }
     }
@@ -192,8 +181,7 @@ impl IntoIterator for Item {
 
                 bs.into_iter()
             }
-            Item::TransposedBaseElementVectors(bss) => bss.concat().into_iter(),
-            Item::TransposedExtensionElementVectors(xss) => xss
+            Item::TransposedElementVectors(xss) => xss
                 .into_iter()
                 .map(|xs| xs_to_bs(&xs).collect::<Vec<_>>())
                 .concat()
