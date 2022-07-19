@@ -360,6 +360,8 @@ impl Stark {
         ext_tables: &ExtTableCollection,
     ) -> Vec<XFieldElement> {
         let mut weights_iterator = weights.into_iter();
+
+        // TODO don't hardcode number of randomizer codewords
         let mut combination_codeword: Vec<XFieldElement> = x_rand_codeword
             .into_iter()
             .map(|elem| elem * weights_iterator.next().unwrap())
@@ -440,10 +442,11 @@ impl Stark {
     ) {
         let interpolated = self.xfri.domain.interpolate(extension_codeword);
         let interpolated_shifted = self.xfri.domain.interpolate(extension_codeword_shifted);
-        let maybe_excl_mark = if interpolated_shifted.degree() != -1
-            && interpolated_shifted.degree() != self.max_degree as isize
-        {
+        let int_shift_deg = interpolated_shifted.degree();
+        let maybe_excl_mark = if int_shift_deg > self.max_degree as isize {
             "!!!"
+        } else if int_shift_deg != -1 && int_shift_deg != self.max_degree as isize {
+            " ! "
         } else {
             "   "
         };
@@ -453,7 +456,7 @@ impl Stark {
             {degree_bound}. Actual degree of unshifted codeword: {}. Shift = {shift}.",
             ext_tables.codeword_index_to_table_name(*idx),
             self.max_degree,
-            interpolated_shifted.degree(),
+            int_shift_deg,
             interpolated.degree(),
         );
     }
@@ -1023,7 +1026,7 @@ pub(crate) mod triton_stark_tests {
     ) -> (Stark, ProofStream<Item, RescuePrimeXlix<RP_DEFAULT_WIDTH>>) {
         let (base_matrices, _) = parse_simulate(code, input_symbols, &[], output_symbols);
 
-        let num_trace_randomizers = 0;
+        let num_trace_randomizers = 2;
         let num_randomizer_polynomials = 1; // TODO: combination codeword might use a hardcoded 1 for this – Fix it :)
         let log_expansion_factor = 2;
         let security_level = 32;

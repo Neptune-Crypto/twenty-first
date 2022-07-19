@@ -324,8 +324,10 @@ impl ExtTableCollection {
         let mut all_table_data = Vec::with_capacity(total_codeword_count);
 
         for table in self.into_iter() {
-            for row in table.data().iter() {
-                all_table_data.push(row.clone());
+            // DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW
+            println!("Table {} has {} columns.", table.name(), table.data().len());
+            for col in table.data().iter() {
+                all_table_data.push(col.clone());
             }
         }
 
@@ -370,7 +372,17 @@ impl ExtTableCollection {
 
     pub fn get_all_degree_bounds(&self) -> Vec<i64> {
         self.into_iter()
-            .map(|ext_table| vec![ext_table.interpolant_degree(); ext_table.full_width()])
+            .map(|ext_table| {
+                let degree_bounds = vec![ext_table.interpolant_degree(); ext_table.full_width()];
+                // DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW
+                println!(
+                    "{} has {} columns, {:?} degree bounds",
+                    ext_table.name(),
+                    ext_table.full_width(),
+                    degree_bounds
+                );
+                degree_bounds
+            })
             .concat()
     }
 
