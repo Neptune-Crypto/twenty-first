@@ -49,8 +49,11 @@ pub struct Stark {
 }
 
 impl Stark {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         padded_height: usize,
+        num_trace_randomizers: usize,
+        num_randomizer_polynomials: usize,
         log_expansion_factor: usize,
         security_level: usize,
         co_set_fri_offset: BWord,
@@ -75,10 +78,6 @@ impl Stark {
             expansion_factor >= 4,
             "expansion factor must be at least 4."
         );
-
-        // TODO: Parameterize these.
-        let num_trace_randomizers = 2;
-        let num_randomizer_polynomials = 1;
 
         let empty_table_collection =
             ExtTableCollection::with_padded_height(num_trace_randomizers, padded_height);
@@ -1067,6 +1066,7 @@ pub(crate) mod triton_stark_tests {
     use crate::shared_math::stark::triton::arguments::evaluation_argument;
     use crate::shared_math::stark::triton::instruction::sample_programs;
     use crate::shared_math::stark::triton::stdio::VecStream;
+    use crate::shared_math::stark::triton::table::base_table;
     use crate::shared_math::stark::triton::vm::Program;
     use crate::shared_math::traits::PrimeField;
     use crate::util_types::proof_stream_typed::ProofStream;
@@ -1096,7 +1096,6 @@ pub(crate) mod triton_stark_tests {
         assert!(program.is_ok(), "program parses correctly");
         let program = program.unwrap();
 
-        let mut _rng = rand::thread_rng();
         let mut stdin = VecStream::new_bwords(input_symbols);
         let mut secret_in = VecStream::new_bwords(&[]);
         let mut stdout = VecStream::new_bwords(output_symbols);
@@ -1106,12 +1105,30 @@ pub(crate) mod triton_stark_tests {
             program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
         assert!(err.is_none());
 
-        let padded_height =
-            other::roundup_npo2(base_matrices.processor_matrix.len() as u64) as usize;
+        let num_trace_randomizers = 2;
+        let num_randomizer_polynomials = 1;
         let log_expansion_factor = 2;
         let security_level = 32;
+
+        let unpadded_height = [
+            base_matrices.program_matrix.len(),
+            base_matrices.processor_matrix.len(),
+            base_matrices.instruction_matrix.len(),
+            base_matrices.op_stack_matrix.len(),
+            base_matrices.ram_matrix.len(),
+            base_matrices.jump_stack_matrix.len(),
+            base_matrices.hash_matrix.len(),
+            base_matrices.u32_op_matrix.len(),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0);
+        let padded_height = base_table::pad_height(unpadded_height, num_trace_randomizers);
+
         let stark = Stark::new(
             padded_height,
+            num_trace_randomizers,
+            num_randomizer_polynomials,
             log_expansion_factor,
             security_level,
             co_set_fri_offset,
@@ -1212,12 +1229,12 @@ pub(crate) mod triton_stark_tests {
 
     #[test]
     pub fn shift_codeword_test() {
-        let stark = Stark::new(2, 2, 32, 1.into(), &[], &[]);
+        let stark = Stark::new(2, 2, 1, 2, 32, 1.into(), &[], &[]);
         let fri_x_values = stark.xfri.domain.domain_values();
 
         let mut test_codeword: Vec<XFieldElement> = vec![0.into(); stark.xfri.domain.length];
         let poly_degree = 4;
-        test_codeword[0..poly_degree + 1].copy_from_slice(&[
+        test_codeword[0..=poly_degree].copy_from_slice(&[
             2.into(),
             42.into(),
             1.into(),
