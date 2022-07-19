@@ -1091,22 +1091,10 @@ pub(crate) mod triton_stark_tests {
         input_symbols: &[BWord],
         output_symbols: &[BWord],
     ) -> (Stark, ProofStream<Item, RescuePrimeXlix<RP_DEFAULT_WIDTH>>) {
-        let program = Program::from_code(code);
+        let (base_matrices, _) = parse_simulate(code, input_symbols, &[], output_symbols);
 
-        assert!(program.is_ok(), "program parses correctly");
-        let program = program.unwrap();
-
-        let mut stdin = VecStream::new_bwords(input_symbols);
-        let mut secret_in = VecStream::new_bwords(&[]);
-        let mut stdout = VecStream::new_bwords(output_symbols);
-        let rescue_prime = rescue_prime_xlix::neptune_params();
-
-        let (base_matrices, err) =
-            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
-        assert!(err.is_none());
-
-        let num_trace_randomizers = 2;
-        let num_randomizer_polynomials = 1;
+        let num_trace_randomizers = 0;
+        let num_randomizer_polynomials = 1; // TODO: combination codeword might use a hardcoded 1 for this – Fix it :)
         let log_expansion_factor = 2;
         let security_level = 32;
 
@@ -1140,11 +1128,37 @@ pub(crate) mod triton_stark_tests {
         (stark, proof_stream)
     }
 
+    fn parse_simulate(
+        code: &str,
+        input_symbols: &[BWord],
+        secret_input_symbols: &[BWord],
+        output_symbols: &[BWord],
+    ) -> (BaseMatrices, VecStream) {
+        let program = Program::from_code(code);
+
+        assert!(program.is_ok(), "program parses correctly");
+        let program = program.unwrap();
+
+        let mut stdin = VecStream::new_bwords(input_symbols);
+        let mut secret_in = VecStream::new_bwords(secret_input_symbols);
+        let mut stdout = VecStream::new_bwords(output_symbols);
+        let rescue_prime = rescue_prime_xlix::neptune_params();
+
+        let (base_matrices, err) =
+            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
+        if let Some(error) = err {
+            panic!("The VM encountered the following problem: {}", error);
+        }
+        (base_matrices, stdout)
+    }
+
     fn parse_simulate_pad_extend(
         code: &str,
-        stdin: &mut VecStream,
-        stdout: &mut VecStream,
+        stdin: &[BWord],
+        secret_in: &[BWord],
+        stdout: &[BWord],
     ) -> (
+        VecStream,
         BaseTableCollection,
         BaseTableCollection,
         ExtTableCollection,
@@ -1152,19 +1166,7 @@ pub(crate) mod triton_stark_tests {
         AllEndpoints,
         AllEndpoints,
     ) {
-        let program = Program::from_code(code);
-
-        assert!(program.is_ok(), "program parses correctly");
-        let program = program.unwrap();
-
-        let mut _rng = rand::thread_rng();
-        let mut secret_in = VecStream::new_bwords(&[]);
-        let rescue_prime = rescue_prime_xlix::neptune_params();
-
-        let (base_matrices, err) = program.simulate(stdin, &mut secret_in, stdout, &rescue_prime);
-
-        assert!(err.is_none(), "simulate did not generate errors");
-
+        let (base_matrices, stdout) = parse_simulate(code, stdin, secret_in, stdout);
         let num_trace_randomizers = 2;
 
         let mut base_tables =
@@ -1179,6 +1181,7 @@ pub(crate) mod triton_stark_tests {
             ExtTableCollection::extend_tables(&base_tables, &all_challenges, &all_initials);
 
         (
+            stdout,
             unpadded_base_tables,
             base_tables,
             ext_tables,
@@ -1260,20 +1263,20 @@ pub(crate) mod triton_stark_tests {
     // 1. simulate(), pad(), extend(), test terminals
     #[test]
     pub fn check_terminals() {
-        let stdin = &mut VecStream::new_bwords(&[3.into(), 5.into(), 7.into()]);
-        let stdout = &mut VecStream::new_bwords(&[]);
+        let input_symbols = [3.into(), 5.into(), 7.into()];
         let (
+            stdout,
             _unpadded_base_tables,
             _base_tables,
             _ext_tables,
             all_challenges,
             _all_initials,
             all_terminals,
-        ) = parse_simulate_pad_extend(sample_programs::READ_X3_NOP_X2, stdin, stdout);
+        ) = parse_simulate_pad_extend(sample_programs::READ_X3_NOP_X2, &input_symbols, &[], &[]);
 
         let ptie = all_terminals.processor_table_endpoints.input_table_eval_sum;
         let ine = evaluation_argument::compute_terminal(
-            &stdin.to_bword_vec(),
+            &input_symbols,
             XFieldElement::ring_zero(),
             all_challenges.input_challenges.processor_eval_row_weight,
         );
@@ -1294,16 +1297,15 @@ pub(crate) mod triton_stark_tests {
     // 2. simulate(), test constraints
     #[test]
     fn triton_table_constraints_evaluate_to_zero_test() {
-        let mut stdin = VecStream::new_bwords(&[]);
-        let mut stdout = VecStream::new_bwords(&[]);
         let (
+            _stdout,
             _unpadded_base_tables,
             _padded_base_tables,
             ext_tables,
             all_challenges,
             _all_initials,
             all_terminals,
-        ) = parse_simulate_pad_extend(sample_programs::FIBONACCI_LT, &mut stdin, &mut stdout);
+        ) = parse_simulate_pad_extend(sample_programs::FIBONACCI_LT, &[], &[], &[]);
 
         for ext_table in (&ext_tables).into_iter() {
             let ext_transition_constraints = ext_table.ext_transition_constraints(&all_challenges);
