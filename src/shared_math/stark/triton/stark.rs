@@ -167,7 +167,7 @@ impl Stark {
         timer.elapsed("extend + get_terminals");
         timer.elapsed("get_all_extension_codewords");
 
-        let extension_degree_bounds = ext_tables.get_all_extension_degree_bounds();
+        let degree_bounds = ext_tables.get_all_degree_bounds();
         timer.elapsed("get_all_extension_degree_bounds");
 
         let transposed_codewords = Self::transpose_codewords(&all_codewords);
@@ -222,7 +222,7 @@ impl Stark {
             all_codewords,
             quotient_codewords,
             weights,
-            extension_degree_bounds,
+            degree_bounds,
             quotient_degree_bounds,
             &ext_tables,
         );
@@ -369,6 +369,7 @@ impl Stark {
         let fri_x_values = self.xfri.domain.domain_values();
         timer.elapsed("x_domain_values");
 
+        debug_assert_eq!(codewords.len(), degree_bounds.len());
         // TODO with the DEBUG CODE and `enumerate` removed, these iterators can be `into_par_iter`
         for (id, (codeword, degree_bound)) in
             codewords.into_iter().zip(degree_bounds.iter()).enumerate()
@@ -608,8 +609,7 @@ impl Stark {
         let base_degree_bounds: Vec<Degree> = ext_table_collection.get_all_base_degree_bounds();
         timer.elapsed("Calculated base degree bounds");
 
-        let extension_degree_bounds: Vec<Degree> =
-            ext_table_collection.get_all_extension_degree_bounds();
+        let extension_degree_bounds: Vec<Degree> = ext_table_collection.get_all_degree_bounds();
         timer.elapsed("Calculated extension degree bounds");
 
         // get weights for nonlinear combination

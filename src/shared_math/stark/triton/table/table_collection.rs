@@ -368,12 +368,9 @@ impl ExtTableCollection {
             .concat()
     }
 
-    pub fn get_all_extension_degree_bounds(&self) -> Vec<i64> {
+    pub fn get_all_degree_bounds(&self) -> Vec<i64> {
         self.into_iter()
-            .map(|ext_table| {
-                let extension_column_count = ext_table.full_width() - ext_table.base_width();
-                vec![ext_table.interpolant_degree(); extension_column_count]
-            })
+            .map(|ext_table| vec![ext_table.interpolant_degree(); ext_table.full_width()])
             .concat()
     }
 
