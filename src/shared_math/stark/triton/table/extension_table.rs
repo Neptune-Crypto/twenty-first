@@ -193,18 +193,18 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
         if std::env::var("DEBUG").is_ok() {
             // interpolate the quotient and check the degree
-            for (i, qc) in quotients.iter().enumerate() {
+            for (idx, qc) in quotients.iter().enumerate() {
                 let interpolated: Polynomial<XWord> = lift_domain(fri_domain).interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
-                    "Degree of transition quotient number {} in {} must not be maximal. \
+                    "Degree of transition quotient number {idx} (of {}) in {} must not be maximal. \
                     Got degree {}, and FRI domain length was {}. \
                     Unsatisfied constraint: {}",
-                    i,
+                    quotients.len(),
                     self.name(),
                     interpolated.degree(),
                     fri_domain.length,
-                    transition_constraints[i]
+                    transition_constraints[idx]
                 );
             }
         }
@@ -246,11 +246,18 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         }
 
         if std::env::var("DEBUG").is_ok() {
-            for (i, qc) in quotient_codewords.iter().enumerate() {
+            for (idx, qc) in quotient_codewords.iter().enumerate() {
                 let interpolated = lift_domain(fri_domain).interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
-                    "Degree of terminal quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}. Unsatisfied constraint: {}", i, self.name(), interpolated.degree(), fri_domain.length, terminal_constraints[i]
+                    "Degree of terminal quotient number {idx} (of {}) in {} must not be maximal. \
+                    Got degree {}, and FRI domain length was {}. \
+                    Unsatisfied constraint: {}",
+                    quotient_codewords.len(),
+                    self.name(),
+                    interpolated.degree(),
+                    fri_domain.length,
+                    terminal_constraints[idx]
                 );
             }
         }
@@ -285,7 +292,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
             .collect();
         let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
 
-        for bc in boundary_constraints {
+        for bc in boundary_constraints.iter() {
             // println!("rows: {}, columns: {}", codewords.len(), codewords[0].len());
             // println!("fri_domain.length = {}", fri_domain.length);
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
@@ -319,11 +326,18 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
         // If the `DEBUG` environment variable is set, run this extra validity check
         if std::env::var("DEBUG").is_ok() {
-            for (i, qc) in quotient_codewords.iter().enumerate() {
+            for (idx, qc) in quotient_codewords.iter().enumerate() {
                 let interpolated = lift_domain(fri_domain).interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
-                    "Degree of boundary quotient number {} in {} must not be maximal. Got degree {}, and FRI domain length was {}", i, self.name(), interpolated.degree(), fri_domain.length
+                    "Degree of boundary quotient number {idx} (of {}) in {} must not be maximal. \
+                    Got degree {}, and FRI domain length was {}.\
+                    Unsatisfied constraint: {}",
+                    quotient_codewords.len(),
+                    self.name(),
+                    interpolated.degree(),
+                    fri_domain.length,
+                    boundary_constraints[idx]
                 );
             }
         }
