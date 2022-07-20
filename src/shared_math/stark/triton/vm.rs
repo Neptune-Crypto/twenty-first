@@ -291,7 +291,12 @@ mod triton_vm_tests {
     #[test]
     fn initialise_table_42_test() {
         // 1. Execute program
-        let code = sample_programs::SUBTRACT;
+        let code = "
+        push 5
+        push 18446744069414584320
+        add
+        halt
+    ";
         let program = Program::from_code(code).unwrap();
 
         println!("{}", program);
@@ -624,69 +629,100 @@ mod triton_vm_tests {
         }
     }
 
-    #[test]
-    fn xxadd() {
-        // 1. Execute program
-        let code = sample_programs::XXADD;
-        let program = Program::from_code(code).unwrap();
+    fn simulate_and_output(code: &str, stdin_words: &[BWord]) -> VecStream {
+        let program = Program::from_code(code).expect("Program parses correctly");
 
         println!("{}", program);
 
-        let mut stdin =
-            VecStream::new_bwords(&[2.into(), 3.into(), 5.into(), 7.into(), 11.into(), 13.into()]);
+        let mut stdin = VecStream::new_bwords(stdin_words);
         let mut secret_in = VecStream::new_bwords(&[]);
         let mut stdout = VecStream::new_bwords(&[]);
         let rescue_prime = neptune_params();
 
-        let (_base_matrices, _err) =
+        let (_base_matrices, err) =
             program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
 
-        let expected = VecStream::new_bwords(&[9.into(), 14.into(), 18.into()]);
+        if let Some(err) = err {
+            panic!("{}", err);
+        }
 
-        // Discard disagreeing cursor values and compare.
-        assert_eq!(expected.to_bword_vec(), stdout.to_bword_vec());
+        stdout
     }
 
     #[test]
-    fn xxmul() {
-        // 1. Execute program
-        let code = sample_programs::XXMUL;
-        let program = Program::from_code(code).unwrap();
+    fn xxadd_test() {
+        let stdin_words = &[2.into(), 3.into(), 5.into(), 7.into(), 11.into(), 13.into()];
+        let xxadd_code = "
+            read_io
+            read_io
+            read_io
+            read_io
+            read_io
+            read_io
+            xxadd
+            swap2
+            write_io
+            write_io
+            write_io
+            halt
+        ";
+        let actual_stdout = simulate_and_output(xxadd_code, stdin_words);
+        let expected_stdout = VecStream::new_bwords(&[9.into(), 14.into(), 18.into()]);
 
-        println!("{}", program);
-
-        let mut stdin =
-            VecStream::new_bwords(&[2.into(), 3.into(), 5.into(), 7.into(), 11.into(), 13.into()]);
-        let mut secret_in = VecStream::new_bwords(&[]);
-        let mut stdout = VecStream::new_bwords(&[]);
-        let rescue_prime = neptune_params();
-
-        let (_base_matrices, _err) =
-            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
-
-        let expected = VecStream::new_bwords(&[108.into(), 123.into(), 22.into()]);
-
-        // Discard disagreeing cursor values and compare.
-        assert_eq!(expected.to_bword_vec(), stdout.to_bword_vec());
+        assert_eq!(expected_stdout.to_bword_vec(), actual_stdout.to_bword_vec());
     }
 
     #[test]
-    fn xinv() {
-        // 1. Execute program
-        let code = sample_programs::XINV;
-        let program = Program::from_code(code).unwrap();
+    fn xxmul_test() {
+        let stdin_words = &[2.into(), 3.into(), 5.into(), 7.into(), 11.into(), 13.into()];
+        let xxmul_code = "
+            read_io
+            read_io
+            read_io
+            read_io
+            read_io
+            read_io
+            xxmul
+            swap2
+            write_io
+            write_io
+            write_io
+            halt
+        ";
+        let actual_stdout = simulate_and_output(xxmul_code, stdin_words);
+        let expected_stdout = VecStream::new_bwords(&[108.into(), 123.into(), 22.into()]);
 
-        println!("{}", program);
+        assert_eq!(expected_stdout.to_bword_vec(), actual_stdout.to_bword_vec());
+    }
 
-        let mut stdin = VecStream::new_bwords(&[2.into(), 3.into(), 5.into()]);
-        let mut secret_in = VecStream::new_bwords(&[]);
-        let mut stdout = VecStream::new_bwords(&[]);
-        let rescue_prime = neptune_params();
-
-        let (_base_matrices, _err) =
-            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
-
-        let expected = VecStream::new_bytes(&[
+    #[test]
+    fn xinv_test() {
+        let stdin_words = &[2.into(), 3.into(), 5.into()];
+        let xinv_code = "
+            read_io
+            read_io
+            read_io
+            dup2
+            dup2
+            dup2
+            dup2
+            dup2
+            dup2
+            xinvert
+            xxmul
+            swap2
+            write_io
+            write_io
+            write_io
+            xinvert
+            swap2
+            write_io
+            write_io
+            write_io
+            halt
+        ";
+        let actual_stdout = simulate_and_output(xinv_code, stdin_words);
+        let expected_stdout = VecStream::new_bytes(&[
             0.into(),
             0.into(),
             0.into(),
@@ -737,29 +773,35 @@ mod triton_vm_tests {
             118.into(),
         ]);
 
-        // Discard disagreeing cursor values and compare.
-        assert_eq!(expected.to_bword_vec(), stdout.to_bword_vec());
+        assert_eq!(expected_stdout.to_bword_vec(), actual_stdout.to_bword_vec());
     }
 
     #[test]
-    fn xbmul() {
-        // 1. Execute program
-        let code = sample_programs::XBMUL;
-        let program = Program::from_code(code).unwrap();
+    fn xbmul_test() {
+        let stdin_words = &[2.into(), 3.into(), 5.into(), 7.into()];
+        let xbmul_code: &str = "
+            read_io
+            read_io
+            read_io
+            read_io
+            xbmul
+            swap2
+            write_io
+            write_io
+            write_io
+            halt
+        ";
+        let actual_stdout = simulate_and_output(xbmul_code, stdin_words);
+        let expected_stdout = VecStream::new_bwords(&[14.into(), 21.into(), 35.into()]);
 
-        println!("{}", program);
+        assert_eq!(expected_stdout.to_bword_vec(), actual_stdout.to_bword_vec());
+    }
 
-        let mut stdin = VecStream::new_bwords(&[2.into(), 3.into(), 5.into(), 7.into()]);
-        let mut secret_in = VecStream::new_bwords(&[]);
-        let mut stdout = VecStream::new_bwords(&[]);
-        let rescue_prime = neptune_params();
+    #[test]
+    fn pseudo_sub_test() {
+        let actual_stdout = simulate_and_output("push 7 push 19 sub write_io halt ", &[]);
+        let expected_stdout = VecStream::new_bwords(&[12.into()]);
 
-        let (_base_matrices, _err) =
-            program.simulate(&mut stdin, &mut secret_in, &mut stdout, &rescue_prime);
-
-        let expected = VecStream::new_bwords(&[14.into(), 21.into(), 35.into()]);
-
-        // Discard disagreeing cursor values and compare.
-        assert_eq!(expected.to_bword_vec(), stdout.to_bword_vec());
+        assert_eq!(expected_stdout.to_bword_vec(), actual_stdout.to_bword_vec());
     }
 }

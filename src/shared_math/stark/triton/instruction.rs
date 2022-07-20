@@ -3,6 +3,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Display;
+use std::ops::Neg;
 use std::str::SplitWhitespace;
 use AnInstruction::*;
 use TokenError::*;
@@ -494,6 +495,10 @@ fn parse_token(
         "xinvert" => vec![XInvert],
         "xbmul" => vec![XbMul],
 
+        // Pseudo-instructions
+        "neg" => vec![Push(BWord::ring_one().neg()), Mul],
+        "sub" => vec![Swap(ST1), Push(BWord::ring_one().neg()), Mul, Add],
+
         // Read/write
         "read_io" => vec![ReadIo],
         "write_io" => vec![WriteIo],
@@ -762,8 +767,6 @@ pub mod sample_programs {
         write_io write_io write_io write_io write_io write_io write_io
         ";
 
-    pub const HALT_THEN_DO_STUFF: &str = "halt push 1 push 2 add invert write_io";
-
     pub const BASIC_RAM_READ_WRITE: &str = concat!(
         "push  5 push  6 write_mem pop pop ",
         "push 15 push 16 write_mem pop pop ",
@@ -782,11 +785,6 @@ pub mod sample_programs {
         "swap2 read_mem ",                    // stack's top should now be 3, 5, 3, 0, 0, …
         "halt ",
     );
-
-    pub const WRITE_42: &str = "
-        push 42
-        write_io
-    ";
 
     pub const READ_WRITE_X3: &str = "
         read_io
@@ -808,22 +806,6 @@ pub mod sample_programs {
         write_io write_io write_io write_io
         write_io write_io
     ";
-
-    pub const READ_X3_NOP_X2: &str = "
-        read_io read_io read_io
-        nop nop
-    ";
-
-    pub const SUBTRACT: &str = "
-        push 5
-        push 18446744069414584320
-        add
-        halt
-    ";
-
-    pub const HALT: &str = "
-        halt
-";
 
     pub const COUNTDOWN_FROM_10: &str = "
         push 10
@@ -993,73 +975,6 @@ terminate: pop
         hash
         hash
         hash
-        halt
-    ";
-
-    pub const XXADD: &str = "
-        read_io
-        read_io
-        read_io
-        read_io
-        read_io
-        read_io
-        xxadd
-        swap2
-        write_io
-        write_io
-        write_io
-        halt
-    ";
-
-    pub const XXMUL: &str = "
-        read_io
-        read_io
-        read_io
-        read_io
-        read_io
-        read_io
-        xxmul
-        swap2
-        write_io
-        write_io
-        write_io
-        halt
-    ";
-
-    pub const XINV: &str = "
-        read_io
-        read_io
-        read_io
-        dup2
-        dup2
-        dup2
-        dup2
-        dup2
-        dup2
-        xinvert
-        xxmul
-        swap2
-        write_io
-        write_io
-        write_io
-        xinvert
-        swap2
-        write_io
-        write_io
-        write_io
-        halt
-    ";
-
-    pub const XBMUL: &str = "
-        read_io
-        read_io
-        read_io
-        read_io
-        xbmul
-        swap2
-        write_io
-        write_io
-        write_io
         halt
     ";
 

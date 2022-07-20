@@ -1196,7 +1196,11 @@ pub(crate) mod triton_stark_tests {
     // 1. simulate(), pad(), extend(), test terminals
     #[test]
     pub fn check_terminals() {
-        let input_symbols = [3.into(), 5.into(), 7.into()];
+        let read_nop_code = "
+            read_io read_io read_io
+            nop nop
+        ";
+        let input_symbols = vec![3.into(), 5.into(), 7.into()];
         let (
             stdout,
             _unpadded_base_tables,
@@ -1205,7 +1209,7 @@ pub(crate) mod triton_stark_tests {
             all_challenges,
             _all_initials,
             all_terminals,
-        ) = parse_simulate_pad_extend(sample_programs::READ_X3_NOP_X2, &input_symbols, &[], &[]);
+        ) = parse_simulate_pad_extend(read_nop_code, &input_symbols, &[], &[]);
 
         let ptie = all_terminals.processor_table_endpoints.input_table_eval_sum;
         let ine = evaluation_argument::compute_terminal(
@@ -1282,8 +1286,7 @@ pub(crate) mod triton_stark_tests {
     #[test]
     fn triton_prove_verify_test() {
         let co_set_fri_offset = BWord::generator();
-        let (stark, mut proof_stream) =
-            parse_simulate_prove(sample_programs::HALT, co_set_fri_offset, &[], &[]);
+        let (stark, mut proof_stream) = parse_simulate_prove("halt", co_set_fri_offset, &[], &[]);
 
         println!("between prove and verify");
 

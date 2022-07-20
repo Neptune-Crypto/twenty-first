@@ -838,7 +838,8 @@ mod vm_state_tests {
 
     #[test]
     fn run_tvm_halt_then_do_stuff_test() {
-        let program = Program::from_code(sample_programs::HALT_THEN_DO_STUFF).unwrap();
+        let halt_then_do_stuff = "halt push 1 push 2 add invert write_io";
+        let program = Program::from_code(halt_then_do_stuff).unwrap();
         let (trace, _out, err) = program.run_with_input(&[], &[]);
 
         for state in trace.iter() {
