@@ -162,6 +162,7 @@ impl Stark {
         let (ext_tables, all_terminals) =
             ExtTableCollection::extend_tables(&base_tables, &all_challenges, &all_initials);
         let ext_codeword_tables = ext_tables.codeword_tables(&self.xfri.domain);
+        // all_codewords contain base codewords and extension codewords.
         let all_codewords = ext_codeword_tables.concat_table_data();
 
         timer.elapsed("extend + get_terminals");
@@ -178,7 +179,6 @@ impl Stark {
         proof_stream.enqueue(&Item::Terminals(all_terminals.clone()));
         timer.elapsed("extension_tree");
 
-        // XXX: Culprit!
         let mut quotient_codewords = ext_codeword_tables.get_all_quotients(
             &self.bfri_domain,
             &all_challenges,
@@ -186,7 +186,6 @@ impl Stark {
         );
         timer.elapsed("all_quotients");
 
-        // XXX: Culprit!
         let mut quotient_degree_bounds =
             ext_codeword_tables.get_all_quotient_degree_bounds(&all_challenges, &all_terminals);
         timer.elapsed("all_quotient_degree_bounds");
@@ -209,7 +208,7 @@ impl Stark {
 
         let combination_codeword = self.create_combination_codeword(
             &mut timer,
-            x_rand_codeword,
+            vec![x_rand_codeword],
             all_codewords,
             quotient_codewords,
             weights,
@@ -342,7 +341,7 @@ impl Stark {
     fn create_combination_codeword(
         &self,
         timer: &mut TimingReporter,
-        x_rand_codeword: Vec<XFieldElement>,
+        randomizer_codewords: Vec<Vec<XFieldElement>>,
         codewords: Vec<Vec<XFieldElement>>,
         quotient_codewords: Vec<Vec<XFieldElement>>,
         weights: Vec<XFieldElement>,
@@ -350,6 +349,7 @@ impl Stark {
         quotient_degree_bounds: Vec<i64>,
         ext_tables: &ExtTableCollection, // TODO this is just for debugging – try to remove again
     ) -> Vec<XFieldElement> {
+        assert_eq!(self.num_randomizer_polynomials, randomizer_codewords.len());
         assert_eq!(codewords.len(), degree_bounds.len());
         assert_eq!(quotient_codewords.len(), quotient_degree_bounds.len());
         assert!(
@@ -359,12 +359,17 @@ impl Stark {
         );
 
         let mut weights_iterator = weights.into_iter();
+        let mut combination_codeword: Vec<XFieldElement> = vec![0.into(); self.xfri.domain.length];
 
-        // TODO don't hardcode number of randomizer codewords
-        let mut combination_codeword: Vec<XFieldElement> = x_rand_codeword
-            .into_iter()
-            .map(|elem| elem * weights_iterator.next().unwrap())
-            .collect();
+        for randomizer_codeword in randomizer_codewords {
+            combination_codeword = Self::non_linearly_add_to_codeword(
+                &combination_codeword,
+                &randomizer_codeword,
+                &weights_iterator.next().unwrap(),
+                &randomizer_codeword,
+                &0.into(),
+            );
+        }
 
         // TODO don't keep the entire domain's values in memory, create them lazily when needed
         let fri_x_values = self.xfri.domain.domain_values();
@@ -740,7 +745,9 @@ impl Stark {
         // Collect values in a hash map
         for (i, &idx) in revealed_indices.iter().enumerate() {
             debug_assert_eq!(
-                1, self.num_randomizer_polynomials,
+                // TODO this is not true anymore, adapt code accordingly
+                1,
+                self.num_randomizer_polynomials,
                 "For now number of randomizers must be 1"
             );
             tuples.insert(idx, revealed_elements[i].clone());
@@ -1025,7 +1032,7 @@ pub(crate) mod triton_stark_tests {
         let (base_matrices, _) = parse_simulate(code, input_symbols, &[], output_symbols);
 
         let num_trace_randomizers = 2;
-        let num_randomizer_polynomials = 1; // TODO: combination codeword might use a hardcoded 1 for this – Fix it :)
+        let num_randomizer_polynomials = 1;
         let log_expansion_factor = 2;
         let security_level = 32;
 
