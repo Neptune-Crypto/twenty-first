@@ -197,22 +197,13 @@ impl Stark {
             quotient_degree_bounds.push(pa.quotient_degree_bound(&ext_codeword_tables));
         }
 
-        let num_polynomials: usize = ext_tables
-            .into_iter()
-            .map(|ext_table| ext_table.full_width())
-            .sum();
-        let num_quotient_polynomials = quotient_degree_bounds.len();
-
-        assert_eq!(num_polynomials, all_codewords.len());
-        assert_eq!(num_quotient_polynomials, quotient_codewords.len());
-
         // Get weights for nonlinear combination
         let weights_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
 
         timer.elapsed("prover_fiat_shamir (again)");
 
         let weights_count = self.num_randomizer_polynomials
-            + 2 * (num_polynomials + num_quotient_polynomials + 1000); // FIXME: How many weights do we actually need?
+            + 2 * (all_codewords.len() + quotient_degree_bounds.len() + 1000); // FIXME: How many weights do we actually need?
         let weights = hasher.sample_n_weights(&weights_seed, weights_count);
         timer.elapsed("sample_weights");
 
@@ -357,8 +348,16 @@ impl Stark {
         weights: Vec<XFieldElement>,
         degree_bounds: Vec<i64>,
         quotient_degree_bounds: Vec<i64>,
-        ext_tables: &ExtTableCollection,
+        ext_tables: &ExtTableCollection, // TODO this is just for debugging – try to remove again
     ) -> Vec<XFieldElement> {
+        assert_eq!(codewords.len(), degree_bounds.len());
+        assert_eq!(quotient_codewords.len(), quotient_degree_bounds.len());
+        assert!(
+            weights.len()
+                >= self.num_randomizer_polynomials
+                    + 2 * (codewords.len() + quotient_codewords.len()),
+        );
+
         let mut weights_iterator = weights.into_iter();
 
         // TODO don't hardcode number of randomizer codewords
@@ -371,7 +370,6 @@ impl Stark {
         let fri_x_values = self.xfri.domain.domain_values();
         timer.elapsed("x_domain_values");
 
-        debug_assert_eq!(codewords.len(), degree_bounds.len());
         // TODO with the DEBUG CODE and `enumerate` removed, these iterators can be `into_par_iter`
         for (id, (codeword, degree_bound)) in
             codewords.into_iter().zip(degree_bounds.iter()).enumerate()
