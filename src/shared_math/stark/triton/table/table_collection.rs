@@ -126,7 +126,7 @@ impl BaseTableCollection {
             .concat()
     }
 
-    pub fn get_all_base_degree_bounds(&self) -> Vec<Degree> {
+    pub fn get_base_column_degree_bounds(&self) -> Vec<Degree> {
         self.into_iter()
             .map(|table| vec![table.interpolant_degree(); table.base_width()])
             .concat()
@@ -316,22 +316,15 @@ impl ExtTableCollection {
         }
     }
 
-    pub fn concat_table_data(&self) -> Vec<Vec<XWord>> {
-        let total_codeword_count = self
-            .into_iter()
-            .map(|ext_table| ext_table.data().len())
-            .sum();
-        let mut all_table_data = Vec::with_capacity(total_codeword_count);
+    pub fn get_all_extension_columns(&self) -> Vec<Vec<XWord>> {
+        let mut all_ext_cols = vec![];
 
         for table in self.into_iter() {
-            // DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW
-            println!("Table {} has {} columns.", table.name(), table.data().len());
-            for col in table.data().iter() {
-                all_table_data.push(col.clone());
+            for col in table.data().iter().skip(table.base_width()) {
+                all_ext_cols.push(col.clone());
             }
         }
-
-        all_table_data
+        all_ext_cols
     }
 
     pub fn data(&self, table_id: TableId) -> &Vec<Vec<XWord>> {
@@ -370,18 +363,13 @@ impl ExtTableCollection {
             .concat()
     }
 
-    pub fn get_all_degree_bounds(&self) -> Vec<i64> {
+    pub fn get_extension_column_degree_bounds(&self) -> Vec<i64> {
         self.into_iter()
             .map(|ext_table| {
-                let degree_bounds = vec![ext_table.interpolant_degree(); ext_table.full_width()];
-                // DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW DEBUG CODE BELOW
-                println!(
-                    "{} has {} columns, {:?} degree bounds",
-                    ext_table.name(),
-                    ext_table.full_width(),
-                    degree_bounds
-                );
-                degree_bounds
+                vec![
+                    ext_table.interpolant_degree();
+                    ext_table.full_width() - ext_table.base_width()
+                ]
             })
             .concat()
     }
