@@ -481,13 +481,11 @@ impl Stark {
         summand_shifted: &Vec<XFieldElement>,
         weight_shifted: &XFieldElement,
     ) -> Vec<XFieldElement> {
-        debug_assert_eq!(combination_codeword.len(), summand.len());
-        debug_assert_eq!(combination_codeword.len(), summand_shifted.len());
         combination_codeword
             .par_iter()
-            .zip(summand.par_iter())
+            .zip_eq(summand.par_iter())
             .map(|(cc_elem, &summand_elem)| *cc_elem + *weight * summand_elem)
-            .zip(summand_shifted.par_iter())
+            .zip_eq(summand_shifted.par_iter())
             .map(|(cc_elem, &summand_shifted_elem)| {
                 cc_elem + *weight_shifted * summand_shifted_elem
             })
@@ -501,7 +499,7 @@ impl Stark {
     ) -> Vec<XFieldElement> {
         fri_x_values
             .par_iter()
-            .zip(codeword.par_iter())
+            .zip_eq(codeword.par_iter())
             .map(|(x, &codeword_element)| (codeword_element * x.mod_pow_u32(shift)))
             .collect()
     }
