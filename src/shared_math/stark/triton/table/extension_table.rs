@@ -105,21 +105,31 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         challenges: &AllChallenges,
         terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {
-        // println!("TABLENAME: {}", self.name());
         let mut timer = TimingReporter::start();
+        timer.elapsed(&format!("Table name: {}", self.name()));
 
-        timer.elapsed("Start calculating boundary quotients: {}");
         let boundary_quotients = self.boundary_quotients(fri_domain, codewords, challenges);
-        timer.elapsed("Stop calculating boundary quotients: {}");
-        timer.elapsed("Start calculating transition quotients: {}");
+        timer.elapsed("boundary quotients");
+
+        // TODO take consistency quotients into account
+        // let consistency_quotients = self.consistency_quotients(fri_domain, codewords, challenges);
+        // timer.elapsed("Done calculating consistency quotients");
+
         let transition_quotients = self.transition_quotients(fri_domain, codewords, challenges);
-        timer.elapsed("Stop calculating transition quotients: {}");
-        timer.elapsed("Start calculating terminal quotients: {}");
+        timer.elapsed("transition quotients");
+
         let terminal_quotients =
             self.terminal_quotients(fri_domain, codewords, challenges, terminals);
-        timer.elapsed("Stop calculating terminal quotients: {}");
+        timer.elapsed("terminal quotients");
 
-        vec![boundary_quotients, transition_quotients, terminal_quotients].concat()
+        println!("{}", timer.finish());
+        vec![
+            boundary_quotients,
+            // consistency_quotients,
+            transition_quotients,
+            terminal_quotients,
+        ]
+        .concat()
     }
 
     fn transition_quotients(
