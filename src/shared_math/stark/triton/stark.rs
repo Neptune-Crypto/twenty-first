@@ -429,6 +429,13 @@ impl Stark {
         }
         timer.elapsed("...shift and collect quotient codewords");
 
+        if std::env::var("DEBUG").is_ok() {
+            println!(
+                "The combination codeword corresponds to a polynomial of degree {}",
+                self.xfri.domain.interpolate(&combination_codeword).degree()
+            );
+        }
+
         combination_codeword
     }
 
@@ -443,6 +450,9 @@ impl Stark {
         ext_tables: &ExtTableCollection,
         poly_type: &str,
     ) {
+        if std::env::var("DEBUG").is_err() {
+            return;
+        }
         let interpolated = self.xfri.domain.interpolate(extension_codeword);
         let interpolated_shifted = self.xfri.domain.interpolate(extension_codeword_shifted);
         let int_shift_deg = interpolated_shifted.degree();
@@ -454,8 +464,8 @@ impl Stark {
             "   "
         };
         println!(
-            "{maybe_excl_mark} The shifted {poly_type} codeword for {} with index {idx:>2} must be of \
-            maximal degree {}. Got {}. Predicted degree of unshifted codeword: \
+            "{maybe_excl_mark} The shifted {poly_type} codeword for {} with index {idx:>2} \
+            must be of maximal degree {}. Got {}. Predicted degree of unshifted codeword: \
             {degree_bound}. Actual degree of unshifted codeword: {}. Shift = {shift}.",
             ext_tables.codeword_index_to_table_name(*idx),
             self.max_degree,
@@ -654,6 +664,7 @@ impl Stark {
 
         // Verify low degree of combination polynomial
         self.xfri.verify(proof_stream, &combination_root)?;
+        println!(" \\o/ FRI verification was successfull \\o/"); // DEBUG DEBUG DEBUG DEBUG DEBUG
         timer.elapsed("Verified FRI proof");
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
@@ -692,7 +703,9 @@ impl Stark {
             .iter()
             .map(|re| {
                 hasher.hash(
-                    &re.iter().map(|xfe| xfe.unlift().unwrap()).collect_vec(),
+                    &re.iter()
+                        .map(|xfe| xfe.unlift().expect("unlift revealed base elements"))
+                        .collect_vec(),
                     RP_DEFAULT_OUTPUT_SIZE,
                 )
             })

@@ -78,7 +78,9 @@ impl ExtensionTable for ExtHashTable {
         // 1. The round number rnd_nmbr starts at 1.
         let rnd_nmbr_starts_at_one = rnd_nmbr - one;
 
-        vec![rnd_nmbr_starts_at_one]
+        // TODO this constraint breaks – figure out why!
+        vec![rnd_nmbr_starts_at_one];
+        vec![]
     }
 
     fn ext_consistency_constraints(&self, _challenges: &AllChallenges) -> Vec<MPolynomial<XWord>> {

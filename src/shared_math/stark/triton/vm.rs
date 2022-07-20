@@ -630,7 +630,7 @@ mod triton_vm_tests {
     }
 
     fn simulate_and_output(code: &str, stdin_words: &[BWord]) -> VecStream {
-        let program = Program::from_code(code).expect("Program parses correctly");
+        let program = Program::from_code(code).expect("Program should parse correctly");
 
         println!("{}", program);
 
