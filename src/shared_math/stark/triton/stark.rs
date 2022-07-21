@@ -272,15 +272,8 @@ impl Stark {
         );
 
         // Open leafs of zipped codewords at indicated positions
-        let mut revealed_indices: Vec<usize> = vec![];
-        for index in cross_codeword_slice_indices.iter() {
-            for unit_distance in unit_distances.iter() {
-                let idx: usize = (index + unit_distance) % self.xfri.domain.length;
-                revealed_indices.push(idx);
-            }
-        }
-        revealed_indices.sort_unstable();
-        revealed_indices.dedup();
+        let revealed_indices =
+            self.get_revealed_indices(&unit_distances, &cross_codeword_slice_indices);
 
         let revealed_base_elems =
             Self::get_revealed_elements(&transposed_base_codewords, &revealed_indices);
@@ -332,6 +325,22 @@ impl Stark {
         );
 
         proof_stream
+    }
+
+    fn get_revealed_indices(
+        &self,
+        unit_distances: &[usize],
+        cross_codeword_slice_indices: &[usize],
+    ) -> Vec<usize> {
+        let mut revealed_indices: Vec<usize> = vec![];
+        for index in cross_codeword_slice_indices.iter() {
+            for unit_distance in unit_distances.iter() {
+                revealed_indices.push((index + unit_distance) % self.xfri.domain.length);
+            }
+        }
+        revealed_indices.sort_unstable();
+        revealed_indices.dedup();
+        revealed_indices
     }
 
     fn get_unit_distances(&self, ext_tables: &ExtTableCollection) -> Vec<usize> {
@@ -683,14 +692,7 @@ impl Stark {
         timer.elapsed("Got unit distances");
 
         // Open leafs of zipped codewords at indicated positions
-        let mut revealed_indices = vec![];
-        for index in indices.iter() {
-            for unit_distance in unit_distances.iter() {
-                revealed_indices.push((index + unit_distance) % self.xfri.domain.length);
-            }
-        }
-        revealed_indices.sort_unstable();
-        revealed_indices.dedup();
+        let revealed_indices = self.get_revealed_indices(&unit_distances, &indices);
         timer.elapsed("Calculated revealed indices");
 
         let revealed_base_elements = proof_stream
