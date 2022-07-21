@@ -246,15 +246,7 @@ impl Stark {
 
         timer.elapsed("combination_tree");
 
-        // TODO: Consider factoring out code to find `unit_distances`, duplicated in verifier
-        let mut unit_distances: Vec<usize> = ext_tables // XXX:
-            .into_iter()
-            .map(|table| table.unit_distance(self.xfri.domain.length))
-            .collect();
-        unit_distances.push(0);
-        unit_distances.sort_unstable();
-        unit_distances.dedup();
-
+        let unit_distances = self.get_unit_distances(&ext_tables);
         timer.elapsed("unit_distances");
 
         // Get indices of slices that go across codewords to prove nonlinear combination
@@ -340,6 +332,17 @@ impl Stark {
         );
 
         proof_stream
+    }
+
+    fn get_unit_distances(&self, ext_tables: &ExtTableCollection) -> Vec<usize> {
+        let mut unit_distances: Vec<usize> = ext_tables
+            .into_iter()
+            .map(|table| table.unit_distance(self.xfri.domain.length))
+            .collect();
+        unit_distances.push(0);
+        unit_distances.sort_unstable();
+        unit_distances.dedup();
+        unit_distances
     }
 
     fn get_revealed_elements<PF: PrimeField>(
@@ -685,15 +688,8 @@ impl Stark {
         println!(" \\o/ FRI verification was successfull \\o/"); // DEBUG DEBUG DEBUG DEBUG DEBUG
         timer.elapsed("Verified FRI proof");
 
-        // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
-        let mut unit_distances: Vec<usize> = ext_table_collection
-            .into_iter()
-            .map(|table| table.unit_distance(self.xfri.domain.length))
-            .collect();
-        unit_distances.push(0);
-        unit_distances.sort_unstable();
-        unit_distances.dedup();
-        timer.elapsed("Got unit distances");
+        let unit_distances = self.get_unit_distances(&ext_table_collection);
+        timer.elapsed("unit_distances");
 
         let mut tuples: HashMap<usize, Vec<XFieldElement>> = HashMap::new();
         // TODO: we can store the elements mushed into "tuples" separately, like in "points" below,
