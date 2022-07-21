@@ -4,6 +4,7 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::stark::triton::fri_domain::{lift_domain, FriDomain};
+use crate::shared_math::stark::triton::table::base_table;
 use crate::shared_math::traits::{Inverse, ModPowU32, PrimeField};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
@@ -164,7 +165,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         timer.elapsed("Transition Constraints");
 
         let mut quotients: Vec<Vec<XWord>> = vec![];
-        let unit_distance = self.unit_distance(fri_domain.length);
+        let unit_distance = base_table::unit_distance(self.padded_height(), fri_domain.length);
 
         for tc in transition_constraints.iter() {
             //timer.elapsed(&format!("START for-loop for tc of {}", tc.degree()));

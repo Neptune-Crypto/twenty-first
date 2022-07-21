@@ -15,6 +15,7 @@ use crate::shared_math::stark::triton::arguments::evaluation_argument::verify_ev
 use crate::shared_math::stark::triton::arguments::permutation_argument::PermArg;
 use crate::shared_math::stark::triton::proof_item::{Item, StarkProofStream};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
+use crate::shared_math::stark::triton::table::base_table;
 use crate::shared_math::stark::triton::table::challenges_endpoints::{AllChallenges, AllEndpoints};
 use crate::shared_math::stark::triton::table::table_collection::{
     BaseTableCollection, ExtTableCollection,
@@ -245,9 +246,6 @@ impl Stark {
 
         timer.elapsed("combination_tree");
 
-        let unit_distances = self.get_unit_distances(&ext_tables);
-        timer.elapsed("unit_distances");
-
         // Get indices of slices that go across codewords to prove nonlinear combination
         let indices_seed = proof_stream.prover_fiat_shamir();
         let cross_codeword_slice_indices =
@@ -270,6 +268,16 @@ impl Stark {
             "Combination root from STARK and from FRI must agree"
         );
 
+        let padded_heights = (&ext_tables)
+            .into_iter()
+            .map(|ext_table| ext_table.padded_height())
+            .collect_vec();
+        let padded_heights_b_field_elems = padded_heights
+            .iter()
+            .map(|height| BWord::new(*height as u64))
+            .collect_vec();
+        let unit_distances = self.get_unit_distances(&padded_heights);
+        timer.elapsed("unit_distances");
         // Open leafs of zipped codewords at indicated positions
         let revealed_indices =
             self.get_revealed_indices(&unit_distances, &cross_codeword_slice_indices);
@@ -277,6 +285,7 @@ impl Stark {
         let revealed_base_elems =
             Self::get_revealed_elements(&transposed_base_codewords, &revealed_indices);
         let auth_paths_base = base_tree.get_multi_proof(&revealed_indices);
+        proof_stream.enqueue(&Item::PaddedHeights(padded_heights_b_field_elems));
         proof_stream.enqueue(&Item::TransposedBaseElementVectors(revealed_base_elems));
         proof_stream.enqueue(&Item::CompressedAuthenticationPaths(auth_paths_base));
 
@@ -342,11 +351,12 @@ impl Stark {
         revealed_indices
     }
 
-    fn get_unit_distances(&self, ext_tables: &ExtTableCollection) -> Vec<usize> {
-        let mut unit_distances: Vec<usize> = ext_tables
-            .into_iter()
-            .map(|table| table.unit_distance(self.xfri.domain.length))
-            .collect();
+    // FIXME: `padded_heights` could be `&[usize; NUM_TABLES]` (but that const doesn't exist yet)
+    fn get_unit_distances(&self, padded_heights: &[usize]) -> Vec<usize> {
+        let mut unit_distances = padded_heights
+            .iter()
+            .map(|height| base_table::unit_distance(*height, self.xfri.domain.length))
+            .collect_vec();
         unit_distances.push(0);
         unit_distances.sort_unstable();
         unit_distances.dedup();
@@ -687,7 +697,13 @@ impl Stark {
         self.xfri.verify(proof_stream, &combination_root)?;
         timer.elapsed("Verified FRI proof");
 
-        let unit_distances = self.get_unit_distances(&ext_table_collection);
+        let padded_heights = proof_stream
+            .dequeue()?
+            .as_padded_heights()?
+            .iter()
+            .map(|bfe| bfe.value() as usize)
+            .collect_vec();
+        let unit_distances = self.get_unit_distances(&padded_heights);
         timer.elapsed("Got unit distances");
 
         // Open leafs of zipped codewords at indicated positions
@@ -884,7 +900,8 @@ impl Stark {
                 }
 
                 // transition
-                let unit_distance = table.unit_distance(self.xfri.domain.length);
+                let unit_distance =
+                    base_table::unit_distance(table.padded_height(), self.xfri.domain.length);
                 let next_index = (index + unit_distance) % self.xfri.domain.length;
                 let mut next_point = tuples[&next_index]
                     [base_acc_index..base_acc_index + table.base_width()]

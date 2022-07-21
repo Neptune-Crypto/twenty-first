@@ -27,6 +27,7 @@ pub enum Item {
     RevealedCombinationElements(Vec<XFieldElement>),
     FriCodeword(Vec<XFieldElement>),
     FriProof(FriProof),
+    PaddedHeights(Vec<BFieldElement>),
 }
 
 impl Item {
@@ -153,6 +154,15 @@ impl Item {
             )),
         }
     }
+
+    pub fn as_padded_heights(&self) -> Result<Vec<BFieldElement>, Box<dyn std::error::Error>> {
+        match self {
+            Self::PaddedHeights(padded_heights) => Ok(padded_heights.to_owned()),
+            _ => Err(ProofStreamError::boxed(
+                "expected padded table heights, but got something else",
+            )),
+        }
+    }
 }
 
 impl IntoIterator for Item {
@@ -199,6 +209,7 @@ impl IntoIterator for Item {
                 .map(|xs| xs_to_bs(&xs).collect::<Vec<_>>())
                 .concat()
                 .into_iter(),
+            Item::PaddedHeights(padded_heights) => padded_heights.into_iter(),
         }
     }
 }
