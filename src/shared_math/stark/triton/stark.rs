@@ -444,7 +444,7 @@ impl Stark {
         ] {
             // TODO with the DEBUG CODE and enumerate removed, the iterators can be `into_par_iter`
             for (idx, (codeword, degree_bound)) in
-                codewords.into_iter().zip(bounds.iter()).enumerate()
+                codewords.into_iter().zip_eq(bounds.iter()).enumerate()
             {
                 let shift = (self.max_degree as Degree - degree_bound) as u32;
                 let codeword_shifted = Self::shift_codeword(&fri_x_values, &codeword, shift);
@@ -711,6 +711,7 @@ impl Stark {
             self.get_revealed_indices(&unit_distances, &cross_codeword_slice_indices);
         timer.elapsed("Calculated revealed indices");
 
+        // TODO: in the following ~80 lines, we (conceptually) do the same thing three times. DRY.
         let revealed_base_elems = proof_stream
             .dequeue()?
             .as_transposed_base_element_vectors()?;
@@ -718,11 +719,11 @@ impl Stark {
             .dequeue()?
             .as_compressed_authentication_paths()?;
         timer.elapsed("Read base elements and auth paths from proof stream");
-        let leaf_digests_base = revealed_base_elems
-            .iter()
+        let leaf_digests_base: Vec<_> = revealed_base_elems
+            .par_iter()
             .map(|revealed_base_elem| hasher.hash(revealed_base_elem, RP_DEFAULT_OUTPUT_SIZE))
-            .collect_vec();
-        timer.elapsed(&format!("Got {num_idxs} leaf digests for base elements",));
+            .collect();
+        timer.elapsed(&format!("Got {num_idxs} leaf digests for base elements"));
 
         if !MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
             base_merkle_tree_root,
@@ -733,7 +734,7 @@ impl Stark {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for base codeword");
         }
-        timer.elapsed(&format!("Verified auth paths for {num_idxs} base elements",));
+        timer.elapsed(&format!("Verified auth paths for {num_idxs} base elements"));
 
         let revealed_ext_elems = proof_stream
             .dequeue()?
@@ -743,11 +744,10 @@ impl Stark {
             .as_compressed_authentication_paths()?;
         timer.elapsed("Read extension elements and auth paths from proof stream");
         let leaf_digests_ext: Vec<_> = revealed_ext_elems
-            .clone()
-            .into_par_iter()
+            .par_iter()
             .map(|xvalues| {
                 let bvalues: Vec<BFieldElement> = xvalues
-                    .into_iter()
+                    .iter()
                     .map(|x| x.coefficients.clone().to_vec())
                     .concat();
                 // FIXME this is a bad assertion. Come up with something better.
@@ -759,7 +759,7 @@ impl Stark {
                 hasher.hash(&bvalues, RP_DEFAULT_OUTPUT_SIZE)
             })
             .collect();
-        timer.elapsed(&format!("Got {num_idxs} leaf digests for ext elements",));
+        timer.elapsed(&format!("Got {num_idxs} leaf digests for ext elements"));
 
         if !MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
             extension_tree_merkle_root,
@@ -770,33 +770,13 @@ impl Stark {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for extension codeword");
         }
-        timer.elapsed(&format!("Verified auth paths for {num_idxs} ext elements",));
-
-        // TODO: we can store the elements mushed into "tuples" separately, like in "points" below,
-        //  to avoid unmushing later
-        let mut tuples: HashMap<usize, Vec<XFieldElement>> = HashMap::new();
-        // Collect values in a hash map
-        for (i, &idx) in revealed_indices.iter().enumerate() {
-            debug_assert_eq!(
-                // TODO this is not true anymore, adapt code accordingly
-                1,
-                self.num_randomizer_polynomials,
-                "For now number of randomizers must be 1"
-            );
-            tuples.insert(idx, revealed_ext_elems[i].clone());
-            tuples.insert(
-                idx,
-                vec![tuples[&idx].clone(), revealed_ext_elems[i].clone()].concat(),
-            );
-        }
-        timer.elapsed(&format!("Collected {num_idxs} values into a hash map",));
+        timer.elapsed(&format!("Verified auth paths for {num_idxs} ext elements"));
 
         // Verify Merkle authentication path for combination elements
         let revealed_combination_elements =
             proof_stream.dequeue()?.as_revealed_combination_elements()?;
-        let revealed_combination_digests: Vec<Vec<BFieldElement>> = revealed_combination_elements
-            .clone()
-            .into_par_iter()
+        let revealed_combination_digests: Vec<_> = revealed_combination_elements
+            .par_iter()
             .map(|xfe| {
                 let b_elements: Vec<BFieldElement> = xfe.to_digest();
                 hasher.hash(&b_elements, RP_DEFAULT_OUTPUT_SIZE)
@@ -814,100 +794,101 @@ impl Stark {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for combination codeword");
         }
-        timer.elapsed(&format!("Verified auth paths for {num_idxs} combi elems",));
+        timer.elapsed(&format!("Verified auth paths for {num_idxs} combi elems"));
 
-        // verify nonlinear combination
-        for (i, &index) in cross_codeword_slice_indices.iter().enumerate() {
-            let b_domain_value = self.xfri.domain.domain_value(index as u32);
-            // collect terms: randomizer
-            let mut terms = (0..self.num_randomizer_polynomials)
-                .map(|j| tuples[&index][j])
-                .collect_vec();
+        // TODO: we can store the elements mushed into "index_map_of_revealed_elems" separately,
+        //  like in "points" below, to avoid unmushing later
+        let index_map_of_revealed_elems = Self::get_index_map_of_revealed_elems(
+            self.num_randomizer_polynomials,
+            revealed_indices,
+            revealed_base_elems,
+            revealed_ext_elems,
+        );
+        timer.elapsed(&format!("Collected {num_idxs} values into a hash map"));
 
-            // collect terms: base
-            for j in self.num_randomizer_polynomials
-                ..self.num_randomizer_polynomials + num_base_polynomials
-            {
-                terms.push(tuples[&index][j]);
-                let shift = (self.max_degree as i64
-                    - base_degree_bounds[j - self.num_randomizer_polynomials])
-                    as u32;
-                terms.push(tuples[&index][j] * b_domain_value.mod_pow_u32(shift));
+        // =======================================
+        // ==== verify non-linear combination ====
+        // =======================================
+        let base_offset = self.num_randomizer_polynomials;
+        let ext_offset = base_offset + num_base_polynomials;
+        let final_offset = ext_offset + num_extension_polynomials;
+        for (cross_slice_index, revealed_combination_element) in cross_codeword_slice_indices
+            .into_iter()
+            .zip_eq(revealed_combination_elements)
+        {
+            let curr_fri_domain_value = self.xfri.domain.domain_value(cross_slice_index as u32);
+            let cross_slice = &index_map_of_revealed_elems[&cross_slice_index];
+            let mut summands = cross_slice[0..base_offset].to_vec();
+
+            for (index_range, degree_bounds) in [
+                (base_offset..ext_offset, base_degree_bounds.iter()),
+                (ext_offset..final_offset, extension_degree_bounds.iter()),
+            ] {
+                for (codeword_index, degree_bound) in index_range.zip_eq(degree_bounds) {
+                    let shift = self.max_degree - degree_bound;
+                    let curr_codeword_elem = cross_slice[codeword_index];
+                    let curr_codeword_elem_shifted =
+                        curr_codeword_elem * curr_fri_domain_value.mod_pow_u32(shift as u32);
+                    summands.push(curr_codeword_elem);
+                    summands.push(curr_codeword_elem_shifted);
+                }
             }
 
-            // collect terms: extension
-            let extension_offset = self.num_randomizer_polynomials + num_base_polynomials;
-
-            assert_eq!(
-                terms.len(),
-                2 * extension_offset - self.num_randomizer_polynomials,
-                "number of terms does not match with extension offset"
-            );
-
-            // TODO: We don't seem to need a separate loop for the base and extension columns.
-            // But merging them would also require concatenating the degree bounds vector.
-            for (j, edb) in extension_degree_bounds.iter().enumerate() {
-                let extension_element = tuples[&index][extension_offset + j];
-                terms.push(extension_element);
-                let shift = (self.max_degree as i64 - edb) as u32;
-                terms.push(extension_element * b_domain_value.mod_pow_u32(shift))
-            }
-
-            // collect terms: quotients, quotients need to be computed
+            // collect summands: quotients, which need to be computed
             let mut acc_index = self.num_randomizer_polynomials;
             let mut points: Vec<Vec<XFieldElement>> = vec![];
             for table in ext_table_collection.into_iter() {
-                let table_base_width = table.base_width();
-                points.push(tuples[&index][acc_index..acc_index + table_base_width].to_vec());
-                acc_index += table_base_width;
+                let num_base_cols = table.base_width();
+                points.push(cross_slice[acc_index..acc_index + num_base_cols].to_vec());
+                acc_index += num_base_cols;
             }
 
             assert_eq!(
-                extension_offset, acc_index,
+                ext_offset, acc_index,
                 "Column count in verifier must match until extension columns"
             );
 
-            for (point, table) in points.iter_mut().zip(ext_table_collection.into_iter()) {
-                let step_size = table.full_width() - table.base_width();
-                point.extend_from_slice(&tuples[&index][acc_index..acc_index + step_size]);
-                acc_index += step_size;
+            for (point, table) in points.iter_mut().zip_eq(ext_table_collection.into_iter()) {
+                let num_ext_cols = table.full_width() - table.base_width();
+                point.extend_from_slice(&cross_slice[acc_index..acc_index + num_ext_cols]);
+                acc_index += num_ext_cols;
             }
 
             assert_eq!(
-                tuples[&index].len(),
+                cross_slice.len(),
                 acc_index,
                 "Column count in verifier must match until end"
             );
 
             let mut base_acc_index = self.num_randomizer_polynomials;
-            let mut ext_acc_index = extension_offset;
-            for (point, table) in points.iter().zip(ext_table_collection.into_iter()) {
+            let mut ext_acc_index = ext_offset;
+            for (point, table) in points.iter().zip_eq(ext_table_collection.into_iter()) {
                 // boundary
                 for (constraint, bound) in table
                     .ext_boundary_constraints(&extension_challenges)
                     .iter()
-                    .zip(
+                    .zip_eq(
                         table
                             .boundary_quotient_degree_bounds(&extension_challenges)
                             .iter(),
                     )
                 {
                     let eval = constraint.evaluate(point);
-                    let quotient = eval / (b_domain_value - 1.into());
-                    terms.push(quotient);
+                    let quotient = eval / (curr_fri_domain_value - 1.into());
+                    summands.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(quotient * b_domain_value.mod_pow_u32(shift));
+                    summands.push(quotient * curr_fri_domain_value.mod_pow_u32(shift));
                 }
 
                 // transition
                 let unit_distance =
                     base_table::unit_distance(table.padded_height(), self.xfri.domain.length);
-                let next_index = (index + unit_distance) % self.xfri.domain.length;
-                let mut next_point = tuples[&next_index]
-                    [base_acc_index..base_acc_index + table.base_width()]
-                    .to_vec();
+                let next_index = (cross_slice_index + unit_distance) % self.xfri.domain.length;
+                let next_cross_slice = &index_map_of_revealed_elems[&next_index];
+                let mut next_point =
+                    next_cross_slice[base_acc_index..base_acc_index + table.base_width()].to_vec();
                 next_point.extend_from_slice(
-                    &tuples[&next_index]
+                    &next_cross_slice
                         [ext_acc_index..ext_acc_index + table.full_width() - table.base_width()],
                 );
                 base_acc_index += table.base_width();
@@ -915,7 +896,7 @@ impl Stark {
                 for (constraint, bound) in table
                     .ext_transition_constraints(&extension_challenges)
                     .iter()
-                    .zip(
+                    .zip_eq(
                         table
                             .transition_quotient_degree_bounds(&extension_challenges)
                             .iter(),
@@ -929,21 +910,21 @@ impl Stark {
                     let quotient = if table.padded_height() == 0 {
                         0.into()
                     } else {
-                        let num = b_domain_value - table.omicron().inverse();
-                        let denom =
-                            b_domain_value.mod_pow_u32(table.padded_height() as u32) - 1.into();
+                        let num = curr_fri_domain_value - table.omicron().inverse();
+                        let denom = curr_fri_domain_value.mod_pow_u32(table.padded_height() as u32)
+                            - 1.into();
                         eval * num / denom
                     };
-                    terms.push(quotient);
+                    summands.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(quotient * b_domain_value.mod_pow_u32(shift));
+                    summands.push(quotient * curr_fri_domain_value.mod_pow_u32(shift));
                 }
 
                 // terminal
                 for (constraint, bound) in table
                     .ext_terminal_constraints(&extension_challenges, &all_terminals)
                     .iter()
-                    .zip(
+                    .zip_eq(
                         table
                             .terminal_quotient_degree_bounds(&extension_challenges, &all_terminals)
                             .iter(),
@@ -951,37 +932,34 @@ impl Stark {
                 {
                     let eval = constraint.evaluate(point);
                     // TODO: Removed lift()
-                    let quotient = eval / (b_domain_value - table.omicron().inverse());
-                    terms.push(quotient);
-                    let shift = (self.max_degree as i64 - bound) as u32;
-                    terms.push(quotient * b_domain_value.mod_pow_u32(shift))
+                    let quotient = eval / (curr_fri_domain_value - table.omicron().inverse());
+                    summands.push(quotient);
+                    let shift = self.max_degree - bound;
+                    summands.push(quotient * curr_fri_domain_value.mod_pow_u32(shift as u32))
                 }
             }
 
             for arg in PermArg::all_permutation_arguments().iter() {
-                let quotient = arg.evaluate_difference(&points) / (b_domain_value - 1.into());
-                terms.push(quotient);
+                let quotient =
+                    arg.evaluate_difference(&points) / (curr_fri_domain_value - 1.into());
+                summands.push(quotient);
                 let degree_bound = arg.quotient_degree_bound(&ext_table_collection);
                 let shift = (self.max_degree as i64 - degree_bound) as u32;
-                terms.push(quotient * b_domain_value.mod_pow_u32(shift));
+                summands.push(quotient * curr_fri_domain_value.mod_pow_u32(shift));
             }
-
-            assert_eq!(
-                non_lin_combi_weights.len(),
-                terms.len(),
-                "length of terms must be equal to length of weights"
-            );
 
             // compute inner product of weights and terms
             // Todo: implement `sum` on XFieldElements
             let inner_product = non_lin_combi_weights
                 .par_iter()
-                .zip(terms.par_iter())
+                .zip_eq(summands.par_iter())
                 .map(|(w, t)| *w * *t)
                 .reduce(XFieldElement::ring_zero, |x, y| x + y);
 
+            // FIXME: This assert looks like it's for development, but it's the actual integrity
+            //  check. Change to `if (…) { return Ok(false) }` or whatever is suitable.
             assert_eq!(
-                revealed_combination_elements[i], inner_product,
+                revealed_combination_element, inner_product,
                 "The combination leaf must equal the inner product"
             );
         }
@@ -1013,6 +991,35 @@ impl Stark {
 
         println!("{}", timer.finish());
         Ok(true)
+    }
+
+    fn get_index_map_of_revealed_elems(
+        num_randomizer_polynomials: usize,
+        revealed_indices: Vec<usize>,
+        revealed_base_elems: Vec<Vec<BFieldElement>>,
+        revealed_ext_elems: Vec<Vec<XFieldElement>>,
+    ) -> HashMap<usize, Vec<XFieldElement>> {
+        let mut index_map: HashMap<usize, Vec<XFieldElement>> = HashMap::new();
+        for (i, &idx) in revealed_indices.iter().enumerate() {
+            let mut rand_elems = vec![];
+            for (coeff_0, coeff_1, coeff_2) in revealed_base_elems[i]
+                .iter()
+                .take(3 * num_randomizer_polynomials)
+                .tuples()
+            {
+                rand_elems.push(XFieldElement::new([*coeff_0, *coeff_1, *coeff_2]));
+            }
+
+            let base_elems = revealed_base_elems[i]
+                .iter()
+                .skip(3 * num_randomizer_polynomials)
+                .map(|bfe| bfe.lift())
+                .collect_vec();
+
+            let cross_slice = [rand_elems, base_elems, revealed_ext_elems[i].clone()].concat();
+            index_map.insert(idx, cross_slice);
+        }
+        index_map
     }
 }
 
