@@ -25,7 +25,7 @@ use crate::shared_math::traits::{
 };
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::util_types::merkle_tree::MerkleTree;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use itertools::Itertools;
 use rand::{thread_rng, Rng};
@@ -138,20 +138,20 @@ impl Stark {
 
         let hasher = rescue_prime_xlix::neptune_params();
         let base_tree = Self::get_merkle_tree(&hasher, &transposed_base_codewords);
-        let base_tree_root = base_tree.get_root();
+        let base_merkle_tree_root = base_tree.get_root();
         timer.elapsed("base_merkle_tree");
 
         // Commit to base codewords
         let mut proof_stream = StarkProofStream::default();
-        proof_stream.enqueue(&Item::MerkleRoot(base_tree_root));
+        proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root));
         timer.elapsed("proof_stream.enqueue");
 
-        let challenges_seed = proof_stream.prover_fiat_shamir();
+        let extension_challenge_seed = proof_stream.prover_fiat_shamir();
         timer.elapsed("prover_fiat_shamir");
 
-        let challenge_weights =
-            hasher.sample_n_weights(&challenges_seed, AllChallenges::TOTAL_CHALLENGES);
-        let all_challenges = AllChallenges::create_challenges(&challenge_weights);
+        let extension_challenge_weights =
+            hasher.sample_n_weights(&extension_challenge_seed, AllChallenges::TOTAL_CHALLENGES);
+        let extension_challenges = AllChallenges::create_challenges(&extension_challenge_weights);
         timer.elapsed("challenges");
 
         let initials_seed = Self::get_initials_seed();
@@ -162,12 +162,12 @@ impl Stark {
         timer.elapsed("initials");
 
         let (ext_tables, all_terminals) =
-            ExtTableCollection::extend_tables(&base_tables, &all_challenges, &all_initials);
+            ExtTableCollection::extend_tables(&base_tables, &extension_challenges, &all_initials);
         timer.elapsed("extend + get_terminals");
 
         let ext_codeword_tables = ext_tables.codeword_tables(&self.xfri.domain);
         let extension_codewords = ext_codeword_tables.get_all_extension_columns();
-        timer.elapsed("get_all_extension_codewords");
+        timer.elapsed("Calculated extension codewords");
 
         let transposed_ext_codewords = Self::transpose_codewords(&extension_codewords);
 
@@ -178,21 +178,21 @@ impl Stark {
         timer.elapsed("extension_tree");
 
         let base_degree_bounds = base_tables.get_base_column_degree_bounds();
-        timer.elapsed("get_all_extension_degree_bounds");
+        timer.elapsed("Calculated base degree bounds");
 
         let extension_degree_bounds = ext_tables.get_extension_column_degree_bounds();
-        timer.elapsed("get_all_extension_degree_bounds");
+        timer.elapsed("Calculated extension degree bounds");
 
         let mut quotient_codewords = ext_codeword_tables.get_all_quotients(
             &self.bfri_domain,
-            &all_challenges,
+            &extension_challenges,
             &all_terminals,
         );
-        timer.elapsed("all_quotients");
+        timer.elapsed("Calculated quotient codewords");
 
-        let mut quotient_degree_bounds =
-            ext_codeword_tables.get_all_quotient_degree_bounds(&all_challenges, &all_terminals);
-        timer.elapsed("all_quotient_degree_bounds");
+        let mut quotient_degree_bounds = ext_codeword_tables
+            .get_all_quotient_degree_bounds(&extension_challenges, &all_terminals);
+        timer.elapsed("Calculated quotient degree bounds");
 
         // Prove equal initial values for the permutation-extension column pairs
         for pa in PermArg::all_permutation_arguments().iter() {
@@ -200,18 +200,17 @@ impl Stark {
             quotient_degree_bounds.push(pa.quotient_degree_bound(&ext_codeword_tables));
         }
 
-        // Get weights for nonlinear combination
-        let weights_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
+        let non_lin_combi_weights_seed = proof_stream.prover_fiat_shamir();
+        timer.elapsed("Fiat-Shamir to get seed for sampling non-linear-combination weights");
 
-        timer.elapsed("prover_fiat_shamir (again)");
-
-        let weights_count = self.num_randomizer_polynomials
+        let non_lin_combi_weights_count = self.num_randomizer_polynomials
             + 2 * base_codewords.len()
             + 2 * extension_codewords.len()
             + 2 * quotient_degree_bounds.len()
-            + 1000; // FIXME: How many weights do we actually need?
-        let weights = hasher.sample_n_weights(&weights_seed, weights_count);
-        timer.elapsed("sample_weights");
+            + 1000; // FIXME: We're missing weights for the difference quotients. How many?
+        let non_lin_combi_weights =
+            hasher.sample_n_weights(&non_lin_combi_weights_seed, non_lin_combi_weights_count);
+        timer.elapsed("Sampled weights for non-linear combination");
 
         let combination_codeword = self.create_combination_codeword(
             &mut timer,
@@ -219,7 +218,7 @@ impl Stark {
             base_codewords,
             extension_codewords,
             quotient_codewords,
-            weights,
+            non_lin_combi_weights,
             base_degree_bounds,
             extension_degree_bounds,
             quotient_degree_bounds,
@@ -250,8 +249,8 @@ impl Stark {
         timer.elapsed("unit_distances");
 
         // Get indices of slices that go across codewords to prove nonlinear combination
-        let indices_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
-        let cross_codeword_slice_indices: Vec<usize> =
+        let indices_seed = proof_stream.prover_fiat_shamir();
+        let cross_codeword_slice_indices =
             hasher.sample_indices(self.security_level, &indices_seed, self.xfri.domain.length);
 
         timer.elapsed("sample_indices");
@@ -679,9 +678,9 @@ impl Stark {
         let combination_root = proof_stream.dequeue()?.as_merkle_root()?;
 
         let indices_seed = proof_stream.verifier_fiat_shamir();
-        let indices =
+        let cross_codeword_slice_indices =
             hasher.sample_indices(self.security_level, &indices_seed, self.xfri.domain.length);
-        let num_idxs = indices.len();
+        let num_idxs = cross_codeword_slice_indices.len();
         timer.elapsed("Got indices");
 
         // Verify low degree of combination polynomial
@@ -692,19 +691,20 @@ impl Stark {
         timer.elapsed("Got unit distances");
 
         // Open leafs of zipped codewords at indicated positions
-        let revealed_indices = self.get_revealed_indices(&unit_distances, &indices);
+        let revealed_indices =
+            self.get_revealed_indices(&unit_distances, &cross_codeword_slice_indices);
         timer.elapsed("Calculated revealed indices");
 
-        let revealed_base_elements = proof_stream
+        let revealed_base_elems = proof_stream
             .dequeue()?
             .as_transposed_base_element_vectors()?;
         let auth_paths_base = proof_stream
             .dequeue()?
             .as_compressed_authentication_paths()?;
         timer.elapsed("Read base elements and auth paths from proof stream");
-        let leaf_digests_base = revealed_base_elements
+        let leaf_digests_base = revealed_base_elems
             .iter()
-            .map(|re| hasher.hash(re, RP_DEFAULT_OUTPUT_SIZE))
+            .map(|revealed_base_elem| hasher.hash(revealed_base_elem, RP_DEFAULT_OUTPUT_SIZE))
             .collect_vec();
         timer.elapsed(&format!("Got {num_idxs} leaf digests for base elements",));
 
@@ -719,14 +719,14 @@ impl Stark {
         }
         timer.elapsed(&format!("Verified auth paths for {num_idxs} base elements",));
 
-        let revealed_ext_elements: Vec<Vec<XFieldElement>> = proof_stream
+        let revealed_ext_elems = proof_stream
             .dequeue()?
             .as_transposed_extension_element_vectors()?;
         let auth_paths_ext = proof_stream
             .dequeue()?
             .as_compressed_authentication_paths()?;
         timer.elapsed("Read extension elements and auth paths from proof stream");
-        let leaf_digests_ext: Vec<Vec<BFieldElement>> = revealed_ext_elements
+        let leaf_digests_ext: Vec<_> = revealed_ext_elems
             .clone()
             .into_par_iter()
             .map(|xvalues| {
@@ -767,16 +767,16 @@ impl Stark {
                 self.num_randomizer_polynomials,
                 "For now number of randomizers must be 1"
             );
-            tuples.insert(idx, revealed_ext_elements[i].clone());
+            tuples.insert(idx, revealed_ext_elems[i].clone());
             tuples.insert(
                 idx,
-                vec![tuples[&idx].clone(), revealed_ext_elements[i].clone()].concat(),
+                vec![tuples[&idx].clone(), revealed_ext_elems[i].clone()].concat(),
             );
         }
         timer.elapsed(&format!("Collected {num_idxs} values into a hash map",));
 
         // Verify Merkle authentication path for combination elements
-        let revealed_combination_elements: Vec<XFieldElement> =
+        let revealed_combination_elements =
             proof_stream.dequeue()?.as_revealed_combination_elements()?;
         let revealed_combination_digests: Vec<Vec<BFieldElement>> = revealed_combination_elements
             .clone()
@@ -786,13 +786,12 @@ impl Stark {
                 hasher.hash(&b_elements, RP_DEFAULT_OUTPUT_SIZE)
             })
             .collect();
-        let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<Vec<BFieldElement>>> =
-            proof_stream
-                .dequeue()?
-                .as_compressed_authentication_paths()?;
+        let revealed_combination_auth_paths = proof_stream
+            .dequeue()?
+            .as_compressed_authentication_paths()?;
         if !MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
             combination_root.clone(),
-            &indices,
+            &cross_codeword_slice_indices,
             &revealed_combination_digests,
             &revealed_combination_auth_paths,
         ) {
@@ -802,19 +801,19 @@ impl Stark {
         timer.elapsed(&format!("Verified auth paths for {num_idxs} combi elems",));
 
         // verify nonlinear combination
-        for (i, &index) in indices.iter().enumerate() {
+        for (i, &index) in cross_codeword_slice_indices.iter().enumerate() {
             let b_domain_value = self.xfri.domain.domain_value(index as u32);
             // collect terms: randomizer
-            let mut terms: Vec<XFieldElement> = (0..self.num_randomizer_polynomials)
+            let mut terms = (0..self.num_randomizer_polynomials)
                 .map(|j| tuples[&index][j])
-                .collect();
+                .collect_vec();
 
             // collect terms: base
             for j in self.num_randomizer_polynomials
                 ..self.num_randomizer_polynomials + num_base_polynomials
             {
                 terms.push(tuples[&index][j]);
-                let shift: u32 = (self.max_degree as i64
+                let shift = (self.max_degree as i64
                     - base_degree_bounds[j - self.num_randomizer_polynomials])
                     as u32;
                 terms.push(tuples[&index][j] * b_domain_value.mod_pow_u32(shift));
@@ -832,7 +831,7 @@ impl Stark {
             // TODO: We don't seem to need a separate loop for the base and extension columns.
             // But merging them would also require concatenating the degree bounds vector.
             for (j, edb) in extension_degree_bounds.iter().enumerate() {
-                let extension_element: XFieldElement = tuples[&index][extension_offset + j];
+                let extension_element = tuples[&index][extension_offset + j];
                 terms.push(extension_element);
                 let shift = (self.max_degree as i64 - edb) as u32;
                 terms.push(extension_element * b_domain_value.mod_pow_u32(shift))
