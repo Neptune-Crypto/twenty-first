@@ -208,7 +208,7 @@ impl Stark {
             + 2 * base_codewords.len()
             + 2 * extension_codewords.len()
             + 2 * quotient_degree_bounds.len()
-            + 1000; // FIXME: We're missing weights for the difference quotients. How many?
+            + 2 * PermArg::all_permutation_arguments().len();
         let non_lin_combi_weights =
             hasher.sample_n_weights(&non_lin_combi_weights_seed, non_lin_combi_weights_count);
         timer.elapsed("Sampled weights for non-linear combination");
@@ -253,20 +253,14 @@ impl Stark {
 
         timer.elapsed("sample_indices");
 
-        // TODO: I don't like that we're calling FRI right after getting the indices through
-        //  the Fiat-Shamir public oracle above. The reason I don't like this is that it implies
-        //  using Fiat-Shamir twice with somewhat similar proof stream content. A cryptographer
-        //  or mathematician should take a look on this part of the code.
-        //  prove low degree of combination polynomial
-        let (_fri_indices, combination_root_verify) = self
-            .xfri
-            .prove(&combination_codeword, &mut proof_stream)
-            .unwrap();
+        match self.xfri.prove(&combination_codeword, &mut proof_stream) {
+            Ok((_, fri_first_round_merkle_root)) => assert_eq!(
+                combination_root, fri_first_round_merkle_root,
+                "Combination root from STARK and from FRI must agree."
+            ),
+            Err(e) => panic!("The FRI prover failed because of: {}", e),
+        }
         timer.elapsed("fri.prove");
-        assert_eq!(
-            combination_root, combination_root_verify,
-            "Combination root from STARK and from FRI must agree"
-        );
 
         let padded_heights = (&ext_tables)
             .into_iter()
@@ -294,17 +288,6 @@ impl Stark {
         let auth_paths_ext = extension_tree.get_multi_proof(&revealed_indices);
         proof_stream.enqueue(&Item::TransposedExtensionElementVectors(revealed_ext_elems));
         proof_stream.enqueue(&Item::CompressedAuthenticationPaths(auth_paths_ext));
-
-        // debug_assert!(
-        //     MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
-        //         base_merkle_tree.get_root(),
-        //         &revealed_indices,
-        //         revealed_indices.iter().map()base_codeword_digests_by_index[idx].clone(),
-        //         auth_path.clone(),
-        //     ),
-        //     "authentication path for base tree must be valid"
-        // );
-
         timer.elapsed("open leafs of zipped codewords");
 
         // open combination codeword at the same positions
@@ -400,16 +383,6 @@ impl Stark {
         ext_tables: &ExtTableCollection, // TODO this is just for debugging – try to remove again
     ) -> Vec<XFieldElement> {
         assert_eq!(self.num_randomizer_polynomials, randomizer_codewords.len());
-        assert_eq!(base_codewords.len(), base_degree_bounds.len());
-        assert_eq!(extension_codewords.len(), extension_degree_bounds.len());
-        assert_eq!(quotient_codewords.len(), quotient_degree_bounds.len());
-        assert!(
-            weights.len()
-                >= self.num_randomizer_polynomials
-                    + 2 * (base_codewords.len()
-                        + extension_codewords.len()
-                        + quotient_codewords.len()),
-        );
 
         let base_codewords_lifted = base_codewords
             .into_iter()
