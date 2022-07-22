@@ -7,6 +7,7 @@ use crate::shared_math::traits::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::iter::Sum;
 use std::ops::{AddAssign, Div, MulAssign, SubAssign};
 use std::{
     fmt::Display,
@@ -23,6 +24,13 @@ impl Default for XFieldElement {
         Self {
             coefficients: [1.into(), 0.into(), 0.into()],
         }
+    }
+}
+
+impl Sum for XFieldElement {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.reduce(|a, b| a + b)
+            .unwrap_or_else(XFieldElement::ring_zero)
     }
 }
 

@@ -15,6 +15,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::iter::Sum;
 use std::num::TryFromIntError;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
@@ -60,6 +61,13 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
 pub struct BFieldElement(u64);
+
+impl Sum for BFieldElement {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.reduce(|a, b| a + b)
+            .unwrap_or_else(BFieldElement::ring_zero)
+    }
+}
 
 impl PartialEq for BFieldElement {
     fn eq(&self, other: &Self) -> bool {

@@ -948,13 +948,11 @@ impl Stark {
                 summands.push(quotient * curr_fri_domain_value.mod_pow_u32(shift));
             }
 
-            // compute inner product of weights and terms
-            // Todo: implement `sum` on XFieldElements
             let inner_product = non_lin_combi_weights
                 .par_iter()
                 .zip_eq(summands.par_iter())
-                .map(|(w, t)| *w * *t)
-                .reduce(XFieldElement::ring_zero, |x, y| x + y);
+                .map(|(weight, summand)| *weight * *summand)
+                .sum();
 
             // FIXME: This assert looks like it's for development, but it's the actual integrity
             //  check. Change to `if (…) { return Ok(false) }` or whatever is suitable.
