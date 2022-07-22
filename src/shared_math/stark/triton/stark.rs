@@ -808,34 +808,41 @@ impl Stark {
             }
 
             // collect summands: quotients, which need to be computed
-            let mut acc_index = self.num_randomizer_polynomials;
-            let mut points: Vec<Vec<XFieldElement>> = vec![];
+            let mut curr_col_idx = self.num_randomizer_polynomials;
+
+            let mut base_col_cross_slice_by_table = vec![];
             for table in ext_table_collection.into_iter() {
                 let num_base_cols = table.base_width();
-                points.push(cross_slice[acc_index..acc_index + num_base_cols].to_vec());
-                acc_index += num_base_cols;
+                base_col_cross_slice_by_table
+                    .push(cross_slice[curr_col_idx..curr_col_idx + num_base_cols].to_vec());
+                curr_col_idx += num_base_cols;
             }
 
-            assert_eq!(
-                ext_offset, acc_index,
-                "Column count in verifier must match until extension columns"
-            );
-
-            for (point, table) in points.iter_mut().zip_eq(ext_table_collection.into_iter()) {
+            let mut ext_col_cross_slice_by_table = vec![];
+            for table in ext_table_collection.into_iter() {
                 let num_ext_cols = table.full_width() - table.base_width();
-                point.extend_from_slice(&cross_slice[acc_index..acc_index + num_ext_cols]);
-                acc_index += num_ext_cols;
+                ext_col_cross_slice_by_table
+                    .push(cross_slice[curr_col_idx..curr_col_idx + num_ext_cols].to_vec());
+                curr_col_idx += num_ext_cols;
             }
-
             assert_eq!(
                 cross_slice.len(),
-                acc_index,
-                "Column count in verifier must match until end"
+                curr_col_idx,
+                "Must have accessed all columns."
             );
+
+            let cross_slice_by_table = base_col_cross_slice_by_table
+                .into_iter()
+                .zip_eq(ext_col_cross_slice_by_table.into_iter())
+                .map(|(base_slice, ext_slice)| [base_slice, ext_slice].concat())
+                .collect_vec();
 
             let mut base_acc_index = self.num_randomizer_polynomials;
             let mut ext_acc_index = ext_offset;
-            for (point, table) in points.iter().zip_eq(ext_table_collection.into_iter()) {
+            for (point, table) in cross_slice_by_table
+                .iter()
+                .zip_eq(ext_table_collection.into_iter())
+            {
                 // boundary
                 for (constraint, bound) in table
                     .ext_boundary_constraints(&extension_challenges)
