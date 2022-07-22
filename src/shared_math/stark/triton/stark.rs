@@ -839,34 +839,31 @@ impl Stark {
 
             let mut base_acc_index = self.num_randomizer_polynomials;
             let mut ext_acc_index = ext_offset;
-            for (point, table) in cross_slice_by_table
-                .iter()
-                .zip_eq(ext_table_collection.into_iter())
+            for (table, table_row) in ext_table_collection
+                .into_iter()
+                .zip_eq(cross_slice_by_table.iter())
             {
-                // boundary
-                for (constraint, bound) in table
-                    .ext_boundary_constraints(&extension_challenges)
-                    .iter()
-                    .zip_eq(
-                        table
-                            .boundary_quotient_degree_bounds(&extension_challenges)
-                            .iter(),
-                    )
+                let boundary_constraints = table.ext_boundary_constraints(&extension_challenges);
+                let degree_bounds = table.boundary_quotient_degree_bounds(&extension_challenges);
+                for (boundary_constraint, degree_bound) in
+                    boundary_constraints.iter().zip_eq(degree_bounds.iter())
                 {
-                    let eval = constraint.evaluate(point);
-                    let quotient = eval / (curr_fri_domain_value - 1.into());
+                    let shift = self.max_degree - degree_bound;
+                    let quotient = boundary_constraint.evaluate(table_row)
+                        / (curr_fri_domain_value - 1.into());
+                    let quotient_shifted =
+                        quotient * curr_fri_domain_value.mod_pow_u32(shift as u32);
                     summands.push(quotient);
-                    let shift = (self.max_degree as i64 - bound) as u32;
-                    summands.push(quotient * curr_fri_domain_value.mod_pow_u32(shift));
+                    summands.push(quotient_shifted);
                 }
 
                 // transition
                 let unit_distance = table.unit_distance(self.xfri.domain.length);
                 let next_index = (cross_slice_index + unit_distance) % self.xfri.domain.length;
                 let next_cross_slice = &index_map_of_revealed_elems[&next_index];
-                let mut next_point =
+                let mut next_table_row =
                     next_cross_slice[base_acc_index..base_acc_index + table.base_width()].to_vec();
-                next_point.extend_from_slice(
+                next_table_row.extend_from_slice(
                     &next_cross_slice
                         [ext_acc_index..ext_acc_index + table.full_width() - table.base_width()],
                 );
@@ -881,8 +878,8 @@ impl Stark {
                             .iter(),
                     )
                 {
-                    let eval =
-                        constraint.evaluate(&vec![point.to_owned(), next_point.clone()].concat());
+                    let eval = constraint
+                        .evaluate(&vec![table_row.to_owned(), next_table_row.clone()].concat());
                     // If height == 0, then there is no subgroup where the transition polynomials should be zero.
                     // The fast zerofier (based on group theory) needs a non-empty group.
                     // Forcing it on an empty group generates a division by zero error.
@@ -909,18 +906,19 @@ impl Stark {
                             .iter(),
                     )
                 {
-                    let eval = constraint.evaluate(point);
-                    // TODO: Removed lift()
-                    let quotient = eval / (curr_fri_domain_value - table.omicron().inverse());
-                    summands.push(quotient);
                     let shift = self.max_degree - bound;
-                    summands.push(quotient * curr_fri_domain_value.mod_pow_u32(shift as u32))
+                    let quotient = constraint.evaluate(table_row)
+                        / (curr_fri_domain_value - table.omicron().inverse());
+                    let quotient_shifted =
+                        quotient * curr_fri_domain_value.mod_pow_u32(shift as u32);
+                    summands.push(quotient);
+                    summands.push(quotient_shifted);
                 }
             }
 
             for arg in PermArg::all_permutation_arguments().iter() {
-                let quotient =
-                    arg.evaluate_difference(&points) / (curr_fri_domain_value - 1.into());
+                let quotient = arg.evaluate_difference(&cross_slice_by_table)
+                    / (curr_fri_domain_value - 1.into());
                 summands.push(quotient);
                 let degree_bound = arg.quotient_degree_bound(&ext_table_collection);
                 let shift = (self.max_degree as i64 - degree_bound) as u32;
