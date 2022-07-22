@@ -21,6 +21,8 @@ use itertools::Itertools;
 type BWord = BFieldElement;
 type XWord = XFieldElement;
 
+pub const NUM_TABLES: usize = 8;
+
 #[derive(Debug, Clone)]
 pub struct BaseTableCollection {
     pub program_table: ProgramTable,
@@ -147,7 +149,7 @@ impl BaseTableCollection {
 impl<'a> IntoIterator for &'a BaseTableCollection {
     type Item = &'a dyn Table<BWord>;
 
-    type IntoIter = std::array::IntoIter<&'a dyn Table<BWord>, 8>;
+    type IntoIter = std::array::IntoIter<&'a dyn Table<BWord>, NUM_TABLES>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -165,30 +167,30 @@ impl<'a> IntoIterator for &'a BaseTableCollection {
 }
 
 impl ExtTableCollection {
-    pub fn with_padded_height(num_trace_randomizers: usize, max_padded_height: usize) -> Self {
+    pub fn with_padded_heights(num_trace_randomizers: usize, padded_heights: &[usize]) -> Self {
         let ext_program_table =
-            ExtProgramTable::with_padded_height(num_trace_randomizers, max_padded_height);
+            ExtProgramTable::with_padded_height(num_trace_randomizers, padded_heights[0]);
 
         let ext_processor_table =
-            ExtProcessorTable::with_padded_height(num_trace_randomizers, max_padded_height);
+            ExtProcessorTable::with_padded_height(num_trace_randomizers, padded_heights[1]);
 
         let ext_instruction_table =
-            ExtInstructionTable::with_padded_height(num_trace_randomizers, max_padded_height);
+            ExtInstructionTable::with_padded_height(num_trace_randomizers, padded_heights[2]);
 
         let ext_op_stack_table =
-            ExtOpStackTable::with_padded_height(num_trace_randomizers, max_padded_height);
+            ExtOpStackTable::with_padded_height(num_trace_randomizers, padded_heights[3]);
 
         let ext_ram_table =
-            ExtRamTable::with_padded_height(num_trace_randomizers, max_padded_height);
+            ExtRamTable::with_padded_height(num_trace_randomizers, padded_heights[4]);
 
         let ext_jump_stack_table =
-            ExtJumpStackTable::with_padded_height(num_trace_randomizers, max_padded_height);
+            ExtJumpStackTable::with_padded_height(num_trace_randomizers, padded_heights[5]);
 
         let ext_hash_table =
-            ExtHashTable::with_padded_height(num_trace_randomizers, max_padded_height);
+            ExtHashTable::with_padded_height(num_trace_randomizers, padded_heights[6]);
 
         let ext_u32_op_table =
-            ExtU32OpTable::with_padded_height(num_trace_randomizers, max_padded_height);
+            ExtU32OpTable::with_padded_height(num_trace_randomizers, padded_heights[7]);
 
         ExtTableCollection {
             program_table: ext_program_table,
@@ -416,7 +418,7 @@ impl ExtTableCollection {
 impl<'a> IntoIterator for &'a ExtTableCollection {
     type Item = &'a dyn ExtensionTable;
 
-    type IntoIter = std::array::IntoIter<&'a dyn ExtensionTable, 8>;
+    type IntoIter = std::array::IntoIter<&'a dyn ExtensionTable, NUM_TABLES>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -446,7 +448,10 @@ mod table_collection_tests {
         let num_trace_randomizers = 2;
         let max_padded_height = 1;
 
-        ExtTableCollection::with_padded_height(num_trace_randomizers, max_padded_height)
+        ExtTableCollection::with_padded_heights(
+            num_trace_randomizers,
+            &[max_padded_height; NUM_TABLES],
+        )
     }
 
     #[test]

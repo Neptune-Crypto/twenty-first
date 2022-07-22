@@ -15,10 +15,9 @@ use crate::shared_math::stark::triton::arguments::evaluation_argument::verify_ev
 use crate::shared_math::stark::triton::arguments::permutation_argument::PermArg;
 use crate::shared_math::stark::triton::proof_item::{Item, StarkProofStream};
 use crate::shared_math::stark::triton::state::DIGEST_LEN;
-use crate::shared_math::stark::triton::table::base_table;
 use crate::shared_math::stark::triton::table::challenges_endpoints::{AllChallenges, AllEndpoints};
 use crate::shared_math::stark::triton::table::table_collection::{
-    BaseTableCollection, ExtTableCollection,
+    BaseTableCollection, ExtTableCollection, NUM_TABLES,
 };
 use crate::shared_math::stark::triton::triton_xfri;
 use crate::shared_math::traits::{
@@ -40,7 +39,6 @@ type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
 
 // We use a type-parameterised FriDomain to avoid duplicate `b_*()` and `x_*()` methods.
 pub struct Stark {
-    padded_height: usize,
     num_trace_randomizers: usize,
     num_randomizer_polynomials: usize,
     security_level: usize,
@@ -54,7 +52,7 @@ pub struct Stark {
 impl Stark {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        padded_height: usize,
+        max_height: usize,
         num_trace_randomizers: usize,
         num_randomizer_polynomials: usize,
         log_expansion_factor: usize,
@@ -82,8 +80,10 @@ impl Stark {
             "expansion factor must be at least 4."
         );
 
-        let empty_table_collection =
-            ExtTableCollection::with_padded_height(num_trace_randomizers, padded_height);
+        let empty_table_collection = ExtTableCollection::with_padded_heights(
+            num_trace_randomizers,
+            &[max_height; NUM_TABLES],
+        );
 
         let max_degree =
             (other::roundup_npo2(empty_table_collection.max_degree() as u64) - 1) as i64;
@@ -109,7 +109,6 @@ impl Stark {
         );
 
         Stark {
-            padded_height,
             num_trace_randomizers,
             num_randomizer_polynomials,
             security_level,
@@ -165,6 +164,13 @@ impl Stark {
         let (ext_tables, all_terminals) =
             ExtTableCollection::extend_tables(&base_tables, &extension_challenges, &all_initials);
         timer.elapsed("extend + get_terminals");
+
+        let padded_heights = (&ext_tables)
+            .into_iter()
+            .map(|ext_table| BWord::new(ext_table.padded_height() as u64))
+            .collect_vec();
+        proof_stream.enqueue(&Item::PaddedHeights(padded_heights));
+        timer.elapsed("Sent all padded heights");
 
         let ext_codeword_tables = ext_tables.codeword_tables(&self.xfri.domain);
         let extension_codewords = ext_codeword_tables.get_all_extension_columns();
@@ -262,16 +268,9 @@ impl Stark {
         }
         timer.elapsed("fri.prove");
 
-        let padded_heights = (&ext_tables)
-            .into_iter()
-            .map(|ext_table| ext_table.padded_height())
-            .collect_vec();
-        let padded_heights_b_field_elems = padded_heights
-            .iter()
-            .map(|height| BWord::new(*height as u64))
-            .collect_vec();
-        let unit_distances = self.get_unit_distances(&padded_heights);
+        let unit_distances = self.get_unit_distances(&ext_tables);
         timer.elapsed("unit_distances");
+
         // Open leafs of zipped codewords at indicated positions
         let revealed_indices =
             self.get_revealed_indices(&unit_distances, &cross_codeword_slice_indices);
@@ -279,7 +278,6 @@ impl Stark {
         let revealed_base_elems =
             Self::get_revealed_elements(&transposed_base_codewords, &revealed_indices);
         let auth_paths_base = base_tree.get_multi_proof(&revealed_indices);
-        proof_stream.enqueue(&Item::PaddedHeights(padded_heights_b_field_elems));
         proof_stream.enqueue(&Item::TransposedBaseElementVectors(revealed_base_elems));
         proof_stream.enqueue(&Item::CompressedAuthenticationPaths(auth_paths_base));
 
@@ -335,10 +333,10 @@ impl Stark {
     }
 
     // FIXME: `padded_heights` could be `&[usize; NUM_TABLES]` (but that const doesn't exist yet)
-    fn get_unit_distances(&self, padded_heights: &[usize]) -> Vec<usize> {
-        let mut unit_distances = padded_heights
-            .iter()
-            .map(|height| base_table::unit_distance(*height, self.xfri.domain.length))
+    fn get_unit_distances(&self, ext_tables: &ExtTableCollection) -> Vec<usize> {
+        let mut unit_distances = ext_tables
+            .into_iter()
+            .map(|table| table.unit_distance(self.xfri.domain.length))
             .collect_vec();
         unit_distances.push(0);
         unit_distances.sort_unstable();
@@ -622,12 +620,20 @@ impl Stark {
         let extension_challenges = AllChallenges::create_challenges(&extension_challenge_weights);
         timer.elapsed("Create extension challenges");
 
+        let padded_heights = proof_stream
+            .dequeue()?
+            .as_padded_heights()?
+            .iter()
+            .map(|bfe| bfe.value() as usize)
+            .collect_vec();
+        timer.elapsed("Got all padded heights");
+
         let extension_tree_merkle_root = proof_stream.dequeue()?.as_merkle_root()?;
         let all_terminals = proof_stream.dequeue()?.as_terminals()?;
         timer.elapsed("Get extension tree's root & terminals from proof stream");
 
         let ext_table_collection =
-            ExtTableCollection::with_padded_height(self.num_trace_randomizers, self.padded_height);
+            ExtTableCollection::with_padded_heights(self.num_trace_randomizers, &padded_heights);
 
         let base_degree_bounds: Vec<Degree> = ext_table_collection.get_all_base_degree_bounds();
         timer.elapsed("Calculated base degree bounds");
@@ -670,13 +676,7 @@ impl Stark {
         self.xfri.verify(proof_stream, &combination_root)?;
         timer.elapsed("Verified FRI proof");
 
-        let padded_heights = proof_stream
-            .dequeue()?
-            .as_padded_heights()?
-            .iter()
-            .map(|bfe| bfe.value() as usize)
-            .collect_vec();
-        let unit_distances = self.get_unit_distances(&padded_heights);
+        let unit_distances = self.get_unit_distances(&ext_table_collection);
         timer.elapsed("Got unit distances");
 
         // Open leafs of zipped codewords at indicated positions
@@ -854,8 +854,7 @@ impl Stark {
                 }
 
                 // transition
-                let unit_distance =
-                    base_table::unit_distance(table.padded_height(), self.xfri.domain.length);
+                let unit_distance = table.unit_distance(self.xfri.domain.length);
                 let next_index = (cross_slice_index + unit_distance) % self.xfri.domain.length;
                 let next_cross_slice = &index_map_of_revealed_elems[&next_index];
                 let mut next_point =

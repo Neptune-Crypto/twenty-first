@@ -169,6 +169,15 @@ where
         padded_height + num_trace_randomizers - 1
     }
 
+    /// Returns the relation between the FRI domain and the omicron domain
+    fn unit_distance(&self, omega_order: usize) -> usize {
+        if self.padded_height() == 0 {
+            0
+        } else {
+            omega_order / self.padded_height()
+        }
+    }
+
     fn low_degree_extension(
         &self,
         fri_domain: &FriDomain<DataPF>,
@@ -256,15 +265,6 @@ where
                 Polynomial::<DataPF>::fast_interpolate(&domain, values, &omega, omega_order)
             })
             .collect()
-    }
-}
-
-/// Returns the relation between the FRI domain and the omicron domain
-pub fn unit_distance(padded_height: usize, omega_order: usize) -> usize {
-    if padded_height == 0 {
-        0
-    } else {
-        omega_order / padded_height
     }
 }
 
