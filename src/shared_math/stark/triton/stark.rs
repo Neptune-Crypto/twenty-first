@@ -770,7 +770,7 @@ impl Stark {
         timer.elapsed(&format!("Verified auth paths for {num_idxs} combi elems"));
 
         // TODO: we can store the elements mushed into "index_map_of_revealed_elems" separately,
-        //  like in "points" below, to avoid unmushing later
+        //  like in "cross_slice_by_table" below, to avoid unmushing later
         let index_map_of_revealed_elems = Self::get_index_map_of_revealed_elems(
             self.num_randomizer_polynomials,
             revealed_indices,
@@ -807,7 +807,7 @@ impl Stark {
                 }
             }
 
-            // collect summands: quotients, which need to be computed
+            // unmush cross-codeword slice: pick (base, ext) columns per table
             let mut curr_base_idx = base_offset;
             let mut curr_ext_idx = ext_offset;
             let mut cross_slice_by_table: Vec<Vec<XFieldElement>> = vec![];
@@ -841,15 +841,18 @@ impl Stark {
             assert_eq!(ext_offset, curr_base_idx);
             assert_eq!(final_offset, curr_ext_idx);
 
+            // use AIR (actually RAP) to get relevant parts of quotient codewords
             for ((table_row, next_table_row), table) in cross_slice_by_table
                 .iter()
                 .zip_eq(next_cross_slice_by_table.iter())
                 .zip_eq(ext_table_collection.into_iter())
             {
+                let table_height = table.padded_height() as u32;
+
                 let boundary_constraints = table.ext_boundary_constraints(&extension_challenges);
-                let degree_bounds = table.boundary_quotient_degree_bounds(&extension_challenges);
+                let bndry_deg_bnds = table.boundary_quotient_degree_bounds(&extension_challenges);
                 for (boundary_constraint, degree_bound) in
-                    boundary_constraints.iter().zip_eq(degree_bounds.iter())
+                    boundary_constraints.iter().zip_eq(bndry_deg_bnds.iter())
                 {
                     let shift = self.max_degree - degree_bound;
                     let quotient = boundary_constraint.evaluate(table_row)
@@ -860,46 +863,40 @@ impl Stark {
                     summands.push(quotient_shifted);
                 }
 
-                // transition
-                for (constraint, bound) in table
-                    .ext_transition_constraints(&extension_challenges)
-                    .iter()
-                    .zip_eq(
-                        table
-                            .transition_quotient_degree_bounds(&extension_challenges)
-                            .iter(),
-                    )
+                let transition_constraints =
+                    table.ext_transition_constraints(&extension_challenges);
+                let trnstn_deg_bnds =
+                    table.transition_quotient_degree_bounds(&extension_challenges);
+                for (transition_constraint, degree_bound) in
+                    transition_constraints.iter().zip_eq(trnstn_deg_bnds.iter())
                 {
-                    let eval = constraint
-                        .evaluate(&vec![table_row.to_owned(), next_table_row.clone()].concat());
-                    // If height == 0, then there is no subgroup where the transition polynomials should be zero.
-                    // The fast zerofier (based on group theory) needs a non-empty group.
-                    // Forcing it on an empty group generates a division by zero error.
-                    let quotient = if table.padded_height() == 0 {
+                    let shift = self.max_degree - degree_bound;
+                    let quotient = if table_height == 0 {
+                        // transition has no meaning on empty table
                         0.into()
                     } else {
-                        let num = curr_fri_domain_value - table.omicron().inverse();
-                        let denom = curr_fri_domain_value.mod_pow_u32(table.padded_height() as u32)
-                            - 1.into();
-                        eval * num / denom
+                        let evaluated_transition_constraint = transition_constraint
+                            .evaluate(&vec![table_row.to_owned(), next_table_row.clone()].concat());
+                        let numerator = curr_fri_domain_value - table.omicron().inverse();
+                        let denominator =
+                            curr_fri_domain_value.mod_pow_u32(table_height) - 1.into();
+                        evaluated_transition_constraint * numerator / denominator
                     };
+                    let quotient_shifted =
+                        quotient * curr_fri_domain_value.mod_pow_u32(shift as u32);
                     summands.push(quotient);
-                    let shift = (self.max_degree as i64 - bound) as u32;
-                    summands.push(quotient * curr_fri_domain_value.mod_pow_u32(shift));
+                    summands.push(quotient_shifted);
                 }
 
-                // terminal
-                for (constraint, bound) in table
-                    .ext_terminal_constraints(&extension_challenges, &all_terminals)
-                    .iter()
-                    .zip_eq(
-                        table
-                            .terminal_quotient_degree_bounds(&extension_challenges, &all_terminals)
-                            .iter(),
-                    )
+                let terminal_constraints =
+                    table.ext_terminal_constraints(&extension_challenges, &all_terminals);
+                let trmnl_deg_bnds =
+                    table.terminal_quotient_degree_bounds(&extension_challenges, &all_terminals);
+                for (terminal_constraint, degree_bound) in
+                    terminal_constraints.iter().zip_eq(trmnl_deg_bnds.iter())
                 {
-                    let shift = self.max_degree - bound;
-                    let quotient = constraint.evaluate(table_row)
+                    let shift = self.max_degree - degree_bound;
+                    let quotient = terminal_constraint.evaluate(table_row)
                         / (curr_fri_domain_value - table.omicron().inverse());
                     let quotient_shifted =
                         quotient * curr_fri_domain_value.mod_pow_u32(shift as u32);
@@ -909,12 +906,13 @@ impl Stark {
             }
 
             for arg in PermArg::all_permutation_arguments().iter() {
+                let perm_arg_deg_bound = arg.quotient_degree_bound(&ext_table_collection);
+                let shift = self.max_degree - perm_arg_deg_bound;
                 let quotient = arg.evaluate_difference(&cross_slice_by_table)
                     / (curr_fri_domain_value - 1.into());
+                let quotient_shifted = quotient * curr_fri_domain_value.mod_pow_u32(shift as u32);
                 summands.push(quotient);
-                let degree_bound = arg.quotient_degree_bound(&ext_table_collection);
-                let shift = (self.max_degree as i64 - degree_bound) as u32;
-                summands.push(quotient * curr_fri_domain_value.mod_pow_u32(shift));
+                summands.push(quotient_shifted);
             }
 
             let inner_product = non_lin_combi_weights
