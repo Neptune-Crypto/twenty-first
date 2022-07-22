@@ -808,40 +808,43 @@ impl Stark {
             }
 
             // collect summands: quotients, which need to be computed
-            let mut curr_col_idx = self.num_randomizer_polynomials;
+            let mut curr_base_idx = base_offset;
+            let mut curr_ext_idx = ext_offset;
+            let mut cross_slice_by_table: Vec<Vec<XFieldElement>> = vec![];
+            let mut next_cross_slice_by_table: Vec<Vec<XFieldElement>> = vec![];
 
-            let mut base_col_cross_slice_by_table = vec![];
             for table in ext_table_collection.into_iter() {
                 let num_base_cols = table.base_width();
-                base_col_cross_slice_by_table
-                    .push(cross_slice[curr_col_idx..curr_col_idx + num_base_cols].to_vec());
-                curr_col_idx += num_base_cols;
-            }
-
-            let mut ext_col_cross_slice_by_table = vec![];
-            for table in ext_table_collection.into_iter() {
                 let num_ext_cols = table.full_width() - table.base_width();
-                ext_col_cross_slice_by_table
-                    .push(cross_slice[curr_col_idx..curr_col_idx + num_ext_cols].to_vec());
-                curr_col_idx += num_ext_cols;
+
+                let base_col_slice =
+                    cross_slice[curr_base_idx..curr_base_idx + num_base_cols].to_vec();
+                let ext_col_slice = cross_slice[curr_ext_idx..curr_ext_idx + num_ext_cols].to_vec();
+                let table_slice = [base_col_slice, ext_col_slice].concat();
+                cross_slice_by_table.push(table_slice);
+
+                let curr_unit_distance = table.unit_distance(self.xfri.domain.length);
+                let next_cross_slice_index =
+                    (cross_slice_index + curr_unit_distance) % self.xfri.domain.length;
+                let next_cross_slice = &index_map_of_revealed_elems[&next_cross_slice_index];
+
+                let next_base_col_slice =
+                    next_cross_slice[curr_base_idx..curr_base_idx + num_base_cols].to_vec();
+                let next_ext_col_slice =
+                    next_cross_slice[curr_ext_idx..curr_ext_idx + num_ext_cols].to_vec();
+                let next_table_slice = [next_base_col_slice, next_ext_col_slice].concat();
+                next_cross_slice_by_table.push(next_table_slice);
+
+                curr_base_idx += num_base_cols;
+                curr_ext_idx += num_ext_cols;
             }
-            assert_eq!(
-                cross_slice.len(),
-                curr_col_idx,
-                "Must have accessed all columns."
-            );
+            assert_eq!(ext_offset, curr_base_idx);
+            assert_eq!(final_offset, curr_ext_idx);
 
-            let cross_slice_by_table = base_col_cross_slice_by_table
-                .into_iter()
-                .zip_eq(ext_col_cross_slice_by_table.into_iter())
-                .map(|(base_slice, ext_slice)| [base_slice, ext_slice].concat())
-                .collect_vec();
-
-            let mut base_acc_index = self.num_randomizer_polynomials;
-            let mut ext_acc_index = ext_offset;
-            for (table, table_row) in ext_table_collection
-                .into_iter()
-                .zip_eq(cross_slice_by_table.iter())
+            for ((table_row, next_table_row), table) in cross_slice_by_table
+                .iter()
+                .zip_eq(next_cross_slice_by_table.iter())
+                .zip_eq(ext_table_collection.into_iter())
             {
                 let boundary_constraints = table.ext_boundary_constraints(&extension_challenges);
                 let degree_bounds = table.boundary_quotient_degree_bounds(&extension_challenges);
@@ -858,17 +861,6 @@ impl Stark {
                 }
 
                 // transition
-                let unit_distance = table.unit_distance(self.xfri.domain.length);
-                let next_index = (cross_slice_index + unit_distance) % self.xfri.domain.length;
-                let next_cross_slice = &index_map_of_revealed_elems[&next_index];
-                let mut next_table_row =
-                    next_cross_slice[base_acc_index..base_acc_index + table.base_width()].to_vec();
-                next_table_row.extend_from_slice(
-                    &next_cross_slice
-                        [ext_acc_index..ext_acc_index + table.full_width() - table.base_width()],
-                );
-                base_acc_index += table.base_width();
-                ext_acc_index += table.full_width() - table.base_width();
                 for (constraint, bound) in table
                     .ext_transition_constraints(&extension_challenges)
                     .iter()
