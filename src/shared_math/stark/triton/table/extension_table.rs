@@ -1,9 +1,8 @@
 use super::base_table::Table;
 use super::challenges_endpoints::{AllChallenges, AllEndpoints};
-use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::{Degree, MPolynomial};
 use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::stark::triton::fri_domain::{lift_domain, FriDomain};
+use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::traits::{Inverse, ModPowU32, PrimeField};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
@@ -13,7 +12,6 @@ use rayon::iter::{
 
 // Generic methods specifically for tables that have been extended
 
-type BWord = BFieldElement;
 type XWord = XFieldElement;
 
 pub trait ExtensionTable: Table<XWord> + Sync {
@@ -100,7 +98,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
     fn all_quotients(
         &self,
-        fri_domain: &FriDomain<BWord>,
+        fri_domain: &FriDomain<XWord>,
         codewords: &[Vec<XWord>],
         challenges: &AllChallenges,
         terminals: &AllEndpoints,
@@ -134,27 +132,29 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
     fn transition_quotients(
         &self,
-        fri_domain: &FriDomain<BWord>,
+        fri_domain: &FriDomain<XWord>,
         codewords_transposed: &[Vec<XWord>],
         challenges: &AllChallenges,
     ) -> Vec<Vec<XWord>> {
         let mut timer = TimingReporter::start();
         timer.elapsed("Start transition quotients");
-        let one = BFieldElement::ring_one();
-        let x_values: Vec<BFieldElement> = fri_domain.domain_values();
+
+        let one = XWord::ring_one();
+        let x_values = fri_domain.domain_values();
         timer.elapsed("Domain values");
-        let subgroup_zerofier: Vec<BFieldElement> = x_values
+
+        let subgroup_zerofier: Vec<XWord> = x_values
             .iter()
             .map(|x| x.mod_pow_u32(self.padded_height() as u32) - one)
             .collect();
         let subgroup_zerofier_inverse = if self.padded_height() == 0 {
             subgroup_zerofier
         } else {
-            BFieldElement::batch_inversion(subgroup_zerofier)
+            XWord::batch_inversion(subgroup_zerofier)
         };
         timer.elapsed("Batch Inversion");
-        let omicron_inverse = self.omicron().unlift().unwrap().inverse();
-        let zerofier_inverse: Vec<BFieldElement> = x_values
+        let omicron_inverse = self.omicron().inverse();
+        let zerofier_inverse: Vec<XWord> = x_values
             .into_iter()
             .enumerate()
             .map(|(i, x)| subgroup_zerofier_inverse[i] * (x - omicron_inverse))
@@ -182,7 +182,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
                     let point = vec![current_row, next_row].concat();
                     let composition_evaluation = tc.evaluate(&point);
-                    composition_evaluation * z_inverse.lift()
+                    composition_evaluation * *z_inverse
                 })
                 .collect();
 
@@ -194,7 +194,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         if std::env::var("DEBUG").is_ok() {
             // interpolate the quotient and check the degree
             for (idx, qc) in quotients.iter().enumerate() {
-                let interpolated: Polynomial<XWord> = lift_domain(fri_domain).interpolate(qc);
+                let interpolated: Polynomial<XWord> = fri_domain.interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
                     "Degree of transition quotient number {idx} (of {}) in {} must not be maximal. \
@@ -214,22 +214,22 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
     fn terminal_quotients(
         &self,
-        fri_domain: &FriDomain<BWord>,
+        fri_domain: &FriDomain<XWord>,
         codewords: &[Vec<XWord>],
         challenges: &AllChallenges,
         terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {
-        let omicron_inverse = self.omicron().unlift().unwrap().inverse();
+        let omicron_inverse = self.omicron().inverse();
 
         // The zerofier for the terminal quotient has a root in the last
         // value in the cyclical group generated from omicron.
-        let zerofier_codeword: Vec<BFieldElement> = fri_domain
+        let zerofier_codeword: Vec<XWord> = fri_domain
             .domain_values()
             .into_iter()
             .map(|x| x - omicron_inverse)
             .collect();
 
-        let zerofier_inverse = BFieldElement::batch_inversion(zerofier_codeword);
+        let zerofier_inverse = XWord::batch_inversion(zerofier_codeword);
         let terminal_constraints = self.ext_terminal_constraints(challenges, terminals);
         let mut quotient_codewords: Vec<Vec<XWord>> = vec![];
         for termc in terminal_constraints.iter() {
@@ -239,7 +239,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
                     let point: Vec<XWord> =
                         (0..self.full_width()).map(|j| codewords[j][i]).collect();
 
-                    termc.evaluate(&point) * zerofier_inverse[i].lift()
+                    termc.evaluate(&point) * zerofier_inverse[i]
                 })
                 .collect();
             quotient_codewords.push(quotient_codeword);
@@ -247,7 +247,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
         if std::env::var("DEBUG").is_ok() {
             for (idx, qc) in quotient_codewords.iter().enumerate() {
-                let interpolated = lift_domain(fri_domain).interpolate(qc);
+                let interpolated = fri_domain.interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
                     "Degree of terminal quotient number {idx} (of {}) in {} must not be maximal. \
@@ -267,7 +267,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
     fn boundary_quotients(
         &self,
-        fri_domain: &FriDomain<BWord>,
+        fri_domain: &FriDomain<XWord>,
         codewords: &[Vec<XWord>],
         challenges: &AllChallenges,
     ) -> Vec<Vec<XWord>> {
@@ -286,39 +286,20 @@ pub trait ExtensionTable: Table<XWord> + Sync {
 
         let boundary_constraints: Vec<MPolynomial<XWord>> =
             self.ext_boundary_constraints(challenges);
-        let one = BFieldElement::ring_one();
-        let zerofier: Vec<BFieldElement> = (0..fri_domain.length)
+        let one = XWord::ring_one();
+        let zerofier: Vec<XWord> = (0..fri_domain.length)
             .map(|i| fri_domain.domain_value(i as u32) - one)
             .collect();
-        let zerofier_inverse = BFieldElement::batch_inversion(zerofier);
+        let zerofier_inverse = XWord::batch_inversion(zerofier);
 
         for bc in boundary_constraints.iter() {
-            // println!("rows: {}, columns: {}", codewords.len(), codewords[0].len());
-            // println!("fri_domain.length = {}", fri_domain.length);
             let quotient_codeword: Vec<XWord> = (0..fri_domain.length)
                 .into_iter()
                 .map(|fri_dom_i| {
-                    // println!(
-                    //     "LOOKATME self.base_width() = {}, self.full_width() = {}, self.name() = {}",
-                    //     self.base_width(),
-                    //     self.full_width(),
-                    //     self.name()
-                    // );
-
                     let point: Vec<XWord> = (0..self.full_width())
-                        .map(|j| {
-                            // println!("i: {}, j: {}", fri_dom_i, j);
-                            codewords[j][fri_dom_i]
-                        })
+                        .map(|j| codewords[j][fri_dom_i])
                         .collect();
-
-                    // println!(
-                    //     "before evaluate, {}: points.len() = {}",
-                    //     self.name(),
-                    //     self.full_width()
-                    // );
-
-                    bc.evaluate(&point) * zerofier_inverse[fri_dom_i].lift()
+                    bc.evaluate(&point) * zerofier_inverse[fri_dom_i]
                 })
                 .collect();
             quotient_codewords.push(quotient_codeword);
@@ -327,7 +308,7 @@ pub trait ExtensionTable: Table<XWord> + Sync {
         // If the `DEBUG` environment variable is set, run this extra validity check
         if std::env::var("DEBUG").is_ok() {
             for (idx, qc) in quotient_codewords.iter().enumerate() {
-                let interpolated = lift_domain(fri_domain).interpolate(qc);
+                let interpolated = fri_domain.interpolate(qc);
                 assert!(
                     interpolated.degree() < fri_domain.length as isize - 1,
                     "Degree of boundary quotient number {idx} (of {}) in {} must not be maximal. \

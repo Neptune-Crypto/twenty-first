@@ -378,7 +378,7 @@ impl ExtTableCollection {
 
     pub fn get_all_quotients(
         &self,
-        fri_domain: &FriDomain<BWord>,
+        fri_domain: &FriDomain<XWord>,
         all_challenges: &AllChallenges,
         all_terminals: &AllEndpoints,
     ) -> Vec<Vec<XWord>> {

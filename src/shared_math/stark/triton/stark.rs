@@ -191,7 +191,7 @@ impl Stark {
         timer.elapsed("Calculated extension degree bounds");
 
         let mut quotient_codewords = ext_codeword_tables.get_all_quotients(
-            &self.bfri_domain,
+            &self.xfri.domain,
             &extension_challenges,
             &all_terminals,
         );
@@ -203,7 +203,7 @@ impl Stark {
 
         // Prove equal initial values for the permutation-extension column pairs
         for pa in PermArg::all_permutation_arguments().iter() {
-            quotient_codewords.push(pa.quotient(&ext_codeword_tables, &self.bfri_domain));
+            quotient_codewords.push(pa.quotient(&ext_codeword_tables, &self.xfri.domain));
             quotient_degree_bounds.push(pa.quotient_degree_bound(&ext_codeword_tables));
         }
 
@@ -291,7 +291,7 @@ impl Stark {
         // open combination codeword at the same positions
         // Notice that we need to loop over `indices` here, not `revealed_indices`
         // as the latter includes adjacent table rows relative to the values in `indices`
-        let revealed_combination_elements: Vec<XFieldElement> = cross_codeword_slice_indices
+        let revealed_combination_elements: Vec<XWord> = cross_codeword_slice_indices
             .iter()
             .map(|i| combination_codeword[*i])
             .collect();

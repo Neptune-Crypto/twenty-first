@@ -1,4 +1,3 @@
-use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::stark::triton::fri_domain::FriDomain;
 use crate::shared_math::stark::triton::table::processor_table::PROCESSOR_TABLE_PERMUTATION_ARGUMENTS_COUNT;
@@ -10,8 +9,6 @@ use crate::shared_math::stark::triton::table::table_column::{
 use crate::shared_math::traits::PrimeField;
 use crate::shared_math::x_field_element::XFieldElement;
 use itertools::{izip, Itertools};
-
-type BWord = BFieldElement;
 
 pub struct PermArg {
     from_table: TableId,
@@ -38,11 +35,11 @@ impl PermArg {
     pub fn quotient(
         &self,
         ext_codeword_tables: &ExtTableCollection,
-        fri_domain: &FriDomain<BFieldElement>,
+        fri_domain: &FriDomain<XFieldElement>,
     ) -> Vec<XFieldElement> {
         let lhs_codeword = &ext_codeword_tables.data(self.from_table)[self.from_column];
         let rhs_codeword = &ext_codeword_tables.data(self.to_table)[self.to_column];
-        let inverse_zerofier = BWord::batch_inversion(
+        let inverse_zerofier = XFieldElement::batch_inversion(
             fri_domain
                 .domain_values()
                 .into_iter()
@@ -51,7 +48,7 @@ impl PermArg {
         );
 
         izip!(lhs_codeword, rhs_codeword, inverse_zerofier)
-            .map(|(from, to, z)| (*from - *to) * z.lift())
+            .map(|(from, to, z)| (*from - *to) * z)
             .collect_vec()
     }
 
