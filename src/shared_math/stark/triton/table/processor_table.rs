@@ -374,7 +374,10 @@ impl ExtProcessorTable {
     }
 
     pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
-        let ext_codewords = self.low_degree_extension(fri_domain, self.full_width());
+        // Extension Tables do not have a randomized trace
+        let num_trace_randomizers = 0;
+        let ext_codewords =
+            self.low_degree_extension(fri_domain, num_trace_randomizers, self.full_width());
         let base = self.base.with_data(ext_codewords);
 
         Self::new(base)

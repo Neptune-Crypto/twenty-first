@@ -181,13 +181,19 @@ where
     fn low_degree_extension(
         &self,
         fri_domain: &FriDomain<DataPF>,
+        num_trace_randomizers: usize,
         current_width: usize,
     ) -> Vec<Vec<DataPF>> {
         // FIXME: Table<> supports Vec<[DataPF; WIDTH]>, but FriDomain does not (yet).
-        self.interpolate_columns(fri_domain.omega, fri_domain.length, current_width)
-            .par_iter()
-            .map(|polynomial| fri_domain.evaluate(polynomial))
-            .collect()
+        self.interpolate_columns(
+            fri_domain.omega,
+            fri_domain.length,
+            num_trace_randomizers,
+            current_width,
+        )
+        .par_iter()
+        .map(|polynomial| fri_domain.evaluate(polynomial))
+        .collect()
     }
 
     /// Return the interpolation of columns. The `column_indices` variable
@@ -197,6 +203,7 @@ where
         &self,
         omega: DataPF,
         omega_order: usize,
+        num_trace_randomizers: usize,
         current_width: usize,
     ) -> Vec<Polynomial<DataPF>> {
         // FIXME: Inject `rng` instead.
@@ -224,12 +231,12 @@ where
         }
 
         assert!(
-            self.padded_height() >= self.num_trace_randomizers(),
+            self.padded_height() >= num_trace_randomizers,
             "Number of trace randomizers must not exceed padded table height. \
             {} height: {} Num trace randomizers: {}",
             self.name(),
             self.padded_height(),
-            self.num_trace_randomizers()
+            num_trace_randomizers
         );
 
         // FIXME: Unfold with multiplication instead of mapping with power.
@@ -237,7 +244,7 @@ where
             .map(|i| self.omicron().mod_pow_u32(i as u32))
             .collect();
 
-        let randomizer_domain: Vec<DataPF> = (0..self.num_trace_randomizers())
+        let randomizer_domain: Vec<DataPF> = (0..num_trace_randomizers)
             .map(|i| omega * omicron_domain[i])
             .collect();
 
@@ -248,8 +255,7 @@ where
         let data = self.data();
         for c in 0..current_width {
             let trace: Vec<DataPF> = data.iter().map(|row| row[c]).collect();
-            let randomizers: Vec<DataPF> =
-                DataPF::random_elements(self.num_trace_randomizers(), &mut rng);
+            let randomizers: Vec<DataPF> = DataPF::random_elements(num_trace_randomizers, &mut rng);
             let values = vec![trace, randomizers].concat();
             assert_eq!(
                 values.len(),
