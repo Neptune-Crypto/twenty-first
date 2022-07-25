@@ -174,14 +174,15 @@ impl<'a> IntoIterator for &'a BaseTableCollection {
 
 impl ExtTableCollection {
     pub fn with_padded_heights(num_trace_randomizers: usize, padded_heights: &[usize]) -> Self {
+        // FIXME there must be a better way to access the padded heights
         let ext_program_table =
             ExtProgramTable::with_padded_height(num_trace_randomizers, padded_heights[0]);
 
-        let ext_processor_table =
-            ExtProcessorTable::with_padded_height(num_trace_randomizers, padded_heights[1]);
-
         let ext_instruction_table =
-            ExtInstructionTable::with_padded_height(num_trace_randomizers, padded_heights[2]);
+            ExtInstructionTable::with_padded_height(num_trace_randomizers, padded_heights[1]);
+
+        let ext_processor_table =
+            ExtProcessorTable::with_padded_height(num_trace_randomizers, padded_heights[2]);
 
         let ext_op_stack_table =
             ExtOpStackTable::with_padded_height(num_trace_randomizers, padded_heights[3]);
