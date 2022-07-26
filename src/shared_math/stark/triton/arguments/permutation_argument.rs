@@ -177,8 +177,6 @@ impl PermArg {
 
 #[cfg(test)]
 mod permutation_argument_tests {
-    use hashbrown::HashSet;
-
     use super::*;
 
     #[test]
@@ -186,18 +184,5 @@ mod permutation_argument_tests {
         for perm_arg in PermArg::all_permutation_arguments() {
             assert_eq!(TableId::ProcessorTable, perm_arg.from_table);
         }
-    }
-
-    #[test]
-    fn all_permutation_arguments_have_unique_rhs_test() {
-        let perm_args_rhs: HashSet<(TableId, usize)> = PermArg::all_permutation_arguments()
-            .map(|perm_arg| (perm_arg.from_table, perm_arg.from_column))
-            .into_iter()
-            .collect();
-
-        assert_eq!(
-            PROCESSOR_TABLE_PERMUTATION_ARGUMENTS_COUNT,
-            perm_args_rhs.len()
-        );
     }
 }
