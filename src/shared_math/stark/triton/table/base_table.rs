@@ -5,8 +5,10 @@ use crate::shared_math::other::{is_power_of_two, roundup_npo2};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{GetRandomElements, PrimeField};
 use crate::shared_math::x_field_element::XFieldElement;
+use itertools::Itertools;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::cmp::max;
+use std::ops::Range;
 
 type BWord = BFieldElement;
 type XWord = XFieldElement;
@@ -182,14 +184,14 @@ where
         &self,
         fri_domain: &FriDomain<DataPF>,
         num_trace_randomizers: usize,
-        current_width: usize,
+        columns: Range<usize>,
     ) -> Vec<Vec<DataPF>> {
         // FIXME: Table<> supports Vec<[DataPF; WIDTH]>, but FriDomain does not (yet).
         self.interpolate_columns(
             fri_domain.omega,
             fri_domain.length,
             num_trace_randomizers,
-            current_width,
+            columns,
         )
         .par_iter()
         .map(|polynomial| fri_domain.evaluate(polynomial))
@@ -204,7 +206,7 @@ where
         omega: DataPF,
         omega_order: usize,
         num_trace_randomizers: usize,
-        current_width: usize,
+        columns: Range<usize>,
     ) -> Vec<Polynomial<DataPF>> {
         // FIXME: Inject `rng` instead.
         let mut rng = rand::thread_rng();
@@ -217,17 +219,8 @@ where
             self.name()
         );
 
-        assert!(
-            omega.mod_pow_u32(omega_order as u32).is_one(),
-            "omega must have indicated order"
-        );
-        assert!(
-            !omega.mod_pow_u32(omega_order as u32 / 2).is_one(),
-            "omega must be a primitive root of indicated order"
-        );
-
         if self.padded_height() == 0 {
-            return vec![Polynomial::ring_zero(); current_width];
+            return vec![Polynomial::ring_zero(); columns.len()];
         }
 
         assert!(
@@ -240,35 +233,34 @@ where
         );
 
         // FIXME: Unfold with multiplication instead of mapping with power.
-        let omicron_domain: Vec<DataPF> = (0..self.padded_height())
+        let omicron_domain = (0..self.padded_height())
             .map(|i| self.omicron().mod_pow_u32(i as u32))
-            .collect();
+            .collect_vec();
 
-        let randomizer_domain: Vec<DataPF> = (0..num_trace_randomizers)
+        let randomizer_domain = (0..num_trace_randomizers)
             .map(|i| omega * omicron_domain[i])
-            .collect();
+            .collect_vec();
 
-        let domain: Vec<DataPF> = vec![omicron_domain, randomizer_domain].concat();
-
-        let mut valuess: Vec<Vec<DataPF>> = vec![];
-
+        let interpolation_domain = vec![omicron_domain, randomizer_domain].concat();
+        let mut all_randomized_traces = vec![];
         let data = self.data();
-        for c in 0..current_width {
-            let trace: Vec<DataPF> = data.iter().map(|row| row[c]).collect();
-            let randomizers: Vec<DataPF> = DataPF::random_elements(num_trace_randomizers, &mut rng);
-            let values = vec![trace, randomizers].concat();
+
+        for col in columns {
+            let trace = data.iter().map(|row| row[col]).collect();
+            let randomizers = DataPF::random_elements(num_trace_randomizers, &mut rng);
+            let randomized_trace = vec![trace, randomizers].concat();
             assert_eq!(
-                values.len(),
-                domain.len(),
+                randomized_trace.len(),
+                interpolation_domain.len(),
                 "Length of x values and y values must match"
             );
-            valuess.push(values);
+            all_randomized_traces.push(randomized_trace);
         }
 
-        valuess
+        all_randomized_traces
             .par_iter()
             .map(|values| {
-                Polynomial::<DataPF>::fast_interpolate(&domain, values, &omega, omega_order)
+                Polynomial::fast_interpolate(&interpolation_domain, values, &omega, omega_order)
             })
             .collect()
     }

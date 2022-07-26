@@ -201,8 +201,9 @@ impl ExtProgramTable {
     pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
         // Extension Tables do not have a randomized trace
         let num_trace_randomizers = 0;
+        let ext_columns = self.base_width()..self.full_width();
         let ext_codewords =
-            self.low_degree_extension(fri_domain, num_trace_randomizers, self.full_width());
+            self.low_degree_extension(fri_domain, num_trace_randomizers, ext_columns);
         let base = self.base.with_data(ext_codewords);
 
         ExtProgramTable { base }

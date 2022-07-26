@@ -125,11 +125,8 @@ impl BaseTableCollection {
     pub fn all_base_codewords(&self, fri_domain: &FriDomain<BWord>) -> Vec<Vec<BWord>> {
         self.into_iter()
             .map(|table| {
-                table.low_degree_extension(
-                    fri_domain,
-                    table.num_trace_randomizers(),
-                    table.base_width(),
-                )
+                let base_columns = 0..table.base_width();
+                table.low_degree_extension(fri_domain, table.num_trace_randomizers(), base_columns)
             })
             .concat()
     }
