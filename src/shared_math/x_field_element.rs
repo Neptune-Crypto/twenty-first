@@ -234,10 +234,8 @@ impl Display for XFieldElement {
         } else {
             write!(
                 f,
-                "({:>016X}·x² + {:>016X}·x + {:>016X})",
-                self.coefficients[2].value(),
-                self.coefficients[1].value(),
-                self.coefficients[0].value(),
+                "({:>020}·x² + {:>020}·x + {:>020})",
+                self.coefficients[2], self.coefficients[1], self.coefficients[0],
             )
         }
     }

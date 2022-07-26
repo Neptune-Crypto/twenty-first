@@ -252,10 +252,13 @@ impl BFieldElement {
 
 impl fmt::Display for BFieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.value() >= Self::QUOTIENT - 256 {
+        let cutoff = 256;
+        if self.value() >= Self::QUOTIENT - cutoff {
             write!(f, "-{}", Self::QUOTIENT - self.value())
+        } else if self.value() <= cutoff {
+            write!(f, "{}", self.value())
         } else {
-            write!(f, "{:>016X}", self.canonical_representation())
+            write!(f, "{:>020}", self.value())
         }
     }
 }
