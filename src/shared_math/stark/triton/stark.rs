@@ -932,6 +932,9 @@ impl Stark {
         }
         timer.elapsed(&format!("Verified {num_idxs} non-linear combinations"));
 
+        // TODO: check cross-table difference boundary constraints for PermArgs
+        // TODO: check cross-table difference boundary constraints for EvalArgs
+
         // Verify external terminals
         if !verify_evaluation_argument(
             &self.input_symbols,
@@ -1286,7 +1289,12 @@ pub(crate) mod triton_stark_tests {
     #[test]
     fn triton_prove_verify_test() {
         let co_set_fri_offset = BWord::generator();
-        let (stark, mut proof_stream) = parse_simulate_prove("halt", co_set_fri_offset, &[], &[]);
+        let (stark, mut proof_stream) = parse_simulate_prove(
+            "hash nop hash nop nop hash halt",
+            co_set_fri_offset,
+            &[],
+            &[],
+        );
 
         println!("between prove and verify");
 

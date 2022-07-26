@@ -255,7 +255,7 @@ impl fmt::Display for BFieldElement {
         if self.value() >= Self::QUOTIENT - 256 {
             write!(f, "-{}", Self::QUOTIENT - self.value())
         } else {
-            write!(f, "{}", self.canonical_representation())
+            write!(f, "{:>016X}", self.canonical_representation())
         }
     }
 }
