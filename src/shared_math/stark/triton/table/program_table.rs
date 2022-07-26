@@ -130,6 +130,15 @@ impl ProgramTable {
         Self { base }
     }
 
+    pub fn codeword_table(&self, fri_domain: &FriDomain<BWord>) -> Self {
+        let base_columns = 0..self.base_width();
+        let codewords =
+            self.low_degree_extension(fri_domain, self.num_trace_randomizers(), base_columns);
+
+        let base = self.base.with_data(codewords);
+        Self { base }
+    }
+
     pub fn extend(
         &self,
         challenges: &ProgramTableChallenges,
@@ -198,14 +207,25 @@ impl ExtProgramTable {
         Self { base }
     }
 
-    pub fn ext_codeword_table(&self, fri_domain: &FriDomain<XWord>) -> Self {
+    pub fn ext_codeword_table(
+        &self,
+        fri_domain: &FriDomain<XWord>,
+        base_codewords: &[Vec<BWord>],
+    ) -> Self {
         // Extension Tables do not have a randomized trace
         let num_trace_randomizers = 0;
         let ext_columns = self.base_width()..self.full_width();
         let ext_codewords =
             self.low_degree_extension(fri_domain, num_trace_randomizers, ext_columns);
-        let base = self.base.with_data(ext_codewords);
 
+        let lifted_base_codewords = base_codewords
+            .iter()
+            .map(|base_codeword| base_codeword.iter().map(|bfe| bfe.lift()).collect_vec())
+            .collect_vec();
+        let all_codewords = vec![lifted_base_codewords, ext_codewords].concat();
+        assert_eq!(self.full_width(), all_codewords.len());
+
+        let base = self.base.with_data(all_codewords);
         ExtProgramTable { base }
     }
 }

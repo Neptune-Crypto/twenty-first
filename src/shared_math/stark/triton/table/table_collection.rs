@@ -122,12 +122,23 @@ impl BaseTableCollection {
         }
     }
 
-    pub fn all_base_codewords(&self, fri_domain: &FriDomain<BWord>) -> Vec<Vec<BWord>> {
+    pub fn codeword_tables(&self, fri_domain: &FriDomain<BWord>) -> BaseTableCollection {
+        BaseTableCollection {
+            program_table: self.program_table.codeword_table(fri_domain),
+            instruction_table: self.instruction_table.codeword_table(fri_domain),
+            processor_table: self.processor_table.codeword_table(fri_domain),
+            op_stack_table: self.op_stack_table.codeword_table(fri_domain),
+            ram_table: self.ram_table.codeword_table(fri_domain),
+            jump_stack_table: self.jump_stack_table.codeword_table(fri_domain),
+            hash_table: self.hash_table.codeword_table(fri_domain),
+            u32_op_table: self.u32_op_table.codeword_table(fri_domain),
+        }
+    }
+
+    pub fn get_all_base_columns(&self) -> Vec<Vec<BWord>> {
         self.into_iter()
-            .map(|table| {
-                let base_columns = 0..table.base_width();
-                table.low_degree_extension(fri_domain, table.num_trace_randomizers(), base_columns)
-            })
+            .map(|table| table.data().clone())
+            .collect_vec()
             .concat()
     }
 
@@ -300,15 +311,35 @@ impl ExtTableCollection {
             .clone()
     }
 
-    pub fn codeword_tables(&self, fri_domain: &FriDomain<XWord>) -> Self {
-        let program_table = self.program_table.ext_codeword_table(fri_domain);
-        let instruction_table = self.instruction_table.ext_codeword_table(fri_domain);
-        let processor_table = self.processor_table.ext_codeword_table(fri_domain);
-        let op_stack_table = self.op_stack_table.ext_codeword_table(fri_domain);
-        let ram_table = self.ram_table.ext_codeword_table(fri_domain);
-        let jump_stack_table = self.jump_stack_table.ext_codeword_table(fri_domain);
-        let hash_table = self.hash_table.ext_codeword_table(fri_domain);
-        let u32_op_table = self.u32_op_table.ext_codeword_table(fri_domain);
+    pub fn codeword_tables(
+        &self,
+        fri_domain: &FriDomain<XWord>,
+        base_codeword_tables: BaseTableCollection,
+    ) -> Self {
+        let program_table = self
+            .program_table
+            .ext_codeword_table(fri_domain, base_codeword_tables.program_table.data());
+        let instruction_table = self
+            .instruction_table
+            .ext_codeword_table(fri_domain, base_codeword_tables.instruction_table.data());
+        let processor_table = self
+            .processor_table
+            .ext_codeword_table(fri_domain, base_codeword_tables.processor_table.data());
+        let op_stack_table = self
+            .op_stack_table
+            .ext_codeword_table(fri_domain, base_codeword_tables.op_stack_table.data());
+        let ram_table = self
+            .ram_table
+            .ext_codeword_table(fri_domain, base_codeword_tables.ram_table.data());
+        let jump_stack_table = self
+            .jump_stack_table
+            .ext_codeword_table(fri_domain, base_codeword_tables.jump_stack_table.data());
+        let hash_table = self
+            .hash_table
+            .ext_codeword_table(fri_domain, base_codeword_tables.hash_table.data());
+        let u32_op_table = self
+            .u32_op_table
+            .ext_codeword_table(fri_domain, base_codeword_tables.u32_op_table.data());
 
         ExtTableCollection {
             program_table,

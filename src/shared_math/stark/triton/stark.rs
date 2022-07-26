@@ -129,7 +129,8 @@ impl Stark {
         let (x_rand_codeword, b_rand_codewords) = self.get_randomizer_codewords();
         timer.elapsed("randomizer_codewords");
 
-        let base_codewords = base_tables.all_base_codewords(&self.bfri_domain);
+        let base_codeword_tables = base_tables.codeword_tables(&self.bfri_domain);
+        let base_codewords = base_codeword_tables.get_all_base_columns();
         let all_base_codewords = vec![b_rand_codewords, base_codewords.clone()].concat();
         timer.elapsed("get_all_base_codewords");
 
@@ -172,7 +173,8 @@ impl Stark {
         proof_stream.enqueue(&Item::PaddedHeights(padded_heights));
         timer.elapsed("Sent all padded heights");
 
-        let ext_codeword_tables = ext_tables.codeword_tables(&self.xfri.domain);
+        let ext_codeword_tables =
+            ext_tables.codeword_tables(&self.xfri.domain, base_codeword_tables);
         let extension_codewords = ext_codeword_tables.get_all_extension_columns();
         timer.elapsed("Calculated extension codewords");
 
