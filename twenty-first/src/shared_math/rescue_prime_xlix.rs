@@ -2,13 +2,13 @@ use serde::{Deserialize, Serialize};
 
 use super::b_field_element::BFieldElement;
 use super::rescue_prime_params;
-use super::stark::triton::table::hash_table;
 use super::traits::PrimeField;
 
 type Word = BFieldElement;
 
 pub const RP_DEFAULT_OUTPUT_SIZE: usize = 6;
 pub const RP_DEFAULT_WIDTH: usize = 16;
+pub const RP_TRACE_WIDTH: usize = 17;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RescuePrimeXlix<const M: usize> {
@@ -75,19 +75,19 @@ impl<const M: usize> RescuePrimeXlix<M> {
     pub fn rescue_xlix_permutation_trace(
         &self,
         state: &mut [Word; M],
-    ) -> Vec<[Word; hash_table::BASE_WIDTH]> {
+    ) -> Vec<[Word; RP_TRACE_WIDTH]> {
         debug_assert_eq!(M, state.len());
-        let mut states: Vec<[Word; hash_table::BASE_WIDTH]> = Vec::with_capacity(self.n);
+        let mut states: Vec<[Word; RP_TRACE_WIDTH]> = Vec::with_capacity(self.n);
 
         let mut idc: Word = 1.into();
-        let mut first_row = [idc; hash_table::BASE_WIDTH];
+        let mut first_row = [idc; RP_TRACE_WIDTH];
         first_row[1..].copy_from_slice(state);
         states.push(first_row);
 
         for round in 0..self.n {
             idc += 1.into();
             self.rescue_xlix_round(round, state);
-            let mut row = [idc; hash_table::BASE_WIDTH];
+            let mut row = [idc; RP_TRACE_WIDTH];
             row[1..].copy_from_slice(state);
             states.push(row);
         }
