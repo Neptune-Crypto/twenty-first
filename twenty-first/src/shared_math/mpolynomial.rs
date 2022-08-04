@@ -1550,6 +1550,9 @@ mod test_mpolynomials {
         };
         assert!(!x.is_one()); // $P(x, y, z) = x$ is not one
         assert!(!x.scalar_mul(b_two).is_one()); // $P(x, y, z) = 2*x$ is not one
+
+        // x + one is not one
+        assert!(!(x + one).is_one());
     }
 
     #[test]
