@@ -335,6 +335,23 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         true
     }
 
+    pub fn is_one(&self) -> bool {
+        if self.coefficients.is_empty() {
+            return false;
+        }
+
+        for (k, v) in self.coefficients.iter() {
+            if *k == vec![0u64; self.variable_count] && !v.is_one() {
+                return false;
+            }
+            if !v.is_zero() {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// Returns an `MPolynomial` instance over `variable_count` variables
     /// that evaluates to `element` everywhere.
     /// I.e.
@@ -1208,6 +1225,12 @@ impl<PFElem: PrimeField> Mul for MPolynomial<PFElem> {
             return Self::zero(variable_count);
         }
 
+        if self.is_one() {
+            return other;
+        } else if other.is_one() {
+            return self;
+        }
+
         let mut output_coefficients: MCoefficients<PFElem> = HashMap::new();
         for (k0, &v0) in self.coefficients.iter() {
             for (k1, &v1) in other.coefficients.iter() {
@@ -1481,6 +1504,13 @@ mod test_mpolynomials {
         let xz = get_xz(q);
         assert_eq!(x_squared, x.clone() * x.clone());
         assert_eq!(xz, x * z);
+
+        // Multiplying with one must be the identity operator
+        let one: MPolynomial<PrimeFieldElementFlexible> = MPolynomial::from_constant(pfb(1, q), 3);
+        assert_eq!(x_squared, x_squared.clone() * one.clone());
+        assert_eq!(x_squared, one.clone() * x_squared.clone());
+        assert_eq!(xz, one.clone() * xz.clone());
+        assert_eq!(xz, xz.clone() * one);
     }
 
     #[test]
