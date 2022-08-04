@@ -341,9 +341,14 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         }
 
         for (k, v) in self.coefficients.iter() {
-            if *k == vec![0u64; self.variable_count] && !v.is_one() {
-                return false;
+            if *k == vec![0u64; self.variable_count] {
+                if !v.is_one() {
+                    return false;
+                } else {
+                    continue;
+                }
             }
+
             if !v.is_zero() {
                 return false;
             }
@@ -1514,6 +1519,40 @@ mod test_mpolynomials {
     }
 
     #[test]
+    fn is_one_test() {
+        let b_two = BFieldElement::new(2);
+        let b_three = BFieldElement::new(3);
+        let zero = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_zero(), 10);
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 10);
+        let two = MPolynomial::<BFieldElement>::from_constant(b_two, 10);
+        let three = MPolynomial::<BFieldElement>::from_constant(b_three, 10);
+        assert!(!zero.is_one());
+        assert!(one.is_one());
+        assert!(!two.is_one());
+        assert!(!three.is_one());
+
+        let mut mcoef_one_alt: MCoefficients<BFieldElement> = HashMap::new();
+        mcoef_one_alt.insert(vec![0, 0, 0], BFieldElement::new(1));
+        mcoef_one_alt.insert(vec![1, 0, 0], BFieldElement::new(0));
+        mcoef_one_alt.insert(vec![1, 188, 3], BFieldElement::new(0));
+        let one_alt = MPolynomial::<BFieldElement> {
+            variable_count: 3,
+            coefficients: mcoef_one_alt.clone(),
+        };
+        assert!(one_alt.is_one());
+        assert!(!one_alt.scalar_mul(b_two).is_one()); // $P(x, y, z) = 2$ is not one
+
+        let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
+        mcoef.insert(vec![1, 0, 0], BFieldElement::new(1));
+        let x = MPolynomial::<BFieldElement> {
+            variable_count: 3,
+            coefficients: mcoef.clone(),
+        };
+        assert!(!x.is_one()); // $P(x, y, z) = x$ is not one
+        assert!(!x.scalar_mul(b_two).is_one()); // $P(x, y, z) = 2*x$ is not one
+    }
+
+    #[test]
     fn simple_modpow_test() {
         let q = 13;
         let one = pfb(1, q);
@@ -1880,6 +1919,16 @@ mod test_mpolynomials {
         let ab = a.clone() * b.clone();
         let ba = b * a;
         assert_eq!(ab, ba);
+    }
+
+    #[test]
+    fn mut_with_one_test() {
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 3);
+        for _ in 0..10 {
+            let a = gen_mpolynomial(3, 5, 10, u64::MAX);
+            assert_eq!(a, a.clone() * one.clone());
+            assert_eq!(a, one.clone() * a.clone());
+        }
     }
 
     #[test]
