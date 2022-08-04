@@ -9,7 +9,7 @@ description = "Collection of mathematics routines and cryptography for the twent
 homepage = "https://github.com/Neptune-Crypto/twenty-first"
 documentation = "https://github.com/Neptune-Crypto/twenty-first"
 repository = "https://github.com/Neptune-Crypto/twenty-first"
-readme = "README.md"
+readme = "../README.md"
 
 keywords = ["polynomial", "merkle-tree", "post-quantum", "algebra", "rescue-prime"]
 categories = ["cryptography", "mathematics"]
