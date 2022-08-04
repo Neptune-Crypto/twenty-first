@@ -4,6 +4,16 @@ version = "0.1.0"
 authors = ["Triton Software AG"]
 edition = "2021"
 
+license = "GPL-2.0"
+description = "Collection of mathematics routines and cryptography for the twenty-first century."
+homepage = "https://github.com/Neptune-Crypto/twenty-first"
+documentation = "https://github.com/Neptune-Crypto/twenty-first"
+repository = "https://github.com/Neptune-Crypto/twenty-first"
+readme = "README.md"
+
+keywords = ["polynomial", "merkle-tree", "post-quantum", "algebra", "rescue-prime"]
+categories = ["cryptography", "mathematics"]
+
 [dev-dependencies]
 proptest = "1.0"
 
