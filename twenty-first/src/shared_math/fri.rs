@@ -1,3 +1,6 @@
+use itertools::Itertools;
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+
 use super::b_field_element::BFieldElement;
 use super::other::{log_2_ceil, log_2_floor};
 use super::polynomial::Polynomial;
@@ -123,6 +126,47 @@ where
         }
     }
 
+    /// Build the (deduplicated) Merkle authentication paths for the codeword at the given indices
+    /// and enqueue the corresponding values and (partial) authentication paths on the proof stream.
+    fn enqueue_auth_pairs(
+        indices: &[usize],
+        codeword: &[PF],
+        merkle_tree: &MerkleTree<H>,
+        proof_stream: &mut ProofStream,
+    ) {
+        let value_ap_pairs: Vec<(PartialAuthenticationPath<H::Digest>, PF)> = merkle_tree
+            .get_multi_proof(indices)
+            .into_iter()
+            .zip(indices.iter())
+            .map(|(ap, i)| (ap, codeword[*i]))
+            .collect_vec();
+        proof_stream
+            .enqueue_length_prepended(&value_ap_pairs)
+            .expect("Enqueuing must succeed")
+    }
+
+    /// Given a set of `indices`, a merkle `root`, and the (correctly set) `proof_stream`, verify
+    /// whether the values at the `indices` are members of the set committed to by the merkle `root`
+    /// and return these values if they are. Fails otherwise.
+    fn dequeue_and_authenticate(
+        indices: &[usize],
+        root: H::Digest,
+        proof_stream: &mut ProofStream,
+    ) -> Result<Vec<PF>, Box<dyn Error>> {
+        let hasher = H::new();
+        let (paths, values): (Vec<PartialAuthenticationPath<H::Digest>>, Vec<PF>) = proof_stream
+            .dequeue_length_prepended::<Vec<(PartialAuthenticationPath<H::Digest>, PF)>>()?
+            .into_iter()
+            .unzip();
+        let digests: Vec<H::Digest> = values.par_iter().map(|v| hasher.hash(v)).collect();
+        let path_digest_pairs = paths.into_iter().zip(digests).collect_vec();
+        if MerkleTree::<H>::verify_multi_proof(root, indices, &path_digest_pairs) {
+            Ok(values)
+        } else {
+            Err(Box::new(ValidationError::BadMerkleProof))
+        }
+    }
+
     pub fn prove(
         &self,
         codeword: &[PF],
@@ -135,30 +179,31 @@ where
         );
 
         // Commit phase
-        let values_and_merkle_trees: Vec<(Vec<PF>, MerkleTree<H>)> =
-            self.commit(codeword, proof_stream)?;
-        let codewords: Vec<Vec<_>> = values_and_merkle_trees
-            .iter()
-            .map(|(_, mt)| mt.get_all_leaves())
-            .collect();
+        let (codewords, merkle_trees): (Vec<Vec<PF>>, Vec<MerkleTree<H>>) =
+            self.commit(codeword, proof_stream)?.into_iter().unzip();
 
         // fiat-shamir phase (get indices)
         let top_level_indices = self.sample_indices(&proof_stream.prover_fiat_shamir());
 
         // query phase
-        let mut c_indices = top_level_indices.clone();
-        for i in 0..values_and_merkle_trees.len() - 1 {
-            c_indices = c_indices
-                .clone()
+        let initial_a_indices: Vec<usize> = top_level_indices.clone();
+        Self::enqueue_auth_pairs(&initial_a_indices, codeword, &merkle_trees[0], proof_stream);
+        let mut current_domain_len = self.domain.length;
+        let mut b_indices: Vec<usize> = initial_a_indices;
+
+        for r in 0..merkle_trees.len() - 1 {
+            debug_assert_eq!(
+                codewords[r].len(),
+                current_domain_len,
+                "The current domain length needs to be the same as the length of the \
+                current codeword"
+            );
+            b_indices = b_indices
                 .iter()
-                .map(|x| x % (codewords[i].len() / 2))
+                .map(|x| (x + current_domain_len / 2) % current_domain_len)
                 .collect();
-            self.query(
-                values_and_merkle_trees[i].clone(),
-                values_and_merkle_trees[i + 1].clone(),
-                &c_indices,
-                proof_stream,
-            )?;
+            Self::enqueue_auth_pairs(&b_indices, &codewords[r], &merkle_trees[r], proof_stream);
+            current_domain_len /= 2;
         }
 
         Ok(top_level_indices)
@@ -180,9 +225,10 @@ where
         let two_inv = one / two;
 
         // Compute and send Merkle root
-        let mut leaves: Vec<H::Digest> = codeword_local.iter().map(|x| hasher.hash(x)).collect();
-        let mut mt = MerkleTree::from_digests(&leaves);
-        proof_stream.enqueue_length_prepended(&mt.get_root())?;
+        let mut digests: Vec<H::Digest> =
+            codeword_local.par_iter().map(|x| hasher.hash(x)).collect();
+        let mut mt = MerkleTree::from_digests(&digests);
+        proof_stream.enqueue(&mt.get_root())?;
         let mut values_and_merkle_trees = vec![(codeword_local.clone(), mt)];
 
         let (num_rounds, _) = self.num_rounds();
@@ -198,22 +244,24 @@ where
 
             let x_offset: Vec<PF> = generator
                 .get_cyclic_group_elements(None)
-                .into_iter()
+                .into_par_iter()
                 .map(|x| x * offset)
                 .collect();
 
             let x_offset_inverses = PF::batch_inversion(x_offset);
-            for i in 0..n / 2 {
-                codeword_local[i] = two_inv
-                    * ((one + alpha * x_offset_inverses[i]) * codeword_local[i]
-                        + (one - alpha * x_offset_inverses[i]) * codeword_local[n / 2 + i]);
-            }
-            codeword_local.truncate(n / 2);
+            codeword_local = (0..n / 2)
+                .into_par_iter()
+                .map(|i| {
+                    two_inv
+                        * ((one + alpha * x_offset_inverses[i]) * codeword_local[i]
+                            + (one - alpha * x_offset_inverses[i]) * codeword_local[n / 2 + i])
+                })
+                .collect();
 
             // Compute and send Merkle root
-            leaves = codeword_local.iter().map(|x| hasher.hash(x)).collect();
-            mt = MerkleTree::from_digests(&leaves);
-            proof_stream.enqueue_length_prepended(&mt.get_root())?;
+            digests = codeword_local.par_iter().map(|x| hasher.hash(x)).collect();
+            mt = MerkleTree::from_digests(&digests);
+            proof_stream.enqueue(&mt.get_root())?;
             values_and_merkle_trees.push((codeword_local.clone(), mt));
 
             // Update subgroup generator and offset
@@ -281,45 +329,6 @@ where
         indices
     }
 
-    fn query(
-        &self,
-        current_values_and_mt: (Vec<PF>, MerkleTree<H>),
-        next_values_and_mt: (Vec<PF>, MerkleTree<H>),
-        c_indices: &[usize],
-        proof_stream: &mut ProofStream,
-    ) -> Result<(), Box<dyn Error>> {
-        let a_indices: Vec<usize> = c_indices.to_vec();
-        let mut b_indices: Vec<usize> = c_indices
-            .iter()
-            .map(|x| x + current_values_and_mt.1.get_leaf_count() / 2)
-            .collect();
-        let mut ab_indices = a_indices;
-        ab_indices.append(&mut b_indices);
-
-        // Reveal authentication paths
-        let current_ap_with_value: Vec<(PartialAuthenticationPath<H::Digest>, PF)> =
-            current_values_and_mt
-                .1
-                .get_multi_proof(&ab_indices)
-                .into_iter()
-                .zip(ab_indices.iter())
-                .map(|(ap, i)| (ap, current_values_and_mt.0[*i]))
-                .collect();
-
-        let next_ap: Vec<(PartialAuthenticationPath<H::Digest>, PF)> = next_values_and_mt
-            .1
-            .get_multi_proof(c_indices)
-            .into_iter()
-            .zip(c_indices.iter())
-            .map(|(ap, i)| (ap, next_values_and_mt.0[*i]))
-            .collect();
-
-        proof_stream.enqueue_length_prepended(&current_ap_with_value)?;
-        proof_stream.enqueue_length_prepended(&next_ap)?;
-
-        Ok(())
-    }
-
     pub fn verify(
         &self,
         proof_stream: &mut ProofStream,
@@ -332,14 +341,14 @@ where
         // Extract all roots and calculate alpha, the challenges
         let mut roots: Vec<H::Digest> = vec![];
         let mut alphas: Vec<PF> = vec![];
-        let first_root: H::Digest = proof_stream.dequeue_length_prepended::<H::Digest>()?;
+        let first_root: H::Digest = proof_stream.dequeue(32)?;
         roots.push(first_root);
 
         for _ in 0..num_rounds {
             // Get a challenge from the proof stream
             let alpha: PF = omega.from_vecu8(proof_stream.verifier_fiat_shamir());
             alphas.push(alpha);
-            roots.push(proof_stream.dequeue_length_prepended::<H::Digest>()?);
+            roots.push(proof_stream.dequeue(32)?);
         }
 
         // Extract last codeword
@@ -375,96 +384,86 @@ where
             return Err(Box::new(ValidationError::LastIterationTooHighDegree));
         }
 
-        let top_level_indices = self.sample_indices(&proof_stream.verifier_fiat_shamir());
+        let mut a_indices: Vec<usize> = self.sample_indices(&proof_stream.verifier_fiat_shamir());
 
         // for every round, check consistency of subsequent layers
         let mut codeword_evaluations: Vec<CodewordEvaluation<PF>> = vec![];
+        let mut a_values =
+            Self::dequeue_and_authenticate(&a_indices, roots[0].clone(), proof_stream)?;
+
+        // set up "B" for offsetting inside loop.  Note that "B" and "A" indices
+        // can be calcuated from each other.
+        let mut b_indices = a_indices.clone();
+        let mut current_domain_len = self.domain.length;
+
         for r in 0..num_rounds as usize {
-            // Fold c indices
-            let c_indices: Vec<usize> = top_level_indices
+            // get "B" indices and verify set membership of corresponding values
+            b_indices = b_indices
                 .iter()
-                .map(|x| x % (self.domain.length >> (r + 1)))
+                .map(|x| (x + current_domain_len / 2) % current_domain_len)
                 .collect();
 
-            // Infer a and b indices
-            let a_indices = c_indices.clone();
-            let b_indices: Vec<usize> = a_indices
-                .iter()
-                .map(|x| x + (self.domain.length >> (r + 1)))
-                .collect();
-            let mut ab_indices: Vec<usize> = a_indices.clone();
-            ab_indices.append(&mut b_indices.clone());
+            let b_values =
+                Self::dequeue_and_authenticate(&b_indices, roots[r].clone(), proof_stream)?;
 
-            // Read values and check colinearity
-            let ab_proof: Vec<(PartialAuthenticationPath<H::Digest>, PF)> =
-                proof_stream.dequeue_length_prepended()?;
-            let c_proof: Vec<(PartialAuthenticationPath<H::Digest>, PF)> =
-                proof_stream.dequeue_length_prepended()?;
+            debug_assert_eq!(
+                self.colinearity_checks_count,
+                a_indices.len(),
+                "There must be equally many 'a indices' as there are colinearity checks."
+            );
+            debug_assert_eq!(
+                self.colinearity_checks_count,
+                b_indices.len(),
+                "There must be equally many 'b indices' as there are colinearity checks."
+            );
+            debug_assert_eq!(
+                self.colinearity_checks_count,
+                a_values.len(),
+                "There must be equally many 'a values' as there are colinearity checks."
+            );
+            debug_assert_eq!(
+                self.colinearity_checks_count,
+                b_values.len(),
+                "There must be equally many 'b values' as there are colinearity checks."
+            );
 
-            let ab_proof_val: Vec<_> = ab_proof
-                .iter()
-                .map(|(pap, value)| (pap.clone(), hasher.hash(value)))
+            // compute "C" indices and values for next round from "A" and "B`"" of current round
+            current_domain_len /= 2;
+            let c_indices = a_indices.iter().map(|x| x % current_domain_len).collect();
+            let c_values = (0..self.colinearity_checks_count)
+                .into_par_iter()
+                .map(|i| {
+                    Polynomial::<PF>::get_colinear_y(
+                        (self.get_evaluation_argument(a_indices[i], r), a_values[i]),
+                        (self.get_evaluation_argument(b_indices[i], r), b_values[i]),
+                        alphas[r],
+                    )
+                })
                 .collect();
-
-            let c_proof_val: Vec<_> = c_proof
-                .iter()
-                .map(|(pap, value)| (pap.clone(), hasher.hash(value)))
-                .collect();
-
-            // verify Merkle authentication paths
-            if !MerkleTree::<H>::verify_multi_proof(roots[r].clone(), &ab_indices, &ab_proof_val) {
-                return Err(Box::new(ValidationError::BadMerkleProof));
-            }
-
-            if !MerkleTree::<H>::verify_multi_proof(roots[r + 1].clone(), &c_indices, &c_proof_val)
-            {
-                return Err(Box::new(ValidationError::BadMerkleProof));
-            }
-
-            // Verify that the expected number of samples are present
-            if ab_proof.len() != 2 * self.colinearity_checks_count
-                || c_proof.len() != self.colinearity_checks_count
-            {
-                return Err(Box::new(ValidationError::BadSizedProof));
-            }
-
-            // Colinearity check
-            let axs: Vec<PF> = (0..self.colinearity_checks_count)
-                .map(|i| offset * omega.mod_pow_u32(a_indices[i] as u32))
-                .collect();
-            let bxs: Vec<PF> = (0..self.colinearity_checks_count)
-                .map(|i| offset * omega.mod_pow_u32(b_indices[i] as u32))
-                .collect();
-            let cx: PF = alphas[r];
-            let ays: Vec<PF> = (0..self.colinearity_checks_count)
-                .map(|i| ab_proof[i].1)
-                .collect();
-            let bys: Vec<PF> = (0..self.colinearity_checks_count)
-                .map(|i| ab_proof[i + self.colinearity_checks_count].1)
-                .collect();
-            let cys: Vec<PF> = (0..self.colinearity_checks_count)
-                .map(|i| c_proof[i].1)
-                .collect();
-
-            if (0..self.colinearity_checks_count).any(|i| {
-                !Polynomial::<PF>::are_colinear_3((axs[i], ays[i]), (bxs[i], bys[i]), (cx, cys[i]))
-            }) {
-                return Err(Box::new(ValidationError::NotColinear(r)));
-            }
-            // Update subgroup generator and offset
-            omega = omega * omega;
-            offset = offset * offset;
 
             // Return top-level values to caller
             if r == 0 {
                 for s in 0..self.colinearity_checks_count {
-                    codeword_evaluations.push((a_indices[s], ays[s]));
-                    codeword_evaluations.push((b_indices[s], bys[s]));
+                    codeword_evaluations.push((a_indices[s], a_values[s]));
+                    codeword_evaluations.push((b_indices[s], b_values[s]));
                 }
             }
+
+            // Notice that next rounds "A"s correspond to current rounds "C":
+            a_indices = c_indices;
+            a_values = c_values;
+
+            // Update subgroup generator and offset
+            omega = omega * omega;
+            offset = offset * offset;
         }
 
         Ok(codeword_evaluations)
+    }
+
+    fn get_evaluation_argument(&self, idx: usize, round: usize) -> PF {
+        (self.domain.offset * self.domain.omega.mod_pow_u32(idx as u32))
+            .mod_pow_u32(2u32.pow(round as u32))
     }
 
     pub fn get_evaluation_domain(&self) -> Vec<PF> {
@@ -646,12 +645,72 @@ mod fri_tests {
         let mut proof_stream: ProofStream = ProofStream::default();
         let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
 
-        let ret = fri.prove(&subgroup, &mut proof_stream).unwrap();
-        assert_eq!(fri.colinearity_checks_count, ret.len());
+        let initial_a_indices = fri.prove(&subgroup, &mut proof_stream).unwrap();
+        assert_eq!(fri.colinearity_checks_count, initial_a_indices.len());
         let verify_result = fri.verify(&mut proof_stream);
         assert!(verify_result.is_ok(), "FRI verification must succeed");
 
-        println!("{:?}", fri);
+        // Construct the expected indices for the a and b values from the in the 1st
+        // round of FRI.
+        let mut initial_a_and_b_indices_from_prover = initial_a_indices.clone();
+        initial_a_and_b_indices_from_prover.append(
+            &mut initial_a_indices
+                .iter()
+                .map(|i| (*i + fri.domain.length / 2 as usize) % fri.domain.length as usize)
+                .collect(),
+        );
+        initial_a_and_b_indices_from_prover.sort();
+        let mut verifier_indices_and_values = verify_result.unwrap();
+        verifier_indices_and_values.sort_by(|(ia, _va), (ib, _vb)| ia.cmp(ib));
+
+        // `verify` must return correct y-values
+        for ((index_from_verifier, y_value_from_verifier), index_from_prover) in
+            verifier_indices_and_values
+                .iter()
+                .zip_eq(initial_a_and_b_indices_from_prover)
+        {
+            assert_eq!(*index_from_verifier, index_from_prover);
+
+            // The input codeword to FRI is the x values (f(x) = x), so the y-values
+            // can be read directly from the cyclical subgroup.
+            assert_eq!(*y_value_from_verifier, subgroup[index_from_prover]);
+        }
+
+        // As above but for x^2
+        let squared: Vec<BFieldElement> = subgroup.iter().map(|&x| x * x).collect();
+        let initial_a_indices = fri.prove(&squared, &mut proof_stream).unwrap();
+        assert_eq!(fri.colinearity_checks_count, initial_a_indices.len());
+        let verify_result = fri.verify(&mut proof_stream);
+        assert!(verify_result.is_ok(), "FRI verification must succeed");
+
+        // Construct the expected indices for the a and b values from the in the 1st
+        // round of FRI.
+        let mut initial_a_and_b_indices_from_prover = initial_a_indices.clone();
+        initial_a_and_b_indices_from_prover.append(
+            &mut initial_a_indices
+                .iter()
+                .map(|i| (*i + fri.domain.length / 2 as usize) % fri.domain.length as usize)
+                .collect(),
+        );
+        initial_a_and_b_indices_from_prover.sort();
+        let mut verifier_indices_and_values = verify_result.unwrap();
+        verifier_indices_and_values.sort_by(|(ia, _va), (ib, _vb)| ia.cmp(ib));
+
+        // `verify` must return correct y-values
+        for ((index_from_verifier, y_value_from_verifier), index_from_prover) in
+            verifier_indices_and_values
+                .iter()
+                .zip_eq(initial_a_and_b_indices_from_prover)
+        {
+            assert_eq!(*index_from_verifier, index_from_prover);
+
+            // The input codeword to FRI is the x values (f(x) = x), so the y-values
+            // can be read directly from the cyclical subgroup.
+            assert_eq!(
+                *y_value_from_verifier,
+                subgroup[index_from_prover] * subgroup[index_from_prover]
+            );
+        }
     }
 
     #[test]
