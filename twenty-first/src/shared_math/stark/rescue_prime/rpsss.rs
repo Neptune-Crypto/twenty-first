@@ -1,13 +1,12 @@
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 use crate::shared_math::rescue_prime_pfe_flexible::RescuePrime;
-use crate::shared_math::stark::stark_pfe_flexible::{
-    StarkPrimeFieldElementFlexible, DOCUMENT_HASH_LENGTH,
-};
 use crate::shared_math::traits::FromVecu8;
 use crate::util_types::proof_stream::ProofStream;
 use crate::utils::blake3_digest;
 use rand::RngCore;
 use std::error::Error;
+
+use super::stark_pfe_flexible::{StarkPrimeFieldElementFlexible, DOCUMENT_HASH_LENGTH};
 
 #[derive(Clone, Debug)]
 pub struct SecretKey {

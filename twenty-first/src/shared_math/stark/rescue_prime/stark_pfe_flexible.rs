@@ -2,6 +2,7 @@ use crate::shared_math::fri::Fri;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other::log_2_ceil;
 use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
+use crate::shared_math::stark::stark_verify_error::{MerkleProofError, StarkVerifyError};
 use crate::shared_math::traits::{CyclicGroupGenerator, GetPrimitiveRootOfUnity, IdentityValues};
 use crate::shared_math::traits::{FromVecu8, ModPowU32};
 use crate::util_types::blake3_wrapper::Blake3Hash;
@@ -15,7 +16,6 @@ use std::iter::zip;
 use std::{collections::HashMap, error::Error};
 
 use super::stark_constraints_pfe_flexible::BoundaryConstraint;
-use super::stark_verify_error::{MerkleProofError, StarkVerifyError};
 
 pub const DOCUMENT_HASH_LENGTH: usize = 32usize;
 pub const MERKLE_ROOT_HASH_LENGTH: usize = 32usize;

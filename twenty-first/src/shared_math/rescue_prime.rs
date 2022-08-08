@@ -1,8 +1,8 @@
 use super::mpolynomial::MPolynomial;
 use super::polynomial::Polynomial;
+use super::stark::rescue_prime::stark_constraints::BoundaryConstraint;
 use super::traits::{CyclicGroupGenerator, ModPowU64};
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::stark::stark_constraints::BoundaryConstraint;
 use crate::shared_math::traits::IdentityValues;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};

@@ -2,8 +2,8 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use primitive_types::U256;
 use twenty_first::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
 use twenty_first::shared_math::rescue_prime_pfe_flexible::RescuePrime;
-use twenty_first::shared_math::stark::rpsss::RPSSS;
-use twenty_first::shared_math::stark::stark_pfe_flexible::StarkPrimeFieldElementFlexible;
+use twenty_first::shared_math::stark::rescue_prime::rpsss::RPSSS;
+use twenty_first::shared_math::stark::rescue_prime::stark_pfe_flexible::StarkPrimeFieldElementFlexible;
 
 pub fn get_tutorial_stark(prime: U256) -> (StarkPrimeFieldElementFlexible, RescuePrime) {
     let expansion_factor = 4;
