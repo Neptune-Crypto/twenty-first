@@ -1,11 +1,7 @@
-use super::stark_proof_stream::StarkProofStream;
 use super::vm::BaseMatrices;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::rescue_prime_xlix::{
-    neptune_params, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
-};
 use crate::shared_math::stark::brainfuck::evaluation_argument::{
     EvaluationArgument, ProgramEvaluationArgument, PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT,
 };
@@ -13,19 +9,21 @@ use crate::shared_math::stark::brainfuck::instruction_table::InstructionTable;
 use crate::shared_math::stark::brainfuck::io_table::IOTable;
 use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
-use crate::shared_math::stark::brainfuck::stark_proof_stream::Item;
 use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
 use crate::shared_math::stark::brainfuck::{table, vm};
 use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
-use crate::shared_math::traits::{GetRandomElements, Inverse, ModPowU32};
+use crate::shared_math::traits::{FromVecu8, GetRandomElements, Inverse, ModPowU32};
 use crate::shared_math::{
-    b_field_element::BFieldElement, other::is_power_of_two,
+    b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
     stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
-    x_field_element::XFieldElement, xfri::Fri,
+    x_field_element::XFieldElement,
 };
 use crate::timing_reporter::TimingReporter;
+use crate::util_types::blake3_wrapper::Blake3Hash;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use crate::utils;
 use itertools::Itertools;
 use rand::thread_rng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator};
@@ -40,8 +38,8 @@ pub const EXTENSION_CHALLENGE_COUNT: usize = 11;
 pub const PERMUTATION_ARGUMENTS_COUNT: usize = 2;
 pub const TERMINAL_COUNT: usize = 5;
 
-type StarkHasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
-type StarkDigest = Vec<BFieldElement>;
+type StarkDigest = Blake3Hash;
+type StarkHasher = blake3::Hasher;
 
 pub struct Stark {
     trace_length: usize,
@@ -55,7 +53,7 @@ pub struct Stark {
     tables: Rc<RefCell<TableCollection>>,
     // TODO: turn max_degree into i64 to match other degrees, which are i64
     max_degree: u64,
-    fri: Fri<StarkHasher>,
+    fri: Fri<XFieldElement, StarkHasher>,
 
     permutation_arguments: [PermutationArgument; PERMUTATION_ARGUMENTS_COUNT],
     io_evaluation_arguments: [EvaluationArgument; 2],
@@ -63,19 +61,15 @@ pub struct Stark {
 }
 
 impl Stark {
-    fn sample_weights(
-        hasher: &StarkHasher,
-        seed: &StarkDigest,
-        count: usize,
-    ) -> Vec<XFieldElement> {
+    fn sample_weights(randomness: &[u8], count: usize) -> Vec<XFieldElement> {
         // FIXME: Perhaps re-use hasher.
-        // FIXME: To make this work for blake3::Hasher, we need .into()s.
         // FIXME: When digests get a length of 6, produce half as many digests as XFieldElements.
-        hasher
-            .get_n_hash_rounds(seed, count)
-            .par_iter()
-            .map(|digest| XFieldElement::new([digest[0], digest[1], digest[2]]))
-            .collect()
+        let k_seeds: Vec<[u8; 32]> = utils::get_n_hash_rounds(randomness, count as u32);
+
+        k_seeds
+            .iter()
+            .map(|seed| XFieldElement::ring_zero().from_vecu8(seed.to_vec()))
+            .collect::<Vec<XFieldElement>>()
     }
 
     pub fn new(
@@ -206,7 +200,7 @@ impl Stark {
             .get_primitive_root_of_unity(fri_domain_length as u64)
             .0
             .unwrap();
-        let fri: Fri<StarkHasher> = Fri::new(
+        let fri: Fri<XFieldElement, StarkHasher> = Fri::new(
             b_field_generator.lift(),
             b_field_omega.lift(),
             fri_domain_length as usize,
@@ -231,10 +225,7 @@ impl Stark {
         }
     }
 
-    pub fn prove(
-        &mut self,
-        base_matrices: BaseMatrices,
-    ) -> Result<StarkProofStream, Box<dyn Error>> {
+    pub fn prove(&mut self, base_matrices: BaseMatrices) -> Result<ProofStream, Box<dyn Error>> {
         let mut timer = TimingReporter::start();
 
         assert_eq!(self.trace_length, base_matrices.processor_matrix.len());
@@ -308,19 +299,19 @@ impl Stark {
 
         timer.elapsed("transposed_base_codewords");
 
-        let hasher = neptune_params();
+        let hasher = StarkHasher::new();
 
         // Current length of each element in `transposed_base_codewords` is 18 which exceeds
         // max length of RP hash function. So we chop it into elements that will fit into the
         // rescue prime hash function. This is done by chopping the hash function input into
         // chunks of `max_length / 2` and calling `hash_many` on this input. Half the max
         // length is needed since the chunks are hashed two at a time.
-        let mut base_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
+        let mut base_codeword_digests_by_index: Vec<StarkDigest> =
             Vec::with_capacity(transposed_base_codewords.len());
 
         transposed_base_codewords
             .par_iter()
-            .map(|values| hasher.hash(values, RP_DEFAULT_OUTPUT_SIZE))
+            .map(|values| hasher.hash(values))
             .collect_into_vec(&mut base_codeword_digests_by_index);
 
         let base_merkle_tree =
@@ -329,21 +320,19 @@ impl Stark {
         timer.elapsed("base_merkle_tree");
 
         // Commit to base codewords
-        let mut proof_stream = StarkProofStream::default();
-        let base_merkle_tree_root: Vec<BFieldElement> = base_merkle_tree.get_root();
-        proof_stream.enqueue(&Item::MerkleRoot(base_merkle_tree_root));
+        let mut proof_stream: ProofStream = ProofStream::default();
+        let base_merkle_tree_root: StarkDigest = base_merkle_tree.get_root();
+        proof_stream.enqueue(&base_merkle_tree_root)?;
 
         timer.elapsed("proof_stream.enqueue");
 
-        let seed = proof_stream.prover_fiat_shamir();
+        let seed: Vec<u8> = proof_stream.prover_fiat_shamir();
 
         timer.elapsed("prover_fiat_shamir");
 
         // Get coefficients for table extension
-        // TODO: REPLACE THIS WITH RescuePrime/B field elements. The type of `challenges`
-        // must not change though, it should remain `Vec<XFieldElement>`.
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
-            Self::sample_weights(&hasher, &seed, EXTENSION_CHALLENGE_COUNT)
+            Self::sample_weights(&seed, EXTENSION_CHALLENGE_COUNT)
                 .try_into()
                 .unwrap();
 
@@ -377,7 +366,7 @@ impl Stark {
             })
             .collect();
 
-        let mut extension_codeword_digests_by_index: Vec<Vec<BFieldElement>> =
+        let mut extension_codeword_digests_by_index: Vec<Blake3Hash> =
             Vec::with_capacity(transposed_extension_codewords.len());
         transposed_extension_codewords
             .clone()
@@ -392,13 +381,13 @@ impl Stark {
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
                 );
-                hasher.hash(&bvalues, RP_DEFAULT_OUTPUT_SIZE)
+                hasher.hash(&bvalues)
             })
             .collect_into_vec(&mut extension_codeword_digests_by_index);
 
         let extension_tree =
             MerkleTree::<StarkHasher>::from_digests(&extension_codeword_digests_by_index);
-        proof_stream.enqueue(&Item::MerkleRoot(extension_tree.get_root()));
+        proof_stream.enqueue(&extension_tree.get_root())?;
 
         timer.elapsed("extension_tree");
 
@@ -423,7 +412,7 @@ impl Stark {
             .borrow()
             .all_quotient_degree_bounds(challenges, terminals);
 
-        proof_stream.enqueue(&Item::Terminals(terminals));
+        proof_stream.enqueue_length_prepended(&terminals)?;
 
         timer.elapsed("all_quotient_degree_bounds");
 
@@ -456,13 +445,13 @@ impl Stark {
         timer.elapsed("get_all_base_degree_bounds");
 
         // Get weights for nonlinear combination
-        let weights_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
+        let weights_seed: Vec<u8> = proof_stream.prover_fiat_shamir();
 
         timer.elapsed("prover_fiat_shamir (again)");
 
         let weights_count = num_randomizer_polynomials
             + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials);
-        let weights = Self::sample_weights(&hasher, &weights_seed, weights_count);
+        let weights = Self::sample_weights(&weights_seed, weights_count);
 
         timer.elapsed("sample_weights");
 
@@ -637,20 +626,20 @@ impl Stark {
         //     );
 
         timer.elapsed("combination_codeword");
-        let mut combination_codeword_digests: Vec<Vec<BFieldElement>> =
+        let mut combination_codeword_digests: Vec<StarkDigest> =
             Vec::with_capacity(combination_codeword.len());
         combination_codeword
             .clone()
             .into_par_iter()
             .map(|xfe| {
-                let digest: Vec<BFieldElement> = xfe.to_digest();
-                hasher.hash(&digest, RP_DEFAULT_OUTPUT_SIZE)
+                let digest: StarkDigest = xfe.to_digest();
+                hasher.hash(&digest)
             })
             .collect_into_vec(&mut combination_codeword_digests);
         let combination_tree =
             MerkleTree::<StarkHasher>::from_digests(&combination_codeword_digests);
-        let combination_root: Vec<BFieldElement> = combination_tree.get_root();
-        proof_stream.enqueue(&Item::MerkleRoot(combination_root.clone()));
+        let combination_root: StarkDigest = combination_tree.get_root();
+        proof_stream.enqueue(&combination_root.clone())?;
 
         timer.elapsed("combination_tree");
 
@@ -668,9 +657,12 @@ impl Stark {
         timer.elapsed("unit_distances");
 
         // Get indices of leafs to prove nonlinear combination
-        let indices_seed: Vec<BFieldElement> = proof_stream.prover_fiat_shamir();
-        let indices: Vec<usize> =
-            hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
+        let indices_seed: [u8; 32] = proof_stream.prover_fiat_shamir().try_into().unwrap();
+        let indices: Vec<usize> = hasher.sample_indices(
+            self.security_level,
+            &indices_seed.into(),
+            self.fri.domain.length,
+        );
 
         timer.elapsed("sample_indices");
 
@@ -679,13 +671,8 @@ impl Stark {
         // using Fiat-Shamir twice with somewhat similar proof stream content. A cryptographer
         // or mathematician should take a look on this part of the code.
         // prove low degree of combination polynomial
-        let (_fri_indices, combination_root_verify) =
-            self.fri.prove(&combination_codeword, &mut proof_stream)?;
+        let _fri_indices = self.fri.prove(&combination_codeword, &mut proof_stream)?;
         timer.elapsed("fri.prove");
-        assert_eq!(
-            combination_root, combination_root_verify,
-            "Combination root from STARK and from FRI must agree"
-        );
 
         // Open leafs of zipped codewords at indicated positions
         let mut revealed_indices: Vec<usize> = vec![];
@@ -702,21 +689,19 @@ impl Stark {
             .iter()
             .map(|idx| transposed_base_codewords[*idx].clone())
             .collect();
-        let auth_paths: Vec<PartialAuthenticationPath<Vec<BFieldElement>>> =
+        let auth_paths: Vec<PartialAuthenticationPath<StarkDigest>> =
             base_merkle_tree.get_multi_proof(&revealed_indices);
 
-        proof_stream.enqueue(&Item::TransposedBaseElementVectors(revealed_elements));
-        proof_stream.enqueue(&Item::CompressedAuthenticationPaths(auth_paths));
+        proof_stream.enqueue_length_prepended(&revealed_elements)?;
+        proof_stream.enqueue_length_prepended(&auth_paths)?;
 
         let revealed_extension_elements: Vec<Vec<XFieldElement>> = revealed_indices
             .iter()
             .map(|idx| transposed_extension_codewords[*idx].clone())
             .collect();
         let extension_auth_paths = extension_tree.get_multi_proof(&revealed_indices);
-        proof_stream.enqueue(&Item::TransposedExtensionElementVectors(
-            revealed_extension_elements,
-        ));
-        proof_stream.enqueue(&Item::CompressedAuthenticationPaths(extension_auth_paths));
+        proof_stream.enqueue_length_prepended(&revealed_extension_elements)?;
+        proof_stream.enqueue_length_prepended(&extension_auth_paths)?;
 
         // debug_assert!(
         //     MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
@@ -736,51 +721,43 @@ impl Stark {
         let revealed_combination_elements: Vec<XFieldElement> =
             indices.iter().map(|i| combination_codeword[*i]).collect();
         let revealed_combination_auth_paths = combination_tree.get_multi_proof(&indices);
-        proof_stream.enqueue(&Item::RevealedCombinationElements(
-            revealed_combination_elements,
-        ));
-        proof_stream.enqueue(&Item::CompressedAuthenticationPaths(
-            revealed_combination_auth_paths,
-        ));
+        proof_stream.enqueue_length_prepended(&revealed_combination_elements)?;
+        proof_stream.enqueue_length_prepended(&revealed_combination_auth_paths)?;
 
         timer.elapsed("open combination codeword at same positions");
 
         let report = timer.finish();
         println!("{}", report);
-        println!(
-            "Created proof containing {} B-field elements",
-            proof_stream.transcript_length()
-        );
+        println!("Created proof containing {} bytes", proof_stream.len());
 
         Ok(proof_stream)
     }
 
-    pub fn verify(&self, proof_stream_: &mut StarkProofStream) -> Result<bool, Box<dyn Error>> {
+    pub fn verify(&self, proof_stream_: &mut ProofStream) -> Result<bool, Box<dyn Error>> {
         let mut timer = TimingReporter::start();
         let hasher = StarkHasher::new();
 
         // let base_merkle_tree_root: Vec<BFieldElement> =
         //     proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
-        let base_merkle_tree_root: Vec<BFieldElement> =
-            proof_stream_.dequeue()?.as_merkle_root()?;
+        let base_merkle_tree_root: StarkDigest = proof_stream_.dequeue(32)?;
 
         let seed = proof_stream_.verifier_fiat_shamir();
 
         timer.elapsed("verifier_fiat_shamir");
         // Get coefficients for table extension
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
-            Self::sample_weights(&hasher, &seed, EXTENSION_CHALLENGE_COUNT)
+            Self::sample_weights(&seed, EXTENSION_CHALLENGE_COUNT)
                 .try_into()
                 .unwrap();
 
-        // let extension_tree_merkle_root: Vec<BFieldElement> =
-        //     proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
-        let extension_tree_merkle_root: Vec<BFieldElement> =
-            proof_stream_.dequeue()?.as_merkle_root()?;
+        let extension_tree_merkle_root: StarkDigest = proof_stream_.dequeue(32)?;
 
-        let terminals = proof_stream_.dequeue()?.as_terminals()?;
+        let terminals: [XFieldElement; TERMINAL_COUNT] =
+            proof_stream_.dequeue_length_prepended()?;
         timer.elapsed("Read from proof stream");
 
+        // TODO: All degree bounds can be calculated way faster, as the mpolynomials
+        // can be hardcoded.
         let base_degree_bounds: Vec<Degree> = self
             .tables
             .borrow()
@@ -816,7 +793,7 @@ impl Stark {
         let num_difference_quotients = self.permutation_arguments.len();
         timer.elapsed("Calculated quotient degree bounds");
 
-        let weights_seed: Vec<BFieldElement> = proof_stream_.verifier_fiat_shamir();
+        let weights_seed: Vec<u8> = proof_stream_.verifier_fiat_shamir();
 
         timer.elapsed("verifier_fiat_shamir (again)");
         let weights_count = num_randomizer_polynomials
@@ -824,19 +801,21 @@ impl Stark {
             + 2 * num_extension_polynomials
             + 2 * num_quotient_polynomials
             + 2 * num_difference_quotients;
-        let weights: Vec<XFieldElement> =
-            Self::sample_weights(&hasher, &weights_seed, weights_count);
+        let weights: Vec<XFieldElement> = Self::sample_weights(&weights_seed, weights_count);
         timer.elapsed("Calculated weights");
 
-        let combination_root: Vec<BFieldElement> = proof_stream_.dequeue()?.as_merkle_root()?;
+        let combination_root: StarkDigest = proof_stream_.dequeue(32)?;
 
-        let indices_seed: Vec<BFieldElement> = proof_stream_.verifier_fiat_shamir();
-        let indices =
-            hasher.sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
+        let indices_seed: [u8; 32] = proof_stream_.verifier_fiat_shamir().try_into().unwrap();
+        let indices = hasher.sample_indices(
+            self.security_level,
+            &indices_seed.into(),
+            self.fri.domain.length,
+        );
         timer.elapsed("Got indices");
 
         // Verify low degree of combination polynomial
-        self.fri.verify(proof_stream_, &combination_root)?;
+        self.fri.verify(proof_stream_)?;
         timer.elapsed("Verified FRI proof");
 
         // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
@@ -867,16 +846,14 @@ impl Stark {
         revealed_indices.dedup();
         timer.elapsed("Calculated revealed indices");
 
-        let revealed_base_elements: Vec<Vec<BFieldElement>> = proof_stream_
-            .dequeue()?
-            .as_transposed_base_element_vectors()?;
-        let auth_paths: Vec<PartialAuthenticationPath<Vec<BFieldElement>>> = proof_stream_
-            .dequeue()?
-            .as_compressed_authentication_paths()?;
+        let revealed_base_elements: Vec<Vec<BFieldElement>> =
+            proof_stream_.dequeue_length_prepended()?;
+        let auth_paths: Vec<PartialAuthenticationPath<StarkDigest>> =
+            proof_stream_.dequeue_length_prepended()?;
         timer.elapsed("Read base elements and auth paths from proof stream");
-        let leaf_digests: Vec<Vec<BFieldElement>> = revealed_base_elements
+        let leaf_digests: Vec<StarkDigest> = revealed_base_elements
             .par_iter()
-            .map(|re| hasher.hash(re, RP_DEFAULT_OUTPUT_SIZE))
+            .map(|re| hasher.hash(re))
             .collect();
         timer.elapsed(&format!(
             "Calculated {} leaf digests for base elements",
@@ -899,14 +876,12 @@ impl Stark {
         ));
 
         // Get extension elements
-        let revealed_extension_elements: Vec<Vec<XFieldElement>> = proof_stream_
-            .dequeue()?
-            .as_transposed_extension_element_vectors()?;
-        let extension_auth_paths = proof_stream_
-            .dequeue()?
-            .as_compressed_authentication_paths()?;
+        let revealed_extension_elements: Vec<Vec<XFieldElement>> =
+            proof_stream_.dequeue_length_prepended()?;
+        let extension_auth_paths: Vec<PartialAuthenticationPath<StarkDigest>> =
+            proof_stream_.dequeue_length_prepended()?;
         timer.elapsed("Read extension elements and auth paths from proof stream");
-        let extension_leaf_digests: Vec<Vec<BFieldElement>> = revealed_extension_elements
+        let extension_leaf_digests: Vec<StarkDigest> = revealed_extension_elements
             .clone()
             .into_par_iter()
             .map(|xvalues| {
@@ -919,7 +894,7 @@ impl Stark {
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
                 );
-                hasher.hash(&bvalues, RP_DEFAULT_OUTPUT_SIZE)
+                hasher.hash(&bvalues)
             })
             .collect();
         timer.elapsed(&format!(
@@ -973,23 +948,20 @@ impl Stark {
         ));
 
         // Verify Merkle authentication path for combination elements
-        let revealed_combination_elements: Vec<XFieldElement> = proof_stream_
-            .dequeue()?
-            .as_revealed_combination_elements()?;
-        let revealed_combination_digests: Vec<Vec<BFieldElement>> = revealed_combination_elements
+        let revealed_combination_elements: Vec<XFieldElement> =
+            proof_stream_.dequeue_length_prepended()?;
+        let revealed_combination_digests: Vec<StarkDigest> = revealed_combination_elements
             .clone()
             .into_par_iter()
             .map(|xfe| {
-                let b_elements: Vec<BFieldElement> = xfe.to_digest();
-                hasher.hash(&b_elements, RP_DEFAULT_OUTPUT_SIZE)
+                let digest: StarkDigest = xfe.to_digest();
+                hasher.hash(&digest)
             })
             .collect();
-        let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<Vec<BFieldElement>>> =
-            proof_stream_
-                .dequeue()?
-                .as_compressed_authentication_paths()?;
+        let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<StarkDigest>> =
+            proof_stream_.dequeue_length_prepended()?;
         let mt_combination_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
-            combination_root.clone(),
+            combination_root,
             &indices,
             &revealed_combination_digests,
             &revealed_combination_auth_paths,
@@ -1402,8 +1374,7 @@ mod brainfuck_stark_tests {
             input_symbols.clone(),
             vec![],
         );
-        let mut regular_proof_stream: StarkProofStream =
-            regular_stark.prove(regular_matrices).unwrap();
+        let mut regular_proof_stream: ProofStream = regular_stark.prove(regular_matrices).unwrap();
         let regular_verify = regular_stark.verify(&mut regular_proof_stream);
         assert!(regular_verify.unwrap(), "Regular execution must succeed");
 
@@ -1415,7 +1386,7 @@ mod brainfuck_stark_tests {
             input_symbols,
             vec![],
         );
-        let mut mallorys_proof_stream: StarkProofStream =
+        let mut mallorys_proof_stream: ProofStream =
             mallorys_stark.prove(mallorys_matrices).unwrap();
 
         let mallorys_verify = mallorys_stark.verify(&mut mallorys_proof_stream);
