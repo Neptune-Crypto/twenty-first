@@ -646,7 +646,8 @@ mod fri_tests {
         let mut proof_stream: ProofStream = ProofStream::default();
         let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
 
-        fri.prove(&subgroup, &mut proof_stream).unwrap();
+        let ret = fri.prove(&subgroup, &mut proof_stream).unwrap();
+        assert_eq!(fri.colinearity_checks_count, ret.len());
         let verify_result = fri.verify(&mut proof_stream);
         assert!(verify_result.is_ok(), "FRI verification must succeed");
 
@@ -665,7 +666,9 @@ mod fri_tests {
         let mut proof_stream: ProofStream = ProofStream::default();
         let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
 
-        fri.prove(&subgroup, &mut proof_stream).unwrap();
+        let ret = fri.prove(&subgroup, &mut proof_stream).unwrap();
+        assert_eq!(fri.colinearity_checks_count, ret.len());
+        assert_eq!(colinearity_check_count, ret.len());
         let verify_result = fri.verify(&mut proof_stream);
         assert!(verify_result.is_ok());
     }
@@ -687,7 +690,8 @@ mod fri_tests {
 
             // TODO: Test elsewhere that proof_stream can be re-used for multiple .prove().
             let mut proof_stream: ProofStream = ProofStream::default();
-            fri.prove(&points, &mut proof_stream).unwrap();
+            let ret = fri.prove(&points, &mut proof_stream).unwrap();
+            assert_eq!(colinearity_check_count, ret.len());
 
             let verify_result = fri.verify(&mut proof_stream);
             if verify_result.is_err() {
