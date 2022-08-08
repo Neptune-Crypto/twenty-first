@@ -1,4 +1,4 @@
-use super::vm::BaseMatrices;
+use super::vm::{BaseMatrices, MemoryMatrixBaseRow};
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
@@ -225,7 +225,11 @@ impl Stark {
         }
     }
 
-    pub fn prove(&mut self, base_matrices: BaseMatrices) -> Result<ProofStream, Box<dyn Error>> {
+    pub fn prove(
+        &mut self,
+        base_matrices: BaseMatrices,
+        memory_matrix: Option<Vec<MemoryMatrixBaseRow>>,
+    ) -> Result<ProofStream, Box<dyn Error>> {
         let mut timer = TimingReporter::start();
 
         assert_eq!(self.trace_length, base_matrices.processor_matrix.len());
@@ -250,8 +254,10 @@ impl Stark {
 
         // Instantiate the memory table object
         let processor_matrix_clone = self.tables.borrow().processor_table.0.matrix.clone();
-        self.tables.borrow_mut().memory_table.0.matrix =
-            MemoryTable::derive_matrix(processor_matrix_clone);
+        self.tables.borrow_mut().memory_table.0.matrix = match memory_matrix {
+            None => MemoryTable::derive_matrix(processor_matrix_clone),
+            Some(mem_matrix_rows) => mem_matrix_rows.into_iter().map(|row| row.into()).collect(),
+        };
 
         timer.elapsed("derive_matrix");
 
@@ -1195,7 +1201,9 @@ mod brainfuck_stark_tests {
         )
     }
 
-    fn mallorys_simulate(
+    // fn mallorys_cheat_with_gapped_memory_value() -> (BaseMatrices, MemoryTable) {}
+
+    fn mallorys_cheat_with_mv_zero_simulate(
         program: &[BFieldElement],
         input_symbols: &[BFieldElement],
     ) -> Option<BaseMatrices> {
@@ -1350,6 +1358,146 @@ mod brainfuck_stark_tests {
     }
 
     #[test]
+    fn cheat_with_clk_in_memory_table_test() {
+        let source_code = "++>+<.-><+".to_string();
+        let program: Vec<BFieldElement> = brainfuck::vm::compile(&source_code).unwrap();
+        let zero = BFieldElement::ring_zero();
+        let one = BFieldElement::ring_one();
+        let two = BFieldElement::new(2);
+        let three = BFieldElement::new(3);
+        let five = BFieldElement::new(5);
+        let six = BFieldElement::new(6);
+        let mut register = Register::default();
+        register.current_instruction = program[0];
+        let (_, _, output) = brainfuck::vm::run(&program, vec![]).unwrap();
+        assert_eq!(vec![two], output);
+        let regular_matrices: BaseMatrices = brainfuck::vm::simulate(&program, &[]).unwrap();
+        let mut regular_stark = new_test_stark(
+            regular_matrices.processor_matrix.len(),
+            source_code.clone(),
+            vec![],
+            output.clone(),
+        );
+        let mut regular_proof_stream: ProofStream =
+            regular_stark.prove(regular_matrices.clone(), None).unwrap();
+        let regular_verify = regular_stark.verify(&mut regular_proof_stream);
+        assert!(regular_verify.unwrap(), "Regular execution must succeed");
+
+        // Verify that the honest memory values are what we expect
+        assert_eq!(two, regular_matrices.processor_matrix[5].memory_value);
+        assert_eq!(two, regular_matrices.processor_matrix[6].memory_value);
+        assert_eq!(one, regular_matrices.processor_matrix[7].memory_value);
+        assert_eq!(one, regular_matrices.processor_matrix[9].memory_value);
+        assert_eq!(two, regular_matrices.processor_matrix[10].memory_value);
+
+        // Let's start being malicious
+        let mut bad_matrices = regular_matrices;
+        bad_matrices.processor_matrix[5].memory_value = three;
+        bad_matrices.processor_matrix[5].memory_value_inverse = three.inverse();
+        bad_matrices.processor_matrix[6].memory_value = three;
+        bad_matrices.processor_matrix[6].memory_value_inverse = three.inverse();
+        bad_matrices.processor_matrix[7].memory_value = two;
+        bad_matrices.processor_matrix[7].memory_value_inverse = two.inverse();
+        bad_matrices.processor_matrix[9].memory_value = two;
+        bad_matrices.processor_matrix[9].memory_value_inverse = two.inverse();
+        bad_matrices.processor_matrix[10].memory_value = three;
+        bad_matrices.processor_matrix[10].memory_value_inverse = three.inverse();
+        let bad_output = vec![three];
+
+        // Construct a false memory table for the prover
+        let mut bad_mt = MemoryTable::derive_matrix(
+            bad_matrices
+                .processor_matrix
+                .iter()
+                .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                .collect(),
+        );
+
+        // Ensure that we know what the honest MT of the dishonest processor table looks like
+        assert_eq!(zero, bad_mt[0][0]);
+        assert_eq!(one, bad_mt[1][0]);
+        assert_eq!(two, bad_mt[2][0]);
+        assert_eq!(five, bad_mt[3][0]);
+        assert_eq!(six, bad_mt[4][0]);
+        assert_eq!(7, bad_mt[5][0].value());
+        assert_eq!(zero, bad_mt[0][2]);
+        assert_eq!(one, bad_mt[1][2]);
+        assert_eq!(two, bad_mt[2][2]);
+        assert_eq!(three, bad_mt[3][2]);
+        assert_eq!(three, bad_mt[4][2]);
+        assert_eq!(two, bad_mt[5][2]);
+
+        // Verify that the prover rejects this dishonest proof
+        // let mut regular_stark = new_test_stark(
+        //     bad_matrices.processor_matrix.len(),
+        //     source_code.clone(),
+        //     vec![],
+        //     bad_output.clone(),
+        // );
+        // let mut regular_proof_stream: ProofStream =
+        //     regular_stark.prove(bad_matrices.clone(), None).unwrap();
+        // let regular_verify = regular_stark.verify(&mut regular_proof_stream);
+        // assert!(
+        //     regular_verify.is_err(),
+        //     "Manipulated memory table must fail"
+        // );
+        // println!("regular_verify = {:?}", regular_verify);
+
+        // manipulate the MT to cheat the verifier
+        let first_permutated_row = bad_mt.remove(3);
+        let second_permutated_row = bad_mt.remove(3);
+        bad_mt.insert(6, first_permutated_row);
+        bad_mt.insert(7, second_permutated_row);
+        bad_matrices.output_matrix[0] = three;
+
+        // We also need to manipualte the instruction table
+        println!("Instruction matrix");
+        for row in bad_matrices.instruction_matrix.iter() {
+            println!("{}", row);
+        }
+
+        println!("Memory matrix");
+        for row in bad_mt.iter() {
+            println!("clk: {}, mp: {}, mv: {}", row[0], row[1], row[2]);
+        }
+
+        println!("processor matrix");
+        for row in bad_matrices.processor_matrix.iter() {
+            println!("{}", row);
+        }
+
+        // Add processor table's padding to the memory table by inserting rows
+        bad_mt.insert(8, vec![BFieldElement::new(15), zero, three]);
+        bad_mt.insert(8, vec![BFieldElement::new(14), zero, three]);
+        bad_mt.insert(8, vec![BFieldElement::new(13), zero, three]);
+        bad_mt.insert(8, vec![BFieldElement::new(12), zero, three]);
+        bad_mt.insert(8, vec![BFieldElement::new(11), zero, three]);
+
+        println!("Memory matrix");
+        for row in bad_mt.iter() {
+            println!("clk: {}, mp: {}, mv: {}", row[0], row[1], row[2]);
+        }
+
+        let mut malicious_stark = new_test_stark(
+            bad_matrices.processor_matrix.len(),
+            source_code.clone(),
+            vec![],
+            bad_output,
+        );
+        let bad_mt_as_vec: Vec<MemoryMatrixBaseRow> =
+            bad_mt.into_iter().map(|x| x.into()).collect();
+        let mut malicious_proof_stream: ProofStream = malicious_stark
+            .prove(bad_matrices.clone(), Some(bad_mt_as_vec))
+            .unwrap();
+        let verify_bad_proof = malicious_stark.verify(&mut malicious_proof_stream);
+        println!("verify_bad_proof = {:?}", verify_bad_proof);
+        assert!(
+            verify_bad_proof.is_err(),
+            "Manipulated matrix values must be caught"
+        );
+    }
+
+    #[test]
     fn set_adversarial_is_zero_value_test() {
         // Expected (honest) output state:
         // `memory_pointer`
@@ -1376,12 +1524,14 @@ mod brainfuck_stark_tests {
             input_symbols.clone(),
             vec![],
         );
-        let mut regular_proof_stream: ProofStream = regular_stark.prove(regular_matrices).unwrap();
+        let mut regular_proof_stream: ProofStream =
+            regular_stark.prove(regular_matrices, None).unwrap();
         let regular_verify = regular_stark.verify(&mut regular_proof_stream);
         assert!(regular_verify.unwrap(), "Regular execution must succeed");
 
         // Run attack, verify that it is caught by the verifier
-        let mallorys_matrices: BaseMatrices = mallorys_simulate(&program, &input_symbols).unwrap();
+        let mallorys_matrices: BaseMatrices =
+            mallorys_cheat_with_mv_zero_simulate(&program, &input_symbols).unwrap();
         let mut mallorys_stark = new_test_stark(
             mallorys_matrices.processor_matrix.len(),
             source_code,
@@ -1389,7 +1539,7 @@ mod brainfuck_stark_tests {
             vec![],
         );
         let mut mallorys_proof_stream: ProofStream =
-            mallorys_stark.prove(mallorys_matrices).unwrap();
+            mallorys_stark.prove(mallorys_matrices, None).unwrap();
 
         let mallorys_verify = mallorys_stark.verify(&mut mallorys_proof_stream);
         match mallorys_verify {
@@ -1429,7 +1579,7 @@ mod brainfuck_stark_tests {
 
             // TODO: If we set the `DEBUG` environment variable here, we *should* catch a lot of bugs.
             // Do we want to do that?
-            let mut proof_stream = stark.prove(base_matrices).unwrap();
+            let mut proof_stream = stark.prove(base_matrices, None).unwrap();
 
             let verifier_verdict: Result<bool, Box<dyn Error>> = stark.verify(&mut proof_stream);
             match verifier_verdict {

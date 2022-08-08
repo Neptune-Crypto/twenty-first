@@ -35,7 +35,7 @@ fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
     );
     timer.elapsed("new");
 
-    let mut proof_stream = stark.prove(base_matrices).unwrap();
+    let mut proof_stream = stark.prove(base_matrices, None).unwrap();
     timer.elapsed("prove");
 
     let verifier_verdict = stark.verify(&mut proof_stream);

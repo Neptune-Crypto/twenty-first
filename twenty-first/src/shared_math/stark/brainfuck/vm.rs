@@ -1,5 +1,6 @@
 use console::Term;
 use std::collections::HashMap;
+use std::fmt::Display;
 
 use crate::shared_math::traits::Inverse;
 use crate::shared_math::{b_field_element::BFieldElement, traits::IdentityValues};
@@ -15,6 +16,22 @@ pub struct Register {
     pub memory_pointer: BFieldElement,
     pub memory_value: BFieldElement,
     pub memory_value_inverse: BFieldElement,
+}
+
+impl Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "clk: {}, ip: {}, ci: {}, ni: {}, mp: {}, mv: {}, mvi: {}",
+            self.cycle,
+            self.instruction_pointer,
+            self.current_instruction,
+            self.next_instruction,
+            self.memory_pointer,
+            self.memory_value,
+            self.memory_value_inverse
+        )
+    }
 }
 
 impl From<Register> for Vec<BFieldElement> {
@@ -81,6 +98,16 @@ impl From<InstructionMatrixBaseRow> for Vec<BFieldElement> {
     }
 }
 
+impl Display for InstructionMatrixBaseRow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ip: {}, ci: {}, ni: {}",
+            self.instruction_pointer, self.current_instruction, self.next_instruction
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MemoryMatrixBaseRow {
     pub cycle: BFieldElement,
@@ -91,6 +118,16 @@ pub struct MemoryMatrixBaseRow {
 impl From<MemoryMatrixBaseRow> for Vec<BFieldElement> {
     fn from(row: MemoryMatrixBaseRow) -> Self {
         vec![row.cycle, row.address, row.value]
+    }
+}
+
+impl From<Vec<BFieldElement>> for MemoryMatrixBaseRow {
+    fn from(row: Vec<BFieldElement>) -> Self {
+        Self {
+            cycle: row[0],
+            address: row[1],
+            value: row[2],
+        }
     }
 }
 
