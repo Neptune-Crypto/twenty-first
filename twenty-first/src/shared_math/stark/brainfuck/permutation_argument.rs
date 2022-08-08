@@ -1,8 +1,8 @@
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::fri::FriDomain;
 use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::traits::PrimeField;
 use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::xfri::FriDomain;
 
 use super::table_collection::TableCollection;
 use std::cell::RefCell;
@@ -44,7 +44,7 @@ impl PermutationArgument {
 
     // The linter seems to mistakenly think that a collect is not needed here
     #[allow(clippy::needless_collect)]
-    pub fn quotient(&self, fri_domain: &FriDomain) -> Vec<XFieldElement> {
+    pub fn quotient(&self, fri_domain: &FriDomain<XFieldElement>) -> Vec<XFieldElement> {
         let one: BFieldElement = BFieldElement::ring_one();
         let zerofier = fri_domain
             .b_domain_values()
