@@ -335,6 +335,7 @@ impl Stark {
             Self::sample_weights(&seed, EXTENSION_CHALLENGE_COUNT)
                 .try_into()
                 .unwrap();
+        self.tables.borrow_mut().set_constraints(challenges);
 
         timer.elapsed("sample_weights");
 
@@ -749,6 +750,7 @@ impl Stark {
             Self::sample_weights(&seed, EXTENSION_CHALLENGE_COUNT)
                 .try_into()
                 .unwrap();
+        self.tables.borrow_mut().set_constraints(challenges);
 
         let extension_tree_merkle_root: StarkDigest = proof_stream_.dequeue(32)?;
 

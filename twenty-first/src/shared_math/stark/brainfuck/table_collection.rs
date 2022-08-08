@@ -81,6 +81,12 @@ impl TableCollection {
             .concat()
     }
 
+    pub fn set_constraints(&mut self, challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT]) {
+        let processor_table_constraints =
+            self.processor_table.transition_constraints_ext(challenges);
+        self.processor_table.0.more.transition_constraints_ext = Some(processor_table_constraints);
+    }
+
     pub fn set_matrices(
         &mut self,
         processor_matrix: Vec<Register>,

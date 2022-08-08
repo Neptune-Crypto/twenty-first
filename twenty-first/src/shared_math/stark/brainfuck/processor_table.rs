@@ -15,6 +15,7 @@ impl TableMoreTrait for ProcessorTableMore {
             memory_permutation_terminal: XFieldElement::ring_zero(),
             input_evaluation_terminal: XFieldElement::ring_zero(),
             output_evaluation_terminal: XFieldElement::ring_zero(),
+            transition_constraints_ext: None,
         }
     }
 }
@@ -25,9 +26,8 @@ pub struct ProcessorTableMore {
     pub memory_permutation_terminal: XFieldElement,
     pub input_evaluation_terminal: XFieldElement,
     pub output_evaluation_terminal: XFieldElement,
+    pub transition_constraints_ext: Option<Vec<MPolynomial<XFieldElement>>>,
 }
-
-impl ProcessorTableMore {}
 
 #[derive(Debug, Clone)]
 pub struct ProcessorTable(pub Table<ProcessorTableMore>);
@@ -388,6 +388,16 @@ impl TableTrait for ProcessorTable {
         &self,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
+        // Avoid having to recalculate these if they've already been calculated once
+        if self.0.more.transition_constraints_ext.is_some() {
+            return self
+                .0
+                .more
+                .transition_constraints_ext
+                .as_ref()
+                .unwrap()
+                .clone();
+        }
         let [a, b, c, d, e, f, alpha, beta, gamma, delta, _eta]: [MPolynomial<XFieldElement>;
             EXTENSION_CHALLENGE_COUNT] = challenges
             .iter()
