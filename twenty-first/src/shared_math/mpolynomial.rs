@@ -571,6 +571,10 @@ impl<PFElem: PrimeField> MPolynomial<PFElem> {
         for (k, v) in self.coefficients.iter() {
             let mut prod = point[0].ring_one();
             for i in 0..k.len() {
+                // If the exponent is zero, multiplying with this factor is the identity operator.
+                if k[i] == 0 {
+                    continue;
+                }
                 // FIXME: We really don't want to cast to 'u32' here, but
                 // refactoring k: Vec<u32> is a bit of a task, too. See issue ...
                 prod *= point[i].mod_pow_u32(k[i] as u32);
