@@ -54,6 +54,7 @@ fn stark_bf(c: &mut Criterion) {
 
     group.sample_size(10);
 
+    // Last time I checked this produces a FRI domain length of 2^14
     let two_by_two_then_output_id = BenchmarkId::new("TWO_BY_TWO_THEN_OUTPUT", 97);
     let tbtto_input = [97].map(BFieldElement::new).to_vec();
     group.bench_with_input(
@@ -69,20 +70,38 @@ fn stark_bf(c: &mut Criterion) {
         },
     );
 
-    // let hello_world_id = BenchmarkId::new("HELLO_WORLD", "");
-    // group.bench_function(hello_world_id, |bencher| {
-    //     bencher.iter(|| compile_simulate_prove_verify(sample_programs::HELLO_WORLD, &[]));
-    // });
+    // Last time I checked this produces a FRI domain length of 2^18
+    let hello_world_id = BenchmarkId::new("HELLO_WORLD", "");
+    group.bench_function(hello_world_id, |bencher| {
+        bencher.iter(|| compile_simulate_prove_verify(sample_programs::HELLO_WORLD, &[]));
+    });
 
+    // Last time I checked this produces a FRI domain length of 2^21
     // let the_raven_id = BenchmarkId::new("THE_RAVEN", "");
     // group.bench_function(the_raven_id, |bencher| {
     //     bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_RAVEN, &[]));
+    // });\
+
+    // Last time I checked this produces a FRI domain length of 2^22
+    // let the_raven_id = BenchmarkId::new("FIRST_FOUR_VERSES_OF_THE_RAVEN", "");
+    // group.bench_function(the_raven_id, |bencher| {
+    //     bencher.iter(|| {
+    //         compile_simulate_prove_verify(sample_programs::FIRST_FOUR_VERSES_OF_THE_RAVEN, &[])
+    //     });
     // });
 
-    // The following benchmark will crash unless you have 128GiB RAM
+    // Last time I checked this produces a FRI domain length of 2^23
+    // let the_raven_id = BenchmarkId::new("FIRST_EIGHT_VERSES_OF_THE_RAVEN", "");
+    // group.bench_function(the_raven_id, |bencher| {
+    //     bencher.iter(|| {
+    //         compile_simulate_prove_verify(sample_programs::FIRST_EIGHT_VERSES_OF_THE_RAVEN, &[])
+    //     });
+    // });
+
+    // The following benchmark will crash unless you have 128GiB RAM. FRI domain length: 2^24
     // let the_whole_raven_id = BenchmarkId::new("THE_WHOLE_RAVEN", 0);
     // group.bench_function(the_whole_raven_id, |bencher| {
-    //     bencher.iter(|| _the_whole_raven());
+    //     bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_WHOLE_RAVEN, &[]));
     // });
 
     group.finish();
