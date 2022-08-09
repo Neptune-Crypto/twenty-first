@@ -79,39 +79,17 @@ fn stark_bf(c: &mut Criterion) {
         },
     );
 
-    // Last time I checked this produces a FRI domain length of 2^18
-    let hello_world_id = BenchmarkId::new("HELLO_WORLD", "");
-    group.bench_function(hello_world_id, |bencher| {
-        bencher.iter(|| compile_simulate_prove_verify(sample_programs::HELLO_WORLD, &[]));
-    });
-
-    // Last time I checked this produces a FRI domain length of 2^21
-    // let the_raven_id = BenchmarkId::new("THE_RAVEN", "");
-    // group.bench_function(the_raven_id, |bencher| {
-    //     bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_RAVEN, &[]));
-    // });\
-
-    // Last time I checked this produces a FRI domain length of 2^22
-    // let the_raven_id = BenchmarkId::new("FIRST_FOUR_VERSES_OF_THE_RAVEN", "");
-    // group.bench_function(the_raven_id, |bencher| {
-    //     bencher.iter(|| {
-    //         compile_simulate_prove_verify(sample_programs::FIRST_FOUR_VERSES_OF_THE_RAVEN, &[])
-    //     });
+    // Last time I checked this produces a FRI domain length of 2^19
+    // let hello_world_id = BenchmarkId::new("HELLO_WORLD", "");
+    // group.bench_function(hello_world_id, |bencher| {
+    //     bencher.iter(|| compile_simulate_prove_verify(sample_programs::HELLO_WORLD, &[]));
     // });
 
     // Last time I checked this produces a FRI domain length of 2^23
-    // let the_raven_id = BenchmarkId::new("FIRST_EIGHT_VERSES_OF_THE_RAVEN", "");
-    // group.bench_function(the_raven_id, |bencher| {
-    //     bencher.iter(|| {
-    //         compile_simulate_prove_verify(sample_programs::FIRST_EIGHT_VERSES_OF_THE_RAVEN, &[])
-    //     });
-    // });
-
-    // The following benchmark will crash unless you have 128GiB RAM. FRI domain length: 2^24
-    // let the_whole_raven_id = BenchmarkId::new("THE_WHOLE_RAVEN", 0);
-    // group.bench_function(the_whole_raven_id, |bencher| {
-    //     bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_WHOLE_RAVEN, &[]));
-    // });
+    let the_raven_id = BenchmarkId::new("THE_RAVEN", "");
+    group.bench_function(the_raven_id, |bencher| {
+        bencher.iter(|| compile_simulate_prove_verify(sample_programs::THE_RAVEN, &[]));
+    });
 
     group.finish();
 }
