@@ -79,6 +79,7 @@ impl Stark {
         output_symbols: Vec<BFieldElement>,
         log_expansion_factor: usize,
         security_level: usize,
+        memory_table_length: usize,
     ) -> Self {
         assert_eq!(
             0,
@@ -125,7 +126,14 @@ impl Stark {
             order,
         );
 
-        let memory_table = MemoryTable::new(trace_length, num_randomizers, smooth_generator, order);
+        let memory_table = MemoryTable::new(
+            memory_table_length,
+            num_randomizers,
+            smooth_generator,
+            order,
+        );
+
+        // let memory_table = MemoryTable::new(trace_length, num_randomizers, smooth_generator, order);
         let input_table = IOTable::new_input_table(input_symbols.len(), smooth_generator, order);
         let output_table = IOTable::new_output_table(output_symbols.len(), smooth_generator, order);
 
@@ -1186,6 +1194,7 @@ mod brainfuck_stark_tests {
         source_code: String,
         input_symbols: Vec<BFieldElement>,
         output_symbols: Vec<BFieldElement>,
+        memory_table_length: usize,
     ) -> Stark {
         // These parameters are too low for security, but work for testing correctness
         let log_expansion_factor = 2;
@@ -1198,6 +1207,7 @@ mod brainfuck_stark_tests {
             output_symbols,
             log_expansion_factor,
             security_level,
+            memory_table_length,
         )
     }
 
@@ -1518,11 +1528,19 @@ mod brainfuck_stark_tests {
         let input_symbols: Vec<BFieldElement> = vec![];
         let regular_matrices: BaseMatrices =
             brainfuck::vm::simulate(&program, &input_symbols).unwrap();
+        let mt = MemoryTable::derive_matrix(
+            regular_matrices
+                .processor_matrix
+                .iter()
+                .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                .collect(),
+        );
         let mut regular_stark = new_test_stark(
             regular_matrices.processor_matrix.len(),
             source_code.clone(),
             input_symbols.clone(),
             vec![],
+            mt.len(),
         );
         let mut regular_proof_stream: ProofStream =
             regular_stark.prove(regular_matrices, None).unwrap();
@@ -1532,11 +1550,19 @@ mod brainfuck_stark_tests {
         // Run attack, verify that it is caught by the verifier
         let mallorys_matrices: BaseMatrices =
             mallorys_cheat_with_mv_zero_simulate(&program, &input_symbols).unwrap();
+        let mallorys_mt = MemoryTable::derive_matrix(
+            mallorys_matrices
+                .processor_matrix
+                .iter()
+                .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                .collect(),
+        );
         let mut mallorys_stark = new_test_stark(
             mallorys_matrices.processor_matrix.len(),
             source_code,
             input_symbols,
             vec![],
+            mallorys_mt.len(),
         );
         let mut mallorys_proof_stream: ProofStream =
             mallorys_stark.prove(mallorys_matrices, None).unwrap();
@@ -1570,11 +1596,19 @@ mod brainfuck_stark_tests {
             .unwrap();
             let base_matrices: BaseMatrices =
                 brainfuck::vm::simulate(&program, &input_symbols).unwrap();
+            let mt = MemoryTable::derive_matrix(
+                base_matrices
+                    .processor_matrix
+                    .iter()
+                    .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                    .collect(),
+            );
             let mut stark = new_test_stark(
                 trace_length,
                 source_code.to_string(),
                 input_symbols,
                 output_symbols,
+                mt.len(),
             );
 
             // TODO: If we set the `DEBUG` environment variable here, we *should* catch a lot of bugs.

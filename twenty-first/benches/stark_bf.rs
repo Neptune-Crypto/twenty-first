@@ -2,6 +2,7 @@ use brainfuck::vm::sample_programs;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::stark::brainfuck;
+use twenty_first::shared_math::stark::brainfuck::memory_table::MemoryTable;
 use twenty_first::shared_math::stark::brainfuck::stark::Stark;
 use twenty_first::shared_math::stark::brainfuck::vm::BaseMatrices;
 use twenty_first::timing_reporter::TimingReporter;
@@ -19,6 +20,13 @@ fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
     println!("run done");
 
     let base_matrices: BaseMatrices = brainfuck::vm::simulate(&program, &input_symbols).unwrap();
+    let mt = MemoryTable::derive_matrix(
+        base_matrices
+            .processor_matrix
+            .iter()
+            .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+            .collect(),
+    );
     timer.elapsed("simulate");
 
     // Standard high parameters
@@ -32,6 +40,7 @@ fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
         output_symbols,
         log_expansion_factor,
         security_level,
+        mt.len(),
     );
     timer.elapsed("new");
 
