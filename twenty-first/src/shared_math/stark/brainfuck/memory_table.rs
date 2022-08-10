@@ -102,6 +102,7 @@ impl MemoryTable {
         matrix
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn transition_constraints_afo_named_variables(
         cycle: MPolynomial<BFieldElement>,
         address: MPolynomial<BFieldElement>,
@@ -110,6 +111,7 @@ impl MemoryTable {
         cycle_next: MPolynomial<BFieldElement>,
         address_next: MPolynomial<BFieldElement>,
         value_next: MPolynomial<BFieldElement>,
+        interweaved_next: MPolynomial<BFieldElement>,
     ) -> Vec<MPolynomial<BFieldElement>> {
         let mut polynomials: Vec<MPolynomial<BFieldElement>> = vec![];
 
@@ -135,10 +137,13 @@ impl MemoryTable {
         polynomials.push(interweaved.clone() * (address_next.clone() - address.clone()));
 
         // 4. If row is an interweaved row, the memory value may not change
-        polynomials.push(interweaved.clone() * (value - value_next.clone()));
+        polynomials.push(interweaved * (value - value_next.clone()));
 
-        // 5. Interweave value is either one or zero
-        polynomials.push(interweaved.clone() * (interweaved - one));
+        // 5. Interweave value is either one or zero. We have to check the next value
+        // as the last row is not otherwise checked. I don't think we have to check a
+        // boundary condition as the other rules for `interweaved` guarantee that
+        // this is 0 in the 1st row.
+        polynomials.push(interweaved_next.clone() * (interweaved_next - one));
 
         // 6. if memory pointer increases by one, then memory value must be set to zero
         polynomials.push((address_next - address) * value_next);
@@ -196,7 +201,7 @@ impl TableTrait for MemoryTable {
         let cycle_next = vars[4].clone();
         let address_next = vars[5].clone();
         let value_next = vars[6].clone();
-        let _interweaved_next = vars[7].clone();
+        let interweaved_next = vars[7].clone();
 
         MemoryTable::transition_constraints_afo_named_variables(
             cycle,
@@ -206,6 +211,7 @@ impl TableTrait for MemoryTable {
             cycle_next,
             address_next,
             value_next,
+            interweaved_next,
         )
     }
 
@@ -281,7 +287,7 @@ impl TableTrait for MemoryTable {
             MPolynomial::variables(2 * Self::FULL_WIDTH, BFieldElement::ring_one())
                 .try_into()
                 .unwrap();
-        let [b_field_cycle, b_field_address, b_field_value, b_field_interweaved, _b_field_permutation, b_field_cycle_next, b_field_address_next, b_field_value_next, _b_field_interweaved_next, _b_field_permutation_next] =
+        let [b_field_cycle, b_field_address, b_field_value, b_field_interweaved, _b_field_permutation, b_field_cycle_next, b_field_address_next, b_field_value_next, b_field_interweaved_next, _b_field_permutation_next] =
             b_field_variables;
 
         let b_field_polynomials = Self::transition_constraints_afo_named_variables(
@@ -292,6 +298,7 @@ impl TableTrait for MemoryTable {
             b_field_cycle_next,
             b_field_address_next,
             b_field_value_next,
+            b_field_interweaved_next,
         );
 
         let b_field_polylen = b_field_polynomials.len();
