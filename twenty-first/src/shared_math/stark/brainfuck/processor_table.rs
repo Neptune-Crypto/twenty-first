@@ -52,6 +52,29 @@ impl ProcessorTable {
     pub const BASE_WIDTH: usize = 7;
     pub const FULL_WIDTH: usize = 11;
 
+    pub fn pad_matrix(matrix: Vec<Vec<BFieldElement>>) -> Vec<Vec<BFieldElement>> {
+        let mut ret = matrix;
+        while !ret.is_empty() && !other::is_power_of_two(ret.len()) {
+            let last: Vec<BFieldElement> = ret.last().unwrap().to_owned();
+            let padding = Self::get_padding_row(&last);
+            ret.push(padding.into());
+        }
+
+        ret
+    }
+
+    pub fn get_padding_row(last: &[BFieldElement]) -> Register {
+        Register {
+            cycle: last[ProcessorTable::CYCLE] + BFieldElement::ring_one(),
+            instruction_pointer: last[ProcessorTable::INSTRUCTION_POINTER],
+            current_instruction: BFieldElement::ring_zero(),
+            next_instruction: BFieldElement::ring_zero(),
+            memory_pointer: last[ProcessorTable::MEMORY_POINTER],
+            memory_value: last[ProcessorTable::MEMORY_VALUE],
+            memory_value_inverse: last[ProcessorTable::MEMORY_VALUE_INVERSE],
+        }
+    }
+
     pub fn new(
         length: usize,
         num_randomizers: usize,
@@ -72,19 +95,7 @@ impl ProcessorTable {
     }
 
     pub fn pad(&mut self) {
-        while !self.0.matrix.is_empty() && !other::is_power_of_two(self.0.matrix.len()) {
-            let last = self.0.matrix.last().unwrap();
-            let padding = Register {
-                cycle: last[ProcessorTable::CYCLE] + BFieldElement::ring_one(),
-                instruction_pointer: last[ProcessorTable::INSTRUCTION_POINTER],
-                current_instruction: BFieldElement::ring_zero(),
-                next_instruction: BFieldElement::ring_zero(),
-                memory_pointer: last[ProcessorTable::MEMORY_POINTER],
-                memory_value: last[ProcessorTable::MEMORY_VALUE],
-                memory_value_inverse: last[ProcessorTable::MEMORY_VALUE_INVERSE],
-            };
-            self.0.matrix.push(padding.into());
-        }
+        self.0.matrix = Self::pad_matrix(self.0.matrix.clone())
     }
 
     /// We *could* consider fixing this, I guess...

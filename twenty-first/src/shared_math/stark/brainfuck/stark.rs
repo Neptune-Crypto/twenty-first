@@ -1184,7 +1184,8 @@ mod brainfuck_stark_tests {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::stark::brainfuck;
-    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
+    use crate::shared_math::stark::brainfuck::vm::*;
+    use crate::shared_math::traits::*;
 
     pub fn new_test_stark(
         trace_length: usize,
@@ -1208,238 +1209,248 @@ mod brainfuck_stark_tests {
         )
     }
 
-    // fn mallorys_cheat_with_gapped_memory_value() -> (BaseMatrices, MemoryTable) {}
+    fn mallorys_cheat_with_mv_zero_simulate(
+        program: &[BFieldElement],
+        input_symbols: &[BFieldElement],
+    ) -> Option<BaseMatrices> {
+        let zero = BFieldElement::ring_zero();
+        let one = BFieldElement::ring_one();
+        let two = BFieldElement::new(2);
+        let mut register = Register::default();
+        register.current_instruction = program[0];
+        if program.len() < 2 {
+            register.next_instruction = zero;
+        } else {
+            register.next_instruction = program[1];
+        }
 
-    // fn mallorys_cheat_with_mv_zero_simulate(
-    //     program: &[BFieldElement],
-    //     input_symbols: &[BFieldElement],
-    // ) -> Option<BaseMatrices> {
-    //     let zero = BFieldElement::ring_zero();
-    //     let one = BFieldElement::ring_one();
-    //     let two = BFieldElement::new(2);
-    //     let mut register = Register::default();
-    //     register.current_instruction = program[0];
-    //     if program.len() < 2 {
-    //         register.next_instruction = zero;
-    //     } else {
-    //         register.next_instruction = program[1];
-    //     }
+        let mut memory: HashMap<BFieldElement, BFieldElement> = HashMap::new();
+        let mut input_counter: usize = 0;
 
-    //     let mut memory: HashMap<BFieldElement, BFieldElement> = HashMap::new();
-    //     let mut input_counter: usize = 0;
+        // Prepare tables. For '++[>++<-]' this would give:
+        // 0 + +
+        // 1 + [
+        // 2 [ >
+        // 3 > +
+        // ...
+        let mut base_matrices = BaseMatrices::default();
+        for i in 0..program.len() - 1 {
+            base_matrices
+                .instruction_matrix
+                .push(InstructionMatrixBaseRow {
+                    instruction_pointer: BFieldElement::new(i as u64),
+                    current_instruction: program[i],
+                    next_instruction: program[i + 1],
+                });
+        }
+        base_matrices
+            .instruction_matrix
+            .push(InstructionMatrixBaseRow {
+                instruction_pointer: BFieldElement::new((program.len() - 1) as u64),
+                current_instruction: *program.last().unwrap(),
+                next_instruction: zero,
+            });
 
-    //     // Prepare tables. For '++[>++<-]' this would give:
-    //     // 0 + +
-    //     // 1 + [
-    //     // 2 [ >
-    //     // 3 > +
-    //     // ...
-    //     let mut base_matrices = BaseMatrices::default();
-    //     for i in 0..program.len() - 1 {
-    //         base_matrices
-    //             .instruction_matrix
-    //             .push(InstructionMatrixBaseRow {
-    //                 instruction_pointer: BFieldElement::new(i as u64),
-    //                 current_instruction: program[i],
-    //                 next_instruction: program[i + 1],
-    //             });
-    //     }
-    //     base_matrices
-    //         .instruction_matrix
-    //         .push(InstructionMatrixBaseRow {
-    //             instruction_pointer: BFieldElement::new((program.len() - 1) as u64),
-    //             current_instruction: *program.last().unwrap(),
-    //             next_instruction: zero,
-    //         });
+        // main loop
+        while (register.instruction_pointer.value() as usize) < program.len() {
+            // collect values to add new rows in execution matrices
+            base_matrices.processor_matrix.push(register.clone());
+            base_matrices
+                .instruction_matrix
+                .push(InstructionMatrixBaseRow {
+                    instruction_pointer: register.instruction_pointer,
+                    current_instruction: register.current_instruction,
+                    next_instruction: register.next_instruction,
+                });
 
-    //     // main loop
-    //     while (register.instruction_pointer.value() as usize) < program.len() {
-    //         // collect values to add new rows in execution matrices
-    //         base_matrices.processor_matrix.push(register.clone());
-    //         base_matrices
-    //             .instruction_matrix
-    //             .push(InstructionMatrixBaseRow {
-    //                 instruction_pointer: register.instruction_pointer,
-    //                 current_instruction: register.current_instruction,
-    //                 next_instruction: register.next_instruction,
-    //             });
+            // update pointer registers according to instruction
+            if register.current_instruction == BFieldElement::new('[' as u64) {
+                // This is the 1st part of the attack, a loop is *always* entered
+                register.instruction_pointer += two;
 
-    //         // update pointer registers according to instruction
-    //         if register.current_instruction == BFieldElement::new('[' as u64) {
-    //             // This is the 1st part of the attack, a loop is *always* entered
-    //             register.instruction_pointer += two;
+                // Original version is commented out below
+                // if register.memory_value.is_zero() {
+                //     register.instruction_pointer =
+                //         program[register.instruction_pointer.value() as usize + 1];
+                // } else {
+                //     register.instruction_pointer += two;
+                // }
+            } else if register.current_instruction == BFieldElement::new(']' as u64) {
+                if !register.memory_value.is_zero() {
+                    register.instruction_pointer =
+                        program[register.instruction_pointer.value() as usize + 1];
+                } else {
+                    register.instruction_pointer += two;
+                }
+            } else if register.current_instruction == BFieldElement::new('<' as u64) {
+                register.instruction_pointer += one;
+                register.memory_pointer -= one;
+            } else if register.current_instruction == BFieldElement::new('>' as u64) {
+                register.instruction_pointer += one;
+                register.memory_pointer += one;
+            } else if register.current_instruction == BFieldElement::new('+' as u64) {
+                register.instruction_pointer += one;
+                memory.insert(
+                    register.memory_pointer,
+                    *memory.get(&register.memory_pointer).unwrap_or(&zero) + one,
+                );
+            } else if register.current_instruction == BFieldElement::new('-' as u64) {
+                register.instruction_pointer += one;
+                memory.insert(
+                    register.memory_pointer,
+                    *memory.get(&register.memory_pointer).unwrap_or(&zero) - one,
+                );
+            } else if register.current_instruction == BFieldElement::new('.' as u64) {
+                register.instruction_pointer += one;
+                base_matrices
+                    .output_matrix
+                    .push(*memory.get(&register.memory_pointer).unwrap_or(&zero));
+            } else if register.current_instruction == BFieldElement::new(',' as u64) {
+                register.instruction_pointer += one;
+                let input_char = input_symbols[input_counter];
+                input_counter += 1;
+                memory.insert(register.memory_pointer, input_char);
+                base_matrices.input_matrix.push(input_char);
+            } else {
+                return None;
+            }
 
-    //             // Original version is commented out below
-    //             // if register.memory_value.is_zero() {
-    //             //     register.instruction_pointer =
-    //             //         program[register.instruction_pointer.value() as usize + 1];
-    //             // } else {
-    //             //     register.instruction_pointer += two;
-    //             // }
-    //         } else if register.current_instruction == BFieldElement::new(']' as u64) {
-    //             if !register.memory_value.is_zero() {
-    //                 register.instruction_pointer =
-    //                     program[register.instruction_pointer.value() as usize + 1];
-    //             } else {
-    //                 register.instruction_pointer += two;
-    //             }
-    //         } else if register.current_instruction == BFieldElement::new('<' as u64) {
-    //             register.instruction_pointer += one;
-    //             register.memory_pointer -= one;
-    //         } else if register.current_instruction == BFieldElement::new('>' as u64) {
-    //             register.instruction_pointer += one;
-    //             register.memory_pointer += one;
-    //         } else if register.current_instruction == BFieldElement::new('+' as u64) {
-    //             register.instruction_pointer += one;
-    //             memory.insert(
-    //                 register.memory_pointer,
-    //                 *memory.get(&register.memory_pointer).unwrap_or(&zero) + one,
-    //             );
-    //         } else if register.current_instruction == BFieldElement::new('-' as u64) {
-    //             register.instruction_pointer += one;
-    //             memory.insert(
-    //                 register.memory_pointer,
-    //                 *memory.get(&register.memory_pointer).unwrap_or(&zero) - one,
-    //             );
-    //         } else if register.current_instruction == BFieldElement::new('.' as u64) {
-    //             register.instruction_pointer += one;
-    //             base_matrices
-    //                 .output_matrix
-    //                 .push(*memory.get(&register.memory_pointer).unwrap_or(&zero));
-    //         } else if register.current_instruction == BFieldElement::new(',' as u64) {
-    //             register.instruction_pointer += one;
-    //             let input_char = input_symbols[input_counter];
-    //             input_counter += 1;
-    //             memory.insert(register.memory_pointer, input_char);
-    //             base_matrices.input_matrix.push(input_char);
-    //         } else {
-    //             return None;
-    //         }
+            // update non-pointer registers
+            register.cycle += one;
 
-    //         // update non-pointer registers
-    //         register.cycle += one;
+            if (register.instruction_pointer.value() as usize) < program.len() {
+                register.current_instruction =
+                    program[register.instruction_pointer.value() as usize];
+            } else {
+                register.current_instruction = zero;
+            }
 
-    //         if (register.instruction_pointer.value() as usize) < program.len() {
-    //             register.current_instruction =
-    //                 program[register.instruction_pointer.value() as usize];
-    //         } else {
-    //             register.current_instruction = zero;
-    //         }
+            if (register.instruction_pointer.value() as usize) < program.len() - 1 {
+                register.next_instruction =
+                    program[(register.instruction_pointer.value() as usize) + 1];
+            } else {
+                register.next_instruction = zero;
+            }
 
-    //         if (register.instruction_pointer.value() as usize) < program.len() - 1 {
-    //             register.next_instruction =
-    //                 program[(register.instruction_pointer.value() as usize) + 1];
-    //         } else {
-    //             register.next_instruction = zero;
-    //         }
+            register.memory_value = *memory.get(&register.memory_pointer).unwrap_or(&zero);
+            register.memory_value_inverse = if register.memory_value.is_zero() {
+                zero
+            } else {
+                register.memory_value.inverse()
+            };
 
-    //         register.memory_value = *memory.get(&register.memory_pointer).unwrap_or(&zero);
-    //         register.memory_value_inverse = if register.memory_value.is_zero() {
-    //             zero
-    //         } else {
-    //             register.memory_value.inverse()
-    //         };
+            // This is the 2nd part of the attack
+            if register.current_instruction == BFieldElement::new('[' as u64) {
+                register.memory_value_inverse = BFieldElement::new(42);
+            }
+        }
 
-    //         // This is the 2nd part of the attack
-    //         if register.current_instruction == BFieldElement::new('[' as u64) {
-    //             register.memory_value_inverse = BFieldElement::new(42);
-    //         }
-    //     }
+        base_matrices.processor_matrix.push(register.clone());
+        base_matrices
+            .instruction_matrix
+            .push(InstructionMatrixBaseRow {
+                instruction_pointer: register.instruction_pointer,
+                current_instruction: register.current_instruction,
+                next_instruction: register.next_instruction,
+            });
 
-    //     base_matrices.processor_matrix.push(register.clone());
-    //     base_matrices
-    //         .instruction_matrix
-    //         .push(InstructionMatrixBaseRow {
-    //             instruction_pointer: register.instruction_pointer,
-    //             current_instruction: register.current_instruction,
-    //             next_instruction: register.next_instruction,
-    //         });
+        // post-process context tables
+        // sort by instruction address
+        base_matrices
+            .instruction_matrix
+            .sort_by_key(|row| row.instruction_pointer.value());
 
-    //     // post-process context tables
-    //     // sort by instruction address
-    //     base_matrices
-    //         .instruction_matrix
-    //         .sort_by_key(|row| row.instruction_pointer.value());
+        Some(base_matrices)
+    }
 
-    //     Some(base_matrices)
-    // }
+    #[test]
+    fn set_adversarial_is_zero_value_test() {
+        // Expected (honest) output state:
+        // `memory_pointer`
+        //        |
+        //        |
+        //        V
+        //    [1, 0] with cycle = 3
+        // Malory's output state:
+        // `memory_pointer`
+        //     |
+        //     |
+        //     V
+        //    [0, 2] with cycle = 8
 
-    // #[test]
-    // fn set_adversarial_is_zero_value_test() {
-    //     // Expected (honest) output state:
-    //     // `memory_pointer`
-    //     //        |
-    //     //        |
-    //     //        V
-    //     //    [1, 0] with cycle = 3
-    //     // Malory's output state:
-    //     // `memory_pointer`
-    //     //     |
-    //     //     |
-    //     //     V
-    //     //    [0, 2] with cycle = 8
+        // Run honest execution, verify that it succeeds in prover/verifier
+        let source_code = "+>[++<-]".to_string();
+        let program: Vec<BFieldElement> = brainfuck::vm::compile(&source_code).unwrap();
+        let input_symbols: Vec<BFieldElement> = vec![];
+        let regular_matrices: BaseMatrices =
+            brainfuck::vm::simulate(&program, &input_symbols).unwrap();
+        let mt = MemoryTable::derive_matrix(
+            regular_matrices
+                .processor_matrix
+                .iter()
+                .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                .collect(),
+        );
+        let mut regular_stark = new_test_stark(
+            regular_matrices.processor_matrix.len(),
+            source_code.clone(),
+            input_symbols.clone(),
+            vec![],
+            mt.len(),
+        );
+        let mut regular_proof_stream: ProofStream =
+            regular_stark.prove(regular_matrices, None).unwrap();
+        let regular_verify = regular_stark.verify(&mut regular_proof_stream);
+        assert!(regular_verify.unwrap(), "Regular execution must succeed");
 
-    //     // Run honest execution, verify that it succeeds in prover/verifier
-    //     let source_code = "+>[++<-]".to_string();
-    //     let program: Vec<BFieldElement> = brainfuck::vm::compile(&source_code).unwrap();
-    //     let input_symbols: Vec<BFieldElement> = vec![];
-    //     let regular_matrices: BaseMatrices =
-    //         brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-    //     let mt = MemoryTable::derive_matrix(
-    //         regular_matrices
-    //             .processor_matrix
-    //             .iter()
-    //             .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
-    //             .collect(),
-    //     );
-    //     let mut regular_stark = new_test_stark(
-    //         regular_matrices.processor_matrix.len(),
-    //         source_code.clone(),
-    //         input_symbols.clone(),
-    //         vec![],
-    //         mt.len(),
-    //     );
-    //     let mut regular_proof_stream: ProofStream =
-    //         regular_stark.prove(regular_matrices, None).unwrap();
-    //     let regular_verify = regular_stark.verify(&mut regular_proof_stream);
-    //     assert!(regular_verify.unwrap(), "Regular execution must succeed");
+        // Run attack, verify that it is caught by the verifier
+        // Before deriving the memory table to get the length of the memory table,
+        // we have to pad the processor table.
+        let mallorys_matrices: BaseMatrices =
+            mallorys_cheat_with_mv_zero_simulate(&program, &input_symbols).unwrap();
 
-    //     // Run attack, verify that it is caught by the verifier
-    //     let mallorys_matrices: BaseMatrices =
-    //         mallorys_cheat_with_mv_zero_simulate(&program, &input_symbols).unwrap();
-    //     let mallorys_mt = MemoryTable::derive_matrix(
-    //         mallorys_matrices
-    //             .processor_matrix
-    //             .iter()
-    //             .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
-    //             .collect(),
-    //     );
-    //     let mut mallorys_stark = new_test_stark(
-    //         mallorys_matrices.processor_matrix.len(),
-    //         source_code,
-    //         input_symbols,
-    //         vec![],
-    //         mallorys_mt.len(),
-    //     );
-    //     let mut mallorys_proof_stream: ProofStream =
-    //         mallorys_stark.prove(mallorys_matrices, None).unwrap();
+        let padded_processor_matrix = ProcessorTable::pad_matrix(
+            mallorys_matrices
+                .processor_matrix
+                .iter()
+                .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                .collect(),
+        );
+        let mallorys_mt = MemoryTable::derive_matrix(
+            padded_processor_matrix
+                .iter()
+                .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                .collect(),
+        );
+        let mut mallorys_stark = new_test_stark(
+            mallorys_matrices.processor_matrix.len(),
+            source_code,
+            input_symbols,
+            vec![],
+            mallorys_mt.len(),
+        );
+        let mut mallorys_proof_stream: ProofStream =
+            mallorys_stark.prove(mallorys_matrices, None).unwrap();
 
-    //     let mallorys_verify = mallorys_stark.verify(&mut mallorys_proof_stream);
-    //     match mallorys_verify {
-    //         Ok(true) => {
-    //             panic!("Attack passes the STARK verifier!!")
-    //         }
-    //         _ => (),
-    //     }
-    // }
+        let mallorys_verify = mallorys_stark.verify(&mut mallorys_proof_stream);
+        match mallorys_verify {
+            Ok(true) => {
+                panic!("Attack passes the STARK verifier!!")
+            }
+            _ => (),
+        }
+    }
 
     #[test]
     fn bf_prove_verify_test() {
         for source_code in [
             brainfuck::vm::sample_programs::VERY_SIMPLE_PROGRAM,
+            brainfuck::vm::sample_programs::TWO_BY_TWO,
             brainfuck::vm::sample_programs::TWO_BY_TWO_THEN_OUTPUT,
-            brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT,
+            brainfuck::vm::sample_programs::PRINT_EXCLAMATION_MARKS,
             brainfuck::vm::sample_programs::PRINT_17_CHARS,
+            brainfuck::vm::sample_programs::ROT13,
+            brainfuck::vm::sample_programs::SHORT_INPUT_AND_OUTPUT,
         ] {
             let program: Vec<BFieldElement> = brainfuck::vm::compile(source_code).unwrap();
             let (trace_length, input_symbols, output_symbols) = brainfuck::vm::run(
@@ -1453,9 +1464,15 @@ mod brainfuck_stark_tests {
             .unwrap();
             let base_matrices: BaseMatrices =
                 brainfuck::vm::simulate(&program, &input_symbols).unwrap();
-            let mt = MemoryTable::derive_matrix(
+            let padded_processor_matrix = ProcessorTable::pad_matrix(
                 base_matrices
                     .processor_matrix
+                    .iter()
+                    .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                    .collect(),
+            );
+            let mt = MemoryTable::derive_matrix(
+                padded_processor_matrix
                     .iter()
                     .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
                     .collect(),
