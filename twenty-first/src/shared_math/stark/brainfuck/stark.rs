@@ -1442,6 +1442,111 @@ mod brainfuck_stark_tests {
     }
 
     #[test]
+    fn cheat_with_clk_in_memory_table_test() {
+        // In this test the prover attempts to create a false proof where the order of
+        // the rows in the memory table is manipulated to cheat the memory consistency check.
+        // After having added the transition constraint to the memory that thwarts YT's attack,
+        // cf. https://github.com/TritonVM/triton-vm/issues/12, this test should succeed in
+        // catching the transition constraint that is not fulfilled in the memory table.
+        // If you want to see exactly which constraint that is failing you can run this
+        // test with the environment variable `DEBUG=1` as this should make the prover
+        // fail at the right point and print a meaningful error message. The error that
+        // the prover points to in this case should be that the cycle count does not increase
+        // by exactly one when the memory pointer is unchanged.
+        let source_code = "++>+<.-><+".to_string();
+        let program: Vec<BFieldElement> = brainfuck::vm::compile(&source_code).unwrap();
+        let one = BFieldElement::ring_one();
+        let two = BFieldElement::new(2);
+        let three = BFieldElement::new(3);
+        let mut register = Register::default();
+        register.current_instruction = program[0];
+        let (_, _, output) = brainfuck::vm::run(&program, vec![]).unwrap();
+        assert_eq!(vec![two], output);
+        let regular_matrices: BaseMatrices = brainfuck::vm::simulate(&program, &[]).unwrap();
+        let padded_processor_matrix = ProcessorTable::pad_matrix(
+            regular_matrices
+                .processor_matrix
+                .iter()
+                .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                .collect(),
+        );
+        let mt = MemoryTable::derive_matrix(
+            padded_processor_matrix
+                .iter()
+                .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                .collect(),
+        );
+        let mut regular_stark = new_test_stark(
+            regular_matrices.processor_matrix.len(),
+            source_code.clone(),
+            vec![],
+            output.clone(),
+            mt.len(),
+        );
+        let mut regular_proof_stream: ProofStream =
+            regular_stark.prove(regular_matrices.clone(), None).unwrap();
+        let regular_verify = regular_stark.verify(&mut regular_proof_stream);
+        assert!(regular_verify.unwrap(), "Regular execution must succeed");
+
+        // Verify that the honest memory values are what we expect
+        assert_eq!(two, regular_matrices.processor_matrix[5].memory_value);
+        assert_eq!(two, regular_matrices.processor_matrix[6].memory_value);
+        assert_eq!(one, regular_matrices.processor_matrix[7].memory_value);
+        assert_eq!(one, regular_matrices.processor_matrix[9].memory_value);
+        assert_eq!(two, regular_matrices.processor_matrix[10].memory_value);
+
+        // Let's start being malicious
+        let mut bad_matrices = regular_matrices;
+        bad_matrices.processor_matrix[5].memory_value = three;
+        bad_matrices.processor_matrix[5].memory_value_inverse = three.inverse();
+        bad_matrices.processor_matrix[6].memory_value = three;
+        bad_matrices.processor_matrix[6].memory_value_inverse = three.inverse();
+        bad_matrices.processor_matrix[7].memory_value = two;
+        bad_matrices.processor_matrix[7].memory_value_inverse = two.inverse();
+        bad_matrices.processor_matrix[9].memory_value = two;
+        bad_matrices.processor_matrix[9].memory_value_inverse = two.inverse();
+        bad_matrices.processor_matrix[10].memory_value = three;
+        bad_matrices.processor_matrix[10].memory_value_inverse = three.inverse();
+        let bad_output = vec![three];
+
+        // Construct a false memory table for the prover
+        let bad_padded_processor_matrix = ProcessorTable::pad_matrix(
+            bad_matrices
+                .processor_matrix
+                .iter()
+                .map(|reg| Into::<Vec<BFieldElement>>::into(reg.to_owned()))
+                .collect(),
+        );
+        let mut bad_mt = MemoryTable::derive_matrix(bad_padded_processor_matrix);
+
+        // manipulate the MT in an attempt to cheat the verifier
+        let first_permutated_row = bad_mt.remove(5);
+        let second_permutated_row = bad_mt.remove(5);
+        bad_mt.insert(14, first_permutated_row);
+        bad_mt.insert(15, second_permutated_row);
+        bad_matrices.output_matrix[0] = three;
+
+        let mut malicious_stark = new_test_stark(
+            bad_matrices.processor_matrix.len(),
+            source_code.clone(),
+            vec![],
+            bad_output,
+            bad_mt.len(),
+        );
+        let bad_mt_as_vec: Vec<MemoryMatrixBaseRow> =
+            bad_mt.into_iter().map(|x| x.into()).collect();
+        let mut malicious_proof_stream: ProofStream = malicious_stark
+            .prove(bad_matrices.clone(), Some(bad_mt_as_vec))
+            .unwrap();
+        let verify_bad_proof = malicious_stark.verify(&mut malicious_proof_stream);
+        println!("verify_bad_proof = {:?}", verify_bad_proof);
+        assert!(
+            verify_bad_proof.is_err(),
+            "Manipulated matrix values must be caught"
+        );
+    }
+
+    #[test]
     fn bf_prove_verify_test() {
         for source_code in [
             brainfuck::vm::sample_programs::VERY_SIMPLE_PROGRAM,

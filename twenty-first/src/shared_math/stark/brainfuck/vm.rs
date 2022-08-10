@@ -113,11 +113,12 @@ pub struct MemoryMatrixBaseRow {
     pub cycle: BFieldElement,
     pub address: BFieldElement,
     pub value: BFieldElement,
+    pub interweaved: BFieldElement,
 }
 
 impl From<MemoryMatrixBaseRow> for Vec<BFieldElement> {
     fn from(row: MemoryMatrixBaseRow) -> Self {
-        vec![row.cycle, row.address, row.value]
+        vec![row.cycle, row.address, row.value, row.interweaved]
     }
 }
 
@@ -127,6 +128,7 @@ impl From<Vec<BFieldElement>> for MemoryMatrixBaseRow {
             cycle: row[0],
             address: row[1],
             value: row[2],
+            interweaved: row[3],
         }
     }
 }
