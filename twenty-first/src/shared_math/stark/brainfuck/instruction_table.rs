@@ -1,5 +1,6 @@
 use crate::shared_math::b_field_element as bfe;
 use crate::shared_math::stark::brainfuck::stark::TERMINAL_COUNT;
+use crate::shared_math::stark::brainfuck::vm::instruction_zerofier;
 use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::{
     b_field_element::BFieldElement, mpolynomial::MPolynomial, other, x_field_element::XFieldElement,
@@ -209,13 +210,17 @@ impl TableTrait for InstructionTable {
                 .map(|&bfe| XFieldElement::new_const(bfe))
                 .collect();
 
-            new_row.push(permutation_running_product);
+            // Check if the new row is padding
             if !new_row[InstructionTable::CURRENT_INSTRUCTION].is_zero() {
-                permutation_running_product *= alpha
-                    - a * new_row[InstructionTable::ADDRESS]
-                    - b * new_row[InstructionTable::CURRENT_INSTRUCTION]
-                    - c * new_row[InstructionTable::NEXT_INSTRUCTION];
+                // Check if the instruction address changed
+                if i > 0 && new_row[Self::ADDRESS] == self.0.matrix[i - 1][Self::ADDRESS].lift() {
+                    permutation_running_product *= alpha
+                        - a * new_row[InstructionTable::ADDRESS]
+                        - b * new_row[InstructionTable::CURRENT_INSTRUCTION]
+                        - c * new_row[InstructionTable::NEXT_INSTRUCTION];
+                }
             }
+            new_row.push(permutation_running_product);
 
             if new_row[InstructionTable::ADDRESS] != previous_address {
                 evaluation_running_sum = eta * evaluation_running_sum
@@ -294,7 +299,7 @@ impl TableTrait for InstructionTable {
 
         let address_lifted = bfe::lift_coefficients_to_xfield(&address);
         let _current_instruction_lifted = bfe::lift_coefficients_to_xfield(&current_instruction);
-        let next_instruction_lifted = bfe::lift_coefficients_to_xfield(&next_instruction);
+        let _next_instruction_lifted = bfe::lift_coefficients_to_xfield(&next_instruction);
 
         let address_next_lifted = bfe::lift_coefficients_to_xfield(&address_next);
         let current_instruction_next_lifted =
@@ -308,15 +313,23 @@ impl TableTrait for InstructionTable {
         let evaluation_lifted = bfe::lift_coefficients_to_xfield(&evaluation);
         let evaluation_next_lifted = bfe::lift_coefficients_to_xfield(&evaluation_next);
 
-        // TODO: Explain what this polynomial does:
+        let one: MPolynomial<XFieldElement> =
+            MPolynomial::from_constant(XFieldElement::ring_one(), 2 * Self::FULL_WIDTH);
         polynomials.push(
-            (permutation_lifted
+            // Dictates the evolution rules for instruction table's permutation rules. Its terminal
+            // value must match that in the processor table.
+            (permutation_lifted.clone()
                 * (alpha
-                    - a.clone() * address_lifted.clone()
-                    - b.clone() * current_instruction_lifted.clone()
-                    - c.clone() * next_instruction_lifted)
-                - permutation_next_lifted)
-                * current_instruction_lifted,
+                    - a.clone() * address_next_lifted.clone()
+                    - b.clone() * current_instruction_next_lifted.clone()
+                    - c.clone() * next_instruction_next_lifted.clone())
+                - permutation_next_lifted.clone())
+                * current_instruction_lifted.clone()
+                * (address_lifted.clone() + one - address_next_lifted.clone())
+                + instruction_zerofier(&current_instruction_lifted, 2 * Self::FULL_WIDTH)
+                    * (permutation_lifted.clone() - permutation_next_lifted.clone())
+                + (address_lifted.clone() - address_next_lifted.clone())
+                    * (permutation_lifted - permutation_next_lifted),
         );
 
         let ifnewaddress: MPolynomial<XFieldElement> =
@@ -367,7 +380,9 @@ impl TableTrait for InstructionTable {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        let [a, b, c, _d, _e, _f, alpha, _beta, _gamma, _delta, _eta]: [MPolynomial<XFieldElement>;
+        let [_a, _b, _c, _d, _e, _f, _alpha, _beta, _gamma, _delta, _eta]: [MPolynomial<
+            XFieldElement,
+        >;
             EXTENSION_CHALLENGE_COUNT] = challenges
             .iter()
             .map(|challenge| MPolynomial::from_constant(*challenge, Self::FULL_WIDTH))
@@ -386,13 +401,7 @@ impl TableTrait for InstructionTable {
             MPolynomial::variables(self.full_width(), XFieldElement::ring_one());
 
         vec![
-            (x[Self::PERMUTATION].clone()
-                * (alpha
-                    - a * x[Self::ADDRESS].clone()
-                    - b * x[Self::CURRENT_INSTRUCTION].clone()
-                    - c * x[Self::NEXT_INSTRUCTION].clone())
-                - processor_instruction_permutation_terminal)
-                * x[Self::CURRENT_INSTRUCTION].clone(),
+            x[Self::PERMUTATION].clone() - processor_instruction_permutation_terminal,
             x[Self::EVALUATION].clone() - instruction_evaluation_terminal,
         ]
     }

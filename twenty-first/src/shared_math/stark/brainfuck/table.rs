@@ -290,13 +290,20 @@ pub trait TableTrait {
     }
 
     fn max_degree(&self) -> Degree {
-        let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.base_width() * 2];
+        let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.full_width() * 2];
+        let mut rng = thread_rng();
+        let dummy_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
+            XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
+                .try_into()
+                .unwrap();
 
-        self.base_transition_constraints()
+        let ret = self
+            .transition_constraints_ext(dummy_challenges)
             .iter()
             .map(|air| air.symbolic_degree_bound(&degree_bounds) - (self.height() as Degree - 1))
             .max()
-            .unwrap_or(-1)
+            .unwrap_or(-1);
+        ret
     }
 
     fn all_quotient_degree_bounds(
