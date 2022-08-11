@@ -2,7 +2,9 @@ use console::Term;
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::traits::Inverse;
+use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{b_field_element::BFieldElement, traits::IdentityValues};
 
 pub const INSTRUCTIONS: [char; 8] = ['[', ']', '<', '>', '+', '-', ',', '.'];
@@ -16,6 +18,24 @@ pub struct Register {
     pub memory_pointer: BFieldElement,
     pub memory_value: BFieldElement,
     pub memory_value_inverse: BFieldElement,
+}
+
+/// Returns a multivariate polynomial that evaluates to 0 for all instructions. Otherwise non-zero.
+pub fn instruction_zerofier(
+    indeterminate: &MPolynomial<XFieldElement>,
+    variable_count: usize,
+) -> MPolynomial<XFieldElement> {
+    let mut acc: MPolynomial<XFieldElement> =
+        MPolynomial::from_constant(XFieldElement::ring_one(), variable_count);
+    for c in INSTRUCTIONS.iter() {
+        acc *= indeterminate.to_owned()
+            - MPolynomial::from_constant(
+                XFieldElement::new_const((*c as u32).into()),
+                variable_count,
+            );
+    }
+
+    acc
 }
 
 impl Display for Register {

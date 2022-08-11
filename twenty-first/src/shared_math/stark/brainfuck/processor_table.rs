@@ -281,6 +281,7 @@ impl ProcessorTable {
         polynomials
     }
 
+    /// Returns a multivariate polynomial that evaluates to 0 for the given instruction
     fn if_instruction<PF: PrimeField>(
         instruction: char,
         indeterminate: &MPolynomial<PF>,
