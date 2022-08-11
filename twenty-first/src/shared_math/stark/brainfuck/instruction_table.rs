@@ -315,6 +315,10 @@ impl TableTrait for InstructionTable {
 
         let one: MPolynomial<XFieldElement> =
             MPolynomial::from_constant(XFieldElement::ring_one(), 2 * Self::FULL_WIDTH);
+
+        // This degree 9(!) transition constraint is usually what dictates the max degree
+        // of quotients and it thus dictates the FRI domain length. If you want to speed up
+        // the prover, this would be a good place to start.
         polynomials.push(
             // Dictates the evolution rules for instruction table's permutation rules. Its terminal
             // value must match that in the processor table.

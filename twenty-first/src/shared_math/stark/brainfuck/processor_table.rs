@@ -528,8 +528,12 @@ impl TableTrait for ProcessorTable {
 
         // running product for memory permutation
         polynomials.push(
-            memory_permutation * (beta - d * cycle - e * memory_pointer - f * memory_value.clone())
-                - memory_permutation_next,
+            (memory_permutation.clone()
+                * (beta - d * cycle - e * memory_pointer - f * memory_value.clone())
+                - memory_permutation_next.clone())
+                * current_instruction.clone()
+                + (memory_permutation - memory_permutation_next)
+                    * instruction_zerofier(&current_instruction, 2 * self.full_width()),
         );
 
         // running evaluation for input
@@ -595,10 +599,14 @@ impl TableTrait for ProcessorTable {
 
             // 2. running product for memory access
             extended_matrix[i].push(memory_permutation_running_product);
-            memory_permutation_running_product *= beta
-                - d * extended_matrix[i][Self::CYCLE]
-                - e * extended_matrix[i][Self::MEMORY_POINTER]
-                - f * extended_matrix[i][Self::MEMORY_VALUE];
+
+            // If not padding
+            if !extended_matrix[i][Self::CURRENT_INSTRUCTION].is_zero() {
+                memory_permutation_running_product *= beta
+                    - d * extended_matrix[i][Self::CYCLE]
+                    - e * extended_matrix[i][Self::MEMORY_POINTER]
+                    - f * extended_matrix[i][Self::MEMORY_VALUE];
+            }
 
             // 3. evaluation for input
             extended_matrix[i].push(input_evaluation_running_evaluation);
@@ -690,6 +698,7 @@ impl TableTrait for ProcessorTable {
             MPolynomial::<XFieldElement>::from_constant(terminals[3], Self::FULL_WIDTH);
 
         let instruction_permutation = x[Self::INSTRUCTION_PERMUTATION].clone();
+        let current_instruction = x[Self::CURRENT_INSTRUCTION].clone();
         let memory_permutation = x[ProcessorTable::MEMORY_PERMUTATION].clone();
         let cycle = x[ProcessorTable::CYCLE].clone();
         let memory_pointer = x[ProcessorTable::MEMORY_POINTER].clone();
@@ -700,8 +709,12 @@ impl TableTrait for ProcessorTable {
 
         vec![
             processor_instruction_permutation_terminal - instruction_permutation,
-            processor_memory_permutation_terminal
-                - memory_permutation * (beta - d * cycle - e * memory_pointer - f * memory_value),
+            (processor_memory_permutation_terminal.clone()
+                - memory_permutation.clone()
+                    * (beta - d * cycle - e * memory_pointer - f * memory_value))
+                * current_instruction.clone()
+                + (processor_memory_permutation_terminal - memory_permutation)
+                    * instruction_zerofier(&current_instruction, self.full_width()),
             processor_input_terminal - input_evaluation,
             processor_output_terminal - output_evaluation,
         ]
