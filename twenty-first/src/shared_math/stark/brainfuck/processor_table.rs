@@ -3,6 +3,7 @@ use super::table::{Table, TableMoreTrait, TableTrait};
 use super::vm::{Register, INSTRUCTIONS};
 use crate::shared_math::b_field_element as bfe;
 use crate::shared_math::other;
+use crate::shared_math::stark::brainfuck::vm::instruction_zerofier;
 use crate::shared_math::traits::{IdentityValues, PrimeField};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
@@ -514,13 +515,15 @@ impl TableTrait for ProcessorTable {
         // extension AIR polynomials
         // running product for instruction permutation
         polynomials.push(
-            (instruction_permutation
+            (instruction_permutation.clone()
                 * (alpha
                     - a * instruction_pointer
                     - b * current_instruction.clone()
                     - c * next_instruction)
-                - instruction_permutation_next)
-                * current_instruction.clone(),
+                - instruction_permutation_next.clone())
+                * current_instruction.clone()
+                + instruction_zerofier(&current_instruction, 2 * self.full_width())
+                    * (instruction_permutation - instruction_permutation_next),
         );
 
         // running product for memory permutation
@@ -677,6 +680,8 @@ impl TableTrait for ProcessorTable {
             MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
 
         // FIXME: These anonymous constant offsets into `terminals` are not very clear!
+        let processor_instruction_permutation_terminal =
+            MPolynomial::<XFieldElement>::from_constant(terminals[0], Self::FULL_WIDTH);
         let processor_memory_permutation_terminal =
             MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
         let processor_input_terminal =
@@ -684,7 +689,7 @@ impl TableTrait for ProcessorTable {
         let processor_output_terminal =
             MPolynomial::<XFieldElement>::from_constant(terminals[3], Self::FULL_WIDTH);
 
-        let current_instruction = x[ProcessorTable::CURRENT_INSTRUCTION].clone();
+        let instruction_permutation = x[Self::INSTRUCTION_PERMUTATION].clone();
         let memory_permutation = x[ProcessorTable::MEMORY_PERMUTATION].clone();
         let cycle = x[ProcessorTable::CYCLE].clone();
         let memory_pointer = x[ProcessorTable::MEMORY_POINTER].clone();
@@ -694,7 +699,7 @@ impl TableTrait for ProcessorTable {
         let output_evaluation = x[ProcessorTable::OUTPUT_EVALUATION].clone();
 
         vec![
-            current_instruction,
+            processor_instruction_permutation_terminal - instruction_permutation,
             processor_memory_permutation_terminal
                 - memory_permutation * (beta - d * cycle - e * memory_pointer - f * memory_value),
             processor_input_terminal - input_evaluation,
