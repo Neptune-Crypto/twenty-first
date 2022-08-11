@@ -91,6 +91,7 @@ impl TableCollection {
         &mut self,
         processor_matrix: Vec<Register>,
         instruction_matrix: Vec<InstructionMatrixBaseRow>,
+        memory_matrix: Vec<Vec<BFieldElement>>,
         input_matrix: Vec<BFieldElement>,
         output_matrix: Vec<BFieldElement>,
     ) {
@@ -99,11 +100,13 @@ impl TableCollection {
             instruction_matrix.into_iter().map(|x| x.into()).collect();
         self.input_table.0.matrix = input_matrix.into_iter().map(|x| vec![x]).collect();
         self.output_table.0.matrix = output_matrix.into_iter().map(|x| vec![x]).collect();
+        self.memory_table.0.matrix = memory_matrix;
     }
 
     pub fn pad(&mut self) {
         self.processor_table.pad();
         self.instruction_table.pad();
+        self.memory_table.pad();
         self.input_table.pad();
         self.output_table.pad();
     }
@@ -253,8 +256,7 @@ mod brainfuck_table_collection_tests {
         let input_data = vec![];
         let table_collection = create_table_collection(&actual_program, &input_data, 1);
 
-        // 1281 is derived from running Python Brainfuck Stark
-        assert_eq!(1281, table_collection.get_max_degree());
+        assert_eq!(2049, table_collection.get_max_degree());
     }
 
     #[test]
@@ -264,44 +266,18 @@ mod brainfuck_table_collection_tests {
 
         // The expected values have been found from the Python STARK BF tutorial
         expected_bounds.insert(
-            sample_programs::VERY_SIMPLE_PROGRAM,
-            (
-                vec![8, 8, 8, 8, 8, 8, 8, 16, 16, 16, 8, 8, 8, 8, -1, -1],
-                vec![8, 8, 8, 8, 16, 16, 8, -1, -1],
-                vec![
-                    7, 7, 7, 7, 7, 7, 7, 81, 65, 65, 1, 17, 17, 17, 9, 65, 65, 7, 15, 7, 7, 15, 15,
-                    17, 17, 17, 33, 17, 47, 15, 7, 7, 7, 9, 9, 9, 9, 9, 9, 17, 23, -2, 0, -1, -2,
-                    0, -1,
-                ],
-            ),
-        );
-        expected_bounds.insert(
-            sample_programs::PRINT_17_CHARS,
-            (
-                vec![
-                    32, 32, 32, 32, 32, 32, 32, 64, 64, 64, 32, 32, 32, 32, 0, 31,
-                ],
-                vec![32, 32, 32, 32, 64, 64, 32, 0, 31],
-                vec![
-                    31, 31, 31, 31, 31, 31, 31, 321, 257, 257, 1, 65, 65, 65, 33, 257, 257, 31, 63,
-                    31, 31, 63, 63, 65, 65, 65, 129, 65, 191, 63, 31, 31, 31, 33, 33, 33, 33, 33,
-                    33, 65, 95, -1, 0, -1, 30, 0, 30,
-                ],
-            ),
-        );
-        expected_bounds.insert(
             sample_programs::HELLO_WORLD,
             (
                 vec![
-                    1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
-                    1024, -1, 15,
+                    1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 8192, 8192, 8192,
+                    8192, -1, 15,
                 ],
-                vec![1024, 1024, 1024, 1024, 1024, 1024, 1024, -1, 15],
+                vec![1024, 1024, 1024, 1024, 1024, 1024, 8192, -1, 15],
                 vec![
                     1023, 1023, 1023, 1023, 1023, 1023, 1023, 10241, 8193, 8193, 1, 2049, 2049,
-                    2049, 1025, 8193, 8193, 1023, 2047, 1023, 1023, 1023, 1023, 1025, 1025, 1025,
-                    2049, 1025, 3071, 1023, 1023, 1023, 1023, 1025, 1025, 1025, 1025, 1025, 1025,
-                    2049, 3071, -2, 0, -1, 14, 0, 14,
+                    8193, 8193, 8193, 8193, 1023, 9215, 1023, 1023, 1023, 1023, 1025, 1025, 1025,
+                    8193, 1025, 1023, 1023, 8191, 8191, 8191, 8193, 8193, 8193, 8193, 8193, 8193,
+                    16385, 24575, -2, 0, -1, 14, 0, 14,
                 ],
             ),
         );
@@ -313,8 +289,8 @@ mod brainfuck_table_collection_tests {
                 ],
                 vec![64, 64, 64, 64, 128, 128, 64, 3, 3],
                 vec![
-                    63, 63, 63, 63, 63, 63, 63, 641, 513, 513, 1, 129, 129, 129, 65, 513, 513, 63,
-                    127, 63, 63, 127, 127, 129, 129, 129, 257, 129, 383, 127, 63, 63, 63, 65, 65,
+                    63, 63, 63, 63, 63, 63, 63, 641, 513, 513, 1, 129, 129, 513, 513, 513, 513, 63,
+                    575, 63, 63, 127, 127, 129, 129, 129, 1025, 129, 127, 127, 63, 63, 63, 65, 65,
                     65, 65, 65, 65, 129, 191, 2, 0, 2, 2, 0, 2,
                 ],
             ),
@@ -391,30 +367,27 @@ mod brainfuck_table_collection_tests {
         t_collect_0_rand.set_matrices(
             matrices.processor_matrix.clone(),
             matrices.instruction_matrix.clone(),
+            matrices.memory_matrix.clone(),
             matrices.input_matrix.clone(),
             matrices.output_matrix.clone(),
         );
         t_collect_1_rand.set_matrices(
             matrices.processor_matrix.clone(),
             matrices.instruction_matrix.clone(),
+            matrices.memory_matrix.clone(),
             matrices.input_matrix.clone(),
             matrices.output_matrix.clone(),
         );
         t_collect_2_rand.set_matrices(
             matrices.processor_matrix.clone(),
             matrices.instruction_matrix,
+            matrices.memory_matrix.clone(),
             matrices.input_matrix,
             matrices.output_matrix,
         );
         t_collect_0_rand.pad();
         t_collect_1_rand.pad();
         t_collect_2_rand.pad();
-        t_collect_0_rand.memory_table.0.matrix =
-            MemoryTable::derive_matrix(t_collect_0_rand.processor_table.0.matrix.clone());
-        t_collect_1_rand.memory_table.0.matrix =
-            MemoryTable::derive_matrix(t_collect_1_rand.processor_table.0.matrix.clone());
-        t_collect_2_rand.memory_table.0.matrix =
-            MemoryTable::derive_matrix(t_collect_2_rand.processor_table.0.matrix.clone());
 
         // set up FRI domain
         let fri_domain = FriDomain {
@@ -431,27 +404,18 @@ mod brainfuck_table_collection_tests {
         let interpolants_with_0_randomizers = [
             t_collect_0_rand.processor_table.0.lde(&fri_domain).1,
             t_collect_0_rand.instruction_table.0.lde(&fri_domain).1,
-            t_collect_0_rand.memory_table.0.lde(&fri_domain).1,
-            t_collect_0_rand.input_table.0.lde(&fri_domain).1,
-            t_collect_0_rand.output_table.0.lde(&fri_domain).1,
         ]
         .concat();
         println!("Successfully interpolated table collection with 0 random values");
         let interpolants_with_1_randomizer = [
             t_collect_1_rand.processor_table.0.lde(&fri_domain).1,
             t_collect_1_rand.instruction_table.0.lde(&fri_domain).1,
-            t_collect_1_rand.memory_table.0.lde(&fri_domain).1,
-            t_collect_1_rand.input_table.0.lde(&fri_domain).1,
-            t_collect_1_rand.output_table.0.lde(&fri_domain).1,
         ]
         .concat();
         println!("Successfully interpolated table collection with 1 random value");
         let interpolants_with_2_randomizers = [
             t_collect_2_rand.processor_table.0.lde(&fri_domain).1,
             t_collect_2_rand.instruction_table.0.lde(&fri_domain).1,
-            t_collect_2_rand.memory_table.0.lde(&fri_domain).1,
-            t_collect_2_rand.input_table.0.lde(&fri_domain).1,
-            t_collect_2_rand.output_table.0.lde(&fri_domain).1,
         ]
         .concat();
         println!("Successfully interpolated table collection with 2 random values");
@@ -544,15 +508,11 @@ mod brainfuck_table_collection_tests {
         tc_ref.borrow_mut().set_matrices(
             matrices.processor_matrix.clone(),
             matrices.instruction_matrix.clone(),
+            matrices.memory_matrix.clone(),
             matrices.input_matrix.clone(),
             matrices.output_matrix.clone(),
         );
         tc_ref.borrow_mut().pad();
-
-        // Instantiate the memory table object
-        let processor_matrix_clone = tc_ref.borrow().processor_table.0.matrix.clone();
-        tc_ref.borrow_mut().memory_table.0.matrix =
-            MemoryTable::derive_matrix(processor_matrix_clone);
 
         let mock_fri_domain_length = 512;
         let fri_domain = FriDomain {
@@ -690,7 +650,7 @@ mod brainfuck_table_collection_tests {
             order as usize,
         );
         let memory_table = MemoryTable::new(
-            base_matrices.processor_matrix.len(),
+            base_matrices.memory_matrix.len(),
             number_of_randomizers,
             smooth_generator,
             order as usize,

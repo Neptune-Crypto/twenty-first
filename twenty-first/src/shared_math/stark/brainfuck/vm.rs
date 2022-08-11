@@ -7,6 +7,8 @@ use crate::shared_math::traits::Inverse;
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{b_field_element::BFieldElement, traits::IdentityValues};
 
+use super::memory_table::MemoryTable;
+
 pub const INSTRUCTIONS: [char; 8] = ['[', ']', '<', '>', '+', '-', ',', '.'];
 
 #[derive(Debug, Clone)]
@@ -86,6 +88,7 @@ impl Register {
 pub struct BaseMatrices {
     pub processor_matrix: Vec<Register>,
     pub instruction_matrix: Vec<InstructionMatrixBaseRow>,
+    pub memory_matrix: Vec<Vec<BFieldElement>>,
     pub input_matrix: Vec<BFieldElement>,
     pub output_matrix: Vec<BFieldElement>,
 }
@@ -95,6 +98,7 @@ impl BaseMatrices {
         Self {
             processor_matrix: vec![],
             instruction_matrix: vec![],
+            memory_matrix: vec![],
             input_matrix: vec![],
             output_matrix: vec![],
         }
@@ -394,6 +398,8 @@ pub fn simulate(
     base_matrices
         .instruction_matrix
         .sort_by_key(|row| row.instruction_pointer.value());
+
+    base_matrices.memory_matrix = MemoryTable::derive_matrix(&base_matrices.processor_matrix);
 
     Some(base_matrices)
 }

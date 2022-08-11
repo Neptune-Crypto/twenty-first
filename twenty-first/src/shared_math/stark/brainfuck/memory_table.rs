@@ -1,6 +1,6 @@
-use super::processor_table::ProcessorTable;
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use super::table::{Table, TableMoreTrait, TableTrait};
+use super::vm::Register;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::traits::IdentityValues;
@@ -57,14 +57,33 @@ impl MemoryTable {
         Self(table)
     }
 
-    pub fn derive_matrix(processor_matrix: Vec<Vec<BFieldElement>>) -> Vec<Vec<BFieldElement>> {
+    pub fn pad(&mut self) {
+        while !other::is_power_of_two(self.0.matrix.len()) {
+            let mut padding = self.0.matrix.last().unwrap().to_owned();
+            padding[Self::CYCLE] += BFieldElement::ring_one();
+            padding[Self::INTERWEAVED] = BFieldElement::ring_one();
+            self.0.matrix.push(padding);
+        }
+    }
+
+    pub fn derive_matrix(processor_matrix: &[Register]) -> Vec<Vec<BFieldElement>> {
         let mut matrix = vec![];
-        for pt in processor_matrix.iter() {
+        for (i, pt) in processor_matrix.iter().enumerate() {
+            // This means that the memory value after the last instruction execution is not constrained.
+            // But it can't be output, so that's OK, I guess.
+            if i == processor_matrix.len() - 1 {
+                continue;
+            } else {
+                assert!(
+                    !pt.current_instruction.is_zero(),
+                    "Processor matrix must be unpadded when deriving memory matrix. Row {} has instruction zero. Input was: {:?}", i, processor_matrix
+                );
+            }
             matrix.push(vec![
-                pt[ProcessorTable::CYCLE],
-                pt[ProcessorTable::MEMORY_POINTER],
-                pt[ProcessorTable::MEMORY_VALUE],
-                BFieldElement::ring_zero(), // Rows from processor table are not interweave-rows
+                pt.cycle,
+                pt.memory_pointer,
+                pt.memory_value,
+                BFieldElement::ring_zero(),
             ]);
         }
 
@@ -88,15 +107,6 @@ impl MemoryTable {
                 matrix.insert(i + 1, interleaved_value);
             }
             i += 1;
-        }
-
-        // Then pad memory table with interweaved rows until this table has a height that is a power
-        // of two.
-        while !other::is_power_of_two(matrix.len()) {
-            let mut padded_value: Vec<BFieldElement> = matrix.last().unwrap().to_owned();
-            padded_value[Self::CYCLE] += one;
-            padded_value[Self::INTERWEAVED] = interweave_indicator;
-            matrix.push(padded_value);
         }
 
         matrix
@@ -249,13 +259,13 @@ impl TableTrait for MemoryTable {
             let mut new_row: Vec<XFieldElement> = row.iter().map(|bfe| bfe.lift()).collect();
 
             new_row.push(memory_permutation_running_product);
+
             if new_row[Self::INTERWEAVED].is_zero() {
                 memory_permutation_running_product *= beta
                     - d * new_row[MemoryTable::CYCLE]
                     - e * new_row[MemoryTable::MEMORY_POINTER]
                     - f * new_row[MemoryTable::MEMORY_VALUE];
             }
-
             extended_matrix[i] = new_row;
         }
 
@@ -377,6 +387,7 @@ impl TableTrait for MemoryTable {
         let cycle = x[MemoryTable::CYCLE].clone();
         let memory_pointer = x[MemoryTable::MEMORY_POINTER].clone();
         let memory_value = x[MemoryTable::MEMORY_VALUE].clone();
+        let permutation = x[Self::PERMUTATION].clone();
         let interweaved = x[Self::INTERWEAVED].clone();
         let one = MPolynomial::<XFieldElement>::from_constant(
             XFieldElement::ring_one(),
@@ -384,11 +395,10 @@ impl TableTrait for MemoryTable {
         );
 
         vec![
-            x[Self::PERMUTATION].clone()
-                * ((beta - d * cycle - e * memory_pointer - f * memory_value)
-                    * (one - interweaved.clone())
-                    + interweaved)
-                - processor_memory_permutation_terminal,
+            (permutation.clone() * (beta - d * cycle - e * memory_pointer - f * memory_value)
+                - processor_memory_permutation_terminal.clone())
+                * (one - interweaved.clone())
+                + (permutation - processor_memory_permutation_terminal) * interweaved,
         ]
     }
 }
@@ -421,16 +431,7 @@ mod memory_table_tests {
             ];
             let base_matrices: BaseMatrices =
                 brainfuck::vm::simulate(&actual_program, &input_data).unwrap();
-
-            let processor_matrix_from_simulate: Vec<Vec<BFieldElement>> = base_matrices
-                .processor_matrix
-                .into_iter()
-                .map(|register| {
-                    let row: Vec<BFieldElement> = register.into();
-                    row
-                })
-                .collect();
-            let derived_memory_matrix = MemoryTable::derive_matrix(processor_matrix_from_simulate);
+            let derived_memory_matrix = MemoryTable::derive_matrix(&base_matrices.processor_matrix);
 
             assert!(
                 !derived_memory_matrix.is_empty(),
