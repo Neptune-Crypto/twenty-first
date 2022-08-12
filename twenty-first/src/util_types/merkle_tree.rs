@@ -36,7 +36,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct PartialAuthenticationPath<Digest>(pub Vec<Option<Digest>>);
 
 /// # Design
