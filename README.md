@@ -1,5 +1,7 @@
-[![Build Status](https://drone.neptune.builders/api/badges/core-team/twenty-first/status.svg)](https://drone.neptune.builders/core-team/twenty-first)
 # twenty-first
+
+![GitHub CI](https://github.com/Neptune-Crypto/twenty-first/actions/workflows/main.yml/badge.svg)
+![crates.io](https://img.shields.io/crates/v/twenty-first.svg)
 
 A collection of cryptography functions written in Rust.
 
