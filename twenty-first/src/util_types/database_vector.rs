@@ -3,7 +3,12 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
 /// This is the key for the storage of the length of the vector
-const LENGTH_KEY: Vec<u8> = vec![];
+/// Due to a bug in rusty-levelDB we use 1 byte, not 0 bytes to store the length
+/// of the vector. Cf. https://github.com/dermesser/leveldb-rs/issues/16
+/// This is OK to do as long as collide with a key. Since the keys for indices
+/// are all 16 bytes long when using 128s, then its OK to use a 1-byte key here.
+// const LENGTH_KEY: Vec<u8> = vec![];
+const LENGTH_KEY: [u8; 1] = [0];
 const INDEX_ZERO: u128 = 0u128;
 
 pub struct DatabaseVector<T: Serialize + DeserializeOwned> {
@@ -245,5 +250,19 @@ mod database_vector_tests {
         let extracted_db = db_vector.db;
         let mut new_db_vector: DatabaseVector<u64> = DatabaseVector::restore(extracted_db);
         assert!(new_db_vector.is_empty());
+    }
+
+    #[test]
+    fn index_zero_test() {
+        // Verify that index zero does not overwrite the stored length
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("mydatabase", opt).unwrap();
+        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        db_vector.push(17);
+        assert_eq!(1, db_vector.len());
+        assert_eq!(17u64, db_vector.get(0));
+        assert_eq!(17u64, db_vector.pop().unwrap());
+        assert_eq!(0, db_vector.len());
+        assert!(db_vector.is_empty());
     }
 }
