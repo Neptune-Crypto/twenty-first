@@ -908,7 +908,7 @@ mod mmr_test {
     }
 
     #[test]
-    fn remove_test() {
+    fn remove_last_leaf_test() {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
@@ -941,6 +941,30 @@ mod mmr_test {
         assert_eq!(0, mmr.count_nodes());
         assert!(mmr.is_empty());
         assert!(mmr.remove_last_leaf().is_none());
+    }
+
+    #[test]
+    fn remove_last_leaf_pbt() {
+        type Digest = Blake3Hash;
+        type Hasher = blake3::Hasher;
+
+        let small_size: u128 = 100;
+        let big_size: u128 = 350;
+        let input_prehashes_small: Vec<Digest> = (0..100).map(|x| (x + 19999872).into()).collect();
+        let input_prehashes_big: Vec<Digest> = (0..350).map(|x| (x + 19999872).into()).collect();
+        let mut mmr_small: ArchivalMmr<Hasher> =
+            get_archival_mmr_from_digests(input_prehashes_small.clone());
+        let mut mmr_big: ArchivalMmr<Hasher> =
+            get_archival_mmr_from_digests(input_prehashes_big.clone());
+
+        for _ in 0..(big_size - small_size) {
+            mmr_big.remove_last_leaf();
+        }
+
+        assert_eq!(mmr_big.get_peaks(), mmr_small.get_peaks());
+        assert_eq!(mmr_big.bag_peaks(), mmr_small.bag_peaks());
+        assert_eq!(mmr_big.count_leaves(), mmr_small.count_leaves());
+        assert_eq!(mmr_big.count_nodes(), mmr_small.count_nodes());
     }
 
     #[test]
