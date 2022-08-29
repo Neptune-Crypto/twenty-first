@@ -290,6 +290,14 @@ impl<const N: usize> Sum for U32s<N> {
     }
 }
 
+impl<const N: usize> From<u32> for U32s<N> {
+    fn from(n: u32) -> Self {
+        let mut ret = U32s::zero();
+        ret.values[0] = n;
+        ret
+    }
+}
+
 #[cfg(test)]
 mod u32s_tests {
     use rand::{thread_rng, RngCore};
