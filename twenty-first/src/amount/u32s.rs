@@ -305,6 +305,15 @@ mod u32s_tests {
     use super::*;
 
     #[test]
+    fn u32_conversion_test() {
+        let a: U32s<4> = 9999485u32.into();
+        assert_eq!(9999485u32, a.values[0]);
+        for i in 1..4 {
+            assert!(a.values[i].is_zero());
+        }
+    }
+
+    #[test]
     fn convert_to_bfields_test() {
         let a = U32s::new([(1 << 31) + 2001, 200, 400, 9999, 123456]);
         let bfes: [BFieldElement; 5] = a.into();
