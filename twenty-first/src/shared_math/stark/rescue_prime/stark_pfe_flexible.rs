@@ -195,7 +195,7 @@ fn get_boundary_interpolants(
     bcs: Vec<Vec<(PrimeFieldElementFlexible, PrimeFieldElementFlexible)>>,
 ) -> Vec<Polynomial<PrimeFieldElementFlexible>> {
     bcs.iter()
-        .map(|points| Polynomial::slow_lagrange_interpolation(points))
+        .map(|points| Polynomial::lagrange_interpolate_zipped(points))
         .collect()
 }
 

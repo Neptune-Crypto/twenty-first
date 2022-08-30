@@ -902,7 +902,13 @@ impl StarkRp {
         bcs: Vec<Vec<(BFieldElement, BFieldElement)>>,
     ) -> Vec<Polynomial<BFieldElement>> {
         bcs.iter()
-            .map(|points| Polynomial::slow_lagrange_interpolation(points))
+            .map(|points| {
+                if !points.is_empty() {
+                    Polynomial::lagrange_interpolate_zipped(points)
+                } else {
+                    Polynomial::ring_zero()
+                }
+            })
             .collect()
     }
 

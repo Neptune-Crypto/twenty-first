@@ -322,7 +322,7 @@ impl RescuePrime {
                 .map(|(x, y)| (x.to_owned(), y.to_owned()))
                 .collect();
             let coefficients =
-                Polynomial::<PrimeFieldElementFlexible>::slow_lagrange_interpolation(&points)
+                Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolate_zipped(&points)
                     .coefficients;
             first_round_constants.push(MPolynomial::lift(
                 Polynomial { coefficients },
@@ -348,7 +348,7 @@ impl RescuePrime {
                 .map(|(x, y)| (x.to_owned(), y.to_owned()))
                 .collect();
             let coefficients =
-                Polynomial::<PrimeFieldElementFlexible>::slow_lagrange_interpolation(&points)
+                Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolate_zipped(&points)
                     .coefficients;
             second_round_constants.push(MPolynomial::lift(
                 Polynomial { coefficients },

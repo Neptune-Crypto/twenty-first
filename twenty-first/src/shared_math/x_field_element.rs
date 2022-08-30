@@ -979,8 +979,7 @@ mod x_field_element_test {
             // Verify that polynomial interpolation produces the same polynomial
             // Slow Lagrange interpolation is very slow for big inputs. Do not increase
             // this above 32 elements!
-            let interpolated =
-                Polynomial::<XFieldElement>::slow_lagrange_interpolation_new(&x_domain, &rv);
+            let interpolated = Polynomial::<XFieldElement>::lagrange_interpolate(&x_domain, &rv);
             assert_eq!(pol_degree_i_minus_1, interpolated);
 
             intt::<XFieldElement>(&mut rv, root, log_2_of_n);

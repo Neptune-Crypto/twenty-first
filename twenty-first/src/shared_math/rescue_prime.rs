@@ -150,7 +150,7 @@ impl RescuePrime {
                 .map(|(x, y)| (x.to_owned(), y.to_owned()))
                 .collect();
             let coefficients =
-                Polynomial::<BFieldElement>::slow_lagrange_interpolation(&points).coefficients;
+                Polynomial::<BFieldElement>::lagrange_interpolate_zipped(&points).coefficients;
             first_round_constants.push(MPolynomial::lift(
                 Polynomial { coefficients },
                 0,
@@ -175,7 +175,7 @@ impl RescuePrime {
                 .map(|(x, y)| (x.to_owned(), y.to_owned()))
                 .collect();
             let coefficients =
-                Polynomial::<BFieldElement>::slow_lagrange_interpolation(&points).coefficients;
+                Polynomial::<BFieldElement>::lagrange_interpolate_zipped(&points).coefficients;
             second_round_constants.push(MPolynomial::lift(
                 Polynomial { coefficients },
                 0,

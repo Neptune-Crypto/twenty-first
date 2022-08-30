@@ -384,98 +384,20 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         true
     }
 
-    fn slow_lagrange_interpolation_internal(xs: &[PFElem], ys: &[PFElem]) -> Self {
-        assert_eq!(
-            xs.len(),
-            ys.len(),
-            "x and y values must have the same length"
-        );
-        let roots: Vec<PFElem> = xs.to_vec();
-        let mut big_pol_coeffs = Self::prod_helper(&roots);
-        big_pol_coeffs.reverse();
-        let big_pol = Self {
-            coefficients: big_pol_coeffs,
-        };
-
-        let zero: PFElem = xs[0].ring_zero();
-        let one: PFElem = xs[0].ring_one();
-        let mut coefficients: Vec<PFElem> = vec![zero; xs.len()];
-        for (&x, &y) in xs.iter().zip(ys.iter()) {
-            // create a PrimeFieldPolynomial that is zero at all other points than this
-            // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
-            let my_div_coefficients = vec![zero - x, one];
-            let mut my_pol = Self {
-                coefficients: my_div_coefficients,
-            };
-            my_pol = big_pol.clone() / my_pol;
-
-            let mut divisor = one;
-            for &root in roots.iter() {
-                if root == x {
-                    continue;
-                }
-                divisor *= x - root;
-            }
-
-            // TODO: Review.
-            let mut my_coeffs: Vec<PFElem> = my_pol.coefficients.clone();
-            for coeff in my_coeffs.iter_mut() {
-                *coeff = coeff.to_owned() * y;
-                *coeff = coeff.to_owned() / divisor;
-            }
-
-            for i in 0..my_coeffs.len() {
-                coefficients[i] += my_coeffs[i];
-            }
-        }
-
-        Self { coefficients }
-    }
-
-    pub fn slow_lagrange_interpolation_new(xs: &[PFElem], ys: &[PFElem]) -> Self {
-        if !has_unique_elements(xs.iter()) {
-            panic!("Repeated x values received. Got: {:?}", xs);
-        }
-        if xs.len() != ys.len() {
-            panic!("Attempted to interpolate with x and y values of different length");
-        }
-        if xs.is_empty() {
-            return Polynomial::ring_zero();
-        }
-
-        if xs.len() == 2 {
-            let (a, b) =
-                Polynomial::<PFElem>::lagrange_interpolation_2(&(xs[0], ys[0]), &(xs[1], ys[1]));
-            return Polynomial {
-                coefficients: vec![b, a],
-            };
-        }
-
-        Self::slow_lagrange_interpolation_internal(xs, ys)
-    }
-
     // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
     // purposes. This also means that it is not pivotal that this function has an optimal
     // runtime.
-    pub fn slow_lagrange_interpolation(points: &[(PFElem, PFElem)]) -> Self {
+    pub fn lagrange_interpolate_zipped(points: &[(PFElem, PFElem)]) -> Self {
         if points.is_empty() {
-            return Polynomial::ring_zero();
+            panic!("Cannot interpolate through zero points.");
         }
         if !has_unique_elements(points.iter().map(|x| x.0)) {
             panic!("Repeated x values received. Got: {:?}", points);
         }
 
-        if points.len() == 2 {
-            let (a, b) = Polynomial::<PFElem>::lagrange_interpolation_2(&points[0], &points[1]);
-            return Polynomial {
-                coefficients: vec![b, a],
-            };
-        }
-
         let xs: Vec<PFElem> = points.iter().map(|x| x.0.to_owned()).collect();
         let ys: Vec<PFElem> = points.iter().map(|x| x.1.to_owned()).collect();
-
-        Self::slow_lagrange_interpolation_internal(&xs, &ys)
+        Self::lagrange_interpolate(&xs, &ys)
     }
 }
 
@@ -1491,17 +1413,9 @@ mod test_polynomials {
     fn slow_lagrange_interpolation_test() {
         let q = 7;
 
-        // Verify expected result with zero points
-        let zero_points = &[];
-        let mut interpolation_result: Polynomial<PrimeFieldElementFlexible> =
-            Polynomial::slow_lagrange_interpolation(zero_points);
-        assert!(interpolation_result.is_zero());
-        interpolation_result = Polynomial::slow_lagrange_interpolation_new(&[], &[]);
-        assert!(interpolation_result.is_zero());
-
         // Verify that interpolation works with just one point
         let one_point = &[(pfb(2, q), pfb(5, q))];
-        interpolation_result = Polynomial::slow_lagrange_interpolation(one_point);
+        let mut interpolation_result = Polynomial::lagrange_interpolate_zipped(one_point);
         println!("interpolation_result = {}", interpolation_result);
         let mut expected_result = Polynomial {
             coefficients: vec![pfb(5, q)],
@@ -1515,20 +1429,20 @@ mod test_polynomials {
             (pfb(2, q), pfb(2, q)),
         ];
 
-        interpolation_result = Polynomial::slow_lagrange_interpolation(points);
+        interpolation_result = Polynomial::lagrange_interpolate_zipped(points);
         expected_result = Polynomial {
             coefficients: vec![pfb(6, q), pfb(2, q), pfb(5, q)],
         };
         assert_eq!(expected_result, interpolation_result);
 
-        // Use the same numbers to test evaluation
+        // Use the same numbers to test evaluations
         for point in points.iter() {
             assert_eq!(point.1, interpolation_result.evaluate(&point.0));
         }
 
         // Test linear interpolation, when there are only two points given as input
         let two_points = &[(pfb(0, q), pfb(6, q)), (pfb(2, q), pfb(2, q))];
-        interpolation_result = Polynomial::slow_lagrange_interpolation(two_points);
+        interpolation_result = Polynomial::lagrange_interpolate_zipped(two_points);
         expected_result = Polynomial {
             coefficients: vec![pfb(6, q), pfb(5, q)],
         };
@@ -1545,7 +1459,7 @@ mod test_polynomials {
         ];
 
         let interpolation_result: Polynomial<PrimeFieldElementFlexible> =
-            Polynomial::slow_lagrange_interpolation(points);
+            Polynomial::lagrange_interpolate_zipped(points);
         let expected_result = Polynomial {
             coefficients: vec![pfb(6, q), pfb(2, q), pfb(5, q)],
         };
@@ -1584,7 +1498,7 @@ mod test_polynomials {
         // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
         // evaluate the point values, and verify that they match the original values
         let interpolation_result: Polynomial<PrimeFieldElementFlexible> =
-            Polynomial::slow_lagrange_interpolation(&points);
+            Polynomial::lagrange_interpolate_zipped(&points);
         assert_eq!(interpolation_result, pol);
         for point in points {
             assert_eq!(point.1, interpolation_result.evaluate(&point.0));
@@ -1619,7 +1533,7 @@ mod test_polynomials {
         // Derive the `number_of_points - 1` degree polynomium from these `number_of_points` points,
         // evaluate the point values, and verify that they match the original values
         let interpolation_result: Polynomial<PrimeFieldElementFlexible> =
-            Polynomial::slow_lagrange_interpolation(&points);
+            Polynomial::lagrange_interpolate_zipped(&points);
         assert_eq!(interpolation_result, pol);
         for point in points {
             assert_eq!(point.1, interpolation_result.evaluate(&point.0));
