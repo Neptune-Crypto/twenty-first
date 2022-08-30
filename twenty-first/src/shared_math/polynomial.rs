@@ -294,7 +294,7 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             // so we need to correct for this value
             let mut summand_eval = zero;
             for s in summand_array.iter().rev() {
-                summand_eval = summand_eval * domain[i] + s.clone();
+                summand_eval = summand_eval * domain[i] + *s;
             }
             let corrected_abscis = abscis / summand_eval;
 
@@ -308,7 +308,7 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         }
     }
 
-    fn slow_lagrange_interpolation_internal(xs: &[PFElem], ys: &[PFElem]) -> Self {
+    pub fn slow_lagrange_interpolation_internal(xs: &[PFElem], ys: &[PFElem]) -> Self {
         assert_eq!(
             xs.len(),
             ys.len(),
@@ -1223,7 +1223,6 @@ mod test_polynomials {
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::timing_reporter::TimingReporter;
     use crate::utils::generate_random_numbers;
-    use core::num;
     use primitive_types::U256;
     use rand::RngCore;
     use std::cmp::max;
@@ -3139,7 +3138,7 @@ mod test_polynomials {
             ));
 
             // ntt-based
-            let ntt_based_poly = Polynomial::fast_interpolate(
+            let _ntt_based_poly = Polynomial::fast_interpolate(
                 &domain,
                 &values,
                 &domain[0]
