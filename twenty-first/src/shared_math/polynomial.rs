@@ -242,6 +242,115 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         acc
     }
 
+    // fast_lagrange_interpolate
+    // Faster than lagrange_interpolate, but less readable.
+    pub fn fast_lagrange_interpolate(domain: &[PFElem], values: &[PFElem]) -> Self {
+        assert_eq!(
+            domain.len(),
+            values.len(),
+            "The domain and values lists have to be of equal length."
+        );
+        assert!(
+            !domain.is_empty(),
+            "Trying to interpolate through 0 points."
+        );
+
+        let zero = domain[0].ring_zero();
+        let one = domain[0].ring_one();
+
+        // precompute the coefficient vector of the zerofier,
+        // which is the monic lowest-degree polynomial that evaluates
+        // to zero in all domain points, also prod_i (X - d_i).
+        let mut zerofier_array = vec![zero; domain.len() + 1];
+        zerofier_array[0] = one;
+        let mut num_coeffs = 1;
+        for &d in domain.iter() {
+            for k in (1..num_coeffs + 1).rev() {
+                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
+            }
+            zerofier_array[0] = -d * zerofier_array[0];
+            num_coeffs += 1;
+        }
+
+        // in each iteration of this loop, we accumulate into the sum
+        // one polynomial that evaluates to some abscis (y-value) in
+        // the given ordinate (domain point), and to zero in all other
+        // ordinates.
+        let mut lagrange_sum_array = vec![zero; domain.len()];
+        let mut summand_array = vec![zero; domain.len()];
+        for (i, &abscis) in values.iter().enumerate() {
+            // divide (X - domain[i]) out of zerofier to get unweighted summand
+            let mut leading_coefficient = zerofier_array[domain.len()];
+            let mut supporting_coefficient = zerofier_array[domain.len() - 1];
+            for k in (0..domain.len()).rev() {
+                summand_array[k] = leading_coefficient;
+                leading_coefficient = supporting_coefficient + leading_coefficient * domain[i];
+                if k != 0 {
+                    supporting_coefficient = zerofier_array[k - 1];
+                }
+            }
+
+            // summand does not necessarily evaluate to 1 in domain[i],
+            // so we need to correct for this value
+            let mut summand_eval = zero;
+            for s in summand_array.iter().rev() {
+                summand_eval = summand_eval * domain[i] + s.clone();
+            }
+            let corrected_abscis = abscis / summand_eval;
+
+            // accumulate term
+            for j in 0..domain.len() {
+                lagrange_sum_array[j] += corrected_abscis * summand_array[j];
+            }
+        }
+        Polynomial {
+            coefficients: lagrange_sum_array,
+        }
+    }
+
+    fn slow_lagrange_interpolation_internal(xs: &[PFElem], ys: &[PFElem]) -> Self {
+        assert_eq!(
+            xs.len(),
+            ys.len(),
+            "x and y values must have the same length"
+        );
+        let roots: Vec<PFElem> = xs.to_vec();
+        let mut big_pol_coeffs = Self::prod_helper(&roots);
+        big_pol_coeffs.reverse();
+        let big_pol = Self {
+            coefficients: big_pol_coeffs,
+        };
+        let zero: PFElem = xs[0].ring_zero();
+        let one: PFElem = xs[0].ring_one();
+        let mut coefficients: Vec<PFElem> = vec![zero; xs.len()];
+        for (&x, &y) in xs.iter().zip(ys.iter()) {
+            // create a PrimeFieldPolynomial that is zero at all other points than this
+            // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
+            let my_div_coefficients = vec![zero - x, one];
+            let mut my_pol = Self {
+                coefficients: my_div_coefficients,
+            };
+            my_pol = big_pol.clone() / my_pol;
+            let mut divisor = one;
+            for &root in roots.iter() {
+                if root == x {
+                    continue;
+                }
+                divisor *= x - root;
+            }
+            // TODO: Review.
+            let mut my_coeffs: Vec<PFElem> = my_pol.coefficients.clone();
+            for coeff in my_coeffs.iter_mut() {
+                *coeff = coeff.to_owned() * y;
+                *coeff = coeff.to_owned() / divisor;
+            }
+            for i in 0..my_coeffs.len() {
+                coefficients[i] += my_coeffs[i];
+            }
+        }
+        Self { coefficients }
+    }
+
     pub fn are_colinear_3(
         p0: (PFElem, PFElem),
         p1: (PFElem, PFElem),
@@ -1112,7 +1221,9 @@ mod test_polynomials {
     use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use crate::shared_math::x_field_element::XFieldElement;
+    use crate::timing_reporter::TimingReporter;
     use crate::utils::generate_random_numbers;
+    use core::num;
     use primitive_types::U256;
     use rand::RngCore;
     use std::cmp::max;
@@ -2951,6 +3062,102 @@ mod test_polynomials {
             assert!(num_points as isize > interpoly.degree());
             for (i, y) in values.into_iter().enumerate() {
                 assert_eq!(y, interpoly.evaluate(&domain[i]));
+            }
+        }
+    }
+
+    #[test]
+    fn fast_lagrange_interpolate_test() {
+        type BPoly = Polynomial<BFieldElement>;
+        let mut rng = rand::thread_rng();
+        for _ in 0..10 {
+            let num_points = max(2, rng.next_u32() as usize % 10);
+            let domain = {
+                let mut domain = vec![];
+                while domain.len() < num_points {
+                    let new_domain_candidate = rng.next_u64();
+                    if !domain.contains(&new_domain_candidate) {
+                        domain.push(new_domain_candidate)
+                    }
+                }
+                domain
+                    .into_iter()
+                    .map(|x| BFieldElement::new(x))
+                    .collect_vec()
+            };
+            let values = BFieldElement::random_elements(num_points, &mut rng);
+            let interpoly = BPoly::fast_lagrange_interpolate(&domain, &values);
+
+            assert!(num_points as isize > interpoly.degree());
+            for (i, y) in values.into_iter().enumerate() {
+                assert_eq!(y, interpoly.evaluate(&domain[i]));
+            }
+        }
+    }
+
+    #[test]
+    fn lagrange_bench_test() {
+        type BPoly = Polynomial<BFieldElement>;
+        let mut rng = rand::thread_rng();
+        for num_points in [8, 16, 32, 64, 128] {
+            let domain = {
+                let mut domain = vec![];
+                while domain.len() < num_points {
+                    let new_domain_candidate = rng.next_u64();
+                    if !domain.contains(&new_domain_candidate) {
+                        domain.push(new_domain_candidate)
+                    }
+                }
+                domain
+                    .into_iter()
+                    .map(|x| BFieldElement::new(x))
+                    .collect_vec()
+            };
+            let values = BFieldElement::random_elements(num_points, &mut rng);
+
+            let mut timer = TimingReporter::start();
+
+            // readable
+            let readable_poly = BPoly::lagrange_interpolate(&domain, &values);
+            timer.elapsed(&format!(
+                "Readable lagrange interpolation ({} points).",
+                num_points
+            ));
+
+            // fast
+            let fast_poly = BPoly::fast_lagrange_interpolate(&domain, &values);
+            timer.elapsed(&format!(
+                "Fast lagrange interpolation ({} points).",
+                num_points
+            ));
+
+            // slowinternal
+            let slow_internal_poly = BPoly::slow_lagrange_interpolation_internal(&domain, &values);
+            timer.elapsed(&format!(
+                "SlowInternal lagrange interpolation ({} points).",
+                num_points
+            ));
+
+            // ntt-based
+            let ntt_based_poly = Polynomial::fast_interpolate(
+                &domain,
+                &values,
+                &domain[0]
+                    .get_primitive_root_of_unity(domain.len() as u64)
+                    .0
+                    .unwrap(),
+                domain.len(),
+            );
+            timer.elapsed(&format!("NTT-Based interpolation ({} points).", num_points));
+
+            let report = timer.finish();
+            println!("{}", report);
+
+            for (d, v) in domain.iter().zip(values.iter()) {
+                assert_eq!(readable_poly.evaluate(d), *v);
+                assert_eq!(fast_poly.evaluate(d), *v);
+                assert_eq!(slow_internal_poly.evaluate(d), *v);
+                //assert_eq!(ntt_based_poly.evaluate(d), *v);
             }
         }
     }
