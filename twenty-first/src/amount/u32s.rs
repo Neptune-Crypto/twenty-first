@@ -290,11 +290,28 @@ impl<const N: usize> Sum for U32s<N> {
     }
 }
 
+impl<const N: usize> From<u32> for U32s<N> {
+    fn from(n: u32) -> Self {
+        let mut ret = U32s::zero();
+        ret.values[0] = n;
+        ret
+    }
+}
+
 #[cfg(test)]
 mod u32s_tests {
     use rand::{thread_rng, RngCore};
 
     use super::*;
+
+    #[test]
+    fn u32_conversion_test() {
+        let a: U32s<4> = 9999485u32.into();
+        assert_eq!(9999485u32, a.values[0]);
+        for i in 1..4 {
+            assert!(a.values[i].is_zero());
+        }
+    }
 
     #[test]
     fn convert_to_bfields_test() {
