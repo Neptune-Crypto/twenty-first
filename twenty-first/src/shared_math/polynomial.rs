@@ -209,6 +209,38 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         (a, b)
     }
 
+    pub fn lagrange_interpolate(domain: &[PFElem], values: &[PFElem]) -> Self {
+        assert_eq!(
+            domain.len(),
+            values.len(),
+            "The domain and values lists have to be of equal length."
+        );
+        if domain.is_empty() {
+            panic!("Trying to interpolate through 0 points.")
+        }
+
+        let zero = domain[0].ring_zero();
+        let one = domain[0].ring_one();
+        let x = Self {
+            coefficients: vec![zero, one],
+        };
+
+        let mut acc = Self::ring_zero();
+        for (i, &y) in values.iter().enumerate() {
+            let x_i = domain[i];
+            let mut summand = Self::from_constant(y);
+            for (j, &x_j) in domain.iter().enumerate() {
+                if i == j {
+                    continue;
+                }
+                summand = summand * (x.clone() - Self::from_constant(x_j))
+                    / Self::from_constant(x_i - x_j);
+            }
+            acc += summand
+        }
+        acc
+    }
+
     pub fn are_colinear_3(
         p0: (PFElem, PFElem),
         p1: (PFElem, PFElem),
@@ -1150,6 +1182,7 @@ impl<PFElem: PrimeField> Mul for Polynomial<PFElem> {
 #[cfg(test)]
 mod test_polynomials {
     #![allow(clippy::just_underscores_and_digits)]
+
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::prime_field_element_flexible::PrimeFieldElementFlexible;
@@ -1159,6 +1192,7 @@ mod test_polynomials {
     use crate::utils::generate_random_numbers;
     use primitive_types::U256;
     use rand::RngCore;
+    use std::cmp::max;
     use std::vec;
 
     fn pfb(n: i64, q: u64) -> PrimeFieldElementFlexible {
@@ -2974,6 +3008,35 @@ mod test_polynomials {
 
         Polynomial {
             coefficients: BFieldElement::random_elements(coefficient_count, &mut rng),
+        }
+    }
+
+    #[test]
+    fn lagrange_interpolate_test() {
+        type BPoly = Polynomial<BFieldElement>;
+        let mut rng = rand::thread_rng();
+        for _ in 0..10 {
+            let num_points = max(2, rng.next_u32() as usize % 10);
+            let domain = {
+                let mut domain = vec![];
+                while domain.len() < num_points {
+                    let new_domain_candidate = rng.next_u64();
+                    if !domain.contains(&new_domain_candidate) {
+                        domain.push(new_domain_candidate)
+                    }
+                }
+                domain
+                    .into_iter()
+                    .map(|x| BFieldElement::new(x))
+                    .collect_vec()
+            };
+            let values = BFieldElement::random_elements(num_points, &mut rng);
+            let interpoly = BPoly::lagrange_interpolate(&domain, &values);
+
+            assert!(num_points as isize > interpoly.degree());
+            for (i, y) in values.into_iter().enumerate() {
+                assert_eq!(y, interpoly.evaluate(&domain[i]));
+            }
         }
     }
 }
