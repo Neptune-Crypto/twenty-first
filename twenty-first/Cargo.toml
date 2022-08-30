@@ -73,6 +73,10 @@ harness = false
 name = "ntt_forward"
 harness = false
 
+[[bench]]
+name = "lagrange_interpolation"
+harness = false
+
 # [[bench]]
 # name = "rpsss_bench_sign"
 # harness = false
