@@ -215,9 +215,10 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             values.len(),
             "The domain and values lists have to be of equal length."
         );
-        if domain.is_empty() {
-            panic!("Trying to interpolate through 0 points.")
-        }
+        assert!(
+            !domain.is_empty(),
+            "Trying to interpolate through 0 points."
+        );
 
         let zero = domain[0].ring_zero();
         let one = domain[0].ring_one();
