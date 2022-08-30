@@ -37,7 +37,7 @@ fn bfield_benchmark(
 
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {
-        b.iter(|| polynomial::Polynomial::lagrange_interpolate(&xs, &ys))
+        b.iter(|| polynomial::Polynomial::fast_lagrange_interpolate(&xs, &ys))
     });
     group.sample_size(10);
 }
