@@ -55,6 +55,7 @@ impl<const N: u128, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, 
         let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
         let value_bytes: Vec<u8> = bincode::serialize(&value).unwrap();
         self.db.put(&index_bytes, &value_bytes).unwrap();
+        self.db.flush().expect("set must succeed flushing");
     }
 
     /// Create a new, default-initialized database array. Input database must be empty.
