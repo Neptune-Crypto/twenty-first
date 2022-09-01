@@ -778,9 +778,10 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             root_order
         );
 
-        if domain.is_empty() {
-            return Self::ring_zero();
-        }
+        assert!(
+            !domain.is_empty(),
+            "Cannot fast interpolate through zero points.",
+        );
 
         if domain.len() == 1 {
             return Polynomial {
