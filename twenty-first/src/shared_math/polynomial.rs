@@ -2692,7 +2692,7 @@ mod test_polynomials {
     #[test]
     fn interpolate_pb_test() {
         let mut rng = rand::thread_rng();
-        for _trial_index in 0..1 {
+        for _trial_index in 0..100 {
             let num_points = (rng.next_u32() % 200) as usize + 1;
 
             // sample random but distinct domain points
