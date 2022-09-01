@@ -788,36 +788,15 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             };
         }
 
-        debug_assert_ne!(
-            primitive_root.mod_pow_u32((root_order / 2) as u32),
-            primitive_root.ring_one(),
-            "Supplied element “primitive_root” must be primitive root of supplied order.\
-            Supplied element was: {:?}\
-            Supplied order was: {:?}",
-            primitive_root,
-            root_order
-        );
-
         let half = domain.len() / 2;
-        let primitive_root_squared = primitive_root.to_owned() * primitive_root.to_owned();
 
-        let left_zerofier =
-            Self::fast_zerofier(&domain[..half], &primitive_root_squared, root_order / 2);
-        let right_zerofier =
-            Self::fast_zerofier(&domain[half..], &primitive_root_squared, root_order / 2);
+        let left_zerofier = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
+        let right_zerofier = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
 
-        let left_offset: Vec<PFElem> = Self::fast_evaluate(
-            &right_zerofier,
-            &domain[..half],
-            &primitive_root_squared,
-            root_order / 2,
-        );
-        let right_offset: Vec<PFElem> = Self::fast_evaluate(
-            &left_zerofier,
-            &domain[half..],
-            &primitive_root_squared,
-            root_order / 2,
-        );
+        let left_offset: Vec<PFElem> =
+            Self::fast_evaluate(&right_zerofier, &domain[..half], primitive_root, root_order);
+        let right_offset: Vec<PFElem> =
+            Self::fast_evaluate(&left_zerofier, &domain[half..], primitive_root, root_order);
 
         let left_targets: Vec<PFElem> = values[..half]
             .iter()
@@ -830,18 +809,10 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
             .map(|(n, d)| n.to_owned() / d)
             .collect();
 
-        let left_interpolant = Self::fast_interpolate(
-            &domain[..half],
-            &left_targets,
-            &primitive_root_squared,
-            root_order / 2,
-        );
-        let right_interpolant = Self::fast_interpolate(
-            &domain[half..],
-            &right_targets,
-            &primitive_root_squared,
-            root_order / 2,
-        );
+        let left_interpolant =
+            Self::fast_interpolate(&domain[..half], &left_targets, primitive_root, root_order);
+        let right_interpolant =
+            Self::fast_interpolate(&domain[half..], &right_targets, primitive_root, root_order);
 
         left_interpolant * right_zerofier + right_interpolant * left_zerofier
     }
@@ -2600,6 +2571,25 @@ mod test_polynomials {
     }
 
     #[test]
+    fn fast_interpolate_pbt() {
+        let mut rng = rand::thread_rng();
+        for num_points in [1, 2, 4, 8, 16, 32, 64, 128] {
+            let domain = BFieldElement::random_elements(num_points, &mut rng);
+            let values = BFieldElement::random_elements(num_points, &mut rng);
+            let omega = BFieldElement::ring_zero()
+                .get_primitive_root_of_unity(num_points as u64)
+                .0
+                .unwrap();
+
+            let interpolant = Polynomial::fast_interpolate(&domain, &values, &omega, num_points);
+
+            for (x, y) in domain.iter().zip(values) {
+                assert_eq!(y, interpolant.evaluate(x));
+            }
+        }
+    }
+
+    #[test]
     fn fast_coset_evaluate_test() {
         let q = 17;
         let _0_17 = pfb(0, q);
@@ -3138,7 +3128,7 @@ mod test_polynomials {
             ));
 
             // ntt-based
-            let _ntt_based_poly = Polynomial::fast_interpolate(
+            let ntt_based_poly = Polynomial::fast_interpolate(
                 &domain,
                 &values,
                 &domain[0]
@@ -3156,7 +3146,7 @@ mod test_polynomials {
                 assert_eq!(readable_poly.evaluate(d), *v);
                 assert_eq!(fast_poly.evaluate(d), *v);
                 assert_eq!(slow_internal_poly.evaluate(d), *v);
-                //assert_eq!(ntt_based_poly.evaluate(d), *v);
+                assert_eq!(ntt_based_poly.evaluate(d), *v);
             }
         }
     }

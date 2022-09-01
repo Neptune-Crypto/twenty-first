@@ -4,7 +4,6 @@ use criterion::{
 };
 use num_traits::Pow;
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::ntt::ntt;
 use twenty_first::shared_math::polynomial;
 use twenty_first::shared_math::traits::{GetPrimitiveRootOfUnity, GetRandomElements};
 
