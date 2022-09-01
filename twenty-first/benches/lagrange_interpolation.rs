@@ -98,12 +98,13 @@ fn ntt_bench(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, log2_o
     let size: usize = 1 << log2_of_size;
 
     let mut rng = rand::thread_rng();
-    let mut xs = BFieldElement::random_elements(size, &mut rng);
+    let xs = BFieldElement::random_elements(size, &mut rng);
+    let ys = BFieldElement::random_elements(size, &mut rng);
     let omega = xs[0].get_primitive_root_of_unity(size as u64).0.unwrap();
 
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {
-        b.iter(|| ntt::<BFieldElement>(&mut xs, omega, log2_of_size as u32))
+        b.iter(|| polynomial::Polynomial::fast_interpolate(&xs, &ys, &omega, size))
     });
     group.sample_size(10);
 }
