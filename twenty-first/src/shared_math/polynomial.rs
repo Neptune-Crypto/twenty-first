@@ -2550,6 +2550,52 @@ mod test_polynomials {
     }
 
     #[test]
+    fn fast_evaluate_pb_test() {
+        let mut rng = rand::thread_rng();
+        for _trial_index in 0..100 {
+            let num_points = (rng.next_u32() % 200) as usize;
+
+            // sample random but distinct domain points
+            let mut domain: Vec<BFieldElement> = Vec::<BFieldElement>::with_capacity(num_points);
+            for _i in 0..num_points {
+                let mut x = BFieldElement::new(rng.next_u64());
+                while domain.contains(&x) {
+                    x = BFieldElement::new(rng.next_u64());
+                }
+                domain.push(x);
+            }
+
+            // sample polynomial
+            let degree = (rng.next_u32() % 200) as usize;
+            let coefficients: Vec<BFieldElement> = (0..=degree)
+                .map(|_| BFieldElement::new(rng.next_u64()))
+                .collect_vec();
+            let poly = Polynomial::<BFieldElement> { coefficients };
+
+            // slow evaluate
+            let slow_eval = domain.iter().map(|d| poly.evaluate(d)).collect_vec();
+
+            // prepare NTT-based methods
+
+            // find order by rounding num_points up to the next power of 2
+            let mut order = num_points << 1;
+            while (order & (order - 1)) != 0 {
+                order &= order - 1;
+            }
+
+            // get matching primitive nth root of unity
+            let maybe_omega = BFieldElement::ring_zero().get_primitive_root_of_unity(order as u64);
+            let omega = maybe_omega.0.unwrap();
+
+            // fast evaluate
+            let fast_eval = poly.fast_evaluate(&domain, &omega, order);
+
+            // match evaluations
+            assert_eq!(slow_eval, fast_eval);
+        }
+    }
+
+    #[test]
     fn fast_interpolate_test() {
         let q = 17;
         let _0_17 = pfb(0, q);
