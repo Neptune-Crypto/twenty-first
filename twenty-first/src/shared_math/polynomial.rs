@@ -2606,7 +2606,7 @@ mod test_polynomials {
     fn fast_evaluate_pb_test() {
         let mut rng = rand::thread_rng();
         for _trial_index in 0..100 {
-            let num_points = (rng.next_u32() % 200) as usize;
+            let num_points = (rng.next_u32() % 200) as usize + 1;
 
             // sample random but distinct domain points
             let mut domain: Vec<BFieldElement> = Vec::<BFieldElement>::with_capacity(num_points);
@@ -2693,7 +2693,7 @@ mod test_polynomials {
     fn interpolate_pb_test() {
         let mut rng = rand::thread_rng();
         for _trial_index in 0..1 {
-            let num_points = 128; //(rng.next_u32() % 200) as usize;
+            let num_points = (rng.next_u32() % 200) as usize + 1;
 
             // sample random but distinct domain points
             let mut domain: Vec<BFieldElement> = Vec::<BFieldElement>::with_capacity(num_points);
