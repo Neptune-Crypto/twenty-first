@@ -2590,6 +2590,67 @@ mod test_polynomials {
     }
 
     #[test]
+    fn interpolate_pb_test() {
+        let mut rng = rand::thread_rng();
+        for _trial_index in 0..1 {
+            let num_points = 128; //(rng.next_u32() % 200) as usize;
+
+            // sample random but distinct domain points
+            let mut domain: Vec<BFieldElement> = Vec::<BFieldElement>::with_capacity(num_points);
+            for _i in 0..num_points {
+                let mut x = BFieldElement::new(rng.next_u64());
+                while domain.contains(&x) {
+                    x = BFieldElement::new(rng.next_u64());
+                }
+                domain.push(x);
+            }
+
+            // sample random values
+            let values = (0..num_points)
+                .map(|_| BFieldElement::new(rng.next_u64()))
+                .collect_vec();
+
+            // use lagrange interpolation
+            let lagrange_interpolant =
+                Polynomial::<BFieldElement>::fast_lagrange_interpolate(&domain, &values);
+
+            // re-evaluate and match against values
+            let lagrange_re_eval = domain
+                .iter()
+                .map(|d| lagrange_interpolant.evaluate(&d))
+                .collect_vec();
+            for (v, r) in values.iter().zip(lagrange_re_eval.iter()) {
+                assert_eq!(v, r);
+            }
+
+            // prepare NTT-based methods
+
+            // find order by rounding num_points up to the next power of 2
+            let mut order = num_points << 1;
+            while (order & (order - 1)) != 0 {
+                order &= order - 1;
+            }
+
+            // get matching primitive nth root of unity
+            let maybe_omega = BFieldElement::ring_zero().get_primitive_root_of_unity(order as u64);
+            let omega = maybe_omega.0.unwrap();
+
+            // use NTT-based interpolation
+            let interpolant =
+                Polynomial::<BFieldElement>::fast_interpolate(&domain, &values, &omega, order);
+
+            // re-evaluate and match against sampled values
+            let re_eval = interpolant.fast_evaluate(&domain, &omega, order);
+            for (v, r) in values.iter().zip(re_eval.iter()) {
+                assert_eq!(v, r);
+            }
+
+            // match against lagrange interpolation
+            assert_eq!(interpolant, lagrange_interpolant);
+        }
+    }
+
+    #[test]
     fn fast_coset_evaluate_test() {
         let q = 17;
         let _0_17 = pfb(0, q);
