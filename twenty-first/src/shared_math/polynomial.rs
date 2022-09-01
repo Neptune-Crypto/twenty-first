@@ -197,54 +197,7 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         }
     }
 
-    pub fn lagrange_interpolation_2(
-        p0: &(PFElem, PFElem),
-        p1: &(PFElem, PFElem),
-    ) -> (PFElem, PFElem) {
-        let x_diff = p0.0 - p1.0;
-        let x_diff_inv = p0.0.ring_one() / x_diff;
-        let a = (p0.1 - p1.1) * x_diff_inv;
-        let b = p0.1 - a * p0.0;
-
-        (a, b)
-    }
-
     pub fn lagrange_interpolate(domain: &[PFElem], values: &[PFElem]) -> Self {
-        assert_eq!(
-            domain.len(),
-            values.len(),
-            "The domain and values lists have to be of equal length."
-        );
-        assert!(
-            !domain.is_empty(),
-            "Trying to interpolate through 0 points."
-        );
-
-        let zero = domain[0].ring_zero();
-        let one = domain[0].ring_one();
-        let x = Self {
-            coefficients: vec![zero, one],
-        };
-
-        let mut acc = Self::ring_zero();
-        for (i, &y) in values.iter().enumerate() {
-            let x_i = domain[i];
-            let mut summand = Self::from_constant(y);
-            for (j, &x_j) in domain.iter().enumerate() {
-                if i == j {
-                    continue;
-                }
-                summand = summand * (x.clone() - Self::from_constant(x_j))
-                    / Self::from_constant(x_i - x_j);
-            }
-            acc += summand
-        }
-        acc
-    }
-
-    // fast_lagrange_interpolate
-    // Faster than lagrange_interpolate, but less readable.
-    pub fn fast_lagrange_interpolate(domain: &[PFElem], values: &[PFElem]) -> Self {
         assert_eq!(
             domain.len(),
             values.len(),
@@ -306,49 +259,6 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         Polynomial {
             coefficients: lagrange_sum_array,
         }
-    }
-
-    pub fn slow_lagrange_interpolation_internal(xs: &[PFElem], ys: &[PFElem]) -> Self {
-        assert_eq!(
-            xs.len(),
-            ys.len(),
-            "x and y values must have the same length"
-        );
-        let roots: Vec<PFElem> = xs.to_vec();
-        let mut big_pol_coeffs = Self::prod_helper(&roots);
-        big_pol_coeffs.reverse();
-        let big_pol = Self {
-            coefficients: big_pol_coeffs,
-        };
-        let zero: PFElem = xs[0].ring_zero();
-        let one: PFElem = xs[0].ring_one();
-        let mut coefficients: Vec<PFElem> = vec![zero; xs.len()];
-        for (&x, &y) in xs.iter().zip(ys.iter()) {
-            // create a PrimeFieldPolynomial that is zero at all other points than this
-            // coeffs_j = prod_{i=0, i != j}^{N}((x- q_i))
-            let my_div_coefficients = vec![zero - x, one];
-            let mut my_pol = Self {
-                coefficients: my_div_coefficients,
-            };
-            my_pol = big_pol.clone() / my_pol;
-            let mut divisor = one;
-            for &root in roots.iter() {
-                if root == x {
-                    continue;
-                }
-                divisor *= x - root;
-            }
-            // TODO: Review.
-            let mut my_coeffs: Vec<PFElem> = my_pol.coefficients.clone();
-            for coeff in my_coeffs.iter_mut() {
-                *coeff = coeff.to_owned() * y;
-                *coeff = coeff.to_owned() / divisor;
-            }
-            for i in 0..my_coeffs.len() {
-                coefficients[i] += my_coeffs[i];
-            }
-        }
-        Self { coefficients }
     }
 
     pub fn are_colinear_3(
@@ -1205,7 +1115,6 @@ mod test_polynomials {
     use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use crate::shared_math::x_field_element::XFieldElement;
-    use crate::timing_reporter::TimingReporter;
     use crate::utils::generate_random_numbers;
     use primitive_types::U256;
     use rand::RngCore;
@@ -1633,70 +1542,6 @@ mod test_polynomials {
         for point in points {
             assert_eq!(point.1, interpolation_result.evaluate(&point.0));
         }
-    }
-
-    #[test]
-    fn lagrange_interpolation_2_test() {
-        let q = 5;
-        assert_eq!(
-            (pfb(1, q), pfb(0, q)),
-            Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolation_2(
-                &(pfb(1, q), pfb(1, q)),
-                &(pfb(2, q), pfb(2, q))
-            )
-        );
-        assert_eq!(
-            (pfb(4, q), pfb(4, q)),
-            Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolation_2(
-                &(pfb(1, q), pfb(3, q)),
-                &(pfb(2, q), pfb(2, q))
-            )
-        );
-        assert_eq!(
-            (pfb(4, q), pfb(2, q)),
-            Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolation_2(
-                &(pfb(15, q), pfb(92, q)),
-                &(pfb(19, q), pfb(108, q))
-            )
-        );
-
-        assert_eq!(
-            (pfb(3, q), pfb(2, q)),
-            Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolation_2(
-                &(pfb(1, q), pfb(0, q)),
-                &(pfb(2, q), pfb(3, q))
-            )
-        );
-
-        let q = 5;
-        assert_eq!(
-            (pfb(1, q), pfb(0, q)),
-            Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolation_2(
-                &(pfb(1, q), pfb(1, q)),
-                &(pfb(2, q), pfb(2, q))
-            )
-        );
-        assert_eq!(
-            (pfb(4, q), pfb(4, q)),
-            Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolation_2(
-                &(pfb(1, q), pfb(3, q)),
-                &(pfb(2, q), pfb(2, q))
-            )
-        );
-        assert_eq!(
-            (pfb(4, q), pfb(2, q)),
-            Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolation_2(
-                &(pfb(15, q), pfb(92, q)),
-                &(pfb(19, q), pfb(108, q))
-            )
-        );
-        assert_eq!(
-            (pfb(3, q), pfb(2, q)),
-            Polynomial::<PrimeFieldElementFlexible>::lagrange_interpolation_2(
-                &(pfb(1, q), pfb(0, q)),
-                &(pfb(2, q), pfb(3, q))
-            )
-        );
     }
 
     #[test]
@@ -2724,7 +2569,7 @@ mod test_polynomials {
 
             // use lagrange interpolation
             let lagrange_interpolant =
-                Polynomial::<BFieldElement>::fast_lagrange_interpolate(&domain, &values);
+                Polynomial::<BFieldElement>::lagrange_interpolate(&domain, &values);
 
             // re-evaluate and match against values
             let lagrange_re_eval = domain
@@ -3248,78 +3093,11 @@ mod test_polynomials {
                     .collect_vec()
             };
             let values = BFieldElement::random_elements(num_points, &mut rng);
-            let interpoly = BPoly::fast_lagrange_interpolate(&domain, &values);
+            let interpoly = BPoly::lagrange_interpolate(&domain, &values);
 
             assert!(num_points as isize > interpoly.degree());
             for (i, y) in values.into_iter().enumerate() {
                 assert_eq!(y, interpoly.evaluate(&domain[i]));
-            }
-        }
-    }
-
-    #[test]
-    fn lagrange_bench_test() {
-        type BPoly = Polynomial<BFieldElement>;
-        let mut rng = rand::thread_rng();
-        for num_points in [8, 16, 32, 64, 128] {
-            let domain = {
-                let mut domain = vec![];
-                while domain.len() < num_points {
-                    let new_domain_candidate = rng.next_u64();
-                    if !domain.contains(&new_domain_candidate) {
-                        domain.push(new_domain_candidate)
-                    }
-                }
-                domain
-                    .into_iter()
-                    .map(|x| BFieldElement::new(x))
-                    .collect_vec()
-            };
-            let values = BFieldElement::random_elements(num_points, &mut rng);
-
-            let mut timer = TimingReporter::start();
-
-            // readable
-            let readable_poly = BPoly::lagrange_interpolate(&domain, &values);
-            timer.elapsed(&format!(
-                "Readable lagrange interpolation ({} points).",
-                num_points
-            ));
-
-            // fast
-            let fast_poly = BPoly::fast_lagrange_interpolate(&domain, &values);
-            timer.elapsed(&format!(
-                "Fast lagrange interpolation ({} points).",
-                num_points
-            ));
-
-            // slowinternal
-            let slow_internal_poly = BPoly::slow_lagrange_interpolation_internal(&domain, &values);
-            timer.elapsed(&format!(
-                "SlowInternal lagrange interpolation ({} points).",
-                num_points
-            ));
-
-            // ntt-based
-            let ntt_based_poly = Polynomial::fast_interpolate(
-                &domain,
-                &values,
-                &domain[0]
-                    .get_primitive_root_of_unity(domain.len() as u64)
-                    .0
-                    .unwrap(),
-                domain.len(),
-            );
-            timer.elapsed(&format!("NTT-Based interpolation ({} points).", num_points));
-
-            let report = timer.finish();
-            println!("{}", report);
-
-            for (d, v) in domain.iter().zip(values.iter()) {
-                assert_eq!(readable_poly.evaluate(d), *v);
-                assert_eq!(fast_poly.evaluate(d), *v);
-                assert_eq!(slow_internal_poly.evaluate(d), *v);
-                assert_eq!(ntt_based_poly.evaluate(d), *v);
             }
         }
     }
