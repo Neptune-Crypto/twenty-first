@@ -29,9 +29,9 @@ fn lagrange_interpolation(c: &mut Criterion) {
             BenchmarkId::new("lagrange_interpolate", 2.pow(log2_of_size)),
             log2_of_size,
         );
-        ntt_bench(
+        ntt_based_fast_interpolate(
             &mut group,
-            BenchmarkId::new("ntt", 2.pow(log2_of_size)),
+            BenchmarkId::new("NTT-Based interpolation", 2.pow(log2_of_size)),
             log2_of_size,
         );
     }
@@ -93,7 +93,11 @@ fn lagrange_interpolate(
     group.sample_size(10);
 }
 
-fn ntt_bench(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, log2_of_size: usize) {
+fn ntt_based_fast_interpolate(
+    group: &mut BenchmarkGroup<WallTime>,
+    bench_id: BenchmarkId,
+    log2_of_size: usize,
+) {
     let size: usize = 1 << log2_of_size;
 
     let mut rng = rand::thread_rng();
