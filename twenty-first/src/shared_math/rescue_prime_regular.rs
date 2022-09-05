@@ -813,6 +813,13 @@ impl RescuePrimeRegular {
     }
 
     #[inline]
+    fn batch_square_n(array: &mut [BFieldElement; STATE_SIZE], n: usize) {
+        for _ in 0..n {
+            Self::batch_square(array);
+        }
+    }
+
+    #[inline]
     fn batch_mul_into(
         array: &mut [BFieldElement; STATE_SIZE],
         operand: [BFieldElement; STATE_SIZE],
@@ -822,7 +829,59 @@ impl RescuePrimeRegular {
         }
     }
 
+    #[inline]
+    fn batch_mod_pow_alpha_inv(array: [BFieldElement; STATE_SIZE]) -> [BFieldElement; STATE_SIZE] {
+        // alpha^-1 = 0b1001001001001001001001001001000110110110110110110110110110110111
 
+        // credit to Winterfell for this decomposition into 72 multiplications
+        // (1) base^10
+        // (2) base^100 = (1) << 1
+        // (3) base^100100 = (2) << 3 + (2)
+        // (4) base^100100100100 = (3) << 6 + (3)
+        // (5) base^100100100100100100100100 = (4) << 12 + (4)
+        // (6) base^100100100100100100100100100100 = (5) << 6 + (3)
+        // (7) base^1001001001001001001001001001000100100100100100100100100100100
+        //     = (6) << 31 + (6)
+        // (r) base^1001001001001001001001001001000110110110110110110110110110110111
+        //     = ((7) << 1 + (6)) << 2 + (2)  +  (1)  +  1
+
+        let mut p1 = array;
+        Self::batch_square(&mut p1);
+
+        let mut p2 = p1;
+        Self::batch_square(&mut p2);
+
+        let mut p3 = p2;
+        Self::batch_square_n(&mut p3, 3);
+        Self::batch_mul_into(&mut p3, p2);
+
+        let mut p4 = p3;
+        Self::batch_square_n(&mut p4, 6);
+        Self::batch_mul_into(&mut p4, p3);
+
+        let mut p5 = p4;
+        Self::batch_square_n(&mut p5, 12);
+        Self::batch_mul_into(&mut p5, p4);
+
+        let mut p6 = p5;
+        Self::batch_square_n(&mut p6, 6);
+        Self::batch_mul_into(&mut p6, p3);
+
+        let mut p7 = p6;
+        Self::batch_square_n(&mut p7, 31);
+        Self::batch_mul_into(&mut p7, p6);
+
+        let mut result = p7;
+        Self::batch_square(&mut result);
+        Self::batch_mul_into(&mut result, p6);
+        Self::batch_square_n(&mut result, 2);
+        Self::batch_mul_into(&mut result, p2);
+        Self::batch_mul_into(&mut result, p1);
+        Self::batch_mul_into(&mut result, array);
+        result
+    }
+
+    #[allow(dead_code)]
     fn batch_mod_pow(
         array: [BFieldElement; STATE_SIZE],
         power: u64,
@@ -873,7 +932,11 @@ impl RescuePrimeRegular {
         // for i in 0..STATE_SIZE {
         //     self.state[i] = self.state[i].mod_pow_u64(ALPHA_INV);
         // }
-        self.state = Self::batch_mod_pow(self.state, ALPHA_INV);
+        //
+        // self.state = Self::batch_mod_pow(self.state, ALPHA_INV);
+        self.state = Self::batch_mod_pow_alpha_inv(self.state);
+
+        // MDS matrix
         for i in 0..STATE_SIZE {
             v[i] = BFieldElement::ring_zero();
             for j in 0..STATE_SIZE {
