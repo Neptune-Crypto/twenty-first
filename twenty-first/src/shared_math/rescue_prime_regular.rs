@@ -790,14 +790,13 @@ pub const ROUND_CONSTANTS: [u64; NUM_ROUNDS * STATE_SIZE * 2] = [
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct RescuePrimeRegular {
+pub struct RescuePrimeRegular {
     pub state: [BFieldElement; STATE_SIZE],
 }
 
 impl RescuePrimeRegular {
     /// new
     /// Create a new sponge object. This function is used internally.
-    #[allow(dead_code)]
     fn new() -> Self {
         RescuePrimeRegular {
             state: [BFieldElement::ring_zero(); STATE_SIZE],
@@ -806,7 +805,6 @@ impl RescuePrimeRegular {
 
     /// xlix_round
     /// Apply one round of the XLIX permutation.
-    #[allow(dead_code)]
     fn xlix_round(&mut self, round_index: usize) {
         assert!(
             round_index < NUM_ROUNDS,
@@ -856,7 +854,6 @@ impl RescuePrimeRegular {
     /// xlix
     /// XLIX is the permutation defined by Rescue-Prime. This
     /// function applies XLIX to the state of a sponge.
-    #[allow(dead_code)]
     fn xlix(&mut self) {
         for i in 0..NUM_ROUNDS {
             self.xlix_round(i);
@@ -866,8 +863,7 @@ impl RescuePrimeRegular {
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
-    #[allow(dead_code)]
-    fn hash_10(input: [BFieldElement; 10]) -> [BFieldElement; 5] {
+    pub fn hash_10(input: [BFieldElement; 10]) -> [BFieldElement; 5] {
         let mut sponge = Self::new();
 
         // absorb once
@@ -883,8 +879,7 @@ impl RescuePrimeRegular {
     /// hash_varlen
     /// Hash an arbitrary number of field elements. Takes care of
     /// padding.
-    #[allow(dead_code)]
-    fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
+    pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
         let mut sponge = Self::new();
 
         // pad input
