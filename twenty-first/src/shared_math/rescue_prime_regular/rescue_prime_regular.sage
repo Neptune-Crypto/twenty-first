@@ -1,4 +1,4 @@
-# rescue_prime.sage
+# rescue_prime_regular.sage
 # The reference implementation of regular Rescue-Prime for Neptune.
 
 from CompactFIPS202 import SHAKE256
