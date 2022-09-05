@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::{b_field_element::BFieldElement, traits::ModPowU64};
 
+use super::traits::PrimeField;
+
 pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
 pub const CAPACITY: usize = 6;
@@ -803,6 +805,27 @@ impl RescuePrimeRegular {
         }
     }
 
+    fn batch_mod_pow(
+        array: [BFieldElement; STATE_SIZE],
+        power: u64,
+    ) -> [BFieldElement; STATE_SIZE] {
+        let mut acc = [BFieldElement::ring_one(); STATE_SIZE];
+        for i in (0..64).rev() {
+            if i != 63 {
+                for a in acc.iter_mut() {
+                    *a = a.square();
+                }
+            }
+            if power & (1 << i) != 0 {
+                for (a, b) in acc.iter_mut().zip(array.iter()) {
+                    *a *= *b;
+                }
+            }
+        }
+
+        acc
+    }
+
     /// xlix_round
     /// Apply one round of the XLIX permutation.
     fn xlix_round(&mut self, round_index: usize) {
@@ -833,9 +856,10 @@ impl RescuePrimeRegular {
         }
 
         // Inverse S-box
-        for i in 0..STATE_SIZE {
-            self.state[i] = self.state[i].mod_pow_u64(ALPHA_INV);
-        }
+        // for i in 0..STATE_SIZE {
+        //     self.state[i] = self.state[i].mod_pow_u64(ALPHA_INV);
+        // }
+        self.state = Self::batch_mod_pow(self.state, ALPHA_INV);
         for i in 0..STATE_SIZE {
             v[i] = BFieldElement::ring_zero();
             for j in 0..STATE_SIZE {
