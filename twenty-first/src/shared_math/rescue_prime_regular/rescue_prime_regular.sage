@@ -129,6 +129,27 @@ def print_test_vectors():
         output_sequence = rescue_prime_hash_varlen(parameters, input_sequence)
         print(matrix([input_sequence]), " -> ", matrix([output_sequence]))
 
+def print_mds():
+    print("[");
+    for i in range(m):
+        for j in range(m):
+            print(MDS[i][j], ",")
+    print("]")
+
+def print_mds_inv():
+    MDS_inv = MDS^-1
+    print("[");
+    for i in range(m):
+        for j in range(m):
+            print(MDS_inv[i][j], ",")
+    print("]")
+
+def print_round_constants():
+    print("[")
+    for rc in round_constants:
+        print(rc, ",")
+    print("]")
+
 p = 2^64 - 2^32 + 1
 m = 16
 rate = 10
