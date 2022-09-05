@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::shared_math::{b_field_element::BFieldElement, traits::ModPowU64};
+use crate::shared_math::b_field_element::BFieldElement;
 
 use super::traits::PrimeField;
 
@@ -881,6 +881,16 @@ impl RescuePrimeRegular {
         result
     }
 
+    #[inline]
+    fn batch_mod_pow_alpha(array: [BFieldElement; STATE_SIZE]) -> [BFieldElement; STATE_SIZE] {
+        let mut result = array;
+        Self::batch_square(&mut result);
+        Self::batch_mul_into(&mut result, array);
+        Self::batch_square(&mut result);
+        Self::batch_mul_into(&mut result, array);
+        result
+    }
+
     #[allow(dead_code)]
     fn batch_mod_pow(
         array: [BFieldElement; STATE_SIZE],
@@ -910,9 +920,11 @@ impl RescuePrimeRegular {
         );
 
         // S-box
-        for i in 0..STATE_SIZE {
-            self.state[i] = self.state[i].mod_pow_u64(ALPHA);
-        }
+        // for i in 0..STATE_SIZE {
+        //     self.state[i] = self.state[i].mod_pow_u64(ALPHA);
+        // }
+        //
+        self.state = Self::batch_mod_pow_alpha(self.state);
 
         // MDS matrix
         let mut v: [BFieldElement; STATE_SIZE] = [BFieldElement::new(0u64); STATE_SIZE];
