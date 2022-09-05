@@ -805,6 +805,24 @@ impl RescuePrimeRegular {
         }
     }
 
+    #[inline]
+    fn batch_square(array: &mut [BFieldElement; STATE_SIZE]) {
+        for a in array.iter_mut() {
+            *a = a.square();
+        }
+    }
+
+    #[inline]
+    fn batch_mul_into(
+        array: &mut [BFieldElement; STATE_SIZE],
+        operand: [BFieldElement; STATE_SIZE],
+    ) {
+        for (a, b) in array.iter_mut().zip_eq(operand.iter()) {
+            *a *= *b;
+        }
+    }
+
+
     fn batch_mod_pow(
         array: [BFieldElement; STATE_SIZE],
         power: u64,
@@ -812,14 +830,10 @@ impl RescuePrimeRegular {
         let mut acc = [BFieldElement::ring_one(); STATE_SIZE];
         for i in (0..64).rev() {
             if i != 63 {
-                for a in acc.iter_mut() {
-                    *a = a.square();
-                }
+                Self::batch_square(&mut acc);
             }
             if power & (1 << i) != 0 {
-                for (a, b) in acc.iter_mut().zip(array.iter()) {
-                    *a *= *b;
-                }
+                Self::batch_mul_into(&mut acc, array);
             }
         }
 
