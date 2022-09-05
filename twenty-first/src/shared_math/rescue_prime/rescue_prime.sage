@@ -52,17 +52,20 @@ def rescue_prime_hash_varlen( parameters, input_sequence ):
     while len(padded_input) % rate != 0:
         padded_input.append(Fp(0))
 
-    # divide into chunks of 6 and apply merkle-damgaard
-    chaining_value = [Fp(0)] * 6
+    # divide into chunks of rate and absorb
+    state = matrix([[Fp(0)]] * m)
     while padded_input:
-        chaining_value = rescue_prime_hash_12(parameters, chaining_value + padded_input[:6])
-        padded_input = padded_input[6:]
+        for i in range(rate):
+            state[i,0] += padded_input[i]
+        state = rescue_XLIX_permutation(parameters, state)
+        padded_input = padded_input[rate:]
 
-    return chaining_value
+    # squeeze once, truncate to length 5
+    return [state[i,0] for i in range(5)]
 
-def rescue_prime_hash_12( parameters, input_sequence ):
+def rescue_prime_hash_10( parameters, input_sequence ):
 
-    assert len(input_sequence) == 12, "Function can only hash sequences of 12 field elements; try `rescue_prime_hash_varlen` instead."
+    assert len(input_sequence) == 10, "Function can only hash sequences of 10 field elements; try `rescue_prime_hash_varlen` instead."
 
     p, m, capacity, security_level, alpha, alphainv, N, MDS, round_constants = parameters
     rate = m - capacity
@@ -74,8 +77,8 @@ def rescue_prime_hash_12( parameters, input_sequence ):
     # apply permutation
     state = rescue_XLIX_permutation(parameters, state)
 
-    # get top 6 elements
-    output_sequence = [state[i,0] for i in range(6)]
+    # get top 5 elements
+    output_sequence = [state[i,0] for i in range(5)]
 
     return output_sequence
 
@@ -107,16 +110,16 @@ def rescue_XLIX_permutation( parameters, state ):
 def print_test_vectors():
     Fp = FiniteField(p)
 
-    print("Hash 12:")
-    input_sequence = [Fp(0)] * 12
+    print("Hash 10:")
+    input_sequence = [Fp(0)] * 10
     for i in range(10):
         input_sequence[-1] = Fp(i)
-        output_sequence = rescue_prime_hash_12(parameters, input_sequence)
+        output_sequence = rescue_prime_hash_10(parameters, input_sequence)
         print(matrix([input_sequence]), " -> ", matrix([output_sequence]))
     input_sequence[-1] = Fp(0)
-    for i in range(12):
+    for i in range(10):
         input_sequence[i] = Fp(1)
-        output_sequence = rescue_prime_hash_12(parameters, input_sequence)
+        output_sequence = rescue_prime_hash_10(parameters, input_sequence)
         print(matrix([input_sequence]), " -> ", matrix([output_sequence]))
         input_sequence[i] = Fp(0)
 
@@ -128,8 +131,8 @@ def print_test_vectors():
 
 p = 2^64 - 2^32 + 1
 m = 16
-rate = 12
-capacity = 4
+rate = 10
+capacity = 6
 security_level = 160
 N = 8
 alpha, alphainv = get_alphas(p)
