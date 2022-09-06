@@ -307,17 +307,6 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         }
     }
 
-    pub fn get_polynomial_with_roots(roots: &[PFElem], one: PFElem) -> Self {
-        assert!(one.is_one(), "Provided one must be one");
-        if roots.is_empty() {
-            Polynomial {
-                coefficients: vec![one],
-            }
-        } else {
-            Self::zerofier(roots)
-        }
-    }
-
     // Slow square implementation that does not use NTT
     #[must_use]
     pub fn slow_square(&self) -> Self {
@@ -1299,24 +1288,16 @@ mod test_polynomials {
         );
     }
 
-    #[allow(dead_code)]
-    fn poly_flex(coefficients: Vec<BFieldElement>) -> Polynomial<BFieldElement> {
-        Polynomial::<BFieldElement>::new(coefficients)
-    }
-
     #[should_panic]
     #[test]
     fn panic_when_one_is_not_one() {
         assert_eq!(
-            poly_flex(vec![
+            Polynomial::<BFieldElement>::new(vec![
                 BFieldElement::from(30u64),
                 BFieldElement::from(0u64),
                 BFieldElement::from(1u64)
             ]),
-            Polynomial::get_polynomial_with_roots(
-                &[BFieldElement::from(1u64), BFieldElement::from(30u64)],
-                BFieldElement::from(14u64)
-            )
+            Polynomial::zerofier(&[BFieldElement::from(1u64), BFieldElement::from(30u64)])
         );
     }
 
@@ -1571,7 +1552,10 @@ mod test_polynomials {
 
     #[test]
     fn polynomial_shift_test() {
-        let pol = poly_flex(vec![BFieldElement::from(17u64), BFieldElement::from(14u64)]);
+        let pol = Polynomial::<BFieldElement>::new(vec![
+            BFieldElement::from(17u64),
+            BFieldElement::from(14u64),
+        ]);
         assert_eq!(
             vec![
                 BFieldElement::from(0u64),
@@ -2218,7 +2202,7 @@ mod test_polynomials {
         let _5_17 = BFieldElement::from(5u64);
 
         // x^5 + x^3
-        let poly = poly_flex(vec![_0_17, _0_17, _0_17, _1_17, _0_17, _1_17]);
+        let poly = Polynomial::<BFieldElement>::new(vec![_0_17, _0_17, _0_17, _1_17, _0_17, _1_17]);
 
         let _6_17 = BFieldElement::from(6u64);
         let _12_17 = BFieldElement::from(12u64);
@@ -2289,7 +2273,7 @@ mod test_polynomials {
         let _5_17 = BFieldElement::from(5u64);
 
         // x^3 + x^1
-        let poly = poly_flex(vec![_0_17, _1_17, _0_17, _1_17]);
+        let poly = Polynomial::<BFieldElement>::new(vec![_0_17, _1_17, _0_17, _1_17]);
 
         let _6_17 = BFieldElement::from(6u64);
         let _7_17 = BFieldElement::from(7u64);
@@ -2388,7 +2372,7 @@ mod test_polynomials {
         let _0 = BFieldElement::from(0u64);
 
         // x^5 + x^3
-        let poly = poly_flex(vec![_0, _0, _0, _1, _0, _1]);
+        let poly = Polynomial::<BFieldElement>::new(vec![_0, _0, _0, _1, _0, _1]);
 
         let offset = BFieldElement::generator();
         let omega = BFieldElement::one()
@@ -2803,13 +2787,6 @@ mod test_polynomials {
                 Polynomial::<BFieldElement>::fast_zerofier(&unique_domain, &omega, next_po2);
 
             assert_eq!(zerofier_polynomial, fast_zerofier_polynomial);
-
-            // zerofier from prod_helper
-            let with_roots_poly = Polynomial::<BFieldElement>::get_polynomial_with_roots(
-                &unique_domain,
-                BFieldElement::one(),
-            );
-            assert_eq!(zerofier_polynomial, with_roots_poly);
         }
     }
 }

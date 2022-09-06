@@ -924,7 +924,7 @@ impl StarkRp {
             .collect();
         roots
             .iter()
-            .map(|points| Polynomial::get_polynomial_with_roots(points, BFieldElement::one()))
+            .map(|points| Polynomial::zerofier(points))
             .collect()
     }
 
