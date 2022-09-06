@@ -15,7 +15,7 @@ use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
 use crate::shared_math::traits::{FromVecu8, GetRandomElements, Inverse, ModPowU32};
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
-    stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
+    stark::brainfuck::processor_table::ProcessorTable, traits::PrimitiveRootOfUnity,
     x_field_element::XFieldElement,
 };
 use crate::timing_reporter::TimingReporter;
@@ -69,7 +69,7 @@ impl Stark {
 
         k_seeds
             .iter()
-            .map(|seed| XFieldElement::zero().from_vecu8(seed.to_vec()))
+            .map(|seed| XFieldElement::from_vecu8(seed.to_vec()))
             .collect::<Vec<XFieldElement>>()
     }
 
@@ -111,10 +111,7 @@ impl Stark {
         // Fewer than 2 randomizers means no zero-knowledge for the prover's execution.
         let num_randomizers = 2;
         let order: usize = 1 << 32;
-        let smooth_generator = BFieldElement::zero()
-            .get_primitive_root_of_unity(order as u64)
-            .0
-            .unwrap();
+        let smooth_generator = BFieldElement::primitive_root_of_unity(order as u64).unwrap();
 
         // instantiate table objects
         let processor_table =
@@ -205,10 +202,8 @@ impl Stark {
 
         // Instantiate FRI object
         let b_field_generator = BFieldElement::generator();
-        let b_field_omega = BFieldElement::zero()
-            .get_primitive_root_of_unity(fri_domain_length as u64)
-            .0
-            .unwrap();
+        let b_field_omega =
+            BFieldElement::primitive_root_of_unity(fri_domain_length as u64).unwrap();
         let fri: Fri<XFieldElement, StarkHasher> = Fri::new(
             b_field_generator.lift(),
             b_field_omega.lift(),

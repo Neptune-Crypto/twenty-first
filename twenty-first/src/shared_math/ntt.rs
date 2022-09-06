@@ -119,7 +119,7 @@ mod fast_ntt_attempt_tests {
 
     use crate::shared_math::{
         b_field_element::BFieldElement,
-        traits::{GetPrimitiveRootOfUnity, GetRandomElements},
+        traits::{GetRandomElements, PrimitiveRootOfUnity},
         x_field_element::XFieldElement,
     };
 
@@ -133,10 +133,7 @@ mod fast_ntt_attempt_tests {
             for _ in 0..10 {
                 let mut values = BFieldElement::random_elements(n, &mut rng);
                 let original_values = values.clone();
-                let omega = BFieldElement::one()
-                    .get_primitive_root_of_unity(n as u64)
-                    .0
-                    .unwrap();
+                let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
                 ntt::<BFieldElement>(&mut values, omega, log_2_n);
                 assert_ne!(original_values, values);
                 intt::<BFieldElement>(&mut values, omega, log_2_n);
@@ -160,10 +157,7 @@ mod fast_ntt_attempt_tests {
             for _ in 0..10 {
                 let mut values = XFieldElement::random_elements(n, &mut rng);
                 let original_values = values.clone();
-                let omega = XFieldElement::one()
-                    .get_primitive_root_of_unity(n as u64)
-                    .0
-                    .unwrap();
+                let omega = XFieldElement::primitive_root_of_unity(n as u64).unwrap();
                 ntt::<XFieldElement>(&mut values, omega, log_2_n);
                 assert_ne!(original_values, values);
                 intt::<XFieldElement>(&mut values, omega, log_2_n);
@@ -206,10 +200,7 @@ mod fast_ntt_attempt_tests {
             XFieldElement::new_const(BFieldElement::one()),
             XFieldElement::new_const(BFieldElement::one()),
         ];
-        let omega = XFieldElement::one()
-            .get_primitive_root_of_unity(4)
-            .0
-            .unwrap();
+        let omega = XFieldElement::primitive_root_of_unity(4).unwrap();
 
         println!("input_output = {:?}", input_output);
         ntt::<XFieldElement>(&mut input_output, omega, 2);
@@ -236,10 +227,7 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(18446744069414584318),
             BFieldElement::new(18445618169507741698),
         ];
-        let omega = BFieldElement::one()
-            .get_primitive_root_of_unity(4)
-            .0
-            .unwrap();
+        let omega = BFieldElement::primitive_root_of_unity(4).unwrap();
 
         ntt::<BFieldElement>(&mut input_output, omega, 2);
         assert_eq!(expected, input_output);
@@ -264,10 +252,7 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(BFieldElement::MAX),
             BFieldElement::new(BFieldElement::MAX),
         ];
-        let omega = BFieldElement::one()
-            .get_primitive_root_of_unity(4)
-            .0
-            .unwrap();
+        let omega = BFieldElement::primitive_root_of_unity(4).unwrap();
 
         ntt::<BFieldElement>(&mut input_output, omega, 2);
         assert_eq!(expected, input_output);
@@ -314,10 +299,7 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(0),
         ];
         let original_input = input_output.clone();
-        let omega = BFieldElement::one()
-            .get_primitive_root_of_unity(32)
-            .0
-            .unwrap();
+        let omega = BFieldElement::primitive_root_of_unity(32).unwrap();
         ntt::<BFieldElement>(&mut input_output, omega, 5);
         // let actual_output = ntt(&mut input_output, &omega, 5);
         println!("actual_output = {:?}", input_output);

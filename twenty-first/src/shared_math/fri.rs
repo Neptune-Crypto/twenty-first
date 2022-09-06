@@ -241,7 +241,7 @@ where
 
             // Get challenge, one just acts as *any* element in this field -- the field element
             // is completely determined from the byte stream.
-            let alpha: PF = one.from_vecu8(proof_stream.prover_fiat_shamir());
+            let alpha: PF = PF::from_vecu8(proof_stream.prover_fiat_shamir());
 
             let x_offset: Vec<PF> = generator
                 .get_cyclic_group_elements(None)
@@ -347,7 +347,7 @@ where
 
         for _ in 0..num_rounds {
             // Get a challenge from the proof stream
-            let alpha: PF = omega.from_vecu8(proof_stream.verifier_fiat_shamir());
+            let alpha: PF = PF::from_vecu8(proof_stream.verifier_fiat_shamir());
             alphas.push(alpha);
             roots.push(proof_stream.dequeue(32)?);
         }
@@ -498,7 +498,7 @@ mod fri_domain_tests {
 
     use super::*;
     use crate::shared_math::{
-        b_field_element::BFieldElement, traits::GetPrimitiveRootOfUnity,
+        b_field_element::BFieldElement, traits::PrimitiveRootOfUnity,
         x_field_element::XFieldElement,
     };
 
@@ -513,10 +513,7 @@ mod fri_domain_tests {
         ];
 
         for order in [4, 8, 32] {
-            let omega = BFieldElement::zero()
-                .get_primitive_root_of_unity(order)
-                .0
-                .unwrap();
+            let omega = BFieldElement::primitive_root_of_unity(order).unwrap();
             let domain = FriDomain {
                 offset: BFieldElement::generator().lift(),
                 omega: omega.lift(),
@@ -569,7 +566,7 @@ mod fri_tests {
     use super::*;
     use crate::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
     use crate::shared_math::{
-        b_field_element::BFieldElement, traits::GetPrimitiveRootOfUnity,
+        b_field_element::BFieldElement, traits::PrimitiveRootOfUnity,
         x_field_element::XFieldElement,
     };
     use itertools::Itertools;
@@ -785,16 +782,15 @@ mod fri_tests {
         BFieldElement: ToDigest<Digest>,
     {
         let subgroup_order = 1024;
-        let (omega, _primes1) = BFieldElement::zero().get_primitive_root_of_unity(subgroup_order);
-        let (offset, _primes2) =
-            BFieldElement::zero().get_primitive_root_of_unity(BFieldElement::QUOTIENT - 1);
+        let maybe_omega = BFieldElement::primitive_root_of_unity(subgroup_order);
+        let offset = BFieldElement::generator();
 
         let expansion_factor = 4;
         let colinearity_checks = 6;
 
         Fri::<BFieldElement, H>::new(
-            offset.unwrap(),
-            omega.unwrap(),
+            offset,
+            maybe_omega.unwrap(),
             subgroup_order as usize,
             expansion_factor,
             colinearity_checks,
@@ -811,8 +807,7 @@ mod fri_tests {
         H: Hasher<Digest = Digest> + Sized,
         XFieldElement: ToDigest<Digest>,
     {
-        let (omega, _primes1): (Option<XFieldElement>, Vec<u64>) =
-            XFieldElement::zero().get_primitive_root_of_unity(subgroup_order);
+        let maybe_omega = XFieldElement::primitive_root_of_unity(subgroup_order);
 
         // The following offset was picked arbitrarily by copying the one found in
         // `get_b_field_fri_test_object`. It does not generate the full Z_p\{0}, but
@@ -821,7 +816,7 @@ mod fri_tests {
 
         let fri: Fri<XFieldElement, H> = Fri::new(
             offset.unwrap(),
-            omega.unwrap(),
+            maybe_omega.unwrap(),
             subgroup_order as usize,
             expansion_factor,
             colinearity_checks,

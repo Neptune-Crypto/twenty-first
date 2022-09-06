@@ -1,10 +1,9 @@
 use super::mpolynomial::MPolynomial;
 use super::other;
-use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
+use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
-use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
 use std::hash::{Hash, Hasher};
 
@@ -385,7 +384,7 @@ impl New for BFieldElement {
 
 // This is used for: Convert a hash value to a BFieldElement. Consider making From<Blake3Hash> trait
 impl FromVecu8 for BFieldElement {
-    fn from_vecu8(&self, bytes: Vec<u8>) -> Self {
+    fn from_vecu8(bytes: Vec<u8>) -> Self {
         // TODO: Right now we only accept if 'bytes' has 8 bytes; while that is true in
         // the single call site this is used, it also seems unnecessarily fragile (when we
         // change from BLAKE3 to Rescue-Prime, the hash length will change and this will be
@@ -516,76 +515,16 @@ impl ModPowU64 for BFieldElement {
     }
 }
 
-impl GetPrimitiveRootOfUnity for BFieldElement {
-    fn get_primitive_root_of_unity(&self, n: u64) -> (Option<BFieldElement>, Vec<u64>) {
+impl PrimitiveRootOfUnity for BFieldElement {
+    fn primitive_root_of_unity(n: u64) -> Option<BFieldElement> {
         // Check if n is one of the values for which we have pre-calculated roots
         if PRIMITIVE_ROOTS.contains_key(&(n as u64)) {
-            return (
-                Some(BFieldElement::new(PRIMITIVE_ROOTS[&(n as u64)])),
-                vec![2],
-            );
-        }
-
-        let mut primes: Vec<u64> = vec![];
-
-        if n <= 1 {
-            return (Some(BFieldElement::one()), primes);
-        }
-
-        // Calculate prime factorization of n
-        // Check if n = 2^k
-        if other::is_power_of_two(n) {
-            primes = vec![2];
+            Some(BFieldElement::new(PRIMITIVE_ROOTS[&(n as u64)]))
+        } else if n <= 1 {
+            Some(BFieldElement::one())
         } else {
-            let mut m = n;
-            for prime in FIRST_THOUSAND_PRIMES.iter().map(|&p| p as u64) {
-                if m == 1 {
-                    break;
-                }
-                if m % prime == 0 {
-                    primes.push(prime);
-                    while m % prime == 0 {
-                        m /= prime;
-                    }
-                }
-            }
-            // This might be prohibitively expensive
-            if m > 1 {
-                let mut other_primes = other::primes_lt(m)
-                    .into_iter()
-                    .filter(|&x| n % x == 0)
-                    .collect();
-                primes.append(&mut other_primes);
-            }
-        };
-
-        // N must divide the field prime minus one for a primitive nth root of unity to exist
-        if !((Self::QUOTIENT - 1) % n as u64).is_zero() {
-            return (None, primes);
+            None
         }
-
-        let mut primitive_root: Option<BFieldElement> = None;
-        let mut candidate: BFieldElement = BFieldElement::one();
-
-        #[allow(clippy::suspicious_operation_groupings)]
-        while primitive_root == None && candidate.0 < Self::QUOTIENT {
-            if (-candidate.legendre_symbol()).is_one()
-                && primes.iter().filter(|&x| n % x == 0).all(|x| {
-                    !other::mod_pow_raw(
-                        candidate.0 as u128,
-                        ((Self::QUOTIENT - 1) / *x as u64) as u64,
-                        Self::QUOTIENT as u128,
-                    )
-                    .is_one()
-                })
-            {
-                primitive_root = Some(candidate.mod_pow(((Self::QUOTIENT - 1) / n as u64) as u64));
-            }
-
-            candidate.0 += 1;
-        }
-
-        (primitive_root, primes)
     }
 }
 
@@ -1138,58 +1077,15 @@ mod b_prime_field_element_test {
     }
 
     #[test]
-    fn get_primitive_root_of_unity_non_powers_of_two_test() {
-        // The below list follows from the fact that `prime = 2^32*prod_{i=0}^4(1 + 2^(2^i)) + 1`
-        let prime_minus_one_factors = vec![2, 3, 5, 17, 257, 65537];
-        for number in prime_minus_one_factors {
-            assert!(BFieldElement::one()
-                .get_primitive_root_of_unity(number)
-                .0
-                .is_some());
-        }
-        assert!(BFieldElement::one()
-            .get_primitive_root_of_unity(2u64.pow(32) * 65537u64)
-            .0
-            .is_some());
-        assert!(BFieldElement::one()
-            .get_primitive_root_of_unity(2u64.pow(32) * 65537u64 * 257)
-            .0
-            .is_some());
-        assert!(BFieldElement::one()
-            .get_primitive_root_of_unity(2u64.pow(32) * 65537u64 * 257 * 17)
-            .0
-            .is_some());
-        assert!(BFieldElement::one()
-            .get_primitive_root_of_unity(2u64.pow(32) * 65537u64 * 257 * 17 * 5)
-            .0
-            .is_some());
-
-        // Largest subgroup of the multiplicative group of the B field
-        assert!(BFieldElement::one()
-            .get_primitive_root_of_unity(2u64.pow(31) * 65537u64 * 257 * 17 * 5 * 3)
-            .0
-            .is_some());
-
-        // Negative test for small group sizes
-        let non_factors = vec![7, 9, 11, 18];
-        for number in non_factors {
-            assert!(BFieldElement::one()
-                .get_primitive_root_of_unity(number)
-                .0
-                .is_none());
-        }
-    }
-
-    #[test]
     fn get_primitive_root_of_unity_test() {
         for i in 1..33 {
             let power = 1 << i;
-            let root_result = BFieldElement::one().get_primitive_root_of_unity(power);
-            match root_result.0 {
+            let root_result = BFieldElement::primitive_root_of_unity(power);
+            match root_result {
                 Some(root) => println!("{} => {},", power, root),
                 None => println!("Found no primitive root of unity for n = {}", power),
             };
-            let root = root_result.0.unwrap();
+            let root = root_result.unwrap();
             assert!(root.mod_pow(power as u64).is_one());
             assert!(!root.mod_pow(power as u64 / 2).is_one());
         }

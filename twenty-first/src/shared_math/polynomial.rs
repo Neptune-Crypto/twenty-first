@@ -412,7 +412,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
 
         let result_degree: u64 = 2 * self.degree() as u64;
         let order = roundup_npo2(result_degree + 1);
-        let (root_res, _) = self.coefficients[0].get_primitive_root_of_unity(order);
+        let root_res = PFElem::primitive_root_of_unity(order);
         let root = match root_res {
             Some(n) => n,
             None => panic!("Failed to find primitive root for order = {}", order),
@@ -1087,7 +1087,7 @@ mod test_polynomials {
 
     use rand::RngCore;
 
-    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, GetRandomElements};
+    use crate::shared_math::traits::{GetRandomElements, PrimitiveRootOfUnity};
 
     use super::*;
 
@@ -2015,10 +2015,7 @@ mod test_polynomials {
 
     #[test]
     fn fast_multiply_test() {
-        let primitive_root = BFieldElement::one()
-            .get_primitive_root_of_unity(32)
-            .0
-            .unwrap();
+        let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
         println!("primitive_root = {}", primitive_root);
         let a: Polynomial<BFieldElement> = Polynomial {
             coefficients: vec![
@@ -2095,10 +2092,7 @@ mod test_polynomials {
         let _1_17 = BFieldElement::from(1u64);
         let _5_17 = BFieldElement::from(5u64);
         let root_order: usize = 8;
-        let omega = BFieldElement::one()
-            .get_primitive_root_of_unity(root_order as u64)
-            .0
-            .unwrap();
+        let omega = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
         let domain = vec![_1_17, _5_17];
         let actual = Polynomial::<BFieldElement>::fast_zerofier(&domain, &omega, root_order);
         assert!(
@@ -2120,10 +2114,7 @@ mod test_polynomials {
         let _7_17 = BFieldElement::from(7u64);
         let _10_17 = BFieldElement::from(10u64);
         let root_order_2 = 16;
-        let omega2 = BFieldElement::one()
-            .get_primitive_root_of_unity(root_order_2 as u64)
-            .0
-            .unwrap();
+        let omega2 = BFieldElement::primitive_root_of_unity(root_order_2 as u64).unwrap();
         let domain_2 = vec![_7_17, _10_17];
         let actual_2 = Polynomial::<BFieldElement>::fast_zerofier(&domain_2, &omega2, root_order_2);
         assert!(
@@ -2163,8 +2154,8 @@ mod test_polynomials {
             }
 
             // get matching primitive nth root of unity
-            let maybe_omega = BFieldElement::zero().get_primitive_root_of_unity(order as u64);
-            let omega = maybe_omega.0.unwrap();
+            let maybe_omega = BFieldElement::primitive_root_of_unity(order as u64);
+            let omega = maybe_omega.unwrap();
 
             // compute zerofier
             let zerofier = Polynomial::<BFieldElement>::fast_zerofier(&domain, &omega, order);
@@ -2195,10 +2186,7 @@ mod test_polynomials {
     fn fast_evaluate_test() {
         let _0_17 = BFieldElement::from(0u64);
         let _1_17 = BFieldElement::from(1u64);
-        let omega = BFieldElement::one()
-            .get_primitive_root_of_unity(16)
-            .0
-            .unwrap();
+        let omega = BFieldElement::primitive_root_of_unity(16).unwrap();
         let _5_17 = BFieldElement::from(5u64);
 
         // x^5 + x^3
@@ -2251,8 +2239,8 @@ mod test_polynomials {
             }
 
             // get matching primitive nth root of unity
-            let maybe_omega = BFieldElement::zero().get_primitive_root_of_unity(order as u64);
-            let omega = maybe_omega.0.unwrap();
+            let maybe_omega = BFieldElement::primitive_root_of_unity(order as u64);
+            let omega = maybe_omega.unwrap();
 
             // fast evaluate
             let fast_eval = poly.fast_evaluate(&domain, &omega, order);
@@ -2266,10 +2254,7 @@ mod test_polynomials {
     fn fast_interpolate_test() {
         let _0_17 = BFieldElement::from(0u64);
         let _1_17 = BFieldElement::from(1u64);
-        let omega = BFieldElement::one()
-            .get_primitive_root_of_unity(4)
-            .0
-            .unwrap();
+        let omega = BFieldElement::primitive_root_of_unity(4).unwrap();
         let _5_17 = BFieldElement::from(5u64);
 
         // x^3 + x^1
@@ -2292,10 +2277,7 @@ mod test_polynomials {
         for num_points in [1, 2, 4, 8, 16, 32, 64, 128] {
             let domain = BFieldElement::random_elements(num_points, &mut rng);
             let values = BFieldElement::random_elements(num_points, &mut rng);
-            let omega = BFieldElement::zero()
-                .get_primitive_root_of_unity(num_points as u64)
-                .0
-                .unwrap();
+            let omega = BFieldElement::primitive_root_of_unity(num_points as u64).unwrap();
 
             let interpolant = Polynomial::fast_interpolate(&domain, &values, &omega, num_points);
 
@@ -2348,8 +2330,8 @@ mod test_polynomials {
             }
 
             // get matching primitive nth root of unity
-            let maybe_omega = BFieldElement::zero().get_primitive_root_of_unity(order as u64);
-            let omega = maybe_omega.0.unwrap();
+            let maybe_omega = BFieldElement::primitive_root_of_unity(order as u64);
+            let omega = maybe_omega.unwrap();
 
             // use NTT-based interpolation
             let interpolant =
@@ -2375,10 +2357,7 @@ mod test_polynomials {
         let poly = Polynomial::<BFieldElement>::new(vec![_0, _0, _0, _1, _0, _1]);
 
         let offset = BFieldElement::generator();
-        let omega = BFieldElement::one()
-            .get_primitive_root_of_unity(8)
-            .0
-            .unwrap();
+        let omega = BFieldElement::primitive_root_of_unity(8).unwrap();
 
         let values = poly.fast_coset_evaluate(&offset, omega, 8);
 
@@ -2397,14 +2376,8 @@ mod test_polynomials {
 
     #[test]
     fn fast_coset_divide_test() {
-        let offset = BFieldElement::from(1u64)
-            .get_primitive_root_of_unity(64)
-            .0
-            .unwrap();
-        let primitive_root = BFieldElement::from(1u64)
-            .get_primitive_root_of_unity(32)
-            .0
-            .unwrap();
+        let offset = BFieldElement::primitive_root_of_unity(64).unwrap();
+        let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
         println!("primitive_root = {}", primitive_root);
         let a: Polynomial<BFieldElement> = Polynomial {
             coefficients: vec![
@@ -2778,10 +2751,7 @@ mod test_polynomials {
                 next_po2 = next_po2 & (next_po2 - 1);
             }
 
-            let omega = BFieldElement::one()
-                .get_primitive_root_of_unity(next_po2 as u64)
-                .0
-                .unwrap();
+            let omega = BFieldElement::primitive_root_of_unity(next_po2 as u64).unwrap();
 
             let fast_zerofier_polynomial =
                 Polynomial::<BFieldElement>::fast_zerofier(&unique_domain, &omega, next_po2);

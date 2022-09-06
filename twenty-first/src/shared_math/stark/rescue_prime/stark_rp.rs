@@ -7,7 +7,7 @@ use crate::shared_math::other::log_2_ceil;
 use crate::shared_math::other::roundup_npo2;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::CyclicGroupGenerator;
-use crate::shared_math::traits::{FromVecu8, GetPrimitiveRootOfUnity, GetRandomElements};
+use crate::shared_math::traits::{FromVecu8, GetRandomElements, PrimitiveRootOfUnity};
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::blake3_wrapper::Blake3Hash;
@@ -156,18 +156,12 @@ impl StarkRp {
         timer.elapsed("calculate initial details");
 
         // compute generators
-        let omega = BFieldElement::zero()
-            .get_primitive_root_of_unity(fri_domain_length as u64)
-            .0
-            .unwrap();
+        let omega = BFieldElement::primitive_root_of_unity(fri_domain_length as u64).unwrap();
 
         timer.elapsed("calculate omega");
 
         let omicron_domain_length = rounded_trace_length;
-        let omicron = BFieldElement::zero()
-            .get_primitive_root_of_unity(omicron_domain_length)
-            .0
-            .unwrap();
+        let omicron = BFieldElement::primitive_root_of_unity(omicron_domain_length).unwrap();
 
         timer.elapsed("calculate omicron");
 
@@ -711,10 +705,7 @@ impl StarkRp {
             randomizer_values.insert(index, value);
         }
 
-        let omicron = BFieldElement::zero()
-            .get_primitive_root_of_unity(omicron_domain_length as u64)
-            .0
-            .unwrap();
+        let omicron = BFieldElement::primitive_root_of_unity(omicron_domain_length as u64).unwrap();
         timer.elapsed("Insert randomizer values in HashMap");
 
         // Verify leafs of combination polynomial
@@ -999,7 +990,7 @@ impl StarkRp {
         // Make sure we change this when changing the hash function.
         k_seeds
             .iter()
-            .map(|seed| XFieldElement::zero().from_vecu8(seed.to_vec()))
+            .map(|seed| XFieldElement::from_vecu8(seed.to_vec()))
             .collect::<Vec<XFieldElement>>()
     }
 }
@@ -1022,10 +1013,7 @@ pub mod test_stark {
         let (output, trace) = rp.eval_and_trace(&input);
         assert_eq!(4, trace.len());
 
-        let omicron = BFieldElement::zero()
-            .get_primitive_root_of_unity(16)
-            .0
-            .unwrap();
+        let omicron = BFieldElement::primitive_root_of_unity(16).unwrap();
         let air_constraints = rp.get_air_constraints(omicron);
         let boundary_constraints = rp.get_boundary_constraints(&output);
         let mut proof_stream = ProofStream::default();
@@ -1071,10 +1059,7 @@ pub mod test_stark {
         let (output, trace) = rp.eval_and_trace(&input);
 
         // FIXME: Don't hardcode omicron domain length
-        let omicron = BFieldElement::zero()
-            .get_primitive_root_of_unity(16)
-            .0
-            .unwrap();
+        let omicron = BFieldElement::primitive_root_of_unity(16).unwrap();
 
         let mut timer = TimingReporter::start();
         let air_constraints = rp.get_air_constraints(omicron);
@@ -1127,10 +1112,7 @@ pub mod test_stark {
         let (output, trace) = rp.eval_and_trace(&input);
         assert_eq!(4, trace.len());
 
-        let omicron = BFieldElement::zero()
-            .get_primitive_root_of_unity(16)
-            .0
-            .unwrap();
+        let omicron = BFieldElement::primitive_root_of_unity(16).unwrap();
         let air_constraints = rp.get_air_constraints(omicron);
         let boundary_constraints = rp.get_boundary_constraints(&output);
         let mut proof_stream = ProofStream::default();

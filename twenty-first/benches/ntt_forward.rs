@@ -4,7 +4,7 @@ use criterion::{
 };
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::ntt::ntt;
-use twenty_first::shared_math::traits::{GetPrimitiveRootOfUnity, GetRandomElements};
+use twenty_first::shared_math::traits::{GetRandomElements, PrimitiveRootOfUnity};
 use twenty_first::shared_math::x_field_element::XFieldElement;
 
 fn chu_ntt_forward(c: &mut Criterion) {
@@ -42,7 +42,7 @@ fn bfield_benchmark(
 
     let mut rng = rand::thread_rng();
     let mut xs = BFieldElement::random_elements(size, &mut rng);
-    let omega = xs[0].get_primitive_root_of_unity(size as u64).0.unwrap();
+    let omega = BFieldElement::primitive_root_of_unity(size as u64).unwrap();
 
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {
@@ -60,7 +60,7 @@ fn xfield_benchmark(
 
     let mut rng = rand::thread_rng();
     let mut xs = XFieldElement::random_elements(size, &mut rng);
-    let omega = xs[0].get_primitive_root_of_unity(size as u64).0.unwrap();
+    let omega = XFieldElement::primitive_root_of_unity(size as u64).unwrap();
 
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {

@@ -6,10 +6,10 @@ use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::FiniteField;
-use crate::shared_math::traits::GetPrimitiveRootOfUnity;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::Inverse;
 use crate::shared_math::traits::ModPowU32;
+use crate::shared_math::traits::PrimitiveRootOfUnity;
 use crate::shared_math::x_field_element::XFieldElement;
 use num_traits::One;
 use num_traits::Zero;
@@ -88,10 +88,7 @@ impl<T: TableMoreTrait> Table<T> {
             return BFieldElement::one();
         }
 
-        BFieldElement::zero()
-            .get_primitive_root_of_unity(height as u64)
-            .0
-            .unwrap()
+        BFieldElement::primitive_root_of_unity(height as u64).unwrap()
     }
 
     /// Return the interpolation of columns. The `column_indices` variable
@@ -572,14 +569,8 @@ mod table_tests {
     #[test]
     fn table_matrix_interpolate_simple_test() {
         let order: usize = 1 << 32;
-        let smooth_generator = BFieldElement::zero()
-            .get_primitive_root_of_unity(order as u64)
-            .0
-            .unwrap();
-        let omega = BFieldElement::zero()
-            .get_primitive_root_of_unity(16)
-            .0
-            .unwrap();
+        let smooth_generator = BFieldElement::primitive_root_of_unity(order as u64).unwrap();
+        let omega = BFieldElement::primitive_root_of_unity(16).unwrap();
 
         let trace_length = 5;
         let num_randomizers = 2;
@@ -633,10 +624,7 @@ mod table_tests {
 
         // Verify that when we evaluate the interpolants in the omicron domain, we get the
         // values that we defined for the matrix values
-        let omicron = BFieldElement::zero()
-            .get_primitive_root_of_unity(8)
-            .0
-            .unwrap();
+        let omicron = BFieldElement::primitive_root_of_unity(8).unwrap();
         assert_eq!(
             omicron, instruction_table.0.omicron,
             "omicron must match expected value"

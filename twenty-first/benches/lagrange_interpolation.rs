@@ -5,7 +5,7 @@ use criterion::{
 use num_traits::Pow;
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::polynomial;
-use twenty_first::shared_math::traits::{GetPrimitiveRootOfUnity, GetRandomElements};
+use twenty_first::shared_math::traits::{GetRandomElements, PrimitiveRootOfUnity};
 
 fn lagrange_interpolation(c: &mut Criterion) {
     let mut group = c.benchmark_group("lagrange_interpolation");
@@ -57,7 +57,7 @@ fn ntt_based_fast_interpolate(
     let mut rng = rand::thread_rng();
     let xs = BFieldElement::random_elements(size, &mut rng);
     let ys = BFieldElement::random_elements(size, &mut rng);
-    let omega = xs[0].get_primitive_root_of_unity(size as u64).0.unwrap();
+    let omega = BFieldElement::primitive_root_of_unity(size as u64).unwrap();
 
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {

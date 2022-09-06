@@ -292,7 +292,7 @@ mod rescue_prime_test {
     use itertools::izip;
 
     use super::*;
-    use crate::shared_math::{rescue_prime_params as params, traits::GetPrimitiveRootOfUnity};
+    use crate::shared_math::{rescue_prime_params as params, traits::PrimitiveRootOfUnity};
 
     #[test]
     #[should_panic]
@@ -411,8 +411,8 @@ mod rescue_prime_test {
         // let rp = params::rescue_prime_params_bfield_0();
 
         // rescue prime test vector 1
-        let omicron_res = BFieldElement::zero().get_primitive_root_of_unity(1 << 5);
-        let omicron = omicron_res.0.unwrap();
+        let omicron_res = BFieldElement::primitive_root_of_unity(1 << 5);
+        let omicron = omicron_res.unwrap();
 
         // Verify that the round constants polynomials are correct
         let (fst_rc_pol, snd_rc_pol) = rp.get_round_constant_polynomials(omicron);

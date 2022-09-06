@@ -729,7 +729,7 @@ mod processor_table_tests {
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::{
         stark::brainfuck::{self, vm::BaseMatrices},
-        traits::{GetPrimitiveRootOfUnity, GetRandomElements},
+        traits::{GetRandomElements, PrimitiveRootOfUnity},
     };
 
     #[test]
@@ -748,10 +748,7 @@ mod processor_table_tests {
             let processor_matrix = base_matrices.processor_matrix;
             let number_of_randomizers = 2;
             let order = 1 << 32;
-            let smooth_generator = BFieldElement::zero()
-                .get_primitive_root_of_unity(order)
-                .0
-                .unwrap();
+            let smooth_generator = BFieldElement::primitive_root_of_unity(order).unwrap();
 
             // instantiate table objects
             let mut processor_table: ProcessorTable = ProcessorTable::new(

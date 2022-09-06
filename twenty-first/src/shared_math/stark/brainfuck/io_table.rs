@@ -263,8 +263,8 @@ mod io_table_tests {
     use crate::shared_math::stark::brainfuck;
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
-    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use crate::shared_math::traits::GetRandomElements;
+    use crate::shared_math::traits::PrimitiveRootOfUnity;
     use rand::thread_rng;
     use std::cmp::max;
     use std::convert::TryInto;
@@ -289,10 +289,7 @@ mod io_table_tests {
 
             let _number_of_randomizers = 2;
             let order = 1 << 32;
-            let smooth_generator = BFieldElement::zero()
-                .get_primitive_root_of_unity(order)
-                .0
-                .unwrap();
+            let smooth_generator = BFieldElement::primitive_root_of_unity(order).unwrap();
 
             // instantiate table objects
             let input_table_: IOTable = IOTable::new_input_table(

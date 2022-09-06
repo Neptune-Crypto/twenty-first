@@ -32,11 +32,11 @@ where
     fn inverse(&self) -> Self;
 }
 
-pub trait GetPrimitiveRootOfUnity
+pub trait PrimitiveRootOfUnity
 where
     Self: Sized,
 {
-    fn get_primitive_root_of_unity(&self, n: u64) -> (Option<Self>, Vec<u64>);
+    fn primitive_root_of_unity(n: u64) -> Option<Self>;
 }
 
 // Used for testing.
@@ -75,7 +75,7 @@ pub trait New {
 pub trait FromVecu8 {
     #[must_use]
     #[allow(clippy::wrong_self_convention)]
-    fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
+    fn from_vecu8(bytes: Vec<u8>) -> Self;
 }
 
 pub trait FiniteField:
@@ -100,7 +100,7 @@ pub trait FiniteField:
     + New
     + CyclicGroupGenerator
     + ModPowU32
-    + GetPrimitiveRootOfUnity
+    + PrimitiveRootOfUnity
     + Send
     + Sync
     + Copy

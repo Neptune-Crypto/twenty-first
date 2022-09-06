@@ -537,7 +537,7 @@ where
 mod fri_domain_tests {
     use super::*;
     use crate::shared_math::{
-        b_field_element::BFieldElement, traits::GetPrimitiveRootOfUnity,
+        b_field_element::BFieldElement, traits::PrimitiveRootOfUnity,
         x_field_element::XFieldElement,
     };
 
@@ -552,10 +552,7 @@ mod fri_domain_tests {
         ];
 
         for order in [4, 8, 32] {
-            let omega = BFieldElement::zero()
-                .get_primitive_root_of_unity(order)
-                .0
-                .unwrap();
+            let omega = BFieldElement::primitive_root_of_unity(order).unwrap();
             let domain = FriDomain {
                 offset: BFieldElement::generator().lift(),
                 omega: omega.lift(),
@@ -610,7 +607,7 @@ mod xfri_tests {
     use crate::shared_math::rescue_prime_xlix::{
         RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
     };
-    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
+    use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::simple_hasher::{RescuePrimeProduction, ToDigest};
@@ -812,8 +809,8 @@ mod xfri_tests {
         H: Hasher<Digest = Vec<BFieldElement>> + Sized + std::marker::Sync,
         XFieldElement: ToDigest<H::Digest>,
     {
-        let (omega, _primes1): (Option<XFieldElement>, Vec<u64>) =
-            XFieldElement::zero().get_primitive_root_of_unity(subgroup_order);
+        let maybe_omega: Option<XFieldElement> =
+            XFieldElement::primitive_root_of_unity(subgroup_order);
 
         // The following offset was picked arbitrarily by copying the one found in
         // `get_b_field_fri_test_object`. It does not generate the full Z_p\{0}, but
@@ -822,7 +819,7 @@ mod xfri_tests {
 
         let fri: Fri<H> = Fri::new(
             offset.unwrap(),
-            omega.unwrap(),
+            maybe_omega.unwrap(),
             subgroup_order as usize,
             expansion_factor,
             colinearity_checks,

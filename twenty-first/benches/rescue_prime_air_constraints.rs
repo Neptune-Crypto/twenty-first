@@ -1,9 +1,8 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use num_traits::Zero;
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::rescue_prime::RescuePrime;
 use twenty_first::shared_math::rescue_prime_params as params;
-use twenty_first::shared_math::traits::GetPrimitiveRootOfUnity;
+use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 
 // Benchmark the RescuePrime AIR constraints compilation.
 
@@ -12,10 +11,7 @@ fn rescue_prime_air_constraints(criterion: &mut Criterion) {
     let mut rp_bench: RescuePrime = params::rescue_prime_small_test_params();
     rp_bench.round_count = 1;
     rp_bench.alpha = 4;
-    let omicron = BFieldElement::zero()
-        .get_primitive_root_of_unity(1 << 5)
-        .0
-        .unwrap();
+    let omicron = BFieldElement::primitive_root_of_unity(1 << 5).unwrap();
 
     let mut group = criterion.benchmark_group("rescue_prime_air_constraints");
     group.sample_size(10);

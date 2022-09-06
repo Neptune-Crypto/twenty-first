@@ -409,8 +409,8 @@ mod memory_table_tests {
     use crate::shared_math::stark::brainfuck;
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
-    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use crate::shared_math::traits::GetRandomElements;
+    use crate::shared_math::traits::PrimitiveRootOfUnity;
 
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on
@@ -436,10 +436,7 @@ mod memory_table_tests {
 
             let number_of_randomizers = 2;
             let order = 1 << 32;
-            let smooth_generator = BFieldElement::zero()
-                .get_primitive_root_of_unity(order)
-                .0
-                .unwrap();
+            let smooth_generator = BFieldElement::primitive_root_of_unity(order).unwrap();
 
             // instantiate table objects
             let mut memory_table: MemoryTable = MemoryTable::new(

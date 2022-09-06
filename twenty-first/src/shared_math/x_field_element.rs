@@ -1,4 +1,4 @@
-use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
+use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetRandomElements;
@@ -169,12 +169,10 @@ impl Inverse for XFieldElement {
     }
 }
 
-impl GetPrimitiveRootOfUnity for XFieldElement {
-    fn get_primitive_root_of_unity(&self, n: u64) -> (Option<XFieldElement>, Vec<u64>) {
-        let (b_root, primes) = self.coefficients[0].get_primitive_root_of_unity(n);
-        let x_root = b_root.map(XFieldElement::new_const);
-
-        (x_root, primes)
+impl PrimitiveRootOfUnity for XFieldElement {
+    fn primitive_root_of_unity(n: u64) -> Option<XFieldElement> {
+        let b_root = BFieldElement::primitive_root_of_unity(n);
+        b_root.map(XFieldElement::new_const)
     }
 }
 
@@ -226,16 +224,16 @@ impl Display for XFieldElement {
 }
 
 impl FromVecu8 for XFieldElement {
-    fn from_vecu8(&self, bytes: Vec<u8>) -> Self {
+    fn from_vecu8(bytes: Vec<u8>) -> Self {
         // TODO: See note in BFieldElement's From<Vec<u8>>.
         let bytesize = std::mem::size_of::<u64>();
         let (first_eight_bytes, rest) = bytes.as_slice().split_at(bytesize);
         let (second_eight_bytes, rest2) = rest.split_at(bytesize);
         let (third_eight_bytes, _rest3) = rest2.split_at(bytesize);
 
-        let coefficient0 = self.coefficients[0].from_vecu8(first_eight_bytes.to_vec());
-        let coefficient1 = self.coefficients[0].from_vecu8(second_eight_bytes.to_vec());
-        let coefficient2 = self.coefficients[0].from_vecu8(third_eight_bytes.to_vec());
+        let coefficient0 = BFieldElement::from_vecu8(first_eight_bytes.to_vec());
+        let coefficient1 = BFieldElement::from_vecu8(second_eight_bytes.to_vec());
+        let coefficient2 = BFieldElement::from_vecu8(third_eight_bytes.to_vec());
         XFieldElement::new([coefficient0, coefficient1, coefficient2])
     }
 }
@@ -928,10 +926,7 @@ mod x_field_element_test {
                 .iter()
                 .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
                 .collect();
-            let root = XFieldElement::zero()
-                .get_primitive_root_of_unity(i)
-                .0
-                .unwrap();
+            let root = XFieldElement::primitive_root_of_unity(i).unwrap();
             let log_2_of_n = log_2_floor(inputs.len() as u128) as u32;
             let mut rv = inputs.clone();
             ntt::<XFieldElement>(&mut rv, root, log_2_of_n);

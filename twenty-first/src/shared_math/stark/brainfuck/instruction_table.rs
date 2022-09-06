@@ -415,8 +415,8 @@ mod instruction_table_tests {
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::stark::brainfuck::vm::InstructionMatrixBaseRow;
     use crate::shared_math::stark::brainfuck::{self};
-    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use crate::shared_math::traits::GetRandomElements;
+    use crate::shared_math::traits::PrimitiveRootOfUnity;
     use rand::thread_rng;
 
     // When we simulate a program, this generates a collection of matrices that contain
@@ -440,10 +440,7 @@ mod instruction_table_tests {
 
             let number_of_randomizers = 2;
             let order = 1 << 32;
-            let smooth_generator = BFieldElement::zero()
-                .get_primitive_root_of_unity(order)
-                .0
-                .unwrap();
+            let smooth_generator = BFieldElement::primitive_root_of_unity(order).unwrap();
 
             // instantiate table objects
             let mut instruction_table: InstructionTable = InstructionTable::new(
