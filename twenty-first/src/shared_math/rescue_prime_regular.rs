@@ -2,7 +2,10 @@ use itertools::Itertools;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
-use crate::shared_math::b_field_element::BFieldElement;
+use crate::{
+    shared_math::b_field_element::BFieldElement,
+    util_types::simple_hasher::{self, ToDigest},
+};
 
 use super::traits::FiniteField;
 
@@ -793,17 +796,24 @@ pub const ROUND_CONSTANTS: [u64; NUM_ROUNDS * STATE_SIZE * 2] = [
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RescuePrimeRegular {
+pub struct RescuePrimeRegularState {
     pub state: [BFieldElement; STATE_SIZE],
 }
 
-impl RescuePrimeRegular {
-    /// new
-    /// Create a new sponge object. This function is used internally.
-    fn new() -> Self {
-        RescuePrimeRegular {
+impl RescuePrimeRegularState {
+    fn new() -> RescuePrimeRegularState {
+        RescuePrimeRegularState {
             state: [BFieldElement::zero(); STATE_SIZE],
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RescuePrimeRegular {}
+
+impl RescuePrimeRegular {
+    fn new() -> Self {
+        RescuePrimeRegular {}
     }
 
     #[inline]
@@ -912,7 +922,7 @@ impl RescuePrimeRegular {
 
     /// xlix_round
     /// Apply one round of the XLIX permutation.
-    fn xlix_round(&mut self, round_index: usize) {
+    fn xlix_round(sponge: &mut RescuePrimeRegularState, round_index: usize) {
         assert!(
             round_index < NUM_ROUNDS,
             "Cannot apply {}th round; only have {} in total.",
@@ -925,20 +935,21 @@ impl RescuePrimeRegular {
         //     self.state[i] = self.state[i].mod_pow_u64(ALPHA);
         // }
         //
-        self.state = Self::batch_mod_pow_alpha(self.state);
+        sponge.state = Self::batch_mod_pow_alpha(sponge.state);
 
         // MDS matrix
         let mut v: [BFieldElement; STATE_SIZE] = [BFieldElement::from(0u64); STATE_SIZE];
         for i in 0..STATE_SIZE {
             for j in 0..STATE_SIZE {
-                v[i] += BFieldElement::from(MDS[i * STATE_SIZE + j]) * self.state[j];
+                v[i] += BFieldElement::from(MDS[i * STATE_SIZE + j]) * sponge.state[j];
             }
         }
-        self.state = v;
+        sponge.state = v;
 
         // round constants A
         for i in 0..STATE_SIZE {
-            self.state[i] += BFieldElement::from(ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + i]);
+            sponge.state[i] +=
+                BFieldElement::from(ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + i]);
         }
 
         // Inverse S-box
@@ -947,20 +958,20 @@ impl RescuePrimeRegular {
         // }
         //
         // self.state = Self::batch_mod_pow(self.state, ALPHA_INV);
-        self.state = Self::batch_mod_pow_alpha_inv(self.state);
+        sponge.state = Self::batch_mod_pow_alpha_inv(sponge.state);
 
         // MDS matrix
         for i in 0..STATE_SIZE {
             v[i] = BFieldElement::zero();
             for j in 0..STATE_SIZE {
-                v[i] += BFieldElement::from(MDS[i * STATE_SIZE + j]) * self.state[j];
+                v[i] += BFieldElement::from(MDS[i * STATE_SIZE + j]) * sponge.state[j];
             }
         }
-        self.state = v;
+        sponge.state = v;
 
         // round constants B
         for i in 0..STATE_SIZE {
-            self.state[i] +=
+            sponge.state[i] +=
                 BFieldElement::from(ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + STATE_SIZE + i]);
         }
     }
@@ -968,9 +979,9 @@ impl RescuePrimeRegular {
     /// xlix
     /// XLIX is the permutation defined by Rescue-Prime. This
     /// function applies XLIX to the state of a sponge.
-    fn xlix(&mut self) {
+    fn xlix(sponge: &mut RescuePrimeRegularState) {
         for i in 0..NUM_ROUNDS {
-            self.xlix_round(i);
+            Self::xlix_round(sponge, i);
         }
     }
 
@@ -978,13 +989,13 @@ impl RescuePrimeRegular {
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
     pub fn hash_10(input: [BFieldElement; 10]) -> [BFieldElement; 5] {
-        let mut sponge = Self::new();
+        let mut sponge = RescuePrimeRegularState::new();
 
         // absorb once
         sponge.state[..10].copy_from_slice(&input);
 
         // apply xlix
-        sponge.xlix();
+        Self::xlix(&mut sponge);
 
         // squeeze once
         sponge.state[..5].try_into().unwrap()
@@ -994,7 +1005,7 @@ impl RescuePrimeRegular {
     /// Hash an arbitrary number of field elements. Takes care of
     /// padding.
     pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
-        let mut sponge = Self::new();
+        let mut sponge = RescuePrimeRegularState::new();
 
         // pad input
         let mut padded_input = input.to_vec();
@@ -1014,11 +1025,48 @@ impl RescuePrimeRegular {
                 *sponge_state_element += input_element.to_owned();
             }
             padded_input = padded_input[RATE..].to_vec();
-            sponge.xlix();
+            Self::xlix(&mut sponge);
         }
 
         // squeeze once
         sponge.state[..5].try_into().unwrap()
+    }
+}
+
+impl simple_hasher::Hasher for RescuePrimeRegular {
+    type Digest = [BFieldElement; 5];
+
+    fn new() -> Self {
+        RescuePrimeRegular::new()
+    }
+
+    fn hash<Value: simple_hasher::ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
+        RescuePrimeRegular::hash_varlen(&input.to_digest())
+    }
+
+    fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
+        let input: [BFieldElement; 10] = [left_input.to_vec(), right_input.to_vec()]
+            .concat()
+            .try_into()
+            .unwrap();
+        RescuePrimeRegular::hash_10(input)
+    }
+
+    fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
+        let input: Vec<BFieldElement> = inputs.concat();
+        RescuePrimeRegular::hash_varlen(&input)
+    }
+}
+
+impl ToDigest<[BFieldElement; 5]> for [BFieldElement; 5] {
+    fn to_digest(&self) -> [BFieldElement; 5] {
+        *self
+    }
+}
+
+impl ToDigest<[BFieldElement; 5]> for Vec<BFieldElement> {
+    fn to_digest(&self) -> [BFieldElement; 5] {
+        self.to_owned().try_into().unwrap()
     }
 }
 
