@@ -286,6 +286,26 @@ impl<PFElem: PrimeField> Polynomial<PFElem> {
         p2_y_times_dx / dx
     }
 
+    pub fn zerofier(domain: &[PFElem]) -> Self {
+        assert!(
+            !domain.is_empty(),
+            "Cannot compute zerofier for empty domain."
+        );
+        let mut zerofier_array = vec![domain[0].ring_zero(); domain.len() + 1];
+        zerofier_array[0] = domain[0].ring_one();
+        let mut num_coeffs = 1;
+        for &d in domain.iter() {
+            for k in (1..num_coeffs + 1).rev() {
+                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
+            }
+            zerofier_array[0] = -d * zerofier_array[0];
+            num_coeffs += 1;
+        }
+        Self {
+            coefficients: zerofier_array,
+        }
+    }
+
     // Calculates a reversed representation of the coefficients of
     // prod_{i=0}^{N}((x- q_i))
     #[allow(clippy::assign_op_pattern)]
@@ -2772,6 +2792,38 @@ mod test_polynomials {
             for (i, y) in values.into_iter().enumerate() {
                 assert_eq!(y, interpoly.evaluate(&domain[i]));
             }
+        }
+    }
+
+    #[test]
+    fn zerofier_test() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..10 {
+            let num_samples: usize = max(2, rng.next_u32() as usize % 100);
+            let domain = BFieldElement::random_elements(num_samples, &mut rng);
+            let mut unique_domain = vec![];
+            for d in domain.iter() {
+                if !unique_domain.contains(d) {
+                    unique_domain.push(*d);
+                }
+            }
+
+            let zerofier_polynomial = Polynomial::<BFieldElement>::zerofier(&unique_domain);
+
+            let mut next_po2 = unique_domain.len() << 1;
+            while next_po2 & (next_po2 - 1) != 0 {
+                next_po2 = next_po2 & (next_po2 - 1);
+            }
+
+            let omega = BFieldElement::ring_one()
+                .get_primitive_root_of_unity(next_po2 as u64)
+                .0
+                .unwrap();
+
+            let fast_zerofier_polynomial =
+                Polynomial::<BFieldElement>::fast_zerofier(&unique_domain, &omega, next_po2);
+
+            assert_eq!(zerofier_polynomial, fast_zerofier_polynomial);
         }
     }
 }
