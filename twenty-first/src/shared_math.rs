@@ -4,7 +4,6 @@ pub mod mpolynomial;
 pub mod ntt;
 pub mod other;
 pub mod polynomial;
-pub mod prime_field_element_flexible;
 pub mod rescue_prime;
 pub mod rescue_prime_params;
 pub mod rescue_prime_regular;
