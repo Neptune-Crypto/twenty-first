@@ -813,8 +813,8 @@ impl RescuePrimeRegular {
     }
 
     #[inline]
-    fn batch_square_n(array: &mut [BFieldElement; STATE_SIZE], n: usize) {
-        for _ in 0..n {
+    fn batch_square_n<const N: usize>(array: &mut [BFieldElement; STATE_SIZE]) {
+        for _ in 0..N {
             Self::batch_square(array);
         }
     }
@@ -852,29 +852,29 @@ impl RescuePrimeRegular {
         Self::batch_square(&mut p2);
 
         let mut p3 = p2;
-        Self::batch_square_n(&mut p3, 3);
+        Self::batch_square_n::<3>(&mut p3);
         Self::batch_mul_into(&mut p3, p2);
 
         let mut p4 = p3;
-        Self::batch_square_n(&mut p4, 6);
+        Self::batch_square_n::<6>(&mut p4);
         Self::batch_mul_into(&mut p4, p3);
 
         let mut p5 = p4;
-        Self::batch_square_n(&mut p5, 12);
+        Self::batch_square_n::<12>(&mut p5);
         Self::batch_mul_into(&mut p5, p4);
 
         let mut p6 = p5;
-        Self::batch_square_n(&mut p6, 6);
+        Self::batch_square_n::<6>(&mut p6);
         Self::batch_mul_into(&mut p6, p3);
 
         let mut p7 = p6;
-        Self::batch_square_n(&mut p7, 31);
+        Self::batch_square_n::<31>(&mut p7);
         Self::batch_mul_into(&mut p7, p6);
 
         let mut result = p7;
         Self::batch_square(&mut result);
         Self::batch_mul_into(&mut result, p6);
-        Self::batch_square_n(&mut result, 2);
+        Self::batch_square_n::<2>(&mut result);
         Self::batch_mul_into(&mut result, p2);
         Self::batch_mul_into(&mut result, p1);
         Self::batch_mul_into(&mut result, array);
