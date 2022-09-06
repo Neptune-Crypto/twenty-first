@@ -3,9 +3,7 @@ use super::other;
 use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::GetRandomElements;
-use crate::shared_math::traits::{
-    CyclicGroupGenerator, IdentityValues, ModPowU32, ModPowU64, New, PrimeField,
-};
+use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use crate::utils::FIRST_THOUSAND_PRIMES;
 use num_traits::{One, Zero};
 use std::hash::{Hash, Hasher};
@@ -65,7 +63,7 @@ pub struct BFieldElement(u64);
 impl Sum for BFieldElement {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.reduce(|a, b| a + b)
-            .unwrap_or_else(BFieldElement::ring_zero)
+            .unwrap_or_else(BFieldElement::zero)
     }
 }
 
@@ -126,25 +124,12 @@ impl BFieldElement {
 
     // You should probably only use `increment` and `decrement` for testing purposes
     pub fn increment(&mut self) {
-        self.0 = Self::canonical_representation(&(*self + Self::ring_one()));
+        self.0 = Self::canonical_representation(&(*self + Self::one()));
     }
 
     // You should probably only use `increment` and `decrement` for testing purposes
     pub fn decrement(&mut self) {
-        self.0 = Self::canonical_representation(&(*self - Self::ring_one()));
-    }
-
-    // TODO: Currently, IdentityValues has &self as part of its signature, so we hotfix
-    // being able to refer to a zero/one element without having an element at hand. This
-    // will go away when moving to Zero/One traits.
-    #[inline]
-    pub const fn ring_zero() -> Self {
-        Self(0)
-    }
-
-    #[inline]
-    pub const fn ring_one() -> Self {
-        Self(1)
+        self.0 = Self::canonical_representation(&(*self - Self::one()));
     }
 
     #[inline]
@@ -161,10 +146,10 @@ impl BFieldElement {
     pub fn mod_pow(&self, exp: u64) -> Self {
         // Special case for handling 0^0 = 1
         if exp == 0 {
-            return BFieldElement::ring_one();
+            return BFieldElement::one();
         }
 
-        let mut acc = BFieldElement::ring_one();
+        let mut acc = BFieldElement::one();
         let bit_length = other::count_bits(exp);
         for i in 0..bit_length {
             acc = acc * acc;
@@ -323,7 +308,7 @@ impl Inverse for BFieldElement {
         let x = *self;
         assert_ne!(
             x,
-            Self::ring_zero(),
+            Self::zero(),
             "Attempted to find the multiplicative inverse of zero."
         );
 
@@ -360,7 +345,7 @@ impl ModPowU32 for BFieldElement {
 impl CyclicGroupGenerator for BFieldElement {
     fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self> {
         let mut val = *self;
-        let mut ret: Vec<Self> = vec![self.ring_one()];
+        let mut ret: Vec<Self> = vec![Self::one()];
 
         loop {
             ret.push(val);
@@ -412,48 +397,25 @@ impl FromVecu8 for BFieldElement {
     }
 }
 
-impl PrimeField for BFieldElement {}
+impl FiniteField for BFieldElement {}
 
-// TODO: We implement IdentityValues so this module works in existing code, but we want to replace IdentityValues with Zero and One eventually.
-// impl Zero for BFieldElement {
-//     fn zero() -> Self {
-//         BFieldElement(0)
-//     }
-
-//     fn is_zero(&self) -> bool {
-//         self.0 == 0
-//     }
-// }
-
-// impl One for BFieldElement {
-//     fn one() -> Self {
-//         BFieldElement(1)
-//     }
-
-//     fn is_one(&self) -> bool {
-//         self.0 == 1
-//     }
-// }
-
-impl IdentityValues for BFieldElement {
-    #[inline]
-    fn is_zero(&self) -> bool {
-        self.canonical_representation() == 0
-    }
-
-    #[inline]
-    fn is_one(&self) -> bool {
-        self.canonical_representation() == 1
-    }
-
-    #[inline]
-    fn ring_zero(&self) -> Self {
+impl Zero for BFieldElement {
+    fn zero() -> Self {
         BFieldElement(0)
     }
 
-    #[inline]
-    fn ring_one(&self) -> Self {
+    fn is_zero(&self) -> bool {
+        self.canonical_representation() == 0
+    }
+}
+
+impl One for BFieldElement {
+    fn one() -> Self {
         BFieldElement(1)
+    }
+
+    fn is_one(&self) -> bool {
+        self.canonical_representation() == 1
     }
 }
 
@@ -567,7 +529,7 @@ impl GetPrimitiveRootOfUnity for BFieldElement {
         let mut primes: Vec<u64> = vec![];
 
         if n <= 1 {
-            return (Some(BFieldElement::ring_one()), primes);
+            return (Some(BFieldElement::one()), primes);
         }
 
         // Calculate prime factorization of n
@@ -603,7 +565,7 @@ impl GetPrimitiveRootOfUnity for BFieldElement {
         }
 
         let mut primitive_root: Option<BFieldElement> = None;
-        let mut candidate: BFieldElement = BFieldElement::ring_one();
+        let mut candidate: BFieldElement = BFieldElement::one();
 
         #[allow(clippy::suspicious_operation_groupings)]
         while primitive_root == None && candidate.0 < Self::QUOTIENT {
@@ -782,7 +744,7 @@ mod b_prime_field_element_test {
     fn simple_value_test() {
         let zero: BFieldElement = bfield_elem!(0);
         assert_eq!(0, zero.value());
-        let one: BFieldElement = BFieldElement::ring_one();
+        let one: BFieldElement = BFieldElement::one();
         assert_eq!(1, one.value());
 
         let neinneinnein = bfield_elem!(999);
@@ -1088,20 +1050,20 @@ mod b_prime_field_element_test {
 
     #[test]
     fn neg_test() {
-        assert_eq!(-BFieldElement::ring_zero(), BFieldElement::ring_zero());
-        assert_eq!((-BFieldElement::ring_one()).0, BFieldElement::MAX);
+        assert_eq!(-BFieldElement::zero(), BFieldElement::zero());
+        assert_eq!((-BFieldElement::one()).0, BFieldElement::MAX);
         let max = BFieldElement::new(BFieldElement::MAX);
-        let max_plus_one = max + BFieldElement::ring_one();
-        let max_plus_two = max_plus_one + BFieldElement::ring_one();
-        assert_eq!(BFieldElement::ring_zero(), -max_plus_one);
+        let max_plus_one = max + BFieldElement::one();
+        let max_plus_two = max_plus_one + BFieldElement::one();
+        assert_eq!(BFieldElement::zero(), -max_plus_one);
         assert_eq!(max, -max_plus_two);
     }
 
     #[test]
     fn equality_and_hash_test() {
-        assert_eq!(BFieldElement::ring_zero(), BFieldElement::ring_zero());
-        assert_eq!(BFieldElement::ring_one(), BFieldElement::ring_one());
-        assert_ne!(BFieldElement::ring_one(), BFieldElement::ring_zero());
+        assert_eq!(BFieldElement::zero(), BFieldElement::zero());
+        assert_eq!(BFieldElement::one(), BFieldElement::one());
+        assert_ne!(BFieldElement::one(), BFieldElement::zero());
         assert_eq!(BFieldElement::new(42), BFieldElement::new(42));
         assert_ne!(BFieldElement::new(42), BFieldElement::new(43));
 
@@ -1180,30 +1142,30 @@ mod b_prime_field_element_test {
         // The below list follows from the fact that `prime = 2^32*prod_{i=0}^4(1 + 2^(2^i)) + 1`
         let prime_minus_one_factors = vec![2, 3, 5, 17, 257, 65537];
         for number in prime_minus_one_factors {
-            assert!(BFieldElement::ring_one()
+            assert!(BFieldElement::one()
                 .get_primitive_root_of_unity(number)
                 .0
                 .is_some());
         }
-        assert!(BFieldElement::ring_one()
+        assert!(BFieldElement::one()
             .get_primitive_root_of_unity(2u64.pow(32) * 65537u64)
             .0
             .is_some());
-        assert!(BFieldElement::ring_one()
+        assert!(BFieldElement::one()
             .get_primitive_root_of_unity(2u64.pow(32) * 65537u64 * 257)
             .0
             .is_some());
-        assert!(BFieldElement::ring_one()
+        assert!(BFieldElement::one()
             .get_primitive_root_of_unity(2u64.pow(32) * 65537u64 * 257 * 17)
             .0
             .is_some());
-        assert!(BFieldElement::ring_one()
+        assert!(BFieldElement::one()
             .get_primitive_root_of_unity(2u64.pow(32) * 65537u64 * 257 * 17 * 5)
             .0
             .is_some());
 
         // Largest subgroup of the multiplicative group of the B field
-        assert!(BFieldElement::ring_one()
+        assert!(BFieldElement::one()
             .get_primitive_root_of_unity(2u64.pow(31) * 65537u64 * 257 * 17 * 5 * 3)
             .0
             .is_some());
@@ -1211,7 +1173,7 @@ mod b_prime_field_element_test {
         // Negative test for small group sizes
         let non_factors = vec![7, 9, 11, 18];
         for number in non_factors {
-            assert!(BFieldElement::ring_one()
+            assert!(BFieldElement::one()
                 .get_primitive_root_of_unity(number)
                 .0
                 .is_none());
@@ -1222,7 +1184,7 @@ mod b_prime_field_element_test {
     fn get_primitive_root_of_unity_test() {
         for i in 1..33 {
             let power = 1 << i;
-            let root_result = BFieldElement::ring_one().get_primitive_root_of_unity(power);
+            let root_result = BFieldElement::one().get_primitive_root_of_unity(power);
             match root_result.0 {
                 Some(root) => println!("{} => {},", power, root),
                 None => println!("Found no primitive root of unity for n = {}", power),
@@ -1280,7 +1242,7 @@ mod b_prime_field_element_test {
     #[test]
     #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
     fn multiplicative_inverse_of_zero() {
-        let zero = BFieldElement::ring_zero();
+        let zero = BFieldElement::zero();
         zero.inverse();
     }
 

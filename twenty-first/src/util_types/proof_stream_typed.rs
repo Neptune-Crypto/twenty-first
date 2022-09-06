@@ -103,6 +103,7 @@ where
 #[cfg(test)]
 mod proof_stream_typed_tests {
     use itertools::Itertools;
+    use num_traits::One;
 
     use super::*;
     use crate::shared_math::x_field_element::XFieldElement;
@@ -158,7 +159,7 @@ mod proof_stream_typed_tests {
 
         // B
 
-        let b_one = BFieldElement::ring_one();
+        let b_one = BFieldElement::one();
         let bs_expected = vec![b_one; 3];
         let item_1 = TestItem::ManyB(bs_expected.clone());
         ps.enqueue(&item_1);
@@ -180,7 +181,7 @@ mod proof_stream_typed_tests {
 
         // X
 
-        let x_one = XFieldElement::ring_one();
+        let x_one = XFieldElement::one();
 
         let xs_expected = vec![x_one; 3];
         let item_2 = TestItem::ManyX(xs_expected.clone());
@@ -205,7 +206,7 @@ mod proof_stream_typed_tests {
         let ps: &mut ProofStream<TestItem, RescuePrimeProduction> = &mut proof_stream;
 
         let hasher = RescuePrimeProduction::new();
-        let digest_1 = hasher.hash(&BFieldElement::ring_one());
+        let digest_1 = hasher.hash(&BFieldElement::one());
         ps.enqueue(&TestItem::ManyB(digest_1));
         let _result = ps.dequeue();
 
@@ -215,7 +216,7 @@ mod proof_stream_typed_tests {
             "prover_fiat_shamir() and verifier_fiat_shamir() are equivalent when the entire stream is read"
         );
 
-        let digest_2 = hasher.hash(&BFieldElement::ring_one());
+        let digest_2 = hasher.hash(&BFieldElement::one());
         ps.enqueue(&TestItem::ManyB(digest_2));
 
         assert_ne!(

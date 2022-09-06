@@ -1,10 +1,12 @@
+use num_traits::{One, Zero};
+
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
 use super::table::{Table, TableMoreTrait, TableTrait};
 use super::vm::{Register, INSTRUCTIONS};
 use crate::shared_math::b_field_element as bfe;
 use crate::shared_math::other;
 use crate::shared_math::stark::brainfuck::vm::instruction_zerofier;
-use crate::shared_math::traits::{IdentityValues, PrimeField};
+use crate::shared_math::traits::FiniteField;
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
 use std::convert::TryInto;
@@ -12,10 +14,10 @@ use std::convert::TryInto;
 impl TableMoreTrait for ProcessorTableMore {
     fn new_more() -> Self {
         ProcessorTableMore {
-            instruction_permutation_terminal: XFieldElement::ring_zero(),
-            memory_permutation_terminal: XFieldElement::ring_zero(),
-            input_evaluation_terminal: XFieldElement::ring_zero(),
-            output_evaluation_terminal: XFieldElement::ring_zero(),
+            instruction_permutation_terminal: XFieldElement::zero(),
+            memory_permutation_terminal: XFieldElement::zero(),
+            input_evaluation_terminal: XFieldElement::zero(),
+            output_evaluation_terminal: XFieldElement::zero(),
             transition_constraints_ext: None,
         }
     }
@@ -66,10 +68,10 @@ impl ProcessorTable {
 
     pub fn get_padding_row(last: &[BFieldElement]) -> Register {
         Register {
-            cycle: last[ProcessorTable::CYCLE] + BFieldElement::ring_one(),
+            cycle: last[ProcessorTable::CYCLE] + BFieldElement::one(),
             instruction_pointer: last[ProcessorTable::INSTRUCTION_POINTER],
-            current_instruction: BFieldElement::ring_zero(),
-            next_instruction: BFieldElement::ring_zero(),
+            current_instruction: BFieldElement::zero(),
+            next_instruction: BFieldElement::zero(),
             memory_pointer: last[ProcessorTable::MEMORY_POINTER],
             memory_value: last[ProcessorTable::MEMORY_VALUE],
             memory_value_inverse: last[ProcessorTable::MEMORY_VALUE_INVERSE],
@@ -154,7 +156,7 @@ impl ProcessorTable {
 
             // Max degree: 7
             let deselector: MPolynomial<BFieldElement> =
-                Self::ifnot_instruction(*c, &current_instruction, BFieldElement::ring_one());
+                Self::ifnot_instruction(*c, &current_instruction, BFieldElement::one());
 
             for (i, instr) in instrs.iter().enumerate() {
                 polynomials[i] += deselector.to_owned() * instr.to_owned();
@@ -164,7 +166,7 @@ impl ProcessorTable {
         // Instruction independent polynomials
 
         // p(x1,...,x14) = 1
-        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::one(), 14);
 
         // p(cycle,cycle_next,...) = cycle_next - cycle - 1;
         //
@@ -199,8 +201,8 @@ impl ProcessorTable {
         memory_value_next: &MPolynomial<BFieldElement>,
         _memory_value_inverse_next: &MPolynomial<BFieldElement>,
     ) -> [MPolynomial<BFieldElement>; 3] {
-        let zero = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_zero(), 14);
-        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), 14);
+        let zero = MPolynomial::<BFieldElement>::from_constant(BFieldElement::zero(), 14);
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::one(), 14);
         let two = MPolynomial::<BFieldElement>::from_constant(BFieldElement::new(2), 14);
         let mut polynomials: [MPolynomial<BFieldElement>; 3] =
             [zero.clone(), zero.clone(), zero.clone()];
@@ -283,7 +285,7 @@ impl ProcessorTable {
     }
 
     /// Returns a multivariate polynomial that evaluates to 0 for the given instruction
-    fn if_instruction<PF: PrimeField>(
+    fn if_instruction<PF: FiniteField>(
         instruction: char,
         indeterminate: &MPolynomial<PF>,
         one: PF,
@@ -295,7 +297,7 @@ impl ProcessorTable {
         ) - indeterminate.to_owned()
     }
 
-    fn ifnot_instruction<PF: PrimeField>(
+    fn ifnot_instruction<PF: FiniteField>(
         instruction: char,
         indeterminate: &MPolynomial<PF>,
         one: PF,
@@ -352,7 +354,7 @@ impl TableTrait for ProcessorTable {
     }
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        let mut variables = MPolynomial::<BFieldElement>::variables(14, BFieldElement::ring_one());
+        let mut variables = MPolynomial::<BFieldElement>::variables(14, BFieldElement::one());
 
         variables.reverse();
         let cycle = variables.pop().unwrap();
@@ -419,7 +421,7 @@ impl TableTrait for ProcessorTable {
             .try_into()
             .unwrap();
         let b_field_variables: [MPolynomial<BFieldElement>; 2 * Self::FULL_WIDTH] =
-            MPolynomial::variables(2 * Self::FULL_WIDTH, BFieldElement::ring_one())
+            MPolynomial::variables(2 * Self::FULL_WIDTH, BFieldElement::one())
                 .try_into()
                 .unwrap();
         let [
@@ -476,7 +478,7 @@ impl TableTrait for ProcessorTable {
         );
 
         let x_field_variables: [MPolynomial<XFieldElement>; 2 * Self::FULL_WIDTH] =
-            MPolynomial::variables(2 * Self::FULL_WIDTH, XFieldElement::ring_one())
+            MPolynomial::variables(2 * Self::FULL_WIDTH, XFieldElement::one())
                 .try_into()
                 .unwrap();
         let [
@@ -539,19 +541,19 @@ impl TableTrait for ProcessorTable {
         // running evaluation for input
         polynomials.push(
             (input_evaluation_next.clone() - input_evaluation.clone() * gamma - memory_value_next)
-                * Self::ifnot_instruction(',', &current_instruction, XFieldElement::ring_one())
+                * Self::ifnot_instruction(',', &current_instruction, XFieldElement::one())
                 * current_instruction.clone()
                 + (input_evaluation_next - input_evaluation)
-                    * Self::if_instruction(',', &current_instruction, XFieldElement::ring_one()),
+                    * Self::if_instruction(',', &current_instruction, XFieldElement::one()),
         );
 
         // running evaluation for output
         polynomials.push(
             (output_evaluation_next.clone() - output_evaluation.clone() * delta - memory_value)
-                * Self::ifnot_instruction('.', &current_instruction, XFieldElement::ring_one())
+                * Self::ifnot_instruction('.', &current_instruction, XFieldElement::one())
                 * current_instruction.clone()
                 + (output_evaluation_next - output_evaluation)
-                    * Self::if_instruction('.', &current_instruction, XFieldElement::ring_one()),
+                    * Self::if_instruction('.', &current_instruction, XFieldElement::one()),
         );
 
         assert_eq!(
@@ -577,8 +579,8 @@ impl TableTrait for ProcessorTable {
             processor_instruction_permutation_initial;
         let mut memory_permutation_running_product: XFieldElement =
             processor_memory_permutation_initial;
-        let mut input_evaluation_running_evaluation = XFieldElement::ring_zero();
-        let mut output_evaluation_running_evaluation = XFieldElement::ring_zero();
+        let mut input_evaluation_running_evaluation = XFieldElement::zero();
+        let mut output_evaluation_running_evaluation = XFieldElement::zero();
 
         // Preallocate memory for the extended matrix
         let mut extended_matrix: Vec<Vec<XFieldElement>> =
@@ -644,8 +646,7 @@ impl TableTrait for ProcessorTable {
         // TODO: Is `challenges` really not needed here?
         _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        let x =
-            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
 
         let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
         let cycle = x[ProcessorTable::CYCLE].clone();
@@ -684,8 +685,7 @@ impl TableTrait for ProcessorTable {
             .try_into()
             .unwrap();
 
-        let x =
-            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
 
         // FIXME: These anonymous constant offsets into `terminals` are not very clear!
         let processor_instruction_permutation_terminal =
@@ -729,7 +729,7 @@ mod processor_table_tests {
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::{
         stark::brainfuck::{self, vm::BaseMatrices},
-        traits::{GetPrimitiveRootOfUnity, GetRandomElements, IdentityValues},
+        traits::{GetPrimitiveRootOfUnity, GetRandomElements},
     };
 
     #[test]
@@ -748,7 +748,7 @@ mod processor_table_tests {
             let processor_matrix = base_matrices.processor_matrix;
             let number_of_randomizers = 2;
             let order = 1 << 32;
-            let smooth_generator = BFieldElement::ring_zero()
+            let smooth_generator = BFieldElement::zero()
                 .get_primitive_root_of_unity(order)
                 .0
                 .unwrap();

@@ -6,6 +6,7 @@ use crate::shared_math::rescue_prime_xlix::{
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{other, rescue_prime_params, rescue_prime_xlix};
 use crate::util_types::blake3_wrapper::Blake3Hash;
+use num_traits::Zero;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -137,9 +138,9 @@ impl ToDigest<Vec<BFieldElement>> for u128 {
         // Only shifting with 63 *should* prevent collissions for all
         // numbers below u64::MAX
         vec![
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
             BFieldElement::new((self >> 126) as u64),
             BFieldElement::new(((self >> 63) % BFieldElement::MAX as u128) as u64),
             BFieldElement::new((self % BFieldElement::MAX as u128) as u64),
@@ -191,7 +192,7 @@ impl ToDigest<Vec<BFieldElement>> for Vec<BFieldElement> {
 impl ToDigest<Vec<BFieldElement>> for BFieldElement {
     fn to_digest(&self) -> Vec<BFieldElement> {
         let mut digest = vec![*self];
-        digest.append(&mut vec![BFieldElement::ring_zero(); 4]);
+        digest.append(&mut vec![BFieldElement::zero(); 4]);
         digest
     }
 }
@@ -281,7 +282,7 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
     }
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
-        let mut state = [BFieldElement::ring_zero(); RP_DEFAULT_WIDTH];
+        let mut state = [BFieldElement::zero(); RP_DEFAULT_WIDTH];
 
         // Padding shouldn't be necessary since the total input length is 12, which is the
         // capacity of this sponge. Also not needed since the context (length) is clear.
@@ -331,6 +332,7 @@ impl RescuePrimeXlix<RP_DEFAULT_WIDTH> {
 pub mod test_simple_hasher {
     use super::*;
     use crate::shared_math::traits::GetRandomElements;
+    use num_traits::One;
     use rand::Rng;
 
     #[test]
@@ -338,32 +340,32 @@ pub mod test_simple_hasher {
         let one = 1u128;
         let bfields_one: Vec<BFieldElement> = one.to_digest();
         assert_eq!(6, bfields_one.len());
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[0]);
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[1]);
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[2]);
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[3]);
-        assert_eq!(BFieldElement::ring_zero(), bfields_one[4]);
-        assert_eq!(BFieldElement::ring_one(), bfields_one[5]);
+        assert_eq!(BFieldElement::zero(), bfields_one[0]);
+        assert_eq!(BFieldElement::zero(), bfields_one[1]);
+        assert_eq!(BFieldElement::zero(), bfields_one[2]);
+        assert_eq!(BFieldElement::zero(), bfields_one[3]);
+        assert_eq!(BFieldElement::zero(), bfields_one[4]);
+        assert_eq!(BFieldElement::one(), bfields_one[5]);
 
         let beyond_bfield0 = u64::MAX as u128;
         let bfields: Vec<BFieldElement> = beyond_bfield0.to_digest();
         assert_eq!(6, bfields.len());
-        assert_eq!(BFieldElement::ring_zero(), bfields[0]);
-        assert_eq!(BFieldElement::ring_zero(), bfields[1]);
-        assert_eq!(BFieldElement::ring_zero(), bfields[2]);
-        assert_eq!(BFieldElement::ring_zero(), bfields[3]);
-        assert_eq!(BFieldElement::ring_one(), bfields[4]);
+        assert_eq!(BFieldElement::zero(), bfields[0]);
+        assert_eq!(BFieldElement::zero(), bfields[1]);
+        assert_eq!(BFieldElement::zero(), bfields[2]);
+        assert_eq!(BFieldElement::zero(), bfields[3]);
+        assert_eq!(BFieldElement::one(), bfields[4]);
         assert_eq!(BFieldElement::new(4294967295u64), bfields[5]);
 
         let beyond_bfield1 = BFieldElement::MAX as u128 + 1;
         let bfields: Vec<BFieldElement> = beyond_bfield1.to_digest();
         assert_eq!(6, bfields.len());
-        assert_eq!(BFieldElement::ring_zero(), bfields[0]);
-        assert_eq!(BFieldElement::ring_zero(), bfields[1]);
-        assert_eq!(BFieldElement::ring_zero(), bfields[2]);
-        assert_eq!(BFieldElement::ring_zero(), bfields[3]);
-        assert_eq!(BFieldElement::ring_one(), bfields[4]);
-        assert_eq!(BFieldElement::ring_one(), bfields[5]);
+        assert_eq!(BFieldElement::zero(), bfields[0]);
+        assert_eq!(BFieldElement::zero(), bfields[1]);
+        assert_eq!(BFieldElement::zero(), bfields[2]);
+        assert_eq!(BFieldElement::zero(), bfields[3]);
+        assert_eq!(BFieldElement::one(), bfields[4]);
+        assert_eq!(BFieldElement::one(), bfields[5]);
 
         let big_value = u128::MAX;
         let bfields: Vec<BFieldElement> = big_value.to_digest();

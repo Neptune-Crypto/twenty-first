@@ -336,6 +336,7 @@ mod accumulator_mmr_tests {
     use std::cmp;
 
     use itertools::izip;
+    use num_traits::Zero;
     use rand::{thread_rng, Rng, RngCore};
 
     use crate::shared_math::b_field_element::BFieldElement;
@@ -727,7 +728,7 @@ mod accumulator_mmr_tests {
         let hasher = Hasher::new();
         type Mmr = MmrAccumulator<Hasher>;
         let mut mmra: Mmr = MmrAccumulator::new(vec![]);
-        mmra.append(hasher.hash(&vec![BFieldElement::ring_zero()], RP_DEFAULT_OUTPUT_SIZE));
+        mmra.append(hasher.hash(&vec![BFieldElement::zero()], RP_DEFAULT_OUTPUT_SIZE));
 
         let json = serde_json::to_string(&mmra).unwrap();
         let mut s_back = serde_json::from_str::<Mmr>(&json).unwrap();

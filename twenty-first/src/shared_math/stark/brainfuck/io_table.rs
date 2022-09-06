@@ -1,9 +1,11 @@
+use num_traits::{One, Zero};
+
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use super::table::{Table, TableMoreTrait, TableTrait};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
-use crate::shared_math::traits::{IdentityValues, ModPowU32};
+use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::x_field_element::XFieldElement;
 
 #[derive(Debug, Clone)]
@@ -21,7 +23,7 @@ impl TableMoreTrait for IOTableMore {
         IOTableMore {
             challenge_index: 0,
             terminal_index: 0,
-            evaluation_terminal: XFieldElement::ring_zero(),
+            evaluation_terminal: XFieldElement::zero(),
         }
     }
 }
@@ -82,7 +84,7 @@ impl IOTable {
     pub fn pad(&mut self) {
         // TODO: The current python code does something else here
         while !self.0.matrix.is_empty() && !other::is_power_of_two(self.0.matrix.len()) {
-            let padding: Vec<BFieldElement> = vec![BFieldElement::ring_zero()];
+            let padding: Vec<BFieldElement> = vec![BFieldElement::zero()];
             self.0.matrix.push(padding);
         }
     }
@@ -148,7 +150,7 @@ impl TableTrait for IOTable {
     ) {
         // `iota` is called `gamma` or `delta` in the other `extend()`s.
         let iota = all_challenges[self.0.more.challenge_index];
-        let zero = XFieldElement::ring_zero();
+        let zero = XFieldElement::zero();
 
         // prepare loop
         let mut extended_matrix: Vec<Vec<XFieldElement>> =
@@ -196,8 +198,7 @@ impl TableTrait for IOTable {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let variable_count = Self::FULL_WIDTH * 2;
-        let vars =
-            MPolynomial::<XFieldElement>::variables(variable_count, XFieldElement::ring_one());
+        let vars = MPolynomial::<XFieldElement>::variables(variable_count, XFieldElement::one());
         let iota = MPolynomial::from_constant(challenges[self.challenge_index()], variable_count);
 
         let evaluation = vars[1].clone();
@@ -212,8 +213,7 @@ impl TableTrait for IOTable {
         // TODO: Is `challenges` really not needed here?
         _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        let x =
-            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
         let evaluation = x[IOTable::EVALUATION].clone();
         let column = x[IOTable::COLUMN].clone();
 
@@ -244,8 +244,7 @@ impl TableTrait for IOTable {
             Self::FULL_WIDTH,
         );
 
-        let x =
-            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
         let evaluation = x[IOTable::EVALUATION].clone();
 
         // In every additional row, the running evaluation variable is
@@ -264,8 +263,8 @@ mod io_table_tests {
     use crate::shared_math::stark::brainfuck;
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
+    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use rand::thread_rng;
     use std::cmp::max;
     use std::convert::TryInto;
@@ -290,7 +289,7 @@ mod io_table_tests {
 
             let _number_of_randomizers = 2;
             let order = 1 << 32;
-            let smooth_generator = BFieldElement::ring_zero()
+            let smooth_generator = BFieldElement::zero()
                 .get_primitive_root_of_unity(order)
                 .0
                 .unwrap();

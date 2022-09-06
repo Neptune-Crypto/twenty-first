@@ -1,7 +1,8 @@
+use num_traits::{One, Zero};
+
 use crate::shared_math::b_field_element as bfe;
 use crate::shared_math::stark::brainfuck::stark::TERMINAL_COUNT;
 use crate::shared_math::stark::brainfuck::vm::instruction_zerofier;
-use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::{
     b_field_element::BFieldElement, mpolynomial::MPolynomial, other, x_field_element::XFieldElement,
 };
@@ -25,8 +26,8 @@ pub struct InstructionTableMore {
 impl TableMoreTrait for InstructionTableMore {
     fn new_more() -> Self {
         InstructionTableMore {
-            permutation_terminal: XFieldElement::ring_zero(),
-            evaluation_terminal: XFieldElement::ring_zero(),
+            permutation_terminal: XFieldElement::zero(),
+            evaluation_terminal: XFieldElement::zero(),
         }
     }
 }
@@ -69,8 +70,8 @@ impl InstructionTable {
             let last = self.0.matrix.last().unwrap();
             let padding = InstructionMatrixBaseRow {
                 instruction_pointer: last[Self::ADDRESS],
-                current_instruction: BFieldElement::ring_zero(),
-                next_instruction: BFieldElement::ring_zero(),
+                current_instruction: BFieldElement::zero(),
+                next_instruction: BFieldElement::zero(),
             };
             self.0.matrix.push(padding.into());
         }
@@ -87,8 +88,7 @@ impl InstructionTable {
         let mut polynomials: Vec<MPolynomial<BFieldElement>> = vec![];
 
         let variable_count = Self::BASE_WIDTH * 2;
-        let one =
-            MPolynomial::<BFieldElement>::from_constant(BFieldElement::ring_one(), variable_count);
+        let one = MPolynomial::<BFieldElement>::from_constant(BFieldElement::one(), variable_count);
 
         // instruction pointer increases by 0 or 1
         polynomials.push(
@@ -150,8 +150,7 @@ impl TableTrait for InstructionTable {
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         let variable_count = Self::BASE_WIDTH * 2;
-        let vars =
-            MPolynomial::<BFieldElement>::variables(variable_count, BFieldElement::ring_one());
+        let vars = MPolynomial::<BFieldElement>::variables(variable_count, BFieldElement::one());
 
         let address = vars[0].clone();
         let current_instruction = vars[1].clone();
@@ -173,7 +172,7 @@ impl TableTrait for InstructionTable {
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         let x = MPolynomial::<BFieldElement>::variables(
             InstructionTable::FULL_WIDTH,
-            BFieldElement::ring_one(),
+            BFieldElement::one(),
         );
 
         // Why create 'x' and then throw all but 'address' away?
@@ -199,9 +198,9 @@ impl TableTrait for InstructionTable {
         let mut permutation_running_product: XFieldElement =
             processor_instruction_permutation_initial;
 
-        let mut evaluation_running_sum = XFieldElement::ring_zero();
+        let mut evaluation_running_sum = XFieldElement::zero();
 
-        let mut previous_address = -XFieldElement::ring_one();
+        let mut previous_address = -XFieldElement::one();
 
         for (i, row) in self.0.matrix.iter().enumerate() {
             // first, copy over existing row
@@ -262,10 +261,8 @@ impl TableTrait for InstructionTable {
             .try_into()
             .unwrap();
 
-        let vars = MPolynomial::<BFieldElement>::variables(
-            2 * Self::FULL_WIDTH,
-            BFieldElement::ring_one(),
-        );
+        let vars =
+            MPolynomial::<BFieldElement>::variables(2 * Self::FULL_WIDTH, BFieldElement::one());
 
         let address = vars[0].clone();
         let current_instruction = vars[1].clone();
@@ -314,7 +311,7 @@ impl TableTrait for InstructionTable {
         let evaluation_next_lifted = bfe::lift_coefficients_to_xfield(&evaluation_next);
 
         let one: MPolynomial<XFieldElement> =
-            MPolynomial::from_constant(XFieldElement::ring_one(), 2 * Self::FULL_WIDTH);
+            MPolynomial::from_constant(XFieldElement::one(), 2 * Self::FULL_WIDTH);
 
         // This degree 9(!) transition constraint is usually what dictates the max degree
         // of quotients and it thus dictates the FRI domain length. If you want to speed up
@@ -340,7 +337,7 @@ impl TableTrait for InstructionTable {
             address_next_lifted.clone() - address_lifted.clone();
         let ifoldaddress: MPolynomial<XFieldElement> = address_next_lifted.clone()
             - address_lifted
-            - MPolynomial::from_constant(XFieldElement::ring_one(), 2 * Self::FULL_WIDTH);
+            - MPolynomial::from_constant(XFieldElement::one(), 2 * Self::FULL_WIDTH);
 
         polynomials.push(
             ifnewaddress
@@ -368,7 +365,7 @@ impl TableTrait for InstructionTable {
             .unwrap();
 
         let x: Vec<MPolynomial<XFieldElement>> =
-            MPolynomial::variables(self.full_width(), XFieldElement::ring_one());
+            MPolynomial::variables(self.full_width(), XFieldElement::one());
 
         vec![
             x[Self::ADDRESS].clone(),
@@ -402,7 +399,7 @@ impl TableTrait for InstructionTable {
             .unwrap();
 
         let x: Vec<MPolynomial<XFieldElement>> =
-            MPolynomial::variables(self.full_width(), XFieldElement::ring_one());
+            MPolynomial::variables(self.full_width(), XFieldElement::one());
 
         vec![
             x[Self::PERMUTATION].clone() - processor_instruction_permutation_terminal,
@@ -418,8 +415,8 @@ mod instruction_table_tests {
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::stark::brainfuck::vm::InstructionMatrixBaseRow;
     use crate::shared_math::stark::brainfuck::{self};
+    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
     use rand::thread_rng;
 
     // When we simulate a program, this generates a collection of matrices that contain
@@ -443,7 +440,7 @@ mod instruction_table_tests {
 
             let number_of_randomizers = 2;
             let order = 1 << 32;
-            let smooth_generator = BFieldElement::ring_zero()
+            let smooth_generator = BFieldElement::zero()
                 .get_primitive_root_of_unity(order)
                 .0
                 .unwrap();

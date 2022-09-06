@@ -2,9 +2,8 @@ use super::traits::{FromVecu8, GetPrimitiveRootOfUnity, Inverse};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetRandomElements;
-use crate::shared_math::traits::{
-    CyclicGroupGenerator, IdentityValues, ModPowU32, ModPowU64, New, PrimeField,
-};
+use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
+use num_traits::{One, Zero};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::iter::Sum;
@@ -30,7 +29,7 @@ impl Default for XFieldElement {
 impl Sum for XFieldElement {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.reduce(|a, b| a + b)
-            .unwrap_or_else(XFieldElement::ring_zero)
+            .unwrap_or_else(XFieldElement::zero)
     }
 }
 
@@ -53,7 +52,7 @@ impl From<XFieldElement> for Polynomial<BFieldElement> {
 impl From<Polynomial<BFieldElement>> for XFieldElement {
     fn from(poly: Polynomial<BFieldElement>) -> Self {
         let (_, rem) = poly.divide(Self::shah_polynomial());
-        let zero = BFieldElement::ring_zero();
+        let zero = BFieldElement::zero();
         let mut rem_arr: [BFieldElement; 3] = [zero; 3];
 
         for i in 0..rem.degree() + 1 {
@@ -68,10 +67,10 @@ impl XFieldElement {
     #[inline]
     pub fn shah_polynomial() -> Polynomial<BFieldElement> {
         Polynomial::new(vec![
-            BFieldElement::ring_one(),
-            -BFieldElement::ring_one(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_one(),
+            BFieldElement::one(),
+            -BFieldElement::one(),
+            BFieldElement::zero(),
+            BFieldElement::one(),
         ])
     }
 
@@ -93,7 +92,7 @@ impl XFieldElement {
 
     #[inline]
     pub fn new_const(element: BFieldElement) -> Self {
-        let zero = BFieldElement::ring_zero();
+        let zero = BFieldElement::zero();
 
         Self {
             coefficients: [element, zero, zero],
@@ -108,21 +107,6 @@ impl XFieldElement {
         }
     }
 
-    #[inline]
-    pub fn ring_zero() -> Self {
-        Self {
-            coefficients: [0, 0, 0].map(BFieldElement::new),
-        }
-    }
-
-    // 0x^2 + 0x + 1
-    #[inline]
-    pub fn ring_one() -> Self {
-        Self {
-            coefficients: [1, 0, 0].map(BFieldElement::new),
-        }
-    }
-
     // TODO: Move this into Polynomial when PrimeField can implement Zero + One.
     // Division in 𝔽_p[X], not 𝔽_{p^e} ≅ 𝔽[X]/p(x).
     pub fn xgcd(
@@ -133,10 +117,10 @@ impl XFieldElement {
         Polynomial<BFieldElement>,
         Polynomial<BFieldElement>,
     ) {
-        let mut a_factor = Polynomial::new(vec![BFieldElement::ring_one()]);
-        let mut a1 = Polynomial::new(vec![BFieldElement::ring_zero()]);
-        let mut b_factor = Polynomial::new(vec![BFieldElement::ring_zero()]);
-        let mut b1 = Polynomial::new(vec![BFieldElement::ring_one()]);
+        let mut a_factor = Polynomial::new(vec![BFieldElement::one()]);
+        let mut a1 = Polynomial::new(vec![BFieldElement::zero()]);
+        let mut b_factor = Polynomial::new(vec![BFieldElement::zero()]);
+        let mut b1 = Polynomial::new(vec![BFieldElement::one()]);
 
         while !y.is_zero() {
             let (quotient, remainder): (Polynomial<BFieldElement>, Polynomial<BFieldElement>) =
@@ -214,7 +198,7 @@ impl GetRandomElements for XFieldElement {
 impl CyclicGroupGenerator for XFieldElement {
     fn get_cyclic_group_elements(&self, max: Option<usize>) -> Vec<Self> {
         let mut val = *self;
-        let mut ret: Vec<Self> = vec![Self::ring_one()];
+        let mut ret: Vec<Self> = vec![Self::one()];
 
         loop {
             ret.push(val);
@@ -256,29 +240,37 @@ impl FromVecu8 for XFieldElement {
     }
 }
 
-impl PrimeField for XFieldElement {}
+impl Zero for XFieldElement {
+    fn zero() -> Self {
+        Self {
+            coefficients: [BFieldElement::zero(); 3],
+        }
+    }
 
-impl IdentityValues for XFieldElement {
-    #[inline]
     fn is_zero(&self) -> bool {
-        self == &Self::ring_zero()
-    }
-
-    #[inline]
-    fn is_one(&self) -> bool {
-        self == &Self::ring_one()
-    }
-
-    #[inline]
-    fn ring_zero(&self) -> Self {
-        Self::ring_zero()
-    }
-
-    #[inline]
-    fn ring_one(&self) -> Self {
-        Self::ring_one()
+        self.coefficients.iter().all(|c| c.is_zero())
     }
 }
+
+impl One for XFieldElement {
+    fn one() -> Self {
+        Self {
+            coefficients: [
+                BFieldElement::one(),
+                BFieldElement::zero(),
+                BFieldElement::zero(),
+            ],
+        }
+    }
+
+    fn is_one(&self) -> bool {
+        self.coefficients[0].is_one()
+            & self.coefficients[1].is_zero()
+            & self.coefficients[2].is_zero()
+    }
+}
+
+impl FiniteField for XFieldElement {}
 
 // TODO: Replace this with a From<usize> trait
 // This trait is used by INTT
@@ -287,27 +279,6 @@ impl New for XFieldElement {
         Self::new_const(BFieldElement::new(value as u64))
     }
 }
-
-// TODO: This is the place we want to define these; other sites can die.
-// impl Zero for XFieldElement {
-//     fn zero() -> Self {
-//         Self::ring_zero()
-//     }
-
-//     fn is_zero(&self) -> bool {
-//         self == &Self::ring_zero()
-//     }
-// }
-
-// impl One for XFieldElement {
-//     fn one() -> Self {
-//         Self::ring_one()
-//     }
-
-//     fn is_one(&self) -> bool {
-//         self == &Self::ring_one()
-//     }
-// }
 
 impl Add for XFieldElement {
     type Output = Self;
@@ -459,11 +430,11 @@ impl ModPowU64 for XFieldElement {
     fn mod_pow_u64(&self, exponent: u64) -> Self {
         // Special case for handling 0^0 = 1
         if exponent == 0 {
-            return Self::ring_one();
+            return Self::one();
         }
 
         let mut x = *self;
-        let mut result = Self::ring_one();
+        let mut result = Self::one();
         let mut i = exponent;
 
         while i > 0 {
@@ -499,32 +470,32 @@ mod x_field_element_test {
 
     #[test]
     fn one_zero_test() {
-        let one = XFieldElement::ring_one();
+        let one = XFieldElement::one();
         assert!(one.is_one());
         assert!(one.coefficients[0].is_one());
         assert!(one.coefficients[1].is_zero());
         assert!(one.coefficients[2].is_zero());
-        let zero = XFieldElement::ring_zero();
+        let zero = XFieldElement::zero();
         assert!(zero.is_zero());
         assert!(zero.coefficients[0].is_zero());
         assert!(zero.coefficients[1].is_zero());
         assert!(zero.coefficients[2].is_zero());
         let two = XFieldElement::new([
             BFieldElement::new(2),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
         ]);
         assert!(!two.is_one());
         assert!(!zero.is_one());
         let one_as_constant_term_0 = XFieldElement::new([
             BFieldElement::new(1),
-            BFieldElement::ring_one(),
-            BFieldElement::ring_zero(),
+            BFieldElement::one(),
+            BFieldElement::zero(),
         ]);
         let one_as_constant_term_1 = XFieldElement::new([
             BFieldElement::new(1),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_one(),
+            BFieldElement::zero(),
+            BFieldElement::one(),
         ]);
         assert!(!one_as_constant_term_0.is_one());
         assert!(!one_as_constant_term_1.is_one());
@@ -556,7 +527,7 @@ mod x_field_element_test {
         let max_const = XFieldElement::new([BFieldElement::MAX, 0, 0].map(BFieldElement::new));
         let max_x = XFieldElement::new([0, BFieldElement::MAX, 0].map(BFieldElement::new));
         let max_x_squared = XFieldElement::new([0, 0, BFieldElement::MAX].map(BFieldElement::new));
-        let mut val = XFieldElement::ring_zero();
+        let mut val = XFieldElement::zero();
         val.increment(0);
         assert!(val.is_one());
         val.increment(0);
@@ -568,12 +539,9 @@ mod x_field_element_test {
         val.decrement(0);
         assert_eq!(max_const, val);
         val.decrement(0);
-        assert_eq!(max_const - XFieldElement::ring_one(), val);
+        assert_eq!(max_const - XFieldElement::one(), val);
         val.decrement(0);
-        assert_eq!(
-            max_const - XFieldElement::ring_one() - XFieldElement::ring_one(),
-            val
-        );
+        assert_eq!(max_const - XFieldElement::one() - XFieldElement::one(), val);
         val.increment(0);
         val.increment(0);
         val.increment(0);
@@ -936,8 +904,8 @@ mod x_field_element_test {
         let expecteds = [1u64, 3, 9, 27, 81, 243].iter().map(|&x| {
             XFieldElement::new([
                 BFieldElement::new(x as u64),
-                BFieldElement::ring_zero(),
-                BFieldElement::ring_zero(),
+                BFieldElement::zero(),
+                BFieldElement::zero(),
             ])
         });
 
@@ -960,7 +928,7 @@ mod x_field_element_test {
                 .iter()
                 .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
                 .collect();
-            let root = XFieldElement::ring_zero()
+            let root = XFieldElement::zero()
                 .get_primitive_root_of_unity(i)
                 .0
                 .unwrap();

@@ -117,7 +117,7 @@ impl<const N: usize> From<BigUint> for U32s<N> {
 
 impl<const N: usize> From<U32s<N>> for [BFieldElement; N] {
     fn from(value: U32s<N>) -> Self {
-        let mut ret = [BFieldElement::ring_zero(); N];
+        let mut ret = [BFieldElement::zero(); N];
         for (&value_elem, ret_elem) in value.values.iter().zip(ret.iter_mut()) {
             *ret_elem = value_elem.into();
         }

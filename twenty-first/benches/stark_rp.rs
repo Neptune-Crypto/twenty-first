@@ -1,4 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use num_traits::{One, Zero};
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::rescue_prime::RescuePrime;
 use twenty_first::shared_math::rescue_prime_params as params;
@@ -21,11 +22,11 @@ fn stark_medium(criterion: &mut Criterion) {
 
         let mut timer = TimingReporter::start();
 
-        let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
-        input[0] = BFieldElement::ring_one();
+        let mut input = vec![BFieldElement::zero(); rp.max_input_length];
+        input[0] = BFieldElement::one();
         let (output, trace) = rp.eval_and_trace(&input);
         timer.elapsed("rp.eval_and_trace(...)");
-        let omicron = BFieldElement::ring_zero()
+        let omicron = BFieldElement::zero()
             .get_primitive_root_of_unity(16)
             .0
             .unwrap();

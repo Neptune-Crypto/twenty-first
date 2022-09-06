@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::b_field_element::BFieldElement;
 use super::rescue_prime_params;
-use super::traits::PrimeField;
+use super::traits::FiniteField;
 
 type Word = BFieldElement;
 
@@ -192,6 +192,8 @@ pub fn neptune_params() -> RescuePrimeXlix<RP_DEFAULT_WIDTH> {
 
 #[cfg(test)]
 mod rescue_prime_xlix_tests {
+    use num_traits::One;
+
     use super::*;
     use crate::shared_math::traits::GetRandomElements;
 
@@ -219,7 +221,7 @@ mod rescue_prime_xlix_tests {
     #[test]
     fn test_vector_0() {
         let rp = neptune_params();
-        let input: Vec<BFieldElement> = vec![BFieldElement::ring_one()];
+        let input: Vec<BFieldElement> = vec![BFieldElement::one()];
         let expected = vec![
             BFieldElement::new(15634820042269645118),
             BFieldElement::new(615341424773519402),

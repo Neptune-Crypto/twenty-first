@@ -25,6 +25,7 @@ use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
 use crate::utils;
 use itertools::Itertools;
+use num_traits::{One, Zero};
 use rand::thread_rng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -68,7 +69,7 @@ impl Stark {
 
         k_seeds
             .iter()
-            .map(|seed| XFieldElement::ring_zero().from_vecu8(seed.to_vec()))
+            .map(|seed| XFieldElement::zero().from_vecu8(seed.to_vec()))
             .collect::<Vec<XFieldElement>>()
     }
 
@@ -110,7 +111,7 @@ impl Stark {
         // Fewer than 2 randomizers means no zero-knowledge for the prover's execution.
         let num_randomizers = 2;
         let order: usize = 1 << 32;
-        let smooth_generator = BFieldElement::ring_zero()
+        let smooth_generator = BFieldElement::zero()
             .get_primitive_root_of_unity(order as u64)
             .0
             .unwrap();
@@ -204,7 +205,7 @@ impl Stark {
 
         // Instantiate FRI object
         let b_field_generator = BFieldElement::generator();
-        let b_field_omega = BFieldElement::ring_zero()
+        let b_field_omega = BFieldElement::zero()
             .get_primitive_root_of_unity(fri_domain_length as u64)
             .0
             .unwrap();
@@ -619,7 +620,7 @@ impl Stark {
         //             .collect::<Vec<XFieldElement>>()
         //     })
         //     .reduce(
-        //         || vec![XFieldElement::ring_zero(); self.fri.domain.length],
+        //         || vec![XFieldElement::zero(); self.fri.domain.length],
         //         |acc, weighted_terms| {
         //             acc.iter()
         //                 .zip(weighted_terms.iter())
@@ -1051,7 +1052,7 @@ impl Stark {
                     .zip(table.boundary_quotient_degree_bounds(challenges).iter())
                 {
                     let eval = constraint.evaluate(point);
-                    let quotient = eval / (b_domain_value.lift() - XFieldElement::ring_one());
+                    let quotient = eval / (b_domain_value.lift() - XFieldElement::one());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
                     terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
@@ -1080,11 +1081,11 @@ impl Stark {
                     // The fast zerofier (based on group theory) needs a non-empty group.
                     // Forcing it on an empty group generates a division by zero error.
                     let quotient = if table.height() == 0 {
-                        XFieldElement::ring_zero()
+                        XFieldElement::zero()
                     } else {
                         let num = (b_domain_value - table.omicron().inverse()).lift();
                         let denom = b_domain_value.mod_pow_u32(table.height() as u32).lift()
-                            - XFieldElement::ring_one();
+                            - XFieldElement::one();
                         eval * num / denom
                     };
                     terms.push(quotient);
@@ -1113,7 +1114,7 @@ impl Stark {
 
             for arg in self.permutation_arguments.iter() {
                 let quotient = arg.evaluate_difference(&points)
-                    / (b_domain_value.lift() - XFieldElement::ring_one());
+                    / (b_domain_value.lift() - XFieldElement::one());
                 terms.push(quotient);
                 let degree_bound = arg.quotient_degree_bound();
                 let shift = (self.max_degree as i64 - degree_bound) as u32;
@@ -1132,7 +1133,7 @@ impl Stark {
                 .par_iter()
                 .zip(terms.par_iter())
                 .map(|(w, t)| *w * *t)
-                .reduce(XFieldElement::ring_zero, |x, y| x + y);
+                .reduce(XFieldElement::zero, |x, y| x + y);
 
             assert_eq!(
                 revealed_combination_elements[i], inner_product,
@@ -1169,11 +1170,12 @@ impl Stark {
 
 #[cfg(test)]
 mod brainfuck_stark_tests {
+    use num_traits::Zero;
+
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::stark::brainfuck;
     use crate::shared_math::stark::brainfuck::vm::*;
-    use crate::shared_math::traits::*;
 
     pub fn new_test_stark(
         trace_length: usize,
@@ -1201,8 +1203,8 @@ mod brainfuck_stark_tests {
         program: &[BFieldElement],
         input_symbols: &[BFieldElement],
     ) -> Option<BaseMatrices> {
-        let zero = BFieldElement::ring_zero();
-        let one = BFieldElement::ring_one();
+        let zero = BFieldElement::zero();
+        let one = BFieldElement::one();
         let two = BFieldElement::new(2);
         let mut register = Register::default();
         register.current_instruction = program[0];
@@ -1421,7 +1423,7 @@ mod brainfuck_stark_tests {
         // by exactly one when the memory pointer is unchanged.
         let source_code = "++>+<.-><+".to_string();
         let program: Vec<BFieldElement> = brainfuck::vm::compile(&source_code).unwrap();
-        let one = BFieldElement::ring_one();
+        let one = BFieldElement::one();
         let two = BFieldElement::new(2);
         let three = BFieldElement::new(3);
         let mut register = Register::default();

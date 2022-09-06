@@ -1,11 +1,12 @@
 use console::Term;
+use num_traits::{One, Zero};
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::traits::Inverse;
 use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::{b_field_element::BFieldElement, traits::IdentityValues};
 
 use super::memory_table::MemoryTable;
 
@@ -28,7 +29,7 @@ pub fn instruction_zerofier(
     variable_count: usize,
 ) -> MPolynomial<XFieldElement> {
     let mut acc: MPolynomial<XFieldElement> =
-        MPolynomial::from_constant(XFieldElement::ring_one(), variable_count);
+        MPolynomial::from_constant(XFieldElement::one(), variable_count);
     for c in INSTRUCTIONS.iter() {
         acc *= indeterminate.to_owned()
             - MPolynomial::from_constant(
@@ -73,13 +74,13 @@ impl From<Register> for Vec<BFieldElement> {
 impl Register {
     pub fn default() -> Self {
         Self {
-            cycle: BFieldElement::ring_zero(),
-            instruction_pointer: BFieldElement::ring_zero(),
-            current_instruction: BFieldElement::ring_zero(),
-            next_instruction: BFieldElement::ring_zero(),
-            memory_pointer: BFieldElement::ring_zero(),
-            memory_value: BFieldElement::ring_zero(),
-            memory_value_inverse: BFieldElement::ring_zero(),
+            cycle: BFieldElement::zero(),
+            instruction_pointer: BFieldElement::zero(),
+            current_instruction: BFieldElement::zero(),
+            next_instruction: BFieldElement::zero(),
+            memory_pointer: BFieldElement::zero(),
+            memory_value: BFieldElement::zero(),
+            memory_value_inverse: BFieldElement::zero(),
         }
     }
 }
@@ -165,7 +166,7 @@ pub fn compile(source_code: &str) -> Option<Vec<BFieldElement>> {
     for symbol in trimmed_source_code.chars() {
         program.push(BFieldElement::new(symbol as u64));
         if symbol == '[' {
-            program.push(BFieldElement::ring_zero());
+            program.push(BFieldElement::zero());
             stack.push(program.len() - 1);
         }
         if symbol == ']' {
@@ -188,13 +189,13 @@ pub fn run(
     input_symbols: Vec<BFieldElement>,
 ) -> Option<(usize, Vec<BFieldElement>, Vec<BFieldElement>)> {
     let mut instruction_pointer: usize = 0;
-    let mut memory_pointer: BFieldElement = BFieldElement::ring_zero();
+    let mut memory_pointer: BFieldElement = BFieldElement::zero();
     let mut memory: HashMap<BFieldElement, BFieldElement> = HashMap::new();
     let mut output_data: Vec<BFieldElement> = vec![];
     let mut input_counter: usize = 0;
     let mut input_data_mut = input_symbols;
-    let zero = BFieldElement::ring_zero();
-    let one = BFieldElement::ring_one();
+    let zero = BFieldElement::zero();
+    let one = BFieldElement::one();
     let term = Term::stdout();
 
     let mut trace_length = 1;
@@ -262,8 +263,8 @@ pub fn simulate(
     program: &[BFieldElement],
     input_symbols: &[BFieldElement],
 ) -> Option<BaseMatrices> {
-    let zero = BFieldElement::ring_zero();
-    let one = BFieldElement::ring_one();
+    let zero = BFieldElement::zero();
+    let one = BFieldElement::one();
     let two = BFieldElement::new(2);
     let mut register = Register::default();
     register.current_instruction = program[0];

@@ -1,9 +1,10 @@
 use itertools::Itertools;
+use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
 
-use super::traits::PrimeField;
+use super::traits::FiniteField;
 
 pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
@@ -801,7 +802,7 @@ impl RescuePrimeRegular {
     /// Create a new sponge object. This function is used internally.
     fn new() -> Self {
         RescuePrimeRegular {
-            state: [BFieldElement::ring_zero(); STATE_SIZE],
+            state: [BFieldElement::zero(); STATE_SIZE],
         }
     }
 
@@ -896,7 +897,7 @@ impl RescuePrimeRegular {
         array: [BFieldElement; STATE_SIZE],
         power: u64,
     ) -> [BFieldElement; STATE_SIZE] {
-        let mut acc = [BFieldElement::ring_one(); STATE_SIZE];
+        let mut acc = [BFieldElement::one(); STATE_SIZE];
         for i in (0..64).rev() {
             if i != 63 {
                 Self::batch_square(&mut acc);
@@ -950,7 +951,7 @@ impl RescuePrimeRegular {
 
         // MDS matrix
         for i in 0..STATE_SIZE {
-            v[i] = BFieldElement::ring_zero();
+            v[i] = BFieldElement::zero();
             for j in 0..STATE_SIZE {
                 v[i] += BFieldElement::from(MDS[i * STATE_SIZE + j]) * self.state[j];
             }
@@ -997,9 +998,9 @@ impl RescuePrimeRegular {
 
         // pad input
         let mut padded_input = input.to_vec();
-        padded_input.push(BFieldElement::ring_one());
+        padded_input.push(BFieldElement::one());
         while padded_input.len() % RATE != 0 {
-            padded_input.push(BFieldElement::ring_zero());
+            padded_input.push(BFieldElement::zero());
         }
 
         // absorb
@@ -1106,7 +1107,7 @@ mod rescue_prime_regular_tests {
             .iter()
             .map(|l| l.iter().map(|e| BFieldElement::new(*e)).collect_vec())
             .collect_vec();
-        let mut input = [BFieldElement::ring_zero(); 10];
+        let mut input = [BFieldElement::zero(); 10];
         for i in 0..10 {
             input[input.len() - 1] = BFieldElement::new(i as u64);
             assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(input).to_vec());
@@ -1189,11 +1190,11 @@ mod rescue_prime_regular_tests {
             .iter()
             .map(|l| l.iter().map(|e| BFieldElement::new(*e)).collect_vec())
             .collect_vec();
-        input[input.len() - 1] = BFieldElement::ring_zero();
+        input[input.len() - 1] = BFieldElement::zero();
         for i in 0..10 {
-            input[i] = BFieldElement::ring_one();
+            input[i] = BFieldElement::one();
             assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(input).to_vec());
-            input[i] = BFieldElement::ring_zero();
+            input[i] = BFieldElement::zero();
         }
 
         // hash varlen, third batch

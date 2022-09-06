@@ -15,6 +15,8 @@ use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath, Salt
 use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::Hasher;
 use crate::utils;
+use num_traits::One;
+use num_traits::Zero;
 use rand::prelude::ThreadRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -154,7 +156,7 @@ impl StarkRp {
         timer.elapsed("calculate initial details");
 
         // compute generators
-        let omega = BFieldElement::ring_zero()
+        let omega = BFieldElement::zero()
             .get_primitive_root_of_unity(fri_domain_length as u64)
             .0
             .unwrap();
@@ -162,7 +164,7 @@ impl StarkRp {
         timer.elapsed("calculate omega");
 
         let omicron_domain_length = rounded_trace_length;
-        let omicron = BFieldElement::ring_zero()
+        let omicron = BFieldElement::zero()
             .get_primitive_root_of_unity(omicron_domain_length)
             .0
             .unwrap();
@@ -241,7 +243,7 @@ impl StarkRp {
         let boundary_zerofiers: Vec<Polynomial<BFieldElement>> =
             self.get_boundary_zerofiers(bcs_formatted);
         let mut boundary_quotients: Vec<Polynomial<BFieldElement>> =
-            vec![Polynomial::ring_zero(); self.num_registers as usize];
+            vec![Polynomial::zero(); self.num_registers as usize];
 
         timer.elapsed("calculate intt for each column in trace");
 
@@ -250,7 +252,7 @@ impl StarkRp {
             let div_res = (trace_interpolants[r].clone() - boundary_interpolants[r].clone())
                 .divide(boundary_zerofiers[r].clone());
             assert_eq!(
-                Polynomial::<BFieldElement>::ring_zero(),
+                Polynomial::<BFieldElement>::zero(),
                 div_res.1,
                 "Remainder must be zero when dividing out boundary zerofier"
             );
@@ -301,7 +303,7 @@ impl StarkRp {
 
         // Symbolically evaluate transition constraints
         let x = Polynomial {
-            coefficients: vec![BFieldElement::ring_zero(), BFieldElement::ring_one()],
+            coefficients: vec![BFieldElement::zero(), BFieldElement::one()],
         };
         let mut point: Vec<Polynomial<BFieldElement>> = vec![x];
         // add polynomial representing trace[x_i] and trace[x_{i+1}]
@@ -380,7 +382,7 @@ impl StarkRp {
                 // Sanity check, remove
                 // let (_quot, rem) = tp.divide(transition_zerofier.clone());
                 // assert_eq!(
-                //     Polynomial::ring_zero(),
+                //     Polynomial::zero(),
                 //     rem,
                 //     "Remainder must be zero when calculating transition quotient"
                 // );
@@ -451,7 +453,7 @@ impl StarkRp {
             let shift = max_degree - (*tq_degree) as i64;
 
             // Make new polynomial with max_degree degree by shifting all terms up
-            let shifted = tq_x.shift_coefficients(shift as usize, XFieldElement::ring_zero());
+            let shifted = tq_x.shift_coefficients(shift as usize, XFieldElement::zero());
             assert_eq!(max_degree as isize, shifted.degree());
             terms.push(shifted);
         }
@@ -461,7 +463,7 @@ impl StarkRp {
             let shift = max_degree as usize - bq_degree;
 
             // Make new polynomial with max_degree degree by shifting all terms up
-            let shifted = bq_x.shift_coefficients(shift, XFieldElement::ring_zero());
+            let shifted = bq_x.shift_coefficients(shift, XFieldElement::zero());
             assert_eq!(max_degree as isize, shifted.degree());
             terms.push(shifted);
         }
@@ -489,7 +491,7 @@ impl StarkRp {
         let combination: Polynomial<XFieldElement> = weights
             .iter()
             .zip(terms.iter())
-            .fold(Polynomial::ring_zero(), |sum, (&weight, pol)| {
+            .fold(Polynomial::zero(), |sum, (&weight, pol)| {
                 sum + pol.scalar_mul(weight)
             });
 
@@ -709,7 +711,7 @@ impl StarkRp {
             randomizer_values.insert(index, value);
         }
 
-        let omicron = BFieldElement::ring_zero()
+        let omicron = BFieldElement::zero()
             .get_primitive_root_of_unity(omicron_domain_length as u64)
             .0
             .unwrap();
@@ -846,7 +848,7 @@ impl StarkRp {
             let combination: XFieldElement = weights
                 .iter()
                 .zip(terms.iter())
-                .fold(XFieldElement::ring_zero(), |sum, (&weight, &term)| {
+                .fold(XFieldElement::zero(), |sum, (&weight, &term)| {
                     sum + term * weight
                 });
             timer.elapsed(&format!("combination {}", i));
@@ -906,7 +908,7 @@ impl StarkRp {
                 if !points.is_empty() {
                     Polynomial::lagrange_interpolate_zipped(points)
                 } else {
-                    Polynomial::ring_zero()
+                    Polynomial::zero()
                 }
             })
             .collect()
@@ -922,7 +924,7 @@ impl StarkRp {
             .collect();
         roots
             .iter()
-            .map(|points| Polynomial::get_polynomial_with_roots(points, BFieldElement::ring_one()))
+            .map(|points| Polynomial::get_polynomial_with_roots(points, BFieldElement::one()))
             .collect()
     }
 
@@ -997,7 +999,7 @@ impl StarkRp {
         // Make sure we change this when changing the hash function.
         k_seeds
             .iter()
-            .map(|seed| XFieldElement::ring_zero().from_vecu8(seed.to_vec()))
+            .map(|seed| XFieldElement::zero().from_vecu8(seed.to_vec()))
             .collect::<Vec<XFieldElement>>()
     }
 }
@@ -1015,12 +1017,12 @@ pub mod test_stark {
         let rp: RescuePrime = params::rescue_prime_small_test_params();
         let stark: StarkRp = StarkRp::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-        let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
-        input[0] = BFieldElement::ring_one();
+        let mut input = vec![BFieldElement::zero(); rp.max_input_length];
+        input[0] = BFieldElement::one();
         let (output, trace) = rp.eval_and_trace(&input);
         assert_eq!(4, trace.len());
 
-        let omicron = BFieldElement::ring_zero()
+        let omicron = BFieldElement::zero()
             .get_primitive_root_of_unity(16)
             .0
             .unwrap();
@@ -1064,12 +1066,12 @@ pub mod test_stark {
         let rp: RescuePrime = params::rescue_prime_medium_test_params();
         let stark: StarkRp = StarkRp::new(16, 2, rp.m as u32, BFieldElement::new(7));
 
-        let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
-        input[0] = BFieldElement::ring_one();
+        let mut input = vec![BFieldElement::zero(); rp.max_input_length];
+        input[0] = BFieldElement::one();
         let (output, trace) = rp.eval_and_trace(&input);
 
         // FIXME: Don't hardcode omicron domain length
-        let omicron = BFieldElement::ring_zero()
+        let omicron = BFieldElement::zero()
             .get_primitive_root_of_unity(16)
             .0
             .unwrap();
@@ -1120,12 +1122,12 @@ pub mod test_stark {
         let mut rp: RescuePrime = params::rescue_prime_small_test_params();
         rp.max_input_length = 2;
         let stark: StarkRp = StarkRp::new(16, 2, rp.m as u32, BFieldElement::new(7));
-        let mut input = vec![BFieldElement::ring_zero(); rp.max_input_length];
-        input[0] = BFieldElement::ring_one();
+        let mut input = vec![BFieldElement::zero(); rp.max_input_length];
+        input[0] = BFieldElement::one();
         let (output, trace) = rp.eval_and_trace(&input);
         assert_eq!(4, trace.len());
 
-        let omicron = BFieldElement::ring_zero()
+        let omicron = BFieldElement::zero()
             .get_primitive_root_of_unity(16)
             .0
             .unwrap();

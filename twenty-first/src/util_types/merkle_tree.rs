@@ -719,6 +719,7 @@ mod merkle_tree_test {
     use crate::util_types::simple_hasher::RescuePrimeProduction;
     use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
     use itertools::{zip, Itertools};
+    use num_traits::One;
     use rand::RngCore;
 
     fn count_hashes<Digest>(proof: &SaltedMultiProof<Digest>) -> usize {
@@ -1087,7 +1088,7 @@ mod merkle_tree_test {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
-        let one = BFieldElement::ring_one();
+        let one = BFieldElement::one();
         let two = BFieldElement::new(2);
         let three = BFieldElement::new(3);
         let four = BFieldElement::new(4);

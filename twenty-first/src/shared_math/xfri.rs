@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use num_traits::{One, Zero};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -10,7 +11,7 @@ use super::stark::brainfuck::stark_proof_stream::{Item, StarkProofStream};
 use super::traits::{CyclicGroupGenerator, ModPowU32};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
-use crate::shared_math::traits::{IdentityValues, PrimeField};
+use crate::shared_math::traits::FiniteField;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
@@ -232,7 +233,7 @@ where
         let mut offset = self.domain.offset;
         let mut codeword_local = codeword.to_vec();
 
-        let one: XFieldElement = subgroup_generator.ring_one();
+        let one: XFieldElement = XFieldElement::one();
         let two: XFieldElement = one + one;
         let two_inv = one / two;
 
@@ -544,14 +545,14 @@ mod fri_domain_tests {
     fn x_values_test() {
         // pol = x^3
         let x_squared_coefficients = vec![
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_one(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::one(),
         ];
 
         for order in [4, 8, 32] {
-            let omega = BFieldElement::ring_zero()
+            let omega = BFieldElement::zero()
                 .get_primitive_root_of_unity(order)
                 .0
                 .unwrap();
@@ -575,7 +576,7 @@ mod fri_domain_tests {
             }
 
             let pol = Polynomial::<BFieldElement>::new(x_squared_coefficients.clone());
-            let values = domain.b_evaluate(&pol, BFieldElement::ring_zero());
+            let values = domain.b_evaluate(&pol, BFieldElement::zero());
             assert_ne!(values, x_squared_coefficients);
             let interpolant = domain.b_interpolate(&values);
             assert_eq!(pol, interpolant);
@@ -737,8 +738,8 @@ mod xfri_tests {
             get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
         let mut proof_stream: StarkProofStream = StarkProofStream::default();
 
-        let zero = XFieldElement::ring_zero();
-        let one = XFieldElement::ring_one();
+        let zero = XFieldElement::zero();
+        let one = XFieldElement::one();
         let two = one + one;
         let poly = Polynomial::<XFieldElement>::new(vec![one, zero, zero, two]);
         let codeword = fri.domain.x_evaluate(&poly);
@@ -812,7 +813,7 @@ mod xfri_tests {
         XFieldElement: ToDigest<H::Digest>,
     {
         let (omega, _primes1): (Option<XFieldElement>, Vec<u64>) =
-            XFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
+            XFieldElement::zero().get_primitive_root_of_unity(subgroup_order);
 
         // The following offset was picked arbitrarily by copying the one found in
         // `get_b_field_fri_test_object`. It does not generate the full Z_p\{0}, but

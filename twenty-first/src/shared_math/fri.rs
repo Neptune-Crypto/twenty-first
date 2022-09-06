@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use num_traits::Zero;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use super::b_field_element::BFieldElement;
@@ -7,7 +8,7 @@ use super::polynomial::Polynomial;
 use super::traits::ModPowU32;
 use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
-use crate::shared_math::traits::{IdentityValues, PrimeField};
+use crate::shared_math::traits::FiniteField;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::proof_stream::ProofStream;
 use crate::util_types::simple_hasher::{Hasher, ToDigest};
@@ -35,7 +36,7 @@ pub enum ValidationError {
 }
 
 #[derive(Debug, Clone)]
-pub struct FriDomain<PF: PrimeField> {
+pub struct FriDomain<PF: FiniteField> {
     pub offset: PF,
     pub omega: PF,
     pub length: usize,
@@ -91,7 +92,7 @@ impl FriDomain<XFieldElement> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Fri<PF: PrimeField, H> {
+pub struct Fri<PF: FiniteField, H> {
     pub expansion_factor: usize,         // = domain_length / trace_length
     pub colinearity_checks_count: usize, // number of colinearity checks in each round
     pub domain: FriDomain<PF>,
@@ -102,7 +103,7 @@ type CodewordEvaluation<T> = (usize, T);
 
 impl<PF, H> Fri<PF, H>
 where
-    PF: PrimeField + ToDigest<H::Digest>,
+    PF: FiniteField + ToDigest<H::Digest>,
     H: Hasher,
 {
     pub fn new(
@@ -220,7 +221,7 @@ where
         let mut codeword_local = codeword.to_vec();
         let hasher = H::new();
 
-        let one: PF = generator.ring_one();
+        let one: PF = PF::one();
         let two: PF = one + one;
         let two_inv = one / two;
 
@@ -493,6 +494,8 @@ where
 
 #[cfg(test)]
 mod fri_domain_tests {
+    use num_traits::One;
+
     use super::*;
     use crate::shared_math::{
         b_field_element::BFieldElement, traits::GetPrimitiveRootOfUnity,
@@ -503,14 +506,14 @@ mod fri_domain_tests {
     fn x_values_test() {
         // pol = x^3
         let x_squared_coefficients = vec![
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_one(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::one(),
         ];
 
         for order in [4, 8, 32] {
-            let omega = BFieldElement::ring_zero()
+            let omega = BFieldElement::zero()
                 .get_primitive_root_of_unity(order)
                 .0
                 .unwrap();
@@ -534,7 +537,7 @@ mod fri_domain_tests {
             }
 
             let pol = Polynomial::<BFieldElement>::new(x_squared_coefficients.clone());
-            let values = domain.b_evaluate(&pol, BFieldElement::ring_zero());
+            let values = domain.b_evaluate(&pol, BFieldElement::zero());
             assert_ne!(values, x_squared_coefficients);
             let interpolant = domain.b_interpolate(&values);
             assert_eq!(pol, interpolant);
@@ -782,10 +785,9 @@ mod fri_tests {
         BFieldElement: ToDigest<Digest>,
     {
         let subgroup_order = 1024;
-        let (omega, _primes1) =
-            BFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
+        let (omega, _primes1) = BFieldElement::zero().get_primitive_root_of_unity(subgroup_order);
         let (offset, _primes2) =
-            BFieldElement::ring_zero().get_primitive_root_of_unity(BFieldElement::QUOTIENT - 1);
+            BFieldElement::zero().get_primitive_root_of_unity(BFieldElement::QUOTIENT - 1);
 
         let expansion_factor = 4;
         let colinearity_checks = 6;
@@ -810,7 +812,7 @@ mod fri_tests {
         XFieldElement: ToDigest<Digest>,
     {
         let (omega, _primes1): (Option<XFieldElement>, Vec<u64>) =
-            XFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
+            XFieldElement::zero().get_primitive_root_of_unity(subgroup_order);
 
         // The following offset was picked arbitrarily by copying the one found in
         // `get_b_field_fri_test_object`. It does not generate the full Z_p\{0}, but

@@ -234,6 +234,7 @@ impl<'a> IntoIterator for &'a TableCollection {
 
 #[cfg(test)]
 mod brainfuck_table_collection_tests {
+    use num_traits::Zero;
     use rand::thread_rng;
 
     use super::*;
@@ -393,7 +394,7 @@ mod brainfuck_table_collection_tests {
         let fri_domain = FriDomain {
             length: fri_domain_length,
             offset: BFieldElement::new(7).lift(),
-            omega: XFieldElement::ring_zero()
+            omega: XFieldElement::zero()
                 .get_primitive_root_of_unity(fri_domain_length as u64)
                 .0
                 .unwrap(),
@@ -518,7 +519,7 @@ mod brainfuck_table_collection_tests {
         let fri_domain = FriDomain {
             length: mock_fri_domain_length,
             offset: BFieldElement::new(7).lift(),
-            omega: XFieldElement::ring_zero()
+            omega: XFieldElement::zero()
                 .get_primitive_root_of_unity(mock_fri_domain_length as u64)
                 .0
                 .unwrap(),
@@ -632,7 +633,7 @@ mod brainfuck_table_collection_tests {
     ) -> TableCollection {
         let base_matrices: BaseMatrices = brainfuck::vm::simulate(program, input_data).unwrap();
         let order = 1 << 32;
-        let smooth_generator = BFieldElement::ring_zero()
+        let smooth_generator = BFieldElement::zero()
             .get_primitive_root_of_unity(order)
             .0
             .unwrap();

@@ -3,7 +3,7 @@ use super::polynomial::Polynomial;
 use super::stark::rescue_prime::stark_constraints::BoundaryConstraint;
 use super::traits::{CyclicGroupGenerator, ModPowU64};
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::traits::IdentityValues;
+use num_traits::{One, Zero};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -36,7 +36,7 @@ impl RescuePrime {
             .collect();
 
         // Matrix
-        let mut temp: Vec<BFieldElement> = vec![input_state[0].ring_zero(); self.m];
+        let mut temp: Vec<BFieldElement> = vec![BFieldElement::zero(); self.m];
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
@@ -56,7 +56,7 @@ impl RescuePrime {
         state = state.iter().map(|v| v.mod_pow(self.alpha_inv)).collect();
 
         // Matrix
-        temp = vec![input_state[0].ring_zero(); self.m];
+        temp = vec![BFieldElement::zero(); self.m];
         #[allow(clippy::needless_range_loop)]
         for i in 0..self.m {
             for j in 0..self.m {
@@ -82,7 +82,7 @@ impl RescuePrime {
             self.max_input_length
         );
         let mut state = input.to_vec();
-        state.resize(self.m, BFieldElement::ring_zero());
+        state.resize(self.m, BFieldElement::zero());
 
         state = (0..self.round_count).fold(state, |intermediate_state, i| {
             self.hash_round(intermediate_state, i)
@@ -100,7 +100,7 @@ impl RescuePrime {
         );
         let mut trace: Vec<Vec<BFieldElement>> = Vec::with_capacity(self.round_count + 1);
         let mut state = input.to_vec();
-        state.resize(self.m, BFieldElement::ring_zero());
+        state.resize(self.m, BFieldElement::zero());
         trace.push(state.clone());
         for i in 0..self.round_count {
             let next_state = self.hash_round(state, i);
@@ -199,10 +199,10 @@ impl RescuePrime {
             self.get_round_constant_polynomials(omicron);
 
         let variable_count = 1 + 2 * self.m;
-        let variables = MPolynomial::variables(1 + 2 * self.m, omicron.ring_one());
+        let variables = MPolynomial::variables(1 + 2 * self.m, BFieldElement::one());
         let previous_state = &variables[1..(self.m + 1)];
         let next_state = &variables[(self.m + 1)..(2 * self.m + 1)];
-        let one = omicron.ring_one();
+        let one = BFieldElement::one();
 
         let previous_state_pow_alpha = previous_state
             .iter()
@@ -218,13 +218,13 @@ impl RescuePrime {
             .zip(self.mds_inv.par_iter())
             .zip(first_step_constants.into_par_iter())
             .map(|((mds, mds_inv), fsc)| {
-                let mut lhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
+                let mut lhs = MPolynomial::from_constant(BFieldElement::zero(), variable_count);
                 for k in 0..self.m {
                     lhs += previous_state_pow_alpha[k].scalar_mul(mds[k]);
                 }
                 lhs += fsc;
 
-                let mut rhs = MPolynomial::from_constant(omicron.ring_zero(), variable_count);
+                let mut rhs = MPolynomial::from_constant(BFieldElement::zero(), variable_count);
                 for k in 0..self.m {
                     rhs += (next_state[k].clone() - second_step_constants[k].clone())
                         .scalar_mul(mds_inv[k]);
@@ -256,7 +256,7 @@ impl RescuePrime {
             let bc = BoundaryConstraint {
                 cycle: 0,
                 register: i,
-                value: BFieldElement::ring_zero(),
+                value: BFieldElement::zero(),
             };
             bcs.push(bc);
         }
@@ -300,19 +300,19 @@ mod rescue_prime_test {
         // Give a RP hasher with max input length 12 an input of length 13
         let rp = params::rescue_prime_params_bfield_0();
         rp.hash(&vec![
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
         ]);
     }
 
@@ -322,19 +322,19 @@ mod rescue_prime_test {
         // Give a RP hasher with max input length 12 an input of length 13
         let rp = params::rescue_prime_params_bfield_0();
         rp.trace(&vec![
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
         ]);
     }
 
@@ -411,14 +411,14 @@ mod rescue_prime_test {
         // let rp = params::rescue_prime_params_bfield_0();
 
         // rescue prime test vector 1
-        let omicron_res = BFieldElement::ring_zero().get_primitive_root_of_unity(1 << 5);
+        let omicron_res = BFieldElement::zero().get_primitive_root_of_unity(1 << 5);
         let omicron = omicron_res.0.unwrap();
 
         // Verify that the round constants polynomials are correct
         let (fst_rc_pol, snd_rc_pol) = rp.get_round_constant_polynomials(omicron);
         for step in 0..rp.round_count {
             let mut point = vec![omicron.mod_pow(step as u64)];
-            point.append(&mut vec![BFieldElement::ring_zero(); 2 * rp.m]);
+            point.append(&mut vec![BFieldElement::zero(); 2 * rp.m]);
 
             for (register, item) in fst_rc_pol.iter().enumerate().take(rp.m) {
                 let fst_eval = item.evaluate(&point);

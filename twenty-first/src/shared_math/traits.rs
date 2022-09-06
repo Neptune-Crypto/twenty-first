@@ -1,3 +1,4 @@
+use num_traits::{One, Zero};
 use rand::Rng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -77,7 +78,7 @@ pub trait FromVecu8 {
     fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
 }
 
-pub trait PrimeField:
+pub trait FiniteField:
     Clone
     + Eq
     + Display
@@ -85,7 +86,8 @@ pub trait PrimeField:
     + DeserializeOwned
     + PartialEq
     + Debug
-    + IdentityValues
+    + One
+    + Zero
     + Add<Output = Self>
     + AddAssign
     + SubAssign
@@ -114,8 +116,8 @@ pub trait PrimeField:
             return Vec::<Self>::new();
         }
 
-        let zero = input[0].ring_zero();
-        let one = input[0].ring_one();
+        let zero = Self::zero();
+        let one = Self::one();
         let mut scratch: Vec<Self> = vec![zero; input_length];
         let mut acc = one;
         scratch[0] = input[0];

@@ -5,12 +5,14 @@ use crate::shared_math::mpolynomial::Degree;
 use crate::shared_math::mpolynomial::MPolynomial;
 use crate::shared_math::other;
 use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::FiniteField;
 use crate::shared_math::traits::GetPrimitiveRootOfUnity;
+use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::Inverse;
 use crate::shared_math::traits::ModPowU32;
-use crate::shared_math::traits::PrimeField;
-use crate::shared_math::traits::{GetRandomElements, IdentityValues};
 use crate::shared_math::x_field_element::XFieldElement;
+use num_traits::One;
+use num_traits::Zero;
 use rand::thread_rng;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
@@ -83,10 +85,10 @@ impl<T: TableMoreTrait> Table<T> {
     /// derive a generator with degree og height
     fn derive_omicron(height: usize) -> BFieldElement {
         if height == 0 {
-            return BFieldElement::ring_one();
+            return BFieldElement::one();
         }
 
-        BFieldElement::ring_zero()
+        BFieldElement::zero()
             .get_primitive_root_of_unity(height as u64)
             .0
             .unwrap()
@@ -119,7 +121,7 @@ impl<T: TableMoreTrait> Table<T> {
         );
 
         if self.height == 0 {
-            return vec![Polynomial::ring_zero(); column_indices.len()];
+            return vec![Polynomial::zero(); column_indices.len()];
         }
 
         assert!(
@@ -179,7 +181,7 @@ impl<T: TableMoreTrait> Table<T> {
         );
 
         if self.height == 0 {
-            return vec![Polynomial::ring_zero(); column_indices.len()];
+            return vec![Polynomial::zero(); column_indices.len()];
         }
 
         assert!(
@@ -227,7 +229,7 @@ impl<T: TableMoreTrait> Table<T> {
         );
         self.codewords = polynomials
             .par_iter()
-            .map(|p| domain.b_evaluate(p, BFieldElement::ring_zero()))
+            .map(|p| domain.b_evaluate(p, BFieldElement::zero()))
             .collect();
         (self.codewords.clone(), polynomials)
     }
@@ -388,7 +390,7 @@ pub trait TableTrait {
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
-        let one = BFieldElement::ring_one();
+        let one = BFieldElement::one();
         let x_values: Vec<BFieldElement> = fri_domain.b_domain_values();
         let subgroup_zerofier: Vec<BFieldElement> = x_values
             .iter()
@@ -500,7 +502,7 @@ pub trait TableTrait {
         let mut quotient_codewords: Vec<Vec<XFieldElement>> = vec![];
         let boundary_constraints: Vec<MPolynomial<XFieldElement>> =
             self.boundary_constraints_ext(challenges);
-        let one = BFieldElement::ring_one();
+        let one = BFieldElement::one();
         let zerofier: Vec<BFieldElement> = (0..fri_domain.length)
             .map(|i| fri_domain.b_domain_value(i as u32) - one)
             .collect();
@@ -561,6 +563,8 @@ pub trait TableMoreTrait {
 
 #[cfg(test)]
 mod table_tests {
+    use num_traits::Zero;
+
     use crate::shared_math::stark::brainfuck::instruction_table::InstructionTable;
 
     use super::*;
@@ -568,11 +572,11 @@ mod table_tests {
     #[test]
     fn table_matrix_interpolate_simple_test() {
         let order: usize = 1 << 32;
-        let smooth_generator = BFieldElement::ring_zero()
+        let smooth_generator = BFieldElement::zero()
             .get_primitive_root_of_unity(order as u64)
             .0
             .unwrap();
-        let omega = BFieldElement::ring_zero()
+        let omega = BFieldElement::zero()
             .get_primitive_root_of_unity(16)
             .0
             .unwrap();
@@ -629,7 +633,7 @@ mod table_tests {
 
         // Verify that when we evaluate the interpolants in the omicron domain, we get the
         // values that we defined for the matrix values
-        let omicron = BFieldElement::ring_zero()
+        let omicron = BFieldElement::zero()
             .get_primitive_root_of_unity(8)
             .0
             .unwrap();
@@ -639,15 +643,15 @@ mod table_tests {
         );
         assert_eq!(
             BFieldElement::new(42),
-            interpolants[0].evaluate(&BFieldElement::ring_one())
+            interpolants[0].evaluate(&BFieldElement::one())
         );
         assert_eq!(
             BFieldElement::new(42),
-            interpolants[1].evaluate(&BFieldElement::ring_one())
+            interpolants[1].evaluate(&BFieldElement::one())
         );
         assert_eq!(
             BFieldElement::new(42),
-            interpolants[2].evaluate(&BFieldElement::ring_one())
+            interpolants[2].evaluate(&BFieldElement::one())
         );
         assert_eq!(BFieldElement::new(2), interpolants[0].evaluate(&omicron));
         assert_eq!(BFieldElement::new(3), interpolants[1].evaluate(&omicron));

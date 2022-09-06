@@ -1,4 +1,4 @@
-use crate::shared_math::traits::PrimeField;
+use crate::shared_math::traits::FiniteField;
 
 /// ## Perform NTT on slices of prime-field elements
 ///
@@ -35,14 +35,19 @@ use crate::shared_math::traits::PrimeField;
 ///
 /// This transform is performed in-place.
 #[allow(clippy::many_single_char_names)]
-pub fn ntt<PFElem: PrimeField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32) {
+pub fn ntt<PFElem: FiniteField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32) {
     let n = x.len() as u32;
 
     // `n` must be a power of 2
-    assert_eq!(n, 1 << log_2_of_n, "2^log2(n) == n");
+    debug_assert_eq!(n, 1 << log_2_of_n, "2^log2(n) == n");
 
     // `omega` must be a primitive root of unity of order `n`
-    debug_assert!(omega.mod_pow_u32(n).is_one());
+    debug_assert!(
+        omega.mod_pow_u32(n).is_one(),
+        "Got {} which is not a {}th root of 1",
+        omega,
+        n
+    );
     debug_assert!(!omega.mod_pow_u32(n / 2).is_one());
 
     for k in 0..n {
@@ -57,7 +62,7 @@ pub fn ntt<PFElem: PrimeField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32)
         let w_m = omega.mod_pow_u32(n / (2 * m));
         let mut k = 0;
         while k < n {
-            let mut w = omega.ring_one();
+            let mut w = PFElem::one();
             for j in 0..m {
                 let mut t = x[(k + j + m) as usize];
                 t *= w;
@@ -89,10 +94,10 @@ pub fn ntt<PFElem: PrimeField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32)
 /// </pre>
 ///
 /// This transform is performed in-place.
-pub fn intt<PFElem: PrimeField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32) {
+pub fn intt<PFElem: FiniteField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32) {
     let n: PFElem = omega.new_from_usize(x.len());
-    let n_inv: PFElem = omega.ring_one() / n;
-    ntt::<PFElem>(x, omega.ring_one() / omega, log_2_of_n);
+    let n_inv: PFElem = PFElem::one() / n;
+    ntt::<PFElem>(x, PFElem::one() / omega, log_2_of_n);
     for elem in x.iter_mut() {
         *elem *= n_inv;
     }
@@ -110,7 +115,8 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
 
 #[cfg(test)]
 mod fast_ntt_attempt_tests {
-    use crate::shared_math::traits::IdentityValues;
+    use num_traits::{One, Zero};
+
     use crate::shared_math::{
         b_field_element::BFieldElement,
         traits::{GetPrimitiveRootOfUnity, GetRandomElements},
@@ -127,7 +133,7 @@ mod fast_ntt_attempt_tests {
             for _ in 0..10 {
                 let mut values = BFieldElement::random_elements(n, &mut rng);
                 let original_values = values.clone();
-                let omega = BFieldElement::ring_one()
+                let omega = BFieldElement::one()
                     .get_primitive_root_of_unity(n as u64)
                     .0
                     .unwrap();
@@ -154,7 +160,7 @@ mod fast_ntt_attempt_tests {
             for _ in 0..10 {
                 let mut values = XFieldElement::random_elements(n, &mut rng);
                 let original_values = values.clone();
-                let omega = XFieldElement::ring_one()
+                let omega = XFieldElement::one()
                     .get_primitive_root_of_unity(n as u64)
                     .0
                     .unwrap();
@@ -188,19 +194,19 @@ mod fast_ntt_attempt_tests {
     #[test]
     fn xfield_basic_test_of_chu_ntt() {
         let mut input_output = vec![
-            XFieldElement::new_const(BFieldElement::ring_one()),
-            XFieldElement::new_const(BFieldElement::ring_zero()),
-            XFieldElement::new_const(BFieldElement::ring_zero()),
-            XFieldElement::new_const(BFieldElement::ring_zero()),
+            XFieldElement::new_const(BFieldElement::one()),
+            XFieldElement::new_const(BFieldElement::zero()),
+            XFieldElement::new_const(BFieldElement::zero()),
+            XFieldElement::new_const(BFieldElement::zero()),
         ];
         let original_input = input_output.clone();
         let expected = vec![
-            XFieldElement::new_const(BFieldElement::ring_one()),
-            XFieldElement::new_const(BFieldElement::ring_one()),
-            XFieldElement::new_const(BFieldElement::ring_one()),
-            XFieldElement::new_const(BFieldElement::ring_one()),
+            XFieldElement::new_const(BFieldElement::one()),
+            XFieldElement::new_const(BFieldElement::one()),
+            XFieldElement::new_const(BFieldElement::one()),
+            XFieldElement::new_const(BFieldElement::one()),
         ];
-        let omega = XFieldElement::ring_one()
+        let omega = XFieldElement::one()
             .get_primitive_root_of_unity(4)
             .0
             .unwrap();
@@ -230,7 +236,7 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(18446744069414584318),
             BFieldElement::new(18445618169507741698),
         ];
-        let omega = BFieldElement::ring_one()
+        let omega = BFieldElement::one()
             .get_primitive_root_of_unity(4)
             .0
             .unwrap();
@@ -258,7 +264,7 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(BFieldElement::MAX),
             BFieldElement::new(BFieldElement::MAX),
         ];
-        let omega = BFieldElement::ring_one()
+        let omega = BFieldElement::one()
             .get_primitive_root_of_unity(4)
             .0
             .unwrap();
@@ -308,7 +314,7 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(0),
         ];
         let original_input = input_output.clone();
-        let omega = BFieldElement::ring_one()
+        let omega = BFieldElement::one()
             .get_primitive_root_of_unity(32)
             .0
             .unwrap();
