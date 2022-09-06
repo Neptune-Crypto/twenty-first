@@ -22,7 +22,7 @@ pub struct XFieldElement {
 impl Default for XFieldElement {
     fn default() -> Self {
         Self {
-            coefficients: [1.into(), 0.into(), 0.into()],
+            coefficients: [1u64.into(), 0u64.into(), 0u64.into()],
         }
     }
 }

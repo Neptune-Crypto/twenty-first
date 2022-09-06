@@ -42,12 +42,12 @@ impl<const M: usize> RescuePrimeXlix<M> {
 
         // Pad input
         let iterations = (input.len() / rate) + 1;
-        let mut padded_input: Vec<Word> = vec![0.into(); iterations * rate];
+        let mut padded_input: Vec<Word> = vec![0u64.into(); iterations * rate];
         padded_input[0..input.len()].copy_from_slice(input);
-        padded_input[input.len()] = 1.into();
+        padded_input[input.len()] = 1u64.into();
 
         // Initialize state
-        let mut state: [Word; M] = [0.into(); M];
+        let mut state: [Word; M] = [0u64.into(); M];
 
         // Absorb
         for iteration in 0..iterations {
@@ -79,13 +79,13 @@ impl<const M: usize> RescuePrimeXlix<M> {
         debug_assert_eq!(M, state.len());
         let mut states: Vec<[Word; RP_TRACE_WIDTH]> = Vec::with_capacity(self.n);
 
-        let mut idc: Word = 1.into();
+        let mut idc: Word = 1u64.into();
         let mut first_row = [idc; RP_TRACE_WIDTH];
         first_row[1..].copy_from_slice(state);
         states.push(first_row);
 
         for round in 0..self.n {
-            idc += 1.into();
+            idc += 1u64.into();
             self.rescue_xlix_round(round, state);
             let mut row = [idc; RP_TRACE_WIDTH];
             row[1..].copy_from_slice(state);

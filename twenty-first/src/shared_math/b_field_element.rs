@@ -269,6 +269,12 @@ impl From<u32> for BFieldElement {
     }
 }
 
+impl From<u64> for BFieldElement {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
 impl From<BFieldElement> for u64 {
     fn from(elem: BFieldElement) -> Self {
         elem.canonical_representation()

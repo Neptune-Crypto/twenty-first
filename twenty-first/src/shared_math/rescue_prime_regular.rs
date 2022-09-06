@@ -927,17 +927,17 @@ impl RescuePrimeRegular {
         self.state = Self::batch_mod_pow_alpha(self.state);
 
         // MDS matrix
-        let mut v: [BFieldElement; STATE_SIZE] = [BFieldElement::new(0u64); STATE_SIZE];
+        let mut v: [BFieldElement; STATE_SIZE] = [BFieldElement::from(0u64); STATE_SIZE];
         for i in 0..STATE_SIZE {
             for j in 0..STATE_SIZE {
-                v[i] += BFieldElement::new(MDS[i * STATE_SIZE + j]) * self.state[j];
+                v[i] += BFieldElement::from(MDS[i * STATE_SIZE + j]) * self.state[j];
             }
         }
         self.state = v;
 
         // round constants A
         for i in 0..STATE_SIZE {
-            self.state[i] += BFieldElement::new(ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + i]);
+            self.state[i] += BFieldElement::from(ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + i]);
         }
 
         // Inverse S-box
@@ -952,7 +952,7 @@ impl RescuePrimeRegular {
         for i in 0..STATE_SIZE {
             v[i] = BFieldElement::ring_zero();
             for j in 0..STATE_SIZE {
-                v[i] += BFieldElement::new(MDS[i * STATE_SIZE + j]) * self.state[j];
+                v[i] += BFieldElement::from(MDS[i * STATE_SIZE + j]) * self.state[j];
             }
         }
         self.state = v;
@@ -960,7 +960,7 @@ impl RescuePrimeRegular {
         // round constants B
         for i in 0..STATE_SIZE {
             self.state[i] +=
-                BFieldElement::new(ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + STATE_SIZE + i]);
+                BFieldElement::from(ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + STATE_SIZE + i]);
         }
     }
 
