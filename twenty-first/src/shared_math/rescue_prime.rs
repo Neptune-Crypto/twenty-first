@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RescuePrime {
+pub struct RescuePrimeDepracated {
     pub m: usize,
     // rate: usize,
     // capacity: usize,
@@ -23,7 +23,7 @@ pub struct RescuePrime {
     pub round_constants: Vec<BFieldElement>,
 }
 
-impl RescuePrime {
+impl RescuePrimeDepracated {
     fn hash_round(
         &self,
         input_state: Vec<BFieldElement>,
@@ -277,7 +277,7 @@ impl RescuePrime {
     }
 }
 
-impl Display for RescuePrime {
+impl Display for RescuePrimeDepracated {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

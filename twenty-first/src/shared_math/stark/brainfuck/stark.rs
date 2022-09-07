@@ -22,7 +22,7 @@ use crate::timing_reporter::TimingReporter;
 use crate::util_types::blake3_wrapper::Blake3Hash;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::proof_stream::ProofStream;
-use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use crate::util_types::simple_hasher::{Hashable, Hasher};
 use crate::utils;
 use itertools::Itertools;
 use num_traits::{One, Zero};
@@ -309,7 +309,15 @@ impl Stark {
 
         transposed_base_codewords
             .par_iter()
-            .map(|values| hasher.hash(values))
+            .map(|values| {
+                hasher.hash_sequence(
+                    &values
+                        .iter()
+                        .map(|v| v.to_sequence())
+                        .flatten()
+                        .collect_vec(),
+                )
+            })
             .collect_into_vec(&mut base_codeword_digests_by_index);
 
         let base_merkle_tree =
@@ -380,7 +388,13 @@ impl Stark {
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
                 );
-                hasher.hash(&bvalues)
+                hasher.hash_sequence(
+                    &bvalues
+                        .iter()
+                        .map(|b| b.to_sequence())
+                        .flatten()
+                        .collect_vec(),
+                )
             })
             .collect_into_vec(&mut extension_codeword_digests_by_index);
 
@@ -631,8 +645,8 @@ impl Stark {
             .clone()
             .into_par_iter()
             .map(|xfe| {
-                let digest: StarkDigest = xfe.to_digest();
-                hasher.hash(&digest)
+                let sequence = xfe.to_sequence();
+                hasher.hash_sequence(&sequence)
             })
             .collect_into_vec(&mut combination_codeword_digests);
         let combination_tree =
@@ -853,7 +867,15 @@ impl Stark {
         timer.elapsed("Read base elements and auth paths from proof stream");
         let leaf_digests: Vec<StarkDigest> = revealed_base_elements
             .par_iter()
-            .map(|re| hasher.hash(re))
+            .map(|rbev| {
+                hasher.hash_sequence(
+                    &rbev
+                        .iter()
+                        .map(|rbe| rbe.to_sequence())
+                        .flatten()
+                        .collect_vec(),
+                )
+            })
             .collect();
         timer.elapsed(&format!(
             "Calculated {} leaf digests for base elements",
@@ -894,7 +916,13 @@ impl Stark {
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
                 );
-                hasher.hash(&bvalues)
+                hasher.hash_sequence(
+                    &bvalues
+                        .iter()
+                        .map(|b| b.to_sequence())
+                        .flatten()
+                        .collect_vec(),
+                )
             })
             .collect();
         timer.elapsed(&format!(
@@ -954,8 +982,8 @@ impl Stark {
             .clone()
             .into_par_iter()
             .map(|xfe| {
-                let digest: StarkDigest = xfe.to_digest();
-                hasher.hash(&digest)
+                let sequence = xfe.to_sequence();
+                hasher.hash_sequence(&sequence)
             })
             .collect();
         let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<StarkDigest>> =

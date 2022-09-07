@@ -4,12 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::util_types::mmr::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
 use crate::util_types::shared::bag_peaks;
-use crate::util_types::simple_hasher;
+use crate::util_types::simple_hasher::{self, Hashable};
 use crate::{
-    util_types::{
-        mmr::shared::calculate_new_peaks_from_leaf_mutation,
-        simple_hasher::{Hasher, ToDigest},
-    },
+    util_types::{mmr::shared::calculate_new_peaks_from_leaf_mutation, simple_hasher::Hasher},
     utils::has_unique_elements,
 };
 
@@ -24,7 +21,7 @@ use super::{
 
 impl<H: Hasher> From<ArchivalMmr<H>> for MmrAccumulator<H>
 where
-    u128: ToDigest<<H as simple_hasher::Hasher>::Digest>,
+    u128: Hashable<<H as simple_hasher::Hasher>::T>,
 {
     fn from(mut ammr: ArchivalMmr<H>) -> Self {
         MmrAccumulator {
@@ -46,7 +43,7 @@ where
 impl<H> From<&mut ArchivalMmr<H>> for MmrAccumulator<H>
 where
     H: Hasher,
-    u128: ToDigest<H::Digest>,
+    u128: Hashable<H::T>,
 {
     fn from(archive: &mut ArchivalMmr<H>) -> Self {
         Self {
@@ -60,7 +57,7 @@ where
 impl<H> MmrAccumulator<H>
 where
     H: Hasher,
-    u128: ToDigest<H::Digest>,
+    u128: Hashable<H::T>,
 {
     pub fn init(peaks: Vec<H::Digest>, leaf_count: u128) -> Self {
         Self { leaf_count, peaks }
@@ -82,7 +79,7 @@ where
 impl<H> Mmr<H> for MmrAccumulator<H>
 where
     H: Hasher,
-    u128: ToDigest<H::Digest>,
+    u128: Hashable<H::T>,
 {
     fn bag_peaks(&mut self) -> H::Digest {
         bag_peaks::<H>(&self.peaks)

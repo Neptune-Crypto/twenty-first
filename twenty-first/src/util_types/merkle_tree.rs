@@ -2,7 +2,7 @@ use crate::shared_math::other::{
     self, bit_representation, get_height_of_complete_binary_tree, is_power_of_two,
 };
 use crate::util_types::shared::bag_peaks;
-use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use crate::util_types::simple_hasher::Hasher;
 use itertools::izip;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+
+use super::simple_hasher::Hashable;
 
 // Chosen from a very small number of benchmark runs, optimized for a slow
 // hash function (the original Rescue Prime implementation). It should probably
@@ -60,7 +62,7 @@ where
     /// Calculate a Merkle root from a list of digests that is not necessarily a power of two.
     pub fn root_from_arbitrary_number_of_digests(digests: &[H::Digest]) -> H::Digest
     where
-        u128: ToDigest<H::Digest>,
+        u128: Hashable<H::T>,
     {
         // This function should preferably construct a whole Merkle tree data structure and not just the root,
         // but I couldn't figure out how to do that as the indexing for this problem seems hard to me. Perhaps, the
@@ -556,7 +558,7 @@ where
         for i in 0..leaves.len() {
             let value = leaves[i].clone();
             let salty_slice = &salts[salts_per_leaf * i..salts_per_leaf * (i + 1)];
-            let leaf_digest = hasher.hash_with_salts(value.to_digest(), salty_slice);
+            let leaf_digest = hasher.hash_with_salts(value, salty_slice);
 
             nodes[leaves.len() + i] = leaf_digest;
         }
@@ -647,7 +649,7 @@ where
         let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(indices.len());
         for (value, proof_element) in izip!(unsalted_leaves, proof) {
             let salts_for_leaf = proof_element.1.clone();
-            let leaf_hash = hasher.hash_with_salts(value.to_digest(), &salts_for_leaf);
+            let leaf_hash = hasher.hash_with_salts(*value, &salts_for_leaf);
             leaf_hashes.push(leaf_hash);
         }
 
@@ -710,13 +712,11 @@ where
 mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::rescue_prime_xlix::{
-        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
-    };
+    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
+    use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
     use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::blake3_wrapper::Blake3Hash;
-    use crate::util_types::simple_hasher::RescuePrimeProduction;
     use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
     use itertools::{zip, Itertools};
     use num_traits::One;
@@ -820,7 +820,10 @@ mod merkle_tree_test {
         let values: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
         let hasher = Hasher::new();
 
-        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+        let leaves: Vec<Digest> = values
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let mut mt_32: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
         let mt_32_orig_root_hash = mt_32.get_root();
 
@@ -914,7 +917,10 @@ mod merkle_tree_test {
         // Number of Merkle tree leaves
         let values: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
         let hasher = Hasher::new();
-        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+        let leaves: Vec<Digest> = values
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
 
         let tree = MerkleTree::<Hasher>::from_digests(&leaves);
 
@@ -943,7 +949,10 @@ mod merkle_tree_test {
         let values: Vec<BFieldElement> = BFieldElement::random_elements(n_values, &mut rng);
 
         let hasher = Hasher::new();
-        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+        let leaves: Vec<Digest> = values
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let regular_tree = MerkleTree::<Hasher>::from_digests(&leaves);
 
         let selected_indices: Vec<usize> = vec![0, 1];
@@ -973,7 +982,7 @@ mod merkle_tree_test {
             BFieldElement::random_elements(salts_per_element * leaves.len(), &mut rng);
         let salts: Vec<Digest> = salts_preimage
             .iter()
-            .map(|x| hasher.hash(x))
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
             .take(how_many_salts_again)
             .collect();
 
@@ -1010,7 +1019,10 @@ mod merkle_tree_test {
                     .collect();
 
             let hasher = Hasher::new();
-            let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+            let leaves: Vec<Digest> = values
+                .iter()
+                .map(|x| hasher.hash_sequence(&x.to_sequence()))
+                .collect();
             let mut tree: MerkleTree<Hasher> = MerkleTree::<Hasher>::from_digests(&leaves);
 
             for _ in 0..3 {
@@ -1095,7 +1107,10 @@ mod merkle_tree_test {
 
         let hasher = Hasher::new();
         let values = vec![BFieldElement::new(1)];
-        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+        let leaves: Vec<Digest> = values
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
 
         let single_mt_one: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
         let expected_root_hash: Digest =
@@ -1103,14 +1118,17 @@ mod merkle_tree_test {
         assert_eq!(expected_root_hash, single_mt_one.get_root());
         assert_eq!(0, single_mt_one.get_height());
 
-        let single_mt_two: MerkleTree<Hasher> = MerkleTree::from_digests(&[hasher.hash(&two)]);
+        let single_mt_two: MerkleTree<Hasher> =
+            MerkleTree::from_digests(&[hasher.hash_sequence(&two.to_sequence())]);
         let expected_root_hash_2: Digest =
             b3h("abb1f67fe5cf64ed79df481ffe011c541028decd98ad105afe1656aca29e5d14");
         assert_eq!(expected_root_hash_2, single_mt_two.get_root());
         assert_eq!(0, single_mt_two.get_height());
 
-        let mt: MerkleTree<Hasher> =
-            MerkleTree::from_digests(&[hasher.hash(&one), hasher.hash(&two)]);
+        let mt: MerkleTree<Hasher> = MerkleTree::from_digests(&[
+            hasher.hash_sequence(&one.to_sequence()),
+            hasher.hash_sequence(&two.to_sequence()),
+        ]);
         let expected_root_hash_3 =
             b3h("0d5c81b4ed156d9838b3be9e90e5c92ceabd10f40bfdef5c4adf93212d392b24");
         assert_eq!(expected_root_hash_3, mt.get_root());
@@ -1122,12 +1140,12 @@ mod merkle_tree_test {
         let success = MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
             mt.get_root(),
             1,
-            hasher.hash(&two),
+            hasher.hash_sequence(&two.to_sequence()),
             auth_path.clone(),
         );
         assert!(success);
         assert_eq!(
-            hasher.hash(&one),
+            hasher.hash_sequence(&one.to_sequence()),
             auth_path[0],
             "First element of authentication path is the leaf node"
         );
@@ -1138,15 +1156,17 @@ mod merkle_tree_test {
             MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
                 mt.get_root(),
                 leaf_index as u32,
-                hasher.hash(&one),
+                hasher.hash_sequence(&one.to_sequence()),
                 auth_path.clone()
             )
         );
-        assert_eq!(hasher.hash(&two), auth_path[0]);
+        assert_eq!(hasher.hash_sequence(&two.to_sequence()), auth_path[0]);
         assert_eq!(1, auth_path.len());
 
-        let mt_reverse: MerkleTree<Hasher> =
-            MerkleTree::from_digests(&[hasher.hash(&two), hasher.hash(&one)]);
+        let mt_reverse: MerkleTree<Hasher> = MerkleTree::from_digests(&[
+            hasher.hash_sequence(&two.to_sequence()),
+            hasher.hash_sequence(&one.to_sequence()),
+        ]);
         let expected_root_hash_4 =
             b3h("1fe7c02631dcf1e025ff34d82e3f164bc5839e8bca91814adf3c25440d9eac48");
         assert_eq!(expected_root_hash_4, mt_reverse.get_root());
@@ -1154,7 +1174,7 @@ mod merkle_tree_test {
 
         let leaves: Vec<Digest> = [one, two, three, four]
             .iter()
-            .map(|x| hasher.hash(x))
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
             .collect();
         let mt_four: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
         let expected_root_hash_5 =
@@ -1168,29 +1188,29 @@ mod merkle_tree_test {
             MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
                 mt_four.get_root(),
                 1,
-                hasher.hash(&two),
+                hasher.hash_sequence(&two.to_sequence()),
                 auth_path.clone()
             )
         );
-        assert_eq!(hasher.hash(&one), auth_path[0]);
+        assert_eq!(hasher.hash_sequence(&one.to_sequence()), auth_path[0]);
 
-        auth_path[0] = hasher.hash(&three);
+        auth_path[0] = hasher.hash_sequence(&three.to_sequence());
         assert!(
             !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
                 mt_four.get_root(),
                 1,
-                hasher.hash(&two),
+                hasher.hash_sequence(&two.to_sequence()),
                 auth_path.clone()
             ),
             "Merkle tree auth path verification must fail when authentication path is wrong"
         );
 
-        auth_path[0] = hasher.hash(&one);
+        auth_path[0] = hasher.hash_sequence(&one.to_sequence());
         assert!(
             MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
                 mt_four.get_root(),
                 1,
-                hasher.hash(&two),
+                hasher.hash_sequence(&two.to_sequence()),
                 auth_path.clone()
             ),
             "MT AP must succeed with valid parameters"
@@ -1199,7 +1219,7 @@ mod merkle_tree_test {
             !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
                 mt_four.get_root(),
                 1,
-                hasher.hash(&four),
+                hasher.hash_sequence(&four.to_sequence()),
                 auth_path.clone()
             ),
             "Merkle tree authentication path must fail when leaf digest is wrong"
@@ -1208,7 +1228,7 @@ mod merkle_tree_test {
             !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
                 mt_reverse.get_root(),
                 1,
-                hasher.hash(&two),
+                hasher.hash_sequence(&two.to_sequence()),
                 auth_path.clone()
             ),
             "Merkle tree authentication path must fail when root is changed"
@@ -1217,7 +1237,7 @@ mod merkle_tree_test {
             !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
                 mt_four.get_root(),
                 2,
-                hasher.hash(&two),
+                hasher.hash_sequence(&two.to_sequence()),
                 auth_path.clone()
             ),
             "Merkle tree authentication path must fail when index is changed"
@@ -1287,7 +1307,10 @@ mod merkle_tree_test {
             .into_iter()
             .map(BFieldElement::new)
             .collect();
-        let leaves_a: Vec<Digest> = values_a.iter().map(|x| hasher.hash(x)).collect();
+        let leaves_a: Vec<Digest> = values_a
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let tree_a = MerkleTree::<Hasher>::from_digests(&leaves_a);
 
         // 2: Get the path for value '9' (index: 2)
@@ -1312,7 +1335,10 @@ mod merkle_tree_test {
             .into_iter()
             .map(BFieldElement::new)
             .collect();
-        let leaves_b: Vec<Digest> = values_b.iter().map(|x| hasher.hash(x)).collect();
+        let leaves_b: Vec<Digest> = values_b
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let tree_b = MerkleTree::<Hasher>::from_digests(&leaves_b);
 
         // merkle leaf index: 5
@@ -1347,7 +1373,10 @@ mod merkle_tree_test {
             .into_iter()
             .map(BFieldElement::new)
             .collect();
-        let leaves_a: Vec<Digest> = values_a.iter().map(|x| hasher.hash(x)).collect();
+        let leaves_a: Vec<Digest> = values_a
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let tree_a = MerkleTree::<Hasher>::from_digests(&leaves_a);
         let mut partial_tree: HashMap<u64, Digest> = HashMap::new();
         let leaf_index: usize = 2;
@@ -1389,7 +1418,10 @@ mod merkle_tree_test {
             .into_iter()
             .map(BFieldElement::new)
             .collect();
-        let leaves_b: Vec<Digest> = values_b.iter().map(|x| hasher.hash(x)).collect();
+        let leaves_b: Vec<Digest> = values_b
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let tree_b = MerkleTree::<Hasher>::from_digests(&leaves_b);
         assert!(
             !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash_with_memoization(
@@ -1429,8 +1461,14 @@ mod merkle_tree_test {
         let mut rng = rand::thread_rng();
         let salts_a_preimage: Vec<BFieldElement> =
             BFieldElement::random_elements(values_a.len() * salts_per_leaf, &mut rng);
-        let salts_a: Vec<_> = salts_a_preimage.iter().map(|x| hasher.hash(x)).collect();
-        let leaves_a: Vec<Digest> = values_a.iter().map(|x| hasher.hash(x)).collect();
+        let salts_a: Vec<_> = salts_a_preimage
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
+        let leaves_a: Vec<Digest> = values_a
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let tree_a = SMT::from_digests(&leaves_a, &salts_a);
         assert_eq!(tree_a.get_leaf_count() * salts_per_leaf, tree_a.salts.len());
 
@@ -1555,11 +1593,17 @@ mod merkle_tree_test {
 
         let mut rng = rand::thread_rng();
         let values_b = &[3, 1, 4, 1, 5, 9, 8, 6].map(BFieldElement::new);
-        let leaves_b: Vec<Digest> = values_b.iter().map(|x| hasher.hash(x)).collect();
+        let leaves_b: Vec<Digest> = values_b
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let salts_per_leaf = 4;
         let salts_b_preimage: Vec<BFieldElement> =
             BFieldElement::random_elements(values_b.len() * salts_per_leaf, &mut rng);
-        let salts_b: Vec<_> = salts_b_preimage.iter().map(|x| hasher.hash(x)).collect();
+        let salts_b: Vec<_> = salts_b_preimage
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let tree_b = SMT::from_digests(&leaves_b, &salts_b);
 
         // auth path: 8 ~> c ~> e
@@ -1596,7 +1640,7 @@ mod merkle_tree_test {
             "sibling e"
         );
 
-        let mut value_b = hasher.hash(&BFieldElement::new(8));
+        let mut value_b = hasher.hash_sequence(&BFieldElement::new(8).to_sequence());
 
         let root_hash_b = &tree_b.get_root();
         assert!(SMT::verify_authentication_path(
@@ -1640,7 +1684,10 @@ mod merkle_tree_test {
         let auth_path_and_salts_b_multi_0: SaltedMultiProof<Digest> =
             tree_b.get_multi_proof_and_salts(&[0, 1]);
         let multi_values_0 = vec![BFieldElement::new(3), BFieldElement::new(1)];
-        let multi_digests_0: Vec<Digest> = multi_values_0.iter().map(|x| hasher.hash(x)).collect();
+        let multi_digests_0: Vec<Digest> = multi_values_0
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1],
@@ -1693,7 +1740,10 @@ mod merkle_tree_test {
 
         let auth_path_b_multi_1 = tree_b.get_multi_proof_and_salts(&[1]);
         let multi_values_1 = vec![BFieldElement::new(1)];
-        let multi_digests_1: Vec<Digest> = multi_values_1.iter().map(|x| hasher.hash(x)).collect();
+        let multi_digests_1: Vec<Digest> = multi_values_1
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[1],
@@ -1708,7 +1758,10 @@ mod merkle_tree_test {
 
         let auth_path_b_multi_2 = tree_b.get_multi_proof_and_salts(&[1, 0]);
         let multi_values_2 = vec![BFieldElement::new(1), BFieldElement::new(3)];
-        let multi_digests_2: Vec<Digest> = multi_values_2.iter().map(|x| hasher.hash(x)).collect();
+        let multi_digests_2: Vec<Digest> = multi_values_2
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[1, 0],
@@ -1724,7 +1777,10 @@ mod merkle_tree_test {
             BFieldElement::new(5),
             BFieldElement::new(6),
         ];
-        let multi_digests_3: Vec<Digest> = multi_values_3.iter().map(|x| hasher.hash(x)).collect();
+        let multi_digests_3: Vec<Digest> = multi_values_3
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1, 2, 4, 7],
@@ -1814,11 +1870,17 @@ mod merkle_tree_test {
             XFieldElement::new([4, 4, 4].map(BFieldElement::new)),
             XFieldElement::new([5, 5, 5].map(BFieldElement::new)),
         ];
-        let leaves_a: Vec<Digest> = values_a.iter().map(|x| hasher.hash(x)).collect();
+        let leaves_a: Vec<Digest> = values_a
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let salts_per_leaf = 3;
         let salts_a_preimage: Vec<BFieldElement> =
             BFieldElement::random_elements(values_a.len() * salts_per_leaf, &mut rng);
-        let salts_a: Vec<_> = salts_a_preimage.iter().map(|x| hasher.hash(x)).collect();
+        let salts_a: Vec<_> = salts_a_preimage
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let tree_a = SMT::from_digests(&leaves_a, &salts_a);
 
         assert_eq!(3, salts_per_leaf);
@@ -1830,7 +1892,7 @@ mod merkle_tree_test {
         // 3: Verify that the proof, along with the salt, works
         let root_hash_a = tree_a.get_root();
         let value = XFieldElement::new([4, 4, 4].map(BFieldElement::new));
-        let mut leaf = hasher.hash(&value);
+        let mut leaf = hasher.hash_sequence(&value.to_sequence());
         assert!(SMT::verify_authentication_path(
             root_hash_a,
             2,
@@ -1930,11 +1992,17 @@ mod merkle_tree_test {
             BFieldElement::new(451282252958277131),
             BFieldElement::new(3796554602848593414),
         ];
-        let leaves_reg0: Vec<Digest> = values_reg0.iter().map(|x| hasher.hash(x)).collect();
+        let leaves_reg0: Vec<Digest> = values_reg0
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let salts_per_leaf = 3;
         let salts_reg0_preimage: Vec<BFieldElement> =
             BFieldElement::random_elements(values_reg0.len() * salts_per_leaf, &mut rng);
-        let salts_reg0: Vec<_> = salts_reg0_preimage.iter().map(|x| hasher.hash(x)).collect();
+        let salts_reg0: Vec<_> = salts_reg0_preimage
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let tree_reg0 = SMT::from_digests(&leaves_reg0, &salts_reg0);
 
         let selected_leaf_indices_reg0 = [0];
@@ -1980,11 +2048,17 @@ mod merkle_tree_test {
                     .map(|x| BFieldElement::new(*x as u64))
                     .collect();
 
-            let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+            let leaves: Vec<Digest> = values
+                .iter()
+                .map(|x| hasher.hash_sequence(&x.to_sequence()))
+                .collect();
             let salts_per_leaf = 3;
             let salts_preimage: Vec<BFieldElement> =
                 BFieldElement::random_elements(values.len() * salts_per_leaf, &mut prng);
-            let salts: Vec<_> = salts_preimage.iter().map(|x| hasher.hash(x)).collect();
+            let salts: Vec<_> = salts_preimage
+                .iter()
+                .map(|x| hasher.hash_sequence(&x.to_sequence()))
+                .collect();
             let tree = SMT::from_digests(&leaves, &salts);
 
             for _ in 0..3 {
@@ -2072,7 +2146,7 @@ mod merkle_tree_test {
         ```
         */
 
-        type Hasher = RescuePrimeProduction;
+        type Hasher = RescuePrimeRegular;
         type MT = MerkleTree<Hasher>;
         type Digest = Vec<BFieldElement>;
 
@@ -2087,13 +2161,16 @@ mod merkle_tree_test {
 
         let offset = 17;
 
-        let values: Vec<BFieldElement> = (offset..num_leaves + offset)
-            .map(|i| BFieldElement::new(i as u64))
-            .collect();
+        let values: Vec<[BFieldElement; 1]> = (offset..num_leaves + offset)
+            .map(|i| [BFieldElement::new(i as u64)])
+            .collect_vec();
 
-        let leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+        let leafs = values
+            .iter()
+            .map(|leaf| hasher.hash_sequence(&leaf.to_vec()))
+            .collect_vec();
 
-        let tree = MT::from_digests(&leaves);
+        let tree = MT::from_digests(&leafs);
 
         assert_eq!(
             tree.get_leaf_count(),
@@ -2103,7 +2180,7 @@ mod merkle_tree_test {
 
         let root_hash = tree.get_root().to_owned();
 
-        for (leaf_idx, leaf) in leaves.iter().enumerate() {
+        for (leaf_idx, leaf) in leafs.iter().enumerate() {
             let ap = tree.get_authentication_path(leaf_idx);
             let verdict = MT::verify_authentication_path_from_leaf_hash(
                 root_hash.clone(),
@@ -2125,9 +2202,9 @@ mod merkle_tree_test {
         /// This tests that we do not confuse indices and payloads in the
         /// test `verify_all_leaves_individually`.
 
-        type Hasher = RescuePrimeProduction;
+        type Hasher = RescuePrimeRegular;
         type MT = MerkleTree<Hasher>;
-        type Digest = Vec<BFieldElement>;
+        type Digest = [BFieldElement; 5];
 
         let hasher = Hasher::new();
 
@@ -2140,21 +2217,24 @@ mod merkle_tree_test {
 
         let offset = 17 * 17;
 
-        let values: Vec<BFieldElement> = (offset..num_leaves as u64 + offset)
-            .map(|i| BFieldElement::new(i))
-            .collect();
+        let values: Vec<[BFieldElement; 1]> = (offset..num_leaves as u64 + offset)
+            .map(|i| [BFieldElement::new(i); 1])
+            .collect_vec();
 
-        let mut leaves: Vec<Digest> = values.iter().map(|x| hasher.hash(x)).collect();
+        let mut leafs: Vec<Digest> = values
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_vec()))
+            .collect_vec();
 
         // A payload integrity test
         let test_leaf = 42;
         let payload_offset = 317;
-        let payload = BFieldElement::new((test_leaf + payload_offset) as u64);
+        let payload = vec![BFieldElement::new((test_leaf + payload_offset) as u64)];
 
         // Embed
-        leaves[test_leaf] = hasher.hash(&payload);
+        leafs[test_leaf] = hasher.hash_sequence(&payload);
 
-        let tree = MT::from_digests(&leaves[..]);
+        let tree = MT::from_digests(&leafs[..]);
 
         assert_eq!(
             tree.get_leaf_count(),
@@ -2164,15 +2244,18 @@ mod merkle_tree_test {
 
         let root_hash = tree.get_root().to_owned();
 
-        (|leaf_idx: usize, leaf: &BFieldElement| {
+        (|leaf_idx: usize, leaf| {
             let ap = tree.get_authentication_path(leaf_idx);
             let verdict = MT::verify_authentication_path_from_leaf_hash(
                 root_hash.clone(),
                 leaf_idx as u32,
-                hasher.hash(leaf),
+                hasher.hash_sequence(leaf),
                 ap,
             );
-            assert_eq!(tree.get_leaf_by_index(test_leaf), hasher.hash(&payload));
+            assert_eq!(
+                tree.get_leaf_by_index(test_leaf),
+                hasher.hash_sequence(&payload)
+            );
             assert!(
                 verdict,
                 "Rejected: `leaf: {:?}` at `leaf_idx: {:?}` failed to verify.",
@@ -2184,31 +2267,24 @@ mod merkle_tree_test {
 
     #[test]
     fn root_from_odd_number_of_digests_test() {
-        type RP = RescuePrimeProduction;
-        type RPXLIX = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
-        type Hasher = RPXLIX;
+        type RP = RescuePrimeRegular;
+        type Hasher = RP;
 
         let mut rng = rand::thread_rng();
         let hasher = Hasher::new();
         let elements = BFieldElement::random_elements(128, &mut rng);
-        let leaves: Vec<_> = elements
+        let leafs: Vec<_> = elements
             .iter()
-            .map(|x| hasher.hash(&[*x], RP_DEFAULT_OUTPUT_SIZE))
+            .map(|e| hasher.hash_sequence(&vec![*e]))
             .collect();
 
-        let mt = MerkleTree::<RP>::from_digests(&leaves);
-        let mt_xlix = MerkleTree::<RPXLIX>::from_digests(&leaves);
+        let mt = MerkleTree::<RP>::from_digests(&leafs);
 
         println!("Merkle root (RP 1): {:?}", mt.get_root());
-        println!("Merkle root (RP 2): {:?}", mt_xlix.get_root());
 
         assert_eq!(
             mt.get_root(),
-            MerkleTree::<RP>::root_from_arbitrary_number_of_digests(&leaves)
-        );
-        assert_eq!(
-            mt_xlix.get_root(),
-            MerkleTree::<RPXLIX>::root_from_arbitrary_number_of_digests(&leaves)
+            MerkleTree::<RP>::root_from_arbitrary_number_of_digests(&leafs)
         );
     }
 

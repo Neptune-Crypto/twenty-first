@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     shared_math::b_field_element::BFieldElement,
-    util_types::simple_hasher::{self, ToDigest},
+    util_types::simple_hasher::{self, Hashable, ToVec},
 };
 
 use super::traits::FiniteField;
@@ -795,7 +795,7 @@ pub const ROUND_CONSTANTS: [u64; NUM_ROUNDS * STATE_SIZE * 2] = [
     15706891000994288769,
 ];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RescuePrimeRegularState {
     pub state: [BFieldElement; STATE_SIZE],
 }
@@ -808,7 +808,7 @@ impl RescuePrimeRegularState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RescuePrimeRegular {}
 
 impl RescuePrimeRegular {
@@ -988,11 +988,11 @@ impl RescuePrimeRegular {
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
-    pub fn hash_10(input: [BFieldElement; 10]) -> [BFieldElement; 5] {
+    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; 5] {
         let mut sponge = RescuePrimeRegularState::new();
 
         // absorb once
-        sponge.state[..10].copy_from_slice(&input);
+        sponge.state[..10].copy_from_slice(input);
 
         // apply domain separation for fixed-length input
         sponge.state[10] = BFieldElement::one();
@@ -1034,17 +1034,64 @@ impl RescuePrimeRegular {
         // squeeze once
         sponge.state[..5].try_into().unwrap()
     }
+
+    /// trace
+    /// Produces the execution trace for one invocation of XLIX
+    fn trace(input: &[BFieldElement; 10]) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
+        let mut trace = [[BFieldElement::zero(); STATE_SIZE]; 1 + NUM_ROUNDS];
+        let mut sponge = RescuePrimeRegularState::new();
+
+        // absorb
+        sponge.state[0..RATE].copy_from_slice(input);
+
+        // record trace
+        trace[0] = sponge.state.clone();
+
+        // apply N rounds
+        for round_index in 0..NUM_ROUNDS {
+            // apply round function to state
+            Self::xlix_round(&mut sponge, round_index);
+
+            // record trace
+            trace[1 + round_index] = sponge.state.clone();
+        }
+
+        trace
+    }
+
+    /// hash_10_with_trace
+    /// Computes the fixed-length hash digest and returns the trace
+    /// along with it.
+    pub fn hash_10_with_trace(
+        input: &[BFieldElement; 10],
+    ) -> (
+        [BFieldElement; DIGEST_LENGTH],
+        [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS],
+    ) {
+        let trace: [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] = Self::trace(input);
+        let output: [BFieldElement; DIGEST_LENGTH] =
+            trace[NUM_ROUNDS][0..DIGEST_LENGTH].try_into().unwrap();
+
+        (output, trace)
+    }
+}
+
+impl ToVec<BFieldElement> for [BFieldElement; 5] {
+    fn to_vec(&self) -> Vec<BFieldElement> {
+        self.to_vec()
+    }
 }
 
 impl simple_hasher::Hasher for RescuePrimeRegular {
     type Digest = [BFieldElement; 5];
+    type T = BFieldElement;
 
     fn new() -> Self {
         RescuePrimeRegular::new()
     }
 
-    fn hash<Value: simple_hasher::ToDigest<Self::Digest>>(&self, input: &Value) -> Self::Digest {
-        RescuePrimeRegular::hash_varlen(&input.to_digest())
+    fn hash_sequence(&self, input: &Vec<BFieldElement>) -> Self::Digest {
+        RescuePrimeRegular::hash_varlen(&input)
     }
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
@@ -1052,7 +1099,7 @@ impl simple_hasher::Hasher for RescuePrimeRegular {
             .concat()
             .try_into()
             .unwrap();
-        RescuePrimeRegular::hash_10(input)
+        RescuePrimeRegular::hash_10(&input)
     }
 
     fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
@@ -1061,21 +1108,16 @@ impl simple_hasher::Hasher for RescuePrimeRegular {
     }
 }
 
-impl ToDigest<[BFieldElement; 5]> for [BFieldElement; 5] {
-    fn to_digest(&self) -> [BFieldElement; 5] {
-        *self
-    }
-}
-
-impl ToDigest<[BFieldElement; 5]> for Vec<BFieldElement> {
-    fn to_digest(&self) -> [BFieldElement; 5] {
-        self.to_owned().try_into().unwrap()
+impl Hashable<BFieldElement> for [BFieldElement; 5] {
+    fn to_sequence(&self) -> Vec<BFieldElement> {
+        self.to_vec()
     }
 }
 
 #[cfg(test)]
 mod rescue_prime_regular_tests {
     use itertools::Itertools;
+    use rand::thread_rng;
 
     use super::*;
 
@@ -1161,7 +1203,7 @@ mod rescue_prime_regular_tests {
         let mut input = [BFieldElement::zero(); 10];
         for i in 0..10 {
             input[input.len() - 1] = BFieldElement::new(i as u64);
-            assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(input).to_vec());
+            assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(&input).to_vec());
         }
 
         // hash 10, second batch
@@ -1244,7 +1286,7 @@ mod rescue_prime_regular_tests {
         input[input.len() - 1] = BFieldElement::zero();
         for i in 0..10 {
             input[i] = BFieldElement::one();
-            assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(input).to_vec());
+            assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(&input).to_vec());
             input[i] = BFieldElement::zero();
         }
 
@@ -1401,6 +1443,23 @@ mod rescue_prime_regular_tests {
                 RescuePrimeRegular::hash_varlen(&var_input).to_vec(),
                 targets_bfe[i]
             );
+        }
+    }
+
+    #[test]
+    fn trace_consistent_test() {
+        let mut rng = thread_rng();
+        for _ in 0..10 {
+            let input: [BFieldElement; 10] = (0..10)
+                .map(|i| BFieldElement::new(i as u64))
+                .collect_vec()
+                .try_into()
+                .unwrap();
+
+            let (output_a, _) = RescuePrimeRegular::hash_10_with_trace(&input);
+            let output_b = RescuePrimeRegular::hash_10(&input);
+
+            assert_eq!(output_a, output_b);
         }
     }
 }

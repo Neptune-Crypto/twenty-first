@@ -1,6 +1,6 @@
 use super::mmr_membership_proof::MmrMembershipProof;
 use crate::shared_math::other::{bit_representation, log_2_floor};
-use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use crate::util_types::simple_hasher::{Hashable, Hasher};
 
 #[inline]
 pub fn left_child(node_index: u128, height: u128) -> u128 {
@@ -320,7 +320,7 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: Hasher>(
     membership_proof: &MmrMembershipProof<H>,
 ) -> Option<Vec<H::Digest>>
 where
-    u128: ToDigest<H::Digest>,
+    u128: Hashable<H::T>,
 {
     let node_index = data_index_to_node_index(membership_proof.data_index);
     let hasher = H::new();
@@ -354,11 +354,10 @@ mod mmr_test {
     use rand::RngCore;
 
     use crate::{
-        shared_math::b_field_element::BFieldElement,
+        shared_math::{b_field_element::BFieldElement, rescue_prime_regular::RescuePrimeRegular},
         test_shared::mmr::get_archival_mmr_from_digests,
-        util_types::{
-            mmr::{archival_mmr::ArchivalMmr, shared::calculate_new_peaks_from_leaf_mutation},
-            simple_hasher::{Hasher, RescuePrimeProduction},
+        util_types::mmr::{
+            archival_mmr::ArchivalMmr, shared::calculate_new_peaks_from_leaf_mutation,
         },
     };
 
@@ -650,17 +649,17 @@ mod mmr_test {
 
     #[test]
     fn calculate_new_peaks_from_leaf_mutation_empty_mmr_test() {
-        type Hasher = RescuePrimeProduction;
+        type Hasher = RescuePrimeRegular;
 
         // Verify that the helper function `calculate_new_peaks_from_leaf_mutation` does
         // not crash if called on an empty list of peaks
         let rp = Hasher::new();
-        let new_leaf = rp.hash(&vec![BFieldElement::new(10000)]);
+        let new_leaf = rp.hash_sequence(&vec![BFieldElement::new(10000)]);
         // let acc = ArchivalMmr::<Hasher>::new(vec![new_leaf.clone()]);
         let mut acc: ArchivalMmr<Hasher> = get_archival_mmr_from_digests(vec![new_leaf.clone()]);
         let mp = acc.prove_membership(0).0;
         assert!(
-            calculate_new_peaks_from_leaf_mutation::<RescuePrimeProduction>(
+            calculate_new_peaks_from_leaf_mutation::<RescuePrimeRegular>(
                 &vec![],
                 &new_leaf,
                 0,

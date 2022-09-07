@@ -1,8 +1,8 @@
-use crate::shared_math::rescue_prime::RescuePrime;
+use crate::shared_math::rescue_prime::RescuePrimeDepracated;
 
 use super::b_field_element::BFieldElement;
 
-pub fn rescue_prime_params_bfield_0() -> RescuePrime {
+pub fn rescue_prime_params_bfield_0() -> RescuePrimeDepracated {
     let mds: Vec<Vec<BFieldElement>> = to_matrix(vec![
         vec![
             5910257123858819639,

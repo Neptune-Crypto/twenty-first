@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::b_field_element::BFieldElement;
-use super::rescue_prime_params;
+use super::rescue_prime_params::{self, rescue_prime_medium_test_params};
 use super::traits::FiniteField;
 
 type Word = BFieldElement;
@@ -26,6 +26,12 @@ pub struct RescuePrimeXlix<const M: usize> {
 impl<const M: usize> PartialEq for RescuePrimeXlix<M> {
     fn eq(&self, _other: &Self) -> bool {
         true
+    }
+}
+
+impl<const M: usize> Default for RescuePrimeXlix<M> {
+    fn default() -> Self {
+        rescue_prime_medium_test_params()
     }
 }
 
