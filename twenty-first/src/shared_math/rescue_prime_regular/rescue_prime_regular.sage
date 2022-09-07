@@ -71,8 +71,11 @@ def rescue_prime_hash_10( parameters, input_sequence ):
     rate = m - capacity
     Fp = FiniteField(p)
 
-    # initialize state to all zeros
+    # initialize state
     state = matrix([inp for inp in input_sequence] + [Fp(0) for i in range(capacity)]).transpose()
+
+    # domain separation for fixed length
+    state[rate] = 1
 
     # apply permutation
     state = rescue_XLIX_permutation(parameters, state)
