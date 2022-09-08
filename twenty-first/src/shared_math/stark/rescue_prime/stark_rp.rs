@@ -1205,6 +1205,7 @@ pub mod test_stark {
     use serde_json;
 
     #[test]
+    #[ignore = "too slow"]
     fn air_is_zero_on_execution_trace_test() {
         // let rp = params::rescue_prime_medium_test_params();
         // let rp = params::rescue_prime_params_bfield_0();
@@ -1263,6 +1264,7 @@ pub mod test_stark {
     }
 
     #[test]
+    #[ignore = "too slow"]
     fn prove_and_verify_small_stark_test() {
         let num_colinearity_checks = 2;
         let num_randomizers = 4 * num_colinearity_checks as usize;
@@ -1322,6 +1324,7 @@ pub mod test_stark {
     }
 
     #[test]
+    #[ignore = "too slow"]
     fn prove_and_verify_medium_stark_test() {
         // let rp: RescuePrime = params::rescue_prime_params_bfield_0();
         let num_colinearity_checks = 2;
@@ -1384,6 +1387,7 @@ pub mod test_stark {
     }
 
     #[test]
+    #[ignore = "too slow"]
     fn stark_with_registers_without_boundary_conditions_test() {
         // Use the small test parameter set but with an input length of 2
         // and an output length of 1. This leaves register 1 (execution trace
