@@ -22,7 +22,7 @@ fn bench_10(c: &mut Criterion) {
     group.bench_function(
         BenchmarkId::new("RescuePrimeRegular / Hash 10", size),
         |bencher| {
-            bencher.iter(|| RescuePrimeRegular::hash_10(single_element));
+            bencher.iter(|| RescuePrimeRegular::hash_10(&single_element));
         },
     );
 }

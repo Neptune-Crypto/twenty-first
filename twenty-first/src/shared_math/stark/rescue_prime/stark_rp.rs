@@ -22,7 +22,6 @@ use num_traits::Zero;
 use rand::prelude::ThreadRng;
 use rayon::prelude::IndexedParallelIterator;
 use rayon::prelude::IntoParallelIterator;
-use rayon::prelude::IntoParallelRefIterator;
 use rayon::prelude::ParallelIterator;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -1021,11 +1020,10 @@ impl StarkRp {
         let mut first_round_constants: Vec<MPolynomial<BFieldElement>> = vec![];
         for i in 0..STATE_SIZE {
             let values: Vec<BFieldElement> = ROUND_CONSTANTS
-                .clone()
                 .into_iter()
                 .skip(i)
                 .step_by(2 * STATE_SIZE)
-                .map(|e| BFieldElement::from(e))
+                .map(BFieldElement::from)
                 .collect();
             // let coefficients = intt(&values, omicron);
             let points: Vec<(BFieldElement, BFieldElement)> = domain
@@ -1046,7 +1044,6 @@ impl StarkRp {
         let mut second_round_constants: Vec<MPolynomial<BFieldElement>> = vec![];
         for i in 0..STATE_SIZE {
             let values: Vec<BFieldElement> = ROUND_CONSTANTS
-                .clone()
                 .into_iter()
                 .skip(i + STATE_SIZE)
                 .step_by(2 * STATE_SIZE)
@@ -1097,43 +1094,84 @@ impl StarkRp {
         // TODO: Consider refactoring MPolynomial<BFieldElement>
         // ::mod_pow(exp: BigInt, one: BFieldElement) into
         // ::mod_pow_u64(exp: u64)
-        let air: Vec<MPolynomial<BFieldElement>> = MDS
-            .par_iter()
-            .zip(MDS_INV.par_iter())
-            .zip(first_step_constants.into_par_iter())
-            .map(|((mds, mds_inv), fsc)| {
-                let mut lhs = MPolynomial::from_constant(BFieldElement::zero(), variable_count);
-                for k in 0..STATE_SIZE {
-                    lhs += previous_state_pow_alpha[k].scalar_mul(BFieldElement::from(MDS[k]));
-                }
-                lhs += fsc;
+        // let air: Vec<MPolynomial<BFieldElement>> = MDS
+        //     .par_iter()
+        //     .zip(MDS_INV.par_iter())
+        //     .zip(first_step_constants.into_par_iter())
+        //     .map(|(_, fsc)| {
+        //         let mut lhs = MPolynomial::from_constant(BFieldElement::zero(), variable_count);
+        //         for k in 0..STATE_SIZE {
+        //             lhs += previous_state_pow_alpha[k].scalar_mul(BFieldElement::from(MDS[k]));
+        //         }
+        //         lhs += fsc;
 
-                let mut rhs = MPolynomial::from_constant(BFieldElement::zero(), variable_count);
-                for k in 0..STATE_SIZE {
-                    rhs += (next_state[k].clone() - second_step_constants[k].clone())
-                        .scalar_mul(BFieldElement::from(MDS_INV[k]));
-                }
-                rhs = rhs.mod_pow(ALPHA.into(), one);
+        //         let mut rhs = MPolynomial::from_constant(BFieldElement::zero(), variable_count);
+        //         for k in 0..STATE_SIZE {
+        //             rhs += (next_state[k].clone() - second_step_constants[k].clone())
+        //                 .scalar_mul(BFieldElement::from(MDS_INV[k]));
+        //         }
+        //         rhs = rhs.mod_pow(ALPHA.into(), one);
 
-                lhs - rhs
+        //         lhs - rhs
+        //     })
+        //     .collect();
+        // air
+
+        let mut forward_airs = vec![MPolynomial::zero(variable_count); STATE_SIZE];
+        (0..STATE_SIZE)
+            .into_par_iter()
+            .map(|i| {
+                MDS[i * STATE_SIZE..(i + 1) * STATE_SIZE]
+                    .iter()
+                    .zip(previous_state_pow_alpha.iter())
+                    .map(|(m, a)| {
+                        MPolynomial::from_constant(
+                            <BFieldElement as From<u64>>::from(*m),
+                            STATE_SIZE,
+                        ) * a.clone()
+                    })
+                    .fold(MPolynomial::zero(variable_count), |x, y| x + y)
+                    + first_step_constants[i].to_owned()
             })
-            .collect();
+            .collect_into_vec(&mut forward_airs);
 
-        air
+        let mut backward_airs = vec![MPolynomial::zero(variable_count); STATE_SIZE];
+        (0..STATE_SIZE)
+            .into_par_iter()
+            .map(|i| {
+                MDS_INV[i * STATE_SIZE..(i + 1) * STATE_SIZE]
+                    .iter()
+                    .zip(next_state.iter().enumerate())
+                    .map(|(m, (j, a))| {
+                        MPolynomial::from_constant(
+                            <BFieldElement as From<u64>>::from(*m),
+                            variable_count,
+                        ) * (a.clone() - second_step_constants[j].to_owned())
+                    })
+                    .fold(MPolynomial::zero(variable_count), |x, y| x + y)
+                    .mod_pow(ALPHA.into(), one)
+            })
+            .collect_into_vec(&mut backward_airs);
+
+        forward_airs
+            .into_par_iter()
+            .zip_eq(backward_airs.into_par_iter())
+            .map(|(lhs, rhs)| lhs - rhs)
+            .collect()
     }
 
     pub fn get_boundary_constraints(output_elements: &[BFieldElement]) -> Vec<BoundaryConstraint> {
         let mut bcs = vec![];
 
-        // All registers not set by the (padded) input must be zero.
-        // If the input is padded, i.e. an input shorter than
-        // `max_input_length` is given, this padding does *not*
-        // give rise to boundary conditions. If it did, information
-        // about the input to the hash would be revealed. In other
-        // words: the STARK must not reveal anything about the input,
-        // including whether it is shorter than max input length
-        // or not.
-        for i in 10..STATE_SIZE {
+        // We are hashing a fixed-length input, so there is no padding.
+        // However, there is domain separation, which requires that the
+        // rate-th element be initialized to 1.
+        bcs.push(BoundaryConstraint {
+            cycle: 0,
+            register: 10,
+            value: BFieldElement::one(),
+        });
+        for i in 11..STATE_SIZE {
             let bc = BoundaryConstraint {
                 cycle: 0,
                 register: i,
@@ -1167,15 +1205,88 @@ pub mod test_stark {
     use serde_json;
 
     #[test]
+    fn air_is_zero_on_execution_trace_test() {
+        // let rp = params::rescue_prime_medium_test_params();
+        // let rp = params::rescue_prime_params_bfield_0();
+
+        // rescue prime test vector 1
+        let omicron_res = BFieldElement::primitive_root_of_unity(1 << 5);
+        let omicron = omicron_res.unwrap();
+
+        // Verify that the round constants polynomials are correct
+        let (fst_rc_pol, snd_rc_pol) = StarkRp::get_round_constant_polynomials(omicron);
+        for step in 0..NUM_ROUNDS {
+            let mut point = vec![omicron.mod_pow(step as u64)];
+            point.append(&mut vec![BFieldElement::zero(); 2 * STATE_SIZE]);
+
+            for (register, item) in fst_rc_pol.iter().enumerate().take(STATE_SIZE) {
+                let fst_eval = item.evaluate(&point);
+                assert_eq!(
+                    Into::<BFieldElement>::into(ROUND_CONSTANTS[2 * step * STATE_SIZE + register]),
+                    fst_eval
+                );
+            }
+            for (register, item) in snd_rc_pol.iter().enumerate().take(STATE_SIZE) {
+                let snd_eval = item.evaluate(&point);
+                assert_eq!(
+                    Into::<BFieldElement>::into(
+                        ROUND_CONSTANTS[2 * step * STATE_SIZE + STATE_SIZE + register]
+                    ),
+                    snd_eval
+                );
+            }
+        }
+
+        // Verify that the AIR constraints evaluation over the trace is zero along the trace
+        let input_2 = [BFieldElement::new(42); 10];
+        let trace = RescuePrimeRegular::trace(&input_2);
+        println!("Computing get_air_constraints(omicron)...");
+        let now = std::time::Instant::now();
+        let air_constraints = StarkRp::get_air_constraints(omicron);
+        let elapsed = now.elapsed();
+        println!("Completed get_air_constraints(omicron) in {:?}!", elapsed);
+
+        for round in 0..NUM_ROUNDS - 1 {
+            println!("Round {}", round);
+            for air_constraint in air_constraints.iter() {
+                let mut point = vec![omicron.mod_pow(round as u64)];
+                for i in 0..STATE_SIZE {
+                    point.push(trace[round][i]);
+                }
+                for i in 0..STATE_SIZE {
+                    point.push(trace[round + 1][i]);
+                }
+                let eval = air_constraint.evaluate(&point);
+                assert!(eval.is_zero());
+            }
+        }
+    }
+
+    #[test]
     fn prove_and_verify_small_stark_test() {
-        let stark: StarkRp = StarkRp::new(16, 2, STATE_SIZE as u32, BFieldElement::new(7));
+        let num_colinearity_checks = 2;
+        let num_randomizers = 4 * num_colinearity_checks as usize;
+        let stark: StarkRp = StarkRp::new(
+            16,
+            num_colinearity_checks,
+            STATE_SIZE as u32,
+            BFieldElement::new(7),
+        );
 
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
         let (output, trace) = RescuePrimeRegular::hash_10_with_trace(&input);
-        assert_eq!(4, trace.len());
+        assert_eq!(9, trace.len());
 
-        let omicron = BFieldElement::primitive_root_of_unity(16).unwrap();
+        let mut npo2 = trace.len() + num_randomizers;
+        if npo2 & (npo2 - 1) != 0 {
+            npo2 = npo2 << 1;
+            while npo2 & (npo2 - 1) != 0 {
+                npo2 = npo2 & (npo2 - 1);
+            }
+        }
+
+        let omicron = BFieldElement::primitive_root_of_unity(npo2 as u64).unwrap();
         let air_constraints = StarkRp::get_air_constraints(omicron);
         let boundary_constraints = StarkRp::get_boundary_constraints(&output);
         let mut proof_stream = ProofStream::default();
@@ -1213,14 +1324,27 @@ pub mod test_stark {
     #[test]
     fn prove_and_verify_medium_stark_test() {
         // let rp: RescuePrime = params::rescue_prime_params_bfield_0();
-        let stark: StarkRp = StarkRp::new(16, 2, STATE_SIZE as u32, BFieldElement::new(7));
+        let num_colinearity_checks = 2;
+        let num_randomizers = num_colinearity_checks * 4;
+        let stark: StarkRp = StarkRp::new(
+            16,
+            num_colinearity_checks,
+            STATE_SIZE as u32,
+            BFieldElement::new(7),
+        );
 
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
         let (output, trace) = RescuePrimeRegular::hash_10_with_trace(&input);
 
-        // FIXME: Don't hardcode omicron domain length
-        let omicron = BFieldElement::primitive_root_of_unity(16).unwrap();
+        let mut npo2 = trace.len() + num_randomizers as usize;
+        if npo2 & (npo2 - 1) != 0 {
+            npo2 <<= 1;
+            while npo2 & (npo2 - 1) != 0 {
+                npo2 &= npo2 - 1;
+            }
+        }
+        let omicron = BFieldElement::primitive_root_of_unity(npo2 as u64).unwrap();
 
         let mut timer = TimingReporter::start();
         let air_constraints = StarkRp::get_air_constraints(omicron);
@@ -1264,14 +1388,28 @@ pub mod test_stark {
         // Use the small test parameter set but with an input length of 2
         // and an output length of 1. This leaves register 1 (execution trace
         // has two registers: `0` and `1`) without any boundary condition.
-        let max_input_length = 10;
-        let stark: StarkRp = StarkRp::new(16, 2, STATE_SIZE as u32, BFieldElement::new(7));
+        let num_colinearity_checks = 2;
+        let num_randomizers = num_colinearity_checks * 4;
+        let stark: StarkRp = StarkRp::new(
+            16,
+            num_colinearity_checks,
+            STATE_SIZE as u32,
+            BFieldElement::new(7),
+        );
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
         let (output, trace) = RescuePrimeRegular::hash_10_with_trace(&input);
-        assert_eq!(4, trace.len());
+        assert_eq!(9, trace.len());
 
-        let omicron = BFieldElement::primitive_root_of_unity(16).unwrap();
+        let mut npo2 = trace.len() + num_randomizers as usize;
+        if npo2 & (npo2 - 1) != 0 {
+            npo2 = npo2 << 1;
+            while npo2 & (npo2 - 1) != 0 {
+                npo2 = npo2 & (npo2 - 1);
+            }
+        }
+
+        let omicron = BFieldElement::primitive_root_of_unity(npo2 as u64).unwrap();
         let air_constraints = StarkRp::get_air_constraints(omicron);
         let boundary_constraints = StarkRp::get_boundary_constraints(&output);
         let mut proof_stream = ProofStream::default();

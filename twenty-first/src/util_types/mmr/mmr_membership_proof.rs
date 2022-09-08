@@ -58,8 +58,7 @@ where
             data_index_hashable,
             self.authentication_path
                 .iter()
-                .map(|ap| ap.to_vec())
-                .flatten()
+                .flat_map(|ap| ap.to_vec())
                 .collect_vec(),
         ]
         .concat();

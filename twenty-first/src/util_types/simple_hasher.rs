@@ -5,6 +5,7 @@ use crate::shared_math::rescue_prime_xlix::{
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{other, rescue_prime_xlix};
 use crate::util_types::blake3_wrapper::Blake3Hash;
+use itertools::Itertools;
 use num_traits::Zero;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::de::DeserializeOwned;
@@ -33,23 +34,34 @@ pub trait Hasher: Sized + Send + Sync + Clone {
         + ToVec<Self::T>;
 
     fn new() -> Self;
-    fn hash_sequence(&self, input: &Vec<Self::T>) -> Self::Digest;
+    fn hash_sequence(&self, input: &[Self::T]) -> Self::Digest;
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest;
-    fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest;
+
+    fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
+        if inputs.is_empty() {
+            panic!("Function hash_many has to take nonzero number of digests.")
+        }
+        let mut acc = inputs[0].clone();
+        for inp in inputs[1..].iter() {
+            acc = self.hash_pair(&acc, inp);
+        }
+        acc
+    }
+
     // TODO: Consider moving the 'Self::Digest: ToDigest<Self::Digest>' constraint up.
     fn hash_with_salts(&self, mut digest: Self::Digest, salts: &[Self::Digest]) -> Self::Digest
     where
         Self::Digest: Hashable<Self::T>,
     {
         for salt in salts {
-            digest = self.hash_pair(&digest, &salt);
+            digest = self.hash_pair(&digest, salt);
         }
 
         digest
     }
 
     fn fiat_shamir(&self, items: &[Self::T]) -> Self::Digest {
-        self.hash_sequence(&items.to_vec())
+        self.hash_sequence(items)
     }
 
     /// Given a uniform random `input` digest and a `max` that is a power of two,
@@ -166,6 +178,12 @@ impl Hashable<u8> for BFieldElement {
     }
 }
 
+impl Hashable<u8> for Vec<BFieldElement> {
+    fn to_sequence(&self) -> Vec<u8> {
+        self.iter().flat_map(|b| b.to_sequence()).collect_vec()
+    }
+}
+
 impl Hashable<BFieldElement> for u128 {
     fn to_sequence(&self) -> Vec<BFieldElement> {
         // Only shifting with 63 *should* prevent collissions for all
@@ -192,9 +210,15 @@ impl Hashable<BFieldElement> for usize {
     }
 }
 
+impl Hashable<BFieldElement> for BFieldElement {
+    fn to_sequence(&self) -> Vec<BFieldElement> {
+        vec![*self]
+    }
+}
+
 impl ToVec<u8> for Blake3Hash {
     fn to_vec(&self) -> Vec<u8> {
-        self.to_vec()
+        self.0.as_bytes().to_vec()
     }
 }
 
@@ -213,7 +237,7 @@ impl Hasher for blake3::Hasher {
         blake3::Hasher::new()
     }
 
-    fn hash_sequence(&self, input: &Vec<u8>) -> Self::Digest {
+    fn hash_sequence(&self, input: &[u8]) -> Self::Digest {
         let mut hasher = Self::new();
         hasher.update(input);
         Blake3Hash(hasher.finalize())
@@ -242,19 +266,13 @@ impl Hasher for blake3::Hasher {
 
 impl ToVec<BFieldElement> for Vec<BFieldElement> {
     fn to_vec(&self) -> Vec<BFieldElement> {
-        *self
-    }
-}
-
-impl Hashable<BFieldElement> for BFieldElement {
-    fn to_sequence(&self) -> Vec<BFieldElement> {
-        vec![*self]
+        self.clone()
     }
 }
 
 impl Hashable<BFieldElement> for Vec<BFieldElement> {
     fn to_sequence(&self) -> Vec<BFieldElement> {
-        *self
+        self.clone()
     }
 }
 
@@ -266,8 +284,8 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
         rescue_prime_xlix::neptune_params()
     }
 
-    fn hash_sequence(&self, input: &Vec<Self::T>) -> Self::Digest {
-        self.hash(&input, RP_DEFAULT_OUTPUT_SIZE)
+    fn hash_sequence(&self, input: &[Self::T]) -> Self::Digest {
+        self.hash(input, RP_DEFAULT_OUTPUT_SIZE)
     }
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
@@ -278,15 +296,12 @@ impl Hasher for RescuePrimeXlix<RP_DEFAULT_WIDTH> {
 
         // Copy over left and right into state for hasher
         state[0..RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(left_input);
-        state[RP_DEFAULT_OUTPUT_SIZE..2 * RP_DEFAULT_OUTPUT_SIZE].copy_from_slice(right_input);
+        state[RP_DEFAULT_OUTPUT_SIZE..2 * RP_DEFAULT_OUTPUT_SIZE]
+            .copy_from_slice(&right_input[..RP_DEFAULT_OUTPUT_SIZE]);
 
         // Apply permutation and return
         self.rescue_xlix_permutation(&mut state);
         state[0..RP_DEFAULT_OUTPUT_SIZE].to_vec()
-    }
-
-    fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
-        self.hash(&inputs.concat(), RP_DEFAULT_OUTPUT_SIZE)
     }
 }
 
@@ -328,10 +343,10 @@ impl SamplableFrom<Vec<u8>> for BFieldElement {
             "Cannot sample pseudo-uniform BFieldElements from less than 8 bytes."
         );
         let mut integer = 0u64;
-        for i in 0..8 {
+        digest[0..8].iter().for_each(|d| {
             integer *= 256u64;
-            integer += digest[i] as u64;
-        }
+            integer += *d as u64;
+        });
         BFieldElement::new(integer)
     }
 }
@@ -355,7 +370,7 @@ impl SamplableFrom<Vec<u8>> for XFieldElement {
 impl SamplableFrom<Vec<BFieldElement>> for BFieldElement {
     fn sample(digest: &Vec<BFieldElement>) -> Self {
         assert!(
-            digest.len() >= 1,
+            !digest.is_empty(),
             "Cannot sample BFieldElement uniformly from less than 1 BFieldElement."
         );
         digest[0]
@@ -377,51 +392,6 @@ impl SamplableFrom<Vec<BFieldElement>> for XFieldElement {
 #[cfg(test)]
 pub mod test_simple_hasher {
     use super::*;
-    use num_traits::One;
-
-    #[test]
-    fn u128_to_sequence_test() {
-        let one = 1u128;
-        let bfields_one: Vec<BFieldElement> = one.to_sequence();
-        assert_eq!(6, bfields_one.len());
-        assert_eq!(BFieldElement::zero(), bfields_one[0]);
-        assert_eq!(BFieldElement::zero(), bfields_one[1]);
-        assert_eq!(BFieldElement::zero(), bfields_one[2]);
-        assert_eq!(BFieldElement::zero(), bfields_one[3]);
-        assert_eq!(BFieldElement::zero(), bfields_one[4]);
-        assert_eq!(BFieldElement::one(), bfields_one[5]);
-
-        let beyond_bfield0 = u64::MAX as u128;
-        let bfields: Vec<BFieldElement> = beyond_bfield0.to_sequence();
-        assert_eq!(6, bfields.len());
-        assert_eq!(BFieldElement::zero(), bfields[0]);
-        assert_eq!(BFieldElement::zero(), bfields[1]);
-        assert_eq!(BFieldElement::zero(), bfields[2]);
-        assert_eq!(BFieldElement::zero(), bfields[3]);
-        assert_eq!(BFieldElement::one(), bfields[4]);
-        assert_eq!(BFieldElement::new(4294967295u64), bfields[5]);
-
-        let beyond_bfield1 = BFieldElement::MAX as u128 + 1;
-        let bfields: Vec<BFieldElement> = beyond_bfield1.to_sequence();
-        assert_eq!(6, bfields.len());
-        assert_eq!(BFieldElement::zero(), bfields[0]);
-        assert_eq!(BFieldElement::zero(), bfields[1]);
-        assert_eq!(BFieldElement::zero(), bfields[2]);
-        assert_eq!(BFieldElement::zero(), bfields[3]);
-        assert_eq!(BFieldElement::one(), bfields[4]);
-        assert_eq!(BFieldElement::one(), bfields[5]);
-
-        let big_value = u128::MAX;
-        let bfields: Vec<BFieldElement> = big_value.to_sequence();
-        for i in 1..128 {
-            let other_digest: Vec<BFieldElement> = (big_value >> i).to_sequence();
-            assert_ne!(
-                bfields, other_digest,
-                "No digest collission allowed. i = {}",
-                i
-            );
-        }
-    }
 
     #[test]
     fn blake3_digest_from_u128_test() {
@@ -442,17 +412,18 @@ pub mod test_simple_hasher {
     where
         usize: Hashable<BFieldElement>,
     {
+        type Digest = <RescuePrimeXlix<16> as Hasher>::Digest;
         let rpp: RescuePrimeXlix<16> = RescuePrimeXlix::new();
-        let digest1: Vec<BFieldElement> = 42usize.to_sequence();
-        let digest2: Vec<BFieldElement> = ((1 << 4 + 42) as usize).to_sequence();
-        let digests: Vec<BFieldElement> = vec![digest1.clone(), digest2.clone()].concat();
-        let hash_digest = rpp.hash(&digests, 6);
+        let digest1: Digest = rpp.hash_sequence(&42usize.to_sequence());
+        let digest2: Digest = rpp.hash_sequence(&((1 << 4 + 42) as usize).to_sequence());
+        let digests: Digest = vec![digest1.clone(), digest2.clone()].concat();
+        let hash_sequence_digest = rpp.hash_sequence(&digests);
         let hash_pair_digest = rpp.hash_pair(&digest1, &digest2);
         let hash_many_digest = rpp.hash_many(&[digest1, digest2]);
-        println!("hash_digest = {:?}", hash_digest);
+        println!("hash_sequence_digest = {:?}", hash_sequence_digest);
         println!("hash_pair_digest = {:?}", hash_pair_digest);
         println!("hash_many_digest = {:?}", hash_many_digest);
-        assert_ne!(hash_digest, hash_pair_digest);
-        assert_eq!(hash_digest, hash_many_digest);
+        assert_eq!(hash_pair_digest, hash_many_digest);
+        assert_ne!(hash_sequence_digest, hash_pair_digest);
     }
 }

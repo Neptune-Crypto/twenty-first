@@ -859,7 +859,7 @@ pub fn rescue_prime_params_bfield_0() -> RescuePrimeDepracated {
         .map(|elem| BFieldElement::new(*elem))
         .collect();
 
-    let res = RescuePrime {
+    let res = RescuePrimeDepracated {
         m: 16,
         round_count: 7,
         alpha: 7,
@@ -879,7 +879,7 @@ pub fn rescue_prime_params_bfield_0() -> RescuePrimeDepracated {
     res
 }
 
-pub fn rescue_prime_medium_test_params() -> RescuePrime {
+pub fn rescue_prime_medium_test_params() -> RescuePrimeDepracated {
     let mds: Vec<Vec<BFieldElement>> = to_matrix(vec![
         vec![
             1473570182113651655,
@@ -1130,7 +1130,7 @@ pub fn rescue_prime_medium_test_params() -> RescuePrime {
     .map(|c| BFieldElement::new(*c))
     .collect();
 
-    RescuePrime {
+    RescuePrimeDepracated {
         m: 8,
         round_count: 5,
         alpha: 7,
@@ -1143,7 +1143,7 @@ pub fn rescue_prime_medium_test_params() -> RescuePrime {
     }
 }
 
-pub fn rescue_prime_small_test_params() -> RescuePrime {
+pub fn rescue_prime_small_test_params() -> RescuePrimeDepracated {
     let mds: Vec<Vec<BFieldElement>> = to_matrix(vec![
         vec![18446744069414584314, 8],
         vec![18446744069414584265, 57],
@@ -1170,7 +1170,7 @@ pub fn rescue_prime_small_test_params() -> RescuePrime {
     .map(|c| BFieldElement::new(*c))
     .collect();
 
-    RescuePrime {
+    RescuePrimeDepracated {
         m: 2,
         round_count: 3,
         alpha: 7,

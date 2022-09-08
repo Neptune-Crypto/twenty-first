@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     shared_math::b_field_element::BFieldElement,
-    util_types::simple_hasher::{self, Hashable, ToVec},
+    util_types::simple_hasher::{self, Hashable, SamplableFrom, ToVec},
 };
 
-use super::traits::FiniteField;
+use super::{traits::FiniteField, x_field_element::XFieldElement};
 
 pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
@@ -1037,15 +1037,18 @@ impl RescuePrimeRegular {
 
     /// trace
     /// Produces the execution trace for one invocation of XLIX
-    fn trace(input: &[BFieldElement; 10]) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
+    pub fn trace(input: &[BFieldElement; 10]) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
         let mut trace = [[BFieldElement::zero(); STATE_SIZE]; 1 + NUM_ROUNDS];
         let mut sponge = RescuePrimeRegularState::new();
 
         // absorb
         sponge.state[0..RATE].copy_from_slice(input);
 
+        // domain separation
+        sponge.state[RATE] = BFieldElement::new(1);
+
         // record trace
-        trace[0] = sponge.state.clone();
+        trace[0] = sponge.state;
 
         // apply N rounds
         for round_index in 0..NUM_ROUNDS {
@@ -1053,7 +1056,7 @@ impl RescuePrimeRegular {
             Self::xlix_round(&mut sponge, round_index);
 
             // record trace
-            trace[1 + round_index] = sponge.state.clone();
+            trace[1 + round_index] = sponge.state;
         }
 
         trace
@@ -1078,7 +1081,10 @@ impl RescuePrimeRegular {
 
 impl ToVec<BFieldElement> for [BFieldElement; 5] {
     fn to_vec(&self) -> Vec<BFieldElement> {
-        self.to_vec()
+        // Why not simply call to_vec?
+        // That function call resolves not to the standard rust
+        // function, but to the one defined here, i.e., recursion.
+        (*self).into_iter().collect::<Vec<BFieldElement>>()
     }
 }
 
@@ -1090,8 +1096,8 @@ impl simple_hasher::Hasher for RescuePrimeRegular {
         RescuePrimeRegular::new()
     }
 
-    fn hash_sequence(&self, input: &Vec<BFieldElement>) -> Self::Digest {
-        RescuePrimeRegular::hash_varlen(&input)
+    fn hash_sequence(&self, input: &[BFieldElement]) -> Self::Digest {
+        RescuePrimeRegular::hash_varlen(input)
     }
 
     fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
@@ -1114,10 +1120,18 @@ impl Hashable<BFieldElement> for [BFieldElement; 5] {
     }
 }
 
+impl SamplableFrom<[BFieldElement; 5]> for XFieldElement {
+    fn sample(digest: &[BFieldElement; 5]) -> Self {
+        XFieldElement {
+            coefficients: digest[0..3].try_into().unwrap(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod rescue_prime_regular_tests {
     use itertools::Itertools;
-    use rand::thread_rng;
+    use rand::{thread_rng, RngCore};
 
     use super::*;
 
@@ -1451,7 +1465,7 @@ mod rescue_prime_regular_tests {
         let mut rng = thread_rng();
         for _ in 0..10 {
             let input: [BFieldElement; 10] = (0..10)
-                .map(|i| BFieldElement::new(i as u64))
+                .map(|_| BFieldElement::new(rng.next_u64()))
                 .collect_vec()
                 .try_into()
                 .unwrap();

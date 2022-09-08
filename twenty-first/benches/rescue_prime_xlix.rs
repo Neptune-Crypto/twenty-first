@@ -4,7 +4,7 @@ use twenty_first::shared_math::rescue_prime_xlix::{
     neptune_params, RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE,
 };
 use twenty_first::shared_math::traits::GetRandomElements;
-use twenty_first::util_types::simple_hasher::{Hasher, RescuePrimeProduction};
+use twenty_first::util_types::simple_hasher::Hasher;
 
 fn bench_single_elements(c: &mut Criterion) {
     let mut group = c.benchmark_group("rescue_prime_single_elements");
@@ -12,15 +12,10 @@ fn bench_single_elements(c: &mut Criterion) {
     let size = 1;
     group.sample_size(100);
 
-    let hasher_rp = RescuePrimeProduction::new();
     let hasher_rp_xlix = RescuePrimeXlix::new();
 
     let mut rng = rand::thread_rng();
     let single_element = BFieldElement::random_elements(size, &mut rng);
-
-    group.bench_function(BenchmarkId::new("RescuePrime", size), |bencher| {
-        bencher.iter(|| hasher_rp.hash(&single_element));
-    });
 
     group.bench_function(BenchmarkId::new("RescuePrimeXlix", size), |bencher| {
         bencher.iter(|| hasher_rp_xlix.hash(&single_element, RP_DEFAULT_OUTPUT_SIZE));
@@ -33,21 +28,10 @@ fn bench_many_elements(c: &mut Criterion) {
     let size = 8_192;
     group.sample_size(50);
 
-    let hasher_rp = RescuePrimeProduction::new();
     let hasher_rp_xlix = RescuePrimeXlix::new();
 
     let mut rng = rand::thread_rng();
     let elements = BFieldElement::random_elements(size, &mut rng);
-
-    group.bench_function(BenchmarkId::new("RescuePrime", size), |bencher| {
-        bencher.iter(|| {
-            let chunks: Vec<Vec<BFieldElement>> = elements
-                .chunks(RP_DEFAULT_OUTPUT_SIZE)
-                .map(|s| s.to_vec())
-                .collect();
-            hasher_rp.hash_many(&chunks);
-        });
-    });
 
     group.bench_function(BenchmarkId::new("RescuePrimeXlix", size), |bencher| {
         bencher.iter(|| {

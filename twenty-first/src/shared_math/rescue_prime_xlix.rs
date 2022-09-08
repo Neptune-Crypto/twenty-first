@@ -31,7 +31,16 @@ impl<const M: usize> PartialEq for RescuePrimeXlix<M> {
 
 impl<const M: usize> Default for RescuePrimeXlix<M> {
     fn default() -> Self {
-        rescue_prime_medium_test_params()
+        let rpd = rescue_prime_medium_test_params();
+        Self {
+            capacity: 4,
+            n: 8,
+            alpha: rpd.alpha,
+            alpha_inv: rpd.alpha_inv,
+            mds: rpd.mds,
+            mds_inv: rpd.mds_inv,
+            round_constants: rpd.round_constants,
+        }
     }
 }
 

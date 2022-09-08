@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use num_traits::{One, Zero};
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::rescue_prime::RescuePrime;
+use twenty_first::shared_math::rescue_prime::RescuePrimeDepracated;
 use twenty_first::shared_math::rescue_prime_params as params;
 use twenty_first::shared_math::stark::rescue_prime::stark_rp::StarkRp;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
@@ -11,7 +11,7 @@ use twenty_first::util_types::proof_stream::ProofStream;
 fn stark_medium(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("stark_rp");
 
-    let rp: RescuePrime = params::rescue_prime_params_bfield_0();
+    let rp: RescuePrimeDepracated = params::rescue_prime_params_bfield_0();
     let benchmark_id = BenchmarkId::new("large", 7);
     // let rp: RescuePrime = params::rescue_prime_medium_test_params();
     // let benchmark_id = BenchmarkId::new("medium", 5);

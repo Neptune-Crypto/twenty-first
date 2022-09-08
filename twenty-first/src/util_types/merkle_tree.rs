@@ -649,7 +649,7 @@ where
         let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(indices.len());
         for (value, proof_element) in izip!(unsalted_leaves, proof) {
             let salts_for_leaf = proof_element.1.clone();
-            let leaf_hash = hasher.hash_with_salts(*value, &salts_for_leaf);
+            let leaf_hash = hasher.hash_with_salts(value.clone(), &salts_for_leaf);
             leaf_hashes.push(leaf_hash);
         }
 
@@ -719,7 +719,6 @@ mod merkle_tree_test {
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
     use itertools::{zip, Itertools};
-    use num_traits::One;
     use rand::RngCore;
 
     fn count_hashes<Digest>(proof: &SaltedMultiProof<Digest>) -> usize {
@@ -1089,204 +1088,6 @@ mod merkle_tree_test {
                 );
             }
         }
-    }
-
-    fn b3h(hex: impl AsRef<[u8]>) -> Blake3Hash {
-        Blake3Hash(blake3::Hash::from_hex(hex).unwrap())
-    }
-
-    #[test]
-    fn merkle_tree_test_simple() {
-        type Digest = Blake3Hash;
-        type Hasher = blake3::Hasher;
-
-        let one = BFieldElement::one();
-        let two = BFieldElement::new(2);
-        let three = BFieldElement::new(3);
-        let four = BFieldElement::new(4);
-
-        let hasher = Hasher::new();
-        let values = vec![BFieldElement::new(1)];
-        let leaves: Vec<Digest> = values
-            .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
-            .collect();
-
-        let single_mt_one: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
-        let expected_root_hash: Digest =
-            b3h("216eb5cf8e60e66db5dc53e5db5ded0a7c038a00b3bcbebb08b4556c830621a1");
-        assert_eq!(expected_root_hash, single_mt_one.get_root());
-        assert_eq!(0, single_mt_one.get_height());
-
-        let single_mt_two: MerkleTree<Hasher> =
-            MerkleTree::from_digests(&[hasher.hash_sequence(&two.to_sequence())]);
-        let expected_root_hash_2: Digest =
-            b3h("abb1f67fe5cf64ed79df481ffe011c541028decd98ad105afe1656aca29e5d14");
-        assert_eq!(expected_root_hash_2, single_mt_two.get_root());
-        assert_eq!(0, single_mt_two.get_height());
-
-        let mt: MerkleTree<Hasher> = MerkleTree::from_digests(&[
-            hasher.hash_sequence(&one.to_sequence()),
-            hasher.hash_sequence(&two.to_sequence()),
-        ]);
-        let expected_root_hash_3 =
-            b3h("0d5c81b4ed156d9838b3be9e90e5c92ceabd10f40bfdef5c4adf93212d392b24");
-        assert_eq!(expected_root_hash_3, mt.get_root());
-        assert_eq!(1, mt.get_height());
-
-        let leaf_index = 1;
-        let mut auth_path: Vec<Digest> = mt.get_authentication_path(leaf_index);
-
-        let success = MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
-            mt.get_root(),
-            1,
-            hasher.hash_sequence(&two.to_sequence()),
-            auth_path.clone(),
-        );
-        assert!(success);
-        assert_eq!(
-            hasher.hash_sequence(&one.to_sequence()),
-            auth_path[0],
-            "First element of authentication path is the leaf node"
-        );
-
-        let leaf_index = 0;
-        auth_path = mt.get_authentication_path(leaf_index);
-        assert!(
-            MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
-                mt.get_root(),
-                leaf_index as u32,
-                hasher.hash_sequence(&one.to_sequence()),
-                auth_path.clone()
-            )
-        );
-        assert_eq!(hasher.hash_sequence(&two.to_sequence()), auth_path[0]);
-        assert_eq!(1, auth_path.len());
-
-        let mt_reverse: MerkleTree<Hasher> = MerkleTree::from_digests(&[
-            hasher.hash_sequence(&two.to_sequence()),
-            hasher.hash_sequence(&one.to_sequence()),
-        ]);
-        let expected_root_hash_4 =
-            b3h("1fe7c02631dcf1e025ff34d82e3f164bc5839e8bca91814adf3c25440d9eac48");
-        assert_eq!(expected_root_hash_4, mt_reverse.get_root());
-        assert_eq!(1, mt_reverse.get_height());
-
-        let leaves: Vec<Digest> = [one, two, three, four]
-            .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
-            .collect();
-        let mt_four: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
-        let expected_root_hash_5 =
-            b3h("7b1084a91bbc707f367a24bf7fab7599fae17d34bd735dd80c671f54d08585ae");
-        assert_eq!(expected_root_hash_5, mt_four.get_root());
-        assert_ne!(mt.get_root(), mt_reverse.get_root());
-        assert_eq!(2, mt_four.get_height());
-        auth_path = mt_four.get_authentication_path(1);
-        assert_eq!(2, auth_path.len());
-        assert!(
-            MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
-                mt_four.get_root(),
-                1,
-                hasher.hash_sequence(&two.to_sequence()),
-                auth_path.clone()
-            )
-        );
-        assert_eq!(hasher.hash_sequence(&one.to_sequence()), auth_path[0]);
-
-        auth_path[0] = hasher.hash_sequence(&three.to_sequence());
-        assert!(
-            !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
-                mt_four.get_root(),
-                1,
-                hasher.hash_sequence(&two.to_sequence()),
-                auth_path.clone()
-            ),
-            "Merkle tree auth path verification must fail when authentication path is wrong"
-        );
-
-        auth_path[0] = hasher.hash_sequence(&one.to_sequence());
-        assert!(
-            MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
-                mt_four.get_root(),
-                1,
-                hasher.hash_sequence(&two.to_sequence()),
-                auth_path.clone()
-            ),
-            "MT AP must succeed with valid parameters"
-        );
-        assert!(
-            !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
-                mt_four.get_root(),
-                1,
-                hasher.hash_sequence(&four.to_sequence()),
-                auth_path.clone()
-            ),
-            "Merkle tree authentication path must fail when leaf digest is wrong"
-        );
-        assert!(
-            !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
-                mt_reverse.get_root(),
-                1,
-                hasher.hash_sequence(&two.to_sequence()),
-                auth_path.clone()
-            ),
-            "Merkle tree authentication path must fail when root is changed"
-        );
-        assert!(
-            !MerkleTree::<Hasher>::verify_authentication_path_from_leaf_hash(
-                mt_four.get_root(),
-                2,
-                hasher.hash_sequence(&two.to_sequence()),
-                auth_path.clone()
-            ),
-            "Merkle tree authentication path must fail when index is changed"
-        );
-
-        let auth_paths: Vec<PartialAuthenticationPath<Digest>> = mt_four.get_multi_proof(&[0]);
-        assert!(MerkleTree::<Hasher>::verify_multi_proof_from_leaves(
-            mt_four.get_root(),
-            &[0],
-            &mt_four.get_leaves_by_indices(&[0])[..],
-            &auth_paths
-        ));
-        auth_path = mt_four.get_authentication_path(0);
-
-        assert_eq!(
-            auth_path.len(),
-            auth_paths[0].0 .len(),
-            "Methods `get_multi_proof` and `get_authentication_path()` should obtain the same authentication path for leaf at index 0."
-        );
-
-        let selected_indices_2 = [0, 1];
-        let auth_paths_2 = mt_four.get_multi_proof(&selected_indices_2);
-        assert!(MerkleTree::<Hasher>::verify_multi_proof_from_leaves(
-            mt_four.get_root(),
-            &selected_indices_2,
-            &leaves[selected_indices_2[0]..=selected_indices_2[1]],
-            &auth_paths_2
-        ));
-
-        let selected_indices_3 = [0, 1, 2];
-        let auth_paths_3 = mt_four.get_multi_proof(&selected_indices_3);
-        assert!(MerkleTree::<Hasher>::verify_multi_proof_from_leaves(
-            mt_four.get_root(),
-            &selected_indices_3,
-            &leaves[selected_indices_3[0]..selected_indices_3.len()],
-            &auth_paths_3
-        ));
-
-        // Verify that verification of multi-proof where the tree or the proof
-        // does not have the indices requested leads to a false return value,
-        // and not to a run-time panic.
-        let out_of_bounds_index = 42;
-        let selected_indices_4 = [0, 1, out_of_bounds_index];
-        assert!(!MerkleTree::<Hasher>::verify_multi_proof_from_leaves(
-            mt_four.get_root(),
-            &selected_indices_4,
-            &leaves[selected_indices_4[0]..selected_indices_4.len()],
-            &auth_paths_3
-        ));
     }
 
     #[test]
@@ -2148,7 +1949,6 @@ mod merkle_tree_test {
 
         type Hasher = RescuePrimeRegular;
         type MT = MerkleTree<Hasher>;
-        type Digest = Vec<BFieldElement>;
 
         let hasher = Hasher::new();
 

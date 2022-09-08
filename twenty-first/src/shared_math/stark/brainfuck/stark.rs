@@ -310,13 +310,7 @@ impl Stark {
         transposed_base_codewords
             .par_iter()
             .map(|values| {
-                hasher.hash_sequence(
-                    &values
-                        .iter()
-                        .map(|v| v.to_sequence())
-                        .flatten()
-                        .collect_vec(),
-                )
+                hasher.hash_sequence(&values.iter().flat_map(|v| v.to_sequence()).collect_vec())
             })
             .collect_into_vec(&mut base_codeword_digests_by_index);
 
@@ -388,13 +382,7 @@ impl Stark {
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
                 );
-                hasher.hash_sequence(
-                    &bvalues
-                        .iter()
-                        .map(|b| b.to_sequence())
-                        .flatten()
-                        .collect_vec(),
-                )
+                hasher.hash_sequence(&bvalues.iter().flat_map(|b| b.to_sequence()).collect_vec())
             })
             .collect_into_vec(&mut extension_codeword_digests_by_index);
 
@@ -868,13 +856,7 @@ impl Stark {
         let leaf_digests: Vec<StarkDigest> = revealed_base_elements
             .par_iter()
             .map(|rbev| {
-                hasher.hash_sequence(
-                    &rbev
-                        .iter()
-                        .map(|rbe| rbe.to_sequence())
-                        .flatten()
-                        .collect_vec(),
-                )
+                hasher.hash_sequence(&rbev.iter().flat_map(|rbe| rbe.to_sequence()).collect_vec())
             })
             .collect();
         timer.elapsed(&format!(
@@ -916,13 +898,7 @@ impl Stark {
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
                 );
-                hasher.hash_sequence(
-                    &bvalues
-                        .iter()
-                        .map(|b| b.to_sequence())
-                        .flatten()
-                        .collect_vec(),
-                )
+                hasher.hash_sequence(&bvalues.iter().flat_map(|b| b.to_sequence()).collect_vec())
             })
             .collect();
         timer.elapsed(&format!(
