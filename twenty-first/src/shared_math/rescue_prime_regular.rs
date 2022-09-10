@@ -1004,9 +1004,11 @@ impl RescuePrimeRegular {
         sponge.state[..5].try_into().unwrap()
     }
 
-    /// hash_varlen
-    /// Hash an arbitrary number of field elements. Takes care of
-    /// padding.
+    /// hash_varlen hashes an arbitrary number of field elements.
+    ///
+    /// Takes care of padding by applying the padding rule: append a single 1 ∈ Fp
+    /// and as many 0 ∈ Fp elements as required to make the number of input elements
+    /// a multiple of `RATE`.
     pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
         let mut sponge = RescuePrimeRegularState::new();
 
