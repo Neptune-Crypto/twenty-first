@@ -6,17 +6,6 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
-pub trait IdentityValues {
-    fn is_zero(&self) -> bool;
-    fn is_one(&self) -> bool;
-
-    #[must_use]
-    fn ring_zero(&self) -> Self;
-
-    #[must_use]
-    fn ring_one(&self) -> Self;
-}
-
 pub trait CyclicGroupGenerator
 where
     Self: Sized,
