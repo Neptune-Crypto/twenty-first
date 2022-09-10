@@ -923,7 +923,7 @@ impl RescuePrimeRegular {
     /// xlix_round
     /// Apply one round of the XLIX permutation.
     fn xlix_round(sponge: &mut RescuePrimeRegularState, round_index: usize) {
-        assert!(
+        debug_assert!(
             round_index < NUM_ROUNDS,
             "Cannot apply {}th round; only have {} in total.",
             round_index,
