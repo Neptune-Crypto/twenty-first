@@ -587,11 +587,9 @@ mod mmr_membership_proof_test {
 
     use super::*;
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
-    use crate::shared_math::rescue_prime_xlix::{
-        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
-    };
     use crate::test_shared::mmr::get_archival_mmr_from_digests;
     use crate::util_types::blake3_wrapper::Blake3Hash;
+    use crate::util_types::simple_hasher;
     use crate::{
         shared_math::b_field_element::BFieldElement,
         util_types::blake3_wrapper,
@@ -1376,19 +1374,17 @@ mod mmr_membership_proof_test {
         // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
         // to me so far.
-        let rp = RescuePrimeXlix::new();
-        type Hasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
-        let leaf_hashes: Vec<Vec<BFieldElement>> = (1001..1001 + 3)
-            .map(|x| rp.hash(&vec![BFieldElement::new(x as u64)], RP_DEFAULT_OUTPUT_SIZE))
+        let rp = RescuePrimeRegular::new();
+        type Hasher = RescuePrimeRegular;
+        let leaf_hashes: Vec<<RescuePrimeRegular as simple_hasher::Hasher>::Digest> = (1001..1001
+            + 3)
+            .map(|x| rp.hash_sequence(&vec![BFieldElement::new(x as u64)]))
             .collect();
         let mut archival_mmr: ArchivalMmr<Hasher> =
             get_archival_mmr_from_digests(leaf_hashes.clone());
-        let mp: MmrMembershipProof<RescuePrimeXlix<RP_DEFAULT_WIDTH>> =
-            archival_mmr.prove_membership(1).0;
+        let mp: MmrMembershipProof<RescuePrimeRegular> = archival_mmr.prove_membership(1).0;
         let json = serde_json::to_string(&mp).unwrap();
-        let s_back =
-            serde_json::from_str::<MmrMembershipProof<RescuePrimeXlix<RP_DEFAULT_WIDTH>>>(&json)
-                .unwrap();
+        let s_back = serde_json::from_str::<MmrMembershipProof<RescuePrimeRegular>>(&json).unwrap();
         assert!(
             s_back
                 .verify(&archival_mmr.get_peaks(), &leaf_hashes[1], 3)

@@ -337,9 +337,7 @@ mod accumulator_mmr_tests {
     use rand::{thread_rng, Rng, RngCore};
 
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::rescue_prime_xlix::{
-        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
-    };
+    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::test_shared::mmr::get_archival_mmr_from_digests;
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::utils::generate_random_numbers_u128;
@@ -721,11 +719,11 @@ mod accumulator_mmr_tests {
         // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
         // to me so far.
-        type Hasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
+        type Hasher = RescuePrimeRegular;
         let hasher = Hasher::new();
         type Mmr = MmrAccumulator<Hasher>;
         let mut mmra: Mmr = MmrAccumulator::new(vec![]);
-        mmra.append(hasher.hash(&vec![BFieldElement::zero()], RP_DEFAULT_OUTPUT_SIZE));
+        mmra.append(hasher.hash_sequence(&vec![BFieldElement::zero()]));
 
         let json = serde_json::to_string(&mmra).unwrap();
         let mut s_back = serde_json::from_str::<Mmr>(&json).unwrap();

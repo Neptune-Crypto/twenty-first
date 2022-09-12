@@ -625,9 +625,6 @@ mod xfri_tests {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
-    use crate::shared_math::rescue_prime_xlix::{
-        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
-    };
     use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
     use crate::shared_math::x_field_element::XFieldElement;
@@ -637,9 +634,9 @@ mod xfri_tests {
 
     #[test]
     fn sample_indices_test() {
-        type Hasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
+        type Hasher = RescuePrimeRegular;
 
-        let hasher = RescuePrimeXlix::new();
+        let hasher = RescuePrimeRegular::new();
         let mut rng = thread_rng();
         let subgroup_order = 16;
         let expansion_factor = 4;
@@ -649,13 +646,9 @@ mod xfri_tests {
             expansion_factor,
             colinearity_checks,
         );
-        let indices = fri.sample_indices(&hasher.hash(
-            &hasher.hash(
-                &vec![BFieldElement::new(rng.next_u64())],
-                RP_DEFAULT_OUTPUT_SIZE,
-            ),
-            RP_DEFAULT_OUTPUT_SIZE,
-        ));
+        let indices = fri.sample_indices(
+            &hasher.hash_sequence(&hasher.hash_sequence(&vec![BFieldElement::new(rng.next_u64())])),
+        );
         assert!(
             has_unique_elements(indices.iter()),
             "Picked indices must be unique"

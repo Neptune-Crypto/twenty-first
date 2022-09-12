@@ -706,7 +706,6 @@ mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
-    use crate::shared_math::rescue_prime_xlix::{RescuePrimeXlix, RP_DEFAULT_WIDTH};
     use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::blake3_wrapper::Blake3Hash;
@@ -2052,8 +2051,8 @@ mod merkle_tree_test {
         // This is needed since a block can contain an empty list of addition or
         // removal records.
 
-        type RPXLIX = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
-        MerkleTree::<RPXLIX>::root_from_arbitrary_number_of_digests(&[]);
+        type RPR = RescuePrimeRegular;
+        MerkleTree::<RPR>::root_from_arbitrary_number_of_digests(&[]);
     }
 
     #[test]

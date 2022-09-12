@@ -1109,11 +1109,6 @@ impl simple_hasher::Hasher for RescuePrimeRegular {
             .unwrap();
         RescuePrimeRegular::hash_10(&input)
     }
-
-    fn hash_many(&self, inputs: &[Self::Digest]) -> Self::Digest {
-        let input: Vec<BFieldElement> = inputs.concat();
-        RescuePrimeRegular::hash_varlen(&input)
-    }
 }
 
 impl Hashable<BFieldElement> for [BFieldElement; 5] {
