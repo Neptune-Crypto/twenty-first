@@ -60,10 +60,6 @@ pub trait Hasher: Sized + Send + Sync + Clone {
         digest
     }
 
-    fn fiat_shamir(&self, items: &[Self::T]) -> Self::Digest {
-        self.hash_sequence(items)
-    }
-
     /// Given a uniform random `input` digest and a `max` that is a power of two,
     /// produce a uniform random number in the interval `[0; max)`. The input should
     /// be a Fiat-Shamir digest to ensure a high degree of randomness.

@@ -110,12 +110,12 @@ where
 
     pub fn prover_fiat_shamir(&self) -> H::Digest {
         let hasher = H::new();
-        hasher.fiat_shamir(&self.transcript)
+        hasher.hash_sequence(&self.transcript)
     }
 
     pub fn verifier_fiat_shamir(&self) -> H::Digest {
         let hasher = H::new();
-        hasher.fiat_shamir(&self.transcript[0..self.transcript_index])
+        hasher.hash_sequence(&self.transcript[0..self.transcript_index])
     }
 }
 
