@@ -202,11 +202,10 @@ impl RescuePrimeDepracated {
         let variables = MPolynomial::variables(1 + 2 * self.m, BFieldElement::one());
         let previous_state = &variables[1..(self.m + 1)];
         let next_state = &variables[(self.m + 1)..(2 * self.m + 1)];
-        let one = BFieldElement::one();
 
         let previous_state_pow_alpha = previous_state
             .iter()
-            .map(|poly| poly.mod_pow(self.alpha.into(), one))
+            .map(|poly| poly.pow(self.alpha))
             .collect::<Vec<MPolynomial<BFieldElement>>>();
 
         // TODO: Consider refactoring MPolynomial<BFieldElement>
@@ -229,7 +228,7 @@ impl RescuePrimeDepracated {
                     rhs += (next_state[k].clone() - second_step_constants[k].clone())
                         .scalar_mul(mds_inv[k]);
                 }
-                rhs = rhs.mod_pow(self.alpha.into(), one);
+                rhs = rhs.pow(self.alpha);
 
                 lhs - rhs
             })

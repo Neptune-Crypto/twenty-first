@@ -1087,11 +1087,10 @@ impl StarkRp {
         let variables = MPolynomial::variables(1 + 2 * STATE_SIZE, BFieldElement::one());
         let previous_state = &variables[1..(STATE_SIZE + 1)];
         let next_state = &variables[(STATE_SIZE + 1)..(2 * STATE_SIZE + 1)];
-        let one = BFieldElement::one();
 
         let previous_state_pow_alpha = previous_state
             .iter()
-            .map(|poly| poly.mod_pow(ALPHA.into(), one))
+            .map(|poly| poly.pow(ALPHA))
             .collect::<Vec<MPolynomial<BFieldElement>>>();
 
         // TODO: Consider refactoring MPolynomial<BFieldElement>
@@ -1152,7 +1151,7 @@ impl StarkRp {
                         ) * (a.clone() - second_step_constants[j].to_owned())
                     })
                     .fold(MPolynomial::zero(variable_count), |x, y| x + y)
-                    .mod_pow(ALPHA.into(), one)
+                    .pow(ALPHA)
             })
             .collect_into_vec(&mut backward_airs);
 

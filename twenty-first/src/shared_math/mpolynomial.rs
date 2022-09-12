@@ -3,7 +3,6 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::tree_m_ary::Node;
 use itertools::{izip, Itertools};
-use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::cell::RefCell;
@@ -882,6 +881,8 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         acc
     }
 
+    /// lift
+    /// Creates a multivariate polynomial from a univariate one.
     pub fn lift(
         univariate_polynomial: Polynomial<PFElem>,
         variable_index: usize,
@@ -909,7 +910,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         for i in 0..univariate_polynomial.coefficients.len() {
             acc +=
                 MPolynomial::from_constant(univariate_polynomial.coefficients[i], variable_count)
-                    * indeterminate.mod_pow(i.into(), one);
+                    * indeterminate.pow(i as u64);
         }
 
         acc
@@ -943,13 +944,11 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     }
 
     #[must_use]
-    pub fn mod_pow(&self, pow: BigInt, one: PFElem) -> Self {
-        assert!(one.is_one(), "one must be one");
-
+    pub fn pow(&self, pow: u64) -> Self {
         // Handle special case of 0^0
         if pow.is_zero() {
             let mut coefficients: MCoefficients<PFElem> = HashMap::new();
-            coefficients.insert(vec![0; self.variable_count], one);
+            coefficients.insert(vec![0; self.variable_count], PFElem::one());
             return MPolynomial {
                 variable_count: self.variable_count,
                 coefficients,
@@ -961,19 +960,27 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
             return Self::zero(self.variable_count);
         }
 
+        // create object, to be populated
         let exp = vec![0u64; self.variable_count];
         let mut acc_coefficients_init: MCoefficients<PFElem> = HashMap::new();
-        acc_coefficients_init.insert(exp, one);
+        acc_coefficients_init.insert(exp, PFElem::one());
         let mut acc: MPolynomial<PFElem> = Self {
             variable_count: self.variable_count,
             coefficients: acc_coefficients_init,
         };
-        let bit_length: u64 = pow.bits();
-        for i in 0..bit_length {
+
+        // calculate bit length
+        let mut bit_length = 0;
+        let mut pow_ = pow;
+        while pow_ != 0 {
+            pow_ >>= 1;
+            bit_length += 1;
+        }
+
+        // square and multiply
+        for i in (0..=bit_length).rev() {
             acc = acc.square();
-            let set: bool =
-                !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
-            if set {
+            if pow & 1 << i != 0 {
                 acc *= self.clone();
             }
         }
@@ -1539,49 +1546,38 @@ mod test_mpolynomials {
     }
 
     #[test]
-    fn simple_modpow_test() {
-        let one = BFieldElement::from(1u64);
+    fn simple_pow_test() {
         let x = get_x();
         let x_squared = get_x_squared();
         let x_quartic = get_x_quartic();
-        assert_eq!(x_squared, x.mod_pow(2.into(), one));
-        assert_eq!(x_quartic, x.mod_pow(4.into(), one));
-        assert_eq!(x_quartic, x_squared.mod_pow(2.into(), one));
-        assert_eq!(get_x_squared_z_squared(), get_xz().mod_pow(2.into(), one));
+        assert_eq!(x_squared, x.pow(2));
+        assert_eq!(x_quartic, x.pow(4));
+        assert_eq!(x_quartic, x_squared.pow(2));
+        assert_eq!(get_x_squared_z_squared(), get_xz().pow(2));
 
         assert_eq!(
             x_squared.scalar_mul(BFieldElement::from(9u64)),
-            x.scalar_mul(BFieldElement::from(3u64))
-                .mod_pow(2.into(), one)
+            x.scalar_mul(BFieldElement::from(3u64)).pow(2)
         );
         assert_eq!(
             x_squared.scalar_mul(BFieldElement::from(16u64)),
-            x.scalar_mul(BFieldElement::from(4u64))
-                .mod_pow(2.into(), one)
+            x.scalar_mul(BFieldElement::from(4u64)).pow(2)
         );
         assert_eq!(
             x_quartic.scalar_mul(BFieldElement::from(16u64)),
-            x.scalar_mul(BFieldElement::from(2u64))
-                .mod_pow(4.into(), one)
+            x.scalar_mul(BFieldElement::from(2u64)).pow(4)
         );
-        assert_eq!(x_quartic, x.mod_pow(4.into(), one));
-        assert_eq!(x_quartic, x_squared.mod_pow(2.into(), one));
-        assert_eq!(get_x_squared_z_squared(), get_xz().mod_pow(2.into(), one));
+        assert_eq!(x_quartic, x.pow(4));
+        assert_eq!(x_quartic, x_squared.pow(2));
+        assert_eq!(get_x_squared_z_squared(), get_xz().pow(2));
         assert_eq!(
             get_x_squared_z_squared().scalar_mul(BFieldElement::from(25u64)),
-            get_xz()
-                .scalar_mul(BFieldElement::from(5u64))
-                .mod_pow(2.into(), one)
+            get_xz().scalar_mul(BFieldElement::from(5u64)).pow(2)
         );
-        assert_eq!(
-            get_big_mpol() * get_big_mpol(),
-            get_big_mpol().mod_pow(2.into(), one)
-        );
+        assert_eq!(get_big_mpol() * get_big_mpol(), get_big_mpol().pow(2));
         assert_eq!(
             get_big_mpol().scalar_mul(BFieldElement::from(25u64)) * get_big_mpol(),
-            get_big_mpol()
-                .scalar_mul(BFieldElement::from(5u64))
-                .mod_pow(2.into(), one)
+            get_big_mpol().scalar_mul(BFieldElement::from(5u64)).pow(2)
         );
     }
 
@@ -1986,11 +1982,11 @@ mod test_mpolynomials {
     }
 
     #[test]
-    fn mod_pow_test() {
+    fn pow_test() {
         let a = gen_mpolynomial(4, 6, 2, 20);
         let mut acc = MPolynomial::from_constant(BFieldElement::one(), 4);
         for i in 0..10 {
-            let mod_pow = a.mod_pow(i.into(), BFieldElement::one());
+            let mod_pow = a.pow(i);
             println!(
                 "mod_pow.coefficients.len() = {}",
                 mod_pow.coefficients.len()
