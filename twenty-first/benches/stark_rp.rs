@@ -1,8 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use num_traits::{One, Zero};
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::rescue_prime::RescuePrimeDepracated;
-use twenty_first::shared_math::rescue_prime_params as params;
+use twenty_first::shared_math::rescue_prime_regular::{RescuePrimeRegular, STATE_SIZE};
 use twenty_first::shared_math::stark::rescue_prime::stark_rp::StarkRp;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 use twenty_first::timing_reporter::TimingReporter;
@@ -11,26 +10,25 @@ use twenty_first::util_types::proof_stream::ProofStream;
 fn stark_medium(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("stark_rp");
 
-    let rp: RescuePrimeDepracated = params::rescue_prime_params_bfield_0();
     let benchmark_id = BenchmarkId::new("large", 7);
     // let rp: RescuePrime = params::rescue_prime_medium_test_params();
     // let benchmark_id = BenchmarkId::new("medium", 5);
 
     group.sample_size(10);
     group.bench_function(benchmark_id, |bencher| {
-        let stark: StarkRp = StarkRp::new(16, 2, rp.m as u32, BFieldElement::new(7));
+        let stark: StarkRp = StarkRp::new(16, 2, STATE_SIZE as u32, BFieldElement::new(7));
 
         let mut timer = TimingReporter::start();
 
-        let mut input = vec![BFieldElement::zero(); rp.max_input_length];
+        let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
-        let (output, trace) = rp.eval_and_trace(&input);
+        let (output, trace) = RescuePrimeRegular::hash_10_with_trace(&input);
         timer.elapsed("rp.eval_and_trace(...)");
         let omicron = BFieldElement::primitive_root_of_unity(16).unwrap();
         timer.elapsed("BFieldElement::get_primitive_root_of_unity(16)");
-        let air_constraints = rp.get_air_constraints(omicron);
+        let air_constraints = StarkRp::get_air_constraints(omicron);
         timer.elapsed("rp.get_air_constraints(omicron)");
-        let boundary_constraints = rp.get_boundary_constraints(&output);
+        let boundary_constraints = StarkRp::get_boundary_constraints(&output);
         timer.elapsed("rp.get_boundary_constraints(...)");
 
         let report = timer.finish();

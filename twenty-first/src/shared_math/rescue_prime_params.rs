@@ -1,6 +1,21 @@
-use crate::shared_math::rescue_prime::RescuePrimeDepracated;
+use serde::{Deserialize, Serialize};
 
 use super::b_field_element::BFieldElement;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RescuePrimeDepracated {
+    pub m: usize,
+    // rate: usize,
+    // capacity: usize,
+    pub round_count: usize,
+    pub alpha: u64,
+    pub alpha_inv: u64,
+    pub max_input_length: usize,
+    pub output_length: usize,
+    pub mds: Vec<Vec<BFieldElement>>,
+    pub mds_inv: Vec<Vec<BFieldElement>>,
+    pub round_constants: Vec<BFieldElement>,
+}
 
 pub fn rescue_prime_params_bfield_0() -> RescuePrimeDepracated {
     let mds: Vec<Vec<BFieldElement>> = to_matrix(vec![

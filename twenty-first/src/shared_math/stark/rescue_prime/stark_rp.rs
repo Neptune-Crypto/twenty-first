@@ -134,7 +134,7 @@ impl StarkRp {
     pub fn prove(
         &self,
         // Trace is indexed as trace[cycle][register]
-        trace: &[Vec<BFieldElement>],
+        trace: &[[BFieldElement; STATE_SIZE]],
         transition_constraints: &[MPolynomial<BFieldElement>],
         boundary_constraints: &[BoundaryConstraint],
         proof_stream: &mut ProofStream,
@@ -875,11 +875,15 @@ impl StarkRp {
     fn randomize_trace(
         &self,
         rng: &mut ThreadRng,
-        trace: &mut Vec<Vec<BFieldElement>>,
+        trace: &mut Vec<[BFieldElement; STATE_SIZE]>,
         num_randomizers: u64,
     ) {
-        let mut randomizers: Vec<Vec<BFieldElement>> = (0..num_randomizers)
-            .map(|_| BFieldElement::random_elements(self.num_registers as usize, rng))
+        let mut randomizers: Vec<[BFieldElement; STATE_SIZE]> = (0..num_randomizers)
+            .map(|_| {
+                BFieldElement::random_elements(STATE_SIZE, rng)
+                    .try_into()
+                    .unwrap()
+            })
             .collect();
 
         trace.append(&mut randomizers);
@@ -1203,7 +1207,6 @@ pub mod test_stark {
     use super::*;
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::timing_reporter::TimingReporter;
-    use itertools::Itertools;
     use serde_json;
 
     #[test]
@@ -1296,7 +1299,7 @@ pub mod test_stark {
         let mut proof_stream = ProofStream::default();
 
         let prove_result = stark.prove(
-            &trace.iter().map(|row| row.to_vec()).collect_vec(),
+            &trace,
             &air_constraints,
             &boundary_constraints,
             &mut proof_stream,
@@ -1353,16 +1356,16 @@ pub mod test_stark {
 
         let mut timer = TimingReporter::start();
         let air_constraints = StarkRp::get_air_constraints(omicron);
-        timer.elapsed("rp.get_air_constraints(omicron)");
+        timer.elapsed("get_air_constraints(omicron)");
         let boundary_constraints = StarkRp::get_boundary_constraints(&output);
-        timer.elapsed("rp.get_boundary_constraints(output)");
+        timer.elapsed("get_boundary_constraints(output)");
         let report = timer.finish();
         println!("{}", report);
 
         let mut proof_stream = ProofStream::default();
 
         let prove_result = stark.prove(
-            &trace.iter().map(|row| row.to_vec()).collect_vec(),
+            &trace,
             &air_constraints,
             &boundary_constraints,
             &mut proof_stream,
@@ -1421,7 +1424,7 @@ pub mod test_stark {
         let mut proof_stream = ProofStream::default();
 
         let prove_result = stark.prove(
-            &trace.iter().map(|row| row.to_vec()).collect_vec(),
+            &trace,
             &air_constraints,
             &boundary_constraints,
             &mut proof_stream,
