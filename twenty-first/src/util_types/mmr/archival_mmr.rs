@@ -145,6 +145,11 @@ where
         }
     }
 
+    // Flush the databases
+    pub fn flush(&mut self) {
+        self.digests.flush()
+    }
+
     /// Get a leaf from the MMR, will panic if index is out of range
     pub fn get_leaf(&mut self, data_index: u128) -> H::Digest {
         let node_index = data_index_to_node_index(data_index);

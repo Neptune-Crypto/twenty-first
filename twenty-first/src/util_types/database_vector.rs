@@ -44,6 +44,10 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         self.len() == 0
     }
 
+    pub fn flush(&mut self) {
+        self.db.flush().expect("Flush must succeed.")
+    }
+
     pub fn len(&mut self) -> u128 {
         let length_as_bytes = self.db.get(&LENGTH_KEY).expect("Length must exist");
         bincode::deserialize(&length_as_bytes).unwrap()

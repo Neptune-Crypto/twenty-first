@@ -58,6 +58,11 @@ impl<const N: u128, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, 
         self.db.flush().expect("set must succeed flushing");
     }
 
+    // Flush database
+    pub fn flush(&mut self) {
+        self.db.flush().expect("Flush must succeed.")
+    }
+
     /// Create a new, default-initialized database array. Input database must be empty.
     pub fn new(db: DB) -> Self {
         Self {
