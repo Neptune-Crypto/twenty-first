@@ -48,18 +48,6 @@ pub trait Hasher: Sized + Send + Sync + Clone {
         acc
     }
 
-    // TODO: Consider moving the 'Self::Digest: ToDigest<Self::Digest>' constraint up.
-    fn hash_with_salts(&self, mut digest: Self::Digest, salts: &[Self::Digest]) -> Self::Digest
-    where
-        Self::Digest: Hashable<Self::T>,
-    {
-        for salt in salts {
-            digest = self.hash_pair(&digest, salt);
-        }
-
-        digest
-    }
-
     /// Given a uniform random `input` digest and a `max` that is a power of two,
     /// produce a uniform random number in the interval `[0; max)`. The input should
     /// be a Fiat-Shamir digest to ensure a high degree of randomness.

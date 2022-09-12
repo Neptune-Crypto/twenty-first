@@ -547,7 +547,7 @@ impl StarkRp {
         for (j, bq_mt) in boundary_quotient_merkle_trees.into_iter().enumerate() {
             let authetication_paths_and_salts: Vec<(
                 PartialAuthenticationPath<Digest>,
-                Vec<Digest>, // salts
+                Digest, // salts
             )> = bq_mt.get_multi_proof_and_salts(&quadrupled_indices);
             proof_stream.enqueue_length_prepended(&authetication_paths_and_salts)?;
             let values: Vec<BFieldElement> = quadrupled_indices
@@ -656,9 +656,9 @@ impl StarkRp {
         let mut boundary_quotients: Vec<HashMap<usize, BFieldElement>> = vec![];
         for (i, bq_root) in boundary_quotient_mt_roots.into_iter().enumerate() {
             boundary_quotients.push(HashMap::new());
-            let authentication_paths_and_salts: Vec<(
+            let authentication_paths_and_salt: Vec<(
                 PartialAuthenticationPath<Digest>,
-                Vec<Digest>, // salts
+                Digest, // sals
             )> = proof_stream.dequeue_length_prepended()?;
 
             let bq_values: Vec<BFieldElement> = proof_stream.dequeue_length_prepended()?;
@@ -672,7 +672,7 @@ impl StarkRp {
                 bq_root,
                 &duplicated_indices_local,
                 &unsalted_leaves,
-                &authentication_paths_and_salts,
+                &authentication_paths_and_salt,
             );
             if !valid {
                 return Err(Box::new(StarkVerifyError::BadMerkleProof(

@@ -520,7 +520,7 @@ where
     }
 }
 
-pub type SaltedMultiProof<Digest> = Vec<(PartialAuthenticationPath<Digest>, Vec<Digest>)>;
+pub type SaltedMultiProof<Digest> = Vec<(PartialAuthenticationPath<Digest>, Digest)>;
 
 #[derive(Clone, Debug)]
 pub struct SaltedMerkleTree<H>
@@ -535,19 +535,12 @@ impl<H> SaltedMerkleTree<H>
 where
     H: Hasher + Sync + Send,
 {
-    fn salts_per_leaf(&self) -> usize {
-        let leaves_count = self.internal_merkle_tree.nodes.len() / 2;
-        self.salts.len() / leaves_count
-    }
-
     // Build a salted Merkle tree from a slice of serializable values
     pub fn from_digests(leaves: &[H::Digest], salts: &[H::Digest]) -> Self {
         assert!(
             other::is_power_of_two(leaves.len()),
             "Size of input for Merkle tree must be a power of 2"
         );
-
-        let salts_per_leaf = salts.len() / leaves.len();
 
         let hasher = H::new();
         let filler = leaves[0].clone();
@@ -557,8 +550,7 @@ where
 
         for i in 0..leaves.len() {
             let value = leaves[i].clone();
-            let salty_slice = &salts[salts_per_leaf * i..salts_per_leaf * (i + 1)];
-            let leaf_digest = hasher.hash_with_salts(value, salty_slice);
+            let leaf_digest = hasher.hash_pair(&value, &salts[i]);
 
             nodes[leaves.len() + i] = leaf_digest;
         }
@@ -578,18 +570,11 @@ where
         }
     }
 
-    pub fn get_authentication_path_and_salts(
-        &self,
-        index: usize,
-    ) -> (Vec<H::Digest>, Vec<H::Digest>) {
+    pub fn get_authentication_path_and_salt(&self, index: usize) -> (Vec<H::Digest>, H::Digest) {
         let authentication_path = self.internal_merkle_tree.get_authentication_path(index);
-        let spl = self.salts_per_leaf();
-        let mut salts = Vec::<H::Digest>::with_capacity(spl);
-        for i in 0..spl {
-            salts.push(self.salts[index * spl + i].clone());
-        }
+        let salt = self.salts[index].clone();
 
-        (authentication_path, salts)
+        (authentication_path, salt)
     }
 
     pub fn verify_authentication_path(
@@ -597,10 +582,10 @@ where
         index: u32,
         leaf: H::Digest,
         auth_path: Vec<H::Digest>,
-        salts_for_leaf: Vec<H::Digest>,
+        leaf_salt: H::Digest,
     ) -> bool {
         let hasher = H::new();
-        let leaf_hash = hasher.hash_with_salts(leaf, &salts_for_leaf);
+        let leaf_hash = hasher.hash_pair(&leaf, &leaf_salt);
 
         // Set `leaf_hash` to H(value + salts[0..])
         MerkleTree::<H>::verify_authentication_path_from_leaf_hash(
@@ -617,11 +602,8 @@ where
         // salts are random data, so they cannot be compressed
         let mut ret: SaltedMultiProof<H::Digest> = Vec::with_capacity(indices.len());
         for (i, index) in indices.iter().enumerate() {
-            let mut salts = vec![];
-            for j in 0..self.salts_per_leaf() {
-                salts.push(self.salts[index * self.salts_per_leaf() + j].clone());
-            }
-            ret.push((partial_authentication_paths[i].clone(), salts));
+            let salt = self.salts[*index].clone();
+            ret.push((partial_authentication_paths[i].clone(), salt));
         }
 
         ret
@@ -647,9 +629,8 @@ where
 
         let hasher = H::new();
         let mut leaf_hashes: Vec<H::Digest> = Vec::with_capacity(indices.len());
-        for (value, proof_element) in izip!(unsalted_leaves, proof) {
-            let salts_for_leaf = proof_element.1.clone();
-            let leaf_hash = hasher.hash_with_salts(value.clone(), &salts_for_leaf);
+        for (value, (_, salt)) in izip!(unsalted_leaves, proof) {
+            let leaf_hash = hasher.hash_pair(value, salt);
             leaf_hashes.push(leaf_hash);
         }
 
@@ -974,15 +955,11 @@ mod merkle_tree_test {
             &auth_pairs,
         );
 
-        let how_many_salts_again = 0;
-
-        let salts_per_element = 5;
         let salts_preimage: Vec<BFieldElement> =
-            BFieldElement::random_elements(salts_per_element * leaves.len(), &mut rng);
+            BFieldElement::random_elements(leaves.len(), &mut rng);
         let salts: Vec<Digest> = salts_preimage
             .iter()
             .map(|x| hasher.hash_sequence(&x.to_sequence()))
-            .take(how_many_salts_again)
             .collect();
 
         let unsalted_salted_tree: SaltedMerkleTree<Hasher> =
@@ -1276,7 +1253,7 @@ mod merkle_tree_test {
         // 2: Get the path for value '4' (index: 2)
         let leaf_a_idx = 2;
         let leaf_a_digest = leaves_a[leaf_a_idx];
-        let auth_path_a_and_salt = tree_a.get_authentication_path_and_salts(leaf_a_idx);
+        let auth_path_a_and_salt = tree_a.get_authentication_path_and_salt(leaf_a_idx);
 
         // 3: Verify that the proof, along with the salt, works
         assert!(SMT::verify_authentication_path(
@@ -1293,11 +1270,6 @@ mod merkle_tree_test {
             "authentication path a has right length"
         );
         assert_eq!(
-            3,
-            auth_path_a_and_salt.1.len(),
-            "Proof contains expected number of salts"
-        );
-        assert_eq!(
             tree_a.internal_merkle_tree.nodes[2], auth_path_a_and_salt.0[1],
             "sibling x"
         );
@@ -1307,8 +1279,8 @@ mod merkle_tree_test {
         );
 
         // 4: Change salt and verify that the proof does not work
-        let mut auth_path_a_and_salt_bad_salt = tree_a.get_authentication_path_and_salts(2);
-        auth_path_a_and_salt_bad_salt.1[0].increment();
+        let mut auth_path_a_and_salt_bad_salt = tree_a.get_authentication_path_and_salt(2);
+        auth_path_a_and_salt_bad_salt.1.increment();
         assert!(!SMT::verify_authentication_path(
             tree_a.get_root(),
             leaf_a_idx as u32,
@@ -1316,39 +1288,7 @@ mod merkle_tree_test {
             auth_path_a_and_salt_bad_salt.0.clone(),
             auth_path_a_and_salt_bad_salt.1.clone(),
         ));
-        auth_path_a_and_salt_bad_salt.1[0].decrement();
-        assert!(SMT::verify_authentication_path(
-            tree_a.get_root(),
-            leaf_a_idx as u32,
-            leaf_a_digest,
-            auth_path_a_and_salt_bad_salt.0.clone(),
-            auth_path_a_and_salt_bad_salt.1.clone(),
-        ));
-        auth_path_a_and_salt_bad_salt.1[1].increment();
-        assert!(!SMT::verify_authentication_path(
-            tree_a.get_root(),
-            leaf_a_idx as u32,
-            leaf_a_digest,
-            auth_path_a_and_salt_bad_salt.0.clone(),
-            auth_path_a_and_salt_bad_salt.1.clone(),
-        ));
-        auth_path_a_and_salt_bad_salt.1[1].decrement();
-        assert!(SMT::verify_authentication_path(
-            tree_a.get_root(),
-            leaf_a_idx as u32,
-            leaf_a_digest,
-            auth_path_a_and_salt_bad_salt.0.clone(),
-            auth_path_a_and_salt_bad_salt.1.clone(),
-        ));
-        auth_path_a_and_salt_bad_salt.1[2].decrement();
-        assert!(!SMT::verify_authentication_path(
-            tree_a.get_root(),
-            leaf_a_idx as u32,
-            leaf_a_digest,
-            auth_path_a_and_salt_bad_salt.0.clone(),
-            auth_path_a_and_salt_bad_salt.1.clone(),
-        ));
-        auth_path_a_and_salt_bad_salt.1[2].increment();
+        auth_path_a_and_salt_bad_salt.1.decrement();
         assert!(SMT::verify_authentication_path(
             tree_a.get_root(),
             leaf_a_idx as u32,
@@ -1408,7 +1348,7 @@ mod merkle_tree_test {
         let tree_b = SMT::from_digests(&leaves_b, &salts_b);
 
         // auth path: 8 ~> c ~> e
-        let mut auth_path_and_salts_b = tree_b.get_authentication_path_and_salts(6);
+        let mut auth_path_and_salts_b = tree_b.get_authentication_path_and_salt(6);
 
         assert_eq!(3, auth_path_and_salts_b.0.len());
         assert_eq!(8 * salts_per_leaf, tree_b.get_salts().len());
@@ -1464,7 +1404,7 @@ mod merkle_tree_test {
         value_b.increment();
 
         // 8: Change salt and verify that verification fails
-        auth_path_and_salts_b.1[3].decrement();
+        auth_path_and_salts_b.1.decrement();
         assert!(!SMT::verify_authentication_path(
             *root_hash_b,
             6,
@@ -1472,7 +1412,7 @@ mod merkle_tree_test {
             auth_path_and_salts_b.0.clone(),
             auth_path_and_salts_b.1.clone(),
         ));
-        auth_path_and_salts_b.1[3].increment();
+        auth_path_and_salts_b.1.increment();
         assert!(SMT::verify_authentication_path(
             *root_hash_b,
             6,
@@ -1605,7 +1545,7 @@ mod merkle_tree_test {
         );
 
         // 10: change a hash, verify failure
-        auth_path_b_multi_3[1].1[0].increment();
+        auth_path_b_multi_3[1].1.increment();
         assert!(!SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1, 2, 4, 7],
@@ -1613,7 +1553,7 @@ mod merkle_tree_test {
             &auth_path_b_multi_3
         ));
 
-        auth_path_b_multi_3[1].1[0].decrement();
+        auth_path_b_multi_3[1].1.decrement();
         assert!(SMT::verify_multi_proof(
             *root_hash_b,
             &[0, 1, 2, 4, 7],
@@ -1688,7 +1628,7 @@ mod merkle_tree_test {
         assert_eq!(3 * 4, tree_a.salts.len());
 
         // 2: Get the path for value '4' (index: 2)
-        let mut auth_path_a_and_salt = tree_a.get_authentication_path_and_salts(2);
+        let mut auth_path_a_and_salt = tree_a.get_authentication_path_and_salt(2);
 
         // 3: Verify that the proof, along with the salt, works
         let root_hash_a = tree_a.get_root();
@@ -1753,7 +1693,7 @@ mod merkle_tree_test {
         ));
 
         // 5: Change salt and verify that it fails
-        auth_path_a_and_salt.1[0].decrement();
+        auth_path_a_and_salt.1.decrement();
         assert!(!SMT::verify_authentication_path(
             root_hash_a,
             2,
@@ -1761,7 +1701,7 @@ mod merkle_tree_test {
             auth_path_a_and_salt.0.clone(),
             auth_path_a_and_salt.1.clone(),
         ));
-        auth_path_a_and_salt.1[0].increment();
+        auth_path_a_and_salt.1.increment();
         assert!(SMT::verify_authentication_path(
             root_hash_a,
             2,
@@ -1920,7 +1860,7 @@ mod merkle_tree_test {
                 ));
 
                 // Verify that an invalid salt fails verification
-                proof[(pick + 1) % actual_number_of_indices].1[1].decrement();
+                proof[(pick + 1) % actual_number_of_indices].1.decrement();
                 let mut corrupted_leaves = selected_leaves.clone();
                 corrupted_leaves[rnd_leaf_idx].increment();
                 assert!(!SMT::verify_multi_proof(
