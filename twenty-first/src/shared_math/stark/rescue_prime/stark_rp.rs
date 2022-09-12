@@ -548,7 +548,7 @@ impl StarkRp {
             let authetication_paths_and_salts: Vec<(
                 PartialAuthenticationPath<Digest>,
                 Digest, // salts
-            )> = bq_mt.get_multi_proof_and_salts(&quadrupled_indices);
+            )> = bq_mt.get_authentication_structure_and_salt(&quadrupled_indices);
             proof_stream.enqueue_length_prepended(&authetication_paths_and_salts)?;
             let values: Vec<BFieldElement> = quadrupled_indices
                 .iter()
@@ -562,7 +562,7 @@ impl StarkRp {
 
         // Open indicated positions in the randomizer
         let randomizer_auth_paths: Vec<PartialAuthenticationPath<Digest>> =
-            randomizer_mt.get_multi_proof(&quadrupled_indices);
+            randomizer_mt.get_authentication_structure(&quadrupled_indices);
         proof_stream.enqueue_length_prepended(&randomizer_auth_paths)?;
 
         let randomizer_values: Vec<XFieldElement> = quadrupled_indices
@@ -668,7 +668,7 @@ impl StarkRp {
                 .map(|x| hasher.hash_sequence(&x.to_sequence()))
                 .collect();
 
-            let valid = SaltedMt::verify_multi_proof(
+            let valid = SaltedMt::verify_authentication_structure(
                 bq_root,
                 &duplicated_indices_local,
                 &unsalted_leaves,
@@ -703,8 +703,11 @@ impl StarkRp {
 
         let auth_pairs: Vec<_> = zip(randomizer_auth_paths, randomizer_values_digests).collect();
 
-        let valid =
-            XFieldMt::verify_multi_proof(randomizer_mt_root, &duplicated_indices, &auth_pairs);
+        let valid = XFieldMt::verify_authentication_structure(
+            randomizer_mt_root,
+            &duplicated_indices,
+            &auth_pairs,
+        );
         if !valid {
             return Err(Box::new(StarkVerifyError::BadMerkleProof(
                 MerkleProofError::RandomizerError,

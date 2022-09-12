@@ -691,7 +691,7 @@ impl Stark {
             .map(|idx| transposed_base_codewords[*idx].clone())
             .collect();
         let auth_paths: Vec<PartialAuthenticationPath<StarkDigest>> =
-            base_merkle_tree.get_multi_proof(&revealed_indices);
+            base_merkle_tree.get_authentication_structure(&revealed_indices);
 
         proof_stream.enqueue_length_prepended(&revealed_elements)?;
         proof_stream.enqueue_length_prepended(&auth_paths)?;
@@ -700,7 +700,7 @@ impl Stark {
             .iter()
             .map(|idx| transposed_extension_codewords[*idx].clone())
             .collect();
-        let extension_auth_paths = extension_tree.get_multi_proof(&revealed_indices);
+        let extension_auth_paths = extension_tree.get_authentication_structure(&revealed_indices);
         proof_stream.enqueue_length_prepended(&revealed_extension_elements)?;
         proof_stream.enqueue_length_prepended(&extension_auth_paths)?;
 
@@ -721,7 +721,8 @@ impl Stark {
         // as the latter includes adjacent table rows relative to the values in `indices`
         let revealed_combination_elements: Vec<XFieldElement> =
             indices.iter().map(|i| combination_codeword[*i]).collect();
-        let revealed_combination_auth_paths = combination_tree.get_multi_proof(&indices);
+        let revealed_combination_auth_paths =
+            combination_tree.get_authentication_structure(&indices);
         proof_stream.enqueue_length_prepended(&revealed_combination_elements)?;
         proof_stream.enqueue_length_prepended(&revealed_combination_auth_paths)?;
 
@@ -863,12 +864,13 @@ impl Stark {
             "Calculated {} leaf digests for base elements",
             indices.len()
         ));
-        let mt_base_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
-            base_merkle_tree_root,
-            &revealed_indices,
-            &leaf_digests,
-            &auth_paths,
-        );
+        let mt_base_success =
+            MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
+                base_merkle_tree_root,
+                &revealed_indices,
+                &leaf_digests,
+                &auth_paths,
+            );
         if !mt_base_success {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for base codeword");
@@ -905,12 +907,13 @@ impl Stark {
             "Calculated {} leaf digests for extension elements",
             indices.len()
         ));
-        let mt_extension_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
-            extension_tree_merkle_root,
-            &revealed_indices,
-            &extension_leaf_digests,
-            &extension_auth_paths,
-        );
+        let mt_extension_success =
+            MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
+                extension_tree_merkle_root,
+                &revealed_indices,
+                &extension_leaf_digests,
+                &extension_auth_paths,
+            );
         if !mt_extension_success {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for extension codeword");
@@ -964,12 +967,13 @@ impl Stark {
             .collect();
         let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<StarkDigest>> =
             proof_stream_.dequeue_length_prepended()?;
-        let mt_combination_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
-            combination_root,
-            &indices,
-            &revealed_combination_digests,
-            &revealed_combination_auth_paths,
-        );
+        let mt_combination_success =
+            MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
+                combination_root,
+                &indices,
+                &revealed_combination_digests,
+                &revealed_combination_auth_paths,
+            );
         if !mt_combination_success {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for combination codeword");

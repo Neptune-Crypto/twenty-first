@@ -143,7 +143,7 @@ where
     ) {
         let value_ap_pairs: Vec<(PartialAuthenticationPath<H::Digest>, XFieldElement)> =
             merkle_tree
-                .get_multi_proof(indices)
+                .get_authentication_structure(indices)
                 .into_iter()
                 .zip(indices.iter())
                 .map(|(ap, i)| (ap, codeword[*i]))
@@ -169,7 +169,7 @@ where
             .map(|v| hasher.hash_sequence(&v.to_sequence()))
             .collect();
         let path_digest_pairs = paths.into_iter().zip(digests).collect_vec();
-        if MerkleTree::<H>::verify_multi_proof(root, indices, &path_digest_pairs) {
+        if MerkleTree::<H>::verify_authentication_structure(root, indices, &path_digest_pairs) {
             Ok(values)
         } else {
             Err(Box::new(ValidationError::BadMerkleProof))
