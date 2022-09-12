@@ -124,7 +124,7 @@ pub trait Hashable<D> {
 
 impl Hashable<u8> for usize {
     fn to_sequence(&self) -> Vec<u8> {
-        (0..4)
+        (0..8)
             .map(|i| ((*self >> (8 * i)) & 0xff) as u8)
             .collect::<Vec<u8>>()
     }
@@ -136,7 +136,7 @@ impl Hashable<u8> for usize {
 
 impl Hashable<u8> for u128 {
     fn to_sequence(&self) -> Vec<u8> {
-        (0..8)
+        (0..16)
             .map(|i| ((*self >> (8 * i)) & 0xff) as u8)
             .collect::<Vec<u8>>()
     }
@@ -156,6 +156,8 @@ impl Hashable<u8> for XFieldElement {
 
 impl Hashable<u8> for BFieldElement {
     fn to_sequence(&self) -> Vec<u8> {
+        // u64::from( BFieldElement ) -> u64 converts the
+        // BFieldElement to canonical representation before casting.
         (0..8)
             .map(|i| ((u64::from(*self) >> (i * 8)) & 0xff) as u8)
             .collect::<Vec<u8>>()
@@ -320,11 +322,13 @@ pub trait SamplableFrom<Digest> {
     fn sample(digest: &Digest) -> Self;
 }
 
+/// Sample pseudo-uniform BFieldElement from vector of uniform bytes.
+/// Statistical distance from uniform: ~2^{-64}.
 impl SamplableFrom<Vec<u8>> for BFieldElement {
     fn sample(digest: &Vec<u8>) -> Self {
         assert!(
-            digest.len() >= 8,
-            "Cannot sample pseudo-uniform BFieldElements from less than 8 bytes."
+            digest.len() >= 16,
+            "Cannot sample pseudo-uniform BFieldElements from less than 16 bytes."
         );
         let mut integer = 0u64;
         digest[0..8].iter().for_each(|d| {
@@ -335,15 +339,17 @@ impl SamplableFrom<Vec<u8>> for BFieldElement {
     }
 }
 
+/// Sample pseudo-uniform XFieldElement from vector of uniform bytes.
+/// Statistical distance from uniform: ~2^{-192}.
 impl SamplableFrom<Vec<u8>> for XFieldElement {
     fn sample(digest: &Vec<u8>) -> Self {
         assert!(
-            digest.len() >= 24,
-            "Cannot sample pseudo-uniform XFieldElements from less than 24 bytes."
+            digest.len() >= 48,
+            "Cannot sample pseudo-uniform XFieldElements from less than 48 bytes."
         );
         XFieldElement {
             coefficients: (0..3)
-                .map(|i| BFieldElement::sample(&digest[8 * i..8 * (i + 1)].to_vec()))
+                .map(|i| BFieldElement::sample(&digest[16 * i..16 * (i + 1)].to_vec()))
                 .collect::<Vec<BFieldElement>>()
                 .try_into()
                 .unwrap(),
