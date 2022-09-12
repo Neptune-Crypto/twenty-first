@@ -4,12 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::util_types::mmr::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
 use crate::util_types::shared::bag_peaks;
-use crate::util_types::simple_hasher;
+use crate::util_types::simple_hasher::{self, Hashable};
 use crate::{
-    util_types::{
-        mmr::shared::calculate_new_peaks_from_leaf_mutation,
-        simple_hasher::{Hasher, ToDigest},
-    },
+    util_types::{mmr::shared::calculate_new_peaks_from_leaf_mutation, simple_hasher::Hasher},
     utils::has_unique_elements,
 };
 
@@ -24,7 +21,7 @@ use super::{
 
 impl<H: Hasher> From<ArchivalMmr<H>> for MmrAccumulator<H>
 where
-    u128: ToDigest<<H as simple_hasher::Hasher>::Digest>,
+    u128: Hashable<<H as simple_hasher::Hasher>::T>,
 {
     fn from(mut ammr: ArchivalMmr<H>) -> Self {
         MmrAccumulator {
@@ -46,7 +43,7 @@ where
 impl<H> From<&mut ArchivalMmr<H>> for MmrAccumulator<H>
 where
     H: Hasher,
-    u128: ToDigest<H::Digest>,
+    u128: Hashable<H::T>,
 {
     fn from(archive: &mut ArchivalMmr<H>) -> Self {
         Self {
@@ -60,7 +57,7 @@ where
 impl<H> MmrAccumulator<H>
 where
     H: Hasher,
-    u128: ToDigest<H::Digest>,
+    u128: Hashable<H::T>,
 {
     pub fn init(peaks: Vec<H::Digest>, leaf_count: u128) -> Self {
         Self { leaf_count, peaks }
@@ -82,7 +79,7 @@ where
 impl<H> Mmr<H> for MmrAccumulator<H>
 where
     H: Hasher,
-    u128: ToDigest<H::Digest>,
+    u128: Hashable<H::T>,
 {
     fn bag_peaks(&mut self) -> H::Digest {
         bag_peaks::<H>(&self.peaks)
@@ -336,12 +333,11 @@ mod accumulator_mmr_tests {
     use std::cmp;
 
     use itertools::izip;
+    use num_traits::Zero;
     use rand::{thread_rng, Rng, RngCore};
 
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::rescue_prime_xlix::{
-        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
-    };
+    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::test_shared::mmr::get_archival_mmr_from_digests;
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::utils::generate_random_numbers_u128;
@@ -723,11 +719,11 @@ mod accumulator_mmr_tests {
         // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
         // to me so far.
-        type Hasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
+        type Hasher = RescuePrimeRegular;
         let hasher = Hasher::new();
         type Mmr = MmrAccumulator<Hasher>;
         let mut mmra: Mmr = MmrAccumulator::new(vec![]);
-        mmra.append(hasher.hash(&vec![BFieldElement::ring_zero()], RP_DEFAULT_OUTPUT_SIZE));
+        mmra.append(hasher.hash_sequence(&vec![BFieldElement::zero()]));
 
         let json = serde_json::to_string(&mmra).unwrap();
         let mut s_back = serde_json::from_str::<Mmr>(&json).unwrap();

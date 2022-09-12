@@ -1,9 +1,10 @@
+use num_traits::{One, Zero};
+
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use super::table::{Table, TableMoreTrait, TableTrait};
 use super::vm::Register;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::traits::IdentityValues;
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::{b_field_element as bfe, other};
 use std::convert::TryInto;
@@ -19,7 +20,7 @@ pub struct MemoryTableMore {
 impl TableMoreTrait for MemoryTableMore {
     fn new_more() -> Self {
         MemoryTableMore {
-            permutation_terminal: XFieldElement::ring_zero(),
+            permutation_terminal: XFieldElement::zero(),
         }
     }
 }
@@ -60,8 +61,8 @@ impl MemoryTable {
     pub fn pad(&mut self) {
         while !other::is_power_of_two(self.0.matrix.len()) {
             let mut padding = self.0.matrix.last().unwrap().to_owned();
-            padding[Self::CYCLE] += BFieldElement::ring_one();
-            padding[Self::INTERWEAVED] = BFieldElement::ring_one();
+            padding[Self::CYCLE] += BFieldElement::one();
+            padding[Self::INTERWEAVED] = BFieldElement::one();
             self.0.matrix.push(padding);
         }
     }
@@ -83,7 +84,7 @@ impl MemoryTable {
                 pt.cycle,
                 pt.memory_pointer,
                 pt.memory_value,
-                BFieldElement::ring_zero(),
+                BFieldElement::zero(),
             ]);
         }
 
@@ -91,7 +92,7 @@ impl MemoryTable {
 
         // Interweave rows to ensure that clock cycle increases by one per row
         // All rows that are not present in the processor table are interweaved rows
-        let one = BFieldElement::ring_one();
+        let one = BFieldElement::one();
         let interweave_indicator = one;
         let mut i = 1;
         while i < matrix.len() - 1 {
@@ -126,7 +127,7 @@ impl MemoryTable {
         let mut polynomials: Vec<MPolynomial<BFieldElement>> = vec![];
 
         let variable_count = Self::BASE_WIDTH * 2;
-        let one = MPolynomial::from_constant(BFieldElement::ring_one(), variable_count);
+        let one = MPolynomial::from_constant(BFieldElement::one(), variable_count);
 
         // 1. memory pointer increases by one or zero
         // <=>. (MP*=MP+1) \/ (MP*=MP)
@@ -201,8 +202,7 @@ impl TableTrait for MemoryTable {
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         let variable_count = Self::BASE_WIDTH * 2;
-        let vars =
-            MPolynomial::<BFieldElement>::variables(variable_count, BFieldElement::ring_one());
+        let vars = MPolynomial::<BFieldElement>::variables(variable_count, BFieldElement::one());
 
         let cycle = vars[0].clone();
         let address = vars[1].clone();
@@ -294,7 +294,7 @@ impl TableTrait for MemoryTable {
             .unwrap();
 
         let b_field_variables: [MPolynomial<BFieldElement>; 2 * Self::FULL_WIDTH] =
-            MPolynomial::variables(2 * Self::FULL_WIDTH, BFieldElement::ring_one())
+            MPolynomial::variables(2 * Self::FULL_WIDTH, BFieldElement::one())
                 .try_into()
                 .unwrap();
         let [b_field_cycle, b_field_address, b_field_value, b_field_interweaved, _b_field_permutation, b_field_cycle_next, b_field_address_next, b_field_value_next, b_field_interweaved_next, _b_field_permutation_next] =
@@ -319,7 +319,7 @@ impl TableTrait for MemoryTable {
         );
 
         let x_field_variables: [MPolynomial<XFieldElement>; 2 * Self::FULL_WIDTH] =
-            MPolynomial::variables(2 * Self::FULL_WIDTH, XFieldElement::ring_one())
+            MPolynomial::variables(2 * Self::FULL_WIDTH, XFieldElement::one())
                 .try_into()
                 .unwrap();
         let [cycle, address, value, interweaved, permutation, _cycle_next, _address_next, _value_next, _interweaved_next, permutation_next] =
@@ -331,7 +331,7 @@ impl TableTrait for MemoryTable {
             .collect();
 
         let one: MPolynomial<XFieldElement> =
-            MPolynomial::from_constant(XFieldElement::ring_one(), 2 * Self::FULL_WIDTH);
+            MPolynomial::from_constant(XFieldElement::one(), 2 * Self::FULL_WIDTH);
         polynomials.push(
             permutation
                 * ((beta - d * cycle - e * address - f * value) * (one - interweaved.clone())
@@ -348,8 +348,7 @@ impl TableTrait for MemoryTable {
         _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
-        let x =
-            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
 
         let cycle = x[MemoryTable::CYCLE].clone();
         let memory_pointer = x[MemoryTable::MEMORY_POINTER].clone();
@@ -381,18 +380,15 @@ impl TableTrait for MemoryTable {
         let processor_memory_permutation_terminal =
             MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
 
-        let x =
-            MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::ring_one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
 
         let cycle = x[MemoryTable::CYCLE].clone();
         let memory_pointer = x[MemoryTable::MEMORY_POINTER].clone();
         let memory_value = x[MemoryTable::MEMORY_VALUE].clone();
         let permutation = x[Self::PERMUTATION].clone();
         let interweaved = x[Self::INTERWEAVED].clone();
-        let one = MPolynomial::<XFieldElement>::from_constant(
-            XFieldElement::ring_one(),
-            Self::FULL_WIDTH,
-        );
+        let one =
+            MPolynomial::<XFieldElement>::from_constant(XFieldElement::one(), Self::FULL_WIDTH);
 
         vec![
             (permutation.clone() * (beta - d * cycle - e * memory_pointer - f * memory_value)
@@ -414,7 +410,7 @@ mod memory_table_tests {
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
     use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::traits::{GetPrimitiveRootOfUnity, IdentityValues};
+    use crate::shared_math::traits::PrimitiveRootOfUnity;
 
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on
@@ -440,10 +436,7 @@ mod memory_table_tests {
 
             let number_of_randomizers = 2;
             let order = 1 << 32;
-            let smooth_generator = BFieldElement::ring_zero()
-                .get_primitive_root_of_unity(order)
-                .0
-                .unwrap();
+            let smooth_generator = BFieldElement::primitive_root_of_unity(order).unwrap();
 
             // instantiate table objects
             let mut memory_table: MemoryTable = MemoryTable::new(

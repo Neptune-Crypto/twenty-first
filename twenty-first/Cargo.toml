@@ -1,6 +1,6 @@
 [package]
 name = "twenty-first"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Triton Software AG"]
 edition = "2021"
 
@@ -62,7 +62,7 @@ name = "polynomial_square"
 harness = false
 
 [[bench]]
-name = "rescue_prime_xlix"
+name = "rescue_prime_regular"
 harness = false
 
 [[bench]]

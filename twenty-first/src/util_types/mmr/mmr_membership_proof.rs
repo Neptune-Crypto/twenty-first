@@ -1,6 +1,7 @@
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use crate::util_types::simple_hasher::{Hashable, Hasher, ToVec};
 use std::{
     collections::{hash_map::RandomState, hash_set::Intersection, HashMap, HashSet},
     fmt::Debug,
@@ -48,15 +49,21 @@ where
 impl<H> MmrMembershipProof<H>
 where
     H: Hasher,
-    u128: ToDigest<H::Digest>,
+    u128: Hashable<H::T>,
 {
     pub fn hash(&self) -> H::Digest {
-        let data_index_digest: H::Digest = self.data_index.to_digest();
+        let data_index_hashable: Vec<H::T> = self.data_index.to_sequence();
         let hasher = H::new();
-        let digest_preimage: Vec<H::Digest> =
-            vec![vec![data_index_digest], self.authentication_path.clone()].concat();
+        let digest_preimage: Vec<H::T> = [
+            data_index_hashable,
+            self.authentication_path
+                .iter()
+                .flat_map(|ap| ap.to_vec())
+                .collect_vec(),
+        ]
+        .concat();
 
-        hasher.hash_many(&digest_preimage)
+        hasher.hash_sequence(&digest_preimage)
     }
 
     /**
@@ -71,7 +78,7 @@ where
     ) -> (bool, Option<H::Digest>)
     where
         H: Hasher,
-        u128: ToDigest<H::Digest>,
+        u128: Hashable<H::T>,
     {
         let node_index = data_index_to_node_index(self.data_index);
 
@@ -575,20 +582,19 @@ where
 
 #[cfg(test)]
 mod mmr_membership_proof_test {
+    use itertools::Itertools;
     use rand::{thread_rng, RngCore};
 
     use super::*;
-    use crate::shared_math::rescue_prime_xlix::{
-        RescuePrimeXlix, RP_DEFAULT_OUTPUT_SIZE, RP_DEFAULT_WIDTH,
-    };
+    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::test_shared::mmr::get_archival_mmr_from_digests;
     use crate::util_types::blake3_wrapper::Blake3Hash;
+    use crate::util_types::simple_hasher;
     use crate::{
         shared_math::b_field_element::BFieldElement,
         util_types::blake3_wrapper,
         util_types::mmr::mmr_accumulator::MmrAccumulator,
         util_types::mmr::{archival_mmr::ArchivalMmr, mmr_trait::Mmr},
-        util_types::simple_hasher::RescuePrimeProduction,
     };
 
     #[test]
@@ -1308,24 +1314,24 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_membership_proof_from_append_big_rescue_prime() {
-        type Digest = Vec<BFieldElement>;
-        type Hasher = RescuePrimeProduction;
+        type Digest = [BFieldElement; 5];
+        type Hasher = RescuePrimeRegular;
 
         // Build MMR from leaf count 0 to 9, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an
         // append update.
-        let rp = RescuePrimeProduction::new();
+        let rp = RescuePrimeRegular::new();
         for leaf_count in 0..9u128 {
             let leaf_hashes: Vec<Digest> = (1001..1001 + leaf_count)
-                .map(|x| rp.hash(&vec![BFieldElement::new(x as u64)]))
-                .collect();
-            // let archival_mmr = ArchivalMmr::<RescuePrimeProduction>::new(leaf_hashes.clone());
+                .map(|x| rp.hash_sequence(&vec![BFieldElement::new(x as u64)]))
+                .collect_vec();
+            // let archival_mmr = ArchivalMmr::<RescuePrimeRegular>::new(leaf_hashes.clone());
             let mut archival_mmr: ArchivalMmr<Hasher> =
                 get_archival_mmr_from_digests(leaf_hashes.clone());
-            let new_leaf = rp.hash(&vec![BFieldElement::new(13333337)]);
+            let new_leaf = rp.hash_sequence(&vec![BFieldElement::new(13333337)]);
             for i in 0..leaf_count {
                 let (original_membership_proof, old_peaks): (
-                    MmrMembershipProof<RescuePrimeProduction>,
+                    MmrMembershipProof<RescuePrimeRegular>,
                     Vec<Digest>,
                 ) = archival_mmr.prove_membership(i);
                 // let mut appended_archival_mmr = archival_mmr.clone();
@@ -1368,19 +1374,17 @@ mod mmr_membership_proof_test {
         // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
         // to me so far.
-        let rp = RescuePrimeXlix::new();
-        type Hasher = RescuePrimeXlix<RP_DEFAULT_WIDTH>;
-        let leaf_hashes: Vec<Vec<BFieldElement>> = (1001..1001 + 3)
-            .map(|x| rp.hash(&vec![BFieldElement::new(x as u64)], RP_DEFAULT_OUTPUT_SIZE))
+        let rp = RescuePrimeRegular::new();
+        type Hasher = RescuePrimeRegular;
+        let leaf_hashes: Vec<<RescuePrimeRegular as simple_hasher::Hasher>::Digest> = (1001..1001
+            + 3)
+            .map(|x| rp.hash_sequence(&vec![BFieldElement::new(x as u64)]))
             .collect();
         let mut archival_mmr: ArchivalMmr<Hasher> =
             get_archival_mmr_from_digests(leaf_hashes.clone());
-        let mp: MmrMembershipProof<RescuePrimeXlix<RP_DEFAULT_WIDTH>> =
-            archival_mmr.prove_membership(1).0;
+        let mp: MmrMembershipProof<RescuePrimeRegular> = archival_mmr.prove_membership(1).0;
         let json = serde_json::to_string(&mp).unwrap();
-        let s_back =
-            serde_json::from_str::<MmrMembershipProof<RescuePrimeXlix<RP_DEFAULT_WIDTH>>>(&json)
-                .unwrap();
+        let s_back = serde_json::from_str::<MmrMembershipProof<RescuePrimeRegular>>(&json).unwrap();
         assert!(
             s_back
                 .verify(&archival_mmr.get_peaks(), &leaf_hashes[1], 3)

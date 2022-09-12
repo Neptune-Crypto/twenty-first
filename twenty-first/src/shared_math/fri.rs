@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use num_traits::Zero;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use super::b_field_element::BFieldElement;
@@ -7,10 +8,10 @@ use super::polynomial::Polynomial;
 use super::traits::ModPowU32;
 use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
-use crate::shared_math::traits::{IdentityValues, PrimeField};
+use crate::shared_math::traits::FiniteField;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::proof_stream::ProofStream;
-use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use crate::util_types::simple_hasher::{Hashable, Hasher};
 use crate::utils::{blake3_digest, get_index_from_bytes};
 use std::error::Error;
 use std::fmt;
@@ -35,7 +36,7 @@ pub enum ValidationError {
 }
 
 #[derive(Debug, Clone)]
-pub struct FriDomain<PF: PrimeField> {
+pub struct FriDomain<PF: FiniteField> {
     pub offset: PF,
     pub omega: PF,
     pub length: usize,
@@ -91,23 +92,23 @@ impl FriDomain<XFieldElement> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Fri<PF: PrimeField, H> {
+pub struct Fri<FF: FiniteField, H> {
     pub expansion_factor: usize,         // = domain_length / trace_length
     pub colinearity_checks_count: usize, // number of colinearity checks in each round
-    pub domain: FriDomain<PF>,
+    pub domain: FriDomain<FF>,
     _hasher: PhantomData<H>,
 }
 
 type CodewordEvaluation<T> = (usize, T);
 
-impl<PF, H> Fri<PF, H>
+impl<FF, H> Fri<FF, H>
 where
-    PF: PrimeField + ToDigest<H::Digest>,
+    FF: FiniteField + Hashable<H::T>,
     H: Hasher,
 {
     pub fn new(
-        offset: PF,
-        omega: PF,
+        offset: FF,
+        omega: FF,
         domain_length: usize,
         expansion_factor: usize,
         colinearity_checks_count: usize,
@@ -130,12 +131,12 @@ where
     /// and enqueue the corresponding values and (partial) authentication paths on the proof stream.
     fn enqueue_auth_pairs(
         indices: &[usize],
-        codeword: &[PF],
+        codeword: &[FF],
         merkle_tree: &MerkleTree<H>,
         proof_stream: &mut ProofStream,
     ) {
-        let value_ap_pairs: Vec<(PartialAuthenticationPath<H::Digest>, PF)> = merkle_tree
-            .get_multi_proof(indices)
+        let value_ap_pairs: Vec<(PartialAuthenticationPath<H::Digest>, FF)> = merkle_tree
+            .get_authentication_structure(indices)
             .into_iter()
             .zip(indices.iter())
             .map(|(ap, i)| (ap, codeword[*i]))
@@ -152,15 +153,18 @@ where
         indices: &[usize],
         root: H::Digest,
         proof_stream: &mut ProofStream,
-    ) -> Result<Vec<PF>, Box<dyn Error>> {
+    ) -> Result<Vec<FF>, Box<dyn Error>> {
         let hasher = H::new();
-        let (paths, values): (Vec<PartialAuthenticationPath<H::Digest>>, Vec<PF>) = proof_stream
-            .dequeue_length_prepended::<Vec<(PartialAuthenticationPath<H::Digest>, PF)>>()?
+        let (paths, values): (Vec<PartialAuthenticationPath<H::Digest>>, Vec<FF>) = proof_stream
+            .dequeue_length_prepended::<Vec<(PartialAuthenticationPath<H::Digest>, FF)>>()?
             .into_iter()
             .unzip();
-        let digests: Vec<H::Digest> = values.par_iter().map(|v| hasher.hash(v)).collect();
+        let digests: Vec<H::Digest> = values
+            .par_iter()
+            .map(|v| hasher.hash_sequence(&v.to_sequence()))
+            .collect();
         let path_digest_pairs = paths.into_iter().zip(digests).collect_vec();
-        if MerkleTree::<H>::verify_multi_proof(root, indices, &path_digest_pairs) {
+        if MerkleTree::<H>::verify_authentication_structure(root, indices, &path_digest_pairs) {
             Ok(values)
         } else {
             Err(Box::new(ValidationError::BadMerkleProof))
@@ -169,7 +173,7 @@ where
 
     pub fn prove(
         &self,
-        codeword: &[PF],
+        codeword: &[FF],
         proof_stream: &mut ProofStream,
     ) -> Result<Vec<usize>, Box<dyn Error>> {
         assert_eq!(
@@ -179,7 +183,7 @@ where
         );
 
         // Commit phase
-        let (codewords, merkle_trees): (Vec<Vec<PF>>, Vec<MerkleTree<H>>) =
+        let (codewords, merkle_trees): (Vec<Vec<FF>>, Vec<MerkleTree<H>>) =
             self.commit(codeword, proof_stream)?.into_iter().unzip();
 
         // fiat-shamir phase (get indices)
@@ -212,21 +216,23 @@ where
     #[allow(clippy::type_complexity)]
     fn commit(
         &self,
-        codeword: &[PF],
+        codeword: &[FF],
         proof_stream: &mut ProofStream,
-    ) -> Result<Vec<(Vec<PF>, MerkleTree<H>)>, Box<dyn Error>> {
+    ) -> Result<Vec<(Vec<FF>, MerkleTree<H>)>, Box<dyn Error>> {
         let mut generator = self.domain.omega;
         let mut offset = self.domain.offset;
         let mut codeword_local = codeword.to_vec();
         let hasher = H::new();
 
-        let one: PF = generator.ring_one();
-        let two: PF = one + one;
+        let one: FF = FF::one();
+        let two: FF = one + one;
         let two_inv = one / two;
 
         // Compute and send Merkle root
-        let mut digests: Vec<H::Digest> =
-            codeword_local.par_iter().map(|x| hasher.hash(x)).collect();
+        let mut digests: Vec<H::Digest> = codeword_local
+            .par_iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let mut mt = MerkleTree::from_digests(&digests);
         proof_stream.enqueue(&mt.get_root())?;
         let mut values_and_merkle_trees = vec![(codeword_local.clone(), mt)];
@@ -240,15 +246,15 @@ where
 
             // Get challenge, one just acts as *any* element in this field -- the field element
             // is completely determined from the byte stream.
-            let alpha: PF = one.from_vecu8(proof_stream.prover_fiat_shamir());
+            let alpha: FF = FF::from_vecu8(proof_stream.prover_fiat_shamir());
 
-            let x_offset: Vec<PF> = generator
+            let x_offset: Vec<FF> = generator
                 .get_cyclic_group_elements(None)
                 .into_par_iter()
                 .map(|x| x * offset)
                 .collect();
 
-            let x_offset_inverses = PF::batch_inversion(x_offset);
+            let x_offset_inverses = FF::batch_inversion(x_offset);
             codeword_local = (0..n / 2)
                 .into_par_iter()
                 .map(|i| {
@@ -259,7 +265,10 @@ where
                 .collect();
 
             // Compute and send Merkle root
-            digests = codeword_local.par_iter().map(|x| hasher.hash(x)).collect();
+            digests = codeword_local
+                .par_iter()
+                .map(|x| hasher.hash_sequence(&x.to_sequence()))
+                .collect();
             mt = MerkleTree::from_digests(&digests);
             proof_stream.enqueue(&mt.get_root())?;
             values_and_merkle_trees.push((codeword_local.clone(), mt));
@@ -332,7 +341,7 @@ where
     pub fn verify(
         &self,
         proof_stream: &mut ProofStream,
-    ) -> Result<Vec<CodewordEvaluation<PF>>, Box<dyn Error>> {
+    ) -> Result<Vec<CodewordEvaluation<FF>>, Box<dyn Error>> {
         let hasher = H::new();
         let mut omega = self.domain.omega;
         let mut offset = self.domain.offset;
@@ -340,22 +349,25 @@ where
 
         // Extract all roots and calculate alpha, the challenges
         let mut roots: Vec<H::Digest> = vec![];
-        let mut alphas: Vec<PF> = vec![];
+        let mut alphas: Vec<FF> = vec![];
         let first_root: H::Digest = proof_stream.dequeue(32)?;
         roots.push(first_root);
 
         for _ in 0..num_rounds {
             // Get a challenge from the proof stream
-            let alpha: PF = omega.from_vecu8(proof_stream.verifier_fiat_shamir());
+            let alpha: FF = FF::from_vecu8(proof_stream.verifier_fiat_shamir());
             alphas.push(alpha);
             roots.push(proof_stream.dequeue(32)?);
         }
 
         // Extract last codeword
-        let mut last_codeword: Vec<PF> = proof_stream.dequeue_length_prepended::<Vec<PF>>()?;
+        let mut last_codeword: Vec<FF> = proof_stream.dequeue_length_prepended::<Vec<FF>>()?;
 
         // Check if last codeword matches the given root
-        let leaves: Vec<_> = last_codeword.iter().map(|x| hasher.hash(x)).collect();
+        let leaves: Vec<_> = last_codeword
+            .iter()
+            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .collect();
         let last_codeword_mt = MerkleTree::<H>::from_digests(&leaves);
         let last_root = roots.last().unwrap();
         if *last_root != last_codeword_mt.get_root() {
@@ -375,8 +387,8 @@ where
         // trace subgroup since we only check its degree and don't use
         // it further.
         let log_2_of_n = log_2_floor(last_codeword.len() as u128) as u32;
-        intt::<PF>(&mut last_codeword, last_omega, log_2_of_n);
-        let last_poly_degree: isize = (Polynomial::<PF> {
+        intt::<FF>(&mut last_codeword, last_omega, log_2_of_n);
+        let last_poly_degree: isize = (Polynomial::<FF> {
             coefficients: last_codeword,
         })
         .degree();
@@ -387,7 +399,7 @@ where
         let mut a_indices: Vec<usize> = self.sample_indices(&proof_stream.verifier_fiat_shamir());
 
         // for every round, check consistency of subsequent layers
-        let mut codeword_evaluations: Vec<CodewordEvaluation<PF>> = vec![];
+        let mut codeword_evaluations: Vec<CodewordEvaluation<FF>> = vec![];
         let mut a_values =
             Self::dequeue_and_authenticate(&a_indices, roots[0].clone(), proof_stream)?;
 
@@ -433,7 +445,7 @@ where
             let c_values = (0..self.colinearity_checks_count)
                 .into_par_iter()
                 .map(|i| {
-                    Polynomial::<PF>::get_colinear_y(
+                    Polynomial::<FF>::get_colinear_y(
                         (self.get_evaluation_argument(a_indices[i], r), a_values[i]),
                         (self.get_evaluation_argument(b_indices[i], r), b_values[i]),
                         alphas[r],
@@ -461,12 +473,12 @@ where
         Ok(codeword_evaluations)
     }
 
-    fn get_evaluation_argument(&self, idx: usize, round: usize) -> PF {
+    fn get_evaluation_argument(&self, idx: usize, round: usize) -> FF {
         (self.domain.offset * self.domain.omega.mod_pow_u32(idx as u32))
             .mod_pow_u32(2u32.pow(round as u32))
     }
 
-    pub fn get_evaluation_domain(&self) -> Vec<PF> {
+    pub fn get_evaluation_domain(&self) -> Vec<FF> {
         let omega_domain = self.domain.omega.get_cyclic_group_elements(None);
         omega_domain
             .into_iter()
@@ -493,9 +505,11 @@ where
 
 #[cfg(test)]
 mod fri_domain_tests {
+    use num_traits::One;
+
     use super::*;
     use crate::shared_math::{
-        b_field_element::BFieldElement, traits::GetPrimitiveRootOfUnity,
+        b_field_element::BFieldElement, traits::PrimitiveRootOfUnity,
         x_field_element::XFieldElement,
     };
 
@@ -503,17 +517,14 @@ mod fri_domain_tests {
     fn x_values_test() {
         // pol = x^3
         let x_squared_coefficients = vec![
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_zero(),
-            BFieldElement::ring_one(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::zero(),
+            BFieldElement::one(),
         ];
 
         for order in [4, 8, 32] {
-            let omega = BFieldElement::ring_zero()
-                .get_primitive_root_of_unity(order)
-                .0
-                .unwrap();
+            let omega = BFieldElement::primitive_root_of_unity(order).unwrap();
             let domain = FriDomain {
                 offset: BFieldElement::generator().lift(),
                 omega: omega.lift(),
@@ -534,7 +545,7 @@ mod fri_domain_tests {
             }
 
             let pol = Polynomial::<BFieldElement>::new(x_squared_coefficients.clone());
-            let values = domain.b_evaluate(&pol, BFieldElement::ring_zero());
+            let values = domain.b_evaluate(&pol, BFieldElement::zero());
             assert_ne!(values, x_squared_coefficients);
             let interpolant = domain.b_interpolate(&values);
             assert_eq!(pol, interpolant);
@@ -566,7 +577,7 @@ mod fri_tests {
     use super::*;
     use crate::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
     use crate::shared_math::{
-        b_field_element::BFieldElement, traits::GetPrimitiveRootOfUnity,
+        b_field_element::BFieldElement, traits::PrimitiveRootOfUnity,
         x_field_element::XFieldElement,
     };
     use itertools::Itertools;
@@ -777,22 +788,20 @@ mod fri_tests {
 
     fn get_b_field_fri_test_object<Digest, H>() -> Fri<BFieldElement, H>
     where
-        Digest: ToDigest<Digest> + Clone + PartialEq + Serialize + DeserializeOwned,
+        Digest: Hashable<H::T> + Clone + PartialEq + Serialize + DeserializeOwned,
         H: Hasher<Digest = Digest> + Sized,
-        BFieldElement: ToDigest<Digest>,
+        BFieldElement: Hashable<H::T>,
     {
         let subgroup_order = 1024;
-        let (omega, _primes1) =
-            BFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
-        let (offset, _primes2) =
-            BFieldElement::ring_zero().get_primitive_root_of_unity(BFieldElement::QUOTIENT - 1);
+        let maybe_omega = BFieldElement::primitive_root_of_unity(subgroup_order);
+        let offset = BFieldElement::generator();
 
         let expansion_factor = 4;
         let colinearity_checks = 6;
 
         Fri::<BFieldElement, H>::new(
-            offset.unwrap(),
-            omega.unwrap(),
+            offset,
+            maybe_omega.unwrap(),
             subgroup_order as usize,
             expansion_factor,
             colinearity_checks,
@@ -805,12 +814,11 @@ mod fri_tests {
         colinearity_checks: usize,
     ) -> Fri<XFieldElement, H>
     where
-        Digest: ToDigest<Digest> + Clone + PartialEq + Serialize + DeserializeOwned,
+        Digest: Hashable<H::T> + Clone + PartialEq + Serialize + DeserializeOwned,
         H: Hasher<Digest = Digest> + Sized,
-        XFieldElement: ToDigest<Digest>,
+        XFieldElement: Hashable<H::T>,
     {
-        let (omega, _primes1): (Option<XFieldElement>, Vec<u64>) =
-            XFieldElement::ring_zero().get_primitive_root_of_unity(subgroup_order);
+        let maybe_omega = XFieldElement::primitive_root_of_unity(subgroup_order);
 
         // The following offset was picked arbitrarily by copying the one found in
         // `get_b_field_fri_test_object`. It does not generate the full Z_p\{0}, but
@@ -819,7 +827,7 @@ mod fri_tests {
 
         let fri: Fri<XFieldElement, H> = Fri::new(
             offset.unwrap(),
-            omega.unwrap(),
+            maybe_omega.unwrap(),
             subgroup_order as usize,
             expansion_factor,
             colinearity_checks,

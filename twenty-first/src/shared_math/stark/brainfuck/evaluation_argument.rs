@@ -1,3 +1,5 @@
+use num_traits::{One, Zero};
+
 use crate::shared_math::{b_field_element::BFieldElement, x_field_element::XFieldElement};
 
 use super::stark::{EXTENSION_CHALLENGE_COUNT, TERMINAL_COUNT};
@@ -29,7 +31,7 @@ impl EvaluationArgument {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> XFieldElement {
         let iota = challenges[self.challenge_index];
-        let mut acc = XFieldElement::ring_zero();
+        let mut acc = XFieldElement::zero();
         for s in self.symbols.iter() {
             acc = iota * acc + s.lift();
         }
@@ -72,11 +74,11 @@ impl ProgramEvaluationArgument {
             challenges[self.challenge_indices[3]],
         ];
 
-        let mut running_sum = XFieldElement::ring_zero();
-        let mut previous_address = -XFieldElement::ring_one();
+        let mut running_sum = XFieldElement::zero();
+        let mut previous_address = -XFieldElement::one();
         let mut padded_program: Vec<XFieldElement> =
             self.program.iter().map(|p| p.lift()).collect();
-        padded_program.push(XFieldElement::ring_zero());
+        padded_program.push(XFieldElement::zero());
         for i in 0..padded_program.len() - 1 {
             let address: XFieldElement = BFieldElement::new(i as u64).lift();
             let current_instruction = padded_program[i];
@@ -93,7 +95,7 @@ impl ProgramEvaluationArgument {
         let index = padded_program.len() - 1;
         let address: XFieldElement = BFieldElement::new(index as u64).lift();
         let current_instruction = padded_program[index];
-        let next_instruction = XFieldElement::ring_zero();
+        let next_instruction = XFieldElement::zero();
 
         running_sum * eta + a * address + b * current_instruction + c * next_instruction
     }

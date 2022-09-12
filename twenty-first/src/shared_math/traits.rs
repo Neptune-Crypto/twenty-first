@@ -1,20 +1,10 @@
+use num_traits::{One, Zero};
 use rand::Rng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
-
-pub trait IdentityValues {
-    fn is_zero(&self) -> bool;
-    fn is_one(&self) -> bool;
-
-    #[must_use]
-    fn ring_zero(&self) -> Self;
-
-    #[must_use]
-    fn ring_one(&self) -> Self;
-}
 
 pub trait CyclicGroupGenerator
 where
@@ -31,11 +21,11 @@ where
     fn inverse(&self) -> Self;
 }
 
-pub trait GetPrimitiveRootOfUnity
+pub trait PrimitiveRootOfUnity
 where
     Self: Sized,
 {
-    fn get_primitive_root_of_unity(&self, n: u64) -> (Option<Self>, Vec<u64>);
+    fn primitive_root_of_unity(n: u64) -> Option<Self>;
 }
 
 // Used for testing.
@@ -74,10 +64,10 @@ pub trait New {
 pub trait FromVecu8 {
     #[must_use]
     #[allow(clippy::wrong_self_convention)]
-    fn from_vecu8(&self, bytes: Vec<u8>) -> Self;
+    fn from_vecu8(bytes: Vec<u8>) -> Self;
 }
 
-pub trait PrimeField:
+pub trait FiniteField:
     Clone
     + Eq
     + Display
@@ -85,7 +75,8 @@ pub trait PrimeField:
     + DeserializeOwned
     + PartialEq
     + Debug
-    + IdentityValues
+    + One
+    + Zero
     + Add<Output = Self>
     + AddAssign
     + SubAssign
@@ -98,7 +89,7 @@ pub trait PrimeField:
     + New
     + CyclicGroupGenerator
     + ModPowU32
-    + GetPrimitiveRootOfUnity
+    + PrimitiveRootOfUnity
     + Send
     + Sync
     + Copy
@@ -114,8 +105,8 @@ pub trait PrimeField:
             return Vec::<Self>::new();
         }
 
-        let zero = input[0].ring_zero();
-        let one = input[0].ring_one();
+        let zero = Self::zero();
+        let one = Self::one();
         let mut scratch: Vec<Self> = vec![zero; input_length];
         let mut acc = one;
         scratch[0] = input[0];

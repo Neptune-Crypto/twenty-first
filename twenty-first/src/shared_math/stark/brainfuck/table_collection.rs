@@ -242,8 +242,8 @@ mod brainfuck_table_collection_tests {
     use crate::shared_math::stark::brainfuck;
     use crate::shared_math::stark::brainfuck::vm::sample_programs;
     use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
-    use crate::shared_math::traits::GetPrimitiveRootOfUnity;
     use crate::shared_math::traits::GetRandomElements;
+    use crate::shared_math::traits::PrimitiveRootOfUnity;
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::convert::TryInto;
@@ -393,10 +393,7 @@ mod brainfuck_table_collection_tests {
         let fri_domain = FriDomain {
             length: fri_domain_length,
             offset: BFieldElement::new(7).lift(),
-            omega: XFieldElement::ring_zero()
-                .get_primitive_root_of_unity(fri_domain_length as u64)
-                .0
-                .unwrap(),
+            omega: XFieldElement::primitive_root_of_unity(fri_domain_length as u64).unwrap(),
         };
 
         println!("Starting LDE stuff…");
@@ -518,10 +515,7 @@ mod brainfuck_table_collection_tests {
         let fri_domain = FriDomain {
             length: mock_fri_domain_length,
             offset: BFieldElement::new(7).lift(),
-            omega: XFieldElement::ring_zero()
-                .get_primitive_root_of_unity(mock_fri_domain_length as u64)
-                .0
-                .unwrap(),
+            omega: XFieldElement::primitive_root_of_unity(mock_fri_domain_length as u64).unwrap(),
         };
 
         let base_codewords = tc_ref
@@ -632,10 +626,7 @@ mod brainfuck_table_collection_tests {
     ) -> TableCollection {
         let base_matrices: BaseMatrices = brainfuck::vm::simulate(program, input_data).unwrap();
         let order = 1 << 32;
-        let smooth_generator = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(order)
-            .0
-            .unwrap();
+        let smooth_generator = BFieldElement::primitive_root_of_unity(order).unwrap();
 
         let processor_table = ProcessorTable::new(
             base_matrices.processor_matrix.len(),

@@ -1,16 +1,35 @@
-use crate::shared_math::b_field_element::BFieldElement;
+use itertools::Itertools;
+
 use crate::util_types::simple_hasher::Hasher;
 use std::error::Error;
 use std::fmt::Display;
 use std::marker::PhantomData;
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct ProofStream<Item, H> {
+use super::simple_hasher::Hashable;
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ProofStream<Item, H: Hasher> {
     items: Vec<(Item, usize)>,
     items_index: usize,
-    transcript: Vec<BFieldElement>,
+    transcript: Vec<H::T>,
     transcript_index: usize,
     _hasher: PhantomData<H>,
+}
+
+impl<Item, H: Hasher> Default for ProofStream<Item, H>
+where
+    Item: Default + Hashable<H::T>,
+    H: Default,
+{
+    fn default() -> Self {
+        Self {
+            items: Default::default(),
+            items_index: Default::default(),
+            transcript: Default::default(),
+            transcript_index: Default::default(),
+            _hasher: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -40,8 +59,8 @@ impl Error for ProofStreamError {}
 
 impl<Item, H> ProofStream<Item, H>
 where
-    Item: IntoIterator<Item = BFieldElement> + Clone,
-    H: Hasher<Digest = Vec<BFieldElement>>,
+    Item: IntoIterator<Item = H::T> + Clone + Default,
+    H: Hasher,
 {
     pub fn default() -> Self {
         ProofStream {
@@ -73,7 +92,7 @@ where
     }
 
     pub fn enqueue(&mut self, item: &Item) {
-        let mut elems: Vec<BFieldElement> = item.clone().into_iter().collect();
+        let mut elems = item.clone().into_iter().collect_vec();
         self.items.push((item.clone(), elems.len()));
         self.transcript.append(&mut elems);
     }
@@ -91,22 +110,25 @@ where
 
     pub fn prover_fiat_shamir(&self) -> H::Digest {
         let hasher = H::new();
-        hasher.fiat_shamir(&self.transcript)
+        hasher.hash_sequence(&self.transcript)
     }
 
     pub fn verifier_fiat_shamir(&self) -> H::Digest {
         let hasher = H::new();
-        hasher.fiat_shamir(&self.transcript[0..self.transcript_index])
+        hasher.hash_sequence(&self.transcript[0..self.transcript_index])
     }
 }
 
 #[cfg(test)]
 mod proof_stream_typed_tests {
     use itertools::Itertools;
+    use num_traits::{One, Zero};
 
     use super::*;
-    use crate::shared_math::x_field_element::XFieldElement;
-    use crate::util_types::simple_hasher::RescuePrimeProduction;
+    use crate::shared_math::{
+        b_field_element::BFieldElement, rescue_prime_regular::RescuePrimeRegular,
+        x_field_element::XFieldElement,
+    };
 
     #[derive(Clone, Debug, PartialEq)]
     enum TestItem {
@@ -130,6 +152,12 @@ mod proof_stream_typed_tests {
         }
     }
 
+    impl Default for TestItem {
+        fn default() -> Self {
+            TestItem::ManyB(vec![BFieldElement::zero()])
+        }
+    }
+
     impl IntoIterator for TestItem {
         type Item = BFieldElement;
 
@@ -149,8 +177,8 @@ mod proof_stream_typed_tests {
 
     #[test]
     fn enqueue_dequeue_test() {
-        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::default();
-        let ps: &mut ProofStream<TestItem, RescuePrimeProduction> = &mut proof_stream;
+        let mut proof_stream = ProofStream::<TestItem, RescuePrimeRegular>::default();
+        let ps: &mut ProofStream<TestItem, RescuePrimeRegular> = &mut proof_stream;
 
         // Empty
 
@@ -158,7 +186,7 @@ mod proof_stream_typed_tests {
 
         // B
 
-        let b_one = BFieldElement::ring_one();
+        let b_one = BFieldElement::one();
         let bs_expected = vec![b_one; 3];
         let item_1 = TestItem::ManyB(bs_expected.clone());
         ps.enqueue(&item_1);
@@ -180,7 +208,7 @@ mod proof_stream_typed_tests {
 
         // X
 
-        let x_one = XFieldElement::ring_one();
+        let x_one = XFieldElement::one();
 
         let xs_expected = vec![x_one; 3];
         let item_2 = TestItem::ManyX(xs_expected.clone());
@@ -201,12 +229,12 @@ mod proof_stream_typed_tests {
     // Property: prover_fiat_shamir() is equivalent to verifier_fiat_shamir() when the entire stream has been read.
     #[test]
     fn prover_verifier_fiat_shamir_test() {
-        let mut proof_stream = ProofStream::<TestItem, RescuePrimeProduction>::default();
-        let ps: &mut ProofStream<TestItem, RescuePrimeProduction> = &mut proof_stream;
+        let mut proof_stream = ProofStream::<TestItem, RescuePrimeRegular>::default();
+        let ps: &mut ProofStream<TestItem, RescuePrimeRegular> = &mut proof_stream;
 
-        let hasher = RescuePrimeProduction::new();
-        let digest_1 = hasher.hash(&BFieldElement::ring_one());
-        ps.enqueue(&TestItem::ManyB(digest_1));
+        let hasher = RescuePrimeRegular::new();
+        let digest_1 = hasher.hash_sequence(&vec![BFieldElement::one()]);
+        ps.enqueue(&TestItem::ManyB(digest_1.to_vec()));
         let _result = ps.dequeue();
 
         assert_eq!(
@@ -215,8 +243,8 @@ mod proof_stream_typed_tests {
             "prover_fiat_shamir() and verifier_fiat_shamir() are equivalent when the entire stream is read"
         );
 
-        let digest_2 = hasher.hash(&BFieldElement::ring_one());
-        ps.enqueue(&TestItem::ManyB(digest_2));
+        let digest_2 = hasher.hash_sequence(&vec![BFieldElement::one()]);
+        ps.enqueue(&TestItem::ManyB(digest_2.to_vec()));
 
         assert_ne!(
             ps.prover_fiat_shamir(),

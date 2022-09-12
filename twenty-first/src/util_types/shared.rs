@@ -1,10 +1,12 @@
-use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use crate::util_types::simple_hasher::Hasher;
+
+use super::simple_hasher::Hashable;
 
 /// Get a root commitment to the entire MMR/list of Merkle trees
 pub fn bag_peaks<H>(peaks: &[H::Digest]) -> H::Digest
 where
     H: Hasher + std::marker::Sync + std::marker::Send,
-    u128: ToDigest<H::Digest>,
+    u128: Hashable<<H as Hasher>::T>,
 {
     // Follows the description on
     // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
@@ -15,7 +17,7 @@ where
     let hasher: H = H::new();
 
     if peaks_count == 0 {
-        return hasher.hash(&0u128.to_digest());
+        return hasher.hash_sequence(&0u128.to_sequence());
     }
 
     if peaks_count == 1 {

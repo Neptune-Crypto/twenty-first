@@ -15,16 +15,17 @@ use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
 use crate::shared_math::traits::{FromVecu8, GetRandomElements, Inverse, ModPowU32};
 use crate::shared_math::{
     b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
-    stark::brainfuck::processor_table::ProcessorTable, traits::GetPrimitiveRootOfUnity,
+    stark::brainfuck::processor_table::ProcessorTable, traits::PrimitiveRootOfUnity,
     x_field_element::XFieldElement,
 };
 use crate::timing_reporter::TimingReporter;
 use crate::util_types::blake3_wrapper::Blake3Hash;
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::proof_stream::ProofStream;
-use crate::util_types::simple_hasher::{Hasher, ToDigest};
+use crate::util_types::simple_hasher::{Hashable, Hasher};
 use crate::utils;
 use itertools::Itertools;
+use num_traits::{One, Zero};
 use rand::thread_rng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -68,7 +69,7 @@ impl Stark {
 
         k_seeds
             .iter()
-            .map(|seed| XFieldElement::ring_zero().from_vecu8(seed.to_vec()))
+            .map(|seed| XFieldElement::from_vecu8(seed.to_vec()))
             .collect::<Vec<XFieldElement>>()
     }
 
@@ -110,10 +111,7 @@ impl Stark {
         // Fewer than 2 randomizers means no zero-knowledge for the prover's execution.
         let num_randomizers = 2;
         let order: usize = 1 << 32;
-        let smooth_generator = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(order as u64)
-            .0
-            .unwrap();
+        let smooth_generator = BFieldElement::primitive_root_of_unity(order as u64).unwrap();
 
         // instantiate table objects
         let processor_table =
@@ -204,10 +202,8 @@ impl Stark {
 
         // Instantiate FRI object
         let b_field_generator = BFieldElement::generator();
-        let b_field_omega = BFieldElement::ring_zero()
-            .get_primitive_root_of_unity(fri_domain_length as u64)
-            .0
-            .unwrap();
+        let b_field_omega =
+            BFieldElement::primitive_root_of_unity(fri_domain_length as u64).unwrap();
         let fri: Fri<XFieldElement, StarkHasher> = Fri::new(
             b_field_generator.lift(),
             b_field_omega.lift(),
@@ -313,7 +309,9 @@ impl Stark {
 
         transposed_base_codewords
             .par_iter()
-            .map(|values| hasher.hash(values))
+            .map(|values| {
+                hasher.hash_sequence(&values.iter().flat_map(|v| v.to_sequence()).collect_vec())
+            })
             .collect_into_vec(&mut base_codeword_digests_by_index);
 
         let base_merkle_tree =
@@ -384,7 +382,7 @@ impl Stark {
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
                 );
-                hasher.hash(&bvalues)
+                hasher.hash_sequence(&bvalues.iter().flat_map(|b| b.to_sequence()).collect_vec())
             })
             .collect_into_vec(&mut extension_codeword_digests_by_index);
 
@@ -619,7 +617,7 @@ impl Stark {
         //             .collect::<Vec<XFieldElement>>()
         //     })
         //     .reduce(
-        //         || vec![XFieldElement::ring_zero(); self.fri.domain.length],
+        //         || vec![XFieldElement::zero(); self.fri.domain.length],
         //         |acc, weighted_terms| {
         //             acc.iter()
         //                 .zip(weighted_terms.iter())
@@ -635,8 +633,8 @@ impl Stark {
             .clone()
             .into_par_iter()
             .map(|xfe| {
-                let digest: StarkDigest = xfe.to_digest();
-                hasher.hash(&digest)
+                let sequence = xfe.to_sequence();
+                hasher.hash_sequence(&sequence)
             })
             .collect_into_vec(&mut combination_codeword_digests);
         let combination_tree =
@@ -693,7 +691,7 @@ impl Stark {
             .map(|idx| transposed_base_codewords[*idx].clone())
             .collect();
         let auth_paths: Vec<PartialAuthenticationPath<StarkDigest>> =
-            base_merkle_tree.get_multi_proof(&revealed_indices);
+            base_merkle_tree.get_authentication_structure(&revealed_indices);
 
         proof_stream.enqueue_length_prepended(&revealed_elements)?;
         proof_stream.enqueue_length_prepended(&auth_paths)?;
@@ -702,7 +700,7 @@ impl Stark {
             .iter()
             .map(|idx| transposed_extension_codewords[*idx].clone())
             .collect();
-        let extension_auth_paths = extension_tree.get_multi_proof(&revealed_indices);
+        let extension_auth_paths = extension_tree.get_authentication_structure(&revealed_indices);
         proof_stream.enqueue_length_prepended(&revealed_extension_elements)?;
         proof_stream.enqueue_length_prepended(&extension_auth_paths)?;
 
@@ -723,7 +721,8 @@ impl Stark {
         // as the latter includes adjacent table rows relative to the values in `indices`
         let revealed_combination_elements: Vec<XFieldElement> =
             indices.iter().map(|i| combination_codeword[*i]).collect();
-        let revealed_combination_auth_paths = combination_tree.get_multi_proof(&indices);
+        let revealed_combination_auth_paths =
+            combination_tree.get_authentication_structure(&indices);
         proof_stream.enqueue_length_prepended(&revealed_combination_elements)?;
         proof_stream.enqueue_length_prepended(&revealed_combination_auth_paths)?;
 
@@ -857,18 +856,21 @@ impl Stark {
         timer.elapsed("Read base elements and auth paths from proof stream");
         let leaf_digests: Vec<StarkDigest> = revealed_base_elements
             .par_iter()
-            .map(|re| hasher.hash(re))
+            .map(|rbev| {
+                hasher.hash_sequence(&rbev.iter().flat_map(|rbe| rbe.to_sequence()).collect_vec())
+            })
             .collect();
         timer.elapsed(&format!(
             "Calculated {} leaf digests for base elements",
             indices.len()
         ));
-        let mt_base_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
-            base_merkle_tree_root,
-            &revealed_indices,
-            &leaf_digests,
-            &auth_paths,
-        );
+        let mt_base_success =
+            MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
+                base_merkle_tree_root,
+                &revealed_indices,
+                &leaf_digests,
+                &auth_paths,
+            );
         if !mt_base_success {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for base codeword");
@@ -898,19 +900,20 @@ impl Stark {
                     bvalues.len(),
                     "9 X-field elements must become 27 B-field elements"
                 );
-                hasher.hash(&bvalues)
+                hasher.hash_sequence(&bvalues.iter().flat_map(|b| b.to_sequence()).collect_vec())
             })
             .collect();
         timer.elapsed(&format!(
             "Calculated {} leaf digests for extension elements",
             indices.len()
         ));
-        let mt_extension_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
-            extension_tree_merkle_root,
-            &revealed_indices,
-            &extension_leaf_digests,
-            &extension_auth_paths,
-        );
+        let mt_extension_success =
+            MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
+                extension_tree_merkle_root,
+                &revealed_indices,
+                &extension_leaf_digests,
+                &extension_auth_paths,
+            );
         if !mt_extension_success {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for extension codeword");
@@ -958,18 +961,19 @@ impl Stark {
             .clone()
             .into_par_iter()
             .map(|xfe| {
-                let digest: StarkDigest = xfe.to_digest();
-                hasher.hash(&digest)
+                let sequence = xfe.to_sequence();
+                hasher.hash_sequence(&sequence)
             })
             .collect();
         let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<StarkDigest>> =
             proof_stream_.dequeue_length_prepended()?;
-        let mt_combination_success = MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
-            combination_root,
-            &indices,
-            &revealed_combination_digests,
-            &revealed_combination_auth_paths,
-        );
+        let mt_combination_success =
+            MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
+                combination_root,
+                &indices,
+                &revealed_combination_digests,
+                &revealed_combination_auth_paths,
+            );
         if !mt_combination_success {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for combination codeword");
@@ -1051,7 +1055,7 @@ impl Stark {
                     .zip(table.boundary_quotient_degree_bounds(challenges).iter())
                 {
                     let eval = constraint.evaluate(point);
-                    let quotient = eval / (b_domain_value.lift() - XFieldElement::ring_one());
+                    let quotient = eval / (b_domain_value.lift() - XFieldElement::one());
                     terms.push(quotient);
                     let shift = (self.max_degree as i64 - bound) as u32;
                     terms.push(quotient * b_domain_value.mod_pow_u32(shift).lift());
@@ -1080,11 +1084,11 @@ impl Stark {
                     // The fast zerofier (based on group theory) needs a non-empty group.
                     // Forcing it on an empty group generates a division by zero error.
                     let quotient = if table.height() == 0 {
-                        XFieldElement::ring_zero()
+                        XFieldElement::zero()
                     } else {
                         let num = (b_domain_value - table.omicron().inverse()).lift();
                         let denom = b_domain_value.mod_pow_u32(table.height() as u32).lift()
-                            - XFieldElement::ring_one();
+                            - XFieldElement::one();
                         eval * num / denom
                     };
                     terms.push(quotient);
@@ -1113,7 +1117,7 @@ impl Stark {
 
             for arg in self.permutation_arguments.iter() {
                 let quotient = arg.evaluate_difference(&points)
-                    / (b_domain_value.lift() - XFieldElement::ring_one());
+                    / (b_domain_value.lift() - XFieldElement::one());
                 terms.push(quotient);
                 let degree_bound = arg.quotient_degree_bound();
                 let shift = (self.max_degree as i64 - degree_bound) as u32;
@@ -1132,7 +1136,7 @@ impl Stark {
                 .par_iter()
                 .zip(terms.par_iter())
                 .map(|(w, t)| *w * *t)
-                .reduce(XFieldElement::ring_zero, |x, y| x + y);
+                .reduce(XFieldElement::zero, |x, y| x + y);
 
             assert_eq!(
                 revealed_combination_elements[i], inner_product,
@@ -1169,11 +1173,12 @@ impl Stark {
 
 #[cfg(test)]
 mod brainfuck_stark_tests {
+    use num_traits::Zero;
+
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::stark::brainfuck;
     use crate::shared_math::stark::brainfuck::vm::*;
-    use crate::shared_math::traits::*;
 
     pub fn new_test_stark(
         trace_length: usize,
@@ -1201,8 +1206,8 @@ mod brainfuck_stark_tests {
         program: &[BFieldElement],
         input_symbols: &[BFieldElement],
     ) -> Option<BaseMatrices> {
-        let zero = BFieldElement::ring_zero();
-        let one = BFieldElement::ring_one();
+        let zero = BFieldElement::zero();
+        let one = BFieldElement::one();
         let two = BFieldElement::new(2);
         let mut register = Register::default();
         register.current_instruction = program[0];
@@ -1421,7 +1426,7 @@ mod brainfuck_stark_tests {
         // by exactly one when the memory pointer is unchanged.
         let source_code = "++>+<.-><+".to_string();
         let program: Vec<BFieldElement> = brainfuck::vm::compile(&source_code).unwrap();
-        let one = BFieldElement::ring_one();
+        let one = BFieldElement::one();
         let two = BFieldElement::new(2);
         let three = BFieldElement::new(3);
         let mut register = Register::default();
