@@ -22,7 +22,6 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         self.db
             .put(&LENGTH_KEY, &length_as_bytes)
             .expect("Length write must succeed");
-        self.db.flush().expect("set_length must succeed flushing");
     }
 
     fn delete(&mut self, index: u128) {
@@ -30,7 +29,6 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         self.db
             .delete(&index_as_bytes)
             .expect("Deleting element must succeed");
-        self.db.flush().expect("delete must succeed flushing");
     }
 
     /// Return true if the database vector looks empty. Used for sanity check when creating
@@ -42,6 +40,10 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
 
     pub fn is_empty(&mut self) -> bool {
         self.len() == 0
+    }
+
+    pub fn flush(&mut self) {
+        self.db.flush().expect("Flush must succeed.")
     }
 
     pub fn len(&mut self) -> u128 {
@@ -99,7 +101,6 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
         let value_bytes: Vec<u8> = bincode::serialize(&value).unwrap();
         self.db.put(&index_bytes, &value_bytes).unwrap();
-        self.db.flush().expect("set must succeed flushing");
     }
 
     pub fn batch_set(&mut self, indices_and_vals: &[(u128, T)]) {
@@ -139,7 +140,6 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         let index_bytes = bincode::serialize(&length).unwrap();
         let value_bytes = bincode::serialize(&value).unwrap();
         self.db.put(&index_bytes, &value_bytes).unwrap();
-        // implicit flush by set_length()
         self.set_length(length + 1);
     }
 
