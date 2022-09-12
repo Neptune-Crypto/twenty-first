@@ -145,7 +145,7 @@ where
         }
     }
 
-    // Flush the databases
+    // Flush the database
     pub fn flush(&mut self) {
         self.digests.flush()
     }
