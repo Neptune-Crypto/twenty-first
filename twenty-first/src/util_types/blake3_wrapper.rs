@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use rand::Rng;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Serialize};
@@ -23,6 +25,17 @@ impl From<[u8; 32]> for Blake3Hash {
 impl From<u128> for Blake3Hash {
     fn from(n: u128) -> Self {
         Blake3Hash(blake3::Hash::from_hex(format!("{:064x}", n)).unwrap())
+    }
+}
+
+/// Automatically dereference our wapper type into the underlying hash.
+/// This allows us to pass a `&blake3_wrapper::Blake3Hash` everywhere we need a `&blake3::Hash`.
+/// [Deref]: https://doc.rust-lang.org/book/ch15-02-deref.html#implicit-deref-coercions-with-functions-and-methods
+impl Deref for Blake3Hash {
+    type Target = blake3::Hash;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -106,5 +119,16 @@ mod blake3_wrapper_test {
         let digests = Blake3Hash::random_elements(n, &mut rng);
 
         assert_eq!(n, digests.len())
+    }
+
+    #[test]
+    fn deref_coercion() {
+        let boxed: Blake3Hash = blake3::hash(b"hello").into();
+
+        let exclicitly_derefed = &boxed.0;
+        // Coerce a reference to our wrapper to be a reference to the wrapped type.
+        let deref_coerced: &blake3::Hash = &boxed;
+
+        assert_eq!(exclicitly_derefed, deref_coerced);
     }
 }
