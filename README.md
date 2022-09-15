@@ -35,3 +35,20 @@ A collection of cryptography functions written in Rust.
 ## Notes
 
 The `Makefile` recipes set the flag `RUSTFLAGS=-Dwarnings` and this makes the recompilation **much** slower than without this flag, as `cargo` for some reason rebuilds the entire crate when this flag is set and a minor change is made in a test. So it is much faster to run the tests using cargo and then use the `make test` command before e.g. committing to ensure that the test build does not produce any warnings.
+
+## Release protocol
+
+While twenty-first's version is `0.x.y`, releasing a new version:
+
+1. Is the release backwards-compatible?
+   Then the new version is `0.x.y+1`. Otherwise the new version is `0.x+1.0`.
+2. Create a commit that increases `version = "0.x.y"` in twenty-first/Cargo.toml.
+   The commit message should give a one-line summary of each release change.
+3. Have a `v0.x.y` [git tag][tag] on this commit created. (`git tag v0.x.y [sha]`, `git push upstream --tags`)
+4. Have this commit `cargo publish`ed on [crates.io][crates] and in GitHub [tags][tags].
+
+[tag]: https://git-scm.com/book/en/v2/Git-Basics-Tagging
+[tags]: https://github.com/Neptune-Crypto/twenty-first/tags
+[crates]: https://crates.io/crates/twenty-first/versions
+
+If you do not have the privilege to create git tags or run `cargo publish`, submit a PR and the merger will take care of these.
