@@ -3,6 +3,7 @@ use serde_big_array;
 use serde_big_array::BigArray;
 use serde_derive::{Deserialize, Serialize};
 use std::{
+    convert::TryFrom,
     fmt::Display,
     iter::Sum,
     ops::{Add, Div, Mul, Rem, Sub},
@@ -299,9 +300,14 @@ impl<const N: usize> From<u32> for U32s<N> {
     }
 }
 
-impl<const N: usize> From<u64> for U32s<N> {
-    fn from(i: u64) -> Self {
-        U32s::<N>::from(BigUint::from(i))
+impl<const N: usize> TryFrom<u64> for U32s<N> {
+    type Error = &'static str;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        if N < 2 {
+            return Err("U32s<{N}>, N<=1 may not be big enough to hold a u64");
+        }
+        Ok(U32s::<N>::from(BigUint::from(value)))
     }
 }
 
@@ -711,11 +717,18 @@ mod u32s_tests {
     #[test]
     fn display_u32s() {
         let v = u64::MAX;
-        let u32s = U32s::<4>::from(v);
+        let u32s = U32s::<4>::try_from(v).unwrap();
 
         let v_string = format!("{}", v);
         let u32s_string = format!("{}", u32s);
 
         assert_eq!(v_string, u32s_string)
+    }
+
+    #[ignore]
+    #[test]
+    fn crash() {
+        let _u32s = U32s::<0>::from(0u32);
+        assert!(true)
     }
 }
