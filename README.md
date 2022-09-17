@@ -18,8 +18,10 @@ This library contains primarily the following cryptographic primitives:
   - [Anatomy of a STARK, Part 3: FRI](https://neptune.cash/learn/stark-anatomy/fri/)
 - BFieldElement, XFieldElement
   - The prime-field type $\mathbb{F}_p$ where $p = 2^{64} - 2^{32} + 1$
-  - The extension field $\mathbb{F}[x]/(x^3 + -x + 1)$
+  - The extension field $\mathbb{F}_p[x]/(x^3 - x + 1)$
+  - [An efficient prime for number-theoretic transforms](https://cp4space.hatsya.com/2021/09/01/an-efficient-prime-for-number-theoretic-transforms/)
 - NTT
+  - Number Theoretic Transform (discrete Fast Fourier Transform)
   - [Anatomy of a STARK, Part 6: Speeding Things Up](https://neptune.cash/learn/stark-anatomy/faster/)
 - Univariate and multivariate polynomials
 - Merkle Trees, Merkle Mountain Ranges
