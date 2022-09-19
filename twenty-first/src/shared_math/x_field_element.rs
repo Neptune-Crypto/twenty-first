@@ -466,6 +466,7 @@ impl ModPowU32 for XFieldElement {
 #[cfg(test)]
 mod x_field_element_test {
     use itertools::{izip, Itertools};
+    use rand::{thread_rng, RngCore};
 
     use crate::shared_math::ntt::{intt, ntt};
     use crate::shared_math::other::log_2_floor;
@@ -967,6 +968,21 @@ mod x_field_element_test {
             println!("{}", curr);
             assert_ne!(curr, prev);
             prev = curr
+        }
+    }
+
+    #[test]
+    fn inverse_or_zero_xfe() {
+        let zero = XFieldElement::zero();
+        let one = XFieldElement::one();
+        assert_eq!(zero, zero.inverse_or_zero());
+
+        let mut prng = thread_rng();
+        let x = XFieldElement::new_u64([prng.next_u64(), prng.next_u64(), prng.next_u64()]);
+        if x.is_zero() {
+            assert_eq!(zero, x.inverse_or_zero())
+        } else {
+            assert_eq!(one, x * x.inverse_or_zero());
         }
     }
 }

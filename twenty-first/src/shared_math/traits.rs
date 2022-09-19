@@ -16,9 +16,17 @@ where
 // TODO: Assert if we're risking inverting 0 at any point.
 pub trait Inverse
 where
-    Self: Sized,
+    Self: Sized + Zero,
 {
     fn inverse(&self) -> Self;
+
+    fn inverse_or_zero(&self) -> Self {
+        if self.is_zero() {
+            Self::zero()
+        } else {
+            self.inverse()
+        }
+    }
 }
 
 pub trait PrimitiveRootOfUnity

@@ -1176,4 +1176,19 @@ mod b_prime_field_element_test {
             prev = curr
         }
     }
+
+    #[test]
+    fn inverse_or_zero_bfe() {
+        let zero = BFieldElement::zero();
+        let one = BFieldElement::one();
+        assert_eq!(zero, zero.inverse_or_zero());
+
+        let mut prng = thread_rng();
+        let b = BFieldElement::new(prng.next_u64());
+        if b.is_zero() {
+            assert_eq!(zero, b.inverse_or_zero())
+        } else {
+            assert_eq!(one, b * b.inverse_or_zero());
+        }
+    }
 }
