@@ -459,30 +459,8 @@ impl ModPowU32 for XFieldElement {
 
 impl Emojible for XFieldElement {
     fn to_emoji(&self) -> String {
-        let prefix = "[";
-        let suffix = "]";
-        let separator = "|";
-
-        let mut rv = String::new();
-        {
-            rv.push_str(prefix);
-
-            let bfe0 = self.coefficients[0];
-            rv.push_str(&bfe0.emojify());
-
-            rv.push_str(separator);
-
-            let bfe1 = self.coefficients[1];
-            rv.push_str(&bfe1.emojify());
-
-            rv.push_str(separator);
-
-            let bfe2 = self.coefficients[2];
-            rv.push_str(&bfe2.emojify());
-
-            rv.push_str(suffix);
-        }
-        rv
+        let [a, b, c] = self.coefficients.map(|bfe| bfe.emojihash());
+        format!("[{a}|{b}|{c}]")
     }
 }
 

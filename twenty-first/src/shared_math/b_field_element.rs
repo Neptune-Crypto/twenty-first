@@ -4,6 +4,7 @@ use super::traits::{Emojible, FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
+use crate::util_types::simple_hasher::Hashable;
 use num_traits::{One, Zero};
 use std::hash::{Hash, Hasher};
 
@@ -55,7 +56,7 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
     4294967296u64 => 1753635133440165772,
 };
 
-pub const BFE_EMOJI_LEN: usize = 3;
+pub const EMOJI_PER_BFE: usize = 3;
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
@@ -233,6 +234,14 @@ impl BFieldElement {
         // we need to handle potential overflow
         let (result, over) = tmp1.overflowing_add(tmp2);
         result.wrapping_add(Self::LOWER_MASK * (over as u64))
+    }
+
+    /// Get string of raw emoji characters
+    pub fn emojihash(&self) -> String {
+        emojihash::hash(&self.to_sequence())
+            .chars()
+            .take(EMOJI_PER_BFE)
+            .collect()
     }
 }
 
@@ -530,32 +539,10 @@ impl PrimitiveRootOfUnity for BFieldElement {
     }
 }
 
-impl BFieldElement {
-    pub fn emojify(&self) -> String {
-        let data: [u8; 8] = (*self).into();
-        let emojis = emojihash::hash(&data);
-
-        let mut rv = String::new();
-        let mut max_len = BFE_EMOJI_LEN;
-        for e in emojis.chars() {
-            if 0 == max_len {
-                break;
-            }
-            rv.push(e);
-            max_len -= 1;
-        }
-        rv
-    }
-}
-
 impl Emojible for BFieldElement {
     fn to_emoji(&self) -> String {
-        let prefix = "[";
-        let suffix = "]";
-        let mut rv = String::from(prefix);
-        rv.push_str(&self.emojify());
-        rv.push_str(suffix);
-        rv
+        let emojis = self.emojihash();
+        format!("[{emojis}]")
     }
 }
 
