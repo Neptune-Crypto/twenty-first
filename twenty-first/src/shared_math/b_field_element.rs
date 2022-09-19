@@ -4,6 +4,7 @@ use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
+use crate::util_types::simple_hasher::Hashable;
 use num_traits::{One, Zero};
 use std::hash::{Hash, Hasher};
 
@@ -54,6 +55,8 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
     2147483648u64 => 4614640910117430873,
     4294967296u64 => 1753635133440165772,
 };
+
+pub const EMOJI_PER_BFE: usize = 3;
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
@@ -231,6 +234,20 @@ impl BFieldElement {
         // we need to handle potential overflow
         let (result, over) = tmp1.overflowing_add(tmp2);
         result.wrapping_add(Self::LOWER_MASK * (over as u64))
+    }
+
+    /// Get string of raw emoji characters
+    pub fn emojihash_raw(&self) -> String {
+        emojihash::hash(&self.to_sequence())
+            .chars()
+            .take(EMOJI_PER_BFE)
+            .collect()
+    }
+
+    ///
+    pub fn emojihash(&self) -> String {
+        let emojis = self.emojihash_raw();
+        format!("[{emojis}]")
     }
 }
 
@@ -1147,5 +1164,16 @@ mod b_prime_field_element_test {
     fn multiplicative_inverse_of_p() {
         let zero = BFieldElement::new(BFieldElement::QUOTIENT);
         zero.inverse();
+    }
+
+    #[test]
+    fn uniqueness_of_consecutive_emojis_bfe() {
+        let mut prev = BFieldElement::zero().emojihash();
+        for n in 1..256 {
+            let curr = BFieldElement::new(n).emojihash();
+            println!("{}, n: {n}", curr);
+            assert_ne!(curr, prev);
+            prev = curr
+        }
     }
 }

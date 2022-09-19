@@ -158,6 +158,12 @@ impl XFieldElement {
     pub fn decrement(&mut self, index: usize) {
         self.coefficients[index].decrement();
     }
+
+    /// Convert item to pretty-printed string of emojis
+    pub fn emojihash(&self) -> String {
+        let [a, b, c] = self.coefficients.map(|bfe| bfe.emojihash_raw());
+        format!("[{a}|{b}|{c}]")
+    }
 }
 
 impl Inverse for XFieldElement {
@@ -947,6 +953,20 @@ mod x_field_element_test {
 
             intt::<XFieldElement>(&mut rv, root, log_2_of_n);
             assert_eq!(inputs, rv);
+        }
+    }
+
+    #[test]
+    fn uniqueness_of_consecutive_emojis_xfe() {
+        let mut rng = rand::thread_rng();
+        let rand_xs = XFieldElement::random_elements(14, &mut rng);
+
+        let mut prev = BFieldElement::zero().emojihash();
+        for xfe in rand_xs {
+            let curr = xfe.emojihash();
+            println!("{}", curr);
+            assert_ne!(curr, prev);
+            prev = curr
         }
     }
 }
