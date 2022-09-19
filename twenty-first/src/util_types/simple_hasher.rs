@@ -312,6 +312,8 @@ impl SamplableFrom<Vec<BFieldElement>> for XFieldElement {
 
 #[cfg(test)]
 pub mod test_simple_hasher {
+    use rand::RngCore;
+
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
 
     use super::*;
@@ -338,7 +340,8 @@ pub mod test_simple_hasher {
         type Digest = <RescuePrimeRegular as Hasher>::Digest;
         let rpr: RescuePrimeRegular = RescuePrimeRegular::new();
         let digest1: Digest = rpr.hash_sequence(&42usize.to_sequence());
-        let digest2: Digest = rpr.hash_sequence(&((1 << 4 + 42) as usize).to_sequence());
+        let mut prng = rand::thread_rng();
+        let digest2: Digest = rpr.hash_sequence(&((prng.next_u64() as usize).to_sequence()));
         let digests = vec![digest1.clone(), digest2.clone()].concat();
         let hash_sequence_digest = rpr.hash_sequence(&digests);
         let hash_pair_digest = rpr.hash_pair(&digest1, &digest2);

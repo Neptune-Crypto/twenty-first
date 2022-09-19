@@ -3,6 +3,8 @@ use serde_big_array;
 use serde_big_array::BigArray;
 use serde_derive::{Deserialize, Serialize};
 use std::{
+    convert::TryFrom,
+    fmt::Display,
     iter::Sum,
     ops::{Add, Div, Mul, Rem, Sub},
 };
@@ -298,6 +300,22 @@ impl<const N: usize> From<u32> for U32s<N> {
     }
 }
 
+impl<const N: usize> TryFrom<u64> for U32s<N> {
+    type Error = &'static str;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        if N < 2 {
+            return Err("U32s<{N}>, N<=1 may not be big enough to hold a u64");
+        }
+        Ok(U32s::<N>::from(BigUint::from(value)))
+    }
+}
+
+impl<const N: usize> Display for U32s<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", BigUint::from(*self))
+    }
+}
 #[cfg(test)]
 mod u32s_tests {
     use rand::{thread_rng, RngCore};
@@ -467,6 +485,19 @@ mod u32s_tests {
         assert!(U32s::new([100, 0]) > U32s::new([99, 0]));
         assert!(U32s::new([0, 1]) > U32s::new([1 << 31, 0]));
         assert!(U32s::new([542, 12]) > U32s::new([1 << 31, 11]));
+    }
+
+    #[test]
+    fn compare_simple_test_more() {
+        assert!(U32s::new([0]) < U32s::new([1]));
+        assert!(U32s::new([0]) <= U32s::new([100]));
+        assert!(U32s::new([99]) < U32s::new([100]));
+        assert!(U32s::new([99, 0]) <= U32s::new([100, 0]));
+        assert!(U32s::new([100, 0]) <= U32s::new([100, 0]));
+        assert!(U32s::new([100, 0]) >= U32s::new([100, 0]));
+        assert!(U32s::new([1 << 31, 0]) < U32s::new([0, 1]));
+        assert!(U32s::new([1 << 31, 11]) <= U32s::new([542, 12]));
+        assert!(U32s::new([0]) >= U32s::new([0]));
     }
 
     #[test]
@@ -681,5 +712,23 @@ mod u32s_tests {
         let j = serde_json::to_string(&s).unwrap();
         let s_back = serde_json::from_str::<U32s<64>>(&j).unwrap();
         assert!(&s.values[..] == &s_back.values[..]);
+    }
+
+    #[test]
+    fn display_u32s() {
+        let v = u64::MAX;
+        let u32s = U32s::<4>::try_from(v).unwrap();
+
+        let v_string = format!("{}", v);
+        let u32s_string = format!("{}", u32s);
+
+        assert_eq!(v_string, u32s_string)
+    }
+
+    #[ignore]
+    #[test]
+    fn crash() {
+        let _u32s = U32s::<0>::from(0u32);
+        assert!(true)
     }
 }
