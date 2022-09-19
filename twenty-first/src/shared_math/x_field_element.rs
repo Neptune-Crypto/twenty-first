@@ -961,7 +961,7 @@ mod x_field_element_test {
         let mut rng = rand::thread_rng();
         let rand_xs = XFieldElement::random_elements(14, &mut rng);
 
-        let mut prev = BFieldElement::zero().emojihash();
+        let mut prev = XFieldElement::zero().emojihash();
         for xfe in rand_xs {
             let curr = xfe.emojihash();
             println!("{}", curr);
