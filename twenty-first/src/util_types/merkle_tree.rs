@@ -710,8 +710,9 @@ mod merkle_tree_test {
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::blake3_wrapper::Blake3Hash;
     use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
-    use itertools::{zip, Itertools};
+    use itertools::Itertools;
     use rand::RngCore;
+    use std::iter::zip;
 
     fn count_hashes<Digest>(proof: &SaltedAuthenticationStructure<Digest>) -> usize {
         proof.iter().map(|y| y.0 .0.iter().flatten().count()).sum()
