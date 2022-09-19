@@ -1,6 +1,6 @@
 use super::mpolynomial::MPolynomial;
 use super::other;
-use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
+use super::traits::{Emojible, FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
@@ -54,6 +54,8 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
     2147483648u64 => 4614640910117430873,
     4294967296u64 => 1753635133440165772,
 };
+
+pub const BFE_EMOJI_LEN: usize = 3;
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
@@ -525,6 +527,35 @@ impl PrimitiveRootOfUnity for BFieldElement {
         } else {
             None
         }
+    }
+}
+
+impl BFieldElement {
+    pub fn emojify(&self) -> String {
+        let data: [u8; 8] = (*self).into();
+        let emojis = emojihash::hash(&data);
+
+        let mut rv = String::new();
+        let mut max_len = BFE_EMOJI_LEN;
+        for e in emojis.chars() {
+            if 0 == max_len {
+                break;
+            }
+            rv.push(e);
+            max_len -= 1;
+        }
+        rv
+    }
+}
+
+impl Emojible for BFieldElement {
+    fn to_emoji(&self) -> String {
+        let prefix = "[";
+        let suffix = "]";
+        let mut rv = String::from(prefix);
+        rv.push_str(&self.emojify());
+        rv.push_str(suffix);
+        rv
     }
 }
 
@@ -1147,5 +1178,16 @@ mod b_prime_field_element_test {
     fn multiplicative_inverse_of_p() {
         let zero = BFieldElement::new(BFieldElement::QUOTIENT);
         zero.inverse();
+    }
+
+    #[test]
+    fn uniqueness_of_consecutive_emojis_bfe() {
+        let mut prev = BFieldElement::zero().to_emoji();
+        for n in 1..256 {
+            let curr = BFieldElement::new(n).to_emoji();
+            println!("{}, n: {n}", curr);
+            assert_ne!(curr, prev);
+            prev = curr
+        }
     }
 }

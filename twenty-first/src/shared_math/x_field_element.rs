@@ -1,4 +1,4 @@
-use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
+use super::traits::{Emojible, FromVecu8, Inverse, PrimitiveRootOfUnity};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetRandomElements;
@@ -454,6 +454,35 @@ impl ModPowU32 for XFieldElement {
         // TODO: This can be sped up by a factor 2 by implementing
         // it for u32 and not using the 64-bit version
         self.mod_pow_u64(exp as u64)
+    }
+}
+
+impl Emojible for XFieldElement {
+    fn to_emoji(&self) -> String {
+        let prefix = "[";
+        let suffix = "]";
+        let separator = "|";
+
+        let mut rv = String::new();
+        {
+            rv.push_str(prefix);
+
+            let bfe0 = self.coefficients[0];
+            rv.push_str(&bfe0.emojify());
+
+            rv.push_str(separator);
+
+            let bfe1 = self.coefficients[1];
+            rv.push_str(&bfe1.emojify());
+
+            rv.push_str(separator);
+
+            let bfe2 = self.coefficients[2];
+            rv.push_str(&bfe2.emojify());
+
+            rv.push_str(suffix);
+        }
+        rv
     }
 }
 
@@ -947,6 +976,20 @@ mod x_field_element_test {
 
             intt::<XFieldElement>(&mut rv, root, log_2_of_n);
             assert_eq!(inputs, rv);
+        }
+    }
+
+    #[test]
+    fn uniqueness_of_consecutive_emojis_xfe() {
+        let mut rng = rand::thread_rng();
+        let rand_xs = XFieldElement::random_elements(14, &mut rng);
+
+        let mut prev = BFieldElement::zero().to_emoji();
+        for xfe in rand_xs {
+            let curr = xfe.to_emoji();
+            println!("{}", curr);
+            assert_ne!(curr, prev);
+            prev = curr
         }
     }
 }

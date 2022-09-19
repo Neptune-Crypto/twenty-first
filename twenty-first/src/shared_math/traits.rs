@@ -134,3 +134,8 @@ pub trait FiniteField:
         self * self
     }
 }
+
+/// Trait for making digests human distingible.
+pub trait Emojible {
+    fn to_emoji(&self) -> String;
+}
