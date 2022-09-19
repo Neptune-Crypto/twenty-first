@@ -1,6 +1,6 @@
 use super::mpolynomial::MPolynomial;
 use super::other;
-use super::traits::{Emojible, FromVecu8, Inverse, PrimitiveRootOfUnity};
+use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
@@ -237,11 +237,17 @@ impl BFieldElement {
     }
 
     /// Get string of raw emoji characters
-    pub fn emojihash(&self) -> String {
+    pub fn emojihash_raw(&self) -> String {
         emojihash::hash(&self.to_sequence())
             .chars()
             .take(EMOJI_PER_BFE)
             .collect()
+    }
+
+    ///
+    pub fn emojihash(&self) -> String {
+        let emojis = self.emojihash_raw();
+        format!("[{emojis}]")
     }
 }
 
@@ -536,13 +542,6 @@ impl PrimitiveRootOfUnity for BFieldElement {
         } else {
             None
         }
-    }
-}
-
-impl Emojible for BFieldElement {
-    fn to_emoji(&self) -> String {
-        let emojis = self.emojihash();
-        format!("[{emojis}]")
     }
 }
 
@@ -1169,9 +1168,9 @@ mod b_prime_field_element_test {
 
     #[test]
     fn uniqueness_of_consecutive_emojis_bfe() {
-        let mut prev = BFieldElement::zero().to_emoji();
+        let mut prev = BFieldElement::zero().emojihash();
         for n in 1..256 {
-            let curr = BFieldElement::new(n).to_emoji();
+            let curr = BFieldElement::new(n).emojihash();
             println!("{}, n: {n}", curr);
             assert_ne!(curr, prev);
             prev = curr

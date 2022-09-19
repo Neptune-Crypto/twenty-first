@@ -1,4 +1,4 @@
-use super::traits::{Emojible, FromVecu8, Inverse, PrimitiveRootOfUnity};
+use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::GetRandomElements;
@@ -157,6 +157,12 @@ impl XFieldElement {
 
     pub fn decrement(&mut self, index: usize) {
         self.coefficients[index].decrement();
+    }
+
+    /// Convert item to pretty-printed string of emojis
+    pub fn emojihash(&self) -> String {
+        let [a, b, c] = self.coefficients.map(|bfe| bfe.emojihash_raw());
+        format!("[{a}|{b}|{c}]")
     }
 }
 
@@ -454,13 +460,6 @@ impl ModPowU32 for XFieldElement {
         // TODO: This can be sped up by a factor 2 by implementing
         // it for u32 and not using the 64-bit version
         self.mod_pow_u64(exp as u64)
-    }
-}
-
-impl Emojible for XFieldElement {
-    fn to_emoji(&self) -> String {
-        let [a, b, c] = self.coefficients.map(|bfe| bfe.emojihash());
-        format!("[{a}|{b}|{c}]")
     }
 }
 
@@ -962,9 +961,9 @@ mod x_field_element_test {
         let mut rng = rand::thread_rng();
         let rand_xs = XFieldElement::random_elements(14, &mut rng);
 
-        let mut prev = BFieldElement::zero().to_emoji();
+        let mut prev = BFieldElement::zero().emojihash();
         for xfe in rand_xs {
-            let curr = xfe.to_emoji();
+            let curr = xfe.emojihash();
             println!("{}", curr);
             assert_ne!(curr, prev);
             prev = curr
