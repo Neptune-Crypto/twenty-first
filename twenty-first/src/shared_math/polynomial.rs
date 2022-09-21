@@ -470,8 +470,8 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
     }
 
     #[must_use]
-    pub fn fast_mod_pow(&self, pow: BigInt, one: PFElem) -> Self {
-        assert!(one.is_one(), "Provided one must be one");
+    pub fn fast_mod_pow(&self, pow: BigInt) -> Self {
+        let one = PFElem::one();
 
         // Special case to handle 0^0 = 1
         if pow.is_zero() {
@@ -852,8 +852,8 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
 
     // Multiply a polynomial with itself `pow` times
     #[must_use]
-    pub fn mod_pow(&self, pow: BigInt, one: PFElem) -> Self {
-        assert!(one.is_one(), "Provided one must be one");
+    pub fn mod_pow(&self, pow: BigInt) -> Self {
+        let one = PFElem::one();
 
         // Special case to handle 0^0 = 1
         if pow.is_zero() {
@@ -884,10 +884,8 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
 
     // Multiply a polynomial with x^power
     #[must_use]
-    pub fn shift_coefficients(&self, power: usize, zero: PFElem) -> Self {
-        if !zero.is_zero() {
-            panic!("`zero` was not zero. Don't do this.");
-        }
+    pub fn shift_coefficients(&self, power: usize) -> Self {
+        let zero = PFElem::zero();
 
         let mut coefficients: Vec<PFElem> = self.coefficients.clone();
         coefficients.splice(0..0, vec![zero; power]);
@@ -1565,13 +1563,11 @@ mod test_polynomials {
                 BFieldElement::from(17u64),
                 BFieldElement::from(14u64)
             ],
-            pol.shift_coefficients(4, BFieldElement::from(0u64))
-                .coefficients
+            pol.shift_coefficients(4).coefficients
         );
         assert_eq!(
             vec![BFieldElement::from(17u64), BFieldElement::from(14u64)],
-            pol.shift_coefficients(0, BFieldElement::from(0u64))
-                .coefficients
+            pol.shift_coefficients(0).coefficients
         );
         assert_eq!(
             vec![
@@ -1579,8 +1575,7 @@ mod test_polynomials {
                 BFieldElement::from(17u64),
                 BFieldElement::from(14u64)
             ],
-            pol.shift_coefficients(1, BFieldElement::from(0u64))
-                .coefficients
+            pol.shift_coefficients(1).coefficients
         );
     }
 
@@ -1590,17 +1585,17 @@ mod test_polynomials {
         let one = BFieldElement::from(1u64);
         let one_pol = Polynomial::<BFieldElement>::from_constant(one);
 
-        assert_eq!(one_pol, one_pol.mod_pow(0.into(), one));
-        assert_eq!(one_pol, one_pol.mod_pow(1.into(), one));
-        assert_eq!(one_pol, one_pol.mod_pow(2.into(), one));
-        assert_eq!(one_pol, one_pol.mod_pow(3.into(), one));
+        assert_eq!(one_pol, one_pol.mod_pow(0.into()));
+        assert_eq!(one_pol, one_pol.mod_pow(1.into()));
+        assert_eq!(one_pol, one_pol.mod_pow(2.into()));
+        assert_eq!(one_pol, one_pol.mod_pow(3.into()));
 
-        let x = one_pol.shift_coefficients(1, zero);
-        let x_squared = one_pol.shift_coefficients(2, zero);
-        let x_cubed = one_pol.shift_coefficients(3, zero);
-        assert_eq!(x, x.mod_pow(1.into(), one));
-        assert_eq!(x_squared, x.mod_pow(2.into(), one));
-        assert_eq!(x_cubed, x.mod_pow(3.into(), one));
+        let x = one_pol.shift_coefficients(1);
+        let x_squared = one_pol.shift_coefficients(2);
+        let x_cubed = one_pol.shift_coefficients(3);
+        assert_eq!(x, x.mod_pow(1.into()));
+        assert_eq!(x_squared, x.mod_pow(2.into()));
+        assert_eq!(x_cubed, x.mod_pow(3.into()));
 
         let pol = Polynomial {
             coefficients: vec![
@@ -1660,10 +1655,10 @@ mod test_polynomials {
             ],
         };
 
-        assert_eq!(one_pol, pol.mod_pow(0.into(), one));
-        assert_eq!(pol, pol.mod_pow(1.into(), one));
-        assert_eq!(pol_squared, pol.mod_pow(2.into(), one));
-        assert_eq!(pol_cubed, pol.mod_pow(3.into(), one));
+        assert_eq!(one_pol, pol.mod_pow(0.into()));
+        assert_eq!(pol, pol.mod_pow(1.into()));
+        assert_eq!(pol_squared, pol.mod_pow(2.into()));
+        assert_eq!(pol_cubed, pol.mod_pow(3.into()));
 
         let parabola = Polynomial {
             coefficients: vec![
@@ -1681,9 +1676,9 @@ mod test_polynomials {
                 BFieldElement::from(361u64),
             ],
         };
-        assert_eq!(one_pol, parabola.mod_pow(0.into(), one));
-        assert_eq!(parabola, parabola.mod_pow(1.into(), one));
-        assert_eq!(parabola_squared, parabola.mod_pow(2.into(), one));
+        assert_eq!(one_pol, parabola.mod_pow(0.into()));
+        assert_eq!(parabola, parabola.mod_pow(1.into()));
+        assert_eq!(parabola_squared, parabola.mod_pow(2.into()));
     }
 
     #[test]
@@ -1691,8 +1686,8 @@ mod test_polynomials {
         for _ in 0..20 {
             let poly = gen_polynomial();
             for i in 0..15 {
-                let actual = poly.mod_pow(i.into(), BFieldElement::one());
-                let fast_actual = poly.fast_mod_pow(i.into(), BFieldElement::one());
+                let actual = poly.mod_pow(i.into());
+                let fast_actual = poly.fast_mod_pow(i.into());
                 let mut expected = Polynomial::from_constant(BFieldElement::one());
                 for _ in 0..i {
                     expected = expected.clone() * poly.clone();
@@ -2070,19 +2065,19 @@ mod test_polynomials {
             coefficients: vec![BFieldElement::from(0u64), BFieldElement::from(1u64)],
         };
         assert_eq!(
-            a.shift_coefficients(1, BFieldElement::from(0u64)),
+            a.shift_coefficients(1),
             Polynomial::fast_multiply(&x, &a, &primitive_root, 32)
         );
         assert_eq!(
-            a.shift_coefficients(1, BFieldElement::from(0u64)),
+            a.shift_coefficients(1),
             Polynomial::fast_multiply(&a, &x, &primitive_root, 32)
         );
         assert_eq!(
-            b.shift_coefficients(1, BFieldElement::from(0u64)),
+            b.shift_coefficients(1),
             Polynomial::fast_multiply(&x, &b, &primitive_root, 32)
         );
         assert_eq!(
-            b.shift_coefficients(1, BFieldElement::from(0u64)),
+            b.shift_coefficients(1),
             Polynomial::fast_multiply(&b, &x, &primitive_root, 32)
         );
     }
@@ -2451,7 +2446,7 @@ mod test_polynomials {
         assert_eq!(expected_rem, actual_rem);
 
         // x^6
-        let c: Polynomial<BFieldElement> = Polynomial::new(vec![one]).shift_coefficients(6, zero);
+        let c: Polynomial<BFieldElement> = Polynomial::new(vec![one]).shift_coefficients(6);
 
         let (actual_sixth_quot, actual_sixth_rem) = c.divide(shah);
 

@@ -150,7 +150,7 @@ impl TableTrait for InstructionTable {
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         let variable_count = Self::BASE_WIDTH * 2;
-        let vars = MPolynomial::<BFieldElement>::variables(variable_count, BFieldElement::one());
+        let vars = MPolynomial::<BFieldElement>::variables(variable_count);
 
         let address = vars[0].clone();
         let current_instruction = vars[1].clone();
@@ -170,10 +170,7 @@ impl TableTrait for InstructionTable {
     }
 
     fn base_boundary_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
-        let x = MPolynomial::<BFieldElement>::variables(
-            InstructionTable::FULL_WIDTH,
-            BFieldElement::one(),
-        );
+        let x = MPolynomial::<BFieldElement>::variables(InstructionTable::FULL_WIDTH);
 
         // Why create 'x' and then throw all but 'address' away?
         let address = x[InstructionTable::ADDRESS].clone();
@@ -261,8 +258,7 @@ impl TableTrait for InstructionTable {
             .try_into()
             .unwrap();
 
-        let vars =
-            MPolynomial::<BFieldElement>::variables(2 * Self::FULL_WIDTH, BFieldElement::one());
+        let vars = MPolynomial::<BFieldElement>::variables(2 * Self::FULL_WIDTH);
 
         let address = vars[0].clone();
         let current_instruction = vars[1].clone();
@@ -364,8 +360,7 @@ impl TableTrait for InstructionTable {
             .try_into()
             .unwrap();
 
-        let x: Vec<MPolynomial<XFieldElement>> =
-            MPolynomial::variables(self.full_width(), XFieldElement::one());
+        let x: Vec<MPolynomial<XFieldElement>> = MPolynomial::variables(self.full_width());
 
         vec![
             x[Self::ADDRESS].clone(),
@@ -398,8 +393,7 @@ impl TableTrait for InstructionTable {
             .try_into()
             .unwrap();
 
-        let x: Vec<MPolynomial<XFieldElement>> =
-            MPolynomial::variables(self.full_width(), XFieldElement::one());
+        let x: Vec<MPolynomial<XFieldElement>> = MPolynomial::variables(self.full_width());
 
         vec![
             x[Self::PERMUTATION].clone() - processor_instruction_permutation_terminal,

@@ -63,12 +63,8 @@ impl FriDomain<XFieldElement> {
             .collect()
     }
 
-    pub fn b_evaluate(
-        &self,
-        polynomial: &Polynomial<BFieldElement>,
-        zero: BFieldElement,
-    ) -> Vec<BFieldElement> {
-        assert!(zero.is_zero(), "zero must be zero");
+    pub fn b_evaluate(&self, polynomial: &Polynomial<BFieldElement>) -> Vec<BFieldElement> {
+        let zero = BFieldElement::zero();
         let mut polynomial_representation: Vec<BFieldElement> = polynomial
             .scale(&self.offset.unlift().unwrap())
             .coefficients;
@@ -545,7 +541,7 @@ mod fri_domain_tests {
             }
 
             let pol = Polynomial::<BFieldElement>::new(x_squared_coefficients.clone());
-            let values = domain.b_evaluate(&pol, BFieldElement::zero());
+            let values = domain.b_evaluate(&pol);
             assert_ne!(values, x_squared_coefficients);
             let interpolant = domain.b_interpolate(&values);
             assert_eq!(pol, interpolant);

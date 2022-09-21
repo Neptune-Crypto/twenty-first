@@ -202,7 +202,7 @@ impl TableTrait for MemoryTable {
 
     fn base_transition_constraints(&self) -> Vec<MPolynomial<BFieldElement>> {
         let variable_count = Self::BASE_WIDTH * 2;
-        let vars = MPolynomial::<BFieldElement>::variables(variable_count, BFieldElement::one());
+        let vars = MPolynomial::<BFieldElement>::variables(variable_count);
 
         let cycle = vars[0].clone();
         let address = vars[1].clone();
@@ -294,7 +294,7 @@ impl TableTrait for MemoryTable {
             .unwrap();
 
         let b_field_variables: [MPolynomial<BFieldElement>; 2 * Self::FULL_WIDTH] =
-            MPolynomial::variables(2 * Self::FULL_WIDTH, BFieldElement::one())
+            MPolynomial::variables(2 * Self::FULL_WIDTH)
                 .try_into()
                 .unwrap();
         let [b_field_cycle, b_field_address, b_field_value, b_field_interweaved, _b_field_permutation, b_field_cycle_next, b_field_address_next, b_field_value_next, b_field_interweaved_next, _b_field_permutation_next] =
@@ -319,7 +319,7 @@ impl TableTrait for MemoryTable {
         );
 
         let x_field_variables: [MPolynomial<XFieldElement>; 2 * Self::FULL_WIDTH] =
-            MPolynomial::variables(2 * Self::FULL_WIDTH, XFieldElement::one())
+            MPolynomial::variables(2 * Self::FULL_WIDTH)
                 .try_into()
                 .unwrap();
         let [cycle, address, value, interweaved, permutation, _cycle_next, _address_next, _value_next, _interweaved_next, permutation_next] =
@@ -348,7 +348,7 @@ impl TableTrait for MemoryTable {
         _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let zero = MPolynomial::<XFieldElement>::zero(Self::FULL_WIDTH);
-        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH);
 
         let cycle = x[MemoryTable::CYCLE].clone();
         let memory_pointer = x[MemoryTable::MEMORY_POINTER].clone();
@@ -380,7 +380,7 @@ impl TableTrait for MemoryTable {
         let processor_memory_permutation_terminal =
             MPolynomial::<XFieldElement>::from_constant(terminals[1], Self::FULL_WIDTH);
 
-        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH);
 
         let cycle = x[MemoryTable::CYCLE].clone();
         let memory_pointer = x[MemoryTable::MEMORY_POINTER].clone();

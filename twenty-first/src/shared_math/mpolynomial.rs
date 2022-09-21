@@ -134,7 +134,7 @@ impl<T: Sized> Node<T> {
                                 None => {
                                     // println!("Missed reduced mod_pow result!");
                                     let mod_pow_intermediate =
-                                        point[i].mod_pow((*diff_exponent).into(), one);
+                                        point[i].mod_pow((*diff_exponent).into());
                                     polynomium_products.insert(
                                         mod_pow_exponents.clone(),
                                         mod_pow_intermediate.clone(),
@@ -143,8 +143,7 @@ impl<T: Sized> Node<T> {
                                 }
                                 Some(res) => {
                                     // println!("Found reduced mod_pow result!");
-                                    point[i]
-                                        .mod_pow((*diff_exponent - mod_pow_reduced[i]).into(), one)
+                                    point[i].mod_pow((*diff_exponent - mod_pow_reduced[i]).into())
                                         * res
                                 }
                             }
@@ -390,8 +389,8 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     /// - `p[2] =` $p(a,b,c,d,e) = c$
     /// - `p[3] =` $p(a,b,c,d,e) = d$
     /// - `p[4] =` $p(a,b,c,d,e) = e$
-    pub fn variables(variable_count: usize, one: PFElem) -> Vec<Self> {
-        assert!(one.is_one(), "Provided one must be one");
+    pub fn variables(variable_count: usize) -> Vec<Self> {
+        let one = PFElem::one();
         let mut res: Vec<Self> = vec![];
         for i in 0..variable_count {
             let mut exponent = vec![0u64; variable_count];
@@ -831,7 +830,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
                         } else {
                             // With precalculation of `mod_pow_memoization`, this should never happen
                             println!("missed mod_pow_memoization!");
-                            let mod_pow_res = point[i].mod_pow(mod_pow_key.1.into(), PFElem::one());
+                            let mod_pow_res = point[i].mod_pow(mod_pow_key.1.into());
                             mod_pow_memoization.insert(mod_pow_key, mod_pow_res.clone());
                             mod_pow_res
                         };
@@ -870,9 +869,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
                 prod = if k[i] == 0 {
                     prod
                 } else if point[i].is_x() {
-                    prod * point[i].shift_coefficients(k[i] as usize - 1, PFElem::zero())
+                    prod * point[i].shift_coefficients(k[i] as usize - 1)
                 } else {
-                    prod * point[i].mod_pow(k[i].into(), PFElem::one())
+                    prod * point[i].mod_pow(k[i].into())
                 };
             }
             acc += prod;
@@ -1583,11 +1582,10 @@ mod test_mpolynomials {
 
     #[test]
     fn variables_test() {
-        let one = BFieldElement::from(1u64);
-        let vars_1 = MPolynomial::variables(1, one);
+        let vars_1 = MPolynomial::variables(1);
         assert_eq!(1usize, vars_1.len());
         assert_eq!(get_x(), vars_1[0]);
-        let vars_3 = MPolynomial::variables(3, one);
+        let vars_3 = MPolynomial::variables(3);
         assert_eq!(3usize, vars_3.len());
         assert_eq!(get_x(), vars_3[0]);
         assert_eq!(get_y(), vars_3[1]);
@@ -1606,11 +1604,9 @@ mod test_mpolynomials {
             Polynomial<BFieldElement>,
         > = HashMap::new();
 
-        let zero = BFieldElement::from(0u64);
         let one = BFieldElement::from(1u64);
         let xyz_m = get_xyz();
-        let x: Polynomial<BFieldElement> =
-            Polynomial::from_constant(one).shift_coefficients(1, zero);
+        let x: Polynomial<BFieldElement> = Polynomial::from_constant(one).shift_coefficients(1);
 
         let mut precalculated_intermediate_results: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
             HashMap::new();
@@ -1625,7 +1621,7 @@ mod test_mpolynomials {
         };
 
         let x_cubed: Polynomial<BFieldElement> =
-            Polynomial::from_constant(one).shift_coefficients(3, zero);
+            Polynomial::from_constant(one).shift_coefficients(3);
         assert_eq!(
             x_cubed,
             xyz_m.evaluate_symbolic(&[x.clone(), x.clone(), x.clone()])
@@ -1660,10 +1656,8 @@ mod test_mpolynomials {
     #[test]
     fn evaluate_symbolic_with_zeros_test() {
         let one = BFieldElement::from(1u64);
-        let zero = BFieldElement::from(0u64);
         let xm = get_x();
-        let xu: Polynomial<BFieldElement> =
-            Polynomial::from_constant(one).shift_coefficients(1, zero);
+        let xu: Polynomial<BFieldElement> = Polynomial::from_constant(one).shift_coefficients(1);
         let zero_upol: Polynomial<BFieldElement> = Polynomial::zero();
         assert_eq!(
             xu,
@@ -2032,8 +2026,7 @@ mod test_mpolynomials {
             for (k, v) in precalculated_intermediate_results.iter() {
                 let mut expected_result = Polynomial::from_constant(BFieldElement::one());
                 for (i, &exponent) in k.iter().enumerate() {
-                    expected_result =
-                        expected_result * point[i].mod_pow(exponent.into(), BFieldElement::one())
+                    expected_result = expected_result * point[i].mod_pow(exponent.into())
                 }
                 // println!("k = {:?}", k);
                 assert_eq!(&expected_result, v);

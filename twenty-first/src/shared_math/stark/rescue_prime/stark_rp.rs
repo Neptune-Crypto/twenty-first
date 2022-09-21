@@ -457,7 +457,7 @@ impl StarkRp {
             let shift = max_degree - (*tq_degree) as i64;
 
             // Make new polynomial with max_degree degree by shifting all terms up
-            let shifted = tq_x.shift_coefficients(shift as usize, XFieldElement::zero());
+            let shifted = tq_x.shift_coefficients(shift as usize);
             assert_eq!(max_degree as isize, shifted.degree());
             terms.push(shifted);
         }
@@ -467,7 +467,7 @@ impl StarkRp {
             let shift = max_degree as usize - bq_degree;
 
             // Make new polynomial with max_degree degree by shifting all terms up
-            let shifted = bq_x.shift_coefficients(shift, XFieldElement::zero());
+            let shifted = bq_x.shift_coefficients(shift);
             assert_eq!(max_degree as isize, shifted.degree());
             terms.push(shifted);
         }
@@ -1088,7 +1088,7 @@ impl StarkRp {
             Self::get_round_constant_polynomials(omicron);
 
         let variable_count = 1 + 2 * STATE_SIZE;
-        let variables = MPolynomial::variables(1 + 2 * STATE_SIZE, BFieldElement::one());
+        let variables = MPolynomial::variables(1 + 2 * STATE_SIZE);
         let previous_state = &variables[1..(STATE_SIZE + 1)];
         let next_state = &variables[(STATE_SIZE + 1)..(2 * STATE_SIZE + 1)];
 

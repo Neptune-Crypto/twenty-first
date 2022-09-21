@@ -12,7 +12,6 @@ use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::PrimitiveRootOfUnity;
 use crate::shared_math::x_field_element::XFieldElement;
 use num_traits::One;
-use num_traits::Zero;
 use rand::thread_rng;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
@@ -226,7 +225,7 @@ impl<T: TableMoreTrait> Table<T> {
         );
         self.codewords = polynomials
             .par_iter()
-            .map(|p| domain.b_evaluate(p, BFieldElement::zero()))
+            .map(|p| domain.b_evaluate(p))
             .collect();
         (self.codewords.clone(), polynomials)
     }

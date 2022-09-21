@@ -1,4 +1,4 @@
-use num_traits::{One, Zero};
+use num_traits::Zero;
 
 use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use super::table::{Table, TableMoreTrait, TableTrait};
@@ -198,7 +198,7 @@ impl TableTrait for IOTable {
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
         let variable_count = Self::FULL_WIDTH * 2;
-        let vars = MPolynomial::<XFieldElement>::variables(variable_count, XFieldElement::one());
+        let vars = MPolynomial::<XFieldElement>::variables(variable_count);
         let iota = MPolynomial::from_constant(challenges[self.challenge_index()], variable_count);
 
         let evaluation = vars[1].clone();
@@ -213,7 +213,7 @@ impl TableTrait for IOTable {
         // TODO: Is `challenges` really not needed here?
         _challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<MPolynomial<XFieldElement>> {
-        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH);
         let evaluation = x[IOTable::EVALUATION].clone();
         let column = x[IOTable::COLUMN].clone();
 
@@ -244,7 +244,7 @@ impl TableTrait for IOTable {
             Self::FULL_WIDTH,
         );
 
-        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH, XFieldElement::one());
+        let x = MPolynomial::<XFieldElement>::variables(Self::FULL_WIDTH);
         let evaluation = x[IOTable::EVALUATION].clone();
 
         // In every additional row, the running evaluation variable is
