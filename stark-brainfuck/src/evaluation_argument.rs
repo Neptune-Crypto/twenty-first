@@ -1,8 +1,8 @@
 use num_traits::{One, Zero};
 
-use crate::shared_math::{b_field_element::BFieldElement, x_field_element::XFieldElement};
+use twenty_first::shared_math::{b_field_element::BFieldElement, x_field_element::XFieldElement};
 
-use super::stark::{EXTENSION_CHALLENGE_COUNT, TERMINAL_COUNT};
+use crate::stark::{EXTENSION_CHALLENGE_COUNT, TERMINAL_COUNT};
 
 pub const PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT: usize = 4;
 

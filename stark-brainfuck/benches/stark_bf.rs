@@ -1,10 +1,12 @@
-use brainfuck::vm::sample_programs;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::stark::brainfuck;
-use twenty_first::shared_math::stark::brainfuck::stark::Stark;
-use twenty_first::shared_math::stark::brainfuck::vm::BaseMatrices;
 use twenty_first::timing_reporter::TimingReporter;
+
+use stark_brainfuck as brainfuck;
+use stark_brainfuck::stark::Stark;
+use stark_brainfuck::vm::sample_programs;
+use stark_brainfuck::vm::BaseMatrices;
 
 fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
     let mut timer = TimingReporter::start();

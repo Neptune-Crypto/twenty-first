@@ -1,29 +1,3 @@
-use super::vm::BaseMatrices;
-use crate::shared_math::mpolynomial::Degree;
-use crate::shared_math::other::roundup_npo2;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::stark::brainfuck::evaluation_argument::{
-    EvaluationArgument, ProgramEvaluationArgument, PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT,
-};
-use crate::shared_math::stark::brainfuck::instruction_table::InstructionTable;
-use crate::shared_math::stark::brainfuck::io_table::IOTable;
-use crate::shared_math::stark::brainfuck::memory_table::MemoryTable;
-use crate::shared_math::stark::brainfuck::permutation_argument::PermutationArgument;
-use crate::shared_math::stark::brainfuck::table_collection::TableCollection;
-use crate::shared_math::stark::brainfuck::{table, vm};
-use crate::shared_math::stark::stark_verify_error::StarkVerifyError;
-use crate::shared_math::traits::{FromVecu8, GetRandomElements, Inverse, ModPowU32};
-use crate::shared_math::{
-    b_field_element::BFieldElement, fri::Fri, other::is_power_of_two,
-    stark::brainfuck::processor_table::ProcessorTable, traits::PrimitiveRootOfUnity,
-    x_field_element::XFieldElement,
-};
-use crate::timing_reporter::TimingReporter;
-use crate::util_types::blake3_wrapper::Blake3Hash;
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
-use crate::util_types::proof_stream::ProofStream;
-use crate::util_types::simple_hasher::{Hashable, Hasher};
-use crate::utils;
 use itertools::Itertools;
 use num_traits::{One, Zero};
 use rand::thread_rng;
@@ -34,6 +8,35 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
 use std::rc::Rc;
+
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::fri::Fri;
+use twenty_first::shared_math::mpolynomial::Degree;
+use twenty_first::shared_math::other::is_power_of_two;
+use twenty_first::shared_math::other::roundup_npo2;
+use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::shared_math::stark::stark_verify_error::StarkVerifyError;
+use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+use twenty_first::shared_math::traits::{FromVecu8, GetRandomElements, Inverse, ModPowU32};
+use twenty_first::shared_math::x_field_element::XFieldElement;
+use twenty_first::timing_reporter::TimingReporter;
+use twenty_first::util_types::blake3_wrapper::Blake3Hash;
+use twenty_first::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use twenty_first::util_types::proof_stream::ProofStream;
+use twenty_first::util_types::simple_hasher::{Hashable, Hasher};
+use twenty_first::utils;
+
+use crate::evaluation_argument::{
+    EvaluationArgument, ProgramEvaluationArgument, PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT,
+};
+use crate::instruction_table::InstructionTable;
+use crate::io_table::IOTable;
+use crate::memory_table::MemoryTable;
+use crate::permutation_argument::PermutationArgument;
+use crate::processor_table::ProcessorTable;
+use crate::table_collection::TableCollection;
+use crate::vm::BaseMatrices;
+use crate::{table, vm};
 
 pub const EXTENSION_CHALLENGE_COUNT: usize = 11;
 pub const PERMUTATION_ARGUMENTS_COUNT: usize = 2;
@@ -1173,12 +1176,14 @@ impl Stark {
 
 #[cfg(test)]
 mod brainfuck_stark_tests {
+    use super::*;
+
     use num_traits::Zero;
 
-    use super::*;
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::stark::brainfuck;
-    use crate::shared_math::stark::brainfuck::vm::*;
+    use twenty_first::shared_math::b_field_element::BFieldElement;
+
+    use crate as brainfuck;
+    use crate::vm::*;
 
     pub fn new_test_stark(
         trace_length: usize,

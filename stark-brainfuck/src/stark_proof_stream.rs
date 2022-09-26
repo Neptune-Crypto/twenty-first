@@ -1,10 +1,12 @@
-use super::stark::TERMINAL_COUNT;
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::util_types::merkle_tree::PartialAuthenticationPath;
-use crate::util_types::proof_stream_typed::{ProofStream, ProofStreamError};
-use crate::util_types::simple_hasher::{Hashable, Hasher, ToVec};
 use itertools::Itertools;
+
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::x_field_element::XFieldElement;
+use twenty_first::util_types::merkle_tree::PartialAuthenticationPath;
+use twenty_first::util_types::proof_stream_typed::{ProofStream, ProofStreamError};
+use twenty_first::util_types::simple_hasher::{Hashable, Hasher, ToVec};
+
+use crate::stark::TERMINAL_COUNT;
 
 pub type StarkProofStream<H> = ProofStream<ProofItem<H>, H>;
 

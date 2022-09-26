@@ -1,12 +1,13 @@
 use num_traits::Zero;
 
-use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
-use super::table::{Table, TableMoreTrait, TableTrait};
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::other;
-use crate::shared_math::traits::ModPowU32;
-use crate::shared_math::x_field_element::XFieldElement;
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::mpolynomial::MPolynomial;
+use twenty_first::shared_math::other;
+use twenty_first::shared_math::traits::ModPowU32;
+use twenty_first::shared_math::x_field_element::XFieldElement;
+
+use crate::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
+use crate::table::{Table, TableMoreTrait, TableTrait};
 
 #[derive(Debug, Clone)]
 pub struct IOTable(pub Table<IOTableMore>);
@@ -260,14 +261,17 @@ impl TableTrait for IOTable {
 #[cfg(test)]
 mod io_table_tests {
     use super::*;
-    use crate::shared_math::stark::brainfuck;
-    use crate::shared_math::stark::brainfuck::vm::sample_programs;
-    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
-    use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::traits::PrimitiveRootOfUnity;
+
     use rand::thread_rng;
     use std::cmp::max;
     use std::convert::TryInto;
+
+    use twenty_first::shared_math::traits::GetRandomElements;
+    use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+
+    use crate as brainfuck;
+    use crate::vm::sample_programs;
+    use crate::vm::BaseMatrices;
 
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on

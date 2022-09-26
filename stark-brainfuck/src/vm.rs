@@ -3,12 +3,12 @@ use num_traits::{One, Zero};
 use std::collections::HashMap;
 use std::fmt::Display;
 
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::traits::Inverse;
-use crate::shared_math::x_field_element::XFieldElement;
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::mpolynomial::MPolynomial;
+use twenty_first::shared_math::traits::Inverse;
+use twenty_first::shared_math::x_field_element::XFieldElement;
 
-use super::memory_table::MemoryTable;
+use crate::memory_table::MemoryTable;
 
 pub const INSTRUCTIONS: [char; 8] = ['[', ']', '<', '>', '+', '-', ',', '.'];
 

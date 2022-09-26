@@ -1,15 +1,17 @@
-use super::instruction_table::InstructionTable;
-use super::io_table::IOTable;
-use super::memory_table::MemoryTable;
-use super::processor_table::ProcessorTable;
-use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
-use super::table::TableTrait;
-use super::vm::{InstructionMatrixBaseRow, Register};
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::fri::FriDomain;
-use crate::shared_math::mpolynomial::Degree;
-use crate::shared_math::x_field_element::XFieldElement;
 use itertools::Itertools;
+
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::fri::FriDomain;
+use twenty_first::shared_math::mpolynomial::Degree;
+use twenty_first::shared_math::x_field_element::XFieldElement;
+
+use crate::instruction_table::InstructionTable;
+use crate::io_table::IOTable;
+use crate::memory_table::MemoryTable;
+use crate::processor_table::ProcessorTable;
+use crate::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
+use crate::table::TableTrait;
+use crate::vm::{InstructionMatrixBaseRow, Register};
 
 #[derive(Debug, Clone)]
 pub struct TableCollection {
@@ -234,20 +236,22 @@ impl<'a> IntoIterator for &'a TableCollection {
 
 #[cfg(test)]
 mod brainfuck_table_collection_tests {
-    use rand::thread_rng;
-
     use super::*;
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::polynomial::Polynomial;
-    use crate::shared_math::stark::brainfuck;
-    use crate::shared_math::stark::brainfuck::vm::sample_programs;
-    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
-    use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::traits::PrimitiveRootOfUnity;
+
+    use rand::thread_rng;
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::convert::TryInto;
     use std::rc::Rc;
+
+    use twenty_first::shared_math::b_field_element::BFieldElement;
+    use twenty_first::shared_math::polynomial::Polynomial;
+    use twenty_first::shared_math::traits::GetRandomElements;
+    use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+
+    use crate as brainfuck;
+    use crate::vm::sample_programs;
+    use crate::vm::BaseMatrices;
 
     #[test]
     fn max_degree_test() {

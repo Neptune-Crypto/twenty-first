@@ -9,3 +9,4 @@ pub mod stark_proof_stream;
 pub mod table;
 pub mod table_collection;
 pub mod vm;
+pub mod xfri;
