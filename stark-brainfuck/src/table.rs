@@ -1,22 +1,24 @@
-use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::fri::FriDomain;
-use crate::shared_math::mpolynomial::Degree;
-use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::other;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::FiniteField;
-use crate::shared_math::traits::GetRandomElements;
-use crate::shared_math::traits::Inverse;
-use crate::shared_math::traits::ModPowU32;
-use crate::shared_math::traits::PrimitiveRootOfUnity;
-use crate::shared_math::x_field_element::XFieldElement;
 use num_traits::One;
 use rand::thread_rng;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
+
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::fri::FriDomain;
+use twenty_first::shared_math::mpolynomial::Degree;
+use twenty_first::shared_math::mpolynomial::MPolynomial;
+use twenty_first::shared_math::other;
+use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::shared_math::traits::FiniteField;
+use twenty_first::shared_math::traits::GetRandomElements;
+use twenty_first::shared_math::traits::Inverse;
+use twenty_first::shared_math::traits::ModPowU32;
+use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+use twenty_first::shared_math::x_field_element::XFieldElement;
+
+use crate::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 
 pub const PROCESSOR_TABLE: usize = 0;
 pub const INSTRUCTION_TABLE: usize = 1;
@@ -559,11 +561,11 @@ pub trait TableMoreTrait {
 
 #[cfg(test)]
 mod table_tests {
+    use super::*;
+
     use num_traits::Zero;
 
-    use crate::shared_math::stark::brainfuck::instruction_table::InstructionTable;
-
-    use super::*;
+    use crate::instruction_table::InstructionTable;
 
     #[test]
     fn table_matrix_interpolate_simple_test() {

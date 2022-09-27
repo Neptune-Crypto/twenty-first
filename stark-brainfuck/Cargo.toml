@@ -1,0 +1,40 @@
+[package]
+name = "stark-brainfuck"
+version = "0.2.0"
+authors = ["Triton Software AG"]
+edition = "2021"
+
+license = "GPL-2.0"
+description = "A Turing-complete zk-STARK engine consisting of a virtual machine, prover and verifier."
+homepage = "https://github.com/Neptune-Crypto/twenty-first"
+documentation = "https://github.com/Neptune-Crypto/twenty-first"
+repository = "https://github.com/Neptune-Crypto/twenty-first"
+readme = "../README.md"
+
+keywords = ["post-quantum", "algebra", "rescue-prime"]
+categories = ["cryptography", "mathematics"]
+
+[dev-dependencies]
+proptest = "1.0"
+
+[dev-dependencies.criterion]
+version = "0.3"
+features = ["html_reports"]
+
+[dev-dependencies.cargo-husky]
+version = "1"
+default-features = false
+features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
+
+[dependencies]
+twenty-first = { path = "../twenty-first" }
+blake3 = "1.2"
+console = "0.15"
+itertools = "0.10"
+num-traits = "0.2"
+rand = "0.8"
+rayon = "1.5"
+
+[[bench]]
+name = "stark_bf"
+harness = false

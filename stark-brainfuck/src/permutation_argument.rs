@@ -1,15 +1,15 @@
 use num_traits::One;
-
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::fri::FriDomain;
-use crate::shared_math::mpolynomial::Degree;
-use crate::shared_math::traits::FiniteField;
-use crate::shared_math::x_field_element::XFieldElement;
-
-use super::table_collection::TableCollection;
 use std::cell::RefCell;
 use std::cmp;
 use std::rc::Rc;
+
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::fri::FriDomain;
+use twenty_first::shared_math::mpolynomial::Degree;
+use twenty_first::shared_math::traits::FiniteField;
+use twenty_first::shared_math::x_field_element::XFieldElement;
+
+use crate::table_collection::TableCollection;
 
 pub struct PermutationArgument {
     tables: Rc<RefCell<TableCollection>>,

@@ -31,7 +31,7 @@ anyhow = "1.0"
 bincode = "1.3"
 blake3 = "1.2"
 byteorder = "1.4"
-console = "0"
+console = "0.15"
 colored = "2.0"
 hashbrown = "0.12"
 itertools = "0.10"
@@ -67,31 +67,11 @@ name = "rescue_prime_regular"
 harness = false
 
 [[bench]]
-name = "stark_bf"
-harness = false
-
-[[bench]]
 name = "ntt_forward"
 harness = false
 
 [[bench]]
 name = "lagrange_interpolation"
-harness = false
-
-# [[bench]]
-# name = "rpsss_bench_sign"
-# harness = false
-
-# [[bench]]
-# name = "rpsss_bench_verify"
-# harness = false
-
-[[bench]]
-name = "rescue_prime_air_constraints"
-harness = false
-
-[[bench]]
-name = "stark_rp"
 harness = false
 
 [[bench]]

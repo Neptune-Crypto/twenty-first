@@ -1,13 +1,14 @@
 use num_traits::{One, Zero};
-
-use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
-use super::table::{Table, TableMoreTrait, TableTrait};
-use super::vm::Register;
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::{b_field_element as bfe, other};
 use std::convert::TryInto;
+
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::mpolynomial::MPolynomial;
+use twenty_first::shared_math::x_field_element::XFieldElement;
+use twenty_first::shared_math::{b_field_element as bfe, other};
+
+use crate::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
+use crate::table::{Table, TableMoreTrait, TableTrait};
+use crate::vm::Register;
 
 #[derive(Debug, Clone)]
 pub struct MemoryTable(pub Table<MemoryTableMore>);
@@ -401,16 +402,17 @@ impl TableTrait for MemoryTable {
 
 #[cfg(test)]
 mod memory_table_tests {
-    use std::convert::TryInto;
+    use super::*;
 
     use rand::thread_rng;
+    use std::convert::TryInto;
 
-    use super::*;
-    use crate::shared_math::stark::brainfuck;
-    use crate::shared_math::stark::brainfuck::vm::sample_programs;
-    use crate::shared_math::stark::brainfuck::vm::BaseMatrices;
-    use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::traits::PrimitiveRootOfUnity;
+    use twenty_first::shared_math::traits::GetRandomElements;
+    use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+
+    use crate as brainfuck;
+    use crate::vm::sample_programs;
+    use crate::vm::BaseMatrices;
 
     // When we simulate a program, this generates a collection of matrices that contain
     // "abstract" execution traces. When we evaluate the base transition constraints on

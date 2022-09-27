@@ -1,15 +1,17 @@
 use num_traits::{One, Zero};
-
-use super::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
-use super::table::{Table, TableMoreTrait, TableTrait};
-use super::vm::{Register, INSTRUCTIONS};
-use crate::shared_math::b_field_element as bfe;
-use crate::shared_math::other;
-use crate::shared_math::stark::brainfuck::vm::instruction_zerofier;
-use crate::shared_math::traits::FiniteField;
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::{b_field_element::BFieldElement, mpolynomial::MPolynomial};
 use std::convert::TryInto;
+
+use twenty_first::shared_math::b_field_element as bfe;
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::mpolynomial::MPolynomial;
+use twenty_first::shared_math::other;
+use twenty_first::shared_math::traits::FiniteField;
+use twenty_first::shared_math::x_field_element::XFieldElement;
+
+use crate::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
+use crate::table::{Table, TableMoreTrait, TableTrait};
+use crate::vm::instruction_zerofier;
+use crate::vm::{Register, INSTRUCTIONS};
 
 impl TableMoreTrait for ProcessorTableMore {
     fn new_more() -> Self {
@@ -721,14 +723,15 @@ impl TableTrait for ProcessorTable {
 
 #[cfg(test)]
 mod processor_table_tests {
+    use super::*;
+
     use rand::thread_rng;
 
-    use super::*;
-    use crate::shared_math::stark::brainfuck::vm::sample_programs;
-    use crate::shared_math::{
-        stark::brainfuck::{self, vm::BaseMatrices},
-        traits::{GetRandomElements, PrimitiveRootOfUnity},
-    };
+    use twenty_first::shared_math::traits::{GetRandomElements, PrimitiveRootOfUnity};
+
+    use crate as brainfuck;
+    use crate::vm::sample_programs;
+    use crate::vm::BaseMatrices;
 
     #[test]
     fn processor_table_constraints_evaluate_to_zero_test() {

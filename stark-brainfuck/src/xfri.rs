@@ -3,21 +3,22 @@ use num_traits::{One, Zero};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
-
-use super::b_field_element::BFieldElement;
-use super::other::{log_2_ceil, log_2_floor};
-use super::polynomial::Polynomial;
-use super::stark::brainfuck::stark_proof_stream::*;
-use super::traits::{CyclicGroupGenerator, ModPowU32};
-use super::x_field_element::XFieldElement;
-use crate::shared_math::ntt::{intt, ntt};
-use crate::shared_math::traits::FiniteField;
-use crate::timing_reporter::TimingReporter;
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
-use crate::util_types::simple_hasher::{Hashable, Hasher, SamplableFrom};
 use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
+
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::ntt::{intt, ntt};
+use twenty_first::shared_math::other::{log_2_ceil, log_2_floor};
+use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::shared_math::traits::FiniteField;
+use twenty_first::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
+use twenty_first::shared_math::x_field_element::XFieldElement;
+use twenty_first::timing_reporter::TimingReporter;
+use twenty_first::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use twenty_first::util_types::simple_hasher::{Hashable, Hasher, SamplableFrom};
+
+use crate::stark_proof_stream::*;
 
 impl Error for ValidationError {}
 
@@ -552,10 +553,10 @@ where
 #[cfg(test)]
 mod fri_domain_tests {
     use super::*;
-    use crate::shared_math::{
-        b_field_element::BFieldElement, traits::PrimitiveRootOfUnity,
-        x_field_element::XFieldElement,
-    };
+
+    use twenty_first::shared_math::b_field_element::BFieldElement;
+    use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+    use twenty_first::shared_math::x_field_element::XFieldElement;
 
     #[test]
     fn x_values_test() {
@@ -619,14 +620,16 @@ mod fri_domain_tests {
 #[cfg(test)]
 mod xfri_tests {
     use super::*;
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
-    use crate::shared_math::traits::PrimitiveRootOfUnity;
-    use crate::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
-    use crate::shared_math::x_field_element::XFieldElement;
-    use crate::utils::has_unique_elements;
+
     use itertools::Itertools;
     use rand::{thread_rng, RngCore};
+
+    use twenty_first::shared_math::b_field_element::BFieldElement;
+    use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
+    use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+    use twenty_first::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
+    use twenty_first::shared_math::x_field_element::XFieldElement;
+    use twenty_first::utils::has_unique_elements;
 
     #[test]
     fn sample_indices_test() {

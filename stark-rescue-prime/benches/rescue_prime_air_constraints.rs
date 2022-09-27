@@ -1,7 +1,9 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::stark::rescue_prime::stark_rp::StarkRp;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+
+use stark_rescue_prime::stark_rp::StarkRp;
 
 // Benchmark the RescuePrime AIR constraints compilation.
 
