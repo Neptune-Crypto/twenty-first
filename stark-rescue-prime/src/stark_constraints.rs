@@ -1,5 +1,5 @@
-use crate::shared_math::b_field_element::BFieldElement;
 use std::collections::HashMap;
+use twenty_first::shared_math::b_field_element::BFieldElement;
 
 #[derive(Clone, Debug)]
 pub struct BoundaryConstraint {

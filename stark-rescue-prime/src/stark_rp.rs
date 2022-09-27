@@ -1,22 +1,3 @@
-use super::stark_constraints::BoundaryConstraint;
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::fri::Fri;
-use crate::shared_math::mpolynomial::MPolynomial;
-use crate::shared_math::ntt::intt;
-use crate::shared_math::other::log_2_ceil;
-use crate::shared_math::other::roundup_npo2;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::rescue_prime_regular::*;
-use crate::shared_math::traits::CyclicGroupGenerator;
-use crate::shared_math::traits::{FromVecu8, GetRandomElements, PrimitiveRootOfUnity};
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::timing_reporter::TimingReporter;
-use crate::util_types::blake3_wrapper::Blake3Hash;
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath, SaltedMerkleTree};
-use crate::util_types::proof_stream::ProofStream;
-use crate::util_types::simple_hasher::Hashable;
-use crate::util_types::simple_hasher::Hasher;
-use crate::utils;
 use num_traits::One;
 use num_traits::Zero;
 use rand::prelude::ThreadRng;
@@ -29,6 +10,29 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::iter::zip;
+
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::fri::Fri;
+use twenty_first::shared_math::mpolynomial::MPolynomial;
+use twenty_first::shared_math::ntt::intt;
+use twenty_first::shared_math::other::log_2_ceil;
+use twenty_first::shared_math::other::roundup_npo2;
+use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::shared_math::rescue_prime_regular::*;
+use twenty_first::shared_math::traits::CyclicGroupGenerator;
+use twenty_first::shared_math::traits::{FromVecu8, GetRandomElements, PrimitiveRootOfUnity};
+use twenty_first::shared_math::x_field_element::XFieldElement;
+use twenty_first::timing_reporter::TimingReporter;
+use twenty_first::util_types::blake3_wrapper::Blake3Hash;
+use twenty_first::util_types::merkle_tree::{
+    MerkleTree, PartialAuthenticationPath, SaltedMerkleTree,
+};
+use twenty_first::util_types::proof_stream::ProofStream;
+use twenty_first::util_types::simple_hasher::Hashable;
+use twenty_first::util_types::simple_hasher::Hasher;
+use twenty_first::utils;
+
+use crate::stark_constraints::BoundaryConstraint;
 
 type Degree = i64;
 
@@ -1205,9 +1209,11 @@ impl StarkRp {
 #[cfg(test)]
 pub mod test_stark {
     use super::*;
-    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
-    use crate::timing_reporter::TimingReporter;
+
     use serde_json;
+
+    use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
+    use twenty_first::timing_reporter::TimingReporter;
 
     #[test]
     #[ignore = "too slow"]

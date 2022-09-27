@@ -75,13 +75,5 @@ name = "lagrange_interpolation"
 harness = false
 
 [[bench]]
-name = "rescue_prime_air_constraints"
-harness = false
-
-[[bench]]
-name = "stark_rp"
-harness = false
-
-[[bench]]
 name = "inverse"
 harness = false
