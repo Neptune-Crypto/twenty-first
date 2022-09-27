@@ -28,8 +28,8 @@ This library contains primarily the following cryptographic primitives:
 
 This library also contains some proof-of-concept STARK implementations:
 
-- [Rescue-Prime](https://neptune.cash/learn/stark-anatomy/)
-- [Brainfuck](https://aszepieniec.github.io/stark-brainfuck/)
+- [Rescue-Prime](https://neptune.cash/learn/stark-anatomy/) ([source code](./stark-rescue-prime))
+- [Brainfuck](https://aszepieniec.github.io/stark-brainfuck/) ([source code](./stark-brainfuck))
 
 ## Release protocol
 
