@@ -12,7 +12,7 @@ use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Rem, Sub};
 
 use super::b_field_element::BFieldElement;
-use super::other::log_2_ceil;
+use super::other::{self, log_2_ceil};
 use super::traits::{Inverse, PrimitiveRootOfUnity};
 
 fn degree_raw<T: Add + Div + Mul + Sub + Display + Zero>(coefficients: &[T]) -> isize {
@@ -89,16 +89,9 @@ impl<PFElem: FiniteField> One for Polynomial<PFElem> {
     }
 }
 
+#[derive(Clone)]
 pub struct Polynomial<PFElem: FiniteField> {
     pub coefficients: Vec<PFElem>,
-}
-
-impl<PFElem: FiniteField> Clone for Polynomial<PFElem> {
-    fn clone(&self) -> Self {
-        Self {
-            coefficients: self.coefficients.clone(),
-        }
-    }
 }
 
 impl<PFElem: FiniteField> Debug for Polynomial<PFElem> {
@@ -1075,8 +1068,45 @@ impl<PFElem: FiniteField> Sub for Polynomial<PFElem> {
 }
 
 impl<PFElem: FiniteField> Polynomial<PFElem> {
+    // Division in 𝔽_p[X], not 𝔽_{p^e} ≅ 𝔽[X]/p(x).
+    /// Run the extended Euclidean algorithm on the polynomial ring. Normalizes the
+    /// result the inverse to a leading coefficient of one.
+    pub fn xgcd(
+        x: Polynomial<PFElem>,
+        y: Polynomial<PFElem>,
+    ) -> (Polynomial<PFElem>, Polynomial<PFElem>, Polynomial<PFElem>) {
+        let (x, a_factor, b_factor) = other::xgcd(x, y);
+
+        // The result is valid up to a coefficient, so we normalize the result,
+        // to ensure that x has a leading coefficient of 1.
+        // x cannot be zero here since polynomials form a group and all elements,
+        // except the zero polynomial, have an inverse.
+        let lc = x.leading_coefficient().unwrap();
+        let scale = lc.inverse();
+        (
+            x.scalar_mul(scale),
+            a_factor.scalar_mul(scale),
+            b_factor.scalar_mul(scale),
+        )
+    }
+}
+
+impl<PFElem: FiniteField> Polynomial<PFElem> {
     pub fn degree(&self) -> isize {
         degree_raw(&self.coefficients)
+    }
+
+    pub fn formal_derivative(&self) -> Self {
+        let coefficients = self
+            .clone()
+            .coefficients
+            .iter()
+            .enumerate()
+            .map(|(i, &coefficient)| PFElem::new_from_usize(&coefficient, i) * coefficient)
+            .skip(1)
+            .collect_vec();
+
+        Self { coefficients }
     }
 }
 
@@ -1093,12 +1123,12 @@ mod test_polynomials {
     #![allow(clippy::just_underscores_and_digits)]
 
     use rand::Rng;
+    use rand_distr::Standard;
 
+    use super::*;
     use crate::shared_math::other::{random_elements, random_elements_distinct};
     use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::shared_math::x_field_element::XFieldElement;
-
-    use super::*;
 
     #[test]
     fn polynomial_display_test() {
@@ -2421,9 +2451,43 @@ mod test_polynomials {
     }
 
     #[test]
+    pub fn xgcd_b_field_pol_test() {
+        for _ in 0..100 {
+            let x: Polynomial<BFieldElement> = gen_polynomial_non_zero();
+            let y: Polynomial<BFieldElement> = gen_polynomial_non_zero();
+            let (gcd, a, b): (
+                Polynomial<BFieldElement>,
+                Polynomial<BFieldElement>,
+                Polynomial<BFieldElement>,
+            ) = Polynomial::xgcd(x.clone(), y.clone());
+            assert!(gcd.is_one());
+
+            // Verify Bezout relations: ax + by = gcd
+            assert_eq!(gcd, a * x + b * y);
+        }
+    }
+
+    #[test]
+    pub fn xgcd_x_field_pol_test() {
+        for _ in 0..50 {
+            let x: Polynomial<XFieldElement> = gen_polynomial_non_zero();
+            let y: Polynomial<XFieldElement> = gen_polynomial_non_zero();
+            let (gcd, a, b): (
+                Polynomial<XFieldElement>,
+                Polynomial<XFieldElement>,
+                Polynomial<XFieldElement>,
+            ) = Polynomial::xgcd(x.clone(), y.clone());
+            assert!(gcd.is_one());
+
+            // Verify Bezout relations: ax + by = gcd
+            assert_eq!(gcd, a * x + b * y);
+        }
+    }
+
+    #[test]
     fn add_assign_test() {
         for _ in 0..10 {
-            let poly1 = gen_polynomial();
+            let poly1: Polynomial<BFieldElement> = gen_polynomial();
             let poly2 = gen_polynomial();
             let expected = poly1.clone() + poly2.clone();
             let mut actual = poly1.clone();
@@ -2547,7 +2611,7 @@ mod test_polynomials {
     #[test]
     fn mul_commutative_test() {
         for _ in 0..10 {
-            let a = gen_polynomial();
+            let a: Polynomial<BFieldElement> = gen_polynomial();
             let b = gen_polynomial();
             let ab = a.clone() * b.clone();
             let ba = b.clone() * a.clone();
@@ -2590,7 +2654,22 @@ mod test_polynomials {
         assert_eq!(one, XPoly::get_colinear_y((one, one), (three, one), two));
     }
 
-    fn gen_polynomial() -> Polynomial<BFieldElement> {
+    fn gen_polynomial_non_zero<T: FiniteField>() -> Polynomial<T>
+    where
+        Standard: rand_distr::Distribution<T>,
+    {
+        let mut rng = rand::thread_rng();
+        let coefficient_count: usize = rng.gen_range(1..40);
+
+        Polynomial {
+            coefficients: random_elements(coefficient_count),
+        }
+    }
+
+    fn gen_polynomial<T: FiniteField>() -> Polynomial<T>
+    where
+        Standard: rand_distr::Distribution<T>,
+    {
         let mut rng = rand::thread_rng();
         let coefficient_count: usize = rng.gen_range(0..40);
 
@@ -2726,6 +2805,88 @@ mod test_polynomials {
                 Polynomial::<BFieldElement>::fast_zerofier(&domain, &omega, next_po2);
 
             assert_eq!(zerofier_polynomial, fast_zerofier_polynomial);
+        }
+    }
+
+    #[test]
+    fn differentiate_zero() {
+        let elm = BFieldElement::new(0);
+        let p = Polynomial::new_const(elm);
+        let q = p.formal_derivative();
+
+        assert!(q.is_zero());
+        assert_eq!(q.degree(), -1)
+    }
+    #[test]
+
+    fn differentiate_const() {
+        let elm = BFieldElement::new(42);
+        let p = Polynomial::new_const(elm);
+        let q = p.formal_derivative();
+
+        assert!(q.is_zero());
+        assert_eq!(q.degree(), -1)
+    }
+
+    #[test]
+    fn differentiate_quartic() {
+        let elm = BFieldElement::new(42);
+        let coeffs = vec![elm, elm, elm, elm, elm];
+        let p = Polynomial::new(coeffs);
+        let q = p.formal_derivative();
+
+        assert!(!q.is_zero());
+        assert_eq!(q.degree(), 3);
+
+        let manual_result = Polynomial::new(vec![
+            elm,
+            BFieldElement::new(2) * elm,
+            BFieldElement::new(3) * elm,
+            BFieldElement::new(4) * elm,
+        ]);
+
+        assert_eq!(q, manual_result)
+    }
+
+    #[test]
+    fn differentiate_leibniz() {
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..10 {
+            let terms_count_p = rng.gen_range(2..10);
+            let terms_count_q = rng.gen_range(2..10);
+
+            let rnd_coeffs_p: Vec<BFieldElement> = random_elements(terms_count_p);
+            let rnd_coeffs_q: Vec<BFieldElement> = random_elements(terms_count_q);
+
+            let p = Polynomial::new(rnd_coeffs_p);
+
+            let q = Polynomial::new(rnd_coeffs_q);
+
+            let pq_prime = (p.clone() * q.clone()).formal_derivative();
+
+            let leibniz = p.formal_derivative() * q.clone() + p * q.formal_derivative();
+
+            assert_eq!(pq_prime, leibniz)
+        }
+    }
+
+    #[test]
+    fn equality() {
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..10 {
+            let terms_count_p = rng.gen_range(2..10);
+
+            let rnd_coeffs_p: Vec<BFieldElement> = random_elements(terms_count_p);
+
+            let mut p = Polynomial::new(rnd_coeffs_p);
+            let original_p = p.clone();
+
+            for _ in 0..4 {
+                p.coefficients.push(BFieldElement::new(0));
+                assert_eq!(p, original_p);
+            }
         }
     }
 }
