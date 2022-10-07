@@ -11,7 +11,7 @@ use std::{
 
 use num_traits::{One, Zero};
 
-use crate::shared_math::b_field_element::BFieldElement;
+use crate::{shared_math::b_field_element::BFieldElement, util_types::simple_hasher::Hashable};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct U32s<const N: usize> {
@@ -316,6 +316,13 @@ impl<const N: usize> Display for U32s<N> {
         write!(f, "{}", BigUint::from(*self))
     }
 }
+
+impl<const N: usize> Hashable<BFieldElement> for U32s<N> {
+    fn to_sequence(&self) -> Vec<BFieldElement> {
+        self.values.into_iter().map(BFieldElement::from).collect()
+    }
+}
+
 #[cfg(test)]
 mod u32s_tests {
     use rand::{Rng, RngCore};
