@@ -332,15 +332,6 @@ impl Mul for XFieldElement {
         let b1 = other.coefficients[1];
         let c1 = other.coefficients[0];
 
-        // Optimization for multiplying an X field with a B field element
-        // This optimization is very relevant when doing NTT on the X field
-        // because the `omega` (here: `rhs` live in the B field)
-        if a1.is_zero() && b1.is_zero() {
-            return Self {
-                coefficients: [c0 * c1, b0 * c1, a0 * c1],
-            };
-        }
-
         // (a_0 * x^2 + b_0 * x + c_0) * (a_1 * x^2 + b_1 * x + c_1)
         Self {
             coefficients: [
@@ -948,7 +939,7 @@ mod x_field_element_test {
             let root = XFieldElement::primitive_root_of_unity(i).unwrap();
             let log_2_of_n = log_2_floor(inputs.len() as u128) as u32;
             let mut rv = inputs.clone();
-            ntt::<XFieldElement>(&mut rv, root, log_2_of_n);
+            ntt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_of_n);
 
             // The output should be equivalent to evaluating root^i, i = [0..4]
             // over the polynomial with coefficients 1, 2, 3, 4
@@ -964,7 +955,7 @@ mod x_field_element_test {
             let interpolated = Polynomial::<XFieldElement>::lagrange_interpolate(&x_domain, &rv);
             assert_eq!(pol_degree_i_minus_1, interpolated);
 
-            intt::<XFieldElement>(&mut rv, root, log_2_of_n);
+            intt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_of_n);
             assert_eq!(inputs, rv);
         }
     }

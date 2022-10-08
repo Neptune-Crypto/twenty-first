@@ -56,8 +56,9 @@ fn xfield_benchmark(
     log2_of_size: usize,
 ) {
     let size: usize = 1 << log2_of_size;
+
     let mut xs: Vec<XFieldElement> = random_elements(size);
-    let omega = XFieldElement::primitive_root_of_unity(size as u64).unwrap();
+    let omega = BFieldElement::primitive_root_of_unity(size as u64).unwrap();
 
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {

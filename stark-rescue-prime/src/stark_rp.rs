@@ -133,7 +133,7 @@ type Digest = Blake3Hash;
 type StarkHasher = blake3::Hasher;
 type SaltedMt = SaltedMerkleTree<StarkHasher>;
 type XFieldMt = MerkleTree<StarkHasher>;
-type XFieldFri = Fri<XFieldElement, StarkHasher>;
+type XFieldFri = Fri<StarkHasher>;
 
 impl StarkRp {
     pub fn prove(
@@ -410,11 +410,9 @@ impl StarkRp {
             coefficients: random_elements(max_degree as usize + 1),
         };
 
-        let lifted_field_generator: XFieldElement = self.field_generator.lift();
-        let lifted_omega: XFieldElement = omega.lift();
         let randomizer_codeword: Vec<XFieldElement> = randomizer_polynomial.fast_coset_evaluate(
-            &lifted_field_generator,
-            lifted_omega,
+            &self.field_generator,
+            omega,
             fri_domain_length as usize,
         );
 
@@ -504,8 +502,8 @@ impl StarkRp {
         timer.elapsed("calculate sum of combination polynomial");
 
         let combined_codeword: Vec<XFieldElement> = combination.fast_coset_evaluate(
-            &lifted_field_generator,
-            lifted_omega,
+            &self.field_generator,
+            omega,
             fri_domain_length as usize,
         );
 
@@ -513,8 +511,8 @@ impl StarkRp {
 
         // Prove low degree of combination polynomial, and collect indices
         let fri = XFieldFri::new(
-            lifted_field_generator,
-            lifted_omega,
+            self.field_generator,
+            omega,
             fri_domain_length as usize,
             self.expansion_factor as usize,
             self.colinearity_check_count as usize,
@@ -619,11 +617,9 @@ impl StarkRp {
         // Verify low degree of combination polynomial, and collect indices
         // Note that FRI verifier verifies number of samples, so we don't have
         // to check that number here
-        let lifted_field_generator: XFieldElement = self.field_generator.lift();
-        let lifted_omega: XFieldElement = omega.lift();
         let fri = XFieldFri::new(
-            lifted_field_generator,
-            lifted_omega,
+            self.field_generator,
+            omega,
             fri_domain_length as usize,
             self.expansion_factor as usize,
             self.colinearity_check_count as usize,

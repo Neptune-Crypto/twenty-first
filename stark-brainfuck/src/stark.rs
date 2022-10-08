@@ -56,7 +56,7 @@ pub struct Stark {
     tables: Rc<RefCell<TableCollection>>,
     // TODO: turn max_degree into i64 to match other degrees, which are i64
     max_degree: u64,
-    fri: Fri<XFieldElement, StarkHasher>,
+    fri: Fri<StarkHasher>,
 
     permutation_arguments: [PermutationArgument; PERMUTATION_ARGUMENTS_COUNT],
     io_evaluation_arguments: [EvaluationArgument; 2],
@@ -204,9 +204,9 @@ impl Stark {
         let b_field_generator = BFieldElement::generator();
         let b_field_omega =
             BFieldElement::primitive_root_of_unity(fri_domain_length as u64).unwrap();
-        let fri: Fri<XFieldElement, StarkHasher> = Fri::new(
-            b_field_generator.lift(),
-            b_field_omega.lift(),
+        let fri: Fri<StarkHasher> = Fri::new(
+            b_field_generator,
+            b_field_omega,
             fri_domain_length as usize,
             expansion_factor as usize,
             colinearity_checks_count,

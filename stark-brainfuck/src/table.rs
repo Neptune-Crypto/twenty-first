@@ -156,7 +156,7 @@ impl<T: TableMoreTrait> Table<T> {
     // TODO: Consider merging this with B-field interpolation method
     pub fn x_interpolate_columns(
         &self,
-        omega: XFieldElement,
+        omega: BFieldElement,
         omega_order: usize,
         column_indices: Vec<usize>,
     ) -> Vec<Polynomial<XFieldElement>> {
@@ -189,7 +189,7 @@ impl<T: TableMoreTrait> Table<T> {
             .map(|i| self.omicron.lift().mod_pow_u32(i as u32))
             .collect();
         let randomizer_domain: Vec<XFieldElement> = (0..self.num_randomizers)
-            .map(|i| omega * omicron_domain[i])
+            .map(|i| omega.lift() * omicron_domain[i])
             .collect();
         let domain = vec![omicron_domain, randomizer_domain].concat();
         let mut valuess: Vec<Vec<XFieldElement>> = vec![];
@@ -214,13 +214,10 @@ impl<T: TableMoreTrait> Table<T> {
     /// Evaluate the base table
     pub fn lde(
         &mut self,
-        domain: &FriDomain<XFieldElement>,
+        domain: &FriDomain,
     ) -> (Vec<Vec<BFieldElement>>, Vec<Polynomial<BFieldElement>>) {
-        let polynomials: Vec<Polynomial<BFieldElement>> = self.b_interpolate_columns(
-            domain.omega.unlift().unwrap(),
-            domain.length,
-            (0..self.base_width).collect(),
-        );
+        let polynomials: Vec<Polynomial<BFieldElement>> =
+            self.b_interpolate_columns(domain.omega, domain.length, (0..self.base_width).collect());
         self.codewords = polynomials
             .par_iter()
             .map(|p| domain.b_evaluate(p))
@@ -230,7 +227,7 @@ impl<T: TableMoreTrait> Table<T> {
 
     pub fn ldex(
         &mut self,
-        domain: &FriDomain<XFieldElement>,
+        domain: &FriDomain,
     ) -> (Vec<Vec<XFieldElement>>, Vec<Polynomial<XFieldElement>>) {
         let polynomials = self.x_interpolate_columns(
             domain.omega,
@@ -361,7 +358,7 @@ pub trait TableTrait {
 
     fn all_quotients(
         &self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
@@ -376,7 +373,7 @@ pub trait TableTrait {
 
     fn transition_quotients(
         &self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
@@ -439,7 +436,7 @@ pub trait TableTrait {
 
     fn terminal_quotients(
         &self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
@@ -484,7 +481,7 @@ pub trait TableTrait {
 
     fn boundary_quotients(
         &self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
         codewords: &[Vec<XFieldElement>],
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
     ) -> Vec<Vec<XFieldElement>> {

@@ -1,4 +1,11 @@
-use crate::shared_math::traits::FiniteField;
+use rand_distr::num_traits::One;
+
+use crate::shared_math::traits::{FiniteField, ModPowU32};
+
+use super::{
+    b_field_element::BFieldElement,
+    traits::{Inverse, New},
+};
 
 /// ## Perform NTT on slices of prime-field elements
 ///
@@ -35,7 +42,7 @@ use crate::shared_math::traits::FiniteField;
 ///
 /// This transform is performed in-place.
 #[allow(clippy::many_single_char_names)]
-pub fn ntt<PFElem: FiniteField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32) {
+pub fn ntt<PFElem: FiniteField>(x: &mut [PFElem], omega: BFieldElement, log_2_of_n: u32) {
     let n = x.len() as u32;
 
     // `n` must be a power of 2
@@ -62,10 +69,10 @@ pub fn ntt<PFElem: FiniteField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32
         let w_m = omega.mod_pow_u32(n / (2 * m));
         let mut k = 0;
         while k < n {
-            let mut w = PFElem::one();
+            let mut w = BFieldElement::one();
             for j in 0..m {
                 let mut t = x[(k + j + m) as usize];
-                t *= w;
+                t = t.mul_bfe(w);
                 let mut tmp = x[(k + j) as usize];
                 tmp -= t;
                 x[(k + j + m) as usize] = tmp;
@@ -94,12 +101,12 @@ pub fn ntt<PFElem: FiniteField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32
 /// </pre>
 ///
 /// This transform is performed in-place.
-pub fn intt<PFElem: FiniteField>(x: &mut [PFElem], omega: PFElem, log_2_of_n: u32) {
-    let n: PFElem = omega.new_from_usize(x.len());
-    let n_inv: PFElem = PFElem::one() / n;
-    ntt::<PFElem>(x, PFElem::one() / omega, log_2_of_n);
+pub fn intt<PFElem: FiniteField>(x: &mut [PFElem], omega: BFieldElement, log_2_of_n: u32) {
+    let n: BFieldElement = omega.new_from_usize(x.len());
+    let n_inv: BFieldElement = BFieldElement::one() / n;
+    ntt::<PFElem>(x, omega.inverse(), log_2_of_n);
     for elem in x.iter_mut() {
-        *elem *= n_inv;
+        *elem = elem.mul_bfe(n_inv)
     }
 }
 
@@ -155,9 +162,9 @@ mod fast_ntt_attempt_tests {
                 let mut values = random_elements(n);
                 let original_values = values.clone();
                 let omega = XFieldElement::primitive_root_of_unity(n as u64).unwrap();
-                ntt::<XFieldElement>(&mut values, omega, log_2_n);
+                ntt::<XFieldElement>(&mut values, omega.unlift().unwrap(), log_2_n);
                 assert_ne!(original_values, values);
-                intt::<XFieldElement>(&mut values, omega, log_2_n);
+                intt::<XFieldElement>(&mut values, omega.unlift().unwrap(), log_2_n);
                 assert_eq!(original_values, values);
 
                 // Verify that we are not just operating in the B-field
@@ -174,9 +181,9 @@ mod fast_ntt_attempt_tests {
                     BFieldElement::new(BFieldElement::MAX),
                 ]);
                 let original_values_with_max_element = values.clone();
-                ntt::<XFieldElement>(&mut values, omega, log_2_n);
+                ntt::<XFieldElement>(&mut values, omega.unlift().unwrap(), log_2_n);
                 assert_ne!(original_values, values);
-                intt::<XFieldElement>(&mut values, omega, log_2_n);
+                intt::<XFieldElement>(&mut values, omega.unlift().unwrap(), log_2_n);
                 assert_eq!(original_values_with_max_element, values);
             }
         }
@@ -200,12 +207,12 @@ mod fast_ntt_attempt_tests {
         let omega = XFieldElement::primitive_root_of_unity(4).unwrap();
 
         println!("input_output = {:?}", input_output);
-        ntt::<XFieldElement>(&mut input_output, omega, 2);
+        ntt::<XFieldElement>(&mut input_output, omega.unlift().unwrap(), 2);
         assert_eq!(expected, input_output);
         println!("input_output = {:?}", input_output);
 
         // Verify that INTT(NTT(x)) = x
-        intt::<XFieldElement>(&mut input_output, omega, 2);
+        intt::<XFieldElement>(&mut input_output, omega.unlift().unwrap(), 2);
         assert_eq!(original_input, input_output);
     }
 

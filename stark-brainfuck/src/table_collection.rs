@@ -116,7 +116,7 @@ impl TableCollection {
     /// Calculate all codewords on the table objects, and return those codewords as a list of codewords
     pub fn get_and_set_all_base_codewords(
         &mut self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
     ) -> Vec<Vec<BFieldElement>> {
         [
             self.processor_table.0.lde(fri_domain).0,
@@ -130,7 +130,7 @@ impl TableCollection {
 
     pub fn get_and_set_all_extension_codewords(
         &mut self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
     ) -> Vec<Vec<XFieldElement>> {
         [
             self.processor_table.0.ldex(fri_domain).0,
@@ -167,7 +167,7 @@ impl TableCollection {
     // TODO: Replace this with an `.iter().map(|table| ...)` when `extended_codewords` lives on the trait.
     pub fn all_quotients(
         &self,
-        fri_domain: &FriDomain<XFieldElement>,
+        fri_domain: &FriDomain,
         challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT],
         terminals: [XFieldElement; TERMINAL_COUNT],
     ) -> Vec<Vec<XFieldElement>> {
@@ -390,8 +390,8 @@ mod brainfuck_table_collection_tests {
         // set up FRI domain
         let fri_domain = FriDomain {
             length: fri_domain_length,
-            offset: BFieldElement::new(7).lift(),
-            omega: XFieldElement::primitive_root_of_unity(fri_domain_length as u64).unwrap(),
+            offset: BFieldElement::new(7),
+            omega: BFieldElement::primitive_root_of_unity(fri_domain_length as u64).unwrap(),
         };
 
         println!("Starting LDE stuff…");
@@ -511,8 +511,8 @@ mod brainfuck_table_collection_tests {
         let mock_fri_domain_length = 512;
         let fri_domain = FriDomain {
             length: mock_fri_domain_length,
-            offset: BFieldElement::new(7).lift(),
-            omega: XFieldElement::primitive_root_of_unity(mock_fri_domain_length as u64).unwrap(),
+            offset: BFieldElement::new(7),
+            omega: BFieldElement::primitive_root_of_unity(mock_fri_domain_length as u64).unwrap(),
         };
 
         let base_codewords = tc_ref
