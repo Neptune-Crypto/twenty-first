@@ -1,3 +1,7 @@
+use super::traits::{FromVecu8, Inverse, MulBFieldElement, PrimitiveRootOfUnity};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use num_traits::{One, Zero};
 use rand::Rng;
 use rand_distr::{Distribution, Standard};
@@ -5,11 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
-
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
-use crate::shared_math::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -217,6 +216,19 @@ impl Display for XFieldElement {
                 "({:>020}·x² + {:>020}·x + {:>020})",
                 self.coefficients[2], self.coefficients[1], self.coefficients[0],
             )
+        }
+    }
+}
+
+impl MulBFieldElement for XFieldElement {
+    #[inline]
+    fn mul_bfe(self, bfe: BFieldElement) -> Self {
+        Self {
+            coefficients: [
+                self.coefficients[0] * bfe,
+                self.coefficients[1] * bfe,
+                self.coefficients[2] * bfe,
+            ],
         }
     }
 }
@@ -850,6 +862,19 @@ mod x_field_element_test {
         for (val, inv) in izip!(rands, inverses) {
             assert!(!val.is_one()); // Pretty small likely this could happen ^^
             assert!((val * inv).is_one());
+        }
+    }
+
+    #[test]
+    fn mul_bfe_pbt() {
+        let test_iterations = 100;
+        let rands_x: Vec<XFieldElement> = random_elements(test_iterations);
+        let rands_b: Vec<BFieldElement> = random_elements(test_iterations);
+        for (x, b) in izip!(rands_x, rands_b) {
+            let mul_res = x.mul_bfe(b);
+            assert_eq!(mul_res.coefficients[0], x.coefficients[0] * b);
+            assert_eq!(mul_res.coefficients[1], x.coefficients[1] * b);
+            assert_eq!(mul_res.coefficients[2], x.coefficients[2] * b);
         }
     }
 

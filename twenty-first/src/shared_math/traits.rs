@@ -5,6 +5,8 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
+use super::b_field_element::BFieldElement;
+
 pub trait CyclicGroupGenerator
 where
     Self: Sized,
@@ -52,6 +54,11 @@ pub trait New {
     fn new_from_usize(&self, value: usize) -> Self;
 }
 
+pub trait MulBFieldElement {
+    #[must_use]
+    fn mul_bfe(self, bfe: BFieldElement) -> Self;
+}
+
 pub trait FromVecu8 {
     #[must_use]
     #[allow(clippy::wrong_self_convention)]
@@ -76,6 +83,7 @@ pub trait FiniteField:
     + Mul<Output = Self>
     + Div<Output = Self>
     + Neg<Output = Self>
+    + MulBFieldElement
     + FromVecu8
     + New
     + CyclicGroupGenerator
