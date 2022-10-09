@@ -2,11 +2,10 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::util_types::simple_hasher::{Hashable, Hasher, ToVec};
-use std::{
-    collections::{hash_map::RandomState, hash_set::Intersection, HashMap, HashSet},
-    fmt::Debug,
-    iter::FromIterator,
-};
+use std::collections::hash_map::RandomState;
+use std::collections::hash_set::Intersection;
+use std::collections::{HashMap, HashSet};
+use std::{fmt::Debug, iter::FromIterator};
 
 use super::shared::{
     data_index_to_node_index, get_authentication_path_node_indices,
@@ -45,6 +44,8 @@ where
         self.data_index == other.data_index && self.authentication_path == other.authentication_path
     }
 }
+
+impl<H: Hasher> Eq for MmrMembershipProof<H> {}
 
 impl<H> MmrMembershipProof<H>
 where
