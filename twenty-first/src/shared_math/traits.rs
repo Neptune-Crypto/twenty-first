@@ -44,14 +44,6 @@ where
     fn random_elements<R: Rng>(length: usize, rng: &mut R) -> Vec<Self>;
 }
 
-// TODO: Remove in favor of CyclicGroupGenerator
-pub trait GetGeneratorDomain
-where
-    Self: Sized,
-{
-    fn get_generator_domain(&self) -> Vec<Self>;
-}
-
 pub trait ModPowU64 {
     #[must_use]
     fn mod_pow_u64(&self, pow: u64) -> Self;
