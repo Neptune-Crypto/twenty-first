@@ -20,6 +20,7 @@ pub trait ToVec<T> {
 pub trait Hasher: Sized + Send + Sync + Clone {
     type T: Clone;
     type Digest: Hashable<Self::T>
+        + Eq
         + PartialEq
         + Clone
         + std::fmt::Debug
