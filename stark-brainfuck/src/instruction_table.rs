@@ -1,12 +1,12 @@
 use num_traits::{One, Zero};
 use std::convert::TryInto;
 
-use twenty_first::shared_math::b_field_element as bfe;
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::mpolynomial::MPolynomial;
 use twenty_first::shared_math::other;
 use twenty_first::shared_math::x_field_element::XFieldElement;
 
+use crate::lift_coefficients_to_xfield;
 use crate::stark::TERMINAL_COUNT;
 use crate::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
 use crate::table::{Table, TableMoreTrait, TableTrait};
@@ -280,7 +280,7 @@ impl TableTrait for InstructionTable {
                 next_instruction_next.clone(),
             )
             .iter()
-            .map(bfe::lift_coefficients_to_xfield)
+            .map(lift_coefficients_to_xfield)
             .collect();
 
         assert_eq!(
@@ -289,21 +289,21 @@ impl TableTrait for InstructionTable {
             "expect to inherit 3 polynomials from ancestor"
         );
 
-        let address_lifted = bfe::lift_coefficients_to_xfield(&address);
-        let _current_instruction_lifted = bfe::lift_coefficients_to_xfield(&current_instruction);
-        let _next_instruction_lifted = bfe::lift_coefficients_to_xfield(&next_instruction);
+        let address_lifted = lift_coefficients_to_xfield(&address);
+        let _current_instruction_lifted = lift_coefficients_to_xfield(&current_instruction);
+        let _next_instruction_lifted = lift_coefficients_to_xfield(&next_instruction);
 
-        let address_next_lifted = bfe::lift_coefficients_to_xfield(&address_next);
+        let address_next_lifted = lift_coefficients_to_xfield(&address_next);
         let current_instruction_next_lifted =
-            bfe::lift_coefficients_to_xfield(&current_instruction_next);
-        let next_instruction_next_lifted = bfe::lift_coefficients_to_xfield(&next_instruction_next);
+            lift_coefficients_to_xfield(&current_instruction_next);
+        let next_instruction_next_lifted = lift_coefficients_to_xfield(&next_instruction_next);
 
-        let permutation_lifted = bfe::lift_coefficients_to_xfield(&permutation);
-        let permutation_next_lifted = bfe::lift_coefficients_to_xfield(&permutation_next);
-        let current_instruction_lifted = bfe::lift_coefficients_to_xfield(&current_instruction);
+        let permutation_lifted = lift_coefficients_to_xfield(&permutation);
+        let permutation_next_lifted = lift_coefficients_to_xfield(&permutation_next);
+        let current_instruction_lifted = lift_coefficients_to_xfield(&current_instruction);
 
-        let evaluation_lifted = bfe::lift_coefficients_to_xfield(&evaluation);
-        let evaluation_next_lifted = bfe::lift_coefficients_to_xfield(&evaluation_next);
+        let evaluation_lifted = lift_coefficients_to_xfield(&evaluation);
+        let evaluation_next_lifted = lift_coefficients_to_xfield(&evaluation_next);
 
         let one: MPolynomial<XFieldElement> =
             MPolynomial::from_constant(XFieldElement::one(), 2 * Self::FULL_WIDTH);

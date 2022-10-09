@@ -3,9 +3,10 @@ use std::convert::TryInto;
 
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::mpolynomial::MPolynomial;
+use twenty_first::shared_math::other;
 use twenty_first::shared_math::x_field_element::XFieldElement;
-use twenty_first::shared_math::{b_field_element as bfe, other};
 
+use crate::lift_coefficients_to_xfield;
 use crate::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT, TERMINAL_COUNT};
 use crate::table::{Table, TableMoreTrait, TableTrait};
 use crate::vm::Register;
@@ -328,7 +329,7 @@ impl TableTrait for MemoryTable {
 
         let mut polynomials: Vec<MPolynomial<XFieldElement>> = b_field_polynomials
             .iter()
-            .map(bfe::lift_coefficients_to_xfield)
+            .map(lift_coefficients_to_xfield)
             .collect();
 
         let one: MPolynomial<XFieldElement> =

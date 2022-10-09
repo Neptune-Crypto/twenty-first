@@ -1,4 +1,3 @@
-use super::mpolynomial::MPolynomial;
 use super::other;
 use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
@@ -11,7 +10,6 @@ use std::hash::{Hash, Hasher};
 use phf::phf_map;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::iter::Sum;
 use std::num::TryFromIntError;
@@ -529,22 +527,6 @@ impl PrimitiveRootOfUnity for BFieldElement {
         } else {
             None
         }
-    }
-}
-
-// TODO: Remove this function when `transition_constraints_afo_named_variables` can
-// return a <PF: PrimeField> version of itself.
-pub fn lift_coefficients_to_xfield(
-    mpolynomial: &MPolynomial<BFieldElement>,
-) -> MPolynomial<XFieldElement> {
-    let mut new_coefficients: HashMap<Vec<u64>, XFieldElement> = HashMap::new();
-    mpolynomial.coefficients.iter().for_each(|(key, value)| {
-        new_coefficients.insert(key.to_owned(), value.lift());
-    });
-
-    MPolynomial {
-        variable_count: mpolynomial.variable_count,
-        coefficients: new_coefficients,
     }
 }
 
@@ -1086,50 +1068,6 @@ mod b_prime_field_element_test {
             assert!(root.mod_pow(power as u64).is_one());
             assert!(!root.mod_pow(power as u64 / 2).is_one());
         }
-    }
-
-    #[test]
-    fn lift_coefficients_to_xfield_test() {
-        let b_field_mpol = gen_mpolynomial(4, 6, 4, 100);
-        let x_field_mpol = super::lift_coefficients_to_xfield(&b_field_mpol);
-        assert_eq!(b_field_mpol.degree(), x_field_mpol.degree());
-        for (exponents, coefficient) in x_field_mpol.coefficients.iter() {
-            assert_eq!(
-                coefficient.unlift().unwrap(),
-                b_field_mpol.coefficients[exponents]
-            );
-        }
-    }
-
-    fn gen_mpolynomial(
-        variable_count: usize,
-        term_count: usize,
-        exponenent_limit: u128,
-        coefficient_limit: u64,
-    ) -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
-
-        for _ in 0..term_count {
-            let key = generate_random_numbers_u128(variable_count, None)
-                .iter()
-                .map(|x| (*x % exponenent_limit) as u64)
-                .collect::<Vec<u64>>();
-            let value = gen_bfield_element(coefficient_limit);
-            coefficients.insert(key, value);
-        }
-
-        MPolynomial {
-            variable_count,
-            coefficients,
-        }
-    }
-
-    fn gen_bfield_element(limit: u64) -> BFieldElement {
-        let mut rng = rand::thread_rng();
-
-        // adding 1 prevents us from building multivariate polynomial containing zero-coefficients
-        let elem = rng.next_u64() % limit + 1;
-        BFieldElement::new(elem as u64)
     }
 
     #[test]
