@@ -583,19 +583,19 @@ where
 #[cfg(test)]
 mod mmr_membership_proof_test {
     use itertools::Itertools;
-    use rand::{thread_rng, RngCore};
+    use rand::Rng;
 
-    use super::*;
+    use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::test_shared::mmr::get_archival_mmr_from_digests;
+    use crate::util_types::blake3_wrapper;
     use crate::util_types::blake3_wrapper::Blake3Hash;
+    use crate::util_types::mmr::archival_mmr::ArchivalMmr;
+    use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
+    use crate::util_types::mmr::mmr_trait::Mmr;
     use crate::util_types::simple_hasher;
-    use crate::{
-        shared_math::b_field_element::BFieldElement,
-        util_types::blake3_wrapper,
-        util_types::mmr::mmr_accumulator::MmrAccumulator,
-        util_types::mmr::{archival_mmr::ArchivalMmr, mmr_trait::Mmr},
-    };
+
+    use super::*;
 
     #[test]
     fn equality_and_hash_test() {
@@ -818,15 +818,14 @@ mod mmr_membership_proof_test {
             (14u128..14 + total_leaf_count).map(|x| x.into()).collect();
         let mut archival_mmr: ArchivalMmr<Hasher> =
             get_archival_mmr_from_digests(leaf_hashes.clone());
-        let mut prng = thread_rng();
+        let mut rng = rand::thread_rng();
         for modified_leaf_count in 0..=total_leaf_count {
             // Pick a set of membership proofs that we want to batch-update
-            let own_membership_proof_count: u128 = prng.next_u32() as u128 % total_leaf_count;
+            let own_membership_proof_count: u128 = rng.gen_range(0..total_leaf_count);
             let mut all_data_indices: Vec<u128> = (0..total_leaf_count).collect();
             let mut own_membership_proofs: Vec<MmrMembershipProof<Hasher>> = vec![];
             for _ in 0..own_membership_proof_count {
-                let data_index =
-                    all_data_indices.remove(prng.next_u32() as usize % all_data_indices.len());
+                let data_index = all_data_indices.remove(rng.gen_range(0..all_data_indices.len()));
                 own_membership_proofs.push(archival_mmr.prove_membership(data_index).0);
             }
 
@@ -837,8 +836,8 @@ mod mmr_membership_proof_test {
             let mut all_data_indices_new: Vec<u128> = (0..total_leaf_count).collect();
             let mut authentication_paths: Vec<MmrMembershipProof<Hasher>> = vec![];
             for _ in 0..modified_leaf_count {
-                let data_index = all_data_indices_new
-                    .remove(prng.next_u32() as usize % all_data_indices_new.len());
+                let data_index =
+                    all_data_indices_new.remove(rng.gen_range(0..all_data_indices_new.len()));
                 authentication_paths.push(archival_mmr.prove_membership(data_index).0);
             }
 

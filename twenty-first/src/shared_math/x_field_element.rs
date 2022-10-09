@@ -1,17 +1,15 @@
-use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::GetRandomElements;
-use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use num_traits::{One, Zero};
 use rand::Rng;
+use rand_distr::{Distribution, Standard};
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::iter::Sum;
-use std::ops::{AddAssign, Div, MulAssign, SubAssign};
-use std::{
-    fmt::Display,
-    ops::{Add, Mul, Neg, Sub},
-};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
+
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
+use crate::shared_math::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -182,20 +180,14 @@ impl PrimitiveRootOfUnity for XFieldElement {
     }
 }
 
-impl GetRandomElements for XFieldElement {
-    fn random_elements<R: Rng>(length: usize, rng: &mut R) -> Vec<Self> {
-        let b_values: Vec<BFieldElement> = BFieldElement::random_elements(length * 3, rng);
-
-        let mut values: Vec<XFieldElement> = Vec::with_capacity(length as usize);
-        for i in 0..length as usize {
-            values.push(XFieldElement::new([
-                b_values[3 * i],
-                b_values[3 * i + 1],
-                b_values[3 * i + 2],
-            ]));
-        }
-
-        values
+impl Distribution<XFieldElement> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> XFieldElement {
+        let coefficients = [
+            rng.gen::<BFieldElement>(),
+            rng.gen::<BFieldElement>(),
+            rng.gen::<BFieldElement>(),
+        ];
+        XFieldElement { coefficients }
     }
 }
 
@@ -466,12 +458,10 @@ impl ModPowU32 for XFieldElement {
 #[cfg(test)]
 mod x_field_element_test {
     use itertools::{izip, Itertools};
-    use rand::{thread_rng, RngCore};
 
     use crate::shared_math::ntt::{intt, ntt};
-    use crate::shared_math::other::log_2_floor;
+    use crate::shared_math::other::{log_2_floor, random_elements};
     use crate::shared_math::{b_field_element::*, x_field_element::*};
-    // use proptest::prelude::*;
 
     #[test]
     fn one_zero_test() {
@@ -510,8 +500,7 @@ mod x_field_element_test {
 
     #[test]
     fn x_field_random_element_generation_test() {
-        let mut rng = rand::thread_rng();
-        let rand_xs = XFieldElement::random_elements(14, &mut rng);
+        let rand_xs: Vec<XFieldElement> = random_elements(14);
 
         // Assert correct length
         assert_eq!(14, rand_xs.len());
@@ -827,8 +816,7 @@ mod x_field_element_test {
     #[test]
     fn x_field_inversion_pbt() {
         let test_iterations = 100;
-        let mut rng = rand::thread_rng();
-        let rands = XFieldElement::random_elements(test_iterations, &mut rng);
+        let rands: Vec<XFieldElement> = random_elements(test_iterations);
         for mut rand in rands.clone() {
             let rand_inv_original = rand.inverse();
             assert!((rand * rand_inv_original).is_one());
@@ -868,9 +856,8 @@ mod x_field_element_test {
     #[test]
     fn x_field_division_mul_pbt() {
         let test_iterations = 1000;
-        let mut rng = rand::thread_rng();
-        let rands_a = XFieldElement::random_elements(test_iterations, &mut rng);
-        let rands_b = XFieldElement::random_elements(test_iterations, &mut rng);
+        let rands_a: Vec<XFieldElement> = random_elements(test_iterations);
+        let rands_b: Vec<XFieldElement> = random_elements(test_iterations);
         for (a, b) in izip!(rands_a, rands_b) {
             let ab = a * b;
             let ba = b * a;
@@ -959,9 +946,7 @@ mod x_field_element_test {
 
     #[test]
     fn uniqueness_of_consecutive_emojis_xfe() {
-        let mut rng = rand::thread_rng();
-        let rand_xs = XFieldElement::random_elements(14, &mut rng);
-
+        let rand_xs: Vec<XFieldElement> = random_elements(14);
         let mut prev = XFieldElement::zero().emojihash();
         for xfe in rand_xs {
             let curr = xfe.emojihash();
@@ -974,15 +959,15 @@ mod x_field_element_test {
     #[test]
     fn inverse_or_zero_xfe() {
         let zero = XFieldElement::zero();
-        let one = XFieldElement::one();
         assert_eq!(zero, zero.inverse_or_zero());
 
-        let mut prng = thread_rng();
-        let x = XFieldElement::new_u64([prng.next_u64(), prng.next_u64(), prng.next_u64()]);
-        if x.is_zero() {
-            assert_eq!(zero, x.inverse_or_zero())
+        let mut rng = rand::thread_rng();
+        let elem: XFieldElement = rng.gen();
+        if elem.is_zero() {
+            assert_eq!(zero, elem.inverse_or_zero())
         } else {
-            assert_eq!(one, x * x.inverse_or_zero());
+            let one = XFieldElement::one();
+            assert_eq!(one, elem * elem.inverse_or_zero());
         }
     }
 }

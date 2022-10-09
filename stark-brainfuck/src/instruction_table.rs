@@ -404,9 +404,8 @@ impl TableTrait for InstructionTable {
 #[cfg(test)]
 mod instruction_table_tests {
     use super::*;
-    use rand::thread_rng;
 
-    use twenty_first::shared_math::traits::GetRandomElements;
+    use twenty_first::shared_math::other::random_elements_array;
     use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 
     use crate as brainfuck;
@@ -419,8 +418,6 @@ mod instruction_table_tests {
     // the rows (points) from the InstructionTable matrix, these should evaluate to zero.
     #[test]
     fn instruction_table_constraints_evaluate_to_zero_test() {
-        let mut rng = thread_rng();
-
         for source_code in sample_programs::get_all_sample_programs().iter() {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
             let input_data = vec![
@@ -486,16 +483,9 @@ mod instruction_table_tests {
             }
 
             // Test the same for the extended matrix
-            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
-                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
-                    .try_into()
-                    .unwrap();
-            instruction_table.extend(
-                challenges,
-                XFieldElement::random_elements(2, &mut rng)
-                    .try_into()
-                    .unwrap(),
-            );
+            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = random_elements_array();
+            let initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT] = random_elements_array();
+            instruction_table.extend(challenges, initials);
 
             let air_constraints = instruction_table.transition_constraints_ext(challenges);
             for step in 0..instruction_table.0.extended_matrix.len() - 1 {

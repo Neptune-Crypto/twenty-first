@@ -1,5 +1,4 @@
 use num_traits::{One, Zero};
-use rand::Rng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::{Debug, Display};
@@ -34,14 +33,6 @@ where
     Self: Sized,
 {
     fn primitive_root_of_unity(n: u64) -> Option<Self>;
-}
-
-// Used for testing.
-pub trait GetRandomElements
-where
-    Self: Sized,
-{
-    fn random_elements<R: Rng>(length: usize, rng: &mut R) -> Vec<Self>;
 }
 
 pub trait ModPowU64 {

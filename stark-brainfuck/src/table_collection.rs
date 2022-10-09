@@ -238,15 +238,14 @@ impl<'a> IntoIterator for &'a TableCollection {
 mod brainfuck_table_collection_tests {
     use super::*;
 
-    use rand::thread_rng;
     use std::cell::RefCell;
     use std::collections::HashMap;
-    use std::convert::TryInto;
     use std::rc::Rc;
+    use twenty_first::shared_math::other::random_elements;
+    use twenty_first::shared_math::other::random_elements_array;
 
     use twenty_first::shared_math::b_field_element::BFieldElement;
     use twenty_first::shared_math::polynomial::Polynomial;
-    use twenty_first::shared_math::traits::GetRandomElements;
     use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 
     use crate as brainfuck;
@@ -325,13 +324,8 @@ mod brainfuck_table_collection_tests {
                 table_collection.get_all_extension_degree_bounds(),
                 "extension degree bounds must match expected value from Python BF-STARK tutorial for code {}", code
             );
-            let mut rng = thread_rng();
-            let challenges: [XFieldElement; 11] = XFieldElement::random_elements(11, &mut rng)
-                .try_into()
-                .unwrap();
-            let terminals: [XFieldElement; 5] = XFieldElement::random_elements(5, &mut rng)
-                .try_into()
-                .unwrap();
+            let challenges: [XFieldElement; 11] = random_elements_array();
+            let terminals: [XFieldElement; 5] = random_elements_array();
             assert_eq!(
                 expected_quotient_bounds,
                 table_collection.all_quotient_degree_bounds(challenges, terminals),
@@ -445,11 +439,10 @@ mod brainfuck_table_collection_tests {
         // sample random evaluation points. They are re-used across property tests for r_0 and r_1
         let omicron: BFieldElement = t_collect_0_rand.processor_table.omicron();
         println!("omicron = {}", omicron);
-        let mut rng = rand::thread_rng();
-        let eval_points = &BFieldElement::random_elements(100, &mut rng);
+        let eval_points = random_elements(100);
 
         // check the expected invariants
-        for (r_1, x) in diffs_due_to_1_randomizer.iter().zip(eval_points) {
+        for (r_1, x) in diffs_due_to_1_randomizer.iter().zip(&eval_points) {
             assert_eq!(
                 r_1.evaluate(x),
                 r_1.evaluate(&(omicron * *x)),
@@ -482,8 +475,8 @@ mod brainfuck_table_collection_tests {
                     );
                 } else {
                     assert_ne!(
-                        r_2.evaluate(x),
-                        r_2.evaluate(&(omicron * *x)),
+                        r_2.evaluate(&x),
+                        r_2.evaluate(&(omicron * x)),
                         "polynomial r_2 must not be invariant to its argument being multiplied by ο.
                     column: {}
                     r_2 = {}
@@ -493,7 +486,7 @@ mod brainfuck_table_collection_tests {
                         r_2,
                         ip_2,
                         x,
-                        omicron * *x
+                        omicron * x
                     );
                 }
             }
@@ -595,16 +588,8 @@ mod brainfuck_table_collection_tests {
         );
 
         // Extend and verify that extension codewords are also calculated correctly
-        let mut rng = thread_rng();
-        let all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
-            XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
-                .try_into()
-                .unwrap();
-        let all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT as usize] =
-            XFieldElement::random_elements(PERMUTATION_ARGUMENTS_COUNT as usize, &mut rng)
-                .try_into()
-                .unwrap();
-
+        let all_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = random_elements_array();
+        let all_initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT] = random_elements_array();
         tc_ref.borrow_mut().extend(all_challenges, all_initials);
         let extended_codewords: Vec<Vec<XFieldElement>> = tc_ref
             .borrow_mut()

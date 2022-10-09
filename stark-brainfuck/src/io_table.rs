@@ -262,11 +262,9 @@ impl TableTrait for IOTable {
 mod io_table_tests {
     use super::*;
 
-    use rand::thread_rng;
     use std::cmp::max;
-    use std::convert::TryInto;
+    use twenty_first::shared_math::other::random_elements_array;
 
-    use twenty_first::shared_math::traits::GetRandomElements;
     use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 
     use crate as brainfuck;
@@ -278,8 +276,6 @@ mod io_table_tests {
     // the rows (points) from the InstructionTable matrix, these should evaluate to zero.
     #[test]
     fn io_table_constraints_evaluate_to_zero_on_test() {
-        let mut rng = thread_rng();
-
         for source_code in sample_programs::get_all_sample_programs().iter() {
             // Run program
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
@@ -365,14 +361,10 @@ mod io_table_tests {
 
                 // Test transition constraints on extension table
                 let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
-                    XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
-                        .try_into()
-                        .unwrap();
+                    random_elements_array();
 
-                let initials =
-                    XFieldElement::random_elements(PERMUTATION_ARGUMENTS_COUNT, &mut rng)
-                        .try_into()
-                        .unwrap();
+                let initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT] =
+                    random_elements_array();
 
                 io_table.extend(challenges, initials);
 

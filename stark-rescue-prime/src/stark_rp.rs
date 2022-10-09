@@ -1,6 +1,5 @@
 use num_traits::One;
 use num_traits::Zero;
-use rand::prelude::ThreadRng;
 use rayon::prelude::IndexedParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use rayon::prelude::ParallelIterator;
@@ -10,6 +9,8 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::iter::zip;
+use twenty_first::shared_math::other::random_elements;
+use twenty_first::shared_math::other::random_elements_array;
 
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::fri::Fri;
@@ -20,7 +21,7 @@ use twenty_first::shared_math::other::roundup_npo2;
 use twenty_first::shared_math::polynomial::Polynomial;
 use twenty_first::shared_math::rescue_prime_regular::*;
 use twenty_first::shared_math::traits::CyclicGroupGenerator;
-use twenty_first::shared_math::traits::{FromVecu8, GetRandomElements, PrimitiveRootOfUnity};
+use twenty_first::shared_math::traits::{FromVecu8, PrimitiveRootOfUnity};
 use twenty_first::shared_math::x_field_element::XFieldElement;
 use twenty_first::timing_reporter::TimingReporter;
 use twenty_first::util_types::blake3_wrapper::Blake3Hash;
@@ -183,9 +184,8 @@ impl StarkRp {
         );
 
         // add randomizers to trace for zero-knowledge
-        let mut rng = rand::thread_rng();
         let mut randomized_trace = trace.to_owned();
-        self.randomize_trace(&mut rng, &mut randomized_trace, num_randomizers);
+        self.randomize_trace(&mut randomized_trace, num_randomizers);
 
         timer.elapsed("calculate and add randomizers");
 
@@ -282,15 +282,13 @@ impl StarkRp {
                 .map(|x| hasher.hash_sequence(&x.to_sequence()))
                 .collect();
 
+            // FIXME: Replace with randomly generating digests directly
             let salts_per_leaf = 5;
-            let rnd_values = BFieldElement::random_elements(
-                boundary_quotient_codeword.len() * salts_per_leaf,
-                &mut rng,
-            );
-            let boundary_quotient_codeword_salts: Vec<_> = rnd_values
-                .iter()
-                .map(|x| hasher.hash_sequence(&x.to_sequence()))
-                .collect();
+            let boundary_quotient_codeword_salts: Vec<_> =
+                random_elements::<BFieldElement>(boundary_quotient_codeword.len() * salts_per_leaf)
+                    .iter()
+                    .map(|x| hasher.hash_sequence(&x.to_sequence()))
+                    .collect();
 
             let bq_merkle_tree = SaltedMt::from_digests(
                 &boundary_quotient_codeword_digests,
@@ -409,7 +407,7 @@ impl StarkRp {
 
         // Commit to randomizer polynomial
         let randomizer_polynomial: Polynomial<XFieldElement> = Polynomial {
-            coefficients: XFieldElement::random_elements(max_degree as usize + 1, &mut rng),
+            coefficients: random_elements(max_degree as usize + 1),
         };
 
         let lifted_field_generator: XFieldElement = self.field_generator.lift();
@@ -876,18 +874,9 @@ impl StarkRp {
         Ok(())
     }
 
-    fn randomize_trace(
-        &self,
-        rng: &mut ThreadRng,
-        trace: &mut Vec<[BFieldElement; STATE_SIZE]>,
-        num_randomizers: u64,
-    ) {
+    fn randomize_trace(&self, trace: &mut Vec<[BFieldElement; STATE_SIZE]>, num_randomizers: u64) {
         let mut randomizers: Vec<[BFieldElement; STATE_SIZE]> = (0..num_randomizers)
-            .map(|_| {
-                BFieldElement::random_elements(STATE_SIZE, rng)
-                    .try_into()
-                    .unwrap()
-            })
+            .map(|_| random_elements_array::<BFieldElement, STATE_SIZE>())
             .collect();
 
         trace.append(&mut randomizers);

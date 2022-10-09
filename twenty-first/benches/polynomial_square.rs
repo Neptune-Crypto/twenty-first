@@ -3,10 +3,9 @@ use criterion::{
     Throughput,
 };
 use itertools::izip;
-use twenty_first::shared_math::{
-    b_field_element::BFieldElement, other::log_2_floor, polynomial::Polynomial,
-    traits::GetRandomElements,
-};
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::other::random_elements;
+use twenty_first::shared_math::{other::log_2_floor, polynomial::Polynomial};
 
 fn polynomial_square(c: &mut Criterion) {
     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
@@ -17,10 +16,9 @@ fn polynomial_square(c: &mut Criterion) {
         .into_iter()
         .map(|x| log_2_floor(x as u128) as usize)
         .collect();
-    let mut rng = rand::thread_rng();
     for (size, log_of_size) in izip!(sizes, log_of_sizes) {
         let polynomial: Polynomial<BFieldElement> = Polynomial {
-            coefficients: BFieldElement::random_elements(size, &mut rng),
+            coefficients: random_elements(size),
         };
         group.throughput(Throughput::Elements(size as u64));
         group

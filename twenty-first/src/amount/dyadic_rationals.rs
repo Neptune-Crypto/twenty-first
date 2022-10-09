@@ -210,7 +210,7 @@ impl From<u32> for DyadicRational {
 
 #[cfg(test)]
 mod dyadic_rationals_tests {
-    use rand::{thread_rng, RngCore};
+    use rand::{Rng, RngCore};
 
     use super::*;
 
@@ -462,14 +462,14 @@ mod dyadic_rationals_tests {
     }
 
     fn get_rands(length: usize) -> Vec<DyadicRational> {
-        let mut prng = thread_rng();
+        let mut rng = rand::thread_rng();
         let mut ret = Vec::with_capacity(length);
 
         for _ in 0..length {
-            let mantissa: BigUint = prng.next_u64().into();
+            let mantissa: BigUint = rng.next_u64().into();
 
             // Restrict exponent to a value between 0 and 255
-            let exponent: u32 = prng.next_u32() % 0x0100;
+            let exponent: u32 = rng.gen_range(0..256);
             let val = DyadicRational::new(mantissa, exponent);
             ret.push(val);
         }

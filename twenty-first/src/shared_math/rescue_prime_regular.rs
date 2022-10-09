@@ -1128,7 +1128,8 @@ impl SamplableFrom<[BFieldElement; 5]> for XFieldElement {
 #[cfg(test)]
 mod rescue_prime_regular_tests {
     use itertools::Itertools;
-    use rand::{thread_rng, RngCore};
+
+    use crate::shared_math::other::random_elements_array;
 
     use super::*;
 
@@ -1459,17 +1460,10 @@ mod rescue_prime_regular_tests {
 
     #[test]
     fn trace_consistent_test() {
-        let mut rng = thread_rng();
         for _ in 0..10 {
-            let input: [BFieldElement; 10] = (0..10)
-                .map(|_| BFieldElement::new(rng.next_u64()))
-                .collect_vec()
-                .try_into()
-                .unwrap();
-
+            let input: [BFieldElement; 10] = random_elements_array();
             let (output_a, _) = RescuePrimeRegular::hash_10_with_trace(&input);
             let output_b = RescuePrimeRegular::hash_10(&input);
-
             assert_eq!(output_a, output_b);
         }
     }

@@ -1,4 +1,3 @@
-use rand::RngCore;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::num::ParseIntError;
@@ -830,35 +829,6 @@ where
 {
     let mut uniq = HashSet::new();
     iter.into_iter().all(move |x| uniq.insert(x))
-}
-
-// TODO: Not uniform. We only use this for testing right now.
-#[allow(dead_code)]
-pub fn generate_random_numbers(count: usize, modulus: i128) -> Vec<i128> {
-    let mut prng = rand::thread_rng();
-
-    let values: Vec<i128> = (0..count)
-        .map(|_| (((prng.next_u64() as i128) << 63) | (prng.next_u64() as i128) >> 1) % modulus)
-        .collect();
-    values
-}
-
-// TODO: Not uniform. We only use this for testing right now.
-#[allow(dead_code)]
-pub fn generate_random_numbers_u128(count: usize, modulus: Option<u128>) -> Vec<u128> {
-    let mut prng = rand::thread_rng();
-
-    (0..count)
-        .map(|_| {
-            let upper = (prng.next_u64() as u128) << 64;
-            let lower = prng.next_u64() as u128;
-
-            match modulus {
-                Some(m) => (upper | lower) % m,
-                None => upper | lower,
-            }
-        })
-        .collect()
 }
 
 pub fn blake3_digest(input: &[u8]) -> [u8; 32] {

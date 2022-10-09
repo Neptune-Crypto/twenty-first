@@ -1,6 +1,5 @@
 use itertools::Itertools;
 use num_traits::{One, Zero};
-use rand::thread_rng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::cell::RefCell;
@@ -12,12 +11,12 @@ use std::rc::Rc;
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::fri::Fri;
 use twenty_first::shared_math::mpolynomial::Degree;
-use twenty_first::shared_math::other::is_power_of_two;
-use twenty_first::shared_math::other::roundup_npo2;
+use twenty_first::shared_math::other::{is_power_of_two, random_elements};
+use twenty_first::shared_math::other::{random_elements_array, roundup_npo2};
 use twenty_first::shared_math::polynomial::Polynomial;
 use twenty_first::shared_math::stark::stark_verify_error::StarkVerifyError;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
-use twenty_first::shared_math::traits::{FromVecu8, GetRandomElements, Inverse, ModPowU32};
+use twenty_first::shared_math::traits::{FromVecu8, Inverse, ModPowU32};
 use twenty_first::shared_math::x_field_element::XFieldElement;
 use twenty_first::timing_reporter::TimingReporter;
 use twenty_first::util_types::blake3_wrapper::Blake3Hash;
@@ -66,8 +65,6 @@ pub struct Stark {
 
 impl Stark {
     fn sample_weights(randomness: &[u8], count: usize) -> Vec<XFieldElement> {
-        // FIXME: Perhaps re-use hasher.
-        // FIXME: When digests get a length of 6, produce half as many digests as XFieldElements.
         let k_seeds: Vec<[u8; 32]> = utils::get_n_hash_rounds(randomness, count as u32);
 
         k_seeds
@@ -258,11 +255,7 @@ impl Stark {
 
         // Generate randomizer codewords for zero-knowledge
         // This generates three B field randomizer codewords, each with the same length as the FRI domain
-        let mut rng = thread_rng();
-        let randomizer_polynomial = Polynomial::new(XFieldElement::random_elements(
-            self.max_degree as usize + 1,
-            &mut rng,
-        ));
+        let randomizer_polynomial = Polynomial::new(random_elements(self.max_degree as usize + 1));
 
         let x_randomizer_codeword: Vec<XFieldElement> =
             self.fri.domain.x_evaluate(&randomizer_polynomial);
@@ -342,10 +335,7 @@ impl Stark {
 
         timer.elapsed("sample_weights");
 
-        let initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT] =
-            XFieldElement::random_elements(PERMUTATION_ARGUMENTS_COUNT, &mut rng)
-                .try_into()
-                .unwrap();
+        let initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT] = random_elements_array();
 
         timer.elapsed("initials");
 

@@ -1,5 +1,4 @@
 use num_traits::One;
-use rand::thread_rng;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
@@ -10,9 +9,10 @@ use twenty_first::shared_math::fri::FriDomain;
 use twenty_first::shared_math::mpolynomial::Degree;
 use twenty_first::shared_math::mpolynomial::MPolynomial;
 use twenty_first::shared_math::other;
+use twenty_first::shared_math::other::random_elements;
+use twenty_first::shared_math::other::random_elements_array;
 use twenty_first::shared_math::polynomial::Polynomial;
 use twenty_first::shared_math::traits::FiniteField;
-use twenty_first::shared_math::traits::GetRandomElements;
 use twenty_first::shared_math::traits::Inverse;
 use twenty_first::shared_math::traits::ModPowU32;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
@@ -135,11 +135,9 @@ impl<T: TableMoreTrait> Table<T> {
             .collect();
         let domain = vec![omicron_domain, randomizer_domain].concat();
         let mut valuess: Vec<Vec<BFieldElement>> = vec![];
-        let mut rng = thread_rng();
         for c in column_indices {
             let trace: Vec<BFieldElement> = self.matrix.iter().map(|row| row[c]).collect();
-            let randomizers: Vec<BFieldElement> =
-                BFieldElement::random_elements(self.num_randomizers, &mut rng);
+            let randomizers: Vec<BFieldElement> = random_elements(self.num_randomizers);
             let values = vec![trace, randomizers].concat();
             assert_eq!(
                 values.len(),
@@ -195,11 +193,9 @@ impl<T: TableMoreTrait> Table<T> {
             .collect();
         let domain = vec![omicron_domain, randomizer_domain].concat();
         let mut valuess: Vec<Vec<XFieldElement>> = vec![];
-        let mut rng = thread_rng();
         for c in column_indices {
             let trace: Vec<XFieldElement> = self.extended_matrix.iter().map(|row| row[c]).collect();
-            let randomizers: Vec<XFieldElement> =
-                XFieldElement::random_elements(self.num_randomizers, &mut rng);
+            let randomizers: Vec<XFieldElement> = random_elements(self.num_randomizers);
             let values = vec![trace, randomizers].concat();
             assert_eq!(
                 values.len(),
@@ -291,11 +287,7 @@ pub trait TableTrait {
 
     fn max_degree(&self) -> Degree {
         let degree_bounds: Vec<Degree> = vec![self.interpolant_degree(); self.full_width() * 2];
-        let mut rng = thread_rng();
-        let dummy_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
-            XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
-                .try_into()
-                .unwrap();
+        let dummy_challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = random_elements_array();
 
         let ret = self
             .transition_constraints_ext(dummy_challenges)

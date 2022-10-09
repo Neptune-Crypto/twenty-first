@@ -318,7 +318,7 @@ impl<const N: usize> Display for U32s<N> {
 }
 #[cfg(test)]
 mod u32s_tests {
-    use rand::{thread_rng, RngCore};
+    use rand::{Rng, RngCore};
 
     use super::*;
 
@@ -664,25 +664,25 @@ mod u32s_tests {
     fn get_bit_set_bit_pbt() {
         let outer_count = 100;
         let inner_count = 20;
-        let mut prng = thread_rng();
+        let mut rng = rand::thread_rng();
         let vals: Vec<U32s<4>> = get_u32s::<4>(outer_count, None);
         for mut val in vals {
-            let bit_value = prng.next_u32() % 2 == 0;
+            let bit_value: bool = rng.gen();
             for _ in 0..inner_count {
-                let bit_index: usize = (prng.next_u32() % (4 * 32)) as usize;
-                val.set_bit(bit_index as usize, bit_value);
+                let bit_index = rng.gen_range(0..4 * 32);
+                val.set_bit(bit_index, bit_value);
                 assert_eq!(bit_value, val.get_bit(bit_index));
             }
         }
     }
 
     fn get_u32s<const N: usize>(count: usize, and_mask: Option<[u32; N]>) -> Vec<U32s<N>> {
-        let mut prng = thread_rng();
+        let mut rng = rand::thread_rng();
         let mut rets: Vec<U32s<N>> = vec![];
         for _ in 0..count {
             let mut a: U32s<N> = U32s::new([0; N]);
             for i in 0..N {
-                a.values[i] = prng.next_u32();
+                a.values[i] = rng.next_u32();
             }
 
             a = match and_mask {

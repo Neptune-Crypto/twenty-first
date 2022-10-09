@@ -117,21 +117,19 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
 mod fast_ntt_attempt_tests {
     use num_traits::{One, Zero};
 
-    use crate::shared_math::{
-        b_field_element::BFieldElement,
-        traits::{GetRandomElements, PrimitiveRootOfUnity},
-        x_field_element::XFieldElement,
-    };
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::other::random_elements;
+    use crate::shared_math::traits::PrimitiveRootOfUnity;
+    use crate::shared_math::x_field_element::XFieldElement;
 
     use super::*;
 
     #[test]
     fn chu_ntt_b_field_prop_test() {
-        let mut rng = rand::thread_rng();
         for log_2_n in 1..10 {
             let n = 1 << log_2_n;
             for _ in 0..10 {
-                let mut values = BFieldElement::random_elements(n, &mut rng);
+                let mut values = random_elements(n);
                 let original_values = values.clone();
                 let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
                 ntt::<BFieldElement>(&mut values, omega, log_2_n);
@@ -151,11 +149,10 @@ mod fast_ntt_attempt_tests {
 
     #[test]
     fn chu_ntt_x_field_prop_test() {
-        let mut rng = rand::thread_rng();
         for log_2_n in 1..10 {
             let n = 1 << log_2_n;
             for _ in 0..10 {
-                let mut values = XFieldElement::random_elements(n, &mut rng);
+                let mut values = random_elements(n);
                 let original_values = values.clone();
                 let omega = XFieldElement::primitive_root_of_unity(n as u64).unwrap();
                 ntt::<XFieldElement>(&mut values, omega, log_2_n);
