@@ -1,5 +1,4 @@
 use num_traits::{One, Zero};
-use rand::Rng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::{Debug, Display};
@@ -34,22 +33,6 @@ where
     Self: Sized,
 {
     fn primitive_root_of_unity(n: u64) -> Option<Self>;
-}
-
-// Used for testing.
-pub trait GetRandomElements
-where
-    Self: Sized,
-{
-    fn random_elements<R: Rng>(length: usize, rng: &mut R) -> Vec<Self>;
-}
-
-// TODO: Remove in favor of CyclicGroupGenerator
-pub trait GetGeneratorDomain
-where
-    Self: Sized,
-{
-    fn get_generator_domain(&self) -> Vec<Self>;
 }
 
 pub trait ModPowU64 {

@@ -705,13 +705,12 @@ where
 mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::other::{random_elements, random_elements_range};
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
-    use crate::shared_math::traits::GetRandomElements;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::blake3_wrapper::Blake3Hash;
-    use crate::utils::{generate_random_numbers, generate_random_numbers_u128};
     use itertools::Itertools;
-    use rand::RngCore;
+    use rand::{Rng, RngCore};
     use std::iter::zip;
 
     fn count_hashes<Digest>(proof: &SaltedAuthenticationStructure<Digest>) -> usize {
@@ -808,28 +807,24 @@ mod merkle_tree_test {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
-        let mut rng = rand::thread_rng();
-        let values: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
-        let hasher = Hasher::new();
-
+        let values: Vec<BFieldElement> = random_elements(32);
         let leaves: Vec<Digest> = values
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         let mut mt_32: MerkleTree<Hasher> = MerkleTree::from_digests(&leaves);
         let mt_32_orig_root_hash = mt_32.get_root();
 
         for _ in 0..2 {
             for i in 0..20 {
-                // Create a vector `indices_usize` of unique (i.e. non-repeated) indices
-                // The first element is discarded to check that verify_authentication_structure returns
-                // false if this element is requested in the verification without being
-                // included in the proof
-                let indices_i128: Vec<i128> = generate_random_numbers(10 + i, 32);
-                let mut indices_usize: Vec<usize> = vec![];
-                for elem in indices_i128.iter().unique().skip(1) {
-                    indices_usize.push(*elem as usize);
-                }
+                // Create a vector of distinct, uniform random indices
+                //
+                // The first element of `indices` is discarded to check that
+                // verify_authentication_structure returns false if this element
+                // is requested in the verification without being included in the proof
+                let indices_i128: Vec<usize> = random_elements_range(10 + i, 0..32);
+                let mut indices_usize: Vec<usize> =
+                    indices_i128.iter().unique().skip(1).cloned().collect();
 
                 let selected_leaves: Vec<Digest> = mt_32.get_leaves_by_indices(&indices_usize);
                 let partial_auth_paths: Vec<PartialAuthenticationPath<Digest>> =
@@ -869,7 +864,8 @@ mod merkle_tree_test {
 
                 // Request an additional index and verify failure
                 // (indices length does not match proof length)
-                indices_usize.insert(0, indices_i128[0] as usize);
+                indices_usize.insert(0, indices_i128[0]);
+
                 assert!(!MerkleTree::<Hasher>::verify_authentication_structure(
                     mt_32.get_root().clone(),
                     &indices_usize,
@@ -879,7 +875,8 @@ mod merkle_tree_test {
                 // Request a non-existant index and verify failure
                 // (indices length does match proof length)
                 indices_usize.remove(0);
-                indices_usize[0] = indices_i128[0] as usize;
+                indices_usize[0] = indices_i128[0];
+                // indices_usize[0] = indices[0];
                 assert!(!MerkleTree::<Hasher>::verify_authentication_structure(
                     mt_32.get_root().clone(),
                     &indices_usize,
@@ -904,14 +901,11 @@ mod merkle_tree_test {
         type Hasher = blake3::Hasher;
         type Digest = Blake3Hash;
 
-        let mut rng = rand::thread_rng();
-
         // Number of Merkle tree leaves
-        let values: Vec<BFieldElement> = BFieldElement::random_elements(32, &mut rng);
-        let hasher = Hasher::new();
+        let values: Vec<BFieldElement> = random_elements(32);
         let leaves: Vec<Digest> = values
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
 
         let tree = MerkleTree::<Hasher>::from_digests(&leaves);
@@ -932,19 +926,16 @@ mod merkle_tree_test {
     fn merkle_tree_verify_authentication_structure_equivalence_test() {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
-        let mut rng = rand::thread_rng();
 
         // This test asserts that regular merkle trees and salted merkle trees with 0 salts work equivalently.
 
         // Number of Merkle tree leaves
         let n_values = 8;
         let expected_path_length = 3; // log2(128), root node not included
-        let values: Vec<BFieldElement> = BFieldElement::random_elements(n_values, &mut rng);
-
-        let hasher = Hasher::new();
+        let values: Vec<BFieldElement> = random_elements(n_values);
         let leaves: Vec<Digest> = values
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         let regular_tree = MerkleTree::<Hasher>::from_digests(&leaves);
 
@@ -968,11 +959,10 @@ mod merkle_tree_test {
             &auth_pairs,
         );
 
-        let salts_preimage: Vec<BFieldElement> =
-            BFieldElement::random_elements(leaves.len(), &mut rng);
+        let salts_preimage: Vec<BFieldElement> = random_elements(leaves.len());
         let salts: Vec<Digest> = salts_preimage
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
 
         let unsalted_salted_tree: SaltedMerkleTree<Hasher> =
@@ -996,17 +986,13 @@ mod merkle_tree_test {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
-        let mut prng = rand::thread_rng();
+        let mut rng = rand::thread_rng();
 
         // Number of Merkle tree leaves
         let n_valuess = &[2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
         let expected_path_lengths = &[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
         for (n_values, expected_path_length) in izip!(n_valuess, expected_path_lengths) {
-            let values: Vec<BFieldElement> =
-                generate_random_numbers_u128(*n_values, Some(1u128 << 63))
-                    .iter()
-                    .map(|x| BFieldElement::new(*x as u64))
-                    .collect();
+            let values: Vec<BFieldElement> = random_elements(*n_values);
 
             let hasher = Hasher::new();
             let leaves: Vec<Digest> = values
@@ -1016,16 +1002,15 @@ mod merkle_tree_test {
             let mut tree: MerkleTree<Hasher> = MerkleTree::<Hasher>::from_digests(&leaves);
 
             for _ in 0..3 {
-                // Ask for an arbitrary amount of indices less than the total
-                let n_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
+                // Ask for an arbitrary, positive amount of indices less than the total
+                let n_indices = (rng.next_u64() % *n_values as u64 / 2) as usize + 1;
 
-                // Generate that amount of indices in the valid index range [0,128)
-                let selected_indices: Vec<usize> =
-                    generate_random_numbers_u128(n_indices, Some(*n_values as u128))
-                        .iter()
-                        .map(|x| *x as usize)
-                        .unique()
-                        .collect();
+                // Generate that amount of indices in the valid index range [0,n_values)
+                let selected_indices: Vec<usize> = random_elements_range(n_indices, 0..*n_values)
+                    .iter()
+                    .copied()
+                    .unique()
+                    .collect();
 
                 let selected_leaves = tree.get_leaves_by_indices(&selected_indices);
                 let selected_auth_paths = tree.get_authentication_structure(&selected_indices);
@@ -1066,7 +1051,8 @@ mod merkle_tree_test {
                 // Corrupt the proof and thus fail to verify against the (valid) tree.
                 let mut bad_proof = auth_pairs.clone();
                 let random_index =
-                    ((prng.next_u64() % n_indices as u64 / 2) as usize) % bad_proof.len();
+                    ((rng.next_u64() % n_indices as u64 / 2) as usize) % bad_proof.len();
+
                 bad_proof[random_index].1.toggle_corruption();
 
                 assert!(
@@ -1241,7 +1227,6 @@ mod merkle_tree_test {
         //   x      y
         //  / \    / \
         // 3   6  9   12
-        let hasher = Hasher::new();
         let values_a = [
             BFieldElement::new(3),
             BFieldElement::new(1),
@@ -1250,16 +1235,14 @@ mod merkle_tree_test {
         ];
         let salts_per_leaf = 3;
 
-        let mut rng = rand::thread_rng();
-        let salts_a_preimage: Vec<BFieldElement> =
-            BFieldElement::random_elements(values_a.len() * salts_per_leaf, &mut rng);
+        let salts_a_preimage: Vec<BFieldElement> = random_elements(values_a.len() * salts_per_leaf);
         let salts_a: Vec<_> = salts_a_preimage
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         let leaves_a: Vec<Digest> = values_a
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         let tree_a = SMT::from_digests(&leaves_a, &salts_a);
         assert_eq!(tree_a.get_leaf_count() * salts_per_leaf, tree_a.salts.len());
@@ -1346,18 +1329,16 @@ mod merkle_tree_test {
         //  / \   / \    / \   / \
         // 3   1 4   1  5   9 8   6
 
-        let mut rng = rand::thread_rng();
         let values_b = &[3, 1, 4, 1, 5, 9, 8, 6].map(BFieldElement::new);
         let leaves_b: Vec<Digest> = values_b
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         let salts_per_leaf = 4;
-        let salts_b_preimage: Vec<BFieldElement> =
-            BFieldElement::random_elements(values_b.len() * salts_per_leaf, &mut rng);
+        let salts_b_preimage: Vec<BFieldElement> = random_elements(values_b.len() * salts_per_leaf);
         let salts_b: Vec<_> = salts_b_preimage
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         let tree_b = SMT::from_digests(&leaves_b, &salts_b);
 
@@ -1395,7 +1376,7 @@ mod merkle_tree_test {
             "sibling e"
         );
 
-        let mut value_b = hasher.hash_sequence(&BFieldElement::new(8).to_sequence());
+        let mut value_b = Hasher::new().hash_sequence(&BFieldElement::new(8).to_sequence());
 
         let root_hash_b = &tree_b.get_root();
         assert!(SMT::verify_authentication_path(
@@ -1441,7 +1422,7 @@ mod merkle_tree_test {
         let multi_values_0 = vec![BFieldElement::new(3), BFieldElement::new(1)];
         let multi_digests_0: Vec<Digest> = multi_values_0
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         assert!(SMT::verify_authentication_structure(
             *root_hash_b,
@@ -1497,7 +1478,7 @@ mod merkle_tree_test {
         let multi_values_1 = vec![BFieldElement::new(1)];
         let multi_digests_1: Vec<Digest> = multi_values_1
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         assert!(SMT::verify_authentication_structure(
             *root_hash_b,
@@ -1515,7 +1496,7 @@ mod merkle_tree_test {
         let multi_values_2 = vec![BFieldElement::new(1), BFieldElement::new(3)];
         let multi_digests_2: Vec<Digest> = multi_values_2
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         assert!(SMT::verify_authentication_structure(
             *root_hash_b,
@@ -1535,7 +1516,7 @@ mod merkle_tree_test {
         ];
         let multi_digests_3: Vec<Digest> = multi_values_3
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         assert!(SMT::verify_authentication_structure(
             *root_hash_b,
@@ -1617,7 +1598,6 @@ mod merkle_tree_test {
         //   x      y
         //  / \    / \
         // 3   6  9   12
-        let mut rng = rand::thread_rng();
         let hasher = Hasher::new();
 
         let values_a = &[
@@ -1631,11 +1611,10 @@ mod merkle_tree_test {
             .map(|x| hasher.hash_sequence(&x.to_sequence()))
             .collect();
         let salts_per_leaf = 3;
-        let salts_a_preimage: Vec<BFieldElement> =
-            BFieldElement::random_elements(values_a.len() * salts_per_leaf, &mut rng);
+        let salts_a_preimage: Vec<BFieldElement> = random_elements(values_a.len() * salts_per_leaf);
         let salts_a: Vec<_> = salts_a_preimage
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(|x| Hasher::new().hash_sequence(&x.to_sequence()))
             .collect();
         let tree_a = SMT::from_digests(&leaves_a, &salts_a);
 
@@ -1742,7 +1721,6 @@ mod merkle_tree_test {
         // Build a representation of the SMT made from values
         // `451282252958277131` and `3796554602848593414` as this is where the error was
         // first caught.
-        let mut rng = rand::thread_rng();
 
         let values_reg0 = vec![
             BFieldElement::new(451282252958277131),
@@ -1754,7 +1732,7 @@ mod merkle_tree_test {
             .collect();
         let salts_per_leaf = 3;
         let salts_reg0_preimage: Vec<BFieldElement> =
-            BFieldElement::random_elements(values_reg0.len() * salts_per_leaf, &mut rng);
+            random_elements(values_reg0.len() * salts_per_leaf);
         let salts_reg0: Vec<_> = salts_reg0_preimage
             .iter()
             .map(|x| hasher.hash_sequence(&x.to_sequence()))
@@ -1793,26 +1771,20 @@ mod merkle_tree_test {
         type SMT = SaltedMerkleTree<Hasher>;
 
         let hasher = Hasher::new();
-        let mut prng = rand::thread_rng();
+        let mut rng = rand::thread_rng();
 
         // Number of Merkle tree leaves
         let n_valuess = &[2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
         let expected_path_lengths = &[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
 
         for (n_values, expected_path_length) in izip!(n_valuess, expected_path_lengths) {
-            let values: Vec<BFieldElement> =
-                generate_random_numbers_u128(*n_values, Some(1u128 << 63))
-                    .iter()
-                    .map(|x| BFieldElement::new(*x as u64))
-                    .collect();
-
+            let values: Vec<BFieldElement> = random_elements(*n_values);
             let leaves: Vec<Digest> = values
                 .iter()
                 .map(|x| hasher.hash_sequence(&x.to_sequence()))
                 .collect();
             let salts_per_leaf = 3;
-            let salts_preimage: Vec<BFieldElement> =
-                BFieldElement::random_elements(values.len() * salts_per_leaf, &mut prng);
+            let salts_preimage: Vec<BFieldElement> = random_elements(values.len() * salts_per_leaf);
             let salts: Vec<_> = salts_preimage
                 .iter()
                 .map(|x| hasher.hash_sequence(&x.to_sequence()))
@@ -1821,15 +1793,13 @@ mod merkle_tree_test {
 
             for _ in 0..3 {
                 // Ask for an arbitrary amount of indices less than the total
-                let max_indices = (prng.next_u64() % *n_values as u64 / 2) as usize + 1;
+                let max_indices: usize = rng.gen_range(1..=n_values / 2);
 
-                // Generate that amount of indices in the valid index range [0,128)
-                let indices: Vec<usize> =
-                    generate_random_numbers_u128(max_indices, Some(*n_values as u128))
-                        .iter()
-                        .map(|x| *x as usize)
-                        .unique()
-                        .collect();
+                // Generate that amount of distinct, uniform random indices in the valid index range
+                let indices: Vec<usize> = random_elements_range(max_indices, 0..*n_values)
+                    .into_iter()
+                    .unique()
+                    .collect();
                 let actual_number_of_indices = indices.len();
 
                 let selected_leaves: Vec<_> = indices.iter().map(|i| leaves[*i]).collect();
@@ -1857,9 +1827,8 @@ mod merkle_tree_test {
 
                 // Verify that an invalid leaf fails verification
 
-                let pick = (prng.next_u64() % actual_number_of_indices as u64) as usize;
-
-                let rnd_leaf_idx = (prng.next_u64() % selected_leaves.len() as u64) as usize;
+                let pick: usize = rng.gen_range(0..actual_number_of_indices);
+                let rnd_leaf_idx = rng.gen_range(0..selected_leaves.len());
                 let mut corrupted_leaves = selected_leaves.clone();
                 corrupted_leaves[rnd_leaf_idx].increment();
                 assert!(!SMT::verify_authentication_structure(
@@ -2028,12 +1997,10 @@ mod merkle_tree_test {
         type RP = RescuePrimeRegular;
         type Hasher = RP;
 
-        let mut rng = rand::thread_rng();
-        let hasher = Hasher::new();
-        let elements = BFieldElement::random_elements(128, &mut rng);
+        let elements = random_elements(128);
         let leafs: Vec<_> = elements
             .iter()
-            .map(|e| hasher.hash_sequence(&vec![*e]))
+            .map(|e| Hasher::new().hash_sequence(&vec![*e]))
             .collect();
 
         let mt = MerkleTree::<RP>::from_digests(&leafs);

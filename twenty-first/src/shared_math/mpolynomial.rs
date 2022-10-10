@@ -1280,14 +1280,15 @@ impl<PFElem: FiniteField> MulAssign for MPolynomial<PFElem> {
 mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
 
-    use super::*;
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::traits::GetRandomElements;
-    use crate::shared_math::x_field_element::XFieldElement;
-    use crate::utils::generate_random_numbers_u128;
     use num_traits::One;
-    use rand::{thread_rng, RngCore};
+    use rand::Rng;
     use std::collections::HashSet;
+
+    use crate::shared_math::other::random_elements_range;
+    use crate::shared_math::x_field_element::XFieldElement;
+    use crate::shared_math::{b_field_element::BFieldElement, other::random_elements};
+
+    use super::*;
 
     fn get_x() -> MPolynomial<BFieldElement> {
         let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
@@ -2084,9 +2085,9 @@ mod test_mpolynomials {
     ) -> Vec<Polynomial<BFieldElement>> {
         let mut ret: Vec<Polynomial<BFieldElement>> = vec![];
         for _ in 0..count {
-            let coefficients: Vec<BFieldElement> = generate_random_numbers_u128(degree + 1, None)
+            let coefficients: Vec<BFieldElement> = random_elements::<u64>(degree + 1)
                 .into_iter()
-                .map(|x| BFieldElement::new((x % coefficient_limit as u128 + 1) as u64))
+                .map(|value| BFieldElement::new(value % coefficient_limit + 1))
                 .collect();
             ret.push(Polynomial { coefficients });
         }
@@ -2097,17 +2098,17 @@ mod test_mpolynomials {
     fn gen_mpolynomial(
         variable_count: usize,
         term_count: usize,
-        exponenent_limit: u128,
-        coefficient_limit: u64,
+        exponent_limit_inclusive: u64,
+        coefficient_limit_inclusive: u64,
     ) -> MPolynomial<BFieldElement> {
         let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut rng = rand::thread_rng();
 
         for _ in 0..term_count {
-            let key = generate_random_numbers_u128(variable_count, None)
-                .iter()
-                .map(|x| (*x % exponenent_limit) as u64)
-                .collect::<Vec<u64>>();
-            let value = gen_bfield_element(coefficient_limit);
+            let key = random_elements_range(variable_count, 0..=exponent_limit_inclusive);
+
+            // Don't build multivariate polynomial with zero coefficients
+            let value = BFieldElement::new(rng.gen_range(1..=coefficient_limit_inclusive));
             coefficients.insert(key, value);
         }
 
@@ -2115,14 +2116,6 @@ mod test_mpolynomials {
             variable_count,
             coefficients,
         }
-    }
-
-    fn gen_bfield_element(limit: u64) -> BFieldElement {
-        let mut rng = rand::thread_rng();
-
-        // adding 1 prevents us from building multivariate polynomial containing zero-coefficients
-        let elem = rng.next_u64() % limit + 1;
-        BFieldElement::new(elem)
     }
 
     #[test]
@@ -2244,28 +2237,23 @@ mod test_mpolynomials {
     fn symbolic_degree_bound_random() {
         let variable_count = 3;
         let term_count = 5;
-        let exponenent_limit = 7;
+        let exponent_limit = 7;
         let coefficient_limit = 11;
 
         let rnd_mvpoly = gen_mpolynomial(
             variable_count,
             term_count,
-            exponenent_limit as u128,
+            exponent_limit,
             coefficient_limit,
         );
 
-        let mut max_degrees = Vec::with_capacity(variable_count);
-        let mut rng = rand::thread_rng();
-
-        for _ in 0..variable_count {
-            max_degrees.push((rng.next_u64() % exponenent_limit + 1) as i64);
-        }
-
+        let max_degrees: Vec<Degree> =
+            random_elements_range(variable_count, 1..=(exponent_limit as Degree));
         let degree_poly = rnd_mvpoly.symbolic_degree_bound(&max_degrees[..]);
 
         assert!(
             degree_poly
-                <= (variable_count as u64 * (exponenent_limit + 1) * (exponenent_limit + 1)) as i64,
+                <= (variable_count as u64 * (exponent_limit + 1) * (exponent_limit + 1)) as Degree,
             "The total degree is the max of the sums of the exponents in any term.",
         )
     }
@@ -2273,26 +2261,21 @@ mod test_mpolynomials {
     fn symbolic_degree_bound_prop_gen() {
         let variable_count = 4;
         let term_count = 5;
-        let exponent_limit: u64 = 7;
+        let exponent_limit = 7;
         let coefficient_limit = 12;
-
-        let mut rng = thread_rng();
 
         // Generate one MPoly.
         let mvpoly: MPolynomial<BFieldElement> = gen_mpolynomial(
             variable_count,
             term_count,
-            exponent_limit as u128,
+            exponent_limit,
             coefficient_limit,
         );
 
         // Generate one UPoly for each variable in MPoly.
         let uvpolys: Vec<Polynomial<BFieldElement>> = (0..variable_count)
-            .map(|_| {
-                let coefficients: Vec<BFieldElement> =
-                    BFieldElement::random_elements(term_count, &mut rng);
-
-                Polynomial { coefficients }
+            .map(|_| Polynomial {
+                coefficients: random_elements(term_count),
             })
             .collect();
 

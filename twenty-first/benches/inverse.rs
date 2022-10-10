@@ -1,7 +1,8 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use itertools::Itertools;
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::traits::{GetRandomElements, Inverse};
+use twenty_first::shared_math::other::random_elements;
+use twenty_first::shared_math::traits::Inverse;
 use twenty_first::timing_reporter::TimingReporter;
 
 /// Run with `cargo criterion --bench inverse`
@@ -11,9 +12,7 @@ fn inverse(c: &mut Criterion) {
     let count = 1024 * 1024; // count of elements to be inversed per run
 
     let mut timer = TimingReporter::start();
-
-    let mut rnd = rand::thread_rng();
-    let rnd_elems = BFieldElement::random_elements(count, &mut rnd);
+    let rnd_elems: Vec<BFieldElement> = random_elements(count);
 
     timer.elapsed(&format!("Generate {} BFieldElements.", count));
 

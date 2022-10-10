@@ -2,12 +2,10 @@ use itertools::Itertools;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    shared_math::b_field_element::BFieldElement,
-    util_types::simple_hasher::{self, Hashable, SamplableFrom, ToVec},
-};
-
-use super::{traits::FiniteField, x_field_element::XFieldElement};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::traits::FiniteField;
+use crate::shared_math::x_field_element::XFieldElement;
+use crate::util_types::simple_hasher::{self, Hashable, SamplableFrom, ToVec};
 
 pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
@@ -808,7 +806,7 @@ impl RescuePrimeRegularState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct RescuePrimeRegular {}
 
 impl RescuePrimeRegular {
@@ -1128,7 +1126,8 @@ impl SamplableFrom<[BFieldElement; 5]> for XFieldElement {
 #[cfg(test)]
 mod rescue_prime_regular_tests {
     use itertools::Itertools;
-    use rand::{thread_rng, RngCore};
+
+    use crate::shared_math::other::random_elements_array;
 
     use super::*;
 
@@ -1459,17 +1458,10 @@ mod rescue_prime_regular_tests {
 
     #[test]
     fn trace_consistent_test() {
-        let mut rng = thread_rng();
         for _ in 0..10 {
-            let input: [BFieldElement; 10] = (0..10)
-                .map(|_| BFieldElement::new(rng.next_u64()))
-                .collect_vec()
-                .try_into()
-                .unwrap();
-
+            let input: [BFieldElement; 10] = random_elements_array();
             let (output_a, _) = RescuePrimeRegular::hash_10_with_trace(&input);
             let output_b = RescuePrimeRegular::hash_10(&input);
-
             assert_eq!(output_a, output_b);
         }
     }

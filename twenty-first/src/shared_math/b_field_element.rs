@@ -1,17 +1,15 @@
-use super::mpolynomial::MPolynomial;
 use super::other;
 use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
-use crate::shared_math::traits::GetRandomElements;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use crate::util_types::simple_hasher::Hashable;
 use num_traits::{One, Zero};
+use rand_distr::{Distribution, Standard};
 use std::hash::{Hash, Hasher};
 
 use phf::phf_map;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::iter::Sum;
 use std::num::TryFromIntError;
@@ -374,22 +372,9 @@ impl CyclicGroupGenerator for BFieldElement {
     }
 }
 
-impl GetRandomElements for BFieldElement {
-    fn random_elements<R: Rng>(length: usize, prng: &mut R) -> Vec<Self> {
-        let mut values: Vec<BFieldElement> = Vec::with_capacity(length);
-        let max = BFieldElement::MAX as u64;
-
-        while values.len() < length {
-            let n = prng.next_u64();
-
-            if n > max {
-                continue;
-            }
-
-            values.push(BFieldElement::new(n));
-        }
-
-        values
+impl Distribution<BFieldElement> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BFieldElement {
+        BFieldElement(rng.gen_range(0..=BFieldElement::MAX))
     }
 }
 
@@ -545,34 +530,15 @@ impl PrimitiveRootOfUnity for BFieldElement {
     }
 }
 
-// TODO: Remove this function when `transition_constraints_afo_named_variables` can
-// return a <PF: PrimeField> version of itself.
-pub fn lift_coefficients_to_xfield(
-    mpolynomial: &MPolynomial<BFieldElement>,
-) -> MPolynomial<XFieldElement> {
-    let mut new_coefficients: HashMap<Vec<u64>, XFieldElement> = HashMap::new();
-    mpolynomial.coefficients.iter().for_each(|(key, value)| {
-        new_coefficients.insert(key.to_owned(), value.lift());
-    });
-
-    MPolynomial {
-        variable_count: mpolynomial.variable_count,
-        coefficients: new_coefficients,
-    }
-}
-
 #[cfg(test)]
 mod b_prime_field_element_test {
     use std::collections::hash_map::DefaultHasher;
 
-    use crate::utils::generate_random_numbers_u128;
-    use crate::{
-        shared_math::{b_field_element::*, polynomial::Polynomial},
-        utils::generate_random_numbers,
-    };
+    use crate::shared_math::b_field_element::*;
+    use crate::shared_math::other::{random_elements, random_elements_array};
+    use crate::shared_math::polynomial::Polynomial;
     use itertools::izip;
     use proptest::prelude::*;
-    use rand::thread_rng;
 
     // TODO: Move this into separate file.
     macro_rules! bfield_elem {
@@ -628,8 +594,7 @@ mod b_prime_field_element_test {
         assert_eq!(array_a, array_b);
 
         // Let's also do some PBT
-        let mut prng = thread_rng();
-        let xs: Vec<BFieldElement> = BFieldElement::random_elements(100, &mut prng);
+        let xs: Vec<BFieldElement> = random_elements(100);
         for x in xs {
             let array: [u8; 8] = x.into();
             let x_recalculated: BFieldElement = array.into();
@@ -735,8 +700,7 @@ mod b_prime_field_element_test {
 
     #[test]
     fn lift_property_test() {
-        let mut rng = rand::thread_rng();
-        let elements: Vec<BFieldElement> = BFieldElement::random_elements(100, &mut rng);
+        let elements: Vec<BFieldElement> = random_elements(100);
         for element in elements {
             assert_eq!(Some(element), element.lift().unlift());
         }
@@ -879,18 +843,23 @@ mod b_prime_field_element_test {
 
     #[test]
     fn inversion_property_based_test() {
-        let rands: Vec<i128> = generate_random_numbers(30, BFieldElement::MAX as i128);
-        for rand in rands {
-            assert!((bfield_elem!(rand as u64).inverse() * bfield_elem!(rand as u64)).is_one());
+        let elements: Vec<BFieldElement> = random_elements(30);
+
+        for elem in elements {
+            if elem.is_zero() {
+                continue;
+            }
+
+            assert!((elem.inverse() * elem).is_one());
+            assert!((elem * elem.inverse()).is_one());
         }
     }
 
     #[test]
     fn batch_inversion_pbt() {
         let test_iterations = 100;
-        let mut rng = rand::thread_rng();
         for i in 0..test_iterations {
-            let rands: Vec<BFieldElement> = BFieldElement::random_elements(i, &mut rng);
+            let rands: Vec<BFieldElement> = random_elements(i);
             let rands_inv: Vec<BFieldElement> = BFieldElement::batch_inversion(rands.clone());
             assert_eq!(i as usize, rands_inv.len());
             for (mut rand, rand_inv) in izip!(rands, rands_inv) {
@@ -926,11 +895,12 @@ mod b_prime_field_element_test {
 
     #[test]
     fn mul_div_plus_minus_neg_property_based_test() {
-        let rands: Vec<i128> = generate_random_numbers(300, BFieldElement::QUOTIENT as i128);
-        let power_inputs_b: Vec<i128> = generate_random_numbers(6, BFieldElement::QUOTIENT as i128);
-        for i in 1..rands.len() {
-            let a = bfield_elem!(rands[i - 1] as u64);
-            let b = bfield_elem!(rands[i] as u64);
+        let elements: Vec<BFieldElement> = random_elements(300);
+        let power_input_b: [BFieldElement; 6] = random_elements_array();
+        for i in 1..elements.len() {
+            let a = elements[i - 1];
+            let b = elements[i];
+
             let ab = a * b;
             let a_o_b = a / b;
             let b_o_a = b / a;
@@ -972,14 +942,6 @@ mod b_prime_field_element_test {
 
             // Test power_accumulator
             let power_input_a = [a, b, ab, a_o_b, b_o_a, a_minus_b];
-            let power_input_b = [
-                bfield_elem!(power_inputs_b[0] as u64),
-                bfield_elem!(power_inputs_b[1] as u64),
-                bfield_elem!(power_inputs_b[2] as u64),
-                bfield_elem!(power_inputs_b[3] as u64),
-                bfield_elem!(power_inputs_b[4] as u64),
-                bfield_elem!(power_inputs_b[5] as u64),
-            ];
             let powers = BFieldElement::power_accumulator::<6, 4>(power_input_a, power_input_b);
             for ((result_element, input_a), input_b) in powers
                 .iter()
@@ -1109,50 +1071,6 @@ mod b_prime_field_element_test {
     }
 
     #[test]
-    fn lift_coefficients_to_xfield_test() {
-        let b_field_mpol = gen_mpolynomial(4, 6, 4, 100);
-        let x_field_mpol = super::lift_coefficients_to_xfield(&b_field_mpol);
-        assert_eq!(b_field_mpol.degree(), x_field_mpol.degree());
-        for (exponents, coefficient) in x_field_mpol.coefficients.iter() {
-            assert_eq!(
-                coefficient.unlift().unwrap(),
-                b_field_mpol.coefficients[exponents]
-            );
-        }
-    }
-
-    fn gen_mpolynomial(
-        variable_count: usize,
-        term_count: usize,
-        exponenent_limit: u128,
-        coefficient_limit: u64,
-    ) -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
-
-        for _ in 0..term_count {
-            let key = generate_random_numbers_u128(variable_count, None)
-                .iter()
-                .map(|x| (*x % exponenent_limit) as u64)
-                .collect::<Vec<u64>>();
-            let value = gen_bfield_element(coefficient_limit);
-            coefficients.insert(key, value);
-        }
-
-        MPolynomial {
-            variable_count,
-            coefficients,
-        }
-    }
-
-    fn gen_bfield_element(limit: u64) -> BFieldElement {
-        let mut rng = rand::thread_rng();
-
-        // adding 1 prevents us from building multivariate polynomial containing zero-coefficients
-        let elem = rng.next_u64() % limit + 1;
-        BFieldElement::new(elem as u64)
-    }
-
-    #[test]
     #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
     fn multiplicative_inverse_of_zero() {
         let zero = BFieldElement::zero();
@@ -1183,12 +1101,12 @@ mod b_prime_field_element_test {
         let one = BFieldElement::one();
         assert_eq!(zero, zero.inverse_or_zero());
 
-        let mut prng = thread_rng();
-        let b = BFieldElement::new(prng.next_u64());
-        if b.is_zero() {
-            assert_eq!(zero, b.inverse_or_zero())
+        let mut rng = rand::thread_rng();
+        let elem: BFieldElement = rng.gen();
+        if elem.is_zero() {
+            assert_eq!(zero, elem.inverse_or_zero())
         } else {
-            assert_eq!(one, b * b.inverse_or_zero());
+            assert_eq!(one, elem * elem.inverse_or_zero());
         }
     }
 }

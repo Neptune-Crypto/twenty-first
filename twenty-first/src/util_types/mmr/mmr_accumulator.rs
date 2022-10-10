@@ -31,7 +31,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MmrAccumulator<H: Hasher>
 where
     H: Hasher,
@@ -332,15 +332,15 @@ where
 mod accumulator_mmr_tests {
     use std::cmp;
 
-    use itertools::izip;
+    use itertools::{izip, Itertools};
     use num_traits::Zero;
-    use rand::{thread_rng, Rng, RngCore};
+    use rand::Rng;
 
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::other::random_elements_range;
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::test_shared::mmr::get_archival_mmr_from_digests;
     use crate::util_types::blake3_wrapper::Blake3Hash;
-    use crate::utils::generate_random_numbers_u128;
 
     use super::*;
 
@@ -495,7 +495,7 @@ mod accumulator_mmr_tests {
         type Digest = Blake3Hash;
         type Hasher = blake3::Hasher;
 
-        let mut prng = thread_rng();
+        let mut rng = rand::thread_rng();
         for mmr_leaf_count in 1..100 {
             let initial_leaf_digests: Vec<Digest> = (4000u128..4000u128 + mmr_leaf_count)
                 .map(|x| x.into())
@@ -508,26 +508,24 @@ mod accumulator_mmr_tests {
             let mut ammr_copy: ArchivalMmr<Hasher> =
                 get_archival_mmr_from_digests(initial_leaf_digests.clone());
 
-            let mutated_leaf_count = prng.gen_range(0..mmr_leaf_count);
+            let mutated_leaf_count = rng.gen_range(0..mmr_leaf_count);
             let all_indices: Vec<u128> = (0..mmr_leaf_count).collect();
 
             // Pick indices for leaves that are being mutated
             let mut all_indices_mut0 = all_indices.clone();
             let mut mutated_leaf_indices: Vec<u128> = vec![];
             for _ in 0..mutated_leaf_count {
-                mutated_leaf_indices.push(
-                    all_indices_mut0.remove(prng.next_u32() as usize % all_indices_mut0.len()),
-                );
+                let data_index = all_indices_mut0.remove(rng.gen_range(0..all_indices_mut0.len()));
+                mutated_leaf_indices.push(data_index);
             }
 
             // Pick membership proofs that we want to update
-            let membership_proof_count = prng.gen_range(0..mmr_leaf_count);
+            let membership_proof_count = rng.gen_range(0..mmr_leaf_count);
             let mut all_indices_mut1 = all_indices.clone();
             let mut membership_proof_indices: Vec<u128> = vec![];
             for _ in 0..membership_proof_count {
-                membership_proof_indices.push(
-                    all_indices_mut1.remove(prng.next_u32() as usize % all_indices_mut1.len()),
-                );
+                let data_index = all_indices_mut1.remove(rng.gen_range(0..all_indices_mut1.len()));
+                membership_proof_indices.push(data_index);
             }
 
             // Calculate the terminal leafs, as they look after the batch leaf mutation
@@ -628,13 +626,15 @@ mod accumulator_mmr_tests {
                 for mutate_size in 0..mutate_count {
                     let new_leaf_values: Vec<Digest> =
                         (13u128..13u128 + mutate_size).map(|x| x.into()).collect();
-                    let mut mutated_indices =
-                        generate_random_numbers_u128(mutate_size as usize, Some(start_size));
 
                     // Ensure that indices are unique since batch updating cannot update
                     // the same leaf twice in one go
-                    mutated_indices.sort();
-                    mutated_indices.dedup();
+                    let mutated_indices: Vec<u128> =
+                        random_elements_range(mutate_size as usize, 0..start_size)
+                            .into_iter()
+                            .sorted()
+                            .unique()
+                            .collect();
 
                     // Create the expected MMRs
                     let mut leaf_hashes_mutated = leaf_hashes_start.clone();

@@ -2,8 +2,8 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use itertools::Itertools;
 use rand::RngCore;
 use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::other::random_elements;
 use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
-use twenty_first::shared_math::traits::GetRandomElements;
 
 fn bench_10(c: &mut Criterion) {
     let mut group = c.benchmark_group("rescue_prime_regular/hash_10");
@@ -32,9 +32,7 @@ fn bench_varlen(c: &mut Criterion) {
 
     let size = 16_384;
     group.sample_size(50);
-
-    let mut rng = rand::thread_rng();
-    let elements = BFieldElement::random_elements(size, &mut rng);
+    let elements: Vec<BFieldElement> = random_elements(size);
 
     group.bench_function(
         BenchmarkId::new("RescuePrimeRegular / Hash Variable Length", size),

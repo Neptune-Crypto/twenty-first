@@ -1,12 +1,12 @@
 use num_traits::{One, Zero};
 use std::convert::TryInto;
 
-use twenty_first::shared_math::b_field_element as bfe;
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::mpolynomial::MPolynomial;
 use twenty_first::shared_math::other;
 use twenty_first::shared_math::x_field_element::XFieldElement;
 
+use crate::lift_coefficients_to_xfield;
 use crate::stark::TERMINAL_COUNT;
 use crate::stark::{EXTENSION_CHALLENGE_COUNT, PERMUTATION_ARGUMENTS_COUNT};
 use crate::table::{Table, TableMoreTrait, TableTrait};
@@ -280,7 +280,7 @@ impl TableTrait for InstructionTable {
                 next_instruction_next.clone(),
             )
             .iter()
-            .map(bfe::lift_coefficients_to_xfield)
+            .map(lift_coefficients_to_xfield)
             .collect();
 
         assert_eq!(
@@ -289,21 +289,21 @@ impl TableTrait for InstructionTable {
             "expect to inherit 3 polynomials from ancestor"
         );
 
-        let address_lifted = bfe::lift_coefficients_to_xfield(&address);
-        let _current_instruction_lifted = bfe::lift_coefficients_to_xfield(&current_instruction);
-        let _next_instruction_lifted = bfe::lift_coefficients_to_xfield(&next_instruction);
+        let address_lifted = lift_coefficients_to_xfield(&address);
+        let _current_instruction_lifted = lift_coefficients_to_xfield(&current_instruction);
+        let _next_instruction_lifted = lift_coefficients_to_xfield(&next_instruction);
 
-        let address_next_lifted = bfe::lift_coefficients_to_xfield(&address_next);
+        let address_next_lifted = lift_coefficients_to_xfield(&address_next);
         let current_instruction_next_lifted =
-            bfe::lift_coefficients_to_xfield(&current_instruction_next);
-        let next_instruction_next_lifted = bfe::lift_coefficients_to_xfield(&next_instruction_next);
+            lift_coefficients_to_xfield(&current_instruction_next);
+        let next_instruction_next_lifted = lift_coefficients_to_xfield(&next_instruction_next);
 
-        let permutation_lifted = bfe::lift_coefficients_to_xfield(&permutation);
-        let permutation_next_lifted = bfe::lift_coefficients_to_xfield(&permutation_next);
-        let current_instruction_lifted = bfe::lift_coefficients_to_xfield(&current_instruction);
+        let permutation_lifted = lift_coefficients_to_xfield(&permutation);
+        let permutation_next_lifted = lift_coefficients_to_xfield(&permutation_next);
+        let current_instruction_lifted = lift_coefficients_to_xfield(&current_instruction);
 
-        let evaluation_lifted = bfe::lift_coefficients_to_xfield(&evaluation);
-        let evaluation_next_lifted = bfe::lift_coefficients_to_xfield(&evaluation_next);
+        let evaluation_lifted = lift_coefficients_to_xfield(&evaluation);
+        let evaluation_next_lifted = lift_coefficients_to_xfield(&evaluation_next);
 
         let one: MPolynomial<XFieldElement> =
             MPolynomial::from_constant(XFieldElement::one(), 2 * Self::FULL_WIDTH);
@@ -404,9 +404,8 @@ impl TableTrait for InstructionTable {
 #[cfg(test)]
 mod instruction_table_tests {
     use super::*;
-    use rand::thread_rng;
 
-    use twenty_first::shared_math::traits::GetRandomElements;
+    use twenty_first::shared_math::other::random_elements_array;
     use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 
     use crate as brainfuck;
@@ -419,8 +418,6 @@ mod instruction_table_tests {
     // the rows (points) from the InstructionTable matrix, these should evaluate to zero.
     #[test]
     fn instruction_table_constraints_evaluate_to_zero_test() {
-        let mut rng = thread_rng();
-
         for source_code in sample_programs::get_all_sample_programs().iter() {
             let actual_program = brainfuck::vm::compile(source_code).unwrap();
             let input_data = vec![
@@ -486,16 +483,9 @@ mod instruction_table_tests {
             }
 
             // Test the same for the extended matrix
-            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
-                XFieldElement::random_elements(EXTENSION_CHALLENGE_COUNT, &mut rng)
-                    .try_into()
-                    .unwrap();
-            instruction_table.extend(
-                challenges,
-                XFieldElement::random_elements(2, &mut rng)
-                    .try_into()
-                    .unwrap(),
-            );
+            let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] = random_elements_array();
+            let initials: [XFieldElement; PERMUTATION_ARGUMENTS_COUNT] = random_elements_array();
+            instruction_table.extend(challenges, initials);
 
             let air_constraints = instruction_table.transition_constraints_ext(challenges);
             for step in 0..instruction_table.0.extended_matrix.len() - 1 {

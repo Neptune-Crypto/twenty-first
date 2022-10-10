@@ -1,5 +1,8 @@
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
+use rand::Rng;
+use rand_distr::uniform::SampleUniform;
+use rand_distr::{Distribution, Standard, Uniform};
 use std::fmt::Display;
 use std::ops::{BitAnd, Div, Rem, Shl, Sub};
 
@@ -147,6 +150,68 @@ pub fn xgcd<
 
     // x is the gcd
     (x, a_factor, b_factor)
+}
+
+/// Generate `n` random elements using `rand::thread_rng()`.
+///
+/// This requires the trait instance `Standard: Distribution<T>`.
+///
+/// See trait instances for BFieldElement or XFieldElement for examples.
+pub fn random_elements<T>(n: usize) -> Vec<T>
+where
+    Standard: Distribution<T>,
+{
+    rand::thread_rng().sample_iter(Standard).take(n).collect()
+}
+
+pub fn random_elements_distinct<T>(n: usize) -> Vec<T>
+where
+    T: PartialEq,
+    Standard: Distribution<T>,
+{
+    let mut sampler = rand::thread_rng().sample_iter(Standard);
+    let mut distinct_elements = Vec::with_capacity(n);
+    while distinct_elements.len() < n {
+        let sample = sampler.next().expect("Random sampler ran out of elements");
+        if !distinct_elements.contains(&sample) {
+            distinct_elements.push(sample);
+        }
+    }
+    distinct_elements
+}
+
+pub fn random_elements_range<T, R>(n: usize, range: R) -> Vec<T>
+where
+    T: SampleUniform,
+    R: Into<Uniform<T>>,
+    Standard: Distribution<T>,
+{
+    let mut rng = rand::thread_rng();
+    range.into().sample_iter(&mut rng).take(n).collect()
+}
+
+pub fn random_elements_distinct_range<T, R>(n: usize, range: R) -> Vec<T>
+where
+    T: SampleUniform + PartialEq,
+    R: Into<Uniform<T>>,
+    Standard: Distribution<T>,
+{
+    let mut sampler = rand::thread_rng().sample_iter(range.into());
+    let mut distinct_elements = Vec::with_capacity(n);
+    while distinct_elements.len() < n {
+        let sample = sampler.next().expect("Random sampler ran out of elements");
+        if !distinct_elements.contains(&sample) {
+            distinct_elements.push(sample);
+        }
+    }
+    distinct_elements
+}
+
+pub fn random_elements_array<T, const N: usize>() -> [T; N]
+where
+    Standard: Distribution<T>,
+{
+    rand::thread_rng().sample::<[T; N], Standard>(Standard)
 }
 
 /// Compute the number of nodes (used as capacity) in a complete binary tree
