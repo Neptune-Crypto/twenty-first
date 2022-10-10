@@ -2,12 +2,10 @@ use itertools::Itertools;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    shared_math::b_field_element::BFieldElement,
-    util_types::simple_hasher::{self, Hashable, SamplableFrom, ToVec},
-};
-
-use super::{traits::FiniteField, x_field_element::XFieldElement};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::traits::FiniteField;
+use crate::shared_math::x_field_element::XFieldElement;
+use crate::util_types::simple_hasher::{self, Hashable, SamplableFrom, ToVec};
 
 pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
@@ -808,7 +806,7 @@ impl RescuePrimeRegularState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct RescuePrimeRegular {}
 
 impl RescuePrimeRegular {
