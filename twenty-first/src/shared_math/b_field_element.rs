@@ -954,6 +954,23 @@ mod b_prime_field_element_test {
     }
 
     #[test]
+    fn mul_div_pbt() {
+        // Verify that the mul result is sane
+        let rands: Vec<BFieldElement> = random_elements(100);
+        for i in 1..rands.len() {
+            let prod_mul = rands[i - 1] * rands[i];
+            let mut prod_mul_assign = rands[i - 1];
+            prod_mul_assign *= rands[i];
+            assert_eq!(
+                prod_mul, prod_mul_assign,
+                "mul and mul_assign must be the same for B field elements"
+            );
+            assert_eq!(prod_mul / rands[i - 1], rands[i]);
+            assert_eq!(prod_mul / rands[i], rands[i - 1]);
+        }
+    }
+
+    #[test]
     fn add_sub_wrap_around_test() {
         // Ensure that something that exceeds P but is smaller than $2^64$
         // is still the correct field element. The property-based test is unlikely

@@ -41,8 +41,8 @@ pub enum ValidationError {
 
 #[derive(Debug, Clone)]
 pub struct FriDomain {
-    pub offset: XFieldElement,
-    pub omega: XFieldElement,
+    pub offset: BFieldElement,
+    pub omega: BFieldElement,
     pub length: usize,
 }
 
@@ -56,26 +56,23 @@ impl FriDomain {
     }
 
     pub fn b_domain_value(&self, index: u32) -> BFieldElement {
-        self.omega.unlift().unwrap().mod_pow_u32(index) * self.offset.unlift().unwrap()
+        self.omega.mod_pow_u32(index) * self.offset
     }
 
     pub fn b_domain_values(&self) -> Vec<BFieldElement> {
         (0..self.length)
-            .map(|i| {
-                self.omega.unlift().unwrap().mod_pow_u32(i as u32) * self.offset.unlift().unwrap()
-            })
+            .map(|i| self.omega.mod_pow_u32(i as u32) * self.offset)
             .collect()
     }
 
     pub fn b_evaluate(&self, polynomial: &Polynomial<BFieldElement>) -> Vec<BFieldElement> {
         let zero = BFieldElement::zero();
-        let mut polynomial_representation: Vec<BFieldElement> = polynomial
-            .scale(&self.offset.unlift().unwrap())
-            .coefficients;
+        let mut polynomial_representation: Vec<BFieldElement> =
+            polynomial.scale(&self.offset).coefficients;
         polynomial_representation.resize(self.length as usize, zero);
         ntt(
             &mut polynomial_representation,
-            self.omega.unlift().unwrap(),
+            self.omega,
             log_2_ceil(self.length as u128) as u32,
         );
 
@@ -83,11 +80,7 @@ impl FriDomain {
     }
 
     pub fn b_interpolate(&self, values: &[BFieldElement]) -> Polynomial<BFieldElement> {
-        Polynomial::<BFieldElement>::fast_coset_interpolate(
-            &self.offset.unlift().unwrap(),
-            self.omega.unlift().unwrap(),
-            values,
-        )
+        Polynomial::<BFieldElement>::fast_coset_interpolate(&self.offset, self.omega, values)
     }
 }
 
@@ -110,8 +103,8 @@ where
     XFieldElement: SamplableFrom<H::Digest> + Hashable<H::T>,
 {
     pub fn new(
-        offset: XFieldElement,
-        omega: XFieldElement,
+        offset: BFieldElement,
+        omega: BFieldElement,
         domain_length: usize,
         expansion_factor: usize,
         colinearity_checks_count: usize,
@@ -270,13 +263,13 @@ where
             // Get challenge
             let alpha = XFieldElement::sample(&proof_stream.prover_fiat_shamir());
 
-            let x_offset: Vec<XFieldElement> = subgroup_generator
+            let x_offset: Vec<BFieldElement> = subgroup_generator
                 .get_cyclic_group_elements(None)
                 .into_par_iter()
                 .map(|x| x * offset)
                 .collect();
 
-            let x_offset_inverses = XFieldElement::batch_inversion(x_offset);
+            let x_offset_inverses = BFieldElement::batch_inversion(x_offset);
             codeword_local = (0..n / 2)
                 .into_par_iter()
                 .map(|i| {
@@ -531,6 +524,7 @@ where
     fn get_evaluation_argument(&self, idx: usize, round: usize) -> XFieldElement {
         (self.domain.offset * self.domain.omega.mod_pow_u32(idx as u32))
             .mod_pow_u32(2u32.pow(round as u32))
+            .lift()
     }
 
     fn num_rounds(&self) -> (u8, u32) {
@@ -571,8 +565,8 @@ mod fri_domain_tests {
         for order in [4, 8, 32] {
             let omega = BFieldElement::primitive_root_of_unity(order).unwrap();
             let domain = FriDomain {
-                offset: BFieldElement::generator().lift(),
-                omega: omega.lift(),
+                offset: BFieldElement::generator(),
+                omega: omega,
                 length: order as usize,
             };
             let expected_x_values: Vec<BFieldElement> = (0..order)
@@ -727,7 +721,13 @@ mod xfri_tests {
         let fri: Fri<Hasher> =
             get_x_field_fri_test_object(subgroup_order, expansion_factor, colinearity_check_count);
         let mut proof_stream: StarkProofStream<Hasher> = StarkProofStream::default();
-        let subgroup = fri.domain.omega.get_cyclic_group_elements(None);
+        let subgroup: Vec<XFieldElement> = fri
+            .domain
+            .omega
+            .get_cyclic_group_elements(None)
+            .iter()
+            .map(|x| x.lift())
+            .collect();
 
         let (_, merkle_root_of_round_0) = fri.prove(&subgroup, &mut proof_stream).unwrap();
         let verdict = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
@@ -773,7 +773,11 @@ mod xfri_tests {
 
         let mut points: Vec<XFieldElement>;
         for n in [1, 5, 20, 30, 31] {
-            points = subgroup.clone().iter().map(|p| p.mod_pow_u32(n)).collect();
+            points = subgroup
+                .clone()
+                .iter()
+                .map(|p| p.mod_pow_u32(n).lift())
+                .collect();
 
             // TODO: Test elsewhere that proof_stream can be re-used for multiple .prove().
             let mut proof_stream: StarkProofStream<Hasher> = StarkProofStream::default();
@@ -805,7 +809,10 @@ mod xfri_tests {
 
         // Negative test with too high degree
         let too_high = subgroup_order as u32 / expansion_factor as u32;
-        points = subgroup.iter().map(|p| p.mod_pow_u32(too_high)).collect();
+        points = subgroup
+            .iter()
+            .map(|p| p.mod_pow_u32(too_high).lift())
+            .collect();
         let mut proof_stream: StarkProofStream<Hasher> = StarkProofStream::default();
         let (_, merkle_root_of_round_0) = fri.prove(&points, &mut proof_stream).unwrap();
         let verify_result = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
@@ -823,11 +830,11 @@ mod xfri_tests {
         BFieldElement: Hashable<H::T>,
         usize: Hashable<H::T>,
     {
-        let maybe_omega: Option<XFieldElement> =
-            XFieldElement::primitive_root_of_unity(subgroup_order);
+        let maybe_omega: Option<BFieldElement> =
+            BFieldElement::primitive_root_of_unity(subgroup_order);
 
         // The element 7 generates all of Zp\{0}
-        let offset: Option<XFieldElement> = Some(XFieldElement::new_const(BFieldElement::new(7)));
+        let offset: Option<BFieldElement> = Some(BFieldElement::new(7));
 
         let fri: Fri<H> = Fri::<H>::new(
             offset.unwrap(),

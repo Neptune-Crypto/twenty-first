@@ -46,7 +46,7 @@ impl PermutationArgument {
 
     // The linter seems to mistakenly think that a collect is not needed here
     #[allow(clippy::needless_collect)]
-    pub fn quotient(&self, fri_domain: &FriDomain<XFieldElement>) -> Vec<XFieldElement> {
+    pub fn quotient(&self, fri_domain: &FriDomain) -> Vec<XFieldElement> {
         let one: BFieldElement = BFieldElement::one();
         let zerofier = fri_domain
             .b_domain_values()

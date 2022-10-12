@@ -1,6 +1,6 @@
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::other::{log_2_floor, roundup_npo2};
-use crate::shared_math::traits::FiniteField;
+use crate::shared_math::traits::{FiniteField, ModPowU32};
 use crate::utils::has_unique_elements;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
@@ -9,11 +9,11 @@ use num_traits::{One, Zero};
 use std::convert::From;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
-use std::ops::{Add, AddAssign, Div, Mul, Rem, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Rem, Sub};
 
 use super::b_field_element::BFieldElement;
 use super::other::log_2_ceil;
-use super::x_field_element::XFieldElement;
+use super::traits::{Inverse, PrimitiveRootOfUnity};
 
 fn degree_raw<T: Add + Div + Mul + Sub + Display + Zero>(coefficients: &[T]) -> isize {
     let mut deg = coefficients.len() as isize - 1;
@@ -63,6 +63,30 @@ fn pretty_print_coefficients_generic<PFElem: FiniteField>(coefficients: &[PFElem
         ));
     }
     outputs.join("")
+}
+
+impl<PFElem: FiniteField> Zero for Polynomial<PFElem> {
+    fn zero() -> Self {
+        Self {
+            coefficients: vec![],
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        *self == Self::zero()
+    }
+}
+
+impl<PFElem: FiniteField> One for Polynomial<PFElem> {
+    fn one() -> Self {
+        Self {
+            coefficients: vec![PFElem::one()],
+        }
+    }
+
+    fn is_one(&self) -> bool {
+        self.degree() == 0 && self.coefficients[0].is_one()
+    }
 }
 
 pub struct Polynomial<PFElem: FiniteField> {
@@ -116,6 +140,456 @@ impl<PFElem: FiniteField> PartialEq for Polynomial<PFElem> {
 
 impl<PFElem: FiniteField> Eq for Polynomial<PFElem> {}
 
+impl<PFElem> Polynomial<PFElem>
+where
+    PFElem: FiniteField + MulAssign<BFieldElement>,
+{
+    // Return the polynomial which corresponds to the transformation `x -> alpha * x`
+    // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
+    // then corresponds to evaluating P(alpha * x).
+    #[must_use]
+    pub fn scale(&self, &alpha: &BFieldElement) -> Self {
+        let mut acc = PFElem::one();
+        let mut return_coefficients = self.coefficients.clone();
+        for elem in return_coefficients.iter_mut() {
+            *elem *= acc;
+            acc *= alpha;
+        }
+
+        Self {
+            coefficients: return_coefficients,
+        }
+    }
+
+    // It is the caller's responsibility that this function
+    // is called with sufficiently large input to be safe
+    // and to be faster than `square`.
+    #[must_use]
+    pub fn fast_square(&self) -> Self {
+        let degree = self.degree();
+        if degree == -1 {
+            return Self::zero();
+        }
+        if degree == 0 {
+            return Self::from_constant(self.coefficients[0] * self.coefficients[0]);
+        }
+
+        let result_degree: u64 = 2 * self.degree() as u64;
+        let order = roundup_npo2(result_degree + 1);
+        let root_res = BFieldElement::primitive_root_of_unity(order);
+        let root = match root_res {
+            Some(n) => n,
+            None => panic!("Failed to find primitive root for order = {}", order),
+        };
+
+        let mut coefficients = self.coefficients.to_vec();
+        coefficients.resize(order as usize, PFElem::zero());
+        let log_2_of_n = log_2_floor(coefficients.len() as u128) as u32;
+        ntt::<PFElem>(&mut coefficients, root, log_2_of_n);
+
+        for element in coefficients.iter_mut() {
+            *element = element.to_owned() * element.to_owned();
+        }
+
+        intt::<PFElem>(&mut coefficients, root, log_2_of_n);
+        coefficients.truncate(result_degree as usize + 1);
+
+        Polynomial { coefficients }
+    }
+
+    #[must_use]
+    pub fn square(&self) -> Self {
+        let degree = self.degree();
+        if degree == -1 {
+            return Self::zero();
+        }
+
+        // A benchmark run on sword_smith's PC revealed that
+        // `fast_square` was faster when the input size exceeds
+        // a length of 64.
+        let squared_coefficient_len = self.degree() as usize * 2 + 1;
+        if squared_coefficient_len > 64 {
+            return self.fast_square();
+        }
+
+        let zero = PFElem::zero();
+        let one = PFElem::one();
+        let two = one + one;
+        let mut squared_coefficients = vec![zero; squared_coefficient_len];
+
+        // TODO: Review.
+        for i in 0..self.coefficients.len() {
+            let ci = self.coefficients[i];
+            squared_coefficients[2 * i] += ci * ci;
+
+            for j in i + 1..self.coefficients.len() {
+                let cj = self.coefficients[j];
+                squared_coefficients[i + j] += two * ci * cj;
+            }
+        }
+
+        Self {
+            coefficients: squared_coefficients,
+        }
+    }
+
+    #[must_use]
+    pub fn fast_mod_pow(&self, pow: BigInt) -> Self {
+        let one = PFElem::one();
+
+        // Special case to handle 0^0 = 1
+        if pow.is_zero() {
+            return Self::from_constant(one);
+        }
+
+        if self.is_zero() {
+            return Self::zero();
+        }
+
+        if pow.is_one() {
+            return self.clone();
+        }
+
+        let mut acc = Polynomial::from_constant(one);
+        let bit_length: u64 = pow.bits();
+        for i in 0..bit_length {
+            acc = acc.square();
+            let set: bool =
+                !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
+            if set {
+                acc = self.to_owned() * acc;
+            }
+        }
+
+        acc
+    }
+
+    // FIXME: lhs -> &self. FIXME: Change root_order: usize into : u32.
+    pub fn fast_multiply(
+        lhs: &Self,
+        rhs: &Self,
+        primitive_root: &BFieldElement,
+        root_order: usize,
+    ) -> Self {
+        assert!(
+            primitive_root.mod_pow_u32(root_order as u32).is_one(),
+            "provided primitive root must have the provided power."
+        );
+        assert!(
+            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one(),
+            "provided primitive root must be primitive in the right power."
+        );
+
+        if lhs.is_zero() || rhs.is_zero() {
+            return Self::zero();
+        }
+
+        let mut root: BFieldElement = primitive_root.to_owned();
+        let mut order = root_order;
+        let lhs_degree = lhs.degree() as usize;
+        let rhs_degree = rhs.degree() as usize;
+        let degree = lhs_degree + rhs_degree;
+
+        if degree < 8 {
+            return lhs.to_owned() * rhs.to_owned();
+        }
+
+        while degree < order / 2 {
+            root *= root;
+            order /= 2;
+        }
+
+        let mut lhs_coefficients: Vec<PFElem> = lhs.coefficients[0..lhs_degree + 1].to_vec();
+        let mut rhs_coefficients: Vec<PFElem> = rhs.coefficients[0..rhs_degree + 1].to_vec();
+        while lhs_coefficients.len() < order {
+            lhs_coefficients.push(PFElem::zero());
+        }
+        while rhs_coefficients.len() < order {
+            rhs_coefficients.push(PFElem::zero());
+        }
+
+        let lhs_log_2_of_n = log_2_floor(lhs_coefficients.len() as u128) as u32;
+        let rhs_log_2_of_n = log_2_floor(rhs_coefficients.len() as u128) as u32;
+        ntt::<PFElem>(&mut lhs_coefficients, root, lhs_log_2_of_n);
+        ntt::<PFElem>(&mut rhs_coefficients, root, rhs_log_2_of_n);
+
+        let mut hadamard_product: Vec<PFElem> = rhs_coefficients
+            .into_iter()
+            .zip(lhs_coefficients.into_iter())
+            .map(|(r, l)| r * l)
+            .collect();
+
+        let log_2_of_n = log_2_floor(hadamard_product.len() as u128) as u32;
+        intt::<PFElem>(&mut hadamard_product, root, log_2_of_n);
+        hadamard_product.truncate(degree + 1);
+
+        Polynomial {
+            coefficients: hadamard_product,
+        }
+    }
+
+    // domain: polynomial roots
+    pub fn fast_zerofier(
+        domain: &[PFElem],
+        primitive_root: &BFieldElement,
+        root_order: usize,
+    ) -> Self {
+        debug_assert_eq!(
+            primitive_root.mod_pow_u32(root_order as u32),
+            BFieldElement::one(),
+            "Supplied element “primitive_root” must have supplied order.\
+            Supplied element was: {:?}\
+            Supplied order was: {:?}",
+            primitive_root,
+            root_order
+        );
+
+        if domain.is_empty() {
+            return Self::zero();
+        }
+
+        if domain.len() == 1 {
+            return Self {
+                coefficients: vec![-domain[0], PFElem::one()],
+            };
+        }
+
+        // This assertion must come after above recursion-ending cases have been dealt with.
+        // Otherwise, the supplied primitive_root will (at some point) equal 1 with correct
+        // root_order = 1, incorrectly failing the assertion.
+        debug_assert_ne!(
+            primitive_root.mod_pow_u32((root_order / 2) as u32),
+            BFieldElement::one(),
+            "Supplied element “primitive_root” must be primitive root of supplied order.\
+            Supplied element was: {:?}\
+            Supplied order was: {:?}",
+            primitive_root,
+            root_order
+        );
+
+        let half = domain.len() / 2;
+
+        let left = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
+        let right = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+        Self::fast_multiply(&left, &right, primitive_root, root_order)
+    }
+
+    pub fn fast_evaluate(
+        &self,
+        domain: &[PFElem],
+        primitive_root: &BFieldElement,
+        root_order: usize,
+    ) -> Vec<PFElem> {
+        if domain.is_empty() {
+            return vec![];
+        }
+
+        if domain.len() == 1 {
+            return vec![self.evaluate(&domain[0])];
+        }
+
+        let half = domain.len() / 2;
+
+        let left_zerofier = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
+        let right_zerofier = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+
+        let mut left = (self.clone() % left_zerofier).fast_evaluate(
+            &domain[..half],
+            primitive_root,
+            root_order,
+        );
+        let mut right = (self.clone() % right_zerofier).fast_evaluate(
+            &domain[half..],
+            primitive_root,
+            root_order,
+        );
+
+        left.append(&mut right);
+        left
+    }
+
+    pub fn fast_interpolate(
+        domain: &[PFElem],
+        values: &[PFElem],
+        primitive_root: &BFieldElement,
+        root_order: usize,
+    ) -> Self {
+        assert_eq!(
+            domain.len(),
+            values.len(),
+            "Domain and values lengths must match"
+        );
+        debug_assert_eq!(
+            primitive_root.mod_pow_u32(root_order as u32),
+            BFieldElement::one(),
+            "Supplied element “primitive_root” must have supplied order.\
+            Supplied element was: {:?}\
+            Supplied order was: {:?}",
+            primitive_root,
+            root_order
+        );
+
+        assert!(
+            !domain.is_empty(),
+            "Cannot fast interpolate through zero points.",
+        );
+
+        if domain.len() == 1 {
+            return Polynomial {
+                coefficients: vec![values[0]],
+            };
+        }
+
+        let half = domain.len() / 2;
+
+        let left_zerofier = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
+        let right_zerofier = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+
+        let left_offset: Vec<PFElem> =
+            Self::fast_evaluate(&right_zerofier, &domain[..half], primitive_root, root_order);
+        let right_offset: Vec<PFElem> =
+            Self::fast_evaluate(&left_zerofier, &domain[half..], primitive_root, root_order);
+
+        let left_targets: Vec<PFElem> = values[..half]
+            .iter()
+            .zip(left_offset)
+            .map(|(n, d)| n.to_owned() / d)
+            .collect();
+        let right_targets: Vec<PFElem> = values[half..]
+            .iter()
+            .zip(right_offset)
+            .map(|(n, d)| n.to_owned() / d)
+            .collect();
+
+        let left_interpolant =
+            Self::fast_interpolate(&domain[..half], &left_targets, primitive_root, root_order);
+        let right_interpolant =
+            Self::fast_interpolate(&domain[half..], &right_targets, primitive_root, root_order);
+
+        let left_term = Self::fast_multiply(
+            &left_interpolant,
+            &right_zerofier,
+            primitive_root,
+            root_order,
+        );
+        let right_term = Self::fast_multiply(
+            &right_interpolant,
+            &left_zerofier,
+            primitive_root,
+            root_order,
+        );
+        left_term + right_term
+    }
+
+    /// Fast evaluate on a coset domain, which is the group generated by `generator^i * offset`
+    pub fn fast_coset_evaluate(
+        &self,
+        offset: &BFieldElement,
+        generator: BFieldElement,
+        order: usize,
+    ) -> Vec<PFElem> {
+        let mut coefficients = self.scale(offset).coefficients;
+        coefficients.append(&mut vec![PFElem::zero(); order - coefficients.len()]);
+        let log_2_of_n = log_2_floor(coefficients.len() as u128) as u32;
+        ntt::<PFElem>(&mut coefficients, generator, log_2_of_n);
+        coefficients
+    }
+
+    /// The inverse of `fast_coset_evaluate`
+    pub fn fast_coset_interpolate(
+        offset: &BFieldElement,
+        generator: BFieldElement,
+        values: &[PFElem],
+    ) -> Self {
+        let length = values.len();
+        let mut mut_values = values.to_vec();
+        intt(
+            &mut mut_values,
+            generator,
+            log_2_ceil(length as u128) as u32,
+        );
+        let poly = Polynomial::new(mut_values);
+
+        poly.scale(&offset.inverse())
+    }
+
+    /// Divide two polynomials under the homomorphism of evaluation for a N^2 -> N*log(N) speedup
+    /// Since we often want to use this fast division for numerators and divisors that evaluate
+    /// to zero in their domain, we do the division with an offset from the polynomials' original
+    /// domains. The issue of zero in the numerator and divisor arises when we divide a transition
+    /// polynomial with a zerofier.
+    pub fn fast_coset_divide(
+        lhs: &Polynomial<PFElem>,
+        rhs: &Polynomial<PFElem>,
+        offset: BFieldElement,
+        primitive_root: BFieldElement,
+        root_order: usize,
+    ) -> Polynomial<PFElem> {
+        assert!(
+            primitive_root.mod_pow_u32(root_order as u32).is_one(),
+            "primitive root raised to given order must yield 1"
+        );
+        assert!(
+            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one(),
+            "primitive root raised to half of given order must not yield 1"
+        );
+        assert!(!rhs.is_zero(), "cannot divide by zero polynomial");
+
+        if lhs.is_zero() {
+            return Polynomial {
+                coefficients: vec![],
+            };
+        }
+
+        assert!(
+            rhs.degree() <= lhs.degree(),
+            "in polynomial division, right hand side degree must be at most that of left hand side"
+        );
+
+        let zero = PFElem::zero();
+        let mut root: BFieldElement = primitive_root.to_owned();
+        let mut order = root_order;
+        let degree: usize = lhs.degree() as usize;
+
+        if degree < 8 {
+            return lhs.to_owned() / rhs.to_owned();
+        }
+
+        while degree < order / 2 {
+            root *= root;
+            order /= 2;
+        }
+
+        let mut scaled_lhs_coefficients: Vec<PFElem> = lhs.scale(&offset).coefficients;
+        scaled_lhs_coefficients.append(&mut vec![zero; order - scaled_lhs_coefficients.len()]);
+
+        let mut scaled_rhs_coefficients: Vec<PFElem> = rhs.scale(&offset).coefficients;
+        scaled_rhs_coefficients.append(&mut vec![zero; order - scaled_rhs_coefficients.len()]);
+
+        let lhs_log_2_of_n = log_2_floor(scaled_lhs_coefficients.len() as u128) as u32;
+        let rhs_log_2_of_n = log_2_floor(scaled_rhs_coefficients.len() as u128) as u32;
+
+        ntt::<PFElem>(&mut scaled_lhs_coefficients, root, lhs_log_2_of_n);
+        ntt::<PFElem>(&mut scaled_rhs_coefficients, root, rhs_log_2_of_n);
+
+        let rhs_inverses = PFElem::batch_inversion(scaled_rhs_coefficients);
+        let mut quotient_codeword: Vec<PFElem> = scaled_lhs_coefficients
+            .iter()
+            .zip(rhs_inverses)
+            .map(|(l, r)| l.to_owned() * r)
+            .collect();
+
+        let log_2_of_n = log_2_floor(quotient_codeword.len() as u128) as u32;
+        intt::<PFElem>(&mut quotient_codeword, root, log_2_of_n);
+
+        let scaled_quotient = Polynomial {
+            coefficients: quotient_codeword,
+        };
+
+        scaled_quotient.scale(&offset.inverse())
+    }
+}
+
 impl<PFElem: FiniteField> Polynomial<PFElem> {
     pub fn new(coefficients: Vec<PFElem>) -> Self {
         Self { coefficients }
@@ -126,23 +600,9 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
             coefficients: vec![element],
         }
     }
-
-    // FIXME: Can be done with traits instead of explicitly mentioning B and X.
-    // Thor does not agree that this is a good path to venture down
-    pub fn lift_b_x(b_poly: &Polynomial<BFieldElement>) -> Polynomial<XFieldElement> {
-        let x_field_coefficients = b_poly.coefficients.iter().map(|b| b.lift()).collect();
-        Polynomial::new(x_field_coefficients)
-    }
-
     pub fn normalize(&mut self) {
         while !self.coefficients.is_empty() && self.coefficients.last().unwrap().is_zero() {
             self.coefficients.pop();
-        }
-    }
-
-    pub fn zero() -> Self {
-        Self {
-            coefficients: vec![],
         }
     }
 
@@ -150,14 +610,6 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         Self {
             coefficients: vec![constant],
         }
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self.coefficients.is_empty() || self.coefficients.iter().all(|x| x.is_zero())
-    }
-
-    pub fn is_one(&self) -> bool {
-        self.degree() == 0 && self.coefficients[0].is_one()
     }
 
     pub fn is_x(&self) -> bool {
@@ -177,23 +629,6 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         match self.degree() {
             -1 => None,
             n => Some(self.coefficients[n as usize]),
-        }
-    }
-
-    // Return the polynomial which corresponds to the transformation `x -> alpha * x`
-    // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
-    // then corresponds to evaluating P(alpha * x).
-    #[must_use]
-    pub fn scale(&self, &alpha: &PFElem) -> Self {
-        let mut acc = PFElem::one();
-        let mut return_coefficients = self.coefficients.clone();
-        for elem in return_coefficients.iter_mut() {
-            *elem *= acc;
-            acc *= alpha;
-        }
-
-        Self {
-            coefficients: return_coefficients,
         }
     }
 
@@ -393,430 +828,6 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         let xs: Vec<PFElem> = points.iter().map(|x| x.0.to_owned()).collect();
         let ys: Vec<PFElem> = points.iter().map(|x| x.1.to_owned()).collect();
         Self::lagrange_interpolate(&xs, &ys)
-    }
-}
-
-impl<PFElem: FiniteField> Polynomial<PFElem> {
-    // It is the caller's responsibility that this function
-    // is called with sufficiently large input to be safe
-    // and to be faster than `square`.
-    #[must_use]
-    pub fn fast_square(&self) -> Self {
-        let degree = self.degree();
-        if degree == -1 {
-            return Self::zero();
-        }
-        if degree == 0 {
-            return Self::from_constant(self.coefficients[0] * self.coefficients[0]);
-        }
-
-        let result_degree: u64 = 2 * self.degree() as u64;
-        let order = roundup_npo2(result_degree + 1);
-        let root_res = PFElem::primitive_root_of_unity(order);
-        let root = match root_res {
-            Some(n) => n,
-            None => panic!("Failed to find primitive root for order = {}", order),
-        };
-
-        let mut coefficients = self.coefficients.to_vec();
-        coefficients.resize(order as usize, PFElem::zero());
-        let log_2_of_n = log_2_floor(coefficients.len() as u128) as u32;
-        ntt::<PFElem>(&mut coefficients, root, log_2_of_n);
-
-        for element in coefficients.iter_mut() {
-            *element = element.to_owned() * element.to_owned();
-        }
-
-        intt::<PFElem>(&mut coefficients, root, log_2_of_n);
-        coefficients.truncate(result_degree as usize + 1);
-
-        Polynomial { coefficients }
-    }
-
-    #[must_use]
-    pub fn square(&self) -> Self {
-        let degree = self.degree();
-        if degree == -1 {
-            return Self::zero();
-        }
-
-        // A benchmark run on sword_smith's PC revealed that
-        // `fast_square` was faster when the input size exceeds
-        // a length of 64.
-        let squared_coefficient_len = self.degree() as usize * 2 + 1;
-        if squared_coefficient_len > 64 {
-            return self.fast_square();
-        }
-
-        let zero = PFElem::zero();
-        let one = PFElem::one();
-        let two = one + one;
-        let mut squared_coefficients = vec![zero; squared_coefficient_len];
-
-        // TODO: Review.
-        for i in 0..self.coefficients.len() {
-            let ci = self.coefficients[i];
-            squared_coefficients[2 * i] += ci * ci;
-
-            for j in i + 1..self.coefficients.len() {
-                let cj = self.coefficients[j];
-                squared_coefficients[i + j] += two * ci * cj;
-            }
-        }
-
-        Self {
-            coefficients: squared_coefficients,
-        }
-    }
-
-    #[must_use]
-    pub fn fast_mod_pow(&self, pow: BigInt) -> Self {
-        let one = PFElem::one();
-
-        // Special case to handle 0^0 = 1
-        if pow.is_zero() {
-            return Self::from_constant(one);
-        }
-
-        if self.is_zero() {
-            return Self::zero();
-        }
-
-        if pow.is_one() {
-            return self.clone();
-        }
-
-        let mut acc = Polynomial::from_constant(one);
-        let bit_length: u64 = pow.bits();
-        for i in 0..bit_length {
-            acc = acc.square();
-            let set: bool =
-                !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
-            if set {
-                acc = self.to_owned() * acc;
-            }
-        }
-
-        acc
-    }
-}
-
-impl<PFElem: FiniteField> Polynomial<PFElem> {
-    // FIXME: lhs -> &self. FIXME: Change root_order: usize into : u32.
-    pub fn fast_multiply(
-        lhs: &Self,
-        rhs: &Self,
-        primitive_root: &PFElem,
-        root_order: usize,
-    ) -> Self {
-        assert!(
-            primitive_root.mod_pow_u32(root_order as u32).is_one(),
-            "provided primitive root must have the provided power."
-        );
-        assert!(
-            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one(),
-            "provided primitive root must be primitive in the right power."
-        );
-
-        if lhs.is_zero() || rhs.is_zero() {
-            return Self::zero();
-        }
-
-        let mut root: PFElem = primitive_root.to_owned();
-        let mut order = root_order;
-        let lhs_degree = lhs.degree() as usize;
-        let rhs_degree = rhs.degree() as usize;
-        let degree = lhs_degree + rhs_degree;
-
-        if degree < 8 {
-            return lhs.to_owned() * rhs.to_owned();
-        }
-
-        while degree < order / 2 {
-            root *= root;
-            order /= 2;
-        }
-
-        let mut lhs_coefficients: Vec<PFElem> = lhs.coefficients[0..lhs_degree + 1].to_vec();
-        let mut rhs_coefficients: Vec<PFElem> = rhs.coefficients[0..rhs_degree + 1].to_vec();
-        while lhs_coefficients.len() < order {
-            lhs_coefficients.push(PFElem::zero());
-        }
-        while rhs_coefficients.len() < order {
-            rhs_coefficients.push(PFElem::zero());
-        }
-
-        let lhs_log_2_of_n = log_2_floor(lhs_coefficients.len() as u128) as u32;
-        let rhs_log_2_of_n = log_2_floor(rhs_coefficients.len() as u128) as u32;
-        ntt::<PFElem>(&mut lhs_coefficients, root, lhs_log_2_of_n);
-        ntt::<PFElem>(&mut rhs_coefficients, root, rhs_log_2_of_n);
-
-        let mut hadamard_product: Vec<PFElem> = rhs_coefficients
-            .into_iter()
-            .zip(lhs_coefficients.into_iter())
-            .map(|(r, l)| r * l)
-            .collect();
-
-        let log_2_of_n = log_2_floor(hadamard_product.len() as u128) as u32;
-        intt::<PFElem>(&mut hadamard_product, root, log_2_of_n);
-        hadamard_product.truncate(degree + 1);
-
-        Polynomial {
-            coefficients: hadamard_product,
-        }
-    }
-
-    // domain: polynomial roots
-    pub fn fast_zerofier(domain: &[PFElem], primitive_root: &PFElem, root_order: usize) -> Self {
-        debug_assert_eq!(
-            primitive_root.mod_pow_u32(root_order as u32),
-            PFElem::one(),
-            "Supplied element “primitive_root” must have supplied order.\
-            Supplied element was: {:?}\
-            Supplied order was: {:?}",
-            primitive_root,
-            root_order
-        );
-
-        if domain.is_empty() {
-            return Self::zero();
-        }
-
-        if domain.len() == 1 {
-            return Self {
-                coefficients: vec![-domain[0], PFElem::one()],
-            };
-        }
-
-        // This assertion must come after above recursion-ending cases have been dealt with.
-        // Otherwise, the supplied primitive_root will (at some point) equal 1 with correct
-        // root_order = 1, incorrectly failing the assertion.
-        debug_assert_ne!(
-            primitive_root.mod_pow_u32((root_order / 2) as u32),
-            PFElem::one(),
-            "Supplied element “primitive_root” must be primitive root of supplied order.\
-            Supplied element was: {:?}\
-            Supplied order was: {:?}",
-            primitive_root,
-            root_order
-        );
-
-        let half = domain.len() / 2;
-
-        let left = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
-        let right = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
-        Self::fast_multiply(&left, &right, primitive_root, root_order)
-    }
-
-    pub fn fast_evaluate(
-        &self,
-        domain: &[PFElem],
-        primitive_root: &PFElem,
-        root_order: usize,
-    ) -> Vec<PFElem> {
-        if domain.is_empty() {
-            return vec![];
-        }
-
-        if domain.len() == 1 {
-            return vec![self.evaluate(&domain[0])];
-        }
-
-        let half = domain.len() / 2;
-
-        let left_zerofier = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
-        let right_zerofier = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
-
-        let mut left = (self.clone() % left_zerofier).fast_evaluate(
-            &domain[..half],
-            primitive_root,
-            root_order,
-        );
-        let mut right = (self.clone() % right_zerofier).fast_evaluate(
-            &domain[half..],
-            primitive_root,
-            root_order,
-        );
-
-        left.append(&mut right);
-        left
-    }
-
-    pub fn fast_interpolate(
-        domain: &[PFElem],
-        values: &[PFElem],
-        primitive_root: &PFElem,
-        root_order: usize,
-    ) -> Self {
-        assert_eq!(
-            domain.len(),
-            values.len(),
-            "Domain and values lengths must match"
-        );
-        debug_assert_eq!(
-            primitive_root.mod_pow_u32(root_order as u32),
-            PFElem::one(),
-            "Supplied element “primitive_root” must have supplied order.\
-            Supplied element was: {:?}\
-            Supplied order was: {:?}",
-            primitive_root,
-            root_order
-        );
-
-        assert!(
-            !domain.is_empty(),
-            "Cannot fast interpolate through zero points.",
-        );
-
-        if domain.len() == 1 {
-            return Polynomial {
-                coefficients: vec![values[0]],
-            };
-        }
-
-        let half = domain.len() / 2;
-
-        let left_zerofier = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
-        let right_zerofier = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
-
-        let left_offset: Vec<PFElem> =
-            Self::fast_evaluate(&right_zerofier, &domain[..half], primitive_root, root_order);
-        let right_offset: Vec<PFElem> =
-            Self::fast_evaluate(&left_zerofier, &domain[half..], primitive_root, root_order);
-
-        let left_targets: Vec<PFElem> = values[..half]
-            .iter()
-            .zip(left_offset)
-            .map(|(n, d)| n.to_owned() / d)
-            .collect();
-        let right_targets: Vec<PFElem> = values[half..]
-            .iter()
-            .zip(right_offset)
-            .map(|(n, d)| n.to_owned() / d)
-            .collect();
-
-        let left_interpolant =
-            Self::fast_interpolate(&domain[..half], &left_targets, primitive_root, root_order);
-        let right_interpolant =
-            Self::fast_interpolate(&domain[half..], &right_targets, primitive_root, root_order);
-
-        let left_term = Self::fast_multiply(
-            &left_interpolant,
-            &right_zerofier,
-            primitive_root,
-            root_order,
-        );
-        let right_term = Self::fast_multiply(
-            &right_interpolant,
-            &left_zerofier,
-            primitive_root,
-            root_order,
-        );
-        left_term + right_term
-    }
-
-    /// Fast evaluate on a coset domain, which is the group generated by `generator^i * offset`
-    pub fn fast_coset_evaluate(
-        &self,
-        offset: &PFElem,
-        generator: PFElem,
-        order: usize,
-    ) -> Vec<PFElem> {
-        let mut coefficients = self.scale(offset).coefficients;
-        coefficients.append(&mut vec![PFElem::zero(); order - coefficients.len()]);
-        let log_2_of_n = log_2_floor(coefficients.len() as u128) as u32;
-        ntt::<PFElem>(&mut coefficients, generator, log_2_of_n);
-        coefficients
-    }
-
-    /// The inverse of `fast_coset_evaluate`
-    pub fn fast_coset_interpolate(offset: &PFElem, generator: PFElem, values: &[PFElem]) -> Self {
-        let length = values.len();
-        let mut mut_values = values.to_vec();
-        intt(
-            &mut mut_values,
-            generator,
-            log_2_ceil(length as u128) as u32,
-        );
-        let poly = Polynomial::new(mut_values);
-
-        poly.scale(&offset.inverse())
-    }
-
-    /// Divide two polynomials under the homomorphism of evaluation for a N^2 -> N*log(N) speedup
-    /// Since we often want to use this fast division for numerators and divisors that evaluate
-    /// to zero in their domain, we do the division with an offset from the polynomials' original
-    /// domains. The issue of zero in the numerator and divisor arises when we divide a transition
-    /// polynomial with a zerofier.
-    pub fn fast_coset_divide(
-        lhs: &Polynomial<PFElem>,
-        rhs: &Polynomial<PFElem>,
-        offset: PFElem,
-        primitive_root: PFElem,
-        root_order: usize,
-    ) -> Polynomial<PFElem> {
-        assert!(
-            primitive_root.mod_pow_u32(root_order as u32).is_one(),
-            "primitive root raised to given order must yield 1"
-        );
-        assert!(
-            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one(),
-            "primitive root raised to half of given order must not yield 1"
-        );
-        assert!(!rhs.is_zero(), "cannot divide by zero polynomial");
-
-        if lhs.is_zero() {
-            return Polynomial {
-                coefficients: vec![],
-            };
-        }
-
-        assert!(
-            rhs.degree() <= lhs.degree(),
-            "in polynomial division, right hand side degree must be at most that of left hand side"
-        );
-
-        let zero = PFElem::zero();
-        let mut root: PFElem = primitive_root.to_owned();
-        let mut order = root_order;
-        let degree: usize = lhs.degree() as usize;
-
-        if degree < 8 {
-            return lhs.to_owned() / rhs.to_owned();
-        }
-
-        while degree < order / 2 {
-            root *= root;
-            order /= 2;
-        }
-
-        let mut scaled_lhs_coefficients: Vec<PFElem> = lhs.scale(&offset).coefficients;
-        scaled_lhs_coefficients.append(&mut vec![zero; order - scaled_lhs_coefficients.len()]);
-
-        let mut scaled_rhs_coefficients: Vec<PFElem> = rhs.scale(&offset).coefficients;
-        scaled_rhs_coefficients.append(&mut vec![zero; order - scaled_rhs_coefficients.len()]);
-
-        let lhs_log_2_of_n = log_2_floor(scaled_lhs_coefficients.len() as u128) as u32;
-        let rhs_log_2_of_n = log_2_floor(scaled_rhs_coefficients.len() as u128) as u32;
-
-        ntt::<PFElem>(&mut scaled_lhs_coefficients, root, lhs_log_2_of_n);
-        ntt::<PFElem>(&mut scaled_rhs_coefficients, root, rhs_log_2_of_n);
-
-        let rhs_inverses = PFElem::batch_inversion(scaled_rhs_coefficients);
-        let mut quotient_codeword: Vec<PFElem> = scaled_lhs_coefficients
-            .iter()
-            .zip(rhs_inverses)
-            .map(|(l, r)| l.to_owned() * r)
-            .collect();
-
-        let log_2_of_n = log_2_floor(quotient_codeword.len() as u128) as u32;
-        intt::<PFElem>(&mut quotient_codeword, root, log_2_of_n);
-
-        let scaled_quotient = Polynomial {
-            coefficients: quotient_codeword,
-        };
-
-        scaled_quotient.scale(&(PFElem::one() / offset.to_owned()))
     }
 }
 
@@ -1085,6 +1096,7 @@ mod test_polynomials {
 
     use crate::shared_math::other::{random_elements, random_elements_distinct};
     use crate::shared_math::traits::PrimitiveRootOfUnity;
+    use crate::shared_math::x_field_element::XFieldElement;
 
     use super::*;
 
@@ -2544,19 +2556,6 @@ mod test_polynomials {
     }
 
     #[test]
-    fn lift_b_x_test() {
-        for _ in 0..5 {
-            let pol = gen_polynomial();
-            let lifted_pol: Polynomial<XFieldElement> = Polynomial::<BFieldElement>::lift_b_x(&pol);
-            for (coefficient, lifted_coefficient) in
-                pol.coefficients.iter().zip(lifted_pol.coefficients.iter())
-            {
-                assert_eq!(Some(*coefficient), lifted_coefficient.unlift());
-            }
-        }
-    }
-
-    #[test]
     fn constant_zero_eq_constant_zero() {
         let zero_polynomial1 = Polynomial::<BFieldElement>::zero();
         let zero_polynomial2 = Polynomial::<BFieldElement>::zero();
@@ -2597,6 +2596,63 @@ mod test_polynomials {
 
         Polynomial {
             coefficients: random_elements(coefficient_count),
+        }
+    }
+
+    #[test]
+    fn zero_test() {
+        let mut zero_pol: Polynomial<BFieldElement> = Polynomial::zero();
+        assert!(zero_pol.is_zero());
+
+        // Verify that trailing zeros in the coefficients does not affect the `is_zero` result
+        for _ in 0..12 {
+            zero_pol.coefficients.push(BFieldElement::zero());
+            assert!(zero_pol.is_zero());
+        }
+
+        // Verify that other constant-polynomials are not `zero`
+        let rand_bs: Vec<BFieldElement> = random_elements(10);
+        for rand_b in rand_bs {
+            let pol: Polynomial<BFieldElement> = Polynomial {
+                coefficients: vec![rand_b],
+            };
+            assert!(
+                !pol.is_zero() || rand_b.is_zero(),
+                "Pol is not zero if constant coefficient is not zero"
+            );
+        }
+    }
+
+    #[test]
+    fn one_test() {
+        let mut one_pol: Polynomial<BFieldElement> = Polynomial::one();
+        assert!(one_pol.is_one(), "One must be one");
+
+        // Verify that trailing zeros in the coefficients does not affect the `is_zero` result
+        let one_pol_original = one_pol.clone();
+        for _ in 0..12 {
+            one_pol.coefficients.push(BFieldElement::zero());
+            assert!(
+                one_pol.is_one(),
+                "One must be one, also with trailing zeros"
+            );
+            assert_eq!(
+                one_pol_original, one_pol,
+                "One must be equal to one with trailing zeros"
+            );
+        }
+
+        // Verify that other constant-polynomials are not `one`
+        let rand_bs: Vec<BFieldElement> = random_elements(10);
+        for rand_b in rand_bs {
+            let pol: Polynomial<BFieldElement> = Polynomial {
+                coefficients: vec![rand_b],
+            };
+            assert!(
+                !pol.is_one() || rand_b.is_one(),
+                "Pol is not one if constant coefficient is not one"
+            );
+            assert!(0 == pol.degree() || -1 == pol.degree());
         }
     }
 
