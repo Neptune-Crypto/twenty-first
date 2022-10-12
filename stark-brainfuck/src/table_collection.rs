@@ -238,6 +238,7 @@ impl<'a> IntoIterator for &'a TableCollection {
 mod brainfuck_table_collection_tests {
     use super::*;
 
+    use num_traits::Zero;
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::rc::Rc;

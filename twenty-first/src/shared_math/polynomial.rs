@@ -66,6 +66,30 @@ fn pretty_print_coefficients_generic<PFElem: FiniteField>(coefficients: &[PFElem
     outputs.join("")
 }
 
+impl<PFElem: FiniteField> Zero for Polynomial<PFElem> {
+    fn zero() -> Self {
+        Self {
+            coefficients: vec![],
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        *self == Self::zero()
+    }
+}
+
+impl<PFElem: FiniteField> One for Polynomial<PFElem> {
+    fn one() -> Self {
+        Self {
+            coefficients: vec![PFElem::one()],
+        }
+    }
+
+    fn is_one(&self) -> bool {
+        self.degree() == 0 && self.coefficients[0].is_one()
+    }
+}
+
 pub struct Polynomial<PFElem: FiniteField> {
     pub coefficients: Vec<PFElem>,
 }
@@ -591,24 +615,10 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         }
     }
 
-    pub fn zero() -> Self {
-        Self {
-            coefficients: vec![],
-        }
-    }
-
     pub fn from_constant(constant: PFElem) -> Self {
         Self {
             coefficients: vec![constant],
         }
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self.coefficients.is_empty() || self.coefficients.iter().all(|x| x.is_zero())
-    }
-
-    pub fn is_one(&self) -> bool {
-        self.degree() == 0 && self.coefficients[0].is_one()
     }
 
     pub fn is_x(&self) -> bool {
@@ -1095,6 +1105,7 @@ mod test_polynomials {
 
     use crate::shared_math::other::{random_elements, random_elements_distinct};
     use crate::shared_math::traits::PrimitiveRootOfUnity;
+    use crate::shared_math::x_field_element::XFieldElement;
 
     use super::*;
 
@@ -2607,6 +2618,63 @@ mod test_polynomials {
 
         Polynomial {
             coefficients: random_elements(coefficient_count),
+        }
+    }
+
+    #[test]
+    fn zero_test() {
+        let mut zero_pol: Polynomial<BFieldElement> = Polynomial::zero();
+        assert!(zero_pol.is_zero());
+
+        // Verify that trailing zeros in the coefficients does not affect the `is_zero` result
+        for _ in 0..12 {
+            zero_pol.coefficients.push(BFieldElement::zero());
+            assert!(zero_pol.is_zero());
+        }
+
+        // Verify that other constant-polynomials are not `zero`
+        let rand_bs: Vec<BFieldElement> = random_elements(10);
+        for rand_b in rand_bs {
+            let pol: Polynomial<BFieldElement> = Polynomial {
+                coefficients: vec![rand_b],
+            };
+            assert!(
+                !pol.is_zero() || rand_b.is_zero(),
+                "Pol is not zero if constant coefficient is not zero"
+            );
+        }
+    }
+
+    #[test]
+    fn one_test() {
+        let mut one_pol: Polynomial<BFieldElement> = Polynomial::one();
+        assert!(one_pol.is_one(), "One must be one");
+
+        // Verify that trailing zeros in the coefficients does not affect the `is_zero` result
+        let one_pol_original = one_pol.clone();
+        for _ in 0..12 {
+            one_pol.coefficients.push(BFieldElement::zero());
+            assert!(
+                one_pol.is_one(),
+                "One must be one, also with trailing zeros"
+            );
+            assert_eq!(
+                one_pol_original, one_pol,
+                "One must be equal to one with trailing zeros"
+            );
+        }
+
+        // Verify that other constant-polynomials are not `one`
+        let rand_bs: Vec<BFieldElement> = random_elements(10);
+        for rand_b in rand_bs {
+            let pol: Polynomial<BFieldElement> = Polynomial {
+                coefficients: vec![rand_b],
+            };
+            assert!(
+                !pol.is_one() || rand_b.is_one(),
+                "Pol is not one if constant coefficient is not one"
+            );
+            assert!(0 == pol.degree() || -1 == pol.degree());
         }
     }
 

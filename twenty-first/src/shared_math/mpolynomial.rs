@@ -725,7 +725,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
             .coefficients
             .par_iter()
             .map(|(k, v)| exponents_memoization[k].scalar_mul(*v))
-            .reduce(|| Polynomial::zero(), |a, b| a + b);
+            .reduce(Polynomial::zero, |a, b| a + b);
 
         acc
     }

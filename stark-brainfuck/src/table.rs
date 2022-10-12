@@ -1,4 +1,5 @@
 use num_traits::One;
+use num_traits::Zero;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
