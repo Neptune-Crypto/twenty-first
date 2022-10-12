@@ -5,7 +5,7 @@ use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIter
 use super::b_field_element::BFieldElement;
 use super::other::{log_2_ceil, log_2_floor};
 use super::polynomial::Polynomial;
-use super::traits::{CyclicGroupGenerator, FromVecu8, ModPowU32, MulBFieldElement};
+use super::traits::{CyclicGroupGenerator, FromVecu8, ModPowU32};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::traits::FiniteField;
@@ -253,9 +253,8 @@ where
                 .into_par_iter()
                 .map(|i| {
                     two_inv
-                        * ((one + alpha.mul_bfe(x_offset_inverses[i])) * codeword_local[i]
-                            + (one - alpha.mul_bfe(x_offset_inverses[i]))
-                                * codeword_local[n / 2 + i])
+                        * ((one + alpha * x_offset_inverses[i]) * codeword_local[i]
+                            + (one - alpha * x_offset_inverses[i]) * codeword_local[n / 2 + i])
                 })
                 .collect();
 

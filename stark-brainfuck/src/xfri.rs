@@ -11,8 +11,8 @@ use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::ntt::{intt, ntt};
 use twenty_first::shared_math::other::{log_2_ceil, log_2_floor};
 use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::shared_math::traits::FiniteField;
 use twenty_first::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
-use twenty_first::shared_math::traits::{FiniteField, MulBFieldElement};
 use twenty_first::shared_math::x_field_element::XFieldElement;
 use twenty_first::timing_reporter::TimingReporter;
 use twenty_first::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
@@ -274,9 +274,8 @@ where
                 .into_par_iter()
                 .map(|i| {
                     two_inv
-                        * ((one + alpha.mul_bfe(x_offset_inverses[i])) * codeword_local[i]
-                            + (one - alpha.mul_bfe(x_offset_inverses[i]))
-                                * codeword_local[n / 2 + i])
+                        * ((one + alpha * x_offset_inverses[i]) * codeword_local[i]
+                            + (one - alpha * x_offset_inverses[i]) * codeword_local[n / 2 + i])
                 })
                 .collect();
 

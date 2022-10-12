@@ -9,7 +9,7 @@ use num_traits::{One, Zero};
 use std::convert::From;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
-use std::ops::{Add, AddAssign, Div, Mul, Rem, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Rem, Sub};
 
 use super::b_field_element::BFieldElement;
 use super::other::log_2_ceil;
@@ -117,70 +117,10 @@ impl<PFElem: FiniteField> PartialEq for Polynomial<PFElem> {
 
 impl<PFElem: FiniteField> Eq for Polynomial<PFElem> {}
 
-impl<PFElem: FiniteField> Polynomial<PFElem> {
-    pub fn new(coefficients: Vec<PFElem>) -> Self {
-        Self { coefficients }
-    }
-
-    pub fn new_const(element: PFElem) -> Self {
-        Self {
-            coefficients: vec![element],
-        }
-    }
-
-    // FIXME: Can be done with traits instead of explicitly mentioning B and X.
-    // Thor does not agree that this is a good path to venture down
-    pub fn lift_b_x(b_poly: &Polynomial<BFieldElement>) -> Polynomial<XFieldElement> {
-        let x_field_coefficients = b_poly.coefficients.iter().map(|b| b.lift()).collect();
-        Polynomial::new(x_field_coefficients)
-    }
-
-    pub fn normalize(&mut self) {
-        while !self.coefficients.is_empty() && self.coefficients.last().unwrap().is_zero() {
-            self.coefficients.pop();
-        }
-    }
-
-    pub fn zero() -> Self {
-        Self {
-            coefficients: vec![],
-        }
-    }
-
-    pub fn from_constant(constant: PFElem) -> Self {
-        Self {
-            coefficients: vec![constant],
-        }
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self.coefficients.is_empty() || self.coefficients.iter().all(|x| x.is_zero())
-    }
-
-    pub fn is_one(&self) -> bool {
-        self.degree() == 0 && self.coefficients[0].is_one()
-    }
-
-    pub fn is_x(&self) -> bool {
-        self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
-    }
-
-    pub fn evaluate(&self, &x: &PFElem) -> PFElem {
-        let mut acc = PFElem::zero();
-        for &c in self.coefficients.iter().rev() {
-            acc = c + x * acc;
-        }
-
-        acc
-    }
-
-    pub fn leading_coefficient(&self) -> Option<PFElem> {
-        match self.degree() {
-            -1 => None,
-            n => Some(self.coefficients[n as usize]),
-        }
-    }
-
+impl<PFElem> Polynomial<PFElem>
+where
+    PFElem: FiniteField + MulAssign<BFieldElement>,
+{
     // Return the polynomial which corresponds to the transformation `x -> alpha * x`
     // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
     // then corresponds to evaluating P(alpha * x).
@@ -190,7 +130,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         let mut return_coefficients = self.coefficients.clone();
         for elem in return_coefficients.iter_mut() {
             *elem *= acc;
-            acc = acc.mul_bfe(alpha);
+            acc *= alpha;
         }
 
         Self {
@@ -198,206 +138,6 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         }
     }
 
-    pub fn lagrange_interpolate(domain: &[PFElem], values: &[PFElem]) -> Self {
-        assert_eq!(
-            domain.len(),
-            values.len(),
-            "The domain and values lists have to be of equal length."
-        );
-        assert!(
-            !domain.is_empty(),
-            "Trying to interpolate through 0 points."
-        );
-
-        let zero = PFElem::zero();
-        let one = PFElem::one();
-
-        // precompute the coefficient vector of the zerofier,
-        // which is the monic lowest-degree polynomial that evaluates
-        // to zero in all domain points, also prod_i (X - d_i).
-        let mut zerofier_array = vec![zero; domain.len() + 1];
-        zerofier_array[0] = one;
-        let mut num_coeffs = 1;
-        for &d in domain.iter() {
-            for k in (1..num_coeffs + 1).rev() {
-                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
-            }
-            zerofier_array[0] = -d * zerofier_array[0];
-            num_coeffs += 1;
-        }
-
-        // in each iteration of this loop, we accumulate into the sum
-        // one polynomial that evaluates to some abscis (y-value) in
-        // the given ordinate (domain point), and to zero in all other
-        // ordinates.
-        let mut lagrange_sum_array = vec![zero; domain.len()];
-        let mut summand_array = vec![zero; domain.len()];
-        for (i, &abscis) in values.iter().enumerate() {
-            // divide (X - domain[i]) out of zerofier to get unweighted summand
-            let mut leading_coefficient = zerofier_array[domain.len()];
-            let mut supporting_coefficient = zerofier_array[domain.len() - 1];
-            for k in (0..domain.len()).rev() {
-                summand_array[k] = leading_coefficient;
-                leading_coefficient = supporting_coefficient + leading_coefficient * domain[i];
-                if k != 0 {
-                    supporting_coefficient = zerofier_array[k - 1];
-                }
-            }
-
-            // summand does not necessarily evaluate to 1 in domain[i],
-            // so we need to correct for this value
-            let mut summand_eval = zero;
-            for s in summand_array.iter().rev() {
-                summand_eval = summand_eval * domain[i] + *s;
-            }
-            let corrected_abscis = abscis / summand_eval;
-
-            // accumulate term
-            for j in 0..domain.len() {
-                lagrange_sum_array[j] += corrected_abscis * summand_array[j];
-            }
-        }
-        Polynomial {
-            coefficients: lagrange_sum_array,
-        }
-    }
-
-    pub fn are_colinear_3(
-        p0: (PFElem, PFElem),
-        p1: (PFElem, PFElem),
-        p2: (PFElem, PFElem),
-    ) -> bool {
-        if p0.0 == p1.0 || p1.0 == p2.0 || p2.0 == p0.0 {
-            return false;
-        }
-
-        let dy = p0.1 - p1.1;
-        let dx = p0.0 - p1.0;
-
-        dx * (p2.1 - p0.1) == dy * (p2.0 - p0.0)
-    }
-
-    pub fn get_colinear_y(p0: (PFElem, PFElem), p1: (PFElem, PFElem), p2_x: PFElem) -> PFElem {
-        debug_assert_ne!(p0.0, p1.0, "Line must not be parallel to y-axis");
-        let dy = p0.1 - p1.1;
-        let dx = p0.0 - p1.0;
-        let p2_y_times_dx = dy * (p2_x - p0.0) + dx * p0.1;
-
-        // Can we implement this without division?
-        p2_y_times_dx / dx
-    }
-
-    pub fn zerofier(domain: &[PFElem]) -> Self {
-        if domain.is_empty() {
-            return Self {
-                coefficients: vec![PFElem::one()],
-            };
-        }
-        let mut zerofier_array = vec![PFElem::zero(); domain.len() + 1];
-        zerofier_array[0] = PFElem::one();
-        let mut num_coeffs = 1;
-        for &d in domain.iter() {
-            for k in (1..num_coeffs + 1).rev() {
-                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
-            }
-            zerofier_array[0] = -d * zerofier_array[0];
-            num_coeffs += 1;
-        }
-        Self {
-            coefficients: zerofier_array,
-        }
-    }
-
-    // Slow square implementation that does not use NTT
-    #[must_use]
-    pub fn slow_square(&self) -> Self {
-        let degree = self.degree();
-        if degree == -1 {
-            return Self::zero();
-        }
-
-        let squared_coefficient_len = self.degree() as usize * 2 + 1;
-        let zero = PFElem::zero();
-        let one = PFElem::one();
-        let two = one + one;
-        let mut squared_coefficients = vec![zero; squared_coefficient_len];
-
-        for i in 0..self.coefficients.len() {
-            let ci = self.coefficients[i];
-            squared_coefficients[2 * i] += ci * ci;
-
-            // TODO: Review.
-            for j in i + 1..self.coefficients.len() {
-                let cj = self.coefficients[j];
-                squared_coefficients[i + j] += two * ci * cj;
-            }
-        }
-
-        Self {
-            coefficients: squared_coefficients,
-        }
-    }
-}
-
-impl<PFElem: FiniteField> Polynomial<PFElem> {
-    pub fn are_colinear(points: &[(PFElem, PFElem)]) -> bool {
-        if points.len() < 3 {
-            println!("Too few points received. Got: {} points", points.len());
-            return false;
-        }
-
-        if !has_unique_elements(points.iter().map(|p| p.0)) {
-            println!("Non-unique element spotted Got: {:?}", points);
-            return false;
-        }
-
-        // Find 1st degree polynomial from first two points
-        let one: PFElem = PFElem::one();
-        let x_diff: PFElem = points[0].0 - points[1].0;
-        let x_diff_inv = one / x_diff;
-        let a = (points[0].1 - points[1].1) * x_diff_inv;
-        let b = points[0].1 - a * points[0].0;
-        for point in points.iter().skip(2) {
-            let expected = a * point.0 + b;
-            if point.1 != expected {
-                println!(
-                    "L({}) = {}, expected L({}) = {}, Found: L(x) = {}x + {} from {{({},{}),({},{})}}",
-                    point.0,
-                    point.1,
-                    point.0,
-                    expected,
-                    a,
-                    b,
-                    points[0].0,
-                    points[0].1,
-                    points[1].0,
-                    points[1].1
-                );
-                return false;
-            }
-        }
-
-        true
-    }
-
-    // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
-    // purposes. This also means that it is not pivotal that this function has an optimal
-    // runtime.
-    pub fn lagrange_interpolate_zipped(points: &[(PFElem, PFElem)]) -> Self {
-        if points.is_empty() {
-            panic!("Cannot interpolate through zero points.");
-        }
-        if !has_unique_elements(points.iter().map(|x| x.0)) {
-            panic!("Repeated x values received. Got: {:?}", points);
-        }
-
-        let xs: Vec<PFElem> = points.iter().map(|x| x.0.to_owned()).collect();
-        let ys: Vec<PFElem> = points.iter().map(|x| x.1.to_owned()).collect();
-        Self::lagrange_interpolate(&xs, &ys)
-    }
-}
-
-impl<PFElem: FiniteField> Polynomial<PFElem> {
     // It is the caller's responsibility that this function
     // is called with sufficiently large input to be safe
     // and to be faster than `square`.
@@ -500,9 +240,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
 
         acc
     }
-}
 
-impl<PFElem: FiniteField> Polynomial<PFElem> {
     // FIXME: lhs -> &self. FIXME: Change root_order: usize into : u32.
     pub fn fast_multiply(
         lhs: &Self,
@@ -826,6 +564,269 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         };
 
         scaled_quotient.scale(&offset.inverse())
+    }
+}
+
+impl<PFElem: FiniteField> Polynomial<PFElem> {
+    pub fn new(coefficients: Vec<PFElem>) -> Self {
+        Self { coefficients }
+    }
+
+    pub fn new_const(element: PFElem) -> Self {
+        Self {
+            coefficients: vec![element],
+        }
+    }
+
+    // FIXME: Can be done with traits instead of explicitly mentioning B and X.
+    // Thor does not agree that this is a good path to venture down
+    pub fn lift_b_x(b_poly: &Polynomial<BFieldElement>) -> Polynomial<XFieldElement> {
+        let x_field_coefficients = b_poly.coefficients.iter().map(|b| b.lift()).collect();
+        Polynomial::new(x_field_coefficients)
+    }
+
+    pub fn normalize(&mut self) {
+        while !self.coefficients.is_empty() && self.coefficients.last().unwrap().is_zero() {
+            self.coefficients.pop();
+        }
+    }
+
+    pub fn zero() -> Self {
+        Self {
+            coefficients: vec![],
+        }
+    }
+
+    pub fn from_constant(constant: PFElem) -> Self {
+        Self {
+            coefficients: vec![constant],
+        }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.coefficients.is_empty() || self.coefficients.iter().all(|x| x.is_zero())
+    }
+
+    pub fn is_one(&self) -> bool {
+        self.degree() == 0 && self.coefficients[0].is_one()
+    }
+
+    pub fn is_x(&self) -> bool {
+        self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
+    }
+
+    pub fn evaluate(&self, &x: &PFElem) -> PFElem {
+        let mut acc = PFElem::zero();
+        for &c in self.coefficients.iter().rev() {
+            acc = c + x * acc;
+        }
+
+        acc
+    }
+
+    pub fn leading_coefficient(&self) -> Option<PFElem> {
+        match self.degree() {
+            -1 => None,
+            n => Some(self.coefficients[n as usize]),
+        }
+    }
+
+    pub fn lagrange_interpolate(domain: &[PFElem], values: &[PFElem]) -> Self {
+        assert_eq!(
+            domain.len(),
+            values.len(),
+            "The domain and values lists have to be of equal length."
+        );
+        assert!(
+            !domain.is_empty(),
+            "Trying to interpolate through 0 points."
+        );
+
+        let zero = PFElem::zero();
+        let one = PFElem::one();
+
+        // precompute the coefficient vector of the zerofier,
+        // which is the monic lowest-degree polynomial that evaluates
+        // to zero in all domain points, also prod_i (X - d_i).
+        let mut zerofier_array = vec![zero; domain.len() + 1];
+        zerofier_array[0] = one;
+        let mut num_coeffs = 1;
+        for &d in domain.iter() {
+            for k in (1..num_coeffs + 1).rev() {
+                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
+            }
+            zerofier_array[0] = -d * zerofier_array[0];
+            num_coeffs += 1;
+        }
+
+        // in each iteration of this loop, we accumulate into the sum
+        // one polynomial that evaluates to some abscis (y-value) in
+        // the given ordinate (domain point), and to zero in all other
+        // ordinates.
+        let mut lagrange_sum_array = vec![zero; domain.len()];
+        let mut summand_array = vec![zero; domain.len()];
+        for (i, &abscis) in values.iter().enumerate() {
+            // divide (X - domain[i]) out of zerofier to get unweighted summand
+            let mut leading_coefficient = zerofier_array[domain.len()];
+            let mut supporting_coefficient = zerofier_array[domain.len() - 1];
+            for k in (0..domain.len()).rev() {
+                summand_array[k] = leading_coefficient;
+                leading_coefficient = supporting_coefficient + leading_coefficient * domain[i];
+                if k != 0 {
+                    supporting_coefficient = zerofier_array[k - 1];
+                }
+            }
+
+            // summand does not necessarily evaluate to 1 in domain[i],
+            // so we need to correct for this value
+            let mut summand_eval = zero;
+            for s in summand_array.iter().rev() {
+                summand_eval = summand_eval * domain[i] + *s;
+            }
+            let corrected_abscis = abscis / summand_eval;
+
+            // accumulate term
+            for j in 0..domain.len() {
+                lagrange_sum_array[j] += corrected_abscis * summand_array[j];
+            }
+        }
+        Polynomial {
+            coefficients: lagrange_sum_array,
+        }
+    }
+
+    pub fn are_colinear_3(
+        p0: (PFElem, PFElem),
+        p1: (PFElem, PFElem),
+        p2: (PFElem, PFElem),
+    ) -> bool {
+        if p0.0 == p1.0 || p1.0 == p2.0 || p2.0 == p0.0 {
+            return false;
+        }
+
+        let dy = p0.1 - p1.1;
+        let dx = p0.0 - p1.0;
+
+        dx * (p2.1 - p0.1) == dy * (p2.0 - p0.0)
+    }
+
+    pub fn get_colinear_y(p0: (PFElem, PFElem), p1: (PFElem, PFElem), p2_x: PFElem) -> PFElem {
+        debug_assert_ne!(p0.0, p1.0, "Line must not be parallel to y-axis");
+        let dy = p0.1 - p1.1;
+        let dx = p0.0 - p1.0;
+        let p2_y_times_dx = dy * (p2_x - p0.0) + dx * p0.1;
+
+        // Can we implement this without division?
+        p2_y_times_dx / dx
+    }
+
+    pub fn zerofier(domain: &[PFElem]) -> Self {
+        if domain.is_empty() {
+            return Self {
+                coefficients: vec![PFElem::one()],
+            };
+        }
+        let mut zerofier_array = vec![PFElem::zero(); domain.len() + 1];
+        zerofier_array[0] = PFElem::one();
+        let mut num_coeffs = 1;
+        for &d in domain.iter() {
+            for k in (1..num_coeffs + 1).rev() {
+                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
+            }
+            zerofier_array[0] = -d * zerofier_array[0];
+            num_coeffs += 1;
+        }
+        Self {
+            coefficients: zerofier_array,
+        }
+    }
+
+    // Slow square implementation that does not use NTT
+    #[must_use]
+    pub fn slow_square(&self) -> Self {
+        let degree = self.degree();
+        if degree == -1 {
+            return Self::zero();
+        }
+
+        let squared_coefficient_len = self.degree() as usize * 2 + 1;
+        let zero = PFElem::zero();
+        let one = PFElem::one();
+        let two = one + one;
+        let mut squared_coefficients = vec![zero; squared_coefficient_len];
+
+        for i in 0..self.coefficients.len() {
+            let ci = self.coefficients[i];
+            squared_coefficients[2 * i] += ci * ci;
+
+            // TODO: Review.
+            for j in i + 1..self.coefficients.len() {
+                let cj = self.coefficients[j];
+                squared_coefficients[i + j] += two * ci * cj;
+            }
+        }
+
+        Self {
+            coefficients: squared_coefficients,
+        }
+    }
+}
+
+impl<PFElem: FiniteField> Polynomial<PFElem> {
+    pub fn are_colinear(points: &[(PFElem, PFElem)]) -> bool {
+        if points.len() < 3 {
+            println!("Too few points received. Got: {} points", points.len());
+            return false;
+        }
+
+        if !has_unique_elements(points.iter().map(|p| p.0)) {
+            println!("Non-unique element spotted Got: {:?}", points);
+            return false;
+        }
+
+        // Find 1st degree polynomial from first two points
+        let one: PFElem = PFElem::one();
+        let x_diff: PFElem = points[0].0 - points[1].0;
+        let x_diff_inv = one / x_diff;
+        let a = (points[0].1 - points[1].1) * x_diff_inv;
+        let b = points[0].1 - a * points[0].0;
+        for point in points.iter().skip(2) {
+            let expected = a * point.0 + b;
+            if point.1 != expected {
+                println!(
+                    "L({}) = {}, expected L({}) = {}, Found: L(x) = {}x + {} from {{({},{}),({},{})}}",
+                    point.0,
+                    point.1,
+                    point.0,
+                    expected,
+                    a,
+                    b,
+                    points[0].0,
+                    points[0].1,
+                    points[1].0,
+                    points[1].1
+                );
+                return false;
+            }
+        }
+
+        true
+    }
+
+    // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
+    // purposes. This also means that it is not pivotal that this function has an optimal
+    // runtime.
+    pub fn lagrange_interpolate_zipped(points: &[(PFElem, PFElem)]) -> Self {
+        if points.is_empty() {
+            panic!("Cannot interpolate through zero points.");
+        }
+        if !has_unique_elements(points.iter().map(|x| x.0)) {
+            panic!("Repeated x values received. Got: {:?}", points);
+        }
+
+        let xs: Vec<PFElem> = points.iter().map(|x| x.0.to_owned()).collect();
+        let ys: Vec<PFElem> = points.iter().map(|x| x.1.to_owned()).collect();
+        Self::lagrange_interpolate(&xs, &ys)
     }
 }
 

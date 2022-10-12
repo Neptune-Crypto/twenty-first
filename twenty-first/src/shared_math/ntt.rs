@@ -1,3 +1,5 @@
+use std::ops::MulAssign;
+
 use rand_distr::num_traits::One;
 
 use crate::shared_math::traits::{FiniteField, ModPowU32};
@@ -42,7 +44,11 @@ use super::{
 ///
 /// This transform is performed in-place.
 #[allow(clippy::many_single_char_names)]
-pub fn ntt<PFElem: FiniteField>(x: &mut [PFElem], omega: BFieldElement, log_2_of_n: u32) {
+pub fn ntt<PFElem: FiniteField + MulAssign<BFieldElement>>(
+    x: &mut [PFElem],
+    omega: BFieldElement,
+    log_2_of_n: u32,
+) {
     let n = x.len() as u32;
 
     // `n` must be a power of 2
@@ -72,7 +78,7 @@ pub fn ntt<PFElem: FiniteField>(x: &mut [PFElem], omega: BFieldElement, log_2_of
             let mut w = BFieldElement::one();
             for j in 0..m {
                 let mut t = x[(k + j + m) as usize];
-                t = t.mul_bfe(w);
+                t *= w;
                 let mut tmp = x[(k + j) as usize];
                 tmp -= t;
                 x[(k + j + m) as usize] = tmp;
@@ -101,12 +107,16 @@ pub fn ntt<PFElem: FiniteField>(x: &mut [PFElem], omega: BFieldElement, log_2_of
 /// </pre>
 ///
 /// This transform is performed in-place.
-pub fn intt<PFElem: FiniteField>(x: &mut [PFElem], omega: BFieldElement, log_2_of_n: u32) {
+pub fn intt<PFElem: FiniteField + MulAssign<BFieldElement>>(
+    x: &mut [PFElem],
+    omega: BFieldElement,
+    log_2_of_n: u32,
+) {
     let n: BFieldElement = omega.new_from_usize(x.len());
     let n_inv: BFieldElement = BFieldElement::one() / n;
     ntt::<PFElem>(x, omega.inverse(), log_2_of_n);
     for elem in x.iter_mut() {
-        *elem = elem.mul_bfe(n_inv)
+        *elem *= n_inv
     }
 }
 

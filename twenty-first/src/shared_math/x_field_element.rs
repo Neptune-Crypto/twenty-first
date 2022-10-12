@@ -1,4 +1,4 @@
-use super::traits::{FromVecu8, Inverse, MulBFieldElement, PrimitiveRootOfUnity};
+use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
@@ -220,19 +220,6 @@ impl Display for XFieldElement {
     }
 }
 
-impl MulBFieldElement for XFieldElement {
-    #[inline]
-    fn mul_bfe(self, bfe: BFieldElement) -> Self {
-        Self {
-            coefficients: [
-                self.coefficients[0] * bfe,
-                self.coefficients[1] * bfe,
-                self.coefficients[2] * bfe,
-            ],
-        }
-    }
-}
-
 impl FromVecu8 for XFieldElement {
     fn from_vecu8(bytes: Vec<u8>) -> Self {
         // TODO: See note in BFieldElement's From<Vec<u8>>.
@@ -317,7 +304,22 @@ impl Add for XFieldElement {
 
 */
 
-impl Mul for XFieldElement {
+impl Mul<BFieldElement> for XFieldElement {
+    type Output = Self;
+
+    #[inline]
+    fn mul(self, other: BFieldElement) -> Self {
+        Self {
+            coefficients: [
+                self.coefficients[0] * other,
+                self.coefficients[1] * other,
+                self.coefficients[2] * other,
+            ],
+        }
+    }
+}
+
+impl Mul<XFieldElement> for XFieldElement {
     type Output = Self;
 
     #[inline]
@@ -385,33 +387,17 @@ impl SubAssign for XFieldElement {
     }
 }
 
-impl MulAssign for XFieldElement {
+impl MulAssign<BFieldElement> for XFieldElement {
+    #[inline]
+    fn mul_assign(&mut self, rhs: BFieldElement) {
+        *self = *self * rhs;
+    }
+}
+
+impl MulAssign<XFieldElement> for XFieldElement {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
-        // a_0 * x^2 + b_0 * x + c_0
-        let a0 = self.coefficients[2];
-        let b0 = self.coefficients[1];
-        let c0 = self.coefficients[0];
-
-        // a_1 * x^2 + b_1 * x + c_1
-        let a1 = rhs.coefficients[2];
-        let b1 = rhs.coefficients[1];
-        let c1 = rhs.coefficients[0];
-
-        // Optimization for multiplying an X field with a B field element
-        // This optimization is very relevant when doing NTT on the X field
-        // because the `omega` (here: `rhs` live in the B field)
-        if a1.is_zero() && b1.is_zero() {
-            self.coefficients = [c0 * c1, b0 * c1, a0 * c1];
-            return;
-        }
-
-        // (a_0 * x^2 + b_0 * x + c_0) * (a_1 * x^2 + b_1 * x + c_1)
-        self.coefficients = [
-            c0 * c1 - a0 * b1 - b0 * a1,                     // * x^0
-            b0 * c1 + c0 * b1 - a0 * a1 + a0 * b1 + b0 * a1, // * x^1
-            a0 * c1 + b0 * b1 + c0 * a1 + a0 * a1,           // * x^2
-        ];
+        *self = *self * rhs;
     }
 }
 
@@ -857,15 +843,20 @@ mod x_field_element_test {
     }
 
     #[test]
-    fn mul_bfe_pbt() {
+    fn mul_xfe_with_bfe_pbt() {
         let test_iterations = 100;
         let rands_x: Vec<XFieldElement> = random_elements(test_iterations);
         let rands_b: Vec<BFieldElement> = random_elements(test_iterations);
-        for (x, b) in izip!(rands_x, rands_b) {
-            let mul_res = x.mul_bfe(b);
-            assert_eq!(mul_res.coefficients[0], x.coefficients[0] * b);
-            assert_eq!(mul_res.coefficients[1], x.coefficients[1] * b);
-            assert_eq!(mul_res.coefficients[2], x.coefficients[2] * b);
+        for (mut x, b) in izip!(rands_x, rands_b) {
+            let res_mul = x * b;
+            assert_eq!(res_mul.coefficients[0], x.coefficients[0] * b);
+            assert_eq!(res_mul.coefficients[1], x.coefficients[1] * b);
+            assert_eq!(res_mul.coefficients[2], x.coefficients[2] * b);
+
+            // Also verify that the `MulAssign` implementation agrees with the `Mul` implementation
+            x *= b;
+            let res_mul_assign = x;
+            assert_eq!(res_mul, res_mul_assign);
         }
     }
 

@@ -1,5 +1,5 @@
 use super::other;
-use super::traits::{FromVecu8, Inverse, MulBFieldElement, PrimitiveRootOfUnity};
+use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use crate::util_types::simple_hasher::Hashable;
@@ -381,13 +381,6 @@ impl Distribution<BFieldElement> for Standard {
 impl New for BFieldElement {
     fn new_from_usize(&self, value: usize) -> Self {
         Self::new(value as u64)
-    }
-}
-
-impl MulBFieldElement for BFieldElement {
-    #[inline]
-    fn mul_bfe(self, bfe: BFieldElement) -> Self {
-        self * bfe
     }
 }
 
@@ -961,15 +954,16 @@ mod b_prime_field_element_test {
     }
 
     #[test]
-    fn mul_bfe_div_pbt() {
-        // Verify that mul_bfe returns the same as mul, and that the result is sane
+    fn mul_div_pbt() {
+        // Verify that the mul result is sane
         let rands: Vec<BFieldElement> = random_elements(100);
         for i in 1..rands.len() {
             let prod_mul = rands[i - 1] * rands[i];
-            let prod_bfe_mul = rands[i - 1].mul_bfe(rands[i]);
+            let mut prod_mul_assign = rands[i - 1];
+            prod_mul_assign *= rands[i];
             assert_eq!(
-                prod_mul, prod_bfe_mul,
-                "mul and bfe mul must be the same for B field elements"
+                prod_mul, prod_mul_assign,
+                "mul and mul_assign must be the same for B field elements"
             );
             assert_eq!(prod_mul / rands[i - 1], rands[i]);
             assert_eq!(prod_mul / rands[i], rands[i - 1]);
