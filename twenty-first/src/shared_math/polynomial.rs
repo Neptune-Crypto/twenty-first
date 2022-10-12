@@ -14,7 +14,6 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Rem, Sub};
 use super::b_field_element::BFieldElement;
 use super::other::log_2_ceil;
 use super::traits::{Inverse, PrimitiveRootOfUnity};
-use super::x_field_element::XFieldElement;
 
 fn degree_raw<T: Add + Div + Mul + Sub + Display + Zero>(coefficients: &[T]) -> isize {
     let mut deg = coefficients.len() as isize - 1;
@@ -601,14 +600,6 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
             coefficients: vec![element],
         }
     }
-
-    // FIXME: Can be done with traits instead of explicitly mentioning B and X.
-    // Thor does not agree that this is a good path to venture down
-    pub fn lift_b_x(b_poly: &Polynomial<BFieldElement>) -> Polynomial<XFieldElement> {
-        let x_field_coefficients = b_poly.coefficients.iter().map(|b| b.lift()).collect();
-        Polynomial::new(x_field_coefficients)
-    }
-
     pub fn normalize(&mut self) {
         while !self.coefficients.is_empty() && self.coefficients.last().unwrap().is_zero() {
             self.coefficients.pop();
@@ -2561,19 +2552,6 @@ mod test_polynomials {
             let ab = a.clone() * b.clone();
             let ba = b.clone() * a.clone();
             assert_eq!(ab, ba);
-        }
-    }
-
-    #[test]
-    fn lift_b_x_test() {
-        for _ in 0..5 {
-            let pol = gen_polynomial();
-            let lifted_pol: Polynomial<XFieldElement> = Polynomial::<BFieldElement>::lift_b_x(&pol);
-            for (coefficient, lifted_coefficient) in
-                pol.coefficients.iter().zip(lifted_pol.coefficients.iter())
-            {
-                assert_eq!(Some(*coefficient), lifted_coefficient.unlift());
-            }
         }
     }
 

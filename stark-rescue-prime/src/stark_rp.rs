@@ -136,6 +136,11 @@ type XFieldMt = MerkleTree<StarkHasher>;
 type XFieldFri = Fri<StarkHasher>;
 
 impl StarkRp {
+    pub fn lift_b_x(b_poly: &Polynomial<BFieldElement>) -> Polynomial<XFieldElement> {
+        let x_field_coefficients = b_poly.coefficients.iter().map(|b| b.lift()).collect();
+        Polynomial::new(x_field_coefficients)
+    }
+
     pub fn prove(
         &self,
         // Trace is indexed as trace[cycle][register]
@@ -452,7 +457,7 @@ impl StarkRp {
 
         let mut terms: Vec<Polynomial<XFieldElement>> = vec![randomizer_polynomial];
         for (tq, tq_degree) in transition_quotients.iter().zip(expected_tq_degrees.iter()) {
-            let tq_x: Polynomial<XFieldElement> = Polynomial::<XFieldElement>::lift_b_x(tq);
+            let tq_x: Polynomial<XFieldElement> = Self::lift_b_x(tq);
             terms.push(tq_x.clone());
             let shift = max_degree - (*tq_degree) as i64;
 
@@ -462,7 +467,7 @@ impl StarkRp {
             terms.push(shifted);
         }
         for (bq, bq_degree) in boundary_quotients.iter().zip(boundary_degrees.iter()) {
-            let bq_x: Polynomial<XFieldElement> = Polynomial::<XFieldElement>::lift_b_x(bq);
+            let bq_x: Polynomial<XFieldElement> = Self::lift_b_x(bq);
             terms.push(bq_x.clone());
             let shift = max_degree as usize - bq_degree;
 
@@ -1195,10 +1200,33 @@ impl StarkRp {
 pub mod test_stark {
     use super::*;
 
+    use rand::Rng;
     use serde_json;
 
     use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use twenty_first::timing_reporter::TimingReporter;
+
+    fn gen_polynomial() -> Polynomial<BFieldElement> {
+        let mut rng = rand::thread_rng();
+        let coefficient_count: usize = rng.gen_range(0..40);
+
+        Polynomial {
+            coefficients: random_elements(coefficient_count),
+        }
+    }
+
+    #[test]
+    fn lift_b_x_test() {
+        for _ in 0..5 {
+            let pol = gen_polynomial();
+            let lifted_pol: Polynomial<XFieldElement> = StarkRp::lift_b_x(&pol);
+            for (coefficient, lifted_coefficient) in
+                pol.coefficients.iter().zip(lifted_pol.coefficients.iter())
+            {
+                assert_eq!(Some(*coefficient), lifted_coefficient.unlift());
+            }
+        }
+    }
 
     #[test]
     #[ignore = "too slow"]
