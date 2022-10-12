@@ -186,10 +186,11 @@ impl<T: TableMoreTrait> Table<T> {
         );
 
         let omicron_domain: Vec<XFieldElement> = (0..self.height)
-            .map(|i| self.omicron.lift().mod_pow_u32(i as u32))
+            .map(|i| self.omicron.mod_pow_u32(i as u32))
+            .map(|x| x.lift())
             .collect();
         let randomizer_domain: Vec<XFieldElement> = (0..self.num_randomizers)
-            .map(|i| omega.lift() * omicron_domain[i])
+            .map(|i| omicron_domain[i] * omega)
             .collect();
         let domain = vec![omicron_domain, randomizer_domain].concat();
         let mut valuess: Vec<Vec<XFieldElement>> = vec![];
@@ -393,7 +394,7 @@ pub trait TableTrait {
         let zerofier_inverse: Vec<BFieldElement> = x_values
             .into_iter()
             .enumerate()
-            .map(|(i, x)| subgroup_zerofier_inverse[i] * (x - omicron_inverse))
+            .map(|(i, x)| (x - omicron_inverse) * subgroup_zerofier_inverse[i])
             .collect();
 
         let transition_constraints = self.transition_constraints_ext(challenges);
@@ -413,7 +414,7 @@ pub trait TableTrait {
                         .collect();
                     let point = vec![current, next].concat();
                     let composition_evaluation = tc.evaluate(&point);
-                    composition_evaluation * z_inverse.lift()
+                    composition_evaluation * *z_inverse
                 })
                 .collect();
 
@@ -460,7 +461,7 @@ pub trait TableTrait {
                 .map(|i| {
                     let point: Vec<XFieldElement> =
                         (0..own_width).map(|j| codewords[j][i]).collect();
-                    termc.evaluate(&point) * zerofier_inverse[i].lift()
+                    termc.evaluate(&point) * zerofier_inverse[i]
                 })
                 .collect();
             quotient_codewords.push(quotient_codeword);
@@ -505,7 +506,7 @@ pub trait TableTrait {
                 .map(|i| {
                     let point: Vec<XFieldElement> =
                         (0..own_width).map(|j| codewords[j][i]).collect();
-                    bc.evaluate(&point) * zerofier_inverse[i].lift()
+                    bc.evaluate(&point) * zerofier_inverse[i]
                 })
                 .collect();
             quotient_codewords.push(quotient_codeword);
