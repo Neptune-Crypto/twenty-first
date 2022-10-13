@@ -1,9 +1,7 @@
 use rusty_leveldb::DB;
 
-use crate::{
-    shared_math::rescue_prime_digest::Digest,
-    util_types::{algebraic_hasher::AlgebraicHasher, mmr::archival_mmr::ArchivalMmr},
-};
+use crate::shared_math::rescue_prime_digest::Digest;
+use crate::util_types::{algebraic_hasher::AlgebraicHasher, mmr::archival_mmr::ArchivalMmr};
 
 pub fn get_empty_archival_mmr<H: AlgebraicHasher>() -> ArchivalMmr<H> {
     let opt = rusty_leveldb::in_memory();

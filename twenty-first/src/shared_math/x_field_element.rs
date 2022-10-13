@@ -6,6 +6,7 @@ use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
+use super::rescue_prime_digest::Digest;
 use crate::shared_math::b_field_element::{BFieldElement, EMOJI_PER_BFE};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
@@ -103,6 +104,54 @@ impl XFieldElement {
         } else {
             None
         }
+    }
+
+    pub fn sample(digest: &Digest) -> Self {
+        let elements = digest.values();
+        XFieldElement::new([elements[0], elements[1], elements[2]])
+    }
+
+    // TODO: Move this into Polynomial when PrimeField can implement Zero + One.
+    // Division in 𝔽_p[X], not 𝔽_{p^e} ≅ 𝔽[X]/p(x).
+    pub fn xgcd(
+        mut x: Polynomial<BFieldElement>,
+        mut y: Polynomial<BFieldElement>,
+    ) -> (
+        Polynomial<BFieldElement>,
+        Polynomial<BFieldElement>,
+        Polynomial<BFieldElement>,
+    ) {
+        let mut a_factor = Polynomial::new(vec![BFieldElement::one()]);
+        let mut a1 = Polynomial::new(vec![BFieldElement::zero()]);
+        let mut b_factor = Polynomial::new(vec![BFieldElement::zero()]);
+        let mut b1 = Polynomial::new(vec![BFieldElement::one()]);
+
+        while !y.is_zero() {
+            let (quotient, remainder): (Polynomial<BFieldElement>, Polynomial<BFieldElement>) =
+                x.clone().divide(y.clone());
+            let (c, d) = (
+                a_factor - quotient.clone() * a1.clone(),
+                b_factor.clone() - quotient * b1.clone(),
+            );
+
+            x = y;
+            y = remainder;
+            a_factor = a1;
+            a1 = c;
+            b_factor = b1;
+            b1 = d;
+        }
+
+        // The result is valid up to a coefficient, so we normalize the result,
+        // to ensure that x has a leading coefficient of 1.
+        // TODO: What happens if x is zero here, can it be?
+        let lc = x.leading_coefficient().unwrap();
+        let scale = lc.inverse();
+        (
+            x.scalar_mul(scale),
+            a_factor.scalar_mul(scale),
+            b_factor.scalar_mul(scale),
+        )
     }
 
     // `increment` and `decrement` are mainly used for testing purposes

@@ -1,6 +1,5 @@
-use crate::{
-    shared_math::rescue_prime_digest::Digest, util_types::algebraic_hasher::AlgebraicHasher,
-};
+use crate::shared_math::rescue_prime_digest::Digest;
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 use super::{mmr_accumulator::MmrAccumulator, mmr_membership_proof::MmrMembershipProof};
 

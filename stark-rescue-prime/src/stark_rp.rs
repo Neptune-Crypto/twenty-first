@@ -11,6 +11,8 @@ use std::fmt;
 use std::iter::zip;
 use twenty_first::shared_math::other::random_elements;
 use twenty_first::shared_math::other::random_elements_array;
+use twenty_first::shared_math::rescue_prime_digest::Digest;
+use twenty_first::util_types::algebraic_hasher::AlgebraicHasher;
 
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::fri::Fri;
@@ -24,13 +26,10 @@ use twenty_first::shared_math::traits::CyclicGroupGenerator;
 use twenty_first::shared_math::traits::{FromVecu8, PrimitiveRootOfUnity};
 use twenty_first::shared_math::x_field_element::XFieldElement;
 use twenty_first::timing_reporter::TimingReporter;
-use twenty_first::util_types::blake3_wrapper::Blake3Hash;
 use twenty_first::util_types::merkle_tree::{
     MerkleTree, PartialAuthenticationPath, SaltedMerkleTree,
 };
 use twenty_first::util_types::proof_stream::ProofStream;
-use twenty_first::util_types::simple_hasher::Hashable;
-use twenty_first::util_types::simple_hasher::Hasher;
 use twenty_first::utils;
 
 use crate::stark_constraints::BoundaryConstraint;
@@ -129,7 +128,6 @@ impl fmt::Display for StarkVerifyError {
     }
 }
 
-type Digest = Blake3Hash;
 type StarkHasher = blake3::Hasher;
 type SaltedMt = SaltedMerkleTree<StarkHasher>;
 type XFieldMt = MerkleTree<StarkHasher>;
@@ -149,14 +147,8 @@ impl StarkRp {
         boundary_constraints: &[BoundaryConstraint],
         proof_stream: &mut ProofStream,
         input_omicron: BFieldElement,
-    ) -> Result<(u32, BFieldElement), Box<dyn Error>>
-    where
-        BFieldElement: Hashable<u8>,
-    {
+    ) -> Result<(u32, BFieldElement), Box<dyn Error>> {
         let mut timer = TimingReporter::start();
-
-        let hasher = StarkHasher::new();
-        //let mut rng = rand::thread_rng();
 
         // infer details about computation
         let original_trace_length = trace.len() as i64;
@@ -284,16 +276,13 @@ impl StarkRp {
             // Build MT
             let boundary_quotient_codeword_digests: Vec<_> = boundary_quotient_codeword
                 .iter()
-                .map(|x| hasher.hash_sequence(&x.to_sequence()))
+                .map(StarkHasher::hash)
                 .collect();
 
             // FIXME: Replace with randomly generating digests directly
             let salts_per_leaf = 5;
-            let boundary_quotient_codeword_salts: Vec<_> =
-                random_elements::<BFieldElement>(boundary_quotient_codeword.len() * salts_per_leaf)
-                    .iter()
-                    .map(|x| hasher.hash_sequence(&x.to_sequence()))
-                    .collect();
+            let boundary_quotient_codeword_salts: Vec<Digest> =
+                random_elements(boundary_quotient_codeword.len() * salts_per_leaf);
 
             let bq_merkle_tree = SaltedMt::from_digests(
                 &boundary_quotient_codeword_digests,
@@ -420,10 +409,8 @@ impl StarkRp {
             fri_domain_length as usize,
         );
 
-        let randomizer_codeword_digests: Vec<_> = randomizer_codeword
-            .iter()
-            .map(|rand_eval| hasher.hash_sequence(&rand_eval.to_sequence()))
-            .collect();
+        let randomizer_codeword_digests: Vec<Digest> =
+            randomizer_codeword.iter().map(StarkHasher::hash).collect();
         let randomizer_mt: XFieldMt = XFieldMt::from_digests(&randomizer_codeword_digests);
 
         let randomizer_mt_root = randomizer_mt.get_root();
@@ -594,7 +581,6 @@ impl StarkRp {
         let mut timer = TimingReporter::start();
         // assert!(omega.mod_pow(fri_domain_length as u64).is_one());
         // assert!(!omega.mod_pow((fri_domain_length / 2) as u64).is_one());
-        let hasher: StarkHasher = Hasher::new();
 
         // Get Merkle root of boundary quotient codewords
         let mut boundary_quotient_mt_roots: Vec<Digest> = vec![];
@@ -665,10 +651,7 @@ impl StarkRp {
 
             let bq_values: Vec<BFieldElement> = proof_stream.dequeue_length_prepended()?;
 
-            let unsalted_leaves: Vec<_> = bq_values
-                .iter()
-                .map(|x| hasher.hash_sequence(&x.to_sequence()))
-                .collect();
+            let unsalted_leaves: Vec<Digest> = bq_values.iter().map(StarkHasher::hash).collect();
 
             let valid = SaltedMt::verify_authentication_structure(
                 bq_root,
@@ -698,9 +681,9 @@ impl StarkRp {
             proof_stream.dequeue_length_prepended()?;
         let revealed_randomizer_values: Vec<XFieldElement> =
             proof_stream.dequeue_length_prepended()?;
-        let randomizer_values_digests: Vec<_> = revealed_randomizer_values
+        let randomizer_values_digests: Vec<Digest> = revealed_randomizer_values
             .iter()
-            .map(|x| hasher.hash_sequence(&x.to_sequence()))
+            .map(StarkHasher::hash)
             .collect();
 
         let auth_pairs: Vec<_> = zip(randomizer_auth_paths, randomizer_values_digests).collect();

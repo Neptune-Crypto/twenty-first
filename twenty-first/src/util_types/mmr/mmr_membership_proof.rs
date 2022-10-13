@@ -572,7 +572,6 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
 #[cfg(test)]
 mod mmr_membership_proof_test {
-    use itertools::Itertools;
     use rand::Rng;
 
     use crate::shared_math::b_field_element::BFieldElement;
@@ -589,8 +588,7 @@ mod mmr_membership_proof_test {
     #[test]
     fn equality_and_hash_test() {
         type H = blake3::Hasher;
-        let _hasher = PhantomData;
-        let rng = rand::thread_rng();
+        let mut rng = rand::thread_rng();
 
         let some_digest: Digest = rng.gen();
 

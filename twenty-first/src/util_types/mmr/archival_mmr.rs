@@ -315,7 +315,6 @@ mod mmr_test {
         },
     };
     use itertools::izip;
-    use rand::Rng;
 
     impl<H: AlgebraicHasher> ArchivalMmr<H> {
         /// Return the number of nodes in all the trees in the MMR

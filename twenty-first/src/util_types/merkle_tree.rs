@@ -53,10 +53,7 @@ pub struct PartialAuthenticationPath<Digest>(pub Vec<Option<Digest>>);
 /// the original `MerkleTree` object, but only partial information from it,
 /// in the form of the quadrupples: `(root_hash, index, digest, auth_path)`.
 /// These are exactly the arguments for the `verify_*` family of static methods.
-impl<H: AlgebraicHasher> MerkleTree<H>
-where
-    H: Sync + Send, // FIXME: Remove these.
-{
+impl<H: AlgebraicHasher> MerkleTree<H> {
     /// Calculate a Merkle root from a list of digests that is not necessarily a power of two.
     pub fn root_from_arbitrary_number_of_digests(digests: &[Digest]) -> Digest {
         // This function should preferably construct a whole Merkle tree data structure and not just the root,
@@ -1006,8 +1003,6 @@ mod merkle_tree_test {
         // through tests of `verify_authentication_structure_from_leaves` from which it is called.
         type H = blake3::Hasher;
 
-        let hasher = H::new();
-
         // 1: Create Merkle tree
         //
         //     root
@@ -1133,7 +1128,7 @@ mod merkle_tree_test {
         ));
 
         // 5: Change the value and verify that the proof does not work
-        let mut corrupt_leaf_a_digest = corrupt_digest(&leaf_a_digest);
+        let corrupt_leaf_a_digest = corrupt_digest(&leaf_a_digest);
         assert!(!SMT::verify_authentication_path(
             tree_a.get_root(),
             leaf_a_idx as u32,
@@ -1419,7 +1414,6 @@ mod merkle_tree_test {
         type H = blake3::Hasher;
         type SMT = SaltedMerkleTree<H>;
 
-        let hasher = H::new();
         let mut rng = rand::thread_rng();
 
         // Number of Merkle tree leaves
@@ -1465,7 +1459,7 @@ mod merkle_tree_test {
                     &selected_leaves,
                     &proof,
                 ));
-                let mut bad_root_hash = corrupt_digest(&tree.get_root());
+                let bad_root_hash = corrupt_digest(&tree.get_root());
 
                 assert!(!SMT::verify_authentication_structure(
                     bad_root_hash,

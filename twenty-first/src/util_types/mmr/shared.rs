@@ -1,11 +1,8 @@
+use crate::shared_math::other::{bit_representation, log_2_floor};
+use crate::shared_math::rescue_prime_digest::Digest;
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
+
 use super::mmr_membership_proof::MmrMembershipProof;
-use crate::{
-    shared_math::{
-        other::{bit_representation, log_2_floor},
-        rescue_prime_digest::Digest,
-    },
-    util_types::algebraic_hasher::AlgebraicHasher,
-};
 
 #[inline]
 pub fn left_child(node_index: u128, height: u128) -> u128 {

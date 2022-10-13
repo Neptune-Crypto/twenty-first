@@ -578,12 +578,12 @@ mod fri_tests {
 
     #[test]
     fn get_rounds_count_test() {
-        type Hasher = blake3::Hasher;
+        type H = blake3::Hasher;
 
         let subgroup_order = 512;
         let expansion_factor = 4;
-        let mut fri: Fri<Hasher> =
-            get_x_field_fri_test_object::<Hasher>(subgroup_order, expansion_factor, 2);
+        let mut fri: Fri<XFieldElement, H> =
+            get_x_field_fri_test_object::<H>(subgroup_order, expansion_factor, 2);
 
         assert_eq!((7, 0), fri.num_rounds());
         fri.colinearity_checks_count = 8;
