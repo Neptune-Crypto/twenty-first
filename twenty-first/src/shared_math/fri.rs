@@ -391,8 +391,7 @@ where
 
         // for every round, check consistency of subsequent layers
         let mut codeword_evaluations: Vec<CodewordEvaluation<XFieldElement>> = vec![];
-        let mut a_values =
-            Self::dequeue_and_authenticate(&a_indices, roots[0].clone(), proof_stream)?;
+        let mut a_values = Self::dequeue_and_authenticate(&a_indices, roots[0], proof_stream)?;
 
         // set up "B" for offsetting inside loop.  Note that "B" and "A" indices
         // can be calcuated from each other.
@@ -406,8 +405,7 @@ where
                 .map(|x| (x + current_domain_len / 2) % current_domain_len)
                 .collect();
 
-            let b_values =
-                Self::dequeue_and_authenticate(&b_indices, roots[r].clone(), proof_stream)?;
+            let b_values = Self::dequeue_and_authenticate(&b_indices, roots[r], proof_stream)?;
 
             debug_assert_eq!(
                 self.colinearity_checks_count,

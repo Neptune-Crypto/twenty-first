@@ -389,10 +389,7 @@ impl<H: AlgebraicHasher> Fri<H> {
         let last_codeword: Vec<XFieldElement> = proof_stream.dequeue()?.as_fri_codeword()?;
 
         // Check if last codeword matches the given root
-        let codeword_digests = last_codeword
-            .iter()
-            .map(|elm| Hasher::hash(elm))
-            .collect_vec();
+        let codeword_digests = last_codeword.iter().map(Hasher::hash).collect_vec();
         let last_codeword_mt = MerkleTree::<H>::from_digests(&codeword_digests);
         let last_root = roots.last().unwrap();
         if *last_root != last_codeword_mt.get_root() {
@@ -423,8 +420,7 @@ impl<H: AlgebraicHasher> Fri<H> {
         let hm = proof_stream.verifier_fiat_shamir();
         let mut a_indices: Vec<usize> = self.sample_indices(&hm.to_sequence());
         timer.elapsed("Sample indices");
-        let mut a_values =
-            Self::dequeue_and_authenticate(&a_indices, roots[0].clone(), proof_stream)?;
+        let mut a_values = Self::dequeue_and_authenticate(&a_indices, roots[0], proof_stream)?;
 
         // set up "B" for offsetting inside loop.  Note that "B" and "A" indices
         // can be calcuated from each other.
@@ -442,8 +438,7 @@ impl<H: AlgebraicHasher> Fri<H> {
                 .map(|x| (x + current_domain_len / 2) % current_domain_len)
                 .collect();
             timer.elapsed(&format!("Get b-indices for current round ({})", r));
-            let b_values =
-                Self::dequeue_and_authenticate(&b_indices, roots[r].clone(), proof_stream)?;
+            let b_values = Self::dequeue_and_authenticate(&b_indices, roots[r], proof_stream)?;
             timer.elapsed(&format!("Read & verify b-auth paths round {}", r));
             debug_assert_eq!(
                 self.colinearity_checks_count,

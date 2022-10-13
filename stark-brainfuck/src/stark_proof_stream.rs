@@ -67,7 +67,7 @@ impl ProofItem {
 
     pub fn as_merkle_root(&self) -> Result<Digest, Box<dyn std::error::Error>> {
         match self {
-            Self::MerkleRoot(bs) => Ok(bs.clone()),
+            Self::MerkleRoot(bs) => Ok(*bs),
             _ => Err(ProofStreamError::boxed(
                 "expected merkle root, but got something else",
             )),

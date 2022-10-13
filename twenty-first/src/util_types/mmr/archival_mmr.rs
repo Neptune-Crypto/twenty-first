@@ -91,7 +91,7 @@ where
         );
 
         for (mp, digest) in mutation_data.iter() {
-            self.mutate_leaf_raw(mp.data_index, digest.clone());
+            self.mutate_leaf_raw(mp.data_index, *digest);
         }
 
         let mut modified_mps: Vec<usize> = vec![];
@@ -150,7 +150,6 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
     /// Get a leaf from the MMR, will panic if index is out of range
     pub fn get_leaf(&mut self, data_index: u128) -> Digest {
         let node_index = data_index_to_node_index(data_index);
-        // self.digests[node_index as usize].clone()
         self.digests.get(node_index)
     }
 
@@ -158,8 +157,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
     pub fn mutate_leaf_raw(&mut self, data_index: u128, new_leaf: Digest) {
         // 1. change the leaf value
         let mut node_index = data_index_to_node_index(data_index);
-        // self.digests[node_index as usize] = new_leaf.clone();
-        self.digests.set(node_index, new_leaf.clone());
+        self.digests.set(node_index, new_leaf);
 
         // 2. Calculate hash changes for all parents
         let mut parent_index = parent(node_index);
@@ -179,8 +177,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
                     &self.digests.get(right_sibling(node_index, height)),
                 )
             };
-            // self.digests[parent_index as usize] = acc_hash.clone();
-            self.digests.set(parent_index, acc_hash.clone());
+            self.digests.set(parent_index, acc_hash);
             node_index = parent_index;
             parent_index = parent(parent_index);
         }
@@ -222,11 +219,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
             index_height = next_index_info.1;
         }
 
-        let peaks: Vec<Digest> = self
-            .get_peaks_with_heights()
-            .iter()
-            .map(|x| x.0.clone())
-            .collect();
+        let peaks: Vec<Digest> = self.get_peaks_with_heights().iter().map(|x| x.0).collect();
 
         let membership_proof = MmrMembershipProof::new(data_index, authentication_path);
 
@@ -273,7 +266,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
     /// Append an element to the archival MMR
     pub fn append_raw(&mut self, new_leaf: Digest) {
         let node_index = self.digests.len() as u128;
-        self.digests.push(new_leaf.clone());
+        self.digests.push(new_leaf);
         let (parent_needed, own_height) = right_child_and_height(node_index);
         if parent_needed {
             let left_sibling_hash = self.digests.get(left_sibling(node_index, own_height));

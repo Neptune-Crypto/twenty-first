@@ -297,9 +297,7 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
             None => return None,
             Some(peak) => peak,
         };
-        membership_proof
-            .authentication_path
-            .push(previous_peak.clone());
+        membership_proof.authentication_path.push(previous_peak);
         peaks.push(H::hash_pair(&previous_peak, &new_hash));
         new_node_index += 1;
         new_node_is_right_child = right_child_and_height(new_node_index).0;

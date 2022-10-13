@@ -227,7 +227,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // 6
         for missing_digest_node_index in node_indices_for_missing_digests {
             self.authentication_path
-                .push(known_digests[&missing_digest_node_index].clone());
+                .push(known_digests[&missing_digest_node_index]);
         }
 
         true
@@ -313,7 +313,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
             for missing_digest_node_index in node_indices_for_missing_digests {
                 membership_proof
                     .authentication_path
-                    .push(known_digests[&missing_digest_node_index].clone());
+                    .push(known_digests[&missing_digest_node_index]);
             }
         }
 
@@ -352,7 +352,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // `membership_proof` until we meet the intersecting node.
         let mut deducible_hashes: HashMap<u128, Digest> = HashMap::new();
         let mut node_index = data_index_to_node_index(leaf_mutation_membership_proof.data_index);
-        deducible_hashes.insert(node_index, new_leaf.clone());
+        deducible_hashes.insert(node_index, *new_leaf);
         let mut acc_hash: Digest = new_leaf.to_owned();
 
         // Calculate hashes from the bottom towards the peak. Break when
@@ -374,7 +374,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
                 H::hash_pair(&acc_hash, hash)
             };
             node_index = parent(node_index);
-            deducible_hashes.insert(node_index, acc_hash.clone());
+            deducible_hashes.insert(node_index, acc_hash);
         }
 
         // Some of the hashes in `self` need to be updated. We can loop over
@@ -389,7 +389,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
             if !deducible_hashes.contains_key(&own_node_index) {
                 continue;
             }
-            *digest = deducible_hashes[&own_node_index].clone();
+            *digest = deducible_hashes[&own_node_index];
         }
 
         true
@@ -411,7 +411,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
         let mut deducible_hashes: HashMap<u128, Digest> = HashMap::new();
         let mut node_index = data_index_to_node_index(leaf_mutation_membership_proof.data_index);
-        deducible_hashes.insert(node_index, new_leaf.clone());
+        deducible_hashes.insert(node_index, *new_leaf);
         let mut acc_hash: Digest = new_leaf.to_owned();
 
         // Calculate hashes from the bottom towards the peak. Break before we
@@ -434,7 +434,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
                 H::hash_pair(&acc_hash, hash)
             };
             node_index = parent(node_index);
-            deducible_hashes.insert(node_index, acc_hash.clone());
+            deducible_hashes.insert(node_index, acc_hash);
         }
 
         let mut modified_membership_proofs: Vec<u128> = vec![];
@@ -459,7 +459,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
                 if deducible_hashes.contains_key(&authentication_path_indices)
                     && *digest != deducible_hashes[&authentication_path_indices]
                 {
-                    *digest = deducible_hashes[&authentication_path_indices].clone();
+                    *digest = deducible_hashes[&authentication_path_indices];
                     modified_membership_proofs.push(i as u128);
                     break;
                 }
@@ -494,7 +494,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // The hash map `new_ap_digests` takes care of that.
         while let Some((ap, new_leaf)) = authentication_paths_and_leafs.pop() {
             let mut node_index = data_index_to_node_index(ap.data_index);
-            let former_value = new_ap_digests.insert(node_index, new_leaf.clone());
+            let former_value = new_ap_digests.insert(node_index, new_leaf);
             assert!(
                 former_value.is_none(),
                 "Duplicated leaves are not allowed in membership proof updater"
@@ -534,7 +534,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
                     node_index += 1 << (height + 1);
                 }
 
-                new_ap_digests.insert(node_index, acc_hash.clone());
+                new_ap_digests.insert(node_index, acc_hash);
             }
         }
 
@@ -560,7 +560,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
                     && *digest != new_ap_digests[&authentication_path_indices]
                 {
                     modified_membership_proof_indices.push(i);
-                    *digest = new_ap_digests[&authentication_path_indices].clone();
+                    *digest = new_ap_digests[&authentication_path_indices];
                 }
             }
         }

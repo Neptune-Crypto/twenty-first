@@ -225,7 +225,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         // The hash map `new_ap_digests` takes care of that.
         while let Some((ap, new_leaf)) = mutation_data.pop() {
             let mut node_index = data_index_to_node_index(ap.data_index);
-            let former_value = new_ap_digests.insert(node_index, new_leaf.clone());
+            let former_value = new_ap_digests.insert(node_index, new_leaf);
             assert!(
                 former_value.is_none(),
                 "Duplicated leaf indices are not allowed in membership proof updater"
@@ -262,7 +262,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
                 // This is not inserted in the hash map, as it will never be in any
                 // authentication path
                 if count < ap.authentication_path.len() - 1 {
-                    new_ap_digests.insert(node_index, acc_hash.clone());
+                    new_ap_digests.insert(node_index, acc_hash);
                 }
             }
 
@@ -296,7 +296,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
                 if new_ap_digests.contains_key(&authentication_path_indices)
                     && *digest != new_ap_digests[&authentication_path_indices]
                 {
-                    *digest = new_ap_digests[&authentication_path_indices].clone();
+                    *digest = new_ap_digests[&authentication_path_indices];
                     modified_membership_proof_indices.push(i);
                 }
             }

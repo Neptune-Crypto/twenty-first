@@ -739,12 +739,9 @@ impl Stark {
 
         let combination_root: Digest = proof_stream.dequeue(32)?;
 
-        let indices_seed = proof_stream.verifier_fiat_shamir();
-        let indices = StarkHasher::sample_indices(
-            self.security_level,
-            &indices_seed.into(),
-            self.fri.domain.length,
-        );
+        let indices_seed: Digest = proof_stream.verifier_fiat_shamir();
+        let indices =
+            StarkHasher::sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
         timer.elapsed("Got indices");
 
         // Verify low degree of combination polynomial

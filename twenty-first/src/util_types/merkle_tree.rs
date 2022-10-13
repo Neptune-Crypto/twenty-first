@@ -92,7 +92,7 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
             "Size of input for Merkle tree must be a power of 2"
         );
 
-        let filler = digests[0].clone();
+        let filler = digests[0];
 
         // nodes[0] is never used for anything.
         let mut nodes = vec![filler; 2 * leaves_count];
@@ -151,7 +151,7 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
         while node_index > 1 {
             // We get the sibling node by XOR'ing with 1.
             let sibling_i = node_index ^ 1;
-            auth_path.push(self.nodes[sibling_i].clone());
+            auth_path.push(self.nodes[sibling_i]);
             node_index /= 2;
         }
 
@@ -207,7 +207,7 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
         }
 
         let mut i = node_index >> level_in_tree;
-        let mut acc_hash = partial_tree[&(i as u64)].clone();
+        let mut acc_hash = partial_tree[&(i as u64)];
         while i / 2 >= 1 {
             if i % 2 == 0 {
                 acc_hash = H::hash_pair(&acc_hash, &auth_path[level_in_tree]);
@@ -330,12 +330,12 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
             let mut index = half_tree_size + *i as u64;
 
             // Insert hashes for known leaf hashes.
-            partial_tree.insert(index, leaf_hash.clone());
+            partial_tree.insert(index, *leaf_hash);
 
             // Insert hashes for known leaves from partial authentication paths.
             for hash_option in partial_auth_path.0.iter() {
                 if let Some(hash) = hash_option {
-                    partial_tree.insert(index ^ 1, hash.clone());
+                    partial_tree.insert(index ^ 1, *hash);
                 }
                 index /= 2;
             }
@@ -406,10 +406,9 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
                         return false;
                     }
 
-                    *elem = Some(partial_tree[&sibling].clone());
+                    *elem = Some(partial_tree[&sibling]);
                 }
-                let elem_for_reals = elem.as_ref().unwrap();
-                partial_tree.insert(sibling, elem_for_reals.clone());
+                partial_tree.insert(sibling, elem.unwrap());
                 index /= 2;
             }
         }
@@ -471,7 +470,7 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
     }
 
     pub fn get_root(&self) -> Digest {
-        self.nodes[1].clone()
+        self.nodes[1]
     }
 
     pub fn get_leaf_count(&self) -> usize {
@@ -496,7 +495,7 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
             index < first_leaf_index || beyond_last_leaf_index <= index,
             "Out of bounds index requested"
         );
-        self.nodes[first_leaf_index + index].clone()
+        self.nodes[first_leaf_index + index]
     }
 
     pub fn get_leaves_by_indices(&self, leaf_indices: &[usize]) -> Vec<Digest> {
@@ -530,13 +529,13 @@ where
             "Size of input for Merkle tree must be a power of 2"
         );
 
-        let filler = leaves[0].clone();
+        let filler = leaves[0];
 
         // nodes[0] is never used for anything.
         let mut nodes: Vec<Digest> = vec![filler; 2 * leaves.len()];
 
         for i in 0..leaves.len() {
-            let value = leaves[i].clone();
+            let value = leaves[i];
             let leaf_digest = H::hash_pair(&value, &salts[i]);
 
             nodes[leaves.len() + i] = leaf_digest;
@@ -544,8 +543,8 @@ where
 
         // loop from `len(L) - 1` to 1
         for i in (1..(nodes.len() / 2)).rev() {
-            let left = nodes[i * 2].clone();
-            let right = nodes[i * 2 + 1].clone();
+            let left = nodes[i * 2];
+            let right = nodes[i * 2 + 1];
             nodes[i] = H::hash_pair(&left, &right);
         }
 
@@ -560,7 +559,7 @@ where
 
     pub fn get_authentication_path_and_salt(&self, index: usize) -> (Vec<Digest>, Digest) {
         let authentication_path = self.internal_merkle_tree.get_authentication_path(index);
-        let salt = self.salts[index].clone();
+        let salt = self.salts[index];
 
         (authentication_path, salt)
     }
@@ -593,7 +592,7 @@ where
         // salts are random data, so they cannot be compressed
         let mut ret: SaltedAuthenticationStructure<Digest> = Vec::with_capacity(indices.len());
         for (i, index) in indices.iter().enumerate() {
-            let salt = self.salts[*index].clone();
+            let salt = self.salts[*index];
             ret.push((partial_authentication_paths[i].clone(), salt));
         }
 
@@ -660,7 +659,7 @@ where
             index < first_leaf_index || beyond_last_leaf_index <= index,
             "Out of bounds index requested"
         );
-        self.internal_merkle_tree.nodes[first_leaf_index + index].clone()
+        self.internal_merkle_tree.nodes[first_leaf_index + index]
     }
 
     pub fn get_salted_leaves_by_indices(&self, leaf_indices: &[usize]) -> Vec<Digest> {
