@@ -376,7 +376,8 @@ impl<H: AlgebraicHasher> Fri<H> {
 
         for _round in 0..num_rounds {
             // Get a challenge from the proof stream
-            let alpha = XFieldElement::sample(&proof_stream.verifier_fiat_shamir());
+            let challenge = proof_stream.verifier_fiat_shamir();
+            let alpha = XFieldElement::sample(&challenge);
             alphas.push(alpha); // XXX
 
             let root: Digest = proof_stream.dequeue()?.as_merkle_root()?;
@@ -419,8 +420,8 @@ impl<H: AlgebraicHasher> Fri<H> {
 
         // Query phase
         // query step 0: get "A" indices and verify set membership of corresponding values.
-        let mut a_indices: Vec<usize> =
-            self.sample_indices(&proof_stream.verifier_fiat_shamir().to_sequence());
+        let hm = proof_stream.verifier_fiat_shamir();
+        let mut a_indices: Vec<usize> = self.sample_indices(&hm.to_sequence());
         timer.elapsed("Sample indices");
         let mut a_values =
             Self::dequeue_and_authenticate(&a_indices, roots[0].clone(), proof_stream)?;
@@ -602,7 +603,6 @@ mod xfri_tests {
     use super::*;
 
     use itertools::Itertools;
-    use rand::thread_rng;
 
     use twenty_first::shared_math::b_field_element::BFieldElement;
     use twenty_first::shared_math::other::random_elements;
@@ -616,7 +616,6 @@ mod xfri_tests {
     fn sample_indices_test() {
         type Hasher = RescuePrimeRegular;
 
-        let mut rng = thread_rng();
         let subgroup_order = 16;
         let expansion_factor = 4;
         let colinearity_checks = 16;
@@ -765,7 +764,7 @@ mod xfri_tests {
 
             // TODO: Test elsewhere that proof_stream can be re-used for multiple .prove().
             let mut proof_stream: StarkProofStream<Hasher> = StarkProofStream::default();
-            let (_, mut merkle_root_of_round_0) = fri.prove(&points, &mut proof_stream).unwrap();
+            let (_, merkle_root_of_round_0) = fri.prove(&points, &mut proof_stream).unwrap();
 
             let verify_result = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
             if verify_result.is_err() {

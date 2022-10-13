@@ -235,7 +235,8 @@ where
 
             // Get challenge, one just acts as *any* element in this field -- the field element
             // is completely determined from the byte stream.
-            let alpha: XFieldElement = XFieldElement::from_vecu8(proof_stream.prover_fiat_shamir());
+            let challenge: Digest = proof_stream.prover_fiat_shamir();
+            let alpha: XFieldElement = XFieldElement::sample(&challenge);
 
             let x_offset: Vec<BFieldElement> = generator
                 .get_cyclic_group_elements(None)
@@ -275,7 +276,7 @@ where
     }
 
     // Return the c-indices for the 1st round of FRI
-    fn sample_indices(&self, seed: &[u8]) -> Vec<usize> {
+    fn sample_indices(&self, seed: &Digest) -> Vec<usize> {
         // This algorithm starts with the inner-most indices to pick up
         // to `last_codeword_length` indices from the codeword in the last round.
         // It then calculates the indices in the subsequent rounds by choosing
@@ -292,7 +293,7 @@ where
         let mut remaining_last_round_exponents: Vec<usize> = (0..last_codeword_length).collect();
         let mut counter = 0u32;
         for _ in 0..self.colinearity_checks_count {
-            let mut seed_local: Vec<u8> = seed.to_vec();
+            let mut seed_local: Vec<u8> = bincode::serialize(&seed).unwrap();
             seed_local.append(&mut counter.to_be_bytes().into());
             let hash = blake3_digest(&seed_local);
             let index: usize = get_index_from_bytes(&hash, remaining_last_round_exponents.len());
@@ -307,7 +308,7 @@ where
 
             let mut new_indices: Vec<usize> = vec![];
             for index in indices {
-                let mut seed_local: Vec<u8> = seed.to_vec();
+                let mut seed_local: Vec<u8> = bincode::serialize(&seed).unwrap();
                 seed_local.append(&mut counter.to_be_bytes().into());
                 let hash = blake3_digest(&seed_local);
                 let reduce_modulo: bool = get_index_from_bytes(&hash, 2) == 0;
@@ -343,8 +344,8 @@ where
 
         for _ in 0..num_rounds {
             // Get a challenge from the proof stream
-            let alpha: XFieldElement =
-                XFieldElement::from_vecu8(proof_stream.verifier_fiat_shamir());
+            let challenge: Digest = proof_stream.verifier_fiat_shamir();
+            let alpha: XFieldElement = XFieldElement::sample(&challenge);
             alphas.push(alpha);
             roots.push(proof_stream.dequeue(32)?);
         }

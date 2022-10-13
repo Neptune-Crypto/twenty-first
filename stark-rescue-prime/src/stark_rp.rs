@@ -23,14 +23,13 @@ use twenty_first::shared_math::other::roundup_npo2;
 use twenty_first::shared_math::polynomial::Polynomial;
 use twenty_first::shared_math::rescue_prime_regular::*;
 use twenty_first::shared_math::traits::CyclicGroupGenerator;
-use twenty_first::shared_math::traits::{FromVecu8, PrimitiveRootOfUnity};
+use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 use twenty_first::shared_math::x_field_element::XFieldElement;
 use twenty_first::timing_reporter::TimingReporter;
 use twenty_first::util_types::merkle_tree::{
     MerkleTree, PartialAuthenticationPath, SaltedMerkleTree,
 };
 use twenty_first::util_types::proof_stream::ProofStream;
-use twenty_first::utils;
 
 use crate::stark_constraints::BoundaryConstraint;
 
@@ -470,9 +469,9 @@ impl StarkRp {
         // #  - 1 randomizer
         // #  - 2 for every transition quotient
         // #  - 2 for every boundary quotient
-        let fiat_shamir_hash: Vec<u8> = proof_stream.prover_fiat_shamir();
-        let weights: Vec<XFieldElement> = self.sample_weights(
-            &fiat_shamir_hash,
+        let challenge: Digest = proof_stream.prover_fiat_shamir();
+        let weights: Vec<XFieldElement> = Self::sample_weights(
+            &challenge,
             1 + 2 * transition_quotients.len() + 2 * boundary_quotients.len(),
         );
         assert_eq!(
@@ -597,8 +596,8 @@ impl StarkRp {
         // 1 weight element for randomizer
         // 2 for every transition quotient
         // 2 for every boundary quotient
-        let fiat_shamir_hash: Vec<u8> = proof_stream.verifier_fiat_shamir();
-        let weights: Vec<XFieldElement> = self.sample_weights(
+        let fiat_shamir_hash: Digest = proof_stream.verifier_fiat_shamir();
+        let weights: Vec<XFieldElement> = Self::sample_weights(
             &fiat_shamir_hash,
             1 + 2 * boundary_quotient_mt_roots.len() + 2 * transition_constraints.len(),
         );
@@ -979,15 +978,11 @@ impl StarkRp {
         Polynomial::fast_zerofier(&omicron_trace_elements, &omicron, omicron_domain_length)
     }
 
-    fn sample_weights(&self, randomness: &[u8], number: usize) -> Vec<XFieldElement> {
-        let k_seeds: Vec<[u8; 32]> = utils::get_n_hash_rounds(randomness, number as u32);
-
-        // TODO: XFieldElement::from assumes something about the hash size.
-        // Make sure we change this when changing the hash function.
-        k_seeds
+    fn sample_weights(randomness: &Digest, count: usize) -> Vec<XFieldElement> {
+        StarkHasher::get_n_hash_rounds(randomness, count)
             .iter()
-            .map(|seed| XFieldElement::from_vecu8(seed.to_vec()))
-            .collect::<Vec<XFieldElement>>()
+            .map(XFieldElement::sample)
+            .collect()
     }
 
     /// Return a pair of a list of polynomials, first element in the pair,

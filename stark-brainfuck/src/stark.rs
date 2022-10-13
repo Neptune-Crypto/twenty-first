@@ -18,12 +18,11 @@ use twenty_first::shared_math::other::{random_elements_array, roundup_npo2};
 use twenty_first::shared_math::polynomial::Polynomial;
 use twenty_first::shared_math::stark::stark_verify_error::StarkVerifyError;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
-use twenty_first::shared_math::traits::{FromVecu8, Inverse, ModPowU32};
+use twenty_first::shared_math::traits::{Inverse, ModPowU32};
 use twenty_first::shared_math::x_field_element::XFieldElement;
 use twenty_first::timing_reporter::TimingReporter;
 use twenty_first::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use twenty_first::util_types::proof_stream::ProofStream;
-use twenty_first::utils;
 
 use crate::evaluation_argument::{
     EvaluationArgument, ProgramEvaluationArgument, PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT,
@@ -61,13 +60,11 @@ pub struct Stark {
 }
 
 impl Stark {
-    fn sample_weights(randomness: &[u8], count: usize) -> Vec<XFieldElement> {
-        let k_seeds: Vec<[u8; 32]> = utils::get_n_hash_rounds(randomness, count as u32);
-
-        k_seeds
+    fn sample_weights(randomness: &Digest, count: usize) -> Vec<XFieldElement> {
+        StarkHasher::get_n_hash_rounds(randomness, count)
             .iter()
-            .map(|seed| XFieldElement::from_vecu8(seed.to_vec()))
-            .collect::<Vec<XFieldElement>>()
+            .map(XFieldElement::sample)
+            .collect()
     }
 
     pub fn new(
@@ -274,11 +271,6 @@ impl Stark {
 
         timer.elapsed("get_and_set_all_base_codewords");
 
-        // TODO: How do I make a single Merkle tree from many codewords?
-        // If the Merkle trees are always opened for all base codewords for a single index, then
-        // we *should* be able to make a commitment to *each* index and store that list of commitments
-        // in a single Merkle tree. This list of commitments will have length 2^k, so this should be
-        // possible, as the MT requires a leaf count that is a power of two.
         let transposed_base_codewords: Vec<Vec<BFieldElement>> = (0..all_base_codewords[0].len())
             .map(|i| {
                 all_base_codewords
@@ -289,8 +281,6 @@ impl Stark {
             .collect();
 
         timer.elapsed("transposed_base_codewords");
-
-        let hasher = StarkHasher::new();
 
         // Current length of each element in `transposed_base_codewords` is 18 which exceeds
         // max length of RP hash function. So we chop it into elements that will fit into the
@@ -319,7 +309,7 @@ impl Stark {
 
         timer.elapsed("proof_stream.enqueue");
 
-        let seed: Vec<u8> = proof_stream.prover_fiat_shamir();
+        let seed: Digest = proof_stream.prover_fiat_shamir();
 
         timer.elapsed("prover_fiat_shamir");
 
@@ -436,7 +426,7 @@ impl Stark {
         timer.elapsed("get_all_base_degree_bounds");
 
         // Get weights for nonlinear combination
-        let weights_seed: Vec<u8> = proof_stream.prover_fiat_shamir();
+        let weights_seed: Digest = proof_stream.prover_fiat_shamir();
 
         timer.elapsed("prover_fiat_shamir (again)");
 
@@ -565,7 +555,6 @@ impl Stark {
                 .map(|(x, &qce)| qce * x.mod_pow_u32(shift).lift())
                 .collect();
 
-            // TODO: Not all the degrees of the shifted quotient codewords are of max degree. Why?
             if std::env::var("DEBUG").is_ok() {
                 let interpolated = self.fri.domain.x_interpolate(&qc_shifted);
                 assert!(
@@ -590,32 +579,6 @@ impl Stark {
 
         timer.elapsed("...shift and collect quotient codewords");
 
-        // assert_eq!(
-        //     terms.len(),
-        //     weights.len(),
-        //     "Number of terms in non-linear combination must match number of weights"
-        // );
-
-        // Take weighted sum
-        // TODO: Consider if this would go faster with some form of memoization
-        // let combination_codeword: Vec<XFieldElement> = weights
-        //     .par_iter()
-        //     .zip(terms.par_iter())
-        //     .map(|(w, t)| {
-        //         (0..self.fri.domain.length)
-        //             .map(|i| *w * t[i])
-        //             .collect::<Vec<XFieldElement>>()
-        //     })
-        //     .reduce(
-        //         || vec![XFieldElement::zero(); self.fri.domain.length],
-        //         |acc, weighted_terms| {
-        //             acc.iter()
-        //                 .zip(weighted_terms.iter())
-        //                 .map(|(a, wt)| *a + *wt)
-        //                 .collect()
-        //         },
-        //     );
-
         timer.elapsed("combination_codeword");
         let mut combination_codeword_digests: Vec<Digest> =
             Vec::with_capacity(combination_codeword.len());
@@ -634,7 +597,6 @@ impl Stark {
 
         timer.elapsed("combination_tree");
 
-        // TODO: Consider factoring out code to find `unit_distances`, duplicated in verifier
         let mut unit_distances: Vec<usize> = self
             .tables
             .borrow()
@@ -648,20 +610,12 @@ impl Stark {
         timer.elapsed("unit_distances");
 
         // Get indices of leafs to prove nonlinear combination
-        let indices_seed: [u8; 32] = proof_stream.prover_fiat_shamir().try_into().unwrap();
-        let indices: Vec<usize> = StarkHasher::sample_indices(
-            self.security_level,
-            &indices_seed.into(),
-            self.fri.domain.length,
-        );
+        let indices_seed = proof_stream.prover_fiat_shamir();
+        let indices: Vec<usize> =
+            StarkHasher::sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
 
         timer.elapsed("sample_indices");
 
-        // TODO: I don't like that we're calling FRI right after getting the indices through
-        // the Fiat-Shamir public oracle above. The reason I don't like this is that it implies
-        // using Fiat-Shamir twice with somewhat similar proof stream content. A cryptographer
-        // or mathematician should take a look on this part of the code.
-        // prove low degree of combination polynomial
         let _fri_indices = self.fri.prove(&combination_codeword, &mut proof_stream)?;
         timer.elapsed("fri.prove");
 
@@ -694,16 +648,6 @@ impl Stark {
         proof_stream.enqueue_length_prepended(&revealed_extension_elements)?;
         proof_stream.enqueue_length_prepended(&extension_auth_paths)?;
 
-        // debug_assert!(
-        //     MerkleTree::<StarkHasher>::verify_multi_proof_from_leaves(
-        //         base_merkle_tree.get_root(),
-        //         &revealed_indices,
-        //         revealed_indices.iter().map()base_codeword_digests_by_index[idx].clone(),
-        //         auth_path.clone(),
-        //     ),
-        //     "authentication path for base tree must be valid"
-        // );
-
         timer.elapsed("open leafs of zipped codewords");
 
         // open combination codeword at the same positions
@@ -725,15 +669,14 @@ impl Stark {
         Ok(proof_stream)
     }
 
-    pub fn verify(&self, proof_stream_: &mut ProofStream) -> Result<bool, Box<dyn Error>> {
+    pub fn verify(&self, proof_stream: &mut ProofStream) -> Result<bool, Box<dyn Error>> {
         let mut timer = TimingReporter::start();
-        let hasher = StarkHasher::new();
 
         // let base_merkle_tree_root: Vec<BFieldElement> =
         //     proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
-        let base_merkle_tree_root: Digest = proof_stream_.dequeue(32)?;
+        let base_merkle_tree_root: Digest = proof_stream.dequeue(32)?;
 
-        let seed = proof_stream_.verifier_fiat_shamir();
+        let seed = proof_stream.verifier_fiat_shamir();
 
         timer.elapsed("verifier_fiat_shamir");
         // Get coefficients for table extension
@@ -743,14 +686,11 @@ impl Stark {
                 .unwrap();
         self.tables.borrow_mut().set_constraints(challenges);
 
-        let extension_tree_merkle_root: Digest = proof_stream_.dequeue(32)?;
+        let extension_tree_merkle_root: Digest = proof_stream.dequeue(32)?;
 
-        let terminals: [XFieldElement; TERMINAL_COUNT] =
-            proof_stream_.dequeue_length_prepended()?;
+        let terminals: [XFieldElement; TERMINAL_COUNT] = proof_stream.dequeue_length_prepended()?;
         timer.elapsed("Read from proof stream");
 
-        // TODO: All degree bounds can be calculated way faster, as the mpolynomials
-        // can be hardcoded.
         let base_degree_bounds: Vec<Degree> = self
             .tables
             .borrow()
@@ -786,7 +726,7 @@ impl Stark {
         let num_difference_quotients = self.permutation_arguments.len();
         timer.elapsed("Calculated quotient degree bounds");
 
-        let weights_seed: Vec<u8> = proof_stream_.verifier_fiat_shamir();
+        let weights_seed: Digest = proof_stream.verifier_fiat_shamir();
 
         timer.elapsed("verifier_fiat_shamir (again)");
         let weights_count = num_randomizer_polynomials
@@ -797,9 +737,9 @@ impl Stark {
         let weights: Vec<XFieldElement> = Self::sample_weights(&weights_seed, weights_count);
         timer.elapsed("Calculated weights");
 
-        let combination_root: Digest = proof_stream_.dequeue(32)?;
+        let combination_root: Digest = proof_stream.dequeue(32)?;
 
-        let indices_seed: [u8; 32] = proof_stream_.verifier_fiat_shamir().try_into().unwrap();
+        let indices_seed = proof_stream.verifier_fiat_shamir();
         let indices = StarkHasher::sample_indices(
             self.security_level,
             &indices_seed.into(),
@@ -808,10 +748,9 @@ impl Stark {
         timer.elapsed("Got indices");
 
         // Verify low degree of combination polynomial
-        self.fri.verify(proof_stream_)?;
+        self.fri.verify(proof_stream)?;
         timer.elapsed("Verified FRI proof");
 
-        // TODO: Consider factoring out code to find `unit_distances`, duplicated in prover
         let mut unit_distances: Vec<usize> = self
             .tables
             .borrow()
@@ -824,8 +763,6 @@ impl Stark {
         timer.elapsed("Got unit distances");
 
         let mut tuples: HashMap<usize, Vec<XFieldElement>> = HashMap::new();
-        // TODO: we can store the elements mushed into "tuples" separately, like in "points" below,
-        // to avoid unmushing later
 
         // Open leafs of zipped codewords at indicated positions
         let mut revealed_indices: Vec<usize> = vec![];
@@ -840,9 +777,9 @@ impl Stark {
         timer.elapsed("Calculated revealed indices");
 
         let revealed_base_elements: Vec<Vec<BFieldElement>> =
-            proof_stream_.dequeue_length_prepended()?;
+            proof_stream.dequeue_length_prepended()?;
         let auth_paths: Vec<PartialAuthenticationPath<Digest>> =
-            proof_stream_.dequeue_length_prepended()?;
+            proof_stream.dequeue_length_prepended()?;
         timer.elapsed("Read base elements and auth paths from proof stream");
         let leaf_digests: Vec<Digest> = revealed_base_elements
             .par_iter()
@@ -864,9 +801,7 @@ impl Stark {
                 &auth_paths,
             );
         if !mt_base_success {
-            // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for base codeword");
-            // return Ok(false);
         }
         timer.elapsed(&format!(
             "Verified authentication paths for {} base elements",
@@ -875,9 +810,9 @@ impl Stark {
 
         // Get extension elements
         let revealed_extension_elements: Vec<Vec<XFieldElement>> =
-            proof_stream_.dequeue_length_prepended()?;
+            proof_stream.dequeue_length_prepended()?;
         let extension_auth_paths: Vec<PartialAuthenticationPath<Digest>> =
-            proof_stream_.dequeue_length_prepended()?;
+            proof_stream.dequeue_length_prepended()?;
         timer.elapsed("Read extension elements and auth paths from proof stream");
         let extension_leaf_digests: Vec<Digest> = revealed_extension_elements
             .clone()
@@ -948,7 +883,7 @@ impl Stark {
 
         // Verify Merkle authentication path for combination elements
         let revealed_combination_elements: Vec<XFieldElement> =
-            proof_stream_.dequeue_length_prepended()?;
+            proof_stream.dequeue_length_prepended()?;
         let revealed_combination_digests: Vec<Digest> = revealed_combination_elements
             .clone()
             .into_par_iter()
@@ -958,7 +893,7 @@ impl Stark {
             })
             .collect();
         let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<Digest>> =
-            proof_stream_.dequeue_length_prepended()?;
+            proof_stream.dequeue_length_prepended()?;
         let mt_combination_success =
             MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
                 combination_root,

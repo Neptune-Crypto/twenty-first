@@ -1078,7 +1078,6 @@ mod mmr_membership_proof_test {
         // leaf index for MMR, modifying its membership proof with a
         // leaf update.
         for leaf_count in 0..=22 {
-            let start: u128 = 543217893265643843678;
             let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
             let new_leaf: Digest = H::hash(&133333333333333333333337u128);
             let mut archival_mmr: ArchivalMmr<H> =

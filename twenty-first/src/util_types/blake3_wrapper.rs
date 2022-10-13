@@ -11,24 +11,25 @@ impl AlgebraicHasher for blake3::Hasher {
         for elem in elements.iter() {
             hasher.update(&elem.value().to_be_bytes());
         }
-        let digest_elements: [BFieldElement; DIGEST_LENGTH] = hasher
-            .finalize()
-            .as_bytes()
-            .chunks(std::mem::size_of::<u64>())
-            .take(DIGEST_LENGTH)
-            .map(|bytes: &[u8]| {
-                let mut bytes_copied: [u8; 8] = [0; 8];
-                bytes_copied.copy_from_slice(bytes);
-                BFieldElement::new(u64::from_be_bytes(bytes_copied))
-            })
-            .collect_vec()
-            .try_into()
-            .expect("A BLAKE3 digest is larger than a Digest");
-
-        Digest::new(digest_elements)
+        from_blake3_digest(&hasher.finalize())
     }
 
     fn hash_pair(left: &Digest, right: &Digest) -> Digest {
         Self::hash_slice(&vec![left.to_sequence(), right.to_sequence()].concat())
     }
+}
+
+pub(crate) fn from_blake3_digest(digest: &blake3::Hash) -> Digest {
+    digest
+        .as_bytes()
+        .chunks(std::mem::size_of::<u64>())
+        .take(DIGEST_LENGTH)
+        .map(|bytes: &[u8]| {
+            let mut bytes_copied: [u8; 8] = [0; 8];
+            bytes_copied.copy_from_slice(bytes);
+            BFieldElement::new(u64::from_be_bytes(bytes_copied))
+        })
+        .collect_vec()
+        .try_into()
+        .expect("A BLAKE3 digest is larger than a Digest")
 }

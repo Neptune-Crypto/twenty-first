@@ -1,12 +1,10 @@
 use itertools::Itertools;
-
 use std::error::Error;
 use std::fmt::Display;
 use std::marker::PhantomData;
 
 use crate::shared_math::{b_field_element::BFieldElement, rescue_prime_digest::Digest};
-
-use super::algebraic_hasher::{AlgebraicHasher, Hashable};
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ProofStream<Item, H: AlgebraicHasher> {
@@ -17,18 +15,14 @@ pub struct ProofStream<Item, H: AlgebraicHasher> {
     _hasher: PhantomData<H>,
 }
 
-impl<Item, H> Default for ProofStream<Item, H>
-where
-    H: Default + AlgebraicHasher,
-    Item: Default + Hashable,
-{
+impl<Item, H: AlgebraicHasher> Default for ProofStream<Item, H> {
     fn default() -> Self {
         Self {
-            items: Default::default(),
-            items_index: Default::default(),
-            transcript: Default::default(),
-            transcript_index: Default::default(),
-            _hasher: Default::default(),
+            items: vec![],
+            items_index: 0,
+            transcript: vec![],
+            transcript_index: 0,
+            _hasher: PhantomData,
         }
     }
 }
@@ -60,7 +54,7 @@ impl Error for ProofStreamError {}
 
 impl<Item, H> ProofStream<Item, H>
 where
-    Item: IntoIterator<Item = BFieldElement> + Clone + Default,
+    Item: IntoIterator<Item = BFieldElement> + Clone,
     H: AlgebraicHasher,
 {
     pub fn default() -> Self {

@@ -759,7 +759,7 @@ mod mmr_test {
             4, 5, 1, 2,
         ];
         let data_sizes: Vec<usize> = (1..34).collect();
-        for (i, node_count, peak_count) in izip!(data_sizes, node_counts, peak_counts) {
+        for (i, node_count, _peak_count) in izip!(data_sizes, node_counts, peak_counts) {
             let data_size = i as u128;
             let input_hashes: Vec<Digest> = random_elements(i);
             let mut mmr: ArchivalMmr<H> = get_archival_mmr_from_digests(input_hashes.clone());
