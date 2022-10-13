@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use super::b_field_element::BFieldElement;
 use super::other::{log_2_ceil, log_2_floor};
 use super::polynomial::Polynomial;
-use super::traits::{CyclicGroupGenerator, FromVecu8, ModPowU32};
+use super::traits::{CyclicGroupGenerator, ModPowU32};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::traits::FiniteField;
@@ -581,8 +581,7 @@ mod fri_tests {
 
         let subgroup_order = 512;
         let expansion_factor = 4;
-        let mut fri: Fri<XFieldElement, H> =
-            get_x_field_fri_test_object::<H>(subgroup_order, expansion_factor, 2);
+        let mut fri: Fri<H> = get_x_field_fri_test_object::<H>(subgroup_order, expansion_factor, 2);
 
         assert_eq!((7, 0), fri.num_rounds());
         fri.colinearity_checks_count = 8;

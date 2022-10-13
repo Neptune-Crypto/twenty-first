@@ -802,13 +802,13 @@ mod xfri_tests {
         expansion_factor: usize,
         colinearity_checks: usize,
     ) -> Fri<H> {
-        let maybe_omega: Option<XFieldElement> =
-            XFieldElement::primitive_root_of_unity(subgroup_order);
+        let maybe_omega: Option<BFieldElement> =
+            BFieldElement::primitive_root_of_unity(subgroup_order);
 
         // The element 7 generates all of Zp\{0}
         let offset: Option<BFieldElement> = Some(BFieldElement::new(7));
 
-        let fri: Fri<H> = Fri::<H>::new(
+        let fri: Fri<H> = Fri::new(
             offset.unwrap(),
             maybe_omega.unwrap(),
             subgroup_order as usize,
