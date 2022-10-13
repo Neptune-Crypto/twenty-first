@@ -1,7 +1,3 @@
-use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use num_traits::{One, Zero};
 use rand::Rng;
 use rand_distr::{Distribution, Standard};
@@ -9,6 +5,11 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
+
+use crate::shared_math::b_field_element::{BFieldElement, EMOJI_PER_BFE};
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
+use crate::shared_math::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -115,7 +116,12 @@ impl XFieldElement {
 
     /// Convert item to pretty-printed string of emojis
     pub fn emojihash(&self) -> String {
-        let [a, b, c] = self.coefficients.map(|bfe| bfe.emojihash_raw());
+        let [a, b, c] = self.coefficients.map(|bfe| {
+            emojihash::hash(&bfe.value().to_be_bytes())
+                .chars()
+                .take(EMOJI_PER_BFE)
+                .collect::<String>()
+        });
         format!("[{a}|{b}|{c}]")
     }
 }

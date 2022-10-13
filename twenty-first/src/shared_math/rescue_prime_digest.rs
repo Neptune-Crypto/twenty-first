@@ -2,7 +2,10 @@ use core::fmt;
 use std::str::FromStr;
 
 use get_size::GetSize;
+use itertools::Itertools;
 use num_traits::Zero;
+use rand::Rng;
+use rand_distr::{Distribution, Standard};
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
@@ -47,6 +50,19 @@ impl Digest {
 impl fmt::Display for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0.map(|elem| elem.to_string()).join(","))
+    }
+}
+
+impl Distribution<Digest> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Digest {
+        // FIXME: impl Fill for [BFieldElement] to rng.fill() a [BFieldElement; DIGEST_LENGTH].
+        let elements = rng
+            .sample_iter(Standard)
+            .take(DIGEST_LENGTH)
+            .collect_vec()
+            .try_into()
+            .unwrap();
+        Digest::new(elements)
     }
 }
 

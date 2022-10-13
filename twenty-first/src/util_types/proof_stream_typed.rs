@@ -1,25 +1,26 @@
 use itertools::Itertools;
 
-use crate::util_types::simple_hasher::Hasher;
 use std::error::Error;
 use std::fmt::Display;
 use std::marker::PhantomData;
 
-use super::simple_hasher::Hashable;
+use crate::shared_math::{b_field_element::BFieldElement, rescue_prime_digest::Digest};
+
+use super::algebraic_hasher::{AlgebraicHasher, Hashable};
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ProofStream<Item, H: Hasher> {
+pub struct ProofStream<Item, H: AlgebraicHasher> {
     items: Vec<(Item, usize)>,
     items_index: usize,
-    transcript: Vec<H::T>,
+    transcript: Vec<BFieldElement>,
     transcript_index: usize,
     _hasher: PhantomData<H>,
 }
 
-impl<Item, H: Hasher> Default for ProofStream<Item, H>
+impl<Item, H> Default for ProofStream<Item, H>
 where
-    Item: Default + Hashable<H::T>,
-    H: Default,
+    H: Default + AlgebraicHasher,
+    Item: Default + Hashable,
 {
     fn default() -> Self {
         Self {
@@ -59,8 +60,8 @@ impl Error for ProofStreamError {}
 
 impl<Item, H> ProofStream<Item, H>
 where
-    Item: IntoIterator<Item = H::T> + Clone + Default,
-    H: Hasher,
+    Item: IntoIterator<Item = BFieldElement> + Clone + Default,
+    H: AlgebraicHasher,
 {
     pub fn default() -> Self {
         ProofStream {
@@ -108,14 +109,12 @@ where
         Ok(item.clone())
     }
 
-    pub fn prover_fiat_shamir(&self) -> H::Digest {
-        let hasher = H::new();
-        hasher.hash_sequence(&self.transcript)
+    pub fn prover_fiat_shamir(&self) -> Digest {
+        H::hash_slice(&self.transcript)
     }
 
-    pub fn verifier_fiat_shamir(&self) -> H::Digest {
-        let hasher = H::new();
-        hasher.hash_sequence(&self.transcript[0..self.transcript_index])
+    pub fn verifier_fiat_shamir(&self) -> Digest {
+        H::hash_slice(&self.transcript[0..self.transcript_index])
     }
 }
 
@@ -229,12 +228,12 @@ mod proof_stream_typed_tests {
     // Property: prover_fiat_shamir() is equivalent to verifier_fiat_shamir() when the entire stream has been read.
     #[test]
     fn prover_verifier_fiat_shamir_test() {
-        let mut proof_stream = ProofStream::<TestItem, RescuePrimeRegular>::default();
-        let ps: &mut ProofStream<TestItem, RescuePrimeRegular> = &mut proof_stream;
+        type H = RescuePrimeRegular;
+        let mut proof_stream = ProofStream::<TestItem, H>::default();
+        let ps: &mut ProofStream<TestItem, H> = &mut proof_stream;
 
-        let hasher = RescuePrimeRegular::new();
-        let digest_1 = hasher.hash_sequence(&vec![BFieldElement::one()]);
-        ps.enqueue(&TestItem::ManyB(digest_1.to_vec()));
+        let digest_1 = H::hash(&BFieldElement::one());
+        ps.enqueue(&TestItem::ManyB(digest_1.values().to_vec()));
         let _result = ps.dequeue();
 
         assert_eq!(
@@ -243,8 +242,8 @@ mod proof_stream_typed_tests {
             "prover_fiat_shamir() and verifier_fiat_shamir() are equivalent when the entire stream is read"
         );
 
-        let digest_2 = hasher.hash_sequence(&vec![BFieldElement::one()]);
-        ps.enqueue(&TestItem::ManyB(digest_2.to_vec()));
+        let digest_2 = H::hash(&BFieldElement::one());
+        ps.enqueue(&TestItem::ManyB(digest_2.values().to_vec()));
 
         assert_ne!(
             ps.prover_fiat_shamir(),

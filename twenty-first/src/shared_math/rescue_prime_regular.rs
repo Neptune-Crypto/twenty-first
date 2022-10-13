@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::traits::FiniteField;
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::util_types::simple_hasher::{self, Hashable, SamplableFrom, ToVec};
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
+
+use super::rescue_prime_digest::Digest;
 
 pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
@@ -810,10 +811,6 @@ impl RescuePrimeRegularState {
 pub struct RescuePrimeRegular {}
 
 impl RescuePrimeRegular {
-    fn new() -> Self {
-        RescuePrimeRegular {}
-    }
-
     #[inline]
     fn batch_square(array: &mut [BFieldElement; STATE_SIZE]) {
         for a in array.iter_mut() {
@@ -1079,47 +1076,16 @@ impl RescuePrimeRegular {
     }
 }
 
-impl ToVec<BFieldElement> for [BFieldElement; 5] {
-    fn to_vec(&self) -> Vec<BFieldElement> {
-        // Why not simply call to_vec?
-        // That function call resolves not to the standard rust
-        // function, but to the one defined here, i.e., recursion.
-        (*self).into_iter().collect::<Vec<BFieldElement>>()
-    }
-}
-
-impl simple_hasher::Hasher for RescuePrimeRegular {
-    type Digest = [BFieldElement; 5];
-    type T = BFieldElement;
-
-    fn new() -> Self {
-        RescuePrimeRegular::new()
+impl AlgebraicHasher for RescuePrimeRegular {
+    fn hash_slice(elements: &[BFieldElement]) -> Digest {
+        Digest::new(RescuePrimeRegular::hash_varlen(elements))
     }
 
-    fn hash_sequence(&self, input: &[BFieldElement]) -> Self::Digest {
-        RescuePrimeRegular::hash_varlen(input)
-    }
-
-    fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
-        let input: [BFieldElement; 10] = [left_input.to_vec(), right_input.to_vec()]
-            .concat()
-            .try_into()
-            .unwrap();
-        RescuePrimeRegular::hash_10(&input)
-    }
-}
-
-impl Hashable<BFieldElement> for [BFieldElement; 5] {
-    fn to_sequence(&self) -> Vec<BFieldElement> {
-        self.to_vec()
-    }
-}
-
-impl SamplableFrom<[BFieldElement; 5]> for XFieldElement {
-    fn sample(digest: &[BFieldElement; 5]) -> Self {
-        XFieldElement {
-            coefficients: digest[0..3].try_into().unwrap(),
-        }
+    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+        let mut input = [BFieldElement::zero(); 10];
+        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
+        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
+        Digest::new(RescuePrimeRegular::hash_10(&input))
     }
 }
 

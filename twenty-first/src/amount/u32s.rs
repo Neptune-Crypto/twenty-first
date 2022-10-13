@@ -1,4 +1,5 @@
 use num_bigint::BigUint;
+use num_traits::{One, Zero};
 use serde_big_array;
 use serde_big_array::BigArray;
 use serde_derive::{Deserialize, Serialize};
@@ -9,9 +10,8 @@ use std::{
     ops::{Add, Div, Mul, Rem, Sub},
 };
 
-use num_traits::{One, Zero};
-
-use crate::{shared_math::b_field_element::BFieldElement, util_types::simple_hasher::Hashable};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::util_types::algebraic_hasher::Hashable;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct U32s<const N: usize> {
@@ -317,7 +317,7 @@ impl<const N: usize> Display for U32s<N> {
     }
 }
 
-impl<const N: usize> Hashable<BFieldElement> for U32s<N> {
+impl<const N: usize> Hashable for U32s<N> {
     fn to_sequence(&self) -> Vec<BFieldElement> {
         self.values.into_iter().map(BFieldElement::from).collect()
     }

@@ -2,7 +2,6 @@ use super::other;
 use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
-use crate::util_types::simple_hasher::Hashable;
 use num_traits::{One, Zero};
 use rand_distr::{Distribution, Standard};
 use std::hash::{Hash, Hasher};
@@ -234,17 +233,12 @@ impl BFieldElement {
         result.wrapping_add(Self::LOWER_MASK * (over as u64))
     }
 
-    /// Get string of raw emoji characters
-    pub fn emojihash_raw(&self) -> String {
-        emojihash::hash(&self.to_sequence())
+    pub fn emojihash(&self) -> String {
+        let emojis = emojihash::hash(&self.0.to_be_bytes())
             .chars()
             .take(EMOJI_PER_BFE)
-            .collect()
-    }
+            .collect::<String>();
 
-    ///
-    pub fn emojihash(&self) -> String {
-        let emojis = self.emojihash_raw();
         format!("[{emojis}]")
     }
 }
@@ -1015,15 +1009,16 @@ mod b_prime_field_element_test {
         let mut hasher_a = DefaultHasher::new();
         let mut hasher_b = DefaultHasher::new();
 
-        BFieldElement::new(42).hash(&mut hasher_a);
-        BFieldElement::new(42).hash(&mut hasher_b);
+        std::hash::Hash::hash(&BFieldElement::new(42), &mut hasher_a);
+        std::hash::Hash::hash(&BFieldElement::new(42), &mut hasher_b);
         assert_eq!(hasher_a.finish(), hasher_b.finish());
 
         // Verify that hashing works for non-canonical representations
         hasher_a = DefaultHasher::new();
         hasher_b = DefaultHasher::new();
-        (BFieldElement::new(BFieldElement::MAX) + BFieldElement::new(103)).hash(&mut hasher_a);
-        BFieldElement::new(102).hash(&mut hasher_b);
+        let non_canonical = BFieldElement::new(BFieldElement::MAX) + BFieldElement::new(103);
+        std::hash::Hash::hash(&(non_canonical), &mut hasher_a);
+        std::hash::Hash::hash(&BFieldElement::new(102), &mut hasher_b);
         assert_eq!(hasher_a.finish(), hasher_b.finish());
     }
 
