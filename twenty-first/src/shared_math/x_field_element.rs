@@ -104,49 +104,6 @@ impl XFieldElement {
         }
     }
 
-    // TODO: Move this into Polynomial when PrimeField can implement Zero + One.
-    // Division in 𝔽_p[X], not 𝔽_{p^e} ≅ 𝔽[X]/p(x).
-    pub fn xgcd(
-        mut x: Polynomial<BFieldElement>,
-        mut y: Polynomial<BFieldElement>,
-    ) -> (
-        Polynomial<BFieldElement>,
-        Polynomial<BFieldElement>,
-        Polynomial<BFieldElement>,
-    ) {
-        let mut a_factor = Polynomial::new(vec![BFieldElement::one()]);
-        let mut a1 = Polynomial::new(vec![BFieldElement::zero()]);
-        let mut b_factor = Polynomial::new(vec![BFieldElement::zero()]);
-        let mut b1 = Polynomial::new(vec![BFieldElement::one()]);
-
-        while !y.is_zero() {
-            let (quotient, remainder): (Polynomial<BFieldElement>, Polynomial<BFieldElement>) =
-                x.clone().divide(y.clone());
-            let (c, d) = (
-                a_factor - quotient.clone() * a1.clone(),
-                b_factor.clone() - quotient * b1.clone(),
-            );
-
-            x = y;
-            y = remainder;
-            a_factor = a1;
-            a1 = c;
-            b_factor = b1;
-            b1 = d;
-        }
-
-        // The result is valid up to a coefficient, so we normalize the result,
-        // to ensure that x has a leading coefficient of 1.
-        // TODO: What happens if x is zero here, can it be?
-        let lc = x.leading_coefficient().unwrap();
-        let scale = lc.inverse();
-        (
-            x.scalar_mul(scale),
-            a_factor.scalar_mul(scale),
-            b_factor.scalar_mul(scale),
-        )
-    }
-
     // `increment` and `decrement` are mainly used for testing purposes
     pub fn increment(&mut self, index: usize) {
         self.coefficients[index].increment();
@@ -167,7 +124,7 @@ impl Inverse for XFieldElement {
     #[must_use]
     fn inverse(&self) -> Self {
         let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
-        let (_, a, _) = Self::xgcd(self_as_poly, Self::shah_polynomial());
+        let (_, a, _) = Polynomial::<BFieldElement>::xgcd(self_as_poly, Self::shah_polynomial());
         a.into()
     }
 }
@@ -726,12 +683,12 @@ mod x_field_element_test {
         for x_field_element in x_field_elements.iter() {
             let x_field_element_poly: Polynomial<BFieldElement> = (*x_field_element).into();
             // XGCP for x
-            let (gcd_0, a_0, b_0) = XFieldElement::xgcd(
+            let (gcd_0, a_0, b_0) = Polynomial::xgcd(
                 x_field_element_poly.clone(),
                 XFieldElement::shah_polynomial(),
             );
             let (gcd_1, b_1, a_1) =
-                XFieldElement::xgcd(XFieldElement::shah_polynomial(), (*x_field_element).into());
+                Polynomial::xgcd(XFieldElement::shah_polynomial(), (*x_field_element).into());
 
             // Verify symmetry, and that all elements are mutual primes, meaning that
             // they form a field
