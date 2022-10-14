@@ -38,7 +38,7 @@ where
     /// membership proofs that have changed as a result of this operation.
     fn batch_mutate_leaf_and_update_mps(
         &mut self,
-        membership_proofs: &mut [MmrMembershipProof<H>],
+        membership_proofs: &mut [&mut MmrMembershipProof<H>],
         mutation_data: Vec<(MmrMembershipProof<H>, H::Digest)>,
     ) -> Vec<usize>;
 
