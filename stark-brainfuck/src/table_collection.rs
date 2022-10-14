@@ -265,8 +265,8 @@ mod brainfuck_table_collection_tests {
 
     #[test]
     fn degree_bounds_test() {
-        let mut expected_bounds: HashMap<&str, (Vec<Degree>, Vec<Degree>, Vec<Degree>)> =
-            HashMap::new();
+        type DegreeBounds = (Vec<Degree>, Vec<Degree>, Vec<Degree>);
+        let mut expected_bounds: HashMap<&str, DegreeBounds> = HashMap::new();
 
         // The expected values have been found from the Python STARK BF tutorial
         expected_bounds.insert(

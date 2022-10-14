@@ -672,13 +672,11 @@ impl Stark {
     pub fn verify(&self, proof_stream: &mut ProofStream) -> Result<bool, Box<dyn Error>> {
         let mut timer = TimingReporter::start();
 
-        // let base_merkle_tree_root: Vec<BFieldElement> =
-        //     proof_stream.dequeue(SIZE_OF_RP_HASH_IN_BYTES)?;
-        let base_merkle_tree_root: Digest = proof_stream.dequeue(32)?;
-
+        let base_merkle_tree_root: Digest = proof_stream.dequeue(Digest::BYTES)?;
         let seed = proof_stream.verifier_fiat_shamir();
 
         timer.elapsed("verifier_fiat_shamir");
+
         // Get coefficients for table extension
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
             Self::sample_weights(&seed, EXTENSION_CHALLENGE_COUNT)
@@ -686,7 +684,7 @@ impl Stark {
                 .unwrap();
         self.tables.borrow_mut().set_constraints(challenges);
 
-        let extension_tree_merkle_root: Digest = proof_stream.dequeue(32)?;
+        let extension_tree_merkle_root: Digest = proof_stream.dequeue(Digest::BYTES)?;
 
         let terminals: [XFieldElement; TERMINAL_COUNT] = proof_stream.dequeue_length_prepended()?;
         timer.elapsed("Read from proof stream");
@@ -737,7 +735,7 @@ impl Stark {
         let weights: Vec<XFieldElement> = Self::sample_weights(&weights_seed, weights_count);
         timer.elapsed("Calculated weights");
 
-        let combination_root: Digest = proof_stream.dequeue(32)?;
+        let combination_root: Digest = proof_stream.dequeue(Digest::BYTES)?;
 
         let indices_seed: Digest = proof_stream.verifier_fiat_shamir();
         let indices =
@@ -1329,12 +1327,8 @@ mod brainfuck_stark_tests {
         let mut mallorys_proof_stream: ProofStream =
             mallorys_stark.prove(mallorys_matrices).unwrap();
 
-        let mallorys_verify = mallorys_stark.verify(&mut mallorys_proof_stream);
-        match mallorys_verify {
-            Ok(true) => {
-                panic!("Attack passes the STARK verifier!!")
-            }
-            _ => (),
+        if let Ok(true) = mallorys_stark.verify(&mut mallorys_proof_stream) {
+            panic!("Attack passes the STARK verifier!!");
         }
     }
 
@@ -1364,7 +1358,7 @@ mod brainfuck_stark_tests {
             regular_matrices.processor_matrix.len(),
             source_code.clone(),
             vec![],
-            output.clone(),
+            output,
             regular_matrices.memory_matrix.len(),
         );
         let mut regular_proof_stream: ProofStream =
@@ -1405,7 +1399,7 @@ mod brainfuck_stark_tests {
 
         let mut malicious_stark = new_test_stark(
             bad_matrices.processor_matrix.len(),
-            source_code.clone(),
+            source_code,
             vec![],
             bad_output,
             bad_mt.len(),

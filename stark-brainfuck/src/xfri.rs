@@ -548,7 +548,7 @@ mod fri_domain_tests {
             let omega = BFieldElement::primitive_root_of_unity(order).unwrap();
             let domain = FriDomain {
                 offset: BFieldElement::generator(),
-                omega: omega,
+                omega,
                 length: order as usize,
             };
             let expected_x_values: Vec<BFieldElement> = (0..order)
@@ -605,6 +605,7 @@ mod xfri_tests {
     use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
     use twenty_first::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
     use twenty_first::shared_math::x_field_element::XFieldElement;
+    use twenty_first::test_shared::corrupt_digest;
     use twenty_first::utils::has_unique_elements;
 
     #[test]
@@ -757,7 +758,6 @@ mod xfri_tests {
                 .map(|p| p.mod_pow_u32(n).lift())
                 .collect();
 
-            // TODO: Test elsewhere that proof_stream can be re-used for multiple .prove().
             let mut proof_stream: StarkProofStream<Hasher> = StarkProofStream::default();
             let (_, merkle_root_of_round_0) = fri.prove(&points, &mut proof_stream).unwrap();
 
@@ -776,8 +776,10 @@ mod xfri_tests {
 
             // Manipulate Merkle root of 0 and verify failure with expected error message
             proof_stream.reset_for_verifier();
-            merkle_root_of_round_0.values()[0].increment();
-            let bad_verify_result = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
+
+            let bad_merkle_root = corrupt_digest(&merkle_root_of_round_0);
+            let bad_verify_result = fri.verify(&mut proof_stream, &bad_merkle_root);
+
             assert!(bad_verify_result.is_err());
             println!("bad_verify_result = {:?}", bad_verify_result);
 

@@ -14,10 +14,9 @@ use crate::shared_math::traits::FromVecu8;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Digest([BFieldElement; DIGEST_LENGTH]);
+// FIXME: Make Digest a record instead of a tuple.
 
-pub const BYTES_PER_BFIELDELEMENT: usize = 8;
 pub const MSG_DIGEST_SIZE_IN_BYTES: usize = 32;
-pub const DIGEST_SIZE_IN_BYTES: usize = DIGEST_LENGTH * BYTES_PER_BFIELDELEMENT;
 
 impl GetSize for Digest {
     fn get_stack_size() -> usize {
@@ -34,6 +33,8 @@ impl GetSize for Digest {
 }
 
 impl Digest {
+    pub const BYTES: usize = DIGEST_LENGTH * BFieldElement::BYTES;
+
     pub fn values(&self) -> [BFieldElement; DIGEST_LENGTH] {
         self.0
     }
@@ -41,8 +42,10 @@ impl Digest {
     pub fn new(digest: [BFieldElement; DIGEST_LENGTH]) -> Self {
         Self(digest)
     }
+}
 
-    pub fn default() -> Self {
+impl Default for Digest {
+    fn default() -> Self {
         Self([BFieldElement::zero(); DIGEST_LENGTH])
     }
 }
@@ -95,12 +98,12 @@ impl TryFrom<Vec<BFieldElement>> for Digest {
 
     fn try_from(value: Vec<BFieldElement>) -> Result<Self, Self::Error> {
         let len = value.len();
-        Ok(Digest::new(value.try_into().map_err(|_| {
+        value.try_into().map(Digest::new).map_err(|_| {
             format!(
                 "Expected {} BFieldElements for digest, but got {}",
                 DIGEST_LENGTH, len,
             )
-        })?))
+        })
     }
 }
 
@@ -110,7 +113,7 @@ impl From<Digest> for Vec<BFieldElement> {
     }
 }
 
-impl From<Digest> for [u8; DIGEST_SIZE_IN_BYTES] {
+impl From<Digest> for [u8; Digest::BYTES] {
     fn from(item: Digest) -> Self {
         let u64s = item.0.iter().map(|x| x.value());
         u64s.map(|x| x.to_ne_bytes())
@@ -121,12 +124,12 @@ impl From<Digest> for [u8; DIGEST_SIZE_IN_BYTES] {
     }
 }
 
-impl From<[u8; DIGEST_SIZE_IN_BYTES]> for Digest {
-    fn from(item: [u8; DIGEST_SIZE_IN_BYTES]) -> Self {
+impl From<[u8; Digest::BYTES]> for Digest {
+    fn from(item: [u8; Digest::BYTES]) -> Self {
         let mut bfes: [BFieldElement; DIGEST_LENGTH] = [BFieldElement::zero(); DIGEST_LENGTH];
         for (i, bfe) in bfes.iter_mut().enumerate() {
-            let start_index = i * BYTES_PER_BFIELDELEMENT;
-            let end_index = (i + 1) * BYTES_PER_BFIELDELEMENT;
+            let start_index = i * BFieldElement::BYTES;
+            let end_index = (i + 1) * BFieldElement::BYTES;
             *bfe = BFieldElement::from_vecu8(item[start_index..end_index].to_vec())
         }
 
@@ -137,7 +140,7 @@ impl From<[u8; DIGEST_SIZE_IN_BYTES]> for Digest {
 // The implementations for dev net byte arrays are not to be used on main net
 impl From<Digest> for [u8; MSG_DIGEST_SIZE_IN_BYTES] {
     fn from(input: Digest) -> Self {
-        let whole: [u8; DIGEST_SIZE_IN_BYTES] = input.into();
+        let whole: [u8; Digest::BYTES] = input.into();
         whole[0..MSG_DIGEST_SIZE_IN_BYTES]
             .to_vec()
             .try_into()

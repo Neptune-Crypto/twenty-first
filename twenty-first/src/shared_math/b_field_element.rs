@@ -82,6 +82,8 @@ impl Hash for BFieldElement {
 }
 
 impl BFieldElement {
+    pub const BYTES: usize = 8;
+
     // 2^64 - 2^32 + 1
     pub const QUOTIENT: u64 = 0xffff_ffff_0000_0001u64;
     pub const MAX: u64 = Self::QUOTIENT - 1;
@@ -171,6 +173,13 @@ impl BFieldElement {
         } else {
             1
         }
+    }
+
+    /// Convert a `BFieldElement` from a byte slice.
+    pub fn from_ne_bytes(bytes: &[u8]) -> BFieldElement {
+        let mut bytes_copied: [u8; 8] = [0; 8];
+        bytes_copied.copy_from_slice(bytes);
+        BFieldElement::new(u64::from_ne_bytes(bytes_copied))
     }
 
     /// Convert a byte array to a vector of B field elements
@@ -575,9 +584,9 @@ mod b_prime_field_element_test {
         let a = BFieldElement::new(123);
         let array_a: [u8; 8] = a.into();
         assert_eq!(123, array_a[0]);
-        for i in 1..7 {
+        (1..7).for_each(|i| {
             assert_eq!(0, array_a[i]);
-        }
+        });
 
         let a_converted_back: BFieldElement = array_a.into();
         assert_eq!(a, a_converted_back);
@@ -599,41 +608,47 @@ mod b_prime_field_element_test {
     #[test]
     fn byte_array_conversion_multiple_test() {
         // Ensure we can't overflow
-        let byte_array_0: [u8; 7] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
-        let output = BFieldElement::from_byte_array(byte_array_0);
-        assert_eq!(1, output.len());
-        assert_eq!(BFieldElement((1 << 56) - 1), output[0]);
+        {
+            let byte_array_0: [u8; 7] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+            let output = BFieldElement::from_byte_array(byte_array_0);
+            assert_eq!(1, output.len());
+            assert_eq!(BFieldElement((1 << 56) - 1), output[0]);
+        }
 
         // Ensure we're using little-endianness
-        let byte_array_1: [u8; 7] = [100, 0, 0, 0, 0, 0, 0];
-        let output = BFieldElement::from_byte_array(byte_array_1);
-        assert_eq!(1, output.len());
-        assert_eq!(BFieldElement(100), output[0]);
+        {
+            let byte_array_1: [u8; 7] = [100, 0, 0, 0, 0, 0, 0];
+            let output = BFieldElement::from_byte_array(byte_array_1);
+            assert_eq!(1, output.len());
+            assert_eq!(BFieldElement(100), output[0]);
+        }
 
-        // Ensure we can handle bigger inputs, with lengths not multiple of 7
-        let byte_array_3: [u8; 33] = [
-            100, 0, 0, 0, 0, 0, 0, 200, 0, 0, 0, 0, 0, 0, 100, 100, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0,
-            0, 0, 150, 0, 0, 0, 0,
-        ];
-        let output = BFieldElement::from_byte_array(byte_array_3);
-        assert_eq!(5, output.len());
-        assert_eq!(BFieldElement(100), output[0]);
-        assert_eq!(BFieldElement(200), output[1]);
-        assert_eq!(BFieldElement(100 * 256 + 100), output[2]);
-        assert_eq!(BFieldElement(100), output[3]);
-        assert_eq!(BFieldElement(150), output[4]);
+        {
+            // Ensure we can handle bigger inputs, with lengths not multiple of 7
+            let byte_array_3: [u8; 33] = [
+                100, 0, 0, 0, 0, 0, 0, 200, 0, 0, 0, 0, 0, 0, 100, 100, 0, 0, 0, 0, 0, 100, 0, 0,
+                0, 0, 0, 0, 150, 0, 0, 0, 0,
+            ];
+            let output = BFieldElement::from_byte_array(byte_array_3);
+            assert_eq!(5, output.len());
+            assert_eq!(BFieldElement(100), output[0]);
+            assert_eq!(BFieldElement(200), output[1]);
+            assert_eq!(BFieldElement(100 * 256 + 100), output[2]);
+            assert_eq!(BFieldElement(100), output[3]);
+            assert_eq!(BFieldElement(150), output[4]);
 
-        // Assert more sizes can be handled, without crashing
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 1]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 3]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 2]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 4]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 5]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 6]).len());
-        assert_eq!(2, BFieldElement::from_byte_array([0u8; 8]).len());
-        assert_eq!(2, BFieldElement::from_byte_array([0u8; 9]).len());
-        assert_eq!(2, BFieldElement::from_byte_array([0u8; 14]).len());
-        assert_eq!(3, BFieldElement::from_byte_array([0u8; 15]).len());
+            // Assert more sizes can be handled, without crashing
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 1]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 3]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 2]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 4]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 5]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 6]).len());
+            assert_eq!(2, BFieldElement::from_byte_array([0u8; 8]).len());
+            assert_eq!(2, BFieldElement::from_byte_array([0u8; 9]).len());
+            assert_eq!(2, BFieldElement::from_byte_array([0u8; 14]).len());
+            assert_eq!(3, BFieldElement::from_byte_array([0u8; 15]).len());
+        }
     }
 
     #[should_panic(
@@ -641,16 +656,7 @@ mod b_prime_field_element_test {
     )]
     #[test]
     fn disallow_conversion_of_u8_array_outside_range() {
-        let bad_bfe_array: [u8; 8] = [
-            u8::MAX,
-            255,
-            0xFF,
-            0o377,
-            0_255,
-            'ÿ' as u8,
-            0b11111111,
-            (('Ǿ' as u16) / 2) as u8,
-        ];
+        let bad_bfe_array: [u8; 8] = [u8::MAX; 8];
         println!("bad_bfe_array = {:?}", bad_bfe_array);
         let _value: BFieldElement = bad_bfe_array.into();
     }

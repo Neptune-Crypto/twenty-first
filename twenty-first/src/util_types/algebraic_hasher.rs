@@ -18,14 +18,18 @@ pub trait AlgebraicHasher: Clone + Send + Sync {
     /// be a Fiat-Shamir digest to ensure a high degree of randomness.
     ///
     /// - `input`: A hash digest
-    /// - `max`: The (non-inclusive) upper bound (a power of two)
-    fn sample_index(seed: &Digest, max: usize) -> usize {
-        assert!(other::is_power_of_two(max));
+    /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
+    fn sample_index(seed: &Digest, upper_bound: usize) -> usize {
+        assert!(
+            other::is_power_of_two(upper_bound),
+            "Non-inclusive upper bound {} is a power of two",
+            upper_bound
+        );
 
         let bytes = bincode::serialize(&seed.values()).unwrap();
         let length_prefix_offset: usize = 8;
         let mut byte_counter: usize = length_prefix_offset;
-        let mut max_bits: usize = other::log_2_floor(max as u128) as usize;
+        let mut max_bits: usize = other::log_2_floor(upper_bound as u128) as usize;
         let mut acc: usize = 0;
 
         while max_bits > 0 {
@@ -101,6 +105,12 @@ impl Hashable for XFieldElement {
 
 // FIXME: Not safe.
 impl Hashable for usize {
+    fn to_sequence(&self) -> Vec<BFieldElement> {
+        vec![BFieldElement::new(*self as u64)]
+    }
+}
+
+impl Hashable for u32 {
     fn to_sequence(&self) -> Vec<BFieldElement> {
         vec![BFieldElement::new(*self as u64)]
     }

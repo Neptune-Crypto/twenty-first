@@ -196,7 +196,7 @@ mod database_vector_tests {
         }
 
         // Batch-write and verify that the values are set correctly
-        db_vector.batch_set(&vec![(40, 4040), (41, 4141), (44, 4444)]);
+        db_vector.batch_set(&[(40, 4040), (41, 4141), (44, 4444)]);
         assert_eq!(4040, db_vector.get(40));
         assert_eq!(4141, db_vector.get(41));
         assert_eq!(4444, db_vector.get(44));

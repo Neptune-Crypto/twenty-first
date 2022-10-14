@@ -228,7 +228,7 @@ mod proof_stream_typed_tests {
 
         let digest_1 = H::hash(&BFieldElement::one());
         ps.enqueue(&TestItem::ManyB(digest_1.values().to_vec()));
-        let _result = ps.dequeue();
+        let _ = ps.dequeue();
 
         assert_eq!(
             ps.prover_fiat_shamir(),
@@ -245,7 +245,7 @@ mod proof_stream_typed_tests {
             "prover_fiat_shamir() and verifier_fiat_shamir() are different when the stream isn't fully read"
         );
 
-        let _result = ps.dequeue();
+        let _ = ps.dequeue();
 
         assert_eq!(
             ps.prover_fiat_shamir(),

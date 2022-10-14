@@ -1,8 +1,8 @@
-use itertools::Itertools;
+use blake3::OUT_LEN;
+use num_traits::Zero;
 
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_digest::Digest;
-use crate::shared_math::rescue_prime_regular::DIGEST_LENGTH;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
 impl AlgebraicHasher for blake3::Hasher {
@@ -19,17 +19,14 @@ impl AlgebraicHasher for blake3::Hasher {
     }
 }
 
-pub(crate) fn from_blake3_digest(digest: &blake3::Hash) -> Digest {
-    digest
-        .as_bytes()
-        .chunks(std::mem::size_of::<u64>())
-        .take(DIGEST_LENGTH)
-        .map(|bytes: &[u8]| {
-            let mut bytes_copied: [u8; 8] = [0; 8];
-            bytes_copied.copy_from_slice(bytes);
-            BFieldElement::new(u64::from_be_bytes(bytes_copied))
-        })
-        .collect_vec()
-        .try_into()
-        .expect("A BLAKE3 digest is larger than a Digest")
+pub fn from_blake3_digest(digest: &blake3::Hash) -> Digest {
+    let bytes: &[u8; OUT_LEN] = digest.as_bytes();
+    let elements = [
+        BFieldElement::from_ne_bytes(&bytes[0..8]),
+        BFieldElement::from_ne_bytes(&bytes[8..16]),
+        BFieldElement::from_ne_bytes(&bytes[16..24]),
+        BFieldElement::from_ne_bytes(&bytes[24..32]),
+        BFieldElement::zero(),
+    ];
+    Digest::new(elements)
 }

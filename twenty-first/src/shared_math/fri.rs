@@ -15,7 +15,6 @@ use crate::shared_math::traits::FiniteField;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
 use crate::util_types::proof_stream::ProofStream;
-use crate::utils::{blake3_digest, get_index_from_bytes};
 
 use super::rescue_prime_digest::Digest;
 
@@ -293,10 +292,11 @@ where
         let mut remaining_last_round_exponents: Vec<usize> = (0..last_codeword_length).collect();
         let mut counter = 0u32;
         for _ in 0..self.colinearity_checks_count {
-            let mut seed_local: Vec<u8> = bincode::serialize(&seed).unwrap();
-            seed_local.append(&mut counter.to_be_bytes().into());
-            let hash = blake3_digest(&seed_local);
-            let index: usize = get_index_from_bytes(&hash, remaining_last_round_exponents.len());
+            let mut seed_local = seed.to_sequence();
+            seed_local.append(&mut counter.to_sequence());
+            let hash = H::hash_slice(&seed_local);
+            let index: usize =
+                H::sample_index_not_power_of_two(&hash, remaining_last_round_exponents.len());
             last_indices.push(remaining_last_round_exponents.remove(index));
             counter += 1;
         }
@@ -308,10 +308,10 @@ where
 
             let mut new_indices: Vec<usize> = vec![];
             for index in indices {
-                let mut seed_local: Vec<u8> = bincode::serialize(&seed).unwrap();
-                seed_local.append(&mut counter.to_be_bytes().into());
-                let hash = blake3_digest(&seed_local);
-                let reduce_modulo: bool = get_index_from_bytes(&hash, 2) == 0;
+                let mut seed_local = seed.to_sequence();
+                seed_local.append(&mut counter.to_sequence());
+                let hash = H::hash_slice(&seed_local);
+                let reduce_modulo: bool = H::sample_index(&hash, 2) == 0;
                 let new_index = if reduce_modulo {
                     index + codeword_length / 2
                 } else {
@@ -339,7 +339,7 @@ where
         // Extract all roots and calculate alpha, the challenges
         let mut roots: Vec<Digest> = vec![];
         let mut alphas: Vec<XFieldElement> = vec![];
-        let first_root: Digest = proof_stream.dequeue(32)?;
+        let first_root: Digest = proof_stream.dequeue(Digest::BYTES)?;
         roots.push(first_root);
 
         for _ in 0..num_rounds {
@@ -347,7 +347,7 @@ where
             let challenge: Digest = proof_stream.verifier_fiat_shamir();
             let alpha: XFieldElement = XFieldElement::sample(&challenge);
             alphas.push(alpha);
-            roots.push(proof_stream.dequeue(32)?);
+            roots.push(proof_stream.dequeue(Digest::BYTES)?);
         }
 
         // Extract last codeword
@@ -521,7 +521,7 @@ mod fri_domain_tests {
             let omega = BFieldElement::primitive_root_of_unity(order).unwrap();
             let domain = FriDomain {
                 offset: BFieldElement::generator(),
-                omega: omega,
+                omega,
                 length: order as usize,
             };
             let expected_x_values: Vec<BFieldElement> = (0..order)
@@ -570,6 +570,7 @@ mod fri_domain_tests {
 mod fri_tests {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
     use crate::shared_math::x_field_element::XFieldElement;
@@ -639,7 +640,7 @@ mod fri_tests {
 
     #[test]
     fn fri_on_x_field_test() {
-        type Hasher = blake3::Hasher;
+        type Hasher = RescuePrimeRegular;
 
         let subgroup_order = 1024;
         let expansion_factor = 4;

@@ -1172,14 +1172,13 @@ mod rescue_prime_regular_tests {
                 5525683604796387635,
             ],
         ];
-        let mut targets_bfe: Vec<Vec<BFieldElement>> = targets_first_batch
-            .iter()
-            .map(|l| l.iter().map(|e| BFieldElement::new(*e)).collect_vec())
-            .collect_vec();
-        let mut input = [BFieldElement::zero(); 10];
-        for i in 0..10 {
-            input[input.len() - 1] = BFieldElement::new(i as u64);
-            assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(&input).to_vec());
+
+        for (i, target) in targets_first_batch.into_iter().enumerate() {
+            let expected = target.map(BFieldElement::new);
+            let mut input = [BFieldElement::zero(); 10];
+            input[input.len() - 1] = BFieldElement::from(i as u64);
+            let actual = RescuePrimeRegular::hash_10(&input);
+            assert_eq!(expected, actual);
         }
 
         // hash 10, second batch
@@ -1255,15 +1254,12 @@ mod rescue_prime_regular_tests {
                 17624827189757302581,
             ],
         ];
-        targets_bfe = targets_second_batch
-            .iter()
-            .map(|l| l.iter().map(|e| BFieldElement::new(*e)).collect_vec())
-            .collect_vec();
-        input[input.len() - 1] = BFieldElement::zero();
-        for i in 0..10 {
+        for (i, target) in targets_second_batch.into_iter().enumerate() {
+            let expected = target.map(BFieldElement::new);
+            let mut input = [BFieldElement::zero(); 10];
             input[i] = BFieldElement::one();
-            assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(&input).to_vec());
-            input[i] = BFieldElement::zero();
+            let actual = RescuePrimeRegular::hash_10(&input);
+            assert_eq!(expected, actual);
         }
 
         // hash varlen, third batch
@@ -1409,16 +1405,11 @@ mod rescue_prime_regular_tests {
                 7424726151688166928,
             ],
         ];
-        targets_bfe = targets_third_batch
-            .iter()
-            .map(|l| l.iter().map(|e| BFieldElement::new(*e)).collect_vec())
-            .collect_vec();
-        for i in 0..20 {
-            let var_input = (0..i).map(|e| BFieldElement::new(e as u64)).collect_vec();
-            assert_eq!(
-                RescuePrimeRegular::hash_varlen(&var_input).to_vec(),
-                targets_bfe[i]
-            );
+        for (i, target) in targets_third_batch.into_iter().enumerate() {
+            let expected = target.map(BFieldElement::new);
+            let input = (0..i as u64).map(BFieldElement::new).collect_vec();
+            let actual = RescuePrimeRegular::hash_varlen(&input);
+            assert_eq!(expected, actual);
         }
     }
 

@@ -1283,9 +1283,9 @@ pub mod test_stark {
 
         let mut npo2 = trace.len() + num_randomizers;
         if npo2 & (npo2 - 1) != 0 {
-            npo2 = npo2 << 1;
+            npo2 <<= 1;
             while npo2 & (npo2 - 1) != 0 {
-                npo2 = npo2 & (npo2 - 1);
+                npo2 &= npo2 - 1;
             }
         }
 
@@ -1408,9 +1408,9 @@ pub mod test_stark {
 
         let mut npo2 = trace.len() + num_randomizers as usize;
         if npo2 & (npo2 - 1) != 0 {
-            npo2 = npo2 << 1;
+            npo2 <<= 1;
             while npo2 & (npo2 - 1) != 0 {
-                npo2 = npo2 & (npo2 - 1);
+                npo2 &= npo2 - 1;
             }
         }
 

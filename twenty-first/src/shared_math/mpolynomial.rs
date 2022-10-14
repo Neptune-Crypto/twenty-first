@@ -1595,12 +1595,12 @@ mod test_mpolynomials {
 
     #[test]
     fn evaluate_symbolic_test() {
-        let empty_intermediate_results: HashMap<Vec<u8>, Polynomial<BFieldElement>> =
+        let mut empty_intermediate_results: HashMap<Vec<u8>, Polynomial<BFieldElement>> =
             HashMap::new();
-        let empty_mod_pow_memoization: HashMap<(usize, u8), Polynomial<BFieldElement>> =
+        let mut empty_mod_pow_memoization: HashMap<(usize, u8), Polynomial<BFieldElement>> =
             HashMap::new();
         #[allow(clippy::type_complexity)]
-        let empty_mul_memoization: HashMap<
+        let mut empty_mul_memoization: HashMap<
             (Polynomial<BFieldElement>, (usize, u8)),
             Polynomial<BFieldElement>,
         > = HashMap::new();
@@ -1633,15 +1633,15 @@ mod test_mpolynomials {
                 &[x.clone(), x.clone(), x.clone()],
                 &mut empty_mod_pow_memoization.clone(),
                 &mut empty_mul_memoization.clone(),
-                &mut empty_intermediate_results.clone(),
+                &mut empty_intermediate_results,
             )
         );
         assert_eq!(
             x_cubed,
             xyz_m.evaluate_symbolic_with_memoization(
                 &[x.clone(), x.clone(), x.clone()],
-                &mut empty_mod_pow_memoization.clone(),
-                &mut empty_mul_memoization.clone(),
+                &mut empty_mod_pow_memoization,
+                &mut empty_mul_memoization,
                 &mut precalculated_intermediate_results.clone(),
             )
         );
@@ -2145,6 +2145,7 @@ mod test_mpolynomials {
         let max_degrees = vec![3, 5, 7];
         let degree_poly = mpoly.symbolic_degree_bound(&max_degrees);
 
+        #[allow(clippy::erasing_op, clippy::identity_op)]
         let expected = cmp::max(0 * 3 + 2 * 5 + 1 * 7, 0 * 3 + 0 * 5 + 1 * 7);
         assert_eq!(degree_poly, expected);
 
@@ -2158,7 +2159,7 @@ mod test_mpolynomials {
         assert_eq!(expected, mpoly_alt.symbolic_degree_bound(&max_degrees));
 
         // Verify that the result is different when the coefficient is non-zero
-        mcoef.insert(new_key.clone(), BFieldElement::new(4562));
+        mcoef.insert(new_key, BFieldElement::new(4562));
         let mpoly_alt_alt = MPolynomial::<BFieldElement> {
             variable_count: 3,
             coefficients: mcoef,

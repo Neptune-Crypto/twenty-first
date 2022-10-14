@@ -323,8 +323,8 @@ mod io_table_tests {
                 let matrix_len = io_table.0.matrix.len() as isize;
                 let base_steps = max(0, matrix_len - 1) as usize;
                 for step in 0..base_steps {
-                    let row: BFieldElement = io_matrix[step].clone();
-                    let next_row: BFieldElement = io_matrix[step + 1].clone();
+                    let row: BFieldElement = io_matrix[step];
+                    let next_row: BFieldElement = io_matrix[step + 1];
                     let point: Vec<BFieldElement> = vec![row, next_row];
 
                     // Since there are no base AIR constraints on either IOTables,
@@ -336,7 +336,7 @@ mod io_table_tests {
                 }
 
                 // Test base transition constraints after padding
-                io_table.0.matrix = io_matrix.into_iter().map(|x| vec![x.clone()]).collect();
+                io_table.0.matrix = io_matrix.iter().map(|&x| vec![x]).collect();
                 io_table.pad();
 
                 let padded_matrix_len = io_table.0.matrix.len() as isize;

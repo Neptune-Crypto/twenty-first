@@ -931,15 +931,15 @@ mod x_field_element_test {
 
     #[test]
     fn x_field_ntt_test() {
-        for i in [2, 4, 8, 16, 32] {
+        for root_order in [2, 4, 8, 16, 32] {
             // Verify that NTT and INTT are each other's inverses,
             // and that NTT corresponds to polynomial evaluation
-            let inputs_u64: Vec<u64> = (0..i).collect();
+            let inputs_u64: Vec<u64> = (0..root_order).collect();
             let inputs: Vec<XFieldElement> = inputs_u64
                 .iter()
                 .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
                 .collect();
-            let root = XFieldElement::primitive_root_of_unity(i).unwrap();
+            let root = XFieldElement::primitive_root_of_unity(root_order).unwrap();
             let log_2_of_n = log_2_floor(inputs.len() as u128) as u32;
             let mut rv = inputs.clone();
             ntt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_of_n);

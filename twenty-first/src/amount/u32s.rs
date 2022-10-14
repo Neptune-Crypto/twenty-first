@@ -548,10 +548,11 @@ mod u32s_tests {
             Some([0xFFFFFFFF, 0x0, 0x0, 0x0]),
         ];
         let mut rhs: U32s<4>;
-        for i in 0..4 {
+        for (i, mask) in masks.into_iter().enumerate() {
+            // for i in 0..4 {
             rhs = U32s::new([0; 4]);
             rhs.values[i] = 1u32;
-            let vals = get_u32s::<4>(100, masks[i]);
+            let vals = get_u32s::<4>(100, mask);
             for val in vals {
                 let mut expected = val;
                 expected.values.rotate_right(i);
@@ -695,9 +696,9 @@ mod u32s_tests {
             a = match and_mask {
                 None => a,
                 Some(mask) => {
-                    for i in 0..N {
+                    (0..N).for_each(|i| {
                         a.values[i] &= mask[i];
-                    }
+                    });
                     a
                 }
             };
@@ -718,7 +719,7 @@ mod u32s_tests {
         };
         let j = serde_json::to_string(&s).unwrap();
         let s_back = serde_json::from_str::<U32s<64>>(&j).unwrap();
-        assert!(&s.values[..] == &s_back.values[..]);
+        assert!(s.values[..] == s_back.values[..]);
     }
 
     #[test]
@@ -736,6 +737,5 @@ mod u32s_tests {
     #[test]
     fn crash() {
         let _u32s = U32s::<0>::from(0u32);
-        assert!(true)
     }
 }

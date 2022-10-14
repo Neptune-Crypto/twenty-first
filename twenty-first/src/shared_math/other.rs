@@ -279,8 +279,7 @@ mod test_other {
 
     #[test]
     fn powers_of_two_below_test() {
-        let powers_of_two: Vec<u32> = powers_of_two_below::<u32>(u32::MAX, u32::BITS).collect();
-        for i in powers_of_two.into_iter() {
+        for i in powers_of_two_below::<u32>(u32::MAX, u32::BITS) {
             assert!(is_power_of_two(i));
         }
 

@@ -831,31 +831,6 @@ where
     iter.into_iter().all(move |x| uniq.insert(x))
 }
 
-pub fn blake3_digest(input: &[u8]) -> [u8; 32] {
-    *blake3::hash(input).as_bytes()
-}
-
-pub fn get_n_hash_rounds(input: &[u8], n: u32) -> Vec<[u8; 32]> {
-    let mut output: Vec<[u8; 32]> = vec![];
-    for i in 0..n {
-        let mut input_clone = input.to_vec();
-
-        input_clone.extend_from_slice(&i.to_le_bytes());
-        let hash = *blake3::hash(input_clone.as_slice()).as_bytes();
-        output.push(hash);
-    }
-    output
-}
-
-// TODO: Not sure I trust the uniformity of this!!
-pub fn get_index_from_bytes(buf: &[u8], length: usize) -> usize {
-    let mut result = 0usize;
-    for elem in buf.iter() {
-        result = (result << 8 ^ *elem as usize) % length;
-    }
-    result
-}
-
 // Used in Merkle Tree tests and in STARK tests
 #[allow(dead_code)]
 pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
@@ -874,52 +849,13 @@ pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
 #[cfg(test)]
 mod test_utils {
     use super::*;
-    use crate::utils::decode_hex;
-
-    #[test]
-    fn get_index_from_bytes_test() {
-        let mut res = get_index_from_bytes(&[1], 4);
-        assert_eq!(1, res);
-        res = get_index_from_bytes(&[2], 4);
-        assert_eq!(2, res);
-        assert_eq!(3, get_index_from_bytes(&[3], 4));
-        assert_eq!(0, get_index_from_bytes(&[4], 4));
-        assert_eq!(9, get_index_from_bytes(&[9], 100));
-        assert_eq!(10, get_index_from_bytes(&[10], 100));
-        assert_eq!(11, get_index_from_bytes(&[11], 100));
-    }
-
-    #[test]
-    fn get_n_hash_rounds_test() {
-        let v: Vec<u8> = vec![1, 2];
-        let res3 = get_n_hash_rounds(&v[..], 3u32);
-        assert_eq!(3, res3.len());
-        let res5 = get_n_hash_rounds(&v[..], 5);
-        assert_eq!(5, res5.len());
-        for (r3_elem, r5_elem) in res3.iter().zip(res5.iter()) {
-            assert_eq!(*r3_elem, *r5_elem);
-        }
-
-        let mut prev = res5[0];
-        for r5_elem in res5.iter().skip(1) {
-            assert_ne!(prev, *r5_elem);
-            prev = *r5_elem;
-        }
-
-        // blake3(0x010200000000) =
-        // 677ff528c2a35e8f94d2f40b647392691bc05e6585f506169c797ec07087bc9c
-        assert_eq!(
-            decode_hex("677ff528c2a35e8f94d2f40b647392691bc05e6585f506169c797ec07087bc9c").unwrap(),
-            res3[0]
-        );
-    }
 
     #[test]
     fn has_unique_elements_test() {
-        let v = vec![10, 20, 30, 10, 50];
-        assert!(!has_unique_elements(v));
+        let v1 = vec![10, 20, 30, 10, 50];
+        assert!(!has_unique_elements(v1));
 
-        let v = vec![10, 20, 30, 40, 50];
-        assert!(has_unique_elements(v));
+        let v2 = vec![10, 20, 30, 40, 50];
+        assert!(has_unique_elements(v2));
     }
 }

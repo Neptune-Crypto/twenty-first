@@ -1136,22 +1136,27 @@ mod test_polynomials {
             coefficients: vec![],
         };
         assert_eq!("0", empty.to_string());
+
         let zero = Polynomial::<BFieldElement> {
             coefficients: vec![BFieldElement::from(0u64)],
         };
         assert_eq!("0", zero.to_string());
+
         let double_zero = Polynomial::<BFieldElement> {
             coefficients: vec![BFieldElement::from(0u64), BFieldElement::from(0u64)],
         };
         assert_eq!("0", double_zero.to_string());
+
         let one = Polynomial::<BFieldElement> {
             coefficients: vec![BFieldElement::from(1u64)],
         };
         assert_eq!("1", one.to_string());
+
         let zero_one = Polynomial::<BFieldElement> {
             coefficients: vec![BFieldElement::from(1u64), BFieldElement::from(0u64)],
         };
         assert_eq!("1", zero_one.to_string());
+
         let zero_zero_one = Polynomial::<BFieldElement> {
             coefficients: vec![
                 BFieldElement::from(1u64),
@@ -1160,13 +1165,11 @@ mod test_polynomials {
             ],
         };
         assert_eq!("1", zero_zero_one.to_string());
+
         let one_zero = Polynomial::<BFieldElement> {
             coefficients: vec![BFieldElement::from(0u64), BFieldElement::from(1u64)],
         };
         assert_eq!("x", one_zero.to_string());
-        let one = Polynomial::<BFieldElement> {
-            coefficients: vec![BFieldElement::from(1u64)],
-        };
         assert_eq!("1", one.to_string());
         let x_plus_one = Polynomial::<BFieldElement> {
             coefficients: vec![BFieldElement::from(1u64), BFieldElement::from(1u64)],
@@ -2202,10 +2205,10 @@ mod test_polynomials {
         let domain = vec![_6_17, _12_17];
 
         let actual = poly.fast_evaluate(&domain, &omega, 16);
-        let expected_6 = _6_17.mod_pow(5u64.into()) + _6_17.mod_pow(3u64.into());
+        let expected_6 = _6_17.mod_pow(5u64) + _6_17.mod_pow(3u64);
         assert_eq!(expected_6, actual[0]);
 
-        let expected_12 = _12_17.mod_pow(5u64.into()) + _12_17.mod_pow(3u64.into());
+        let expected_12 = _12_17.mod_pow(5u64) + _12_17.mod_pow(3u64);
         assert_eq!(expected_12, actual[1]);
     }
 
@@ -2300,7 +2303,7 @@ mod test_polynomials {
             // re-evaluate and match against values
             let lagrange_re_eval = domain
                 .iter()
-                .map(|d| lagrange_interpolant.evaluate(&d))
+                .map(|d| lagrange_interpolant.evaluate(d))
                 .collect_vec();
             for (v, r) in values.iter().zip(lagrange_re_eval.iter()) {
                 assert_eq!(v, r);
@@ -2411,11 +2414,13 @@ mod test_polynomials {
         let a: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(30));
         let b: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(5));
 
-        let (actual_quot, actual_rem) = a.divide(b);
-        let expected_quot: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(6));
-
-        assert_eq!(expected_quot, actual_quot);
-        assert!(actual_rem.is_zero());
+        {
+            let (actual_quot, actual_rem) = a.divide(b);
+            let expected_quot: Polynomial<BFieldElement> =
+                Polynomial::new_const(BFieldElement::new(6));
+            assert_eq!(expected_quot, actual_quot);
+            assert!(actual_rem.is_zero());
+        }
 
         // Shah-polynomial test
         let shah = XFieldElement::shah_polynomial();
@@ -2425,20 +2430,18 @@ mod test_polynomials {
             BFieldElement::zero(),
             BFieldElement::one(),
         ]);
-        let (actual_quot, actual_rem) = shah.divide(c);
-        println!("actual_quot = {}", actual_quot);
-        println!("actual_rem = {}", actual_rem);
-
-        let expected_quot = Polynomial::new_const(BFieldElement::new(1));
-        let expected_rem =
-            Polynomial::new(vec![BFieldElement::one(), BFieldElement::new(minus_one)]);
-        assert_eq!(expected_quot, actual_quot);
-        assert_eq!(expected_rem, actual_rem);
+        {
+            let (actual_quot, actual_rem) = shah.divide(c);
+            let expected_quot = Polynomial::new_const(BFieldElement::new(1));
+            let expected_rem =
+                Polynomial::new(vec![BFieldElement::one(), BFieldElement::new(minus_one)]);
+            assert_eq!(expected_quot, actual_quot);
+            assert_eq!(expected_rem, actual_rem);
+        }
 
         // x^6
-        let c: Polynomial<BFieldElement> = Polynomial::new(vec![one]).shift_coefficients(6);
-
-        let (actual_sixth_quot, actual_sixth_rem) = c.divide(shah);
+        let d: Polynomial<BFieldElement> = Polynomial::new(vec![one]).shift_coefficients(6);
+        let (actual_sixth_quot, actual_sixth_rem) = d.divide(shah);
 
         // x^3 + x - 1
         let expected_sixth_quot: Polynomial<BFieldElement> =
@@ -2636,22 +2639,25 @@ mod test_polynomials {
         Polynomial::<BFieldElement>::get_colinear_y((one, one), (one, three), two);
     }
 
+    fn get_point_on_line_prop<FF: FiniteField>() {
+        let one = FF::one();
+        let two = one + one;
+        let three = two + one;
+
+        let colinear_y_1 = Polynomial::<FF>::get_colinear_y((one, one), (three, three), two);
+        assert_eq!(two, colinear_y_1);
+
+        let colinear_y_2 = Polynomial::<FF>::get_colinear_y((three, three), (one, one), two);
+        assert_eq!(two, colinear_y_2);
+
+        let colinear_y_3 = Polynomial::<FF>::get_colinear_y((one, one), (three, one), two);
+        assert_eq!(one, colinear_y_3);
+    }
+
     #[test]
-    fn get_point_on_line_test() {
-        type BPoly = Polynomial<BFieldElement>;
-        let one = BFieldElement::one();
-        let two = one + one;
-        let three = two + one;
-        assert_eq!(two, BPoly::get_colinear_y((one, one), (three, three), two));
-        assert_eq!(two, BPoly::get_colinear_y((three, three), (one, one), two));
-        assert_eq!(one, BPoly::get_colinear_y((one, one), (three, one), two));
-        type XPoly = Polynomial<XFieldElement>;
-        let one = XFieldElement::one();
-        let two = one + one;
-        let three = two + one;
-        assert_eq!(two, XPoly::get_colinear_y((one, one), (three, three), two));
-        assert_eq!(two, XPoly::get_colinear_y((three, three), (one, one), two));
-        assert_eq!(one, XPoly::get_colinear_y((one, one), (three, one), two));
+    fn get_point_on_line_tests() {
+        get_point_on_line_prop::<BFieldElement>();
+        get_point_on_line_prop::<XFieldElement>();
     }
 
     fn gen_polynomial_non_zero<T: FiniteField>() -> Polynomial<T>
@@ -2780,8 +2786,11 @@ mod test_polynomials {
             let zerofier_polynomial = Polynomial::<BFieldElement>::zerofier(&domain);
 
             // verify zeros
-            for d in domain.iter() {
-                assert_eq!(zerofier_polynomial.evaluate(&d), BFieldElement::zero());
+            for domain_value in domain.iter() {
+                assert!(
+                    zerofier_polynomial.evaluate(domain_value).is_zero(),
+                    "The zerofier polynomial evaluates to zero in the entire domain"
+                );
             }
 
             // verify non-zeros
