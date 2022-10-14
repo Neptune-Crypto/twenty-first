@@ -1068,9 +1068,9 @@ impl<PFElem: FiniteField> Sub for Polynomial<PFElem> {
 }
 
 impl<PFElem: FiniteField> Polynomial<PFElem> {
-    // Division in 𝔽_p[X], not 𝔽_{p^e} ≅ 𝔽[X]/p(x).
-    /// Run the extended Euclidean algorithm on the polynomial ring. Normalizes the
-    /// result the inverse to a leading coefficient of one.
+    /// Extended Euclidean algorithm with polynomials. Computes the greatest
+    /// common divisor `gcd` as a monic polynomial, as well as the corresponding
+    /// Bézout coefficients `a` and `b`, satisfying `gcd = a·x + b·y`
     pub fn xgcd(
         x: Polynomial<PFElem>,
         y: Polynomial<PFElem>,
