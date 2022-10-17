@@ -85,7 +85,7 @@ where
 
     fn batch_mutate_leaf_and_update_mps(
         &mut self,
-        membership_proofs: &mut [MmrMembershipProof<H>],
+        membership_proofs: &mut [&mut MmrMembershipProof<H>],
         mutation_data: Vec<(MmrMembershipProof<H>, <H as Hasher>::Digest)>,
     ) -> Vec<usize> {
         assert!(
@@ -100,11 +100,11 @@ where
         let mut modified_mps: Vec<usize> = vec![];
         for (i, mp) in membership_proofs.iter_mut().enumerate() {
             let new_mp = self.prove_membership(mp.data_index).0;
-            if new_mp != *mp {
+            if new_mp != **mp {
                 modified_mps.push(i);
             }
 
-            *mp = new_mp
+            **mp = new_mp
         }
 
         modified_mps

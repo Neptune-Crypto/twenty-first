@@ -865,8 +865,10 @@ mod mmr_membership_proof_test {
             // MmrAccumulator agrees
             let mut mmra: MmrAccumulator<Hasher> = (&mut archival_mmr).into();
             let mut mps_copy = original_mps;
-            let updated_mp_indices_1 =
-                mmra.batch_mutate_leaf_and_update_mps(&mut mps_copy, mutation_argument);
+            let updated_mp_indices_1 = mmra.batch_mutate_leaf_and_update_mps(
+                &mut mps_copy.iter_mut().collect::<Vec<_>>(),
+                mutation_argument,
+            );
             assert_eq!(own_membership_proofs, mps_copy);
             assert_eq!(mmra.get_peaks(), archival_mmr.get_peaks());
             assert_eq!(updated_mp_indices_0, updated_mp_indices_1);
@@ -935,7 +937,7 @@ mod mmr_membership_proof_test {
         // Let's test the exact same for the MMR accumulator scheme
         let mut mmra: MmrAccumulator<Hasher> = MmrAccumulator::new(leaf_hashes);
         let ret_from_acc = mmra.batch_mutate_leaf_and_update_mps(
-            &mut membership_proofs,
+            &mut membership_proofs.iter_mut().collect::<Vec<_>>(),
             membership_proofs_init_and_new_leafs,
         );
         assert!(ret_from_acc.is_empty());

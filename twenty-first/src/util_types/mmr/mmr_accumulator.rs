@@ -228,7 +228,7 @@ where
 
     fn batch_mutate_leaf_and_update_mps(
         &mut self,
-        membership_proofs: &mut [MmrMembershipProof<H>],
+        membership_proofs: &mut [&mut MmrMembershipProof<H>],
         mut mutation_data: Vec<(MmrMembershipProof<H>, <H as Hasher>::Digest)>,
     ) -> Vec<usize> {
         // Calculate all derivable paths
@@ -565,10 +565,14 @@ mod accumulator_mmr_tests {
             // Do the update on both MMRs
             let mut mmra_mps = original_membership_proofs.clone();
             let mut ammr_mps = original_membership_proofs.clone();
-            let mutated_mps_mmra =
-                mmra.batch_mutate_leaf_and_update_mps(&mut mmra_mps, mutation_data.clone());
-            let mutated_mps_ammr =
-                ammr.batch_mutate_leaf_and_update_mps(&mut ammr_mps, mutation_data.clone());
+            let mutated_mps_mmra = mmra.batch_mutate_leaf_and_update_mps(
+                &mut mmra_mps.iter_mut().collect::<Vec<_>>(),
+                mutation_data.clone(),
+            );
+            let mutated_mps_ammr = ammr.batch_mutate_leaf_and_update_mps(
+                &mut ammr_mps.iter_mut().collect::<Vec<_>>(),
+                mutation_data.clone(),
+            );
             assert_eq!(mutated_mps_mmra, mutated_mps_ammr);
 
             // Verify that both MMRs end up with same peaks
