@@ -18,7 +18,7 @@ use std::{cmp, fmt};
 type MCoefficients<T> = HashMap<Vec<u8>, T>;
 pub type Degree = i64;
 
-const EDMONDS_WEIGHT_CUTOFF_FACTOR: u8 = 2;
+const EDMONDS_WEIGHT_CUTOFF_FACTOR: u64 = 2;
 
 /// This is the data contained in each node in the tree. It contains
 /// the information needed to calculate values for the
@@ -28,7 +28,7 @@ const EDMONDS_WEIGHT_CUTOFF_FACTOR: u8 = 2;
 #[derive(Debug, Clone)]
 pub struct PolynomialEvaluationDataNode {
     diff_exponents: Vec<u8>,
-    diff_sum: u8,
+    diff_sum: u64,
     abs_exponents: Vec<u8>,
     single_point: Option<usize>,
     x_powers: usize,
@@ -451,9 +451,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         // This algorithm i a variation of Edmond's algorithm for finding the minimal spanning tree
         // in a directed graph. Only, we don't calculate all edges but instead look for the ones that
         // are minimal while calculating their weights.
-        let mut chosen_edges: Vec<(u8, u8)> = vec![(0, 0); exponents_list.len()];
+        let mut chosen_edges: Vec<(u64, u64)> = vec![(0, 0); exponents_list.len()];
         'outer: for i in 1..exponents_list.len() {
-            let mut min_weight = u8::MAX;
+            let mut min_weight = u64::MAX;
             'middle: for j in 1..=i {
                 let index = i - j;
 
@@ -469,15 +469,15 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
 
                 // let mut diff = 0;
                 // diff += exponents_list[i][k] - exponents_list[index][k];
-                let diff: u8 = exponents_list[i]
+                let diff: u64 = exponents_list[i]
                     .iter()
                     .zip(exponents_list[index].iter())
-                    .map(|(ei, ej)| *ei - *ej)
-                    .sum();
+                    .map(|(ei, ej)| (*ei - *ej) as u64)
+                    .sum::<u64>();
 
                 if diff < min_weight {
                     min_weight = diff;
-                    chosen_edges[i].0 = index as u8;
+                    chosen_edges[i].0 = index as u64;
                     chosen_edges[i].1 = min_weight;
                     // println!("(min_weight, index) = {:?}", (min_weight, index));
 
