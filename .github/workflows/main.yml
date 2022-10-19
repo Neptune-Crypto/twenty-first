@@ -79,3 +79,44 @@ jobs:
         with:
           command: clippy
           args: -- -D warnings
+
+  benchmark:
+    name: Run benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Install criterion
+        run: cargo install cargo-criterion
+
+      - name: Run NTT benchmark
+        uses: actions-rs/cargo@v1
+        with:
+          command: criterion
+          args: ntt_forward
+
+      - name: Run Rescue Prime benchmark
+        uses: actions-rs/cargo@v1
+        with:
+          command: criterion
+          args: rescue_prime_regular
+
+      - name: Run brainfuck STARK benchmark
+        uses: actions-rs/cargo@v1
+        with:
+          command: criterion
+          args: stark_bf
+
+      - name: Run Rescue-Prime STARK benchmark (symbolical evaluation)
+        uses: actions-rs/cargo@v1
+        with:
+          command: criterion
+          args: stark_rp
