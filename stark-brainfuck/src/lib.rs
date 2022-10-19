@@ -20,7 +20,7 @@ use twenty_first::shared_math::x_field_element::XFieldElement;
 pub fn lift_coefficients_to_xfield(
     mpolynomial: &MPolynomial<BFieldElement>,
 ) -> MPolynomial<XFieldElement> {
-    let mut new_coefficients: HashMap<Vec<u64>, XFieldElement> = HashMap::new();
+    let mut new_coefficients: HashMap<Vec<u8>, XFieldElement> = HashMap::new();
     mpolynomial.coefficients.iter().for_each(|(key, value)| {
         new_coefficients.insert(key.to_owned(), value.lift());
     });

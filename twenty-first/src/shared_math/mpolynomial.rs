@@ -15,10 +15,10 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub};
 use std::rc::Rc;
 use std::{cmp, fmt};
 
-type MCoefficients<T> = HashMap<Vec<u64>, T>;
+type MCoefficients<T> = HashMap<Vec<u8>, T>;
 pub type Degree = i64;
 
-const EDMONDS_WEIGHT_CUTOFF_FACTOR: u64 = 2;
+const EDMONDS_WEIGHT_CUTOFF_FACTOR: u8 = 2;
 
 /// This is the data contained in each node in the tree. It contains
 /// the information needed to calculate values for the
@@ -27,9 +27,9 @@ const EDMONDS_WEIGHT_CUTOFF_FACTOR: u64 = 2;
 /// `polynomium_products[parent] * prod_{i=0}^N(point[i]^diff_exponents[i])`.
 #[derive(Debug, Clone)]
 pub struct PolynomialEvaluationDataNode {
-    diff_exponents: Vec<u64>,
-    diff_sum: u64,
-    abs_exponents: Vec<u64>,
+    diff_exponents: Vec<u8>,
+    diff_sum: u8,
+    abs_exponents: Vec<u8>,
     single_point: Option<usize>,
     x_powers: usize,
     // index: usize,
@@ -40,7 +40,7 @@ impl<T: Sized> Node<T> {
         nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>>,
         point: &[Polynomial<PFElem>],
         one: PFElem,
-        polynomium_products: &mut HashMap<Vec<u64>, Polynomial<PFElem>>,
+        polynomium_products: &mut HashMap<Vec<u8>, Polynomial<PFElem>>,
     ) {
         let zero = PFElem::zero();
 
@@ -90,9 +90,9 @@ impl<T: Sized> Node<T> {
                     //     count += 1;
                     // }
                     let mut intermediate_mul: Polynomial<PFElem> = Polynomial::from_constant(one);
-                    let mut intermediate_exponents: Vec<u64> = vec![0; point.len()];
-                    let mut remaining_exponents: Vec<u64> = child_diff_exponents.clone();
-                    let mut mod_pow_exponents: Vec<u64> = vec![0; point.len()];
+                    let mut intermediate_exponents: Vec<u8> = vec![0; point.len()];
+                    let mut remaining_exponents: Vec<u8> = child_diff_exponents.clone();
+                    let mut mod_pow_exponents: Vec<u8> = vec![0; point.len()];
                     // Would it be faster to traverse this list in random order?
                     for (i, diff_exponent) in child_diff_exponents
                         .iter()
@@ -186,7 +186,8 @@ pub struct MPolynomial<T: FiniteField> {
     //     [6,3,12] => -19,
     // }
     pub variable_count: usize,
-    pub coefficients: HashMap<Vec<u64>, T>,
+    // Notice that the exponent values may not exceed 0xFF = 255 = u8::MAX.
+    pub coefficients: HashMap<Vec<u8>, T>,
 }
 
 impl<T: FiniteField> Clone for MPolynomial<T> {
@@ -260,7 +261,7 @@ impl<PFElem: FiniteField> PartialEq for MPolynomial<PFElem> {
             )
         };
 
-        let mut padded: HashMap<Vec<u64>, PFElem> = HashMap::new();
+        let mut padded: HashMap<Vec<u8>, PFElem> = HashMap::new();
         for (k, v) in shortest.iter() {
             let mut pad = k.clone();
             pad.resize_with(var_count, || 0);
@@ -287,7 +288,7 @@ impl<PFElem: FiniteField> PartialEq for MPolynomial<PFElem> {
 impl<PFElem: FiniteField> Eq for MPolynomial<PFElem> {}
 
 impl<PFElem: FiniteField> MPolynomial<PFElem> {
-    fn term_print(exponents: &[u64], coefficient: &PFElem) -> String {
+    fn term_print(exponents: &[u8], coefficient: &PFElem) -> String {
         if coefficient.is_zero() {
             return "".to_string();
         }
@@ -339,7 +340,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         }
 
         for (k, v) in self.coefficients.iter() {
-            if *k == vec![0u64; self.variable_count] {
+            if *k == vec![0u8; self.variable_count] {
                 if !v.is_one() {
                     return false;
                 } else {
@@ -393,7 +394,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         let one = PFElem::one();
         let mut res: Vec<Self> = vec![];
         for i in 0..variable_count {
-            let mut exponent = vec![0u64; variable_count];
+            let mut exponent = vec![0u8; variable_count];
             exponent[i] = 1;
             let mut coefficients: MCoefficients<PFElem> = HashMap::new();
             coefficients.insert(exponent, one);
@@ -409,7 +410,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     pub fn precalculate_symbolic_exponents(
         mpols: &[Self],
         point: &[Polynomial<PFElem>],
-        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<PFElem>>,
+        exponents_memoization: &mut HashMap<Vec<u8>, Polynomial<PFElem>>,
     ) -> Result<(), Box<dyn Error>> {
         let mut timer = TimingReporter::start();
         if mpols.is_empty() || point.is_empty() {
@@ -429,7 +430,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         timer.elapsed("init stuff");
         let one: PFElem = PFElem::one(); // guaranteed to exist because of above checks
 
-        let mut exponents_list: Vec<Vec<u64>> = Self::extract_exponents_list(mpols)?;
+        let mut exponents_list: Vec<Vec<u8>> = Self::extract_exponents_list(mpols)?;
         timer.elapsed("calculated exponents_list");
 
         for i in 0..variable_count {
@@ -450,9 +451,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         // This algorithm i a variation of Edmond's algorithm for finding the minimal spanning tree
         // in a directed graph. Only, we don't calculate all edges but instead look for the ones that
         // are minimal while calculating their weights.
-        let mut chosen_edges: Vec<(u64, u64)> = vec![(0, 0); exponents_list.len()];
+        let mut chosen_edges: Vec<(u8, u8)> = vec![(0, 0); exponents_list.len()];
         'outer: for i in 1..exponents_list.len() {
-            let mut min_weight = u64::MAX;
+            let mut min_weight = u8::MAX;
             'middle: for j in 1..=i {
                 let index = i - j;
 
@@ -468,7 +469,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
 
                 // let mut diff = 0;
                 // diff += exponents_list[i][k] - exponents_list[index][k];
-                let diff: u64 = exponents_list[i]
+                let diff: u8 = exponents_list[i]
                     .iter()
                     .zip(exponents_list[index].iter())
                     .map(|(ei, ej)| *ei - *ej)
@@ -476,7 +477,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
 
                 if diff < min_weight {
                     min_weight = diff;
-                    chosen_edges[i].0 = index as u64;
+                    chosen_edges[i].0 = index as u8;
                     chosen_edges[i].1 = min_weight;
                     // println!("(min_weight, index) = {:?}", (min_weight, index));
 
@@ -521,7 +522,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
                 .borrow_mut()
                 .children
                 .push(nodes[end].clone());
-            let mut diff_exponents: Vec<u64> = nodes[end as usize]
+            let mut diff_exponents: Vec<u8> = nodes[end as usize]
                 .borrow()
                 .data
                 .abs_exponents
@@ -534,7 +535,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
                 x_power += diff_exponents[*x_point_index];
                 diff_exponents[*x_point_index] = 0;
             }
-            if diff_exponents.iter().sum::<u64>() == 1u64 {
+            if diff_exponents.iter().sum::<u8>() == 1u8 {
                 nodes[end as usize].borrow_mut().data.single_point =
                     Some(diff_exponents.iter().position(|&x| x == 1).unwrap());
             }
@@ -590,7 +591,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     // all the exponent vectors present in a list of multivariate polynomials.
     // We precalculate this to make the verifier faster, as the exponents list is the
     // same across all calls to the evaluater
-    pub fn extract_exponents_list(mpols: &[Self]) -> Result<Vec<Vec<u64>>, Box<dyn Error>> {
+    pub fn extract_exponents_list(mpols: &[Self]) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
         if mpols.is_empty() {
             return Err(Box::new(PrecalculationError::EmptyInput));
         }
@@ -608,7 +609,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         // but I might be wrong about that. That speedup is the reason I included the
         // below "unused" assignment.
         #[allow(unused_assignments)]
-        let mut exponents_set: hashbrown::hash_set::HashSet<Vec<u64>> =
+        let mut exponents_set: hashbrown::hash_set::HashSet<Vec<u8>> =
             hashbrown::hash_set::HashSet::with_capacity(mpols[0].coefficients.len());
         exponents_set = mpols
             .iter()
@@ -624,10 +625,10 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     /// Get a hash map with precalculated values for point[i]^j
     /// Only exponents 2 and above are stored.
     pub fn precalculate_scalar_mod_pows(
-        limit: u64,
+        limit: u8,
         point: &[PFElem],
-    ) -> HashMap<(usize, u64), PFElem> {
-        let mut hash_map: HashMap<(usize, u64), PFElem> = HashMap::new();
+    ) -> HashMap<(usize, u8), PFElem> {
+        let mut hash_map: HashMap<(usize, u8), PFElem> = HashMap::new();
 
         // TODO: Would runing this in parallel give a speedup?
         for (i, coordinate) in point.iter().enumerate() {
@@ -646,9 +647,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     // `precalculated_mod_pows`
     pub fn precalculate_scalar_exponents(
         point: &[PFElem],
-        precalculated_mod_pows: &HashMap<(usize, u64), PFElem>,
-        exponents_list: &[Vec<u64>],
-    ) -> Result<HashMap<Vec<u64>, PFElem>, Box<dyn Error>> {
+        precalculated_mod_pows: &HashMap<(usize, u8), PFElem>,
+        exponents_list: &[Vec<u8>],
+    ) -> Result<HashMap<Vec<u8>, PFElem>, Box<dyn Error>> {
         if point.is_empty() {
             return Err(Box::new(PrecalculationError::EmptyInput));
         }
@@ -663,7 +664,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         // Perform parallel computation of all intermediate results
         // which constitute calculations on the form
         // `prod_i^N(point[i]^e_i)
-        let mut intermediate_results_hash_map: HashMap<Vec<u64>, PFElem> = HashMap::new();
+        let mut intermediate_results_hash_map: HashMap<Vec<u8>, PFElem> = HashMap::new();
         let one: PFElem = PFElem::one();
         let intermediate_results: Vec<PFElem> = exponents_list
             .par_iter()
@@ -692,7 +693,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     pub fn evaluate_with_precalculation(
         &self,
         point: &[PFElem],
-        intermediate_results: &HashMap<Vec<u64>, PFElem>,
+        intermediate_results: &HashMap<Vec<u8>, PFElem>,
     ) -> PFElem {
         assert_eq!(
             self.variable_count,
@@ -714,7 +715,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     pub fn evaluate_symbolic_with_memoization_precalculated(
         &self,
         point: &[Polynomial<PFElem>],
-        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<PFElem>>,
+        exponents_memoization: &mut HashMap<Vec<u8>, Polynomial<PFElem>>,
     ) -> Polynomial<PFElem> {
         assert_eq!(
             self.variable_count,
@@ -736,9 +737,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     pub fn evaluate_symbolic_with_memoization(
         &self,
         point: &[Polynomial<PFElem>],
-        mod_pow_memoization: &mut HashMap<(usize, u64), Polynomial<PFElem>>,
-        mul_memoization: &mut HashMap<(Polynomial<PFElem>, (usize, u64)), Polynomial<PFElem>>,
-        exponents_memoization: &mut HashMap<Vec<u64>, Polynomial<PFElem>>,
+        mod_pow_memoization: &mut HashMap<(usize, u8), Polynomial<PFElem>>,
+        mul_memoization: &mut HashMap<(Polynomial<PFElem>, (usize, u8)), Polynomial<PFElem>>,
+        exponents_memoization: &mut HashMap<Vec<u8>, Polynomial<PFElem>>,
     ) -> Polynomial<PFElem> {
         // Notice that the `exponents_memoization` only gives a speedup if this function is evaluated multiple
         // times for the same `point` input. This condition holds when evaluating the AIR constraints
@@ -769,7 +770,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
             } else {
                 println!("Missed!");
                 prod = Polynomial::from_constant(PFElem::one());
-                let mut k_sorted: Vec<(usize, u64)> = k.clone().into_iter().enumerate().collect();
+                let mut k_sorted: Vec<(usize, u8)> = k.clone().into_iter().enumerate().collect();
                 k_sorted.sort_by_key(|e| e.1);
                 let mut x_pow_mul = 0;
                 for (i, ki) in k_sorted.into_iter() {
@@ -897,7 +898,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
 
         let one = PFElem::one();
         let mut coefficients: MCoefficients<PFElem> = HashMap::new();
-        let mut key = vec![0u64; variable_count];
+        let mut key = vec![0u8; variable_count];
         key[variable_index] = 1;
         coefficients.insert(key, one);
         let indeterminate: MPolynomial<PFElem> = Self {
@@ -909,7 +910,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         for i in 0..univariate_polynomial.coefficients.len() {
             acc +=
                 MPolynomial::from_constant(univariate_polynomial.coefficients[i], variable_count)
-                    * indeterminate.pow(i as u64);
+                    * indeterminate.pow(i as u8);
         }
 
         acc
@@ -943,7 +944,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     }
 
     #[must_use]
-    pub fn pow(&self, pow: u64) -> Self {
+    pub fn pow(&self, pow: u8) -> Self {
         // Handle special case of 0^0
         if pow.is_zero() {
             let mut coefficients: MCoefficients<PFElem> = HashMap::new();
@@ -960,7 +961,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         }
 
         // create object, to be populated
-        let exp = vec![0u64; self.variable_count];
+        let exp = vec![0u8; self.variable_count];
         let mut acc_coefficients_init: MCoefficients<PFElem> = HashMap::new();
         acc_coefficients_init.insert(exp, PFElem::one());
         let mut acc: MPolynomial<PFElem> = Self {
@@ -994,7 +995,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         }
 
         let mut output_coefficients: MCoefficients<PFElem> = HashMap::new();
-        let exponents = self.coefficients.keys().collect::<Vec<&Vec<u64>>>();
+        let exponents = self.coefficients.keys().collect::<Vec<&Vec<u8>>>();
         let two = PFElem::one() + PFElem::one();
 
         for i in 0..exponents.len() {
@@ -1040,7 +1041,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
 
     /// Return the highest number present in the list of list of exponents
     /// For `P(x,y) = x^4*y^3`, `4` would be returned.
-    pub fn max_exponent(&self) -> u64 {
+    pub fn max_exponent(&self) -> u8 {
         *self
             .coefficients
             .keys()
@@ -1062,21 +1063,19 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
             return -1;
         };
 
-        let total_degree: u64 = self
+        let total_degree: i64 = self
             .coefficients
             .keys()
-            .map(|exponents| exponents.iter().sum::<u64>())
+            .map(|exponents| exponents.iter().map(|x| *x as i64).sum::<i64>())
             .max()
             .unwrap_or(0);
 
-        let res = i64::try_from(total_degree);
-        assert!(res.is_ok());
-        res.unwrap()
+        total_degree
     }
 
     /// Removes exponents whose coefficients are 0.
     pub fn normalize(&mut self) {
-        let mut spurious_exponents: Vec<Vec<u64>> = vec![];
+        let mut spurious_exponents: Vec<Vec<u8>> = vec![];
         for (exponent, coefficient) in self.coefficients.iter() {
             if coefficient.is_zero() {
                 spurious_exponents.push(exponent.to_owned());
@@ -1248,7 +1247,7 @@ impl<PFElem: FiniteField> Mul for MPolynomial<PFElem> {
         let mut output_coefficients: MCoefficients<PFElem> = HashMap::new();
         for (k0, &v0) in self.coefficients.iter() {
             for (k1, &v1) in other.coefficients.iter() {
-                let mut exponent = vec![0u64; variable_count];
+                let mut exponent = vec![0u8; variable_count];
                 for k in 0..self.variable_count {
                     exponent[k] += k0[k];
                 }
@@ -1284,14 +1283,15 @@ mod test_mpolynomials {
     use rand::Rng;
     use std::collections::HashSet;
 
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::other::random_elements;
     use crate::shared_math::other::random_elements_range;
     use crate::shared_math::x_field_element::XFieldElement;
-    use crate::shared_math::{b_field_element::BFieldElement, other::random_elements};
 
     use super::*;
 
     fn get_x() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![1, 0, 0], BFieldElement::from(1u64));
         MPolynomial {
             coefficients,
@@ -1300,7 +1300,7 @@ mod test_mpolynomials {
     }
 
     fn get_x_squared() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![2, 0, 0], BFieldElement::from(1u64));
         MPolynomial {
             coefficients,
@@ -1309,7 +1309,7 @@ mod test_mpolynomials {
     }
 
     fn get_x_quartic() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![4, 0, 0], BFieldElement::from(1u64));
         MPolynomial {
             coefficients,
@@ -1318,7 +1318,7 @@ mod test_mpolynomials {
     }
 
     fn get_y() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![0, 1, 0], BFieldElement::from(1u64));
         MPolynomial {
             coefficients,
@@ -1327,7 +1327,7 @@ mod test_mpolynomials {
     }
 
     fn get_z() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![0, 0, 1], BFieldElement::from(1u64));
         MPolynomial {
             coefficients,
@@ -1336,7 +1336,7 @@ mod test_mpolynomials {
     }
 
     fn get_xz() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![1, 0, 1], BFieldElement::from(1u64));
         MPolynomial {
             coefficients,
@@ -1345,7 +1345,7 @@ mod test_mpolynomials {
     }
 
     fn get_x_squared_z_squared() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![2, 0, 2], BFieldElement::from(1u64));
         MPolynomial {
             coefficients,
@@ -1354,7 +1354,7 @@ mod test_mpolynomials {
     }
 
     fn get_xyz() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![1, 1, 1], BFieldElement::from(1u64));
         MPolynomial {
             coefficients,
@@ -1363,7 +1363,7 @@ mod test_mpolynomials {
     }
 
     fn get_x_plus_xz() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![1, 0, 1], BFieldElement::from(1u64));
         coefficients.insert(vec![1, 0, 0], BFieldElement::from(1u64));
         MPolynomial {
@@ -1373,7 +1373,7 @@ mod test_mpolynomials {
     }
 
     fn get_x_minus_xz() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![1, 0, 1], -BFieldElement::from(1u64));
         coefficients.insert(vec![1, 0, 0], BFieldElement::from(1u64));
         MPolynomial {
@@ -1383,7 +1383,7 @@ mod test_mpolynomials {
     }
 
     fn get_minus_17y() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![0, 1, 0], -BFieldElement::from(17u64));
         MPolynomial {
             coefficients,
@@ -1392,7 +1392,7 @@ mod test_mpolynomials {
     }
 
     fn get_x_plus_xz_minus_17y() -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         coefficients.insert(vec![1, 0, 1], BFieldElement::from(1u64));
         coefficients.insert(vec![1, 0, 0], BFieldElement::from(1u64));
         coefficients.insert(vec![0, 1, 0], -BFieldElement::from(17u64));
@@ -1403,7 +1403,7 @@ mod test_mpolynomials {
     }
 
     fn get_big_mpol() -> MPolynomial<BFieldElement> {
-        let mut big_c: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut big_c: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         big_c.insert(vec![0, 0, 1, 0, 0], BFieldElement::from(1u64));
         big_c.insert(vec![0, 1, 0, 0, 0], BFieldElement::from(1u64));
         big_c.insert(vec![10, 3, 8, 0, 3], -BFieldElement::from(9u64));
@@ -1419,7 +1419,7 @@ mod test_mpolynomials {
     }
 
     fn get_big_mpol_extra_variabel() -> MPolynomial<BFieldElement> {
-        let mut big_c: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut big_c: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         big_c.insert(vec![0, 0, 1, 0, 0, 0], BFieldElement::from(1u64));
         big_c.insert(vec![0, 1, 0, 0, 0, 0], BFieldElement::from(1u64));
         big_c.insert(vec![10, 3, 8, 0, 3, 0], -BFieldElement::from(9u64));
@@ -1595,13 +1595,13 @@ mod test_mpolynomials {
 
     #[test]
     fn evaluate_symbolic_test() {
-        let empty_intermediate_results: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
+        let empty_intermediate_results: HashMap<Vec<u8>, Polynomial<BFieldElement>> =
             HashMap::new();
-        let empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<BFieldElement>> =
+        let empty_mod_pow_memoization: HashMap<(usize, u8), Polynomial<BFieldElement>> =
             HashMap::new();
         #[allow(clippy::type_complexity)]
         let empty_mul_memoization: HashMap<
-            (Polynomial<BFieldElement>, (usize, u64)),
+            (Polynomial<BFieldElement>, (usize, u8)),
             Polynomial<BFieldElement>,
         > = HashMap::new();
 
@@ -1609,7 +1609,7 @@ mod test_mpolynomials {
         let xyz_m = get_xyz();
         let x: Polynomial<BFieldElement> = Polynomial::from_constant(one).shift_coefficients(1);
 
-        let mut precalculated_intermediate_results: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
+        let mut precalculated_intermediate_results: HashMap<Vec<u8>, Polynomial<BFieldElement>> =
             HashMap::new();
         let precalculation_result = MPolynomial::precalculate_symbolic_exponents(
             &[xyz_m.clone()],
@@ -1665,13 +1665,13 @@ mod test_mpolynomials {
             xm.evaluate_symbolic(&[xu.clone(), zero_upol.clone(), zero_upol.clone()])
         );
 
-        let mut empty_intermediate_results: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
+        let mut empty_intermediate_results: HashMap<Vec<u8>, Polynomial<BFieldElement>> =
             HashMap::new();
-        let mut empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<BFieldElement>> =
+        let mut empty_mod_pow_memoization: HashMap<(usize, u8), Polynomial<BFieldElement>> =
             HashMap::new();
         #[allow(clippy::type_complexity)]
         let mut empty_mul_memoization: HashMap<
-            (Polynomial<BFieldElement>, (usize, u64)),
+            (Polynomial<BFieldElement>, (usize, u8)),
             Polynomial<BFieldElement>,
         > = HashMap::new();
         assert_eq!(
@@ -1838,8 +1838,8 @@ mod test_mpolynomials {
 
     #[test]
     fn mul_commutative_test() {
-        let a = gen_mpolynomial(40, 40, 100, u64::MAX);
-        let b = gen_mpolynomial(20, 20, 1000, u64::MAX);
+        let a = gen_mpolynomial(40, 40, 80, u64::MAX);
+        let b = gen_mpolynomial(20, 20, 150, u64::MAX);
         let ab = a.clone() * b.clone();
         let ba = b * a;
         assert_eq!(ab, ba);
@@ -1872,7 +1872,7 @@ mod test_mpolynomials {
                 (vec![0, 1], BFieldElement::new(10)),
             ]),
         };
-        let exponents_list: Vec<Vec<u64>> =
+        let exponents_list: Vec<Vec<u8>> =
             MPolynomial::extract_exponents_list(&[a.clone(), b.clone()]).unwrap();
 
         // The `exponents_list` returns the present exponents *plus* [0, 0] in this case
@@ -1881,14 +1881,14 @@ mod test_mpolynomials {
         let point: Vec<BFieldElement> = vec![BFieldElement::new(2), BFieldElement::new(3)];
 
         // Verify mod_pow precalculation
-        let mod_pow_precalculations: HashMap<(usize, u64), BFieldElement> =
+        let mod_pow_precalculations: HashMap<(usize, u8), BFieldElement> =
             MPolynomial::<BFieldElement>::precalculate_scalar_mod_pows(4, &point);
         assert_eq!(6, mod_pow_precalculations.len()); // `6` because only powers [2,3,4] are present
         for ((i, k), v) in mod_pow_precalculations.iter() {
-            assert_eq!(point[*i].mod_pow(*k), *v);
+            assert_eq!(point[*i].mod_pow(*k as u64), *v);
         }
 
-        let intermediate_results_res: Result<HashMap<Vec<u64>, BFieldElement>, Box<dyn Error>> =
+        let intermediate_results_res: Result<HashMap<Vec<u8>, BFieldElement>, Box<dyn Error>> =
             MPolynomial::<BFieldElement>::precalculate_scalar_exponents(
                 &point,
                 &mod_pow_precalculations,
@@ -1948,29 +1948,29 @@ mod test_mpolynomials {
     fn extract_exponents_list_test() {
         // Funky property-based test to verify that the `extract_exponents_list`
         // behaves as expected
-        let a = gen_mpolynomial(40, 40, 100, u64::MAX);
-        let b = gen_mpolynomial(20, 20, 1000, u64::MAX);
-        let mut exponents: Vec<Vec<u64>> =
+        let a = gen_mpolynomial(40, 40, 30, u64::MAX);
+        let b = gen_mpolynomial(20, 20, 130, u64::MAX);
+        let mut exponents: Vec<Vec<u8>> =
             MPolynomial::extract_exponents_list(&[a.clone(), b.clone()]).unwrap();
         exponents.sort();
-        let exponents_a: Vec<Vec<u64>> = a
+        let exponents_a: Vec<Vec<u8>> = a
             .coefficients
             .keys()
             .into_iter()
             .map(|x| x.to_owned())
             .collect();
-        let exponents_b: Vec<Vec<u64>> = b
+        let exponents_b: Vec<Vec<u8>> = b
             .coefficients
             .keys()
             .into_iter()
             .map(|x| x.to_owned())
             .collect();
-        let mut expected_exponents_set: HashSet<Vec<u64>> = [exponents_a, exponents_b]
+        let mut expected_exponents_set: HashSet<Vec<u8>> = [exponents_a, exponents_b]
             .iter()
             .flat_map(|mpol| mpol.iter().map(|x| x.to_owned()))
             .collect();
         expected_exponents_set.insert(vec![0; a.variable_count]);
-        let mut expected_exponents_list: Vec<Vec<u64>> =
+        let mut expected_exponents_list: Vec<Vec<u8>> =
             expected_exponents_set.into_iter().collect();
         expected_exponents_list.sort();
         assert_eq!(expected_exponents_list, exponents);
@@ -2009,7 +2009,7 @@ mod test_mpolynomials {
             });
 
             let mut precalculated_intermediate_results: HashMap<
-                Vec<u64>,
+                Vec<u8>,
                 Polynomial<BFieldElement>,
             > = HashMap::new();
             let precalculation_result = MPolynomial::precalculate_symbolic_exponents(
@@ -2034,13 +2034,13 @@ mod test_mpolynomials {
             }
 
             // Verify that function gets the same result with and without precalculated values
-            let mut empty_intermediate_results: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
+            let mut empty_intermediate_results: HashMap<Vec<u8>, Polynomial<BFieldElement>> =
                 HashMap::new();
-            let mut empty_mod_pow_memoization: HashMap<(usize, u64), Polynomial<BFieldElement>> =
+            let mut empty_mod_pow_memoization: HashMap<(usize, u8), Polynomial<BFieldElement>> =
                 HashMap::new();
             #[allow(clippy::type_complexity)]
             let mut empty_mul_memoization: HashMap<
-                (Polynomial<BFieldElement>, (usize, u64)),
+                (Polynomial<BFieldElement>, (usize, u8)),
                 Polynomial<BFieldElement>,
             > = HashMap::new();
 
@@ -2070,7 +2070,7 @@ mod test_mpolynomials {
     }
 
     fn unique_exponent_vectors(input: &MPolynomial<BFieldElement>) -> bool {
-        let mut hashset: HashSet<Vec<u64>> = HashSet::new();
+        let mut hashset: HashSet<Vec<u8>> = HashSet::new();
 
         input
             .coefficients
@@ -2098,10 +2098,10 @@ mod test_mpolynomials {
     fn gen_mpolynomial(
         variable_count: usize,
         term_count: usize,
-        exponent_limit_inclusive: u64,
+        exponent_limit_inclusive: u8,
         coefficient_limit_inclusive: u64,
     ) -> MPolynomial<BFieldElement> {
-        let mut coefficients: HashMap<Vec<u64>, BFieldElement> = HashMap::new();
+        let mut coefficients: HashMap<Vec<u8>, BFieldElement> = HashMap::new();
         let mut rng = rand::thread_rng();
 
         for _ in 0..term_count {
@@ -2168,8 +2168,6 @@ mod test_mpolynomials {
 
     #[test]
     fn symbolic_degree_bound_simple2() {
-        // mpoly(x,y,z) := 3y^2z + 2z
-
         let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
 
         mcoef.insert(vec![11, 13, 29], BFieldElement::new(41));
@@ -2189,8 +2187,6 @@ mod test_mpolynomials {
 
     #[test]
     fn symbolic_degree_bound_zeroes() {
-        // mpoly(x,y,z) := 3y^2z + 2z
-
         let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
 
         mcoef.insert(vec![1, 2, 58], BFieldElement::new(76));
@@ -2212,8 +2208,6 @@ mod test_mpolynomials {
 
     #[test]
     fn symbolic_degree_bound_ones() {
-        // mpoly(x,y,z) := 3y^2z + 2z
-
         let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
 
         mcoef.insert(vec![1, 2, 58], BFieldElement::new(76));
@@ -2253,9 +2247,34 @@ mod test_mpolynomials {
 
         assert!(
             degree_poly
-                <= (variable_count as u64 * (exponent_limit + 1) * (exponent_limit + 1)) as Degree,
+                <= (variable_count as u64
+                    * (exponent_limit + 1) as u64
+                    * (exponent_limit + 1) as u64) as Degree,
             "The total degree is the max of the sums of the exponents in any term.",
         )
+    }
+
+    #[test]
+    fn degree_bounds_big() {
+        // Verify that we can calculate degree bounds larger than u8::MAX
+        // We don't want to overflow on these calculations
+        let mut mcoef: MCoefficients<BFieldElement> = HashMap::new();
+        mcoef.insert(vec![100, 200, 255], BFieldElement::new(76));
+        mcoef.insert(vec![243, 99, 255], BFieldElement::new(3));
+        mcoef.insert(vec![110, 180, 254], BFieldElement::new(41));
+        mcoef.insert(vec![190, 231, 255], BFieldElement::new(47));
+        let mpoly = MPolynomial::<BFieldElement> {
+            variable_count: 3,
+            coefficients: mcoef,
+        };
+
+        let max_degrees = vec![101, 101, 101];
+        assert_eq!(
+            101 * 190 + 101 * 231 + 101 * 255,
+            mpoly.symbolic_degree_bound(&max_degrees)
+        );
+
+        assert_eq!(676, mpoly.degree());
     }
 
     fn symbolic_degree_bound_prop_gen() {

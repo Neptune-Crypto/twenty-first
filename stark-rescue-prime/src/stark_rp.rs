@@ -329,8 +329,7 @@ impl StarkRp {
 
         timer.elapsed("scale trace interpolants");
 
-        let mut exponents_memoization: HashMap<Vec<u64>, Polynomial<BFieldElement>> =
-            HashMap::new();
+        let mut exponents_memoization: HashMap<Vec<u8>, Polynomial<BFieldElement>> = HashMap::new();
 
         MPolynomial::precalculate_symbolic_exponents(
             // A slight speedup can be achieved here by only sending the 1st
@@ -743,7 +742,7 @@ impl StarkRp {
             original_trace_length as usize,
             rounded_trace_length as usize,
         );
-        let max_exponent: u64 = transition_constraints
+        let max_exponent: u8 = transition_constraints
             .iter()
             .map(|mpol| mpol.max_exponent())
             .max()
@@ -758,7 +757,7 @@ impl StarkRp {
         );
         timer.elapsed("Calculate transition zerofier");
 
-        let exponents_list: Vec<Vec<u64>> =
+        let exponents_list: Vec<Vec<u8>> =
             MPolynomial::extract_exponents_list(transition_constraints)?;
         timer.elapsed("Calculate exponents list");
         for (i, current_index) in indices.into_iter().enumerate() {
@@ -807,10 +806,10 @@ impl StarkRp {
             // println!("transition_constraints degrees: {:?}", tc_degrees);
 
             // TODO: For some reason this mod pow precalculation is super slow
-            let precalculated_mod_pows: HashMap<(usize, u64), BFieldElement> =
+            let precalculated_mod_pows: HashMap<(usize, u8), BFieldElement> =
                 MPolynomial::<BFieldElement>::precalculate_scalar_mod_pows(max_exponent, &point);
             timer.elapsed(&format!("precalculate mod_pows {}", i));
-            let intermediate_results: HashMap<Vec<u64>, BFieldElement> =
+            let intermediate_results: HashMap<Vec<u8>, BFieldElement> =
                 MPolynomial::<BFieldElement>::precalculate_scalar_exponents(
                     &point,
                     &precalculated_mod_pows,
@@ -1088,7 +1087,7 @@ impl StarkRp {
 
         let previous_state_pow_alpha = previous_state
             .iter()
-            .map(|poly| poly.pow(ALPHA))
+            .map(|poly| poly.pow(ALPHA as u8))
             .collect::<Vec<MPolynomial<BFieldElement>>>();
 
         // TODO: Consider refactoring MPolynomial<BFieldElement>
@@ -1149,7 +1148,7 @@ impl StarkRp {
                         ) * (a.clone() - second_step_constants[j].to_owned())
                     })
                     .fold(MPolynomial::zero(variable_count), |x, y| x + y)
-                    .pow(ALPHA)
+                    .pow(ALPHA as u8)
             })
             .collect_into_vec(&mut backward_airs);
 
