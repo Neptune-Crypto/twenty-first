@@ -26,8 +26,8 @@ fn stark_medium(criterion: &mut Criterion) {
         input[0] = BFieldElement::one();
         let (output, trace) = RescuePrimeRegular::hash_10_with_trace(&input);
         timer.elapsed("rp.eval_and_trace(...)");
-        let omicron = BFieldElement::primitive_root_of_unity(16).unwrap();
-        timer.elapsed("BFieldElement::get_primitive_root_of_unity(16)");
+        let omicron = BFieldElement::primitive_root_of_unity(32).unwrap();
+        timer.elapsed("BFieldElement::get_primitive_root_of_unity(32)");
         let air_constraints = StarkRp::get_air_constraints(omicron);
         timer.elapsed("rp.get_air_constraints(omicron)");
         let boundary_constraints = StarkRp::get_boundary_constraints(&output);
