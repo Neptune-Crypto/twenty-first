@@ -114,9 +114,3 @@ jobs:
         with:
           command: criterion
           args: stark_bf
-
-      - name: Run Rescue-Prime STARK benchmark (symbolical evaluation)
-        uses: actions-rs/cargo@v1
-        with:
-          command: criterion
-          args: stark_rp
