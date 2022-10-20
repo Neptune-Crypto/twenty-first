@@ -1,12 +1,12 @@
-use crate::util_types::simple_hasher::Hasher;
+use std::marker::{Send, Sync};
 
-use super::simple_hasher::Hashable;
+use crate::shared_math::rescue_prime_digest::Digest;
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 /// Get a root commitment to the entire MMR/list of Merkle trees
-pub fn bag_peaks<H>(peaks: &[H::Digest]) -> H::Digest
+pub fn bag_peaks<H>(peaks: &[Digest]) -> Digest
 where
-    H: Hasher + std::marker::Sync + std::marker::Send,
-    u128: Hashable<<H as Hasher>::T>,
+    H: AlgebraicHasher + Sync + Send,
 {
     // Follows the description on
     // https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging
@@ -14,20 +14,18 @@ where
     // that the node count described on that website is not used here, as we don't need
     // the extra bits of security that that would provide.
     let peaks_count: usize = peaks.len();
-    let hasher: H = H::new();
 
     if peaks_count == 0 {
-        return hasher.hash_sequence(&0u128.to_sequence());
+        return H::hash(&0u128);
     }
 
     if peaks_count == 1 {
         return peaks[0].to_owned();
     }
 
-    // let mut acc: H::Digest = hasher.hash_pair(&peaks[peaks_count - 1], &peaks[peaks_count - 2]);
-    let mut acc: H::Digest = hasher.hash_pair(&peaks[peaks_count - 2], &peaks[peaks_count - 1]);
+    let mut acc: Digest = H::hash_pair(&peaks[peaks_count - 2], &peaks[peaks_count - 1]);
     for i in 2..peaks_count {
-        acc = hasher.hash_pair(&peaks[peaks_count - 1 - i], &acc);
+        acc = H::hash_pair(&peaks[peaks_count - 1 - i], &acc);
     }
 
     acc

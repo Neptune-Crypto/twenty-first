@@ -1,91 +1,32 @@
-use rand::Rng;
-use rand_distr::{Distribution, Standard};
-use serde::ser::SerializeTuple;
-use serde::{Deserialize, Serialize};
+use blake3::OUT_LEN;
+use num_traits::Zero;
 
-/// A wrapper around `blake3::Hash` because it does not Serialize.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Blake3Hash(pub blake3::Hash);
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::rescue_prime_digest::Digest;
+use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
-impl From<blake3::Hash> for Blake3Hash {
-    fn from(digest: blake3::Hash) -> Self {
-        Blake3Hash(digest)
-    }
-}
-
-impl From<[u8; 32]> for Blake3Hash {
-    fn from(bytes: [u8; 32]) -> Self {
-        Blake3Hash(bytes.into())
-    }
-}
-
-impl From<u128> for Blake3Hash {
-    fn from(n: u128) -> Self {
-        Blake3Hash(blake3::Hash::from_hex(format!("{:064x}", n)).unwrap())
-    }
-}
-
-impl Serialize for Blake3Hash {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut seq = serializer.serialize_tuple(32)?;
-        let bytes: &[u8; 32] = self.0.as_bytes();
-        for byte in bytes {
-            seq.serialize_element(byte)?;
+impl AlgebraicHasher for blake3::Hasher {
+    fn hash_slice(elements: &[BFieldElement]) -> Digest {
+        let mut hasher = Self::new();
+        for elem in elements.iter() {
+            hasher.update(&elem.value().to_be_bytes());
         }
-        seq.end()
+        from_blake3_digest(&hasher.finalize())
+    }
+
+    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+        Self::hash_slice(&vec![left.to_sequence(), right.to_sequence()].concat())
     }
 }
 
-impl<'de> Deserialize<'de> for Blake3Hash {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let bytes: [u8; 32] = Deserialize::deserialize(deserializer)?;
-        let digest: blake3::Hash = bytes.into();
-        Ok(Blake3Hash(digest))
-    }
-}
-
-pub fn hash(bytes: &[u8]) -> Blake3Hash {
-    Blake3Hash(blake3::hash(bytes))
-}
-
-impl Distribution<Blake3Hash> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Blake3Hash {
-        Blake3Hash(rng.gen::<[u8; 32]>().into())
-    }
-}
-
-#[cfg(test)]
-mod blake3_wrapper_test {
-    use super::*;
-
-    #[test]
-    fn serialize_deserialize_identity_test() {
-        let before: Blake3Hash = blake3::hash(b"hello").into();
-
-        let ser = bincode::serialize(&before);
-        assert!(ser.is_ok());
-
-        let de = bincode::deserialize(&ser.unwrap());
-        assert!(de.is_ok());
-
-        let after = de.unwrap();
-        assert_eq!(before, after);
-    }
-
-    #[test]
-    fn blake3_wrapper_uses_32_bytes_test() {
-        let zero: Blake3Hash = [0; 32].into();
-
-        let res_bytes = bincode::serialize(&zero);
-        let bytes = res_bytes.unwrap();
-
-        assert_eq!(std::mem::size_of::<Blake3Hash>(), 32);
-        assert_eq!(bytes.len(), 32);
-    }
+pub fn from_blake3_digest(digest: &blake3::Hash) -> Digest {
+    let bytes: &[u8; OUT_LEN] = digest.as_bytes();
+    let elements = [
+        BFieldElement::from_ne_bytes(&bytes[0..8]),
+        BFieldElement::from_ne_bytes(&bytes[8..16]),
+        BFieldElement::from_ne_bytes(&bytes[16..24]),
+        BFieldElement::from_ne_bytes(&bytes[24..32]),
+        BFieldElement::zero(),
+    ];
+    Digest::new(elements)
 }

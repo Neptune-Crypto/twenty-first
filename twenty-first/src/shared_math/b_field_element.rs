@@ -2,7 +2,6 @@ use super::other;
 use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
-use crate::util_types::simple_hasher::Hashable;
 use num_traits::{One, Zero};
 use rand_distr::{Distribution, Standard};
 use std::hash::{Hash, Hasher};
@@ -83,6 +82,8 @@ impl Hash for BFieldElement {
 }
 
 impl BFieldElement {
+    pub const BYTES: usize = 8;
+
     // 2^64 - 2^32 + 1
     pub const QUOTIENT: u64 = 0xffff_ffff_0000_0001u64;
     pub const MAX: u64 = Self::QUOTIENT - 1;
@@ -174,6 +175,13 @@ impl BFieldElement {
         }
     }
 
+    /// Convert a `BFieldElement` from a byte slice.
+    pub fn from_ne_bytes(bytes: &[u8]) -> BFieldElement {
+        let mut bytes_copied: [u8; 8] = [0; 8];
+        bytes_copied.copy_from_slice(bytes);
+        BFieldElement::new(u64::from_ne_bytes(bytes_copied))
+    }
+
     /// Convert a byte array to a vector of B field elements
     pub fn from_byte_array<const N: usize>(input: [u8; N]) -> Vec<Self> {
         // Although the output size should be known at compile time, Rust cannot handle constant
@@ -234,17 +242,12 @@ impl BFieldElement {
         result.wrapping_add(Self::LOWER_MASK * (over as u64))
     }
 
-    /// Get string of raw emoji characters
-    pub fn emojihash_raw(&self) -> String {
-        emojihash::hash(&self.to_sequence())
+    pub fn emojihash(&self) -> String {
+        let emojis = emojihash::hash(&self.0.to_be_bytes())
             .chars()
             .take(EMOJI_PER_BFE)
-            .collect()
-    }
+            .collect::<String>();
 
-    ///
-    pub fn emojihash(&self) -> String {
-        let emojis = self.emojihash_raw();
         format!("[{emojis}]")
     }
 }
@@ -581,9 +584,9 @@ mod b_prime_field_element_test {
         let a = BFieldElement::new(123);
         let array_a: [u8; 8] = a.into();
         assert_eq!(123, array_a[0]);
-        for i in 1..7 {
+        (1..7).for_each(|i| {
             assert_eq!(0, array_a[i]);
-        }
+        });
 
         let a_converted_back: BFieldElement = array_a.into();
         assert_eq!(a, a_converted_back);
@@ -605,41 +608,47 @@ mod b_prime_field_element_test {
     #[test]
     fn byte_array_conversion_multiple_test() {
         // Ensure we can't overflow
-        let byte_array_0: [u8; 7] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
-        let output = BFieldElement::from_byte_array(byte_array_0);
-        assert_eq!(1, output.len());
-        assert_eq!(BFieldElement((1 << 56) - 1), output[0]);
+        {
+            let byte_array_0: [u8; 7] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+            let output = BFieldElement::from_byte_array(byte_array_0);
+            assert_eq!(1, output.len());
+            assert_eq!(BFieldElement((1 << 56) - 1), output[0]);
+        }
 
         // Ensure we're using little-endianness
-        let byte_array_1: [u8; 7] = [100, 0, 0, 0, 0, 0, 0];
-        let output = BFieldElement::from_byte_array(byte_array_1);
-        assert_eq!(1, output.len());
-        assert_eq!(BFieldElement(100), output[0]);
+        {
+            let byte_array_1: [u8; 7] = [100, 0, 0, 0, 0, 0, 0];
+            let output = BFieldElement::from_byte_array(byte_array_1);
+            assert_eq!(1, output.len());
+            assert_eq!(BFieldElement(100), output[0]);
+        }
 
-        // Ensure we can handle bigger inputs, with lengths not multiple of 7
-        let byte_array_3: [u8; 33] = [
-            100, 0, 0, 0, 0, 0, 0, 200, 0, 0, 0, 0, 0, 0, 100, 100, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0,
-            0, 0, 150, 0, 0, 0, 0,
-        ];
-        let output = BFieldElement::from_byte_array(byte_array_3);
-        assert_eq!(5, output.len());
-        assert_eq!(BFieldElement(100), output[0]);
-        assert_eq!(BFieldElement(200), output[1]);
-        assert_eq!(BFieldElement(100 * 256 + 100), output[2]);
-        assert_eq!(BFieldElement(100), output[3]);
-        assert_eq!(BFieldElement(150), output[4]);
+        {
+            // Ensure we can handle bigger inputs, with lengths not multiple of 7
+            let byte_array_3: [u8; 33] = [
+                100, 0, 0, 0, 0, 0, 0, 200, 0, 0, 0, 0, 0, 0, 100, 100, 0, 0, 0, 0, 0, 100, 0, 0,
+                0, 0, 0, 0, 150, 0, 0, 0, 0,
+            ];
+            let output = BFieldElement::from_byte_array(byte_array_3);
+            assert_eq!(5, output.len());
+            assert_eq!(BFieldElement(100), output[0]);
+            assert_eq!(BFieldElement(200), output[1]);
+            assert_eq!(BFieldElement(100 * 256 + 100), output[2]);
+            assert_eq!(BFieldElement(100), output[3]);
+            assert_eq!(BFieldElement(150), output[4]);
 
-        // Assert more sizes can be handled, without crashing
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 1]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 3]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 2]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 4]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 5]).len());
-        assert_eq!(1, BFieldElement::from_byte_array([0u8; 6]).len());
-        assert_eq!(2, BFieldElement::from_byte_array([0u8; 8]).len());
-        assert_eq!(2, BFieldElement::from_byte_array([0u8; 9]).len());
-        assert_eq!(2, BFieldElement::from_byte_array([0u8; 14]).len());
-        assert_eq!(3, BFieldElement::from_byte_array([0u8; 15]).len());
+            // Assert more sizes can be handled, without crashing
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 1]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 3]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 2]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 4]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 5]).len());
+            assert_eq!(1, BFieldElement::from_byte_array([0u8; 6]).len());
+            assert_eq!(2, BFieldElement::from_byte_array([0u8; 8]).len());
+            assert_eq!(2, BFieldElement::from_byte_array([0u8; 9]).len());
+            assert_eq!(2, BFieldElement::from_byte_array([0u8; 14]).len());
+            assert_eq!(3, BFieldElement::from_byte_array([0u8; 15]).len());
+        }
     }
 
     #[should_panic(
@@ -647,16 +656,7 @@ mod b_prime_field_element_test {
     )]
     #[test]
     fn disallow_conversion_of_u8_array_outside_range() {
-        let bad_bfe_array: [u8; 8] = [
-            u8::MAX,
-            255,
-            0xFF,
-            0o377,
-            0_255,
-            'ÿ' as u8,
-            0b11111111,
-            (('Ǿ' as u16) / 2) as u8,
-        ];
+        let bad_bfe_array: [u8; 8] = [u8::MAX; 8];
         println!("bad_bfe_array = {:?}", bad_bfe_array);
         let _value: BFieldElement = bad_bfe_array.into();
     }
@@ -1015,15 +1015,16 @@ mod b_prime_field_element_test {
         let mut hasher_a = DefaultHasher::new();
         let mut hasher_b = DefaultHasher::new();
 
-        BFieldElement::new(42).hash(&mut hasher_a);
-        BFieldElement::new(42).hash(&mut hasher_b);
+        std::hash::Hash::hash(&BFieldElement::new(42), &mut hasher_a);
+        std::hash::Hash::hash(&BFieldElement::new(42), &mut hasher_b);
         assert_eq!(hasher_a.finish(), hasher_b.finish());
 
         // Verify that hashing works for non-canonical representations
         hasher_a = DefaultHasher::new();
         hasher_b = DefaultHasher::new();
-        (BFieldElement::new(BFieldElement::MAX) + BFieldElement::new(103)).hash(&mut hasher_a);
-        BFieldElement::new(102).hash(&mut hasher_b);
+        let non_canonical = BFieldElement::new(BFieldElement::MAX) + BFieldElement::new(103);
+        std::hash::Hash::hash(&(non_canonical), &mut hasher_a);
+        std::hash::Hash::hash(&BFieldElement::new(102), &mut hasher_b);
         assert_eq!(hasher_a.finish(), hasher_b.finish());
     }
 

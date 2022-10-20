@@ -105,7 +105,7 @@ mod database_array_tests {
         assert_eq!(0u64, db_array.get(79));
 
         // Test batch-set, verify that writes worked and that other values were unchanged
-        db_array.batch_set(&vec![(100, 10000), (11, 1100), (12, 1200)]);
+        db_array.batch_set(&[(100, 10000), (11, 1100), (12, 1200)]);
         assert_eq!(10000u64, db_array.get(100));
         assert_eq!(1100u64, db_array.get(11));
         assert_eq!(1200u64, db_array.get(12));

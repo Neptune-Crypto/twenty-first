@@ -1,7 +1,3 @@
-use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use num_traits::{One, Zero};
 use rand::Rng;
 use rand_distr::{Distribution, Standard};
@@ -9,6 +5,12 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
+
+use super::rescue_prime_digest::Digest;
+use crate::shared_math::b_field_element::{BFieldElement, EMOJI_PER_BFE};
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
+use crate::shared_math::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
@@ -104,6 +106,54 @@ impl XFieldElement {
         }
     }
 
+    pub fn sample(digest: &Digest) -> Self {
+        let elements = digest.values();
+        XFieldElement::new([elements[0], elements[1], elements[2]])
+    }
+
+    // TODO: Move this into Polynomial when PrimeField can implement Zero + One.
+    // Division in 𝔽_p[X], not 𝔽_{p^e} ≅ 𝔽[X]/p(x).
+    pub fn xgcd(
+        mut x: Polynomial<BFieldElement>,
+        mut y: Polynomial<BFieldElement>,
+    ) -> (
+        Polynomial<BFieldElement>,
+        Polynomial<BFieldElement>,
+        Polynomial<BFieldElement>,
+    ) {
+        let mut a_factor = Polynomial::new(vec![BFieldElement::one()]);
+        let mut a1 = Polynomial::new(vec![BFieldElement::zero()]);
+        let mut b_factor = Polynomial::new(vec![BFieldElement::zero()]);
+        let mut b1 = Polynomial::new(vec![BFieldElement::one()]);
+
+        while !y.is_zero() {
+            let (quotient, remainder): (Polynomial<BFieldElement>, Polynomial<BFieldElement>) =
+                x.clone().divide(y.clone());
+            let (c, d) = (
+                a_factor - quotient.clone() * a1.clone(),
+                b_factor.clone() - quotient * b1.clone(),
+            );
+
+            x = y;
+            y = remainder;
+            a_factor = a1;
+            a1 = c;
+            b_factor = b1;
+            b1 = d;
+        }
+
+        // The result is valid up to a coefficient, so we normalize the result,
+        // to ensure that x has a leading coefficient of 1.
+        // TODO: What happens if x is zero here, can it be?
+        let lc = x.leading_coefficient().unwrap();
+        let scale = lc.inverse();
+        (
+            x.scalar_mul(scale),
+            a_factor.scalar_mul(scale),
+            b_factor.scalar_mul(scale),
+        )
+    }
+
     // `increment` and `decrement` are mainly used for testing purposes
     pub fn increment(&mut self, index: usize) {
         self.coefficients[index].increment();
@@ -115,7 +165,12 @@ impl XFieldElement {
 
     /// Convert item to pretty-printed string of emojis
     pub fn emojihash(&self) -> String {
-        let [a, b, c] = self.coefficients.map(|bfe| bfe.emojihash_raw());
+        let [a, b, c] = self.coefficients.map(|bfe| {
+            emojihash::hash(&bfe.value().to_be_bytes())
+                .chars()
+                .take(EMOJI_PER_BFE)
+                .collect::<String>()
+        });
         format!("[{a}|{b}|{c}]")
     }
 }
@@ -876,15 +931,15 @@ mod x_field_element_test {
 
     #[test]
     fn x_field_ntt_test() {
-        for i in [2, 4, 8, 16, 32] {
+        for root_order in [2, 4, 8, 16, 32] {
             // Verify that NTT and INTT are each other's inverses,
             // and that NTT corresponds to polynomial evaluation
-            let inputs_u64: Vec<u64> = (0..i).collect();
+            let inputs_u64: Vec<u64> = (0..root_order).collect();
             let inputs: Vec<XFieldElement> = inputs_u64
                 .iter()
                 .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
                 .collect();
-            let root = XFieldElement::primitive_root_of_unity(i).unwrap();
+            let root = XFieldElement::primitive_root_of_unity(root_order).unwrap();
             let log_2_of_n = log_2_floor(inputs.len() as u128) as u32;
             let mut rv = inputs.clone();
             ntt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_of_n);

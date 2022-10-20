@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::traits::FiniteField;
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::util_types::simple_hasher::{self, Hashable, SamplableFrom, ToVec};
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
+
+use super::rescue_prime_digest::Digest;
 
 pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
@@ -810,10 +811,6 @@ impl RescuePrimeRegularState {
 pub struct RescuePrimeRegular {}
 
 impl RescuePrimeRegular {
-    fn new() -> Self {
-        RescuePrimeRegular {}
-    }
-
     #[inline]
     fn batch_square(array: &mut [BFieldElement; STATE_SIZE]) {
         for a in array.iter_mut() {
@@ -1079,47 +1076,16 @@ impl RescuePrimeRegular {
     }
 }
 
-impl ToVec<BFieldElement> for [BFieldElement; 5] {
-    fn to_vec(&self) -> Vec<BFieldElement> {
-        // Why not simply call to_vec?
-        // That function call resolves not to the standard rust
-        // function, but to the one defined here, i.e., recursion.
-        (*self).into_iter().collect::<Vec<BFieldElement>>()
-    }
-}
-
-impl simple_hasher::Hasher for RescuePrimeRegular {
-    type Digest = [BFieldElement; 5];
-    type T = BFieldElement;
-
-    fn new() -> Self {
-        RescuePrimeRegular::new()
+impl AlgebraicHasher for RescuePrimeRegular {
+    fn hash_slice(elements: &[BFieldElement]) -> Digest {
+        Digest::new(RescuePrimeRegular::hash_varlen(elements))
     }
 
-    fn hash_sequence(&self, input: &[BFieldElement]) -> Self::Digest {
-        RescuePrimeRegular::hash_varlen(input)
-    }
-
-    fn hash_pair(&self, left_input: &Self::Digest, right_input: &Self::Digest) -> Self::Digest {
-        let input: [BFieldElement; 10] = [left_input.to_vec(), right_input.to_vec()]
-            .concat()
-            .try_into()
-            .unwrap();
-        RescuePrimeRegular::hash_10(&input)
-    }
-}
-
-impl Hashable<BFieldElement> for [BFieldElement; 5] {
-    fn to_sequence(&self) -> Vec<BFieldElement> {
-        self.to_vec()
-    }
-}
-
-impl SamplableFrom<[BFieldElement; 5]> for XFieldElement {
-    fn sample(digest: &[BFieldElement; 5]) -> Self {
-        XFieldElement {
-            coefficients: digest[0..3].try_into().unwrap(),
-        }
+    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+        let mut input = [BFieldElement::zero(); 10];
+        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
+        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
+        Digest::new(RescuePrimeRegular::hash_10(&input))
     }
 }
 
@@ -1206,14 +1172,13 @@ mod rescue_prime_regular_tests {
                 5525683604796387635,
             ],
         ];
-        let mut targets_bfe: Vec<Vec<BFieldElement>> = targets_first_batch
-            .iter()
-            .map(|l| l.iter().map(|e| BFieldElement::new(*e)).collect_vec())
-            .collect_vec();
-        let mut input = [BFieldElement::zero(); 10];
-        for i in 0..10 {
-            input[input.len() - 1] = BFieldElement::new(i as u64);
-            assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(&input).to_vec());
+
+        for (i, target) in targets_first_batch.into_iter().enumerate() {
+            let expected = target.map(BFieldElement::new);
+            let mut input = [BFieldElement::zero(); 10];
+            input[input.len() - 1] = BFieldElement::from(i as u64);
+            let actual = RescuePrimeRegular::hash_10(&input);
+            assert_eq!(expected, actual);
         }
 
         // hash 10, second batch
@@ -1289,15 +1254,12 @@ mod rescue_prime_regular_tests {
                 17624827189757302581,
             ],
         ];
-        targets_bfe = targets_second_batch
-            .iter()
-            .map(|l| l.iter().map(|e| BFieldElement::new(*e)).collect_vec())
-            .collect_vec();
-        input[input.len() - 1] = BFieldElement::zero();
-        for i in 0..10 {
+        for (i, target) in targets_second_batch.into_iter().enumerate() {
+            let expected = target.map(BFieldElement::new);
+            let mut input = [BFieldElement::zero(); 10];
             input[i] = BFieldElement::one();
-            assert_eq!(targets_bfe[i], RescuePrimeRegular::hash_10(&input).to_vec());
-            input[i] = BFieldElement::zero();
+            let actual = RescuePrimeRegular::hash_10(&input);
+            assert_eq!(expected, actual);
         }
 
         // hash varlen, third batch
@@ -1443,16 +1405,11 @@ mod rescue_prime_regular_tests {
                 7424726151688166928,
             ],
         ];
-        targets_bfe = targets_third_batch
-            .iter()
-            .map(|l| l.iter().map(|e| BFieldElement::new(*e)).collect_vec())
-            .collect_vec();
-        for i in 0..20 {
-            let var_input = (0..i).map(|e| BFieldElement::new(e as u64)).collect_vec();
-            assert_eq!(
-                RescuePrimeRegular::hash_varlen(&var_input).to_vec(),
-                targets_bfe[i]
-            );
+        for (i, target) in targets_third_batch.into_iter().enumerate() {
+            let expected = target.map(BFieldElement::new);
+            let input = (0..i as u64).map(BFieldElement::new).collect_vec();
+            let actual = RescuePrimeRegular::hash_varlen(&input);
+            assert_eq!(expected, actual);
         }
     }
 

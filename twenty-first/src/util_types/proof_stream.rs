@@ -1,6 +1,10 @@
 use serde::{de::DeserializeOwned, Serialize};
 use std::{error::Error, fmt, result::Result};
 
+use crate::shared_math::rescue_prime_digest::Digest;
+
+use super::blake3_wrapper::from_blake3_digest;
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ProofStream {
     read_index: usize,
@@ -134,14 +138,12 @@ impl ProofStream {
         Ok(item)
     }
 
-    pub fn prover_fiat_shamir(&self) -> Vec<u8> {
-        blake3::hash(&self.transcript).as_bytes().to_vec()
+    pub fn prover_fiat_shamir(&self) -> Digest {
+        from_blake3_digest(&blake3::hash(&self.transcript))
     }
 
-    pub fn verifier_fiat_shamir(&self) -> Vec<u8> {
-        blake3::hash(&self.transcript[0..self.read_index])
-            .as_bytes()
-            .to_vec()
+    pub fn verifier_fiat_shamir(&self) -> Digest {
+        from_blake3_digest(&blake3::hash(&self.transcript[0..self.read_index]))
     }
 }
 
@@ -156,13 +158,6 @@ pub mod test_proof_stream {
         assert!(proof_stream.is_empty());
         assert_eq!(0, proof_stream.get_read_index());
     }
-
-    // make random Blake3Hash'es
-    // push to stream
-    // pop
-    //
-    // To test: can we push single BFieldElement?
-    // To can: we push a merkle tree?
 
     #[test]
     fn ps_empty_ts() {
