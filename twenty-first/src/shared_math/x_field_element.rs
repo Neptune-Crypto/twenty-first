@@ -38,6 +38,12 @@ impl From<u32> for XFieldElement {
     }
 }
 
+impl From<BFieldElement> for XFieldElement {
+    fn from(bfe: BFieldElement) -> Self {
+        bfe.lift()
+    }
+}
+
 // TODO: Consider moving this to Polynomial file by untying XFieldElement, and\
 // instead referring to its internals. Not sure though.
 impl From<XFieldElement> for Polynomial<BFieldElement> {
