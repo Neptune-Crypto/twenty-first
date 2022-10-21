@@ -287,23 +287,23 @@ impl ProcessorTable {
     }
 
     /// Returns a multivariate polynomial that evaluates to 0 for the given instruction
-    fn if_instruction<PF: FiniteField>(
+    fn if_instruction<FF: FiniteField>(
         instruction: char,
-        indeterminate: &MPolynomial<PF>,
-    ) -> MPolynomial<PF> {
-        let one = PF::one();
+        indeterminate: &MPolynomial<FF>,
+    ) -> MPolynomial<FF> {
+        let one = FF::one();
         MPolynomial::from_constant(
             one.new_from_usize(instruction as usize),
             2 * Self::FULL_WIDTH,
         ) - indeterminate.to_owned()
     }
 
-    fn ifnot_instruction<PF: FiniteField>(
+    fn ifnot_instruction<FF: FiniteField>(
         instruction: char,
-        indeterminate: &MPolynomial<PF>,
-    ) -> MPolynomial<PF> {
-        let one = PF::one();
-        let mpol_one = MPolynomial::<PF>::from_constant(one, 14);
+        indeterminate: &MPolynomial<FF>,
+    ) -> MPolynomial<FF> {
+        let one = FF::one();
+        let mpol_one = MPolynomial::<FF>::from_constant(one, 14);
         let mut acc = mpol_one;
         for c in INSTRUCTIONS.iter() {
             if *c != instruction {

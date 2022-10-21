@@ -44,8 +44,8 @@ use super::{
 ///
 /// This transform is performed in-place.
 #[allow(clippy::many_single_char_names)]
-pub fn ntt<PFElem: FiniteField + MulAssign<BFieldElement>>(
-    x: &mut [PFElem],
+pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
+    x: &mut [FF],
     omega: BFieldElement,
     log_2_of_n: u32,
 ) {
@@ -107,14 +107,14 @@ pub fn ntt<PFElem: FiniteField + MulAssign<BFieldElement>>(
 /// </pre>
 ///
 /// This transform is performed in-place.
-pub fn intt<PFElem: FiniteField + MulAssign<BFieldElement>>(
-    x: &mut [PFElem],
+pub fn intt<FF: FiniteField + MulAssign<BFieldElement>>(
+    x: &mut [FF],
     omega: BFieldElement,
     log_2_of_n: u32,
 ) {
     let n: BFieldElement = omega.new_from_usize(x.len());
     let n_inv: BFieldElement = BFieldElement::one() / n;
-    ntt::<PFElem>(x, omega.inverse(), log_2_of_n);
+    ntt::<FF>(x, omega.inverse(), log_2_of_n);
     for elem in x.iter_mut() {
         *elem *= n_inv
     }

@@ -24,7 +24,7 @@ fn degree_raw<T: Add + Div + Mul + Sub + Display + Zero>(coefficients: &[T]) -> 
     deg // -1 for the zero polynomial
 }
 
-fn pretty_print_coefficients_generic<PFElem: FiniteField>(coefficients: &[PFElem]) -> String {
+fn pretty_print_coefficients_generic<FF: FiniteField>(coefficients: &[FF]) -> String {
     let degree = degree_raw(coefficients);
     if degree == -1 {
         return String::from("0");
@@ -48,7 +48,7 @@ fn pretty_print_coefficients_generic<PFElem: FiniteField>(coefficients: &[PFElem
                 coefficients[pow].to_string()
             },
             if pow == 0 && coefficients[pow].is_one() {
-                let one: PFElem = PFElem::one();
+                let one: FF = FF::one();
                 one.to_string()
             } else if pow == 0 {
                 String::from("")
@@ -65,7 +65,7 @@ fn pretty_print_coefficients_generic<PFElem: FiniteField>(coefficients: &[PFElem
     outputs.join("")
 }
 
-impl<PFElem: FiniteField> Zero for Polynomial<PFElem> {
+impl<FF: FiniteField> Zero for Polynomial<FF> {
     fn zero() -> Self {
         Self {
             coefficients: vec![],
@@ -77,10 +77,10 @@ impl<PFElem: FiniteField> Zero for Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> One for Polynomial<PFElem> {
+impl<FF: FiniteField> One for Polynomial<FF> {
     fn one() -> Self {
         Self {
-            coefficients: vec![PFElem::one()],
+            coefficients: vec![FF::one()],
         }
     }
 
@@ -90,11 +90,11 @@ impl<PFElem: FiniteField> One for Polynomial<PFElem> {
 }
 
 #[derive(Clone)]
-pub struct Polynomial<PFElem: FiniteField> {
-    pub coefficients: Vec<PFElem>,
+pub struct Polynomial<FF: FiniteField> {
+    pub coefficients: Vec<FF>,
 }
 
-impl<PFElem: FiniteField> Debug for Polynomial<PFElem> {
+impl<FF: FiniteField> Debug for Polynomial<FF> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Polynomial")
             .field("coefficients", &self.coefficients)
@@ -102,23 +102,23 @@ impl<PFElem: FiniteField> Debug for Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Hash for Polynomial<PFElem> {
+impl<FF: FiniteField> Hash for Polynomial<FF> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.coefficients.hash(state);
     }
 }
 
-impl<PFElem: FiniteField> Display for Polynomial<PFElem> {
+impl<FF: FiniteField> Display for Polynomial<FF> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
             "{}",
-            pretty_print_coefficients_generic::<PFElem>(&self.coefficients)
+            pretty_print_coefficients_generic::<FF>(&self.coefficients)
         )
     }
 }
 
-impl<PFElem: FiniteField> PartialEq for Polynomial<PFElem> {
+impl<FF: FiniteField> PartialEq for Polynomial<FF> {
     fn eq(&self, other: &Self) -> bool {
         if self.degree() != other.degree() {
             return false;
@@ -131,18 +131,18 @@ impl<PFElem: FiniteField> PartialEq for Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Eq for Polynomial<PFElem> {}
+impl<FF: FiniteField> Eq for Polynomial<FF> {}
 
-impl<PFElem> Polynomial<PFElem>
+impl<FF> Polynomial<FF>
 where
-    PFElem: FiniteField + MulAssign<BFieldElement>,
+    FF: FiniteField + MulAssign<BFieldElement>,
 {
     // Return the polynomial which corresponds to the transformation `x -> alpha * x`
     // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
     // then corresponds to evaluating P(alpha * x).
     #[must_use]
     pub fn scale(&self, &alpha: &BFieldElement) -> Self {
-        let mut acc = PFElem::one();
+        let mut acc = FF::one();
         let mut return_coefficients = self.coefficients.clone();
         for elem in return_coefficients.iter_mut() {
             *elem *= acc;
@@ -176,15 +176,15 @@ where
         };
 
         let mut coefficients = self.coefficients.to_vec();
-        coefficients.resize(order as usize, PFElem::zero());
+        coefficients.resize(order as usize, FF::zero());
         let log_2_of_n = log_2_floor(coefficients.len() as u128) as u32;
-        ntt::<PFElem>(&mut coefficients, root, log_2_of_n);
+        ntt::<FF>(&mut coefficients, root, log_2_of_n);
 
         for element in coefficients.iter_mut() {
             *element = element.to_owned() * element.to_owned();
         }
 
-        intt::<PFElem>(&mut coefficients, root, log_2_of_n);
+        intt::<FF>(&mut coefficients, root, log_2_of_n);
         coefficients.truncate(result_degree as usize + 1);
 
         Polynomial { coefficients }
@@ -205,8 +205,8 @@ where
             return self.fast_square();
         }
 
-        let zero = PFElem::zero();
-        let one = PFElem::one();
+        let zero = FF::zero();
+        let one = FF::one();
         let two = one + one;
         let mut squared_coefficients = vec![zero; squared_coefficient_len];
 
@@ -228,7 +228,7 @@ where
 
     #[must_use]
     pub fn fast_mod_pow(&self, pow: BigInt) -> Self {
-        let one = PFElem::one();
+        let one = FF::one();
 
         // Special case to handle 0^0 = 1
         if pow.is_zero() {
@@ -292,28 +292,28 @@ where
             order /= 2;
         }
 
-        let mut lhs_coefficients: Vec<PFElem> = lhs.coefficients[0..lhs_degree + 1].to_vec();
-        let mut rhs_coefficients: Vec<PFElem> = rhs.coefficients[0..rhs_degree + 1].to_vec();
+        let mut lhs_coefficients: Vec<FF> = lhs.coefficients[0..lhs_degree + 1].to_vec();
+        let mut rhs_coefficients: Vec<FF> = rhs.coefficients[0..rhs_degree + 1].to_vec();
         while lhs_coefficients.len() < order {
-            lhs_coefficients.push(PFElem::zero());
+            lhs_coefficients.push(FF::zero());
         }
         while rhs_coefficients.len() < order {
-            rhs_coefficients.push(PFElem::zero());
+            rhs_coefficients.push(FF::zero());
         }
 
         let lhs_log_2_of_n = log_2_floor(lhs_coefficients.len() as u128) as u32;
         let rhs_log_2_of_n = log_2_floor(rhs_coefficients.len() as u128) as u32;
-        ntt::<PFElem>(&mut lhs_coefficients, root, lhs_log_2_of_n);
-        ntt::<PFElem>(&mut rhs_coefficients, root, rhs_log_2_of_n);
+        ntt::<FF>(&mut lhs_coefficients, root, lhs_log_2_of_n);
+        ntt::<FF>(&mut rhs_coefficients, root, rhs_log_2_of_n);
 
-        let mut hadamard_product: Vec<PFElem> = rhs_coefficients
+        let mut hadamard_product: Vec<FF> = rhs_coefficients
             .into_iter()
             .zip(lhs_coefficients.into_iter())
             .map(|(r, l)| r * l)
             .collect();
 
         let log_2_of_n = log_2_floor(hadamard_product.len() as u128) as u32;
-        intt::<PFElem>(&mut hadamard_product, root, log_2_of_n);
+        intt::<FF>(&mut hadamard_product, root, log_2_of_n);
         hadamard_product.truncate(degree + 1);
 
         Polynomial {
@@ -322,11 +322,7 @@ where
     }
 
     // domain: polynomial roots
-    pub fn fast_zerofier(
-        domain: &[PFElem],
-        primitive_root: &BFieldElement,
-        root_order: usize,
-    ) -> Self {
+    pub fn fast_zerofier(domain: &[FF], primitive_root: &BFieldElement, root_order: usize) -> Self {
         debug_assert_eq!(
             primitive_root.mod_pow_u32(root_order as u32),
             BFieldElement::one(),
@@ -343,7 +339,7 @@ where
 
         if domain.len() == 1 {
             return Self {
-                coefficients: vec![-domain[0], PFElem::one()],
+                coefficients: vec![-domain[0], FF::one()],
             };
         }
 
@@ -369,10 +365,10 @@ where
 
     pub fn fast_evaluate(
         &self,
-        domain: &[PFElem],
+        domain: &[FF],
         primitive_root: &BFieldElement,
         root_order: usize,
-    ) -> Vec<PFElem> {
+    ) -> Vec<FF> {
         if domain.is_empty() {
             return vec![];
         }
@@ -402,8 +398,8 @@ where
     }
 
     pub fn fast_interpolate(
-        domain: &[PFElem],
-        values: &[PFElem],
+        domain: &[FF],
+        values: &[FF],
         primitive_root: &BFieldElement,
         root_order: usize,
     ) -> Self {
@@ -438,17 +434,17 @@ where
         let left_zerofier = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
         let right_zerofier = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
 
-        let left_offset: Vec<PFElem> =
+        let left_offset: Vec<FF> =
             Self::fast_evaluate(&right_zerofier, &domain[..half], primitive_root, root_order);
-        let right_offset: Vec<PFElem> =
+        let right_offset: Vec<FF> =
             Self::fast_evaluate(&left_zerofier, &domain[half..], primitive_root, root_order);
 
-        let left_targets: Vec<PFElem> = values[..half]
+        let left_targets: Vec<FF> = values[..half]
             .iter()
             .zip(left_offset)
             .map(|(n, d)| n.to_owned() / d)
             .collect();
-        let right_targets: Vec<PFElem> = values[half..]
+        let right_targets: Vec<FF> = values[half..]
             .iter()
             .zip(right_offset)
             .map(|(n, d)| n.to_owned() / d)
@@ -480,11 +476,11 @@ where
         offset: &BFieldElement,
         generator: BFieldElement,
         order: usize,
-    ) -> Vec<PFElem> {
+    ) -> Vec<FF> {
         let mut coefficients = self.scale(offset).coefficients;
-        coefficients.append(&mut vec![PFElem::zero(); order - coefficients.len()]);
+        coefficients.append(&mut vec![FF::zero(); order - coefficients.len()]);
         let log_2_of_n = log_2_floor(coefficients.len() as u128) as u32;
-        ntt::<PFElem>(&mut coefficients, generator, log_2_of_n);
+        ntt::<FF>(&mut coefficients, generator, log_2_of_n);
         coefficients
     }
 
@@ -492,7 +488,7 @@ where
     pub fn fast_coset_interpolate(
         offset: &BFieldElement,
         generator: BFieldElement,
-        values: &[PFElem],
+        values: &[FF],
     ) -> Self {
         let length = values.len();
         let mut mut_values = values.to_vec();
@@ -512,12 +508,12 @@ where
     /// domains. The issue of zero in the numerator and divisor arises when we divide a transition
     /// polynomial with a zerofier.
     pub fn fast_coset_divide(
-        lhs: &Polynomial<PFElem>,
-        rhs: &Polynomial<PFElem>,
+        lhs: &Polynomial<FF>,
+        rhs: &Polynomial<FF>,
         offset: BFieldElement,
         primitive_root: BFieldElement,
         root_order: usize,
-    ) -> Polynomial<PFElem> {
+    ) -> Polynomial<FF> {
         assert!(
             primitive_root.mod_pow_u32(root_order as u32).is_one(),
             "primitive root raised to given order must yield 1"
@@ -539,7 +535,7 @@ where
             "in polynomial division, right hand side degree must be at most that of left hand side"
         );
 
-        let zero = PFElem::zero();
+        let zero = FF::zero();
         let mut root: BFieldElement = primitive_root.to_owned();
         let mut order = root_order;
         let degree: usize = lhs.degree() as usize;
@@ -553,27 +549,27 @@ where
             order /= 2;
         }
 
-        let mut scaled_lhs_coefficients: Vec<PFElem> = lhs.scale(&offset).coefficients;
+        let mut scaled_lhs_coefficients: Vec<FF> = lhs.scale(&offset).coefficients;
         scaled_lhs_coefficients.append(&mut vec![zero; order - scaled_lhs_coefficients.len()]);
 
-        let mut scaled_rhs_coefficients: Vec<PFElem> = rhs.scale(&offset).coefficients;
+        let mut scaled_rhs_coefficients: Vec<FF> = rhs.scale(&offset).coefficients;
         scaled_rhs_coefficients.append(&mut vec![zero; order - scaled_rhs_coefficients.len()]);
 
         let lhs_log_2_of_n = log_2_floor(scaled_lhs_coefficients.len() as u128) as u32;
         let rhs_log_2_of_n = log_2_floor(scaled_rhs_coefficients.len() as u128) as u32;
 
-        ntt::<PFElem>(&mut scaled_lhs_coefficients, root, lhs_log_2_of_n);
-        ntt::<PFElem>(&mut scaled_rhs_coefficients, root, rhs_log_2_of_n);
+        ntt::<FF>(&mut scaled_lhs_coefficients, root, lhs_log_2_of_n);
+        ntt::<FF>(&mut scaled_rhs_coefficients, root, rhs_log_2_of_n);
 
-        let rhs_inverses = PFElem::batch_inversion(scaled_rhs_coefficients);
-        let mut quotient_codeword: Vec<PFElem> = scaled_lhs_coefficients
+        let rhs_inverses = FF::batch_inversion(scaled_rhs_coefficients);
+        let mut quotient_codeword: Vec<FF> = scaled_lhs_coefficients
             .iter()
             .zip(rhs_inverses)
             .map(|(l, r)| l.to_owned() * r)
             .collect();
 
         let log_2_of_n = log_2_floor(quotient_codeword.len() as u128) as u32;
-        intt::<PFElem>(&mut quotient_codeword, root, log_2_of_n);
+        intt::<FF>(&mut quotient_codeword, root, log_2_of_n);
 
         let scaled_quotient = Polynomial {
             coefficients: quotient_codeword,
@@ -583,12 +579,12 @@ where
     }
 }
 
-impl<PFElem: FiniteField> Polynomial<PFElem> {
-    pub fn new(coefficients: Vec<PFElem>) -> Self {
+impl<FF: FiniteField> Polynomial<FF> {
+    pub fn new(coefficients: Vec<FF>) -> Self {
         Self { coefficients }
     }
 
-    pub fn new_const(element: PFElem) -> Self {
+    pub fn new_const(element: FF) -> Self {
         Self {
             coefficients: vec![element],
         }
@@ -599,7 +595,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         }
     }
 
-    pub fn from_constant(constant: PFElem) -> Self {
+    pub fn from_constant(constant: FF) -> Self {
         Self {
             coefficients: vec![constant],
         }
@@ -609,8 +605,8 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
     }
 
-    pub fn evaluate(&self, &x: &PFElem) -> PFElem {
-        let mut acc = PFElem::zero();
+    pub fn evaluate(&self, &x: &FF) -> FF {
+        let mut acc = FF::zero();
         for &c in self.coefficients.iter().rev() {
             acc = c + x * acc;
         }
@@ -618,14 +614,14 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         acc
     }
 
-    pub fn leading_coefficient(&self) -> Option<PFElem> {
+    pub fn leading_coefficient(&self) -> Option<FF> {
         match self.degree() {
             -1 => None,
             n => Some(self.coefficients[n as usize]),
         }
     }
 
-    pub fn lagrange_interpolate(domain: &[PFElem], values: &[PFElem]) -> Self {
+    pub fn lagrange_interpolate(domain: &[FF], values: &[FF]) -> Self {
         assert_eq!(
             domain.len(),
             values.len(),
@@ -636,8 +632,8 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
             "Trying to interpolate through 0 points."
         );
 
-        let zero = PFElem::zero();
-        let one = PFElem::one();
+        let zero = FF::zero();
+        let one = FF::one();
 
         // precompute the coefficient vector of the zerofier,
         // which is the monic lowest-degree polynomial that evaluates
@@ -689,11 +685,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         }
     }
 
-    pub fn are_colinear_3(
-        p0: (PFElem, PFElem),
-        p1: (PFElem, PFElem),
-        p2: (PFElem, PFElem),
-    ) -> bool {
+    pub fn are_colinear_3(p0: (FF, FF), p1: (FF, FF), p2: (FF, FF)) -> bool {
         if p0.0 == p1.0 || p1.0 == p2.0 || p2.0 == p0.0 {
             return false;
         }
@@ -704,7 +696,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         dx * (p2.1 - p0.1) == dy * (p2.0 - p0.0)
     }
 
-    pub fn get_colinear_y(p0: (PFElem, PFElem), p1: (PFElem, PFElem), p2_x: PFElem) -> PFElem {
+    pub fn get_colinear_y(p0: (FF, FF), p1: (FF, FF), p2_x: FF) -> FF {
         debug_assert_ne!(p0.0, p1.0, "Line must not be parallel to y-axis");
         let dy = p0.1 - p1.1;
         let dx = p0.0 - p1.0;
@@ -714,14 +706,14 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         p2_y_times_dx / dx
     }
 
-    pub fn zerofier(domain: &[PFElem]) -> Self {
+    pub fn zerofier(domain: &[FF]) -> Self {
         if domain.is_empty() {
             return Self {
-                coefficients: vec![PFElem::one()],
+                coefficients: vec![FF::one()],
             };
         }
-        let mut zerofier_array = vec![PFElem::zero(); domain.len() + 1];
-        zerofier_array[0] = PFElem::one();
+        let mut zerofier_array = vec![FF::zero(); domain.len() + 1];
+        zerofier_array[0] = FF::one();
         let mut num_coeffs = 1;
         for &d in domain.iter() {
             for k in (1..num_coeffs + 1).rev() {
@@ -744,8 +736,8 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         }
 
         let squared_coefficient_len = self.degree() as usize * 2 + 1;
-        let zero = PFElem::zero();
-        let one = PFElem::one();
+        let zero = FF::zero();
+        let one = FF::one();
         let two = one + one;
         let mut squared_coefficients = vec![zero; squared_coefficient_len];
 
@@ -766,8 +758,8 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Polynomial<PFElem> {
-    pub fn are_colinear(points: &[(PFElem, PFElem)]) -> bool {
+impl<FF: FiniteField> Polynomial<FF> {
+    pub fn are_colinear(points: &[(FF, FF)]) -> bool {
         if points.len() < 3 {
             println!("Too few points received. Got: {} points", points.len());
             return false;
@@ -779,8 +771,8 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         }
 
         // Find 1st degree polynomial from first two points
-        let one: PFElem = PFElem::one();
-        let x_diff: PFElem = points[0].0 - points[1].0;
+        let one: FF = FF::one();
+        let x_diff: FF = points[0].0 - points[1].0;
         let x_diff_inv = one / x_diff;
         let a = (points[0].1 - points[1].1) * x_diff_inv;
         let b = points[0].1 - a * points[0].0;
@@ -810,7 +802,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
     // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
     // purposes. This also means that it is not pivotal that this function has an optimal
     // runtime.
-    pub fn lagrange_interpolate_zipped(points: &[(PFElem, PFElem)]) -> Self {
+    pub fn lagrange_interpolate_zipped(points: &[(FF, FF)]) -> Self {
         if points.is_empty() {
             panic!("Cannot interpolate through zero points.");
         }
@@ -818,13 +810,13 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
             panic!("Repeated x values received. Got: {:?}", points);
         }
 
-        let xs: Vec<PFElem> = points.iter().map(|x| x.0.to_owned()).collect();
-        let ys: Vec<PFElem> = points.iter().map(|x| x.1.to_owned()).collect();
+        let xs: Vec<FF> = points.iter().map(|x| x.0.to_owned()).collect();
+        let ys: Vec<FF> = points.iter().map(|x| x.1.to_owned()).collect();
         Self::lagrange_interpolate(&xs, &ys)
     }
 }
 
-impl<PFElem: FiniteField> Polynomial<PFElem> {
+impl<FF: FiniteField> Polynomial<FF> {
     pub fn multiply(self, other: Self) -> Self {
         let degree_lhs = self.degree();
         let degree_rhs = other.degree();
@@ -835,15 +827,15 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         }
 
         // allocate right number of coefficients, initialized to zero
-        let mut result_coeff: Vec<PFElem> =
+        let mut result_coeff: Vec<FF> =
             //vec![U::zero_from_field(field: U); degree_lhs as usize + degree_rhs as usize + 1];
-            vec![PFElem::zero(); degree_lhs as usize + degree_rhs as usize + 1];
+            vec![FF::zero(); degree_lhs as usize + degree_rhs as usize + 1];
 
         // TODO: Review this.
         // for all pairs of coefficients, add product to result vector in appropriate coordinate
         for i in 0..=degree_lhs as usize {
             for j in 0..=degree_rhs as usize {
-                let mul: PFElem = self.coefficients[i] * other.coefficients[j];
+                let mul: FF = self.coefficients[i] * other.coefficients[j];
                 result_coeff[i + j] += mul;
             }
         }
@@ -857,7 +849,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
     // Multiply a polynomial with itself `pow` times
     #[must_use]
     pub fn mod_pow(&self, pow: BigInt) -> Self {
-        let one = PFElem::one();
+        let one = FF::one();
 
         // Special case to handle 0^0 = 1
         if pow.is_zero() {
@@ -882,30 +874,30 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         acc
     }
 
-    pub fn shift_coefficients_mut(&mut self, power: usize, zero: PFElem) {
+    pub fn shift_coefficients_mut(&mut self, power: usize, zero: FF) {
         self.coefficients.splice(0..0, vec![zero; power]);
     }
 
     // Multiply a polynomial with x^power
     #[must_use]
     pub fn shift_coefficients(&self, power: usize) -> Self {
-        let zero = PFElem::zero();
+        let zero = FF::zero();
 
-        let mut coefficients: Vec<PFElem> = self.coefficients.clone();
+        let mut coefficients: Vec<FF> = self.coefficients.clone();
         coefficients.splice(0..0, vec![zero; power]);
         Polynomial { coefficients }
     }
 
     // TODO: Review
-    pub fn scalar_mul_mut(&mut self, scalar: PFElem) {
+    pub fn scalar_mul_mut(&mut self, scalar: FF) {
         for coefficient in self.coefficients.iter_mut() {
             *coefficient *= scalar;
         }
     }
 
     #[must_use]
-    pub fn scalar_mul(&self, scalar: PFElem) -> Self {
-        let mut coefficients: Vec<PFElem> = vec![];
+    pub fn scalar_mul(&self, scalar: FF) -> Self {
+        let mut coefficients: Vec<FF> = vec![];
         for i in 0..self.coefficients.len() {
             coefficients.push(self.coefficients[i] * scalar);
         }
@@ -932,7 +924,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
 
         // quotient is built from back to front so must be reversed
         // Preallocate space for quotient coefficients
-        let mut quotient: Vec<PFElem> = if degree_lhs - degree_rhs >= 0 {
+        let mut quotient: Vec<FF> = if degree_lhs - degree_rhs >= 0 {
             Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize)
         } else {
             vec![]
@@ -941,15 +933,15 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
         remainder.normalize();
 
         // a divisor coefficient is guaranteed to exist since the divisor is non-zero
-        let dlc: PFElem = divisor.leading_coefficient().unwrap();
-        let inv = PFElem::one() / dlc;
+        let dlc: FF = divisor.leading_coefficient().unwrap();
+        let inv = FF::one() / dlc;
 
         let mut i = 0;
         while i + degree_rhs <= degree_lhs {
             // calculate next quotient coefficient, and set leading coefficient
             // of remainder remainder is 0 by removing it
-            let rlc: PFElem = remainder.coefficients.last().unwrap().to_owned();
-            let q: PFElem = rlc * inv;
+            let rlc: FF = remainder.coefficients.last().unwrap().to_owned();
+            let q: FF = rlc * inv;
             quotient.push(q);
             remainder.coefficients.pop();
             if q.is_zero() {
@@ -977,7 +969,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Div for Polynomial<PFElem> {
+impl<FF: FiniteField> Div for Polynomial<FF> {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
@@ -986,7 +978,7 @@ impl<PFElem: FiniteField> Div for Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Rem for Polynomial<PFElem> {
+impl<FF: FiniteField> Rem for Polynomial<FF> {
     type Output = Self;
 
     fn rem(self, other: Self) -> Self {
@@ -995,7 +987,7 @@ impl<PFElem: FiniteField> Rem for Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Add for Polynomial<PFElem> {
+impl<FF: FiniteField> Add for Polynomial<FF> {
     type Output = Self;
 
     // fn add(self, other: Self) -> Self {
@@ -1014,11 +1006,11 @@ impl<PFElem: FiniteField> Add for Polynomial<PFElem> {
     // }
 
     fn add(self, other: Self) -> Self {
-        let summed: Vec<PFElem> = self
+        let summed: Vec<FF> = self
             .coefficients
             .into_iter()
             .zip_longest(other.coefficients.into_iter())
-            .map(|a: itertools::EitherOrBoth<PFElem, PFElem>| match a {
+            .map(|a: itertools::EitherOrBoth<FF, FF>| match a {
                 Both(l, r) => l.to_owned() + r.to_owned(),
                 Left(l) => l.to_owned(),
                 Right(r) => r.to_owned(),
@@ -1031,7 +1023,7 @@ impl<PFElem: FiniteField> Add for Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> AddAssign for Polynomial<PFElem> {
+impl<FF: FiniteField> AddAssign for Polynomial<FF> {
     fn add_assign(&mut self, rhs: Self) {
         let rhs_len = rhs.coefficients.len();
         let self_len = self.coefficients.len();
@@ -1046,18 +1038,18 @@ impl<PFElem: FiniteField> AddAssign for Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Sub for Polynomial<PFElem> {
+impl<FF: FiniteField> Sub for Polynomial<FF> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
-        let summed: Vec<PFElem> = self
+        let summed: Vec<FF> = self
             .coefficients
             .into_iter()
             .zip_longest(other.coefficients.into_iter())
-            .map(|a: itertools::EitherOrBoth<PFElem, PFElem>| match a {
+            .map(|a: itertools::EitherOrBoth<FF, FF>| match a {
                 Both(l, r) => l - r,
                 Left(l) => l,
-                Right(r) => PFElem::zero() - r,
+                Right(r) => FF::zero() - r,
             })
             .collect();
 
@@ -1067,14 +1059,14 @@ impl<PFElem: FiniteField> Sub for Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Polynomial<PFElem> {
+impl<FF: FiniteField> Polynomial<FF> {
     /// Extended Euclidean algorithm with polynomials. Computes the greatest
     /// common divisor `gcd` as a monic polynomial, as well as the corresponding
     /// Bézout coefficients `a` and `b`, satisfying `gcd = a·x + b·y`
     pub fn xgcd(
-        x: Polynomial<PFElem>,
-        y: Polynomial<PFElem>,
-    ) -> (Polynomial<PFElem>, Polynomial<PFElem>, Polynomial<PFElem>) {
+        x: Polynomial<FF>,
+        y: Polynomial<FF>,
+    ) -> (Polynomial<FF>, Polynomial<FF>, Polynomial<FF>) {
         let (x, a_factor, b_factor) = other::xgcd(x, y);
 
         // The result is valid up to a coefficient, so we normalize the result,
@@ -1091,7 +1083,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Polynomial<PFElem> {
+impl<FF: FiniteField> Polynomial<FF> {
     pub fn degree(&self) -> isize {
         degree_raw(&self.coefficients)
     }
@@ -1102,7 +1094,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
             .coefficients
             .iter()
             .enumerate()
-            .map(|(i, &coefficient)| PFElem::new_from_usize(&coefficient, i) * coefficient)
+            .map(|(i, &coefficient)| FF::new_from_usize(&coefficient, i) * coefficient)
             .skip(1)
             .collect_vec();
 
@@ -1110,7 +1102,7 @@ impl<PFElem: FiniteField> Polynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Mul for Polynomial<PFElem> {
+impl<FF: FiniteField> Mul for Polynomial<FF> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {

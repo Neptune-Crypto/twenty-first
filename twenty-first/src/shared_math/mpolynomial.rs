@@ -36,13 +36,13 @@ pub struct PolynomialEvaluationDataNode {
 }
 
 impl<T: Sized> Node<T> {
-    fn traverse_tree<PFElem: FiniteField>(
+    fn traverse_tree<FF: FiniteField>(
         nodes: Vec<Rc<RefCell<Node<PolynomialEvaluationDataNode>>>>,
-        point: &[Polynomial<PFElem>],
-        one: PFElem,
-        polynomium_products: &mut HashMap<Vec<u8>, Polynomial<PFElem>>,
+        point: &[Polynomial<FF>],
+        one: FF,
+        polynomium_products: &mut HashMap<Vec<u8>, Polynomial<FF>>,
     ) {
-        let zero = PFElem::zero();
+        let zero = FF::zero();
 
         // We might be able to avoid the `clone()` of exponents_list elements here, if we are smart
         polynomium_products.insert(
@@ -89,7 +89,7 @@ impl<T: Sized> Node<T> {
                     //     // println!("Missed {:?}", child_diff_exponents);
                     //     count += 1;
                     // }
-                    let mut intermediate_mul: Polynomial<PFElem> = Polynomial::from_constant(one);
+                    let mut intermediate_mul: Polynomial<FF> = Polynomial::from_constant(one);
                     let mut intermediate_exponents: Vec<u8> = vec![0; point.len()];
                     let mut remaining_exponents: Vec<u8> = child_diff_exponents.clone();
                     let mut mod_pow_exponents: Vec<u8> = vec![0; point.len()];
@@ -117,7 +117,7 @@ impl<T: Sized> Node<T> {
                             polynomium_products[&mod_pow_exponents].clone()
                         } else {
                             // println!("Calculating mod_pow");
-                            let mut mod_pow_intermediate_lookup: Option<Polynomial<PFElem>> = None;
+                            let mut mod_pow_intermediate_lookup: Option<Polynomial<FF>> = None;
                             let mut mod_pow_reduced = mod_pow_exponents.clone();
                             while mod_pow_reduced[i] > 2 {
                                 mod_pow_reduced[i] -= 1;
@@ -223,7 +223,7 @@ impl fmt::Display for PrecalculationError {
     }
 }
 
-impl<PFElem: FiniteField> Display for MPolynomial<PFElem> {
+impl<FF: FiniteField> Display for MPolynomial<FF> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let output = if self.is_zero() {
             "0".to_string()
@@ -245,7 +245,7 @@ impl<PFElem: FiniteField> Display for MPolynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> PartialEq for MPolynomial<PFElem> {
+impl<FF: FiniteField> PartialEq for MPolynomial<FF> {
     fn eq(&self, other: &Self) -> bool {
         let (shortest, var_count, longest) = if self.variable_count > other.variable_count {
             (
@@ -261,7 +261,7 @@ impl<PFElem: FiniteField> PartialEq for MPolynomial<PFElem> {
             )
         };
 
-        let mut padded: HashMap<Vec<u8>, PFElem> = HashMap::new();
+        let mut padded: HashMap<Vec<u8>, FF> = HashMap::new();
         for (k, v) in shortest.iter() {
             let mut pad = k.clone();
             pad.resize_with(var_count, || 0);
@@ -285,10 +285,10 @@ impl<PFElem: FiniteField> PartialEq for MPolynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Eq for MPolynomial<PFElem> {}
+impl<FF: FiniteField> Eq for MPolynomial<FF> {}
 
-impl<PFElem: FiniteField> MPolynomial<PFElem> {
-    fn term_print(exponents: &[u8], coefficient: &PFElem) -> String {
+impl<FF: FiniteField> MPolynomial<FF> {
+    fn term_print(exponents: &[u8], coefficient: &FF) -> String {
         if coefficient.is_zero() {
             return "".to_string();
         }
@@ -365,9 +365,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     ///     P(x,y) == P(x,w)
     /// but
     ///     P(x,y) != P(x,y,z).
-    pub fn from_constant(element: PFElem, variable_count: usize) -> Self {
+    pub fn from_constant(element: FF, variable_count: usize) -> Self {
         // Potential guarantee: assert!(!element.zero);
-        let mut cs: MCoefficients<PFElem> = HashMap::new();
+        let mut cs: MCoefficients<FF> = HashMap::new();
         cs.insert(vec![0; variable_count], element);
         Self {
             variable_count,
@@ -391,12 +391,12 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     /// - `p[3] =` $p(a,b,c,d,e) = d$
     /// - `p[4] =` $p(a,b,c,d,e) = e$
     pub fn variables(variable_count: usize) -> Vec<Self> {
-        let one = PFElem::one();
+        let one = FF::one();
         let mut res: Vec<Self> = vec![];
         for i in 0..variable_count {
             let mut exponent = vec![0u8; variable_count];
             exponent[i] = 1;
-            let mut coefficients: MCoefficients<PFElem> = HashMap::new();
+            let mut coefficients: MCoefficients<FF> = HashMap::new();
             coefficients.insert(exponent, one);
             res.push(Self {
                 variable_count,
@@ -409,8 +409,8 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
 
     pub fn precalculate_symbolic_exponents(
         mpols: &[Self],
-        point: &[Polynomial<PFElem>],
-        exponents_memoization: &mut HashMap<Vec<u8>, Polynomial<PFElem>>,
+        point: &[Polynomial<FF>],
+        exponents_memoization: &mut HashMap<Vec<u8>, Polynomial<FF>>,
     ) -> Result<(), Box<dyn Error>> {
         let mut timer = TimingReporter::start();
         if mpols.is_empty() || point.is_empty() {
@@ -428,7 +428,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         }
 
         timer.elapsed("init stuff");
-        let one: PFElem = PFElem::one(); // guaranteed to exist because of above checks
+        let one: FF = FF::one(); // guaranteed to exist because of above checks
 
         let mut exponents_list: Vec<Vec<u8>> = Self::extract_exponents_list(mpols)?;
         timer.elapsed("calculated exponents_list");
@@ -545,7 +545,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         }
         timer.elapsed("built nodes");
 
-        Node::<PolynomialEvaluationDataNode>::traverse_tree::<PFElem>(
+        Node::<PolynomialEvaluationDataNode>::traverse_tree::<FF>(
             nodes,
             point,
             one,
@@ -559,16 +559,16 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     }
 
     // Simple evaluation, without precalculated results
-    pub fn evaluate(&self, point: &[PFElem]) -> PFElem {
+    pub fn evaluate(&self, point: &[FF]) -> FF {
         assert_eq!(
             self.variable_count,
             point.len(),
             "Dimensionality of multivariate polynomial, {}, and dimensionality of point, {}, must agree in evaluate", self.variable_count, point.len()
         );
 
-        let mut acc = PFElem::zero();
+        let mut acc = FF::zero();
         for (k, v) in self.coefficients.iter() {
-            let mut prod = PFElem::one();
+            let mut prod = FF::one();
             for i in 0..k.len() {
                 // If the exponent is zero, multiplying with this factor is the identity operator.
                 if k[i] == 0 {
@@ -624,11 +624,8 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     // scalar evaluation. For this reason, this function is placed here.
     /// Get a hash map with precalculated values for point[i]^j
     /// Only exponents 2 and above are stored.
-    pub fn precalculate_scalar_mod_pows(
-        limit: u8,
-        point: &[PFElem],
-    ) -> HashMap<(usize, u8), PFElem> {
-        let mut hash_map: HashMap<(usize, u8), PFElem> = HashMap::new();
+    pub fn precalculate_scalar_mod_pows(limit: u8, point: &[FF]) -> HashMap<(usize, u8), FF> {
+        let mut hash_map: HashMap<(usize, u8), FF> = HashMap::new();
 
         // TODO: Would runing this in parallel give a speedup?
         for (i, coordinate) in point.iter().enumerate() {
@@ -646,10 +643,10 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     // Assumes that all point[i]^j that are needed already exist in
     // `precalculated_mod_pows`
     pub fn precalculate_scalar_exponents(
-        point: &[PFElem],
-        precalculated_mod_pows: &HashMap<(usize, u8), PFElem>,
+        point: &[FF],
+        precalculated_mod_pows: &HashMap<(usize, u8), FF>,
         exponents_list: &[Vec<u8>],
-    ) -> Result<HashMap<Vec<u8>, PFElem>, Box<dyn Error>> {
+    ) -> Result<HashMap<Vec<u8>, FF>, Box<dyn Error>> {
         if point.is_empty() {
             return Err(Box::new(PrecalculationError::EmptyInput));
         }
@@ -664,9 +661,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         // Perform parallel computation of all intermediate results
         // which constitute calculations on the form
         // `prod_i^N(point[i]^e_i)
-        let mut intermediate_results_hash_map: HashMap<Vec<u8>, PFElem> = HashMap::new();
-        let one: PFElem = PFElem::one();
-        let intermediate_results: Vec<PFElem> = exponents_list
+        let mut intermediate_results_hash_map: HashMap<Vec<u8>, FF> = HashMap::new();
+        let one: FF = FF::one();
+        let intermediate_results: Vec<FF> = exponents_list
             .par_iter()
             .map(|exponents| {
                 let mut acc = one;
@@ -692,15 +689,15 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
 
     pub fn evaluate_with_precalculation(
         &self,
-        point: &[PFElem],
-        intermediate_results: &HashMap<Vec<u8>, PFElem>,
-    ) -> PFElem {
+        point: &[FF],
+        intermediate_results: &HashMap<Vec<u8>, FF>,
+    ) -> FF {
         assert_eq!(
             self.variable_count,
             point.len(),
             "Dimensionality of multivariate polynomial and point must agree in evaluate"
         );
-        let zero: PFElem = PFElem::zero();
+        let zero: FF = FF::zero();
         let acc = self
             .coefficients
             .par_iter()
@@ -714,9 +711,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     // will panic.
     pub fn evaluate_symbolic_with_memoization_precalculated(
         &self,
-        point: &[Polynomial<PFElem>],
-        exponents_memoization: &mut HashMap<Vec<u8>, Polynomial<PFElem>>,
-    ) -> Polynomial<PFElem> {
+        point: &[Polynomial<FF>],
+        exponents_memoization: &mut HashMap<Vec<u8>, Polynomial<FF>>,
+    ) -> Polynomial<FF> {
         assert_eq!(
             self.variable_count,
             point.len(),
@@ -736,11 +733,11 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     #[allow(clippy::type_complexity)]
     pub fn evaluate_symbolic_with_memoization(
         &self,
-        point: &[Polynomial<PFElem>],
-        mod_pow_memoization: &mut HashMap<(usize, u8), Polynomial<PFElem>>,
-        mul_memoization: &mut HashMap<(Polynomial<PFElem>, (usize, u8)), Polynomial<PFElem>>,
-        exponents_memoization: &mut HashMap<Vec<u8>, Polynomial<PFElem>>,
-    ) -> Polynomial<PFElem> {
+        point: &[Polynomial<FF>],
+        mod_pow_memoization: &mut HashMap<(usize, u8), Polynomial<FF>>,
+        mul_memoization: &mut HashMap<(Polynomial<FF>, (usize, u8)), Polynomial<FF>>,
+        exponents_memoization: &mut HashMap<Vec<u8>, Polynomial<FF>>,
+    ) -> Polynomial<FF> {
         // Notice that the `exponents_memoization` only gives a speedup if this function is evaluated multiple
         // times for the same `point` input. This condition holds when evaluating the AIR constraints
         // symbolically in a generic STARK prover.
@@ -750,7 +747,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
             "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
         );
         let points_are_x: Vec<bool> = point.iter().map(|p| p.is_x()).collect();
-        let mut acc: Polynomial<PFElem> = Polynomial::zero();
+        let mut acc: Polynomial<FF> = Polynomial::zero();
         // Sort k after complexity
         // let mut ks: Vec<(Vec<u64>, U)> = self.coefficients.clone().into_iter().collect();
         // ks.sort_by_key(|k: (Vec<u64>, U)| k.0.iter().sum());
@@ -764,12 +761,12 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
 
         for (k, v) in self.coefficients.iter() {
             // for (k, v) in ks.iter() {
-            let mut prod: Polynomial<PFElem>;
+            let mut prod: Polynomial<FF>;
             if exponents_memoization.contains_key(k) {
                 prod = exponents_memoization[k].clone();
             } else {
                 println!("Missed!");
-                prod = Polynomial::from_constant(PFElem::one());
+                prod = Polynomial::from_constant(FF::one());
                 let mut k_sorted: Vec<(usize, u8)> = k.clone().into_iter().enumerate().collect();
                 k_sorted.sort_by_key(|e| e.1);
                 let mut x_pow_mul = 0;
@@ -808,7 +805,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
                         // than what we are looking for. If we have, then we use this multiplication
                         // as a starting point to calculation the next.
 
-                        let mut reduced_mul_result: Option<Polynomial<PFElem>> = None;
+                        let mut reduced_mul_result: Option<Polynomial<FF>> = None;
                         let mut reduced_mul_key = (prod.clone(), (i, ki));
                         for j in 1..ki - 1 {
                             reduced_mul_key.1 .1 = ki - j;
@@ -844,7 +841,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
                     }
                 }
 
-                prod.shift_coefficients_mut(x_pow_mul as usize, PFElem::zero());
+                prod.shift_coefficients_mut(x_pow_mul as usize, FF::zero());
                 exponents_memoization.insert(k.to_vec(), prod.clone());
             }
             prod.scalar_mul_mut(*v);
@@ -855,13 +852,13 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     }
 
     // Substitute the variables in a multivariate polynomial with univariate polynomials
-    pub fn evaluate_symbolic(&self, point: &[Polynomial<PFElem>]) -> Polynomial<PFElem> {
+    pub fn evaluate_symbolic(&self, point: &[Polynomial<FF>]) -> Polynomial<FF> {
         assert_eq!(
             self.variable_count,
             point.len(),
             "Dimensionality of multivariate polynomial and point must agree in evaluate_symbolic"
         );
-        let mut acc: Polynomial<PFElem> = Polynomial::zero();
+        let mut acc: Polynomial<FF> = Polynomial::zero();
         for (k, v) in self.coefficients.iter() {
             let mut prod = Polynomial::from_constant(*v);
             for i in 0..k.len() {
@@ -884,7 +881,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     /// lift
     /// Creates a multivariate polynomial from a univariate one.
     pub fn lift(
-        univariate_polynomial: Polynomial<PFElem>,
+        univariate_polynomial: Polynomial<FF>,
         variable_index: usize,
         variable_count: usize,
     ) -> Self {
@@ -896,17 +893,17 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
             return Self::zero(variable_count);
         }
 
-        let one = PFElem::one();
-        let mut coefficients: MCoefficients<PFElem> = HashMap::new();
+        let one = FF::one();
+        let mut coefficients: MCoefficients<FF> = HashMap::new();
         let mut key = vec![0u8; variable_count];
         key[variable_index] = 1;
         coefficients.insert(key, one);
-        let indeterminate: MPolynomial<PFElem> = Self {
+        let indeterminate: MPolynomial<FF> = Self {
             variable_count,
             coefficients,
         };
 
-        let mut acc = MPolynomial::<PFElem>::zero(variable_count);
+        let mut acc = MPolynomial::<FF>::zero(variable_count);
         for i in 0..univariate_polynomial.coefficients.len() {
             acc +=
                 MPolynomial::from_constant(univariate_polynomial.coefficients[i], variable_count)
@@ -917,12 +914,12 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     }
 
     #[must_use]
-    pub fn scalar_mul(&self, factor: PFElem) -> Self {
+    pub fn scalar_mul(&self, factor: FF) -> Self {
         if self.is_zero() {
             return Self::zero(self.variable_count);
         }
 
-        let mut output_coefficients: MCoefficients<PFElem> = HashMap::new();
+        let mut output_coefficients: MCoefficients<FF> = HashMap::new();
         for (k, &v) in self.coefficients.iter() {
             output_coefficients.insert(k.to_vec(), v * factor);
         }
@@ -933,7 +930,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
         }
     }
 
-    pub fn scalar_mul_mut(&mut self, factor: PFElem) {
+    pub fn scalar_mul_mut(&mut self, factor: FF) {
         if self.is_zero() || factor.is_one() {
             return;
         }
@@ -947,8 +944,8 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     pub fn pow(&self, pow: u8) -> Self {
         // Handle special case of 0^0
         if pow.is_zero() {
-            let mut coefficients: MCoefficients<PFElem> = HashMap::new();
-            coefficients.insert(vec![0; self.variable_count], PFElem::one());
+            let mut coefficients: MCoefficients<FF> = HashMap::new();
+            coefficients.insert(vec![0; self.variable_count], FF::one());
             return MPolynomial {
                 variable_count: self.variable_count,
                 coefficients,
@@ -962,9 +959,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
 
         // create object, to be populated
         let exp = vec![0u8; self.variable_count];
-        let mut acc_coefficients_init: MCoefficients<PFElem> = HashMap::new();
-        acc_coefficients_init.insert(exp, PFElem::one());
-        let mut acc: MPolynomial<PFElem> = Self {
+        let mut acc_coefficients_init: MCoefficients<FF> = HashMap::new();
+        acc_coefficients_init.insert(exp, FF::one());
+        let mut acc: MPolynomial<FF> = Self {
             variable_count: self.variable_count,
             coefficients: acc_coefficients_init,
         };
@@ -994,9 +991,9 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
             return Self::zero(self.variable_count);
         }
 
-        let mut output_coefficients: MCoefficients<PFElem> = HashMap::new();
+        let mut output_coefficients: MCoefficients<FF> = HashMap::new();
         let exponents = self.coefficients.keys().collect::<Vec<&Vec<u8>>>();
-        let two = PFElem::one() + PFElem::one();
+        let two = FF::one() + FF::one();
 
         for i in 0..exponents.len() {
             let ki = exponents[i];
@@ -1119,7 +1116,7 @@ impl<PFElem: FiniteField> MPolynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Add for MPolynomial<PFElem> {
+impl<FF: FiniteField> Add for MPolynomial<FF> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -1128,7 +1125,7 @@ impl<PFElem: FiniteField> Add for MPolynomial<PFElem> {
             return Self::zero(variable_count);
         }
 
-        let mut output_coefficients: MCoefficients<PFElem> = HashMap::new();
+        let mut output_coefficients: MCoefficients<FF> = HashMap::new();
         for (k, &v) in self.coefficients.iter() {
             let mut pad = k.clone();
             pad.resize_with(variable_count, || 0);
@@ -1153,7 +1150,7 @@ impl<PFElem: FiniteField> Add for MPolynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> AddAssign for MPolynomial<PFElem> {
+impl<FF: FiniteField> AddAssign for MPolynomial<FF> {
     fn add_assign(&mut self, rhs: Self) {
         if self.variable_count != rhs.variable_count {
             let result = self.clone() + rhs;
@@ -1173,13 +1170,13 @@ impl<PFElem: FiniteField> AddAssign for MPolynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Sum for MPolynomial<PFElem> {
+impl<FF: FiniteField> Sum for MPolynomial<FF> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(MPolynomial::zero(0), |a, b| a + b)
     }
 }
 
-impl<PFElem: FiniteField> Sub for MPolynomial<PFElem> {
+impl<FF: FiniteField> Sub for MPolynomial<FF> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -1188,7 +1185,7 @@ impl<PFElem: FiniteField> Sub for MPolynomial<PFElem> {
             return Self::zero(variable_count);
         }
 
-        let mut output_coefficients: MCoefficients<PFElem> = HashMap::new();
+        let mut output_coefficients: MCoefficients<FF> = HashMap::new();
         for (k, &v) in self.coefficients.iter() {
             let mut pad = k.clone();
             pad.resize_with(variable_count, || 0);
@@ -1213,11 +1210,11 @@ impl<PFElem: FiniteField> Sub for MPolynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Neg for MPolynomial<PFElem> {
+impl<FF: FiniteField> Neg for MPolynomial<FF> {
     type Output = Self;
 
     fn neg(self) -> Self {
-        let mut output_coefficients: MCoefficients<PFElem> = HashMap::new();
+        let mut output_coefficients: MCoefficients<FF> = HashMap::new();
         for (k, &v) in self.coefficients.iter() {
             output_coefficients.insert(k.to_vec(), -v);
         }
@@ -1229,7 +1226,7 @@ impl<PFElem: FiniteField> Neg for MPolynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> Mul for MPolynomial<PFElem> {
+impl<FF: FiniteField> Mul for MPolynomial<FF> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -1244,7 +1241,7 @@ impl<PFElem: FiniteField> Mul for MPolynomial<PFElem> {
             return self;
         }
 
-        let mut output_coefficients: MCoefficients<PFElem> = HashMap::new();
+        let mut output_coefficients: MCoefficients<FF> = HashMap::new();
         for (k0, &v0) in self.coefficients.iter() {
             for (k1, &v1) in other.coefficients.iter() {
                 let mut exponent = vec![0u8; variable_count];
@@ -1269,7 +1266,7 @@ impl<PFElem: FiniteField> Mul for MPolynomial<PFElem> {
     }
 }
 
-impl<PFElem: FiniteField> MulAssign for MPolynomial<PFElem> {
+impl<FF: FiniteField> MulAssign for MPolynomial<FF> {
     fn mul_assign(&mut self, rhs: Self) {
         *self = self.clone() * rhs
     }
