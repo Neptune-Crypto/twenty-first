@@ -42,6 +42,16 @@ impl Digest {
     pub fn new(digest: [BFieldElement; DIGEST_LENGTH]) -> Self {
         Self(digest)
     }
+
+    pub fn emojihash(&self) -> String {
+        let [a, b, c, d, e] = self.0.map(|bfe| {
+            emojihash::hash(&bfe.value().to_be_bytes())
+                .chars()
+                .take(DIGEST_LENGTH)
+                .collect::<String>()
+        });
+        format!("[{a}|{b}|{c}|{d}|{e}]")
+    }
 }
 
 impl Default for Digest {
