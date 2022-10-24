@@ -1024,7 +1024,7 @@ impl RescuePrimeRegular {
             {
                 *sponge_state_element += input_element.to_owned();
             }
-            padded_input = padded_input[RATE..].to_vec();
+            padded_input.drain(..RATE);
             Self::xlix(&mut sponge);
         }
 
