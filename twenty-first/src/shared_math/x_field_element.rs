@@ -19,14 +19,6 @@ pub struct XFieldElement {
     pub coefficients: [BFieldElement; EXTENSION_DEGREE],
 }
 
-impl Default for XFieldElement {
-    fn default() -> Self {
-        Self {
-            coefficients: [1u64.into(), 0u64.into(), 0u64.into()],
-        }
-    }
-}
-
 impl Sum for XFieldElement {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.reduce(|a, b| a + b)
