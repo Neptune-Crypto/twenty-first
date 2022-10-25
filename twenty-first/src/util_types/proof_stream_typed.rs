@@ -119,8 +119,9 @@ mod proof_stream_typed_tests {
 
     use super::*;
     use crate::shared_math::{
-        b_field_element::BFieldElement, rescue_prime_regular::RescuePrimeRegular,
-        x_field_element::XFieldElement,
+        b_field_element::BFieldElement,
+        rescue_prime_regular::RescuePrimeRegular,
+        x_field_element::{XFieldElement, EXTENSION_DEGREE},
     };
 
     #[derive(Clone, Debug, PartialEq)]
@@ -180,7 +181,7 @@ mod proof_stream_typed_tests {
         // B
 
         let b_one = BFieldElement::one();
-        let bs_expected = vec![b_one; 3];
+        let bs_expected = vec![b_one; EXTENSION_DEGREE];
         let item_1 = TestItem::ManyB(bs_expected.clone());
         ps.enqueue(&item_1);
 
@@ -203,7 +204,7 @@ mod proof_stream_typed_tests {
 
         let x_one = XFieldElement::one();
 
-        let xs_expected = vec![x_one; 3];
+        let xs_expected = vec![x_one; EXTENSION_DEGREE];
         let item_2 = TestItem::ManyX(xs_expected.clone());
         ps.enqueue(&item_2);
 

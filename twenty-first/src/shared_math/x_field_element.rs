@@ -12,9 +12,11 @@ use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use crate::shared_math::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 
+pub const EXTENSION_DEGREE: usize = 3;
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
-    pub coefficients: [BFieldElement; 3],
+    pub coefficients: [BFieldElement; EXTENSION_DEGREE],
 }
 
 impl Default for XFieldElement {
@@ -58,7 +60,7 @@ impl From<Polynomial<BFieldElement>> for XFieldElement {
     fn from(poly: Polynomial<BFieldElement>) -> Self {
         let (_, rem) = poly.divide(Self::shah_polynomial());
         let zero = BFieldElement::zero();
-        let mut rem_arr: [BFieldElement; 3] = [zero; 3];
+        let mut rem_arr: [BFieldElement; EXTENSION_DEGREE] = [zero; EXTENSION_DEGREE];
 
         for i in 0..rem.degree() + 1 {
             rem_arr[i as usize] = rem.coefficients[i as usize];
@@ -80,12 +82,12 @@ impl XFieldElement {
     }
 
     #[inline]
-    pub fn new(coefficients: [BFieldElement; 3]) -> Self {
+    pub fn new(coefficients: [BFieldElement; EXTENSION_DEGREE]) -> Self {
         Self { coefficients }
     }
 
     #[inline]
-    pub fn new_u64(coeffs: [u64; 3]) -> Self {
+    pub fn new_u64(coeffs: [u64; EXTENSION_DEGREE]) -> Self {
         Self {
             coefficients: [
                 BFieldElement::new(coeffs[0]),
@@ -256,7 +258,7 @@ impl FromVecu8 for XFieldElement {
 impl Zero for XFieldElement {
     fn zero() -> Self {
         Self {
-            coefficients: [BFieldElement::zero(); 3],
+            coefficients: [BFieldElement::zero(); EXTENSION_DEGREE],
         }
     }
 
