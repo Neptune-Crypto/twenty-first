@@ -162,7 +162,7 @@ pub fn compile(source_code: &str) -> Option<Vec<BFieldElement>> {
     let mut program: Vec<BFieldElement> = vec![];
     let mut stack: Vec<usize> = vec![];
 
-    let trimmed_source_code = &source_code.replace(&[' ', '\r', '\n', '\t'], "");
+    let trimmed_source_code = &source_code.replace([' ', '\r', '\n', '\t'], "");
     for symbol in trimmed_source_code.chars() {
         program.push(BFieldElement::new(symbol as u64));
         if symbol == '[' {

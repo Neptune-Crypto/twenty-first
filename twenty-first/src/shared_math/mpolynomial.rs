@@ -1060,10 +1060,11 @@ impl<FF: FiniteField> MPolynomial<FF> {
             return -1;
         };
 
-        let total_degree: i64 = self
+        let total_degree: Degree = self
             .coefficients
-            .keys()
-            .map(|exponents| exponents.iter().map(|x| *x as i64).sum::<i64>())
+            .iter()
+            .filter(|(_, coefficient)| !coefficient.is_zero())
+            .map(|(exponent, _)| exponent.iter().map(|&x| x as Degree).sum())
             .max()
             .unwrap_or(0);
 
@@ -2356,5 +2357,17 @@ mod test_mpolynomials {
         ]
         .concat();
         assert_eq!(expected, format!("{}", mpoly));
+    }
+
+    #[test]
+    fn ignore_zero_coefficients_for_total_degree_computation_test() {
+        let mut exp_and_coeff = HashMap::new();
+        exp_and_coeff.insert(vec![9, 9, 9], XFieldElement::zero());
+        exp_and_coeff.insert(vec![2, 2, 2], XFieldElement::one());
+        let polynomial = MPolynomial {
+            variable_count: 3,
+            coefficients: exp_and_coeff,
+        };
+        assert_eq!(6, polynomial.degree());
     }
 }
