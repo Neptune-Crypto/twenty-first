@@ -397,7 +397,7 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
             for elem in partial_auth_path.0.iter_mut() {
                 let sibling = index ^ 1;
 
-                if *elem == None {
+                if elem.is_none() {
                     // If the Merkle tree/proof is manipulated, the value partial_tree[&(index ^ 1)]
                     // is not guaranteed to exist. So have to  check
                     // whether it exists and return false if it does not

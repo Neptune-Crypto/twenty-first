@@ -1,1 +1,1 @@
-blacklisted-names = ["foo", "bar", "foobar", "hm", "hmm", "hmmm", "hmmmm", "hmmmmm", "hmmmmmm"]
+disallowed-names = ["foo", "bar", "foobar", "hm", "hmm", "hmmm", "hmmmm", "hmmmmm", "hmmmmmm"]
