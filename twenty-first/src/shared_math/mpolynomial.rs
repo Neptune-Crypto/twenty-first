@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub};
 use std::rc::Rc;
@@ -242,6 +243,19 @@ impl<FF: FiniteField> Display for MPolynomial<FF> {
         };
 
         write!(f, "{}", output)
+    }
+}
+
+impl<FF: FiniteField> Hash for MPolynomial<FF> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.variable_count.hash(state);
+        let mut coeffs_list_sorted = self
+            .coefficients
+            .iter()
+            .filter(|x| !x.1.is_zero())
+            .collect_vec();
+        coeffs_list_sorted.sort_by(|a, b| a.0.partial_cmp(b.0).unwrap());
+        coeffs_list_sorted.hash(state);
     }
 }
 
@@ -1278,8 +1292,11 @@ mod test_mpolynomials {
     #![allow(clippy::just_underscores_and_digits)]
 
     use num_traits::One;
+    use num_traits::Pow;
     use rand::Rng;
+    use std::collections::hash_map::DefaultHasher;
     use std::collections::HashSet;
+    use std::hash::Hasher;
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::random_elements;
@@ -2369,5 +2386,90 @@ mod test_mpolynomials {
             coefficients: exp_and_coeff,
         };
         assert_eq!(6, polynomial.degree());
+    }
+
+    #[test]
+    fn mpoly_hashing_is_deterministic_and_unaffected_by_zero_coefficients_test() {
+        let variable_count = 10;
+        let mut rnd_mvpoly = gen_mpolynomial(variable_count, 10, 15, 540);
+        for _ in 0..10 {
+            let mut hasher0 = DefaultHasher::new();
+            rnd_mvpoly.hash(&mut hasher0);
+            let hash0 = hasher0.finish();
+            let mut hasher1 = DefaultHasher::new();
+            rnd_mvpoly.hash(&mut hasher1);
+            let hash1 = hasher1.finish();
+
+            assert_eq!(hash0, hash1, "hashing must be deterministic");
+
+            // Hashing is unchanged by 0-coefficient
+            rnd_mvpoly
+                .coefficients
+                .insert(vec![9; variable_count], BFieldElement::zero());
+            let mut hasher2 = DefaultHasher::new();
+            rnd_mvpoly.hash(&mut hasher2);
+            let hash2 = hasher2.finish();
+            assert_eq!(
+                hash0, hash2,
+                "hashing must be invariant under 0-coefficients"
+            );
+
+            // Digest must change if mpoly changes (non-zero coefficient term)
+            rnd_mvpoly
+                .coefficients
+                .insert(vec![2; variable_count], BFieldElement::one());
+            let mut hasher3 = DefaultHasher::new();
+            rnd_mvpoly.hash(&mut hasher3);
+            let hash3 = hasher3.finish();
+            assert_ne!(hash0, hash3, "hashing must change if mpoly changes");
+
+            // Digest must change if coefficient changes
+            rnd_mvpoly.scalar_mul_mut(BFieldElement::new(4));
+            let mut hasher4 = DefaultHasher::new();
+            rnd_mvpoly.hash(&mut hasher4);
+            let hash4 = hasher4.finish();
+            assert_ne!(hash3, hash4, "hashing must change if mpoly changes");
+        }
+    }
+
+    #[test]
+    fn mpolys_in_hash_set_test() {
+        let variable_count = 20;
+        let mut hash_set: HashSet<MPolynomial<BFieldElement>> = HashSet::new();
+        for i in 0..10 {
+            let mut a = gen_mpolynomial(variable_count, 20, 10, Pow::pow(10u32, 2u32) as u64);
+            let b = gen_mpolynomial(variable_count, 20, 10, Pow::pow(10u32, 2u32) as u64);
+            let mut a_was_new = hash_set.insert(a.clone());
+            let mut b_was_new = hash_set.insert(b.clone());
+            assert!(
+                a_was_new,
+                "newly generated mpoly must be new in hash set a: iteration {i}"
+            );
+            assert!(
+                b_was_new,
+                "newly generated mpoly must be new in hash set b: iteration {i}"
+            );
+
+            a_was_new = hash_set.insert(a.clone());
+            b_was_new = hash_set.insert(b);
+            assert!(
+                !a_was_new,
+                "Already inserted mpoly must already exist in hash set a: iteration {i}"
+            );
+            assert!(
+                !b_was_new,
+                "Already inserted mpoly must already exist in hash set b: iteration {i}"
+            );
+
+            a.coefficients
+                .insert(vec![9; variable_count], BFieldElement::zero());
+            a_was_new = hash_set.insert(a);
+            assert!(
+                !a_was_new,
+                "Already inserted mpoly must already exist in hash set a, zero coefficient: iteration {i}"
+            );
+        }
+
+        assert_eq!(20, hash_set.len());
     }
 }
