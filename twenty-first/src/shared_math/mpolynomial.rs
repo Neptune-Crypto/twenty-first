@@ -2421,7 +2421,7 @@ mod test_mpolynomials {
             let mut hasher3 = DefaultHasher::new();
             rnd_mvpoly.hash(&mut hasher3);
             let hash3 = hasher3.finish();
-            assert_ne!(hash0, hash3, "hashing must change if mpoly changes");
+            assert_ne!(hash0, hash3, "hash digest must change if mpoly changes");
 
             // Digest must change if coefficient changes
             rnd_mvpoly.scalar_mul_mut(BFieldElement::new(4));
