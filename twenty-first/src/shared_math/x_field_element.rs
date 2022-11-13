@@ -295,7 +295,7 @@ impl New for XFieldElement {
     }
 }
 
-impl Add for XFieldElement {
+impl Add<XFieldElement> for XFieldElement {
     type Output = Self;
 
     #[inline]
@@ -310,35 +310,46 @@ impl Add for XFieldElement {
     }
 }
 
-/*
-
-(ax^2 + bx + c) * (dx^2 + ex + f)   (mod x^3 - x + 1)
-
-=   adx^4 + aex^3 + afx^2
-  + bdx^3 + bex^2 + bfx
-  + cdx^2 + cex   + cf
-
-= adx^4 + (ae + bd)x^3 + (af + be + cd)x^2 + (bf + ce)x + cf   (mod x^3 - x + 1)
-
-= ...
-
-*/
-
-impl Mul<BFieldElement> for XFieldElement {
+impl Add<BFieldElement> for XFieldElement {
     type Output = Self;
 
     #[inline]
-    fn mul(self, other: BFieldElement) -> Self {
+    fn add(self, other: BFieldElement) -> Self {
         Self {
             coefficients: [
-                self.coefficients[0] * other,
-                self.coefficients[1] * other,
-                self.coefficients[2] * other,
+                self.coefficients[0] + other,
+                self.coefficients[1],
+                self.coefficients[2],
             ],
         }
     }
 }
 
+/// The `bfe + xfe -> xfe` instance belongs to BFieldElement.
+impl Add<XFieldElement> for BFieldElement {
+    type Output = XFieldElement;
+
+    #[inline]
+    fn add(self, other: XFieldElement) -> XFieldElement {
+        XFieldElement {
+            coefficients: [
+                other.coefficients[0] + self,
+                other.coefficients[1],
+                other.coefficients[2],
+            ],
+        }
+    }
+}
+
+/// XField * XField means:
+///
+/// (ax^2 + bx + c) * (dx^2 + ex + f)   (mod x^3 - x + 1)
+///
+/// =   adx^4 + aex^3 + afx^2
+///   + bdx^3 + bex^2 + bfx
+///   + cdx^2 + cex   + cf
+///
+/// = adx^4 + (ae + bd)x^3 + (af + be + cd)x^2 + (bf + ce)x + cf   (mod x^3 - x + 1)
 impl Mul<XFieldElement> for XFieldElement {
     type Output = Self;
 
@@ -365,6 +376,38 @@ impl Mul<XFieldElement> for XFieldElement {
     }
 }
 
+/// XField * BField means scalar multiplication of the
+/// BFieldElement onto each coefficient of the XField.
+impl Mul<BFieldElement> for XFieldElement {
+    type Output = Self;
+
+    #[inline]
+    fn mul(self, other: BFieldElement) -> Self {
+        Self {
+            coefficients: [
+                self.coefficients[0] * other,
+                self.coefficients[1] * other,
+                self.coefficients[2] * other,
+            ],
+        }
+    }
+}
+
+impl Mul<XFieldElement> for BFieldElement {
+    type Output = XFieldElement;
+
+    #[inline]
+    fn mul(self, other: XFieldElement) -> XFieldElement {
+        XFieldElement {
+            coefficients: [
+                other.coefficients[0] * self,
+                other.coefficients[1] * self,
+                other.coefficients[2] * self,
+            ],
+        }
+    }
+}
+
 impl Neg for XFieldElement {
     type Output = Self;
 
@@ -380,16 +423,39 @@ impl Neg for XFieldElement {
     }
 }
 
-impl Sub for XFieldElement {
+impl Sub<XFieldElement> for XFieldElement {
     type Output = Self;
 
     #[inline]
     fn sub(self, other: Self) -> Self {
-        -other + self
+        self + (-other)
     }
 }
 
-impl AddAssign for XFieldElement {
+/// Subtracting a BFieldElement from an XFieldElement
+///
+/// self - other = self + (-other)
+///
+/// This overloads to Add and Neg
+impl Sub<BFieldElement> for XFieldElement {
+    type Output = Self;
+
+    #[inline]
+    fn sub(self, other: BFieldElement) -> Self {
+        self + (-other)
+    }
+}
+
+impl Sub<XFieldElement> for BFieldElement {
+    type Output = XFieldElement;
+
+    #[inline]
+    fn sub(self, other: XFieldElement) -> XFieldElement {
+        self + (-other)
+    }
+}
+
+impl AddAssign<XFieldElement> for XFieldElement {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
         self.coefficients[0] += rhs.coefficients[0];
@@ -398,12 +464,17 @@ impl AddAssign for XFieldElement {
     }
 }
 
-impl SubAssign for XFieldElement {
+impl AddAssign<BFieldElement> for XFieldElement {
     #[inline]
-    fn sub_assign(&mut self, rhs: Self) {
-        self.coefficients[0] -= rhs.coefficients[0];
-        self.coefficients[1] -= rhs.coefficients[1];
-        self.coefficients[2] -= rhs.coefficients[2];
+    fn add_assign(&mut self, rhs: BFieldElement) {
+        self.coefficients[0] += rhs;
+    }
+}
+
+impl MulAssign<XFieldElement> for XFieldElement {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = *self * rhs;
     }
 }
 
@@ -414,10 +485,19 @@ impl MulAssign<BFieldElement> for XFieldElement {
     }
 }
 
-impl MulAssign<XFieldElement> for XFieldElement {
+impl SubAssign<XFieldElement> for XFieldElement {
     #[inline]
-    fn mul_assign(&mut self, rhs: Self) {
-        *self = *self * rhs;
+    fn sub_assign(&mut self, rhs: Self) {
+        self.coefficients[0] -= rhs.coefficients[0];
+        self.coefficients[1] -= rhs.coefficients[1];
+        self.coefficients[2] -= rhs.coefficients[2];
+    }
+}
+
+impl SubAssign<BFieldElement> for XFieldElement {
+    #[inline]
+    fn sub_assign(&mut self, rhs: BFieldElement) {
+        self.coefficients[0] -= rhs;
     }
 }
 
@@ -687,6 +767,36 @@ mod x_field_element_test {
 
         let poly1112_product = XFieldElement::new([237, 33, 137].map(BFieldElement::new));
         assert_eq!(poly1112_product, poly11 * poly12);
+    }
+
+    #[test]
+    fn x_field_overloaded_arithmetic_test() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..100 {
+            let xfe = rng.gen::<XFieldElement>();
+            let bfe = rng.gen::<BFieldElement>();
+
+            // 1. xfe + bfe.lift() = bfe.lift() + xfe
+            // 2. xfe + bfe = xfe + bfe.lift()
+            // 3. bfe + xfe = xfe + bfe.lift()
+            let expected_add = xfe + bfe.lift();
+            assert_eq!(expected_add, bfe.lift() + xfe);
+            assert_eq!(expected_add, xfe + bfe);
+            assert_eq!(expected_add, bfe + xfe);
+
+            // 4. xfe * bfe.lift() = bfe.lift() * xfe
+            // 5. xfe * bfe = xfe * bfe.lift()
+            // 6. bfe * xfe = xfe * bfe.lift()
+            let expected_mul = xfe * bfe.lift();
+            assert_eq!(expected_mul, bfe.lift() * xfe);
+            assert_eq!(expected_mul, xfe * bfe);
+            assert_eq!(expected_mul, bfe * xfe);
+
+            // 7. xfe - bfe = xfe - bfe.lift()
+            // 8. bfe - xfe = xfe - bfe.lift()
+            assert_eq!(xfe - bfe.lift(), xfe - bfe);
+            assert_eq!(bfe.lift() - xfe, bfe - xfe);
+        }
     }
 
     #[test]
