@@ -66,16 +66,16 @@ pub trait FiniteField:
     + DeserializeOwned
     + PartialEq
     + Debug
-    + One
     + Zero
+    + One
     + Add<Output = Self>
-    + AddAssign
-    + SubAssign
-    + MulAssign
-    + Sub<Output = Self>
     + Mul<Output = Self>
+    + Sub<Output = Self>
     + Div<Output = Self>
     + Neg<Output = Self>
+    + AddAssign
+    + MulAssign
+    + SubAssign
     + FromVecu8
     + New
     + CyclicGroupGenerator
