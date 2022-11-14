@@ -73,63 +73,120 @@ impl Display for TimingReport {
         let (label_widths, duration_widths): (Vec<usize>, Vec<usize>) = self
             .step_durations
             .iter()
-            .map(|(label, duration)| (label.len(), format!("{:.?}", duration).len()))
+            .map(|(label, duration)| (label.len(), format!("{} ms", duration.as_millis()).len()))
             .into_iter()
             .unzip();
-        let label_width = label_widths.into_iter().max().unwrap_or(0);
-        let duration_width = duration_widths.into_iter().max().unwrap_or(0);
+        let max_label_width = label_widths.into_iter().max().unwrap_or(0);
+        let max_duration_width = duration_widths.into_iter().max().unwrap_or(0);
+        let width = max_duration_width;
+
+        let (header_label_raw, _) = self.step_durations[0].clone();
+        let header_label = header_label_raw
+            .strip_prefix("Table name: ")
+            .unwrap_or(&header_label_raw);
 
         let durations: Vec<Duration> = self
             .step_durations
             .iter()
+            .skip(1) // We do not want Table header affecting in our stats.
             .map(|(_, duration)| *duration)
             .collect();
 
-        let num_steps = self.step_durations.len().try_into().unwrap();
-        let average_duration = self.total_duration / num_steps;
-        let std_dev_duration = std_dev_duration(durations);
+        let num_steps: u32 = self.step_durations.len().try_into().unwrap();
+        let average_duration = self.total_duration / (num_steps - 1); // account for header
+        let std_dev_duration = std_dev_duration(&durations);
+        let mean_duration = {
+            let mut durations_mean = durations;
+            durations_mean.sort();
 
-        writeln!(
-            f,
-            "\navg = {:.2?}, std.dev. = {:.2?}\n",
-            average_duration, std_dev_duration
-        )?;
+            let durations_count = durations_mean.len();
+
+            if durations_count % 2 == 0 {
+                (durations_mean[durations_count / 2 - 1] + durations_mean[durations_count / 2]) / 2
+            } else {
+                durations_mean[durations_count / 2]
+            }
+        };
 
         let colored_columns: Vec<(String, ColoredString)> = self
             .step_durations
             .iter()
-            .map(|(label, duration)| (label.clone(), colorize(*duration, average_duration)))
+            .skip(1) // We do not want Table header affecting in our stats.
+            .map(|(label, duration)| {
+                (
+                    label.clone(),
+                    colorize(*duration, average_duration, max_duration_width),
+                )
+            })
             .collect();
 
         let space = 2;
+        // Print header
         writeln!(f, "\n")?; // Add at least one empty line before report
+        writeln!(f, "{}", header_label)?;
+        let ornament = "=".repeat(header_label.len());
+        writeln!(f, "{}", ornament)?;
+        // Print entries
         for (label, duration) in colored_columns {
-            let padding = String::from_utf8(vec![b' '; label_width - label.len() + space]).unwrap();
+            let padding =
+                String::from_utf8(vec![b' '; max_label_width - label.len() + space]).unwrap();
             writeln!(f, "{}{}{}", label, padding, duration)?;
         }
 
         writeln!(
             f,
             "{}{}{}",
-            String::from_utf8(vec![b'-'; label_width]).unwrap(),
+            String::from_utf8(vec![b'-'; max_label_width]).unwrap(),
             String::from_utf8(vec![b' '; space]).unwrap(),
-            String::from_utf8(vec![b'-'; duration_width]).unwrap()
+            // +3 to account for the suffix " ms".
+            String::from_utf8(vec![b'-'; width + 3]).unwrap()
         )?;
 
-        let total_label = "total";
+        let total_label = "Total";
         let total_padding =
-            String::from_utf8(vec![b' '; label_width - total_label.len() + space]).unwrap();
-
+            String::from_utf8(vec![b' '; max_label_width - total_label.len() + space]).unwrap();
         writeln!(
             f,
-            "{}{}{:.2?}",
-            total_label, total_padding, self.total_duration
+            "{}{}{:width$} ms",
+            total_label,
+            total_padding,
+            self.total_duration.as_millis()
+        )?;
+        let mean_label = "Mean";
+        let mean_padding =
+            String::from_utf8(vec![b' '; max_label_width - mean_label.len() + space]).unwrap();
+        writeln!(
+            f,
+            "{}{}{:>width$} ms",
+            mean_label,
+            mean_padding,
+            mean_duration.as_millis()
+        )?;
+        let average_label = "Average";
+        let average_padding =
+            String::from_utf8(vec![b' '; max_label_width - average_label.len() + space]).unwrap();
+        writeln!(
+            f,
+            "{}{}{:>width$} ms",
+            average_label,
+            average_padding,
+            average_duration.as_millis()
+        )?;
+        let std_dev_label = "Std. Dev.";
+        let std_dev_padding =
+            String::from_utf8(vec![b' '; max_label_width - std_dev_label.len() + space]).unwrap();
+        writeln!(
+            f,
+            "{}{}{:>width$} ms",
+            std_dev_label,
+            std_dev_padding,
+            std_dev_duration.as_millis()
         )
     }
 }
 
-fn colorize(duration: Duration, average: Duration) -> ColoredString {
-    let s = format!("{:.2?}", duration);
+fn colorize(duration: Duration, average: Duration, width: usize) -> ColoredString {
+    let s = format!("{:width$} ms", duration.as_millis());
     if duration > average {
         s.red()
     } else {
@@ -137,7 +194,7 @@ fn colorize(duration: Duration, average: Duration) -> ColoredString {
     }
 }
 
-fn std_dev_duration(durations: Vec<Duration>) -> Duration {
+fn std_dev_duration(durations: &[Duration]) -> Duration {
     let micros: Vec<u64> = durations
         .iter()
         .map(|duration| duration.as_micros().try_into().unwrap())
