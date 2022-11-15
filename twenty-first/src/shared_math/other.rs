@@ -152,6 +152,28 @@ pub fn xgcd<
     (x, a_factor, b_factor)
 }
 
+/// Matrix transpose
+///
+/// ```py
+/// [a b c]
+/// [d e f]
+/// ```
+///
+/// returns
+///
+/// ```py
+/// [a d]
+/// [b e]
+/// [c f]
+/// ```
+///
+/// Assumes that input is regular.
+pub fn transpose<P: Copy>(codewords: &[Vec<P>]) -> Vec<Vec<P>> {
+    (0..codewords[0].len())
+        .map(|col_idx| codewords.iter().map(|row| row[col_idx]).collect())
+        .collect()
+}
+
 /// Generate `n` random elements using `rand::thread_rng()`.
 ///
 /// This requires the trait instance `Standard: Distribution<T>`.
@@ -285,6 +307,31 @@ mod test_other {
 
         // TODO: Test that it can be empty.
         // TODO: Test that no powers of below max are missing.
+    }
+
+    #[test]
+    fn transpose_test() {
+        let input = vec![vec![1, 2, 3], vec![4, 5, 6]];
+        let expected = vec![vec![1, 4], vec![2, 5], vec![3, 6]];
+        let actual = transpose(&input);
+        assert_eq!(expected, actual);
+
+        let mut rng = rand::thread_rng();
+        let n = rng.gen_range(1..10);
+        let m = rng.gen_range(1..10);
+        let random_matrix: Vec<Vec<u64>> = (0..n)
+            .map(|_| (0..m).map(|_| rng.gen()).collect())
+            .collect();
+
+        assert_eq!(n, random_matrix.len());
+        assert_eq!(m, random_matrix[0].len());
+
+        let transposed = transpose(&random_matrix);
+        assert_eq!(m, transposed.len());
+        assert_eq!(n, transposed[0].len());
+
+        let transposed_transposed = transpose(&transposed);
+        assert_eq!(random_matrix, transposed_transposed);
     }
 
     #[test]
