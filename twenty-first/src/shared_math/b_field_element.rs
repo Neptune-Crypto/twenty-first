@@ -1,4 +1,3 @@
-use super::other;
 use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
@@ -151,7 +150,7 @@ impl BFieldElement {
         }
 
         let mut acc = BFieldElement::one();
-        let bit_length = other::count_bits(exp);
+        let bit_length = u64::BITS - exp.leading_zeros();
         for i in 0..bit_length {
             acc = acc * acc;
             if exp & (1 << (bit_length - 1 - i)) != 0 {
@@ -538,7 +537,7 @@ mod b_prime_field_element_test {
     use std::collections::hash_map::DefaultHasher;
 
     use crate::shared_math::b_field_element::*;
-    use crate::shared_math::other::{random_elements, random_elements_array};
+    use crate::shared_math::other::{random_elements, random_elements_array, xgcd};
     use crate::shared_math::polynomial::Polynomial;
     use itertools::izip;
     use proptest::prelude::*;
@@ -1050,7 +1049,7 @@ mod b_prime_field_element_test {
         let a = 15;
         let b = 25;
         let expected_gcd_ab = 5;
-        let (actual_gcd_ab, a_factor, b_factor) = other::xgcd(a, b);
+        let (actual_gcd_ab, a_factor, b_factor) = xgcd(a, b);
 
         assert_eq!(expected_gcd_ab, actual_gcd_ab);
         assert_eq!(2, a_factor);

@@ -1,4 +1,3 @@
-use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use rand::Rng;
 use rand_distr::uniform::SampleUniform;
@@ -7,9 +6,6 @@ use std::fmt::Display;
 use std::ops::{BitAnd, Div, Rem, Shl, Sub};
 
 // Function for creating a bigint from an i128
-pub fn bigint(input: i128) -> BigInt {
-    Into::<BigInt>::into(input)
-}
 
 const fn num_bits<T>() -> u64 {
     std::mem::size_of::<T>() as u64 * 8
@@ -70,26 +66,6 @@ pub fn roundup_npo2(x: u64) -> u64 {
     1 << log_2_ceil(x as u128)
 }
 
-#[inline]
-pub fn mod_pow_raw(x: u128, exp: u64, quotient: u128) -> u128 {
-    // Special case for handling 0^0 = 1
-    if exp == 0 {
-        return 1;
-    }
-
-    let mut acc = 1;
-
-    let bit_length = count_bits(exp);
-    for i in 0..bit_length {
-        acc = (acc * acc) % quotient;
-        if exp & (1 << (bit_length - 1 - i)) != 0 {
-            acc = (acc * x) % quotient;
-        }
-    }
-
-    acc
-}
-
 /// Simultaneously perform division and remainder.
 ///
 /// While there is apparently no built-in Rust function for this,
@@ -99,28 +75,6 @@ pub fn div_rem<T: Div<Output = T> + Rem<Output = T> + Copy>(x: T, y: T) -> (T, T
     let quot = x / y;
     let rem = x % y;
     (quot, rem)
-}
-
-// TODO: Abstract for multiple unsigned output types.
-pub fn primes_lt(bound: u64) -> Vec<u64> {
-    let mut primes: Vec<bool> = (0..bound + 1).map(|num| num == 2 || num & 1 != 0).collect();
-
-    let mut num = 3u64;
-    while num * num <= bound {
-        let mut j = num * num;
-        while j <= bound {
-            primes[j as usize] = false;
-            j += num;
-        }
-        num += 2;
-    }
-
-    primes
-        .into_iter()
-        .enumerate()
-        .skip(2)
-        .filter_map(|(i, p)| if p { Some(i as u64) } else { None })
-        .collect::<Vec<u64>>()
 }
 
 #[inline]
@@ -150,6 +104,28 @@ pub fn xgcd<
 
     // x is the gcd
     (x, a_factor, b_factor)
+}
+
+/// Matrix transpose
+///
+/// ```py
+/// [a b c]
+/// [d e f]
+/// ```
+///
+/// returns
+///
+/// ```py
+/// [a d]
+/// [b e]
+/// [c f]
+/// ```
+///
+/// Assumes that input is regular.
+pub fn transpose<P: Copy>(codewords: &[Vec<P>]) -> Vec<Vec<P>> {
+    (0..codewords[0].len())
+        .map(|col_idx| codewords.iter().map(|row| row[col_idx]).collect())
+        .collect()
 }
 
 /// Generate `n` random elements using `rand::thread_rng()`.
@@ -214,37 +190,9 @@ where
     rand::thread_rng().sample::<[T; N], Standard>(Standard)
 }
 
-/// Compute the number of nodes (used as capacity) in a complete binary tree
-/// from the number of leaves.
-pub fn get_node_count_in_complete_binary_tree(leaf_count: usize) -> usize {
-    assert!(is_power_of_two(leaf_count));
-    2 * leaf_count - 1
-}
-
-pub fn get_height_of_complete_binary_tree(leaf_count: usize) -> usize {
-    assert!(is_power_of_two(leaf_count));
-    // nightly: leaves_count.log2() + 1
-    log_2_floor(leaf_count as u128) as usize
-}
-
-/// Count bits required to represent an unsigned number. Inspired by and similar to
-/// BigInteger's `bits()` method.
-#[inline]
-pub fn count_bits(input: u64) -> u32 {
-    64 - input.leading_zeros()
-}
-
 #[cfg(test)]
 mod test_other {
     use super::*;
-
-    #[test]
-    fn bigint_test() {
-        assert_eq!(
-            Into::<BigInt>::into(12345678901234567890i128),
-            bigint(12345678901234567890i128)
-        );
-    }
 
     #[test]
     fn log_2_ceil_test() {
@@ -288,6 +236,31 @@ mod test_other {
     }
 
     #[test]
+    fn transpose_test() {
+        let input = vec![vec![1, 2, 3], vec![4, 5, 6]];
+        let expected = vec![vec![1, 4], vec![2, 5], vec![3, 6]];
+        let actual = transpose(&input);
+        assert_eq!(expected, actual);
+
+        let mut rng = rand::thread_rng();
+        let n = rng.gen_range(1..10);
+        let m = rng.gen_range(1..10);
+        let random_matrix: Vec<Vec<u64>> = (0..n)
+            .map(|_| (0..m).map(|_| rng.gen()).collect())
+            .collect();
+
+        assert_eq!(n, random_matrix.len());
+        assert_eq!(m, random_matrix[0].len());
+
+        let transposed = transpose(&random_matrix);
+        assert_eq!(m, transposed.len());
+        assert_eq!(n, transposed[0].len());
+
+        let transposed_transposed = transpose(&transposed);
+        assert_eq!(random_matrix, transposed_transposed);
+    }
+
+    #[test]
     fn bit_representation_test() {
         assert_eq!(Vec::<u8>::new(), bit_representation(0));
         assert_eq!(vec![0], bit_representation(1));
@@ -307,80 +280,6 @@ mod test_other {
                 is_power_of_two(leaf_count),
                 "The leaf count should be a power of two."
             );
-
-            assert_eq!(
-                leaf_count,
-                2usize.pow(get_height_of_complete_binary_tree(leaf_count) as u32),
-                "The leaf counts should agree."
-            )
         }
-    }
-
-    #[test]
-    #[should_panic(expected = "assertion failed: is_power_of_two(leaf_count)")]
-    fn small_tree0_height() {
-        let leaves0: [i32; 0] = [];
-        let leaf_count0 = leaves0.len();
-        let height0 = get_height_of_complete_binary_tree(leaf_count0);
-        assert_eq!(height0, 42, "Execution should not reach here.");
-    }
-
-    #[test]
-    #[should_panic(expected = "assertion failed: is_power_of_two(leaf_count)")]
-    fn small_tree0_node_count() {
-        let leaves0: [i32; 0] = [];
-        let leaf_count0 = leaves0.len();
-        let node_count0 = get_node_count_in_complete_binary_tree(leaf_count0);
-        assert_eq!(node_count0, 42, "Execution should not reach here.");
-    }
-
-    #[test]
-    fn small_tree1() {
-        let leaves1 = [1];
-        let leaf_count1 = leaves1.len();
-        let height1 = get_height_of_complete_binary_tree(leaf_count1);
-        assert_eq!(height1, 0);
-        let node_count1 = get_node_count_in_complete_binary_tree(leaf_count1);
-        assert_eq!(node_count1, 1, "The root is also the only node.");
-    }
-
-    #[test]
-    fn small_tree2() {
-        let leaves2 = [1, 2];
-        let leaf_count2 = leaves2.len();
-        let height2 = get_height_of_complete_binary_tree(leaf_count2);
-        assert_eq!(height2, 1);
-        let node_count2 = get_node_count_in_complete_binary_tree(leaf_count2);
-        assert_eq!(node_count2, 3, "The root and the two leaves.");
-    }
-
-    #[test]
-    fn small_tree4() {
-        let leaves4 = [1, 2, 3, 4];
-        let leaf_count4 = leaves4.len();
-        let height4 = get_height_of_complete_binary_tree(leaf_count4);
-        assert_eq!(height4, 2);
-        let node_count4 = get_node_count_in_complete_binary_tree(leaf_count4);
-        assert_eq!(
-            node_count4, 7,
-            "The root, its two children and the four leaves."
-        );
-    }
-
-    #[test]
-    fn count_bits_test() {
-        assert_eq!(0, count_bits(0));
-        assert_eq!(1, count_bits(1));
-        assert_eq!(2, count_bits(2));
-        assert_eq!(2, count_bits(3));
-        assert_eq!(3, count_bits(4));
-        assert_eq!(3, count_bits(5));
-        assert_eq!(3, count_bits(6));
-        assert_eq!(3, count_bits(7));
-        assert_eq!(4, count_bits(8));
-        assert_eq!(4, count_bits(9));
-        assert_eq!(4, count_bits(10));
-        assert_eq!(10, count_bits(1023));
-        assert_eq!(11, count_bits(1024));
     }
 }

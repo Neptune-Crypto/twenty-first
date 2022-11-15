@@ -8,9 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::marker::{PhantomData, Send, Sync};
 
-use crate::shared_math::other::{
-    bit_representation, get_height_of_complete_binary_tree, is_power_of_two,
-};
+use crate::shared_math::other::{bit_representation, is_power_of_two, log_2_floor};
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::shared::bag_peaks;
 
@@ -480,7 +478,9 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
     }
 
     pub fn get_height(&self) -> usize {
-        get_height_of_complete_binary_tree(self.get_leaf_count())
+        let leaf_count = self.get_leaf_count() as u128;
+        assert!(is_power_of_two(leaf_count));
+        log_2_floor(leaf_count) as usize
     }
 
     pub fn get_all_leaves(&self) -> Vec<Digest> {
