@@ -535,10 +535,15 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
 pub type SaltedAuthenticationStructure<Digest> = Vec<(PartialAuthenticationPath<Digest>, Digest)>;
 
 #[derive(Clone, Debug)]
-pub struct SaltedMerkleTree<H: AlgebraicHasher> {
-    internal_merkle_tree: MerkleTree<H>,
+pub struct SaltedMerkleTree<H>
+where
+    H: AlgebraicHasher,
+{
+    internal_merkle_tree: MerkleTree<H, SaltedMaker>,
     salts: Vec<Digest>,
 }
+
+type SaltedMaker = CpuParallel;
 
 impl<H: AlgebraicHasher> SaltedMerkleTree<H>
 where
@@ -567,8 +572,11 @@ where
             nodes[i] = H::hash_pair(&left, &right);
         }
 
-        let _hasher = PhantomData;
-        let internal_merkle_tree = MerkleTree::<H> { nodes, _hasher };
+        let internal_merkle_tree = MerkleTree::<H, SaltedMaker> {
+            nodes,
+            _hasher: PhantomData,
+            _maker: PhantomData,
+        };
 
         Self {
             internal_merkle_tree,
@@ -593,7 +601,7 @@ where
         let leaf_hash = H::hash_pair(&leaf, &leaf_salt);
 
         // Set `leaf_hash` to H(value + salts[0..])
-        MerkleTree::<H>::verify_authentication_path_from_leaf_hash(
+        MerkleTree::<H, SaltedMaker>::verify_authentication_path_from_leaf_hash(
             root_hash, index, leaf_hash, auth_path,
         )
     }
@@ -645,7 +653,7 @@ where
         let saltless_proof: Vec<PartialAuthenticationPath<Digest>> =
             proof.iter().map(|x| x.0.clone()).collect();
 
-        MerkleTree::<H>::verify_authentication_structure_from_leaves(
+        MerkleTree::<H, SaltedMaker>::verify_authentication_structure_from_leaves(
             root_hash,
             indices,
             &leaf_hashes,
