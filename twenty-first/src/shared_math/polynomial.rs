@@ -133,6 +133,12 @@ impl<FF: FiniteField> PartialEq for Polynomial<FF> {
 
 impl<FF: FiniteField> Eq for Polynomial<FF> {}
 
+/// Univariate polynomial over finite field `FF`. Methods relating to evaluation and interpolation
+/// are generic over the domain using `GF`, which has to be compatible with `FF`. This allows
+/// de-coupling the domain over which interpolation or evaluation is to happen from the field the
+/// polynomial is defined over. For example, consider $f \in \mathbb{Q}[x]$ to be evaluated in
+/// $S \subseteq \mathbb{Z}$.
+/// Note that `FF` and `GF` do not have to be distinct.
 impl<FF> Polynomial<FF>
 where
     FF: FiniteField + MulAssign<BFieldElement>,
@@ -322,7 +328,14 @@ where
     }
 
     // domain: polynomial roots
-    pub fn fast_zerofier(domain: &[FF], primitive_root: &BFieldElement, root_order: usize) -> Self {
+    pub fn fast_zerofier<GF>(
+        domain: &[GF],
+        primitive_root: &BFieldElement,
+        root_order: usize,
+    ) -> Self
+    where
+        GF: FiniteField + Into<FF>,
+    {
         debug_assert_eq!(
             primitive_root.mod_pow_u32(root_order as u32),
             BFieldElement::one(),
@@ -339,7 +352,7 @@ where
 
         if domain.len() == 1 {
             return Self {
-                coefficients: vec![-domain[0], FF::one()],
+                coefficients: vec![-domain[0].into(), FF::one()],
             };
         }
 
@@ -363,18 +376,21 @@ where
         Self::fast_multiply(&left, &right, primitive_root, root_order)
     }
 
-    pub fn fast_evaluate(
+    pub fn fast_evaluate<GF>(
         &self,
-        domain: &[FF],
+        domain: &[GF],
         primitive_root: &BFieldElement,
         root_order: usize,
-    ) -> Vec<FF> {
+    ) -> Vec<FF>
+    where
+        GF: FiniteField + Into<FF>,
+    {
         if domain.is_empty() {
             return vec![];
         }
 
         if domain.len() == 1 {
-            return vec![self.evaluate(&domain[0])];
+            return vec![self.evaluate(&domain[0].into())];
         }
 
         let half = domain.len() / 2;
@@ -397,12 +413,15 @@ where
         left
     }
 
-    pub fn fast_interpolate(
-        domain: &[FF],
+    pub fn fast_interpolate<GF>(
+        domain: &[GF],
         values: &[FF],
         primitive_root: &BFieldElement,
         root_order: usize,
-    ) -> Self {
+    ) -> Self
+    where
+        GF: FiniteField + Into<FF>,
+    {
         assert_eq!(
             domain.len(),
             values.len(),
