@@ -730,21 +730,6 @@ mod merkle_tree_test {
             .sum()
     }
 
-    impl<H: AlgebraicHasher> MerkleTree<H> {
-        /// For writing negative tests only.
-        fn set_root(&mut self, new_root: Digest) {
-            self.nodes[1] = new_root
-        }
-    }
-
-    impl<H: AlgebraicHasher> SaltedMerkleTree<H> {
-        /// For writing negative tests only.
-        #[allow(dead_code)]
-        fn set_root(&mut self, new_root: Digest) {
-            self.internal_merkle_tree.set_root(new_root)
-        }
-    }
-
     #[test]
     fn merkle_tree_test_32() {
         type H = blake3::Hasher;
