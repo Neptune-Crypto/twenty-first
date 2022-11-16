@@ -10,9 +10,9 @@ use std::marker::{PhantomData, Send, Sync};
 
 use crate::shared_math::other::{bit_representation, is_power_of_two, log_2_floor};
 use crate::shared_math::rescue_prime_digest::Digest;
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
+use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 use crate::util_types::shared::bag_peaks;
-
-use super::algebraic_hasher::AlgebraicHasher;
 
 // Chosen from a very small number of benchmark runs, optimized for a slow
 // hash function (the original Rescue Prime implementation). It should probably
@@ -20,16 +20,26 @@ use super::algebraic_hasher::AlgebraicHasher;
 const PARALLELLIZATION_THRESHOLD: usize = 16;
 
 #[derive(Debug)]
-pub struct MerkleTree<H: AlgebraicHasher> {
+pub struct MerkleTree<H, M>
+where
+    H: AlgebraicHasher,
+    M: MerkleTreeMaker<H> + ?Sized,
+{
     pub nodes: Vec<Digest>,
     pub _hasher: PhantomData<H>,
+    pub _maker: PhantomData<M>,
 }
 
-impl<H: AlgebraicHasher> Clone for MerkleTree<H> {
+impl<H, M> Clone for MerkleTree<H, M>
+where
+    H: AlgebraicHasher,
+    M: MerkleTreeMaker<H>,
+{
     fn clone(&self) -> Self {
         Self {
             nodes: self.nodes.clone(),
             _hasher: PhantomData,
+            _maker: PhantomData,
         }
     }
 }
@@ -51,7 +61,11 @@ pub struct PartialAuthenticationPath<Digest>(pub Vec<Option<Digest>>);
 /// the original `MerkleTree` object, but only partial information from it,
 /// in the form of the quadrupples: `(root_hash, index, digest, auth_path)`.
 /// These are exactly the arguments for the `verify_*` family of static methods.
-impl<H: AlgebraicHasher> MerkleTree<H> {
+impl<H, M> MerkleTree<H, M>
+where
+    H: AlgebraicHasher,
+    M: MerkleTreeMaker<H>,
+{
     /// Calculate a Merkle root from a list of digests that is not necessarily a power of two.
     pub fn root_from_arbitrary_number_of_digests(digests: &[Digest]) -> Digest {
         // This function should preferably construct a whole Merkle tree data structure and not just the root,
@@ -66,10 +80,10 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
         // since the number of removal records in a block can be zero.
 
         let heights = bit_representation(digests.len() as u128);
-        let mut trees: Vec<MerkleTree<H>> = vec![];
+        let mut trees: Vec<MerkleTree<H, M>> = vec![];
         let mut acc_counter = 0;
         for height in heights {
-            let sub_tree = Self::from_digests(&digests[acc_counter..acc_counter + (1 << height)]);
+            let sub_tree = M::from_digests(&digests[acc_counter..acc_counter + (1 << height)]);
             acc_counter += 1 << height;
             trees.push(sub_tree);
         }
@@ -78,52 +92,6 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
         let roots: Vec<Digest> = trees.iter().map(|t| t.get_root()).collect();
 
         bag_peaks::<H>(&roots)
-    }
-
-    /// Takes an array of digests and builds a MerkleTree over them.
-    /// The digests are used copied over as the leaves of the tree.
-    pub fn from_digests(digests: &[Digest]) -> Self {
-        let leaves_count = digests.len();
-
-        assert!(
-            is_power_of_two(leaves_count),
-            "Size of input for Merkle tree must be a power of 2"
-        );
-
-        let filler = digests[0];
-
-        // nodes[0] is never used for anything.
-        let mut nodes = vec![filler; 2 * leaves_count];
-        nodes[leaves_count..(leaves_count + leaves_count)]
-            .clone_from_slice(&digests[..leaves_count]);
-
-        // Parallel digest calculations
-        let mut node_count_on_this_level: usize = digests.len() / 2;
-        let mut count_acc: usize = 0;
-        while node_count_on_this_level >= PARALLELLIZATION_THRESHOLD {
-            let mut local_digests: Vec<Digest> = Vec::with_capacity(node_count_on_this_level);
-            (0..node_count_on_this_level)
-                .into_par_iter()
-                .map(|i| {
-                    let j = node_count_on_this_level + i;
-                    let left_child = &nodes[j * 2];
-                    let right_child = &nodes[j * 2 + 1];
-                    H::hash_pair(left_child, right_child)
-                })
-                .collect_into_vec(&mut local_digests);
-            nodes[node_count_on_this_level..(node_count_on_this_level + node_count_on_this_level)]
-                .clone_from_slice(&local_digests[..node_count_on_this_level]);
-            count_acc += node_count_on_this_level;
-            node_count_on_this_level /= 2;
-        }
-
-        // Sequential digest calculations
-        for i in (1..(digests.len() - count_acc)).rev() {
-            nodes[i] = H::hash_pair(&nodes[i * 2], &nodes[i * 2 + 1]);
-        }
-
-        let _hasher = PhantomData;
-        Self { nodes, _hasher }
     }
 
     // Similar to `get_proof', but instead of returning a `Vec<Node<T>>`, we only
@@ -507,6 +475,60 @@ impl<H: AlgebraicHasher> MerkleTree<H> {
             result.push(self.get_leaf_by_index(*index));
         }
         result
+    }
+}
+
+#[derive(Debug)]
+pub struct CpuParallel;
+
+impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
+    /// Takes an array of digests and builds a MerkleTree over them.
+    /// The digests are used copied over as the leaves of the tree.
+    fn from_digests(digests: &[Digest]) -> MerkleTree<H, CpuParallel> {
+        let leaves_count = digests.len();
+
+        assert!(
+            is_power_of_two(leaves_count),
+            "Size of input for Merkle tree must be a power of 2"
+        );
+
+        let filler = digests[0];
+
+        // nodes[0] is never used for anything.
+        let mut nodes = vec![filler; 2 * leaves_count];
+        nodes[leaves_count..(leaves_count + leaves_count)]
+            .clone_from_slice(&digests[..leaves_count]);
+
+        // Parallel digest calculations
+        let mut node_count_on_this_level: usize = digests.len() / 2;
+        let mut count_acc: usize = 0;
+        while node_count_on_this_level >= PARALLELLIZATION_THRESHOLD {
+            let mut local_digests: Vec<Digest> = Vec::with_capacity(node_count_on_this_level);
+            (0..node_count_on_this_level)
+                .into_par_iter()
+                .map(|i| {
+                    let j = node_count_on_this_level + i;
+                    let left_child = &nodes[j * 2];
+                    let right_child = &nodes[j * 2 + 1];
+                    H::hash_pair(left_child, right_child)
+                })
+                .collect_into_vec(&mut local_digests);
+            nodes[node_count_on_this_level..(node_count_on_this_level + node_count_on_this_level)]
+                .clone_from_slice(&local_digests[..node_count_on_this_level]);
+            count_acc += node_count_on_this_level;
+            node_count_on_this_level /= 2;
+        }
+
+        // Sequential digest calculations
+        for i in (1..(digests.len() - count_acc)).rev() {
+            nodes[i] = H::hash_pair(&nodes[i * 2], &nodes[i * 2 + 1]);
+        }
+
+        MerkleTree {
+            nodes,
+            _hasher: PhantomData,
+            _maker: PhantomData,
+        }
     }
 }
 
