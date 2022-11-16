@@ -6,19 +6,20 @@ use rayon::iter::{
 use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
-use twenty_first::shared_math::rescue_prime_digest::Digest;
-use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
-use twenty_first::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::ntt::{intt, ntt};
 use twenty_first::shared_math::other::{log_2_ceil, log_2_floor};
 use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::shared_math::rescue_prime_digest::Digest;
+use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
 use twenty_first::shared_math::traits::FiniteField;
 use twenty_first::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
 use twenty_first::shared_math::x_field_element::XFieldElement;
 use twenty_first::timing_reporter::TimingReporter;
-use twenty_first::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use twenty_first::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
+use twenty_first::util_types::merkle_tree::{CpuParallel, MerkleTree, PartialAuthenticationPath};
+use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
 
 use crate::stark_proof_stream::*;
 
@@ -97,6 +98,9 @@ pub struct Fri<H> {
     _hasher: PhantomData<H>,
 }
 
+type Maker = CpuParallel;
+type MT<H> = MerkleTree<H, Maker>;
+
 impl<H: AlgebraicHasher> Fri<H> {
     pub fn new(
         offset: BFieldElement,
@@ -124,7 +128,7 @@ impl<H: AlgebraicHasher> Fri<H> {
     fn enqueue_auth_pairs(
         indices: &[usize],
         codeword: &[XFieldElement],
-        merkle_tree: &MerkleTree<H>,
+        merkle_tree: &MT<H>,
         proof_stream: &mut StarkProofStream<H>,
     ) {
         let value_ap_pairs: Vec<(PartialAuthenticationPath<Digest>, XFieldElement)> = merkle_tree
@@ -148,7 +152,7 @@ impl<H: AlgebraicHasher> Fri<H> {
             proof_stream.dequeue()?.as_fri_proof()?.into_iter().unzip();
         let digests: Vec<Digest> = values.par_iter().map(H::hash).collect();
         let path_digest_pairs = paths.into_iter().zip(digests).collect_vec();
-        if MerkleTree::<H>::verify_authentication_structure(root, indices, &path_digest_pairs) {
+        if MT::<H>::verify_authentication_structure(root, indices, &path_digest_pairs) {
             Ok(values)
         } else {
             Err(Box::new(ValidationError::BadMerkleProof))
@@ -169,7 +173,7 @@ impl<H: AlgebraicHasher> Fri<H> {
 
         // Commit phase
         let mut timer = TimingReporter::start();
-        let (codewords, merkle_trees): (Vec<Vec<XFieldElement>>, Vec<MerkleTree<H>>) =
+        let (codewords, merkle_trees): (Vec<Vec<XFieldElement>>, Vec<MT<H>>) =
             self.commit(codeword, proof_stream)?.into_iter().unzip();
         timer.elapsed("Commit phase");
 
@@ -214,7 +218,7 @@ impl<H: AlgebraicHasher> Fri<H> {
         &self,
         codeword: &[XFieldElement],
         proof_stream: &mut StarkProofStream<H>,
-    ) -> Result<Vec<(Vec<XFieldElement>, MerkleTree<H>)>, Box<dyn Error>> {
+    ) -> Result<Vec<(Vec<XFieldElement>, MT<H>)>, Box<dyn Error>> {
         let mut subgroup_generator = self.domain.omega;
         let mut offset = self.domain.offset;
         let mut codeword_local = codeword.to_vec();
@@ -240,7 +244,7 @@ impl<H: AlgebraicHasher> Fri<H> {
                 )
             })
             .collect_into_vec(&mut digests);
-        let mut mt: MerkleTree<H> = MerkleTree::from_digests(&digests);
+        let mut mt: MT<H> = Maker::from_digests(&digests);
         let mut mt_root: Digest = mt.get_root();
 
         proof_stream.enqueue(&ProofItem::MerkleRoot(mt_root));
@@ -285,7 +289,7 @@ impl<H: AlgebraicHasher> Fri<H> {
                 })
                 .collect_into_vec(&mut digests);
 
-            mt = MerkleTree::from_digests(&digests);
+            mt = Maker::from_digests(&digests);
             mt_root = mt.get_root();
             proof_stream.enqueue(&ProofItem::MerkleRoot(mt_root));
             values_and_merkle_trees.push((codeword_local.clone(), mt));
@@ -390,7 +394,7 @@ impl<H: AlgebraicHasher> Fri<H> {
 
         // Check if last codeword matches the given root
         let codeword_digests = last_codeword.iter().map(Hasher::hash).collect_vec();
-        let last_codeword_mt = MerkleTree::<H>::from_digests(&codeword_digests);
+        let last_codeword_mt: MT<H> = Maker::from_digests(&codeword_digests);
         let last_root = roots.last().unwrap();
         if *last_root != last_codeword_mt.get_root() {
             return Err(Box::new(ValidationError::BadMerkleRootForLastCodeword));
