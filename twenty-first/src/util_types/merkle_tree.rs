@@ -733,10 +733,12 @@ mod merkle_tree_test {
     #[test]
     fn merkle_tree_test_32() {
         type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         let num_leaves = 32;
         let leaves: Vec<Digest> = random_elements(num_leaves);
-        let tree: MerkleTree<H> = MerkleTree::from_digests(&leaves);
+        let tree: MT = M::from_digests(&leaves);
 
         for test_size in 0..20 {
             // Create a vector of distinct, uniform random indices `random_indices`
@@ -758,11 +760,8 @@ mod merkle_tree_test {
                 zip(partial_auth_paths, selected_leaves.clone()).collect();
 
             // Assert membership of randomly chosen leaves
-            let random_leaves_are_members = MerkleTree::<H>::verify_authentication_structure(
-                tree.get_root(),
-                &random_indices,
-                &proof,
-            );
+            let random_leaves_are_members =
+                MT::verify_authentication_structure(tree.get_root(), &random_indices, &proof);
             assert!(random_leaves_are_members);
 
             // Assert completeness of proof
@@ -774,11 +773,8 @@ mod merkle_tree_test {
 
             // Negative: Verify bad Merkle root
             let bad_root_digest = corrupt_digest(&tree.get_root());
-            let bad_root_verifies = MerkleTree::<H>::verify_authentication_structure(
-                bad_root_digest,
-                &random_indices,
-                &proof,
-            );
+            let bad_root_verifies =
+                MT::verify_authentication_structure(bad_root_digest, &random_indices, &proof);
             assert!(!bad_root_verifies);
 
             // Negative: Make random indices not match proof length (too long)
@@ -787,11 +783,8 @@ mod merkle_tree_test {
                 tmp.push(tmp[0]);
                 tmp
             };
-            let too_many_indices_verifies = MerkleTree::<H>::verify_authentication_structure(
-                tree.get_root(),
-                &bad_random_indices_1,
-                &proof,
-            );
+            let too_many_indices_verifies =
+                MT::verify_authentication_structure(tree.get_root(), &bad_random_indices_1, &proof);
             assert!(!too_many_indices_verifies);
 
             // Negative: Make random indices not match proof length (too short)
@@ -800,11 +793,8 @@ mod merkle_tree_test {
                 tmp.remove(0);
                 tmp
             };
-            let too_few_indices_verifies = MerkleTree::<H>::verify_authentication_structure(
-                tree.get_root(),
-                &bad_random_indices_2,
-                &proof,
-            );
+            let too_few_indices_verifies =
+                MT::verify_authentication_structure(tree.get_root(), &bad_random_indices_2, &proof);
             assert!(!too_few_indices_verifies);
 
             // Negative: Request non-existent index
@@ -813,11 +803,8 @@ mod merkle_tree_test {
                 tmp[0] = bad_index;
                 tmp
             };
-            let non_existent_index_verifies = MerkleTree::<H>::verify_authentication_structure(
-                tree.get_root(),
-                &bad_random_indices_3,
-                &proof,
-            );
+            let non_existent_index_verifies =
+                MT::verify_authentication_structure(tree.get_root(), &bad_random_indices_3, &proof);
             assert!(!non_existent_index_verifies);
         }
     }
@@ -825,27 +812,31 @@ mod merkle_tree_test {
     #[test]
     fn merkle_tree_verify_authentication_structure_degenerate_test() {
         type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         let num_leaves = 32;
         let leaves: Vec<Digest> = random_elements(num_leaves);
-        let tree = MerkleTree::<H>::from_digests(&leaves);
+        let tree: MT = M::from_digests(&leaves);
 
         let empty_proof = tree.get_authentication_structure(&[]);
         let auth_pairs = zip(empty_proof, leaves).collect_vec();
         let empty_proof_verifies =
-            MerkleTree::<H>::verify_authentication_structure(tree.get_root(), &[], &auth_pairs);
+            MT::verify_authentication_structure(tree.get_root(), &[], &auth_pairs);
         assert!(empty_proof_verifies);
     }
 
     #[test]
     fn merkle_tree_verify_authentication_structure_equivalence_test() {
         type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         // This test asserts that regular merkle trees and salted merkle trees with 0 salts work equivalently.
 
         let num_leaves = 8;
         let leaves: Vec<Digest> = random_elements(num_leaves);
-        let regular_tree = MerkleTree::<H>::from_digests(&leaves);
+        let regular_tree: MT = M::from_digests(&leaves);
 
         let expected_path_length = 3;
 
@@ -862,7 +853,7 @@ mod merkle_tree_test {
               );
         }
 
-        let regular_verify = MerkleTree::<H>::verify_authentication_structure(
+        let regular_verify = MT::verify_authentication_structure(
             regular_tree.get_root(),
             &selected_indices,
             &auth_pairs,
@@ -888,12 +879,14 @@ mod merkle_tree_test {
     #[test]
     fn merkle_tree_verify_authentication_structure_test() {
         type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         let num_leaves_cases = [2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
         let expected_path_lengths = [1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
         for (num_leaves, expected_path_length) in izip!(num_leaves_cases, expected_path_lengths) {
             let leaves: Vec<Digest> = random_elements(num_leaves);
-            let tree = MerkleTree::<H>::from_digests(&leaves);
+            let tree: MT = M::from_digests(&leaves);
 
             let mut rng = rand::thread_rng();
             for _ in 0..3 {
@@ -918,7 +911,7 @@ mod merkle_tree_test {
                 let auth_pairs: Vec<(PartialAuthenticationPath<Digest>, Digest)> =
                     zip(selected_auth_paths, selected_leaves.clone()).collect();
 
-                let good_tree = MerkleTree::<H>::verify_authentication_structure(
+                let good_tree = MT::verify_authentication_structure(
                     tree.get_root(),
                     &selected_indices,
                     &auth_pairs,
@@ -931,7 +924,7 @@ mod merkle_tree_test {
                 // Negative: Corrupt the root and thereby the tree
                 let bad_root_hash = corrupt_digest(&tree.get_root());
 
-                let verified = MerkleTree::<H>::verify_authentication_structure(
+                let verified = MT::verify_authentication_structure(
                     bad_root_hash,
                     &selected_indices,
                     &auth_pairs,
@@ -947,7 +940,7 @@ mod merkle_tree_test {
                     tmp
                 };
 
-                let corrupted_proof_verifies = MerkleTree::<H>::verify_authentication_structure(
+                let corrupted_proof_verifies = MT::verify_authentication_structure(
                     tree.get_root(),
                     &selected_indices,
                     &bad_proof,
@@ -960,6 +953,8 @@ mod merkle_tree_test {
     #[test]
     fn merkle_tree_get_authentication_path_test() {
         type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         // 1: Create Merkle tree
         //
@@ -970,7 +965,7 @@ mod merkle_tree_test {
         // 0   1  2   3
         let num_leaves_a = 4;
         let leaves_a: Vec<Digest> = random_elements(num_leaves_a);
-        let tree_a = MerkleTree::<H>::from_digests(&leaves_a);
+        let tree_a: MT = M::from_digests(&leaves_a);
 
         // 2: Get the path for some index
         let leaf_index_a = 2;
@@ -992,7 +987,7 @@ mod merkle_tree_test {
         // 0   1 2   3  4   5 6   7
         let num_leaves_b = 8;
         let leaves_b: Vec<Digest> = random_elements(num_leaves_b);
-        let tree_b = MerkleTree::<H>::from_digests(&leaves_b);
+        let tree_b: MT = M::from_digests(&leaves_b);
 
         // 2: Get the path for some index
         let leaf_index_b = 5;
@@ -1008,6 +1003,8 @@ mod merkle_tree_test {
     #[test]
     fn verify_authentication_path_from_leaf_hash_with_memoization_test() {
         type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         // 1: Create Merkle tree
         //
@@ -1018,14 +1015,14 @@ mod merkle_tree_test {
         // 0   1  2   3
         let num_leaves = 4;
         let leaves_a: Vec<Digest> = random_elements(num_leaves);
-        let tree_a = MerkleTree::<H>::from_digests(&leaves_a);
+        let tree_a: MT = M::from_digests(&leaves_a);
 
         let mut partial_tree: HashMap<u64, Digest> = HashMap::new();
         let leaf_index: usize = 2;
         partial_tree.insert((num_leaves + leaf_index) as u64, leaves_a[leaf_index]);
         let auth_path_leaf_index_2 = tree_a.get_authentication_path(leaf_index);
 
-        let proof_verifies = MerkleTree::<H>::verify_authentication_path_from_leaf_hash(
+        let proof_verifies = MT::verify_authentication_path_from_leaf_hash(
             tree_a.get_root(),
             leaf_index as u32,
             leaves_a[leaf_index],
@@ -1034,7 +1031,7 @@ mod merkle_tree_test {
         assert!(proof_verifies);
 
         let proof_with_memoization_verifies =
-            MerkleTree::<H>::verify_authentication_path_from_leaf_hash_with_memoization(
+            MT::verify_authentication_path_from_leaf_hash_with_memoization(
                 &tree_a.get_root(),
                 leaf_index as u32,
                 &auth_path_leaf_index_2,
@@ -1045,7 +1042,7 @@ mod merkle_tree_test {
         // Negative: Invalid auth path / partial tree
         let auth_path_leaf_index_3 = tree_a.get_authentication_path(3);
         let invalid_auth_path_partial_tree_verifies =
-            MerkleTree::<H>::verify_authentication_path_from_leaf_hash_with_memoization(
+            MT::verify_authentication_path_from_leaf_hash_with_memoization(
                 &tree_a.get_root(),
                 leaf_index as u32,
                 &auth_path_leaf_index_3,
@@ -1055,14 +1052,18 @@ mod merkle_tree_test {
 
         // Generate an entirely different Merkle tree
         let leaves_b: Vec<Digest> = random_elements(num_leaves);
-        let different_tree = MerkleTree::<H>::from_digests(&leaves_b);
-        let hmmm = MerkleTree::<H>::verify_authentication_path_from_leaf_hash_with_memoization(
-            &different_tree.get_root(),
-            leaf_index as u32,
-            &auth_path_leaf_index_2,
-            &partial_tree,
+        let different_tree: MT = M::from_digests(&leaves_b);
+        let bad_merkle_root_validation =
+            MT::verify_authentication_path_from_leaf_hash_with_memoization(
+                &different_tree.get_root(),
+                leaf_index as u32,
+                &auth_path_leaf_index_2,
+                &partial_tree,
+            );
+        assert!(
+            !bad_merkle_root_validation,
+            "Bad Merkle tree root must fail to validate"
         );
-        assert!(!hmmm, "Bad Merkle tree root must fail to validate");
     }
 
     fn make_salted_merkle_tree<H: AlgebraicHasher>(
@@ -1511,7 +1512,8 @@ mod merkle_tree_test {
         */
 
         type H = RescuePrimeRegular;
-        type MT = MerkleTree<H>;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         let exponent = 6;
         let num_leaves = usize::pow(2, exponent);
@@ -1528,7 +1530,7 @@ mod merkle_tree_test {
 
         let leafs = values.iter().map(|leaf| H::hash_slice(leaf)).collect_vec();
 
-        let tree = MT::from_digests(&leafs);
+        let tree: MT = M::from_digests(&leafs);
 
         assert_eq!(
             tree.get_leaf_count(),
@@ -1560,7 +1562,8 @@ mod merkle_tree_test {
         /// This tests that we do not confuse indices and payloads in the test `verify_all_leaves_individually`.
 
         type H = RescuePrimeRegular;
-        type MT = MerkleTree<H>;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         let exponent = 6;
         let num_leaves = usize::pow(2, exponent);
@@ -1585,7 +1588,7 @@ mod merkle_tree_test {
         // Embed
         leafs[test_leaf_idx] = H::hash_slice(&payload_leaf);
 
-        let tree = MT::from_digests(&leafs[..]);
+        let tree: MT = M::from_digests(&leafs[..]);
 
         assert_eq!(
             tree.get_leaf_count(),
@@ -1616,15 +1619,17 @@ mod merkle_tree_test {
     #[test]
     fn root_from_odd_number_of_digests_test() {
         type H = RescuePrimeRegular;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         let leafs: Vec<Digest> = random_elements(128);
-        let mt = MerkleTree::<H>::from_digests(&leafs);
+        let mt: MT = M::from_digests(&leafs);
 
         println!("Merkle root (RP 1): {:?}", mt.get_root());
 
         assert_eq!(
             mt.get_root(),
-            MerkleTree::<H>::root_from_arbitrary_number_of_digests(&leafs)
+            MT::root_from_arbitrary_number_of_digests(&leafs)
         );
     }
 
@@ -1635,7 +1640,9 @@ mod merkle_tree_test {
         // removal records.
 
         type H = RescuePrimeRegular;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
-        MerkleTree::<H>::root_from_arbitrary_number_of_digests(&[]);
+        MT::root_from_arbitrary_number_of_digests(&[]);
     }
 }
