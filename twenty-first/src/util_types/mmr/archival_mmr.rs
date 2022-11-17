@@ -299,7 +299,7 @@ mod mmr_test {
     use crate::shared_math::other::random_elements;
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::test_shared::mmr::{get_archival_mmr_from_digests, get_empty_archival_mmr};
-    use crate::util_types::merkle_tree::MerkleTree;
+    use crate::util_types::merkle_tree::{CpuParallel, MerkleTree};
     use crate::{
         shared_math::b_field_element::BFieldElement,
         util_types::mmr::{
@@ -319,6 +319,8 @@ mod mmr_test {
     #[test]
     fn empty_mmr_behavior_test() {
         type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         let mut archival_mmr: ArchivalMmr<H> = get_empty_archival_mmr();
         let mut accumulator_mmr: MmrAccumulator<H> = MmrAccumulator::<H>::new(vec![]);
@@ -330,7 +332,7 @@ mod mmr_test {
         assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
         assert_eq!(
             archival_mmr.bag_peaks(),
-            MerkleTree::<H>::root_from_arbitrary_number_of_digests(&[]),
+            MT::root_from_arbitrary_number_of_digests(&[]),
             "Bagged peaks for empty MMR must agree with MT root finder"
         );
         assert_eq!(0, archival_mmr.count_nodes());
@@ -781,6 +783,8 @@ mod mmr_test {
     #[test]
     fn variable_size_rescue_prime_mmr_test() {
         type H = RescuePrimeRegular;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         let data_sizes: Vec<u128> = (1..34).collect();
         let node_counts: Vec<u128> = vec![
@@ -811,7 +815,7 @@ mod mmr_test {
 
             // Verify that MMR root from odd number of digests and MMR bagged peaks agree
             let mmra_root = mmr.bag_peaks();
-            let mt_root = MerkleTree::<H>::root_from_arbitrary_number_of_digests(&input_hashes);
+            let mt_root = MT::root_from_arbitrary_number_of_digests(&input_hashes);
 
             assert_eq!(
                 mmra_root, mt_root,
@@ -905,6 +909,8 @@ mod mmr_test {
     #[test]
     fn variable_size_blake3_mmr_test() {
         type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
 
         let node_counts: Vec<u128> = vec![
             1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41, 42,
@@ -932,7 +938,7 @@ mod mmr_test {
 
             // Verify that MMR root from odd number of digests and MMR bagged peaks agree
             let mmra_root = mmr.bag_peaks();
-            let mt_root = MerkleTree::<H>::root_from_arbitrary_number_of_digests(&input_digests);
+            let mt_root = MT::root_from_arbitrary_number_of_digests(&input_digests);
             assert_eq!(
                 mmra_root, mt_root,
                 "MMRA bagged peaks and MT root must agree"

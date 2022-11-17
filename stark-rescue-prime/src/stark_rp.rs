@@ -9,26 +9,28 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::iter::zip;
-use twenty_first::shared_math::other::random_elements;
-use twenty_first::shared_math::other::random_elements_array;
-use twenty_first::shared_math::rescue_prime_digest::Digest;
-use twenty_first::util_types::algebraic_hasher::AlgebraicHasher;
 
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::fri::Fri;
 use twenty_first::shared_math::mpolynomial::MPolynomial;
 use twenty_first::shared_math::ntt::intt;
 use twenty_first::shared_math::other::log_2_ceil;
+use twenty_first::shared_math::other::random_elements;
+use twenty_first::shared_math::other::random_elements_array;
 use twenty_first::shared_math::other::roundup_npo2;
 use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::shared_math::rescue_prime_digest::Digest;
 use twenty_first::shared_math::rescue_prime_regular::*;
 use twenty_first::shared_math::traits::CyclicGroupGenerator;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 use twenty_first::shared_math::x_field_element::XFieldElement;
 use twenty_first::timing_reporter::TimingReporter;
+use twenty_first::util_types::algebraic_hasher::AlgebraicHasher;
+use twenty_first::util_types::merkle_tree::CpuParallel;
 use twenty_first::util_types::merkle_tree::{
     MerkleTree, PartialAuthenticationPath, SaltedMerkleTree,
 };
+use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
 use twenty_first::util_types::proof_stream::ProofStream;
 
 use crate::stark_constraints::BoundaryConstraint;
@@ -129,7 +131,8 @@ impl fmt::Display for StarkVerifyError {
 
 type StarkHasher = blake3::Hasher;
 type SaltedMt = SaltedMerkleTree<StarkHasher>;
-type XFieldMt = MerkleTree<StarkHasher>;
+type Maker = CpuParallel;
+type XFieldMt = MerkleTree<StarkHasher, Maker>;
 type XFieldFri = Fri<StarkHasher>;
 
 impl StarkRp {
@@ -410,7 +413,7 @@ impl StarkRp {
 
         let randomizer_codeword_digests: Vec<Digest> =
             randomizer_codeword.iter().map(StarkHasher::hash).collect();
-        let randomizer_mt: XFieldMt = XFieldMt::from_digests(&randomizer_codeword_digests);
+        let randomizer_mt: XFieldMt = Maker::from_digests(&randomizer_codeword_digests);
 
         let randomizer_mt_root = randomizer_mt.get_root();
         proof_stream.enqueue(&randomizer_mt_root)?;

@@ -13,7 +13,8 @@ use super::x_field_element::XFieldElement;
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::traits::FiniteField;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
-use crate::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use crate::util_types::merkle_tree::{CpuParallel, MerkleTree, PartialAuthenticationPath};
+use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 use crate::util_types::proof_stream::ProofStream;
 
 use super::rescue_prime_digest::Digest;
@@ -90,6 +91,8 @@ pub struct Fri<H> {
 }
 
 type CodewordEvaluation<T> = (usize, T);
+type Maker = CpuParallel;
+type MT<H> = MerkleTree<H, Maker>;
 
 impl<H> Fri<H>
 where
@@ -121,7 +124,7 @@ where
     fn enqueue_auth_pairs(
         indices: &[usize],
         codeword: &[XFieldElement],
-        merkle_tree: &MerkleTree<H>,
+        merkle_tree: &MerkleTree<H, CpuParallel>,
         proof_stream: &mut ProofStream,
     ) {
         let value_ap_pairs: Vec<(PartialAuthenticationPath<Digest>, XFieldElement)> = merkle_tree
@@ -153,7 +156,7 @@ where
             .collect();
         let path_digest_pairs = paths.into_iter().zip(digests).collect_vec();
 
-        if MerkleTree::<H>::verify_authentication_structure(root, indices, &path_digest_pairs) {
+        if MT::<H>::verify_authentication_structure(root, indices, &path_digest_pairs) {
             Ok(values)
         } else {
             Err(Box::new(ValidationError::BadMerkleProof))
@@ -172,7 +175,7 @@ where
         );
 
         // Commit phase
-        let (codewords, merkle_trees): (Vec<Vec<XFieldElement>>, Vec<MerkleTree<H>>) =
+        let (codewords, merkle_trees): (Vec<Vec<XFieldElement>>, Vec<MT<H>>) =
             self.commit(codeword, proof_stream)?.into_iter().unzip();
 
         // fiat-shamir phase (get indices)
@@ -207,7 +210,7 @@ where
         &self,
         codeword: &[XFieldElement],
         proof_stream: &mut ProofStream,
-    ) -> Result<Vec<(Vec<XFieldElement>, MerkleTree<H>)>, Box<dyn Error>> {
+    ) -> Result<Vec<(Vec<XFieldElement>, MerkleTree<H, CpuParallel>)>, Box<dyn Error>> {
         let mut generator = self.domain.omega;
         let mut offset = self.domain.offset;
         let mut codeword_local = codeword.to_vec();
@@ -221,7 +224,7 @@ where
             .par_iter()
             .map(|x| H::hash_slice(&x.to_sequence()))
             .collect();
-        let mut mt = MerkleTree::from_digests(&digests);
+        let mut mt: MT<H> = Maker::from_digests(&digests);
         proof_stream.enqueue(&mt.get_root())?;
         let mut values_and_merkle_trees = vec![(codeword_local.clone(), mt)];
 
@@ -258,7 +261,7 @@ where
                 .par_iter()
                 .map(|x| H::hash_slice(&x.to_sequence()))
                 .collect();
-            mt = MerkleTree::from_digests(&digests);
+            mt = Maker::from_digests(&digests);
             proof_stream.enqueue(&mt.get_root())?;
             values_and_merkle_trees.push((codeword_local.clone(), mt));
 
@@ -359,7 +362,7 @@ where
             .iter()
             .map(|x| H::hash_slice(&x.to_sequence()))
             .collect();
-        let last_codeword_mt = MerkleTree::<H>::from_digests(&leaves);
+        let last_codeword_mt: MT<H> = Maker::from_digests(&leaves);
         let last_root = roots.last().unwrap();
         if *last_root != last_codeword_mt.get_root() {
             return Err(Box::new(ValidationError::BadMerkleRootForLastCodeword));

@@ -7,8 +7,6 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
 use std::rc::Rc;
-use twenty_first::shared_math::rescue_prime_digest::Digest;
-use twenty_first::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::fri::Fri;
@@ -16,12 +14,15 @@ use twenty_first::shared_math::mpolynomial::Degree;
 use twenty_first::shared_math::other::{is_power_of_two, random_elements};
 use twenty_first::shared_math::other::{random_elements_array, roundup_npo2};
 use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::shared_math::rescue_prime_digest::Digest;
 use twenty_first::shared_math::stark::stark_verify_error::StarkVerifyError;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 use twenty_first::shared_math::traits::{Inverse, ModPowU32};
 use twenty_first::shared_math::x_field_element::XFieldElement;
 use twenty_first::timing_reporter::TimingReporter;
-use twenty_first::util_types::merkle_tree::{MerkleTree, PartialAuthenticationPath};
+use twenty_first::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
+use twenty_first::util_types::merkle_tree::{CpuParallel, MerkleTree, PartialAuthenticationPath};
+use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
 use twenty_first::util_types::proof_stream::ProofStream;
 
 use crate::evaluation_argument::{
@@ -41,6 +42,8 @@ pub const PERMUTATION_ARGUMENTS_COUNT: usize = 2;
 pub const TERMINAL_COUNT: usize = 5;
 
 type StarkHasher = blake3::Hasher;
+type Maker = CpuParallel;
+type MT = MerkleTree<StarkHasher, Maker>;
 
 pub struct Stark {
     trace_length: usize,
@@ -297,8 +300,7 @@ impl Stark {
             })
             .collect_into_vec(&mut base_codeword_digests_by_index);
 
-        let base_merkle_tree =
-            MerkleTree::<StarkHasher>::from_digests(&base_codeword_digests_by_index);
+        let base_merkle_tree: MT = Maker::from_digests(&base_codeword_digests_by_index);
 
         timer.elapsed("base_merkle_tree");
 
@@ -366,8 +368,7 @@ impl Stark {
             })
             .collect_into_vec(&mut extension_codeword_digests_by_index);
 
-        let extension_tree =
-            MerkleTree::<StarkHasher>::from_digests(&extension_codeword_digests_by_index);
+        let extension_tree: MT = Maker::from_digests(&extension_codeword_digests_by_index);
         proof_stream.enqueue(&extension_tree.get_root())?;
 
         timer.elapsed("extension_tree");
@@ -590,8 +591,7 @@ impl Stark {
                 StarkHasher::hash_slice(&sequence)
             })
             .collect_into_vec(&mut combination_codeword_digests);
-        let combination_tree =
-            MerkleTree::<StarkHasher>::from_digests(&combination_codeword_digests);
+        let combination_tree: MT = Maker::from_digests(&combination_codeword_digests);
         let combination_root: Digest = combination_tree.get_root();
         proof_stream.enqueue(&combination_root.clone())?;
 
@@ -788,13 +788,12 @@ impl Stark {
             "Calculated {} leaf digests for base elements",
             indices.len()
         ));
-        let mt_base_success =
-            MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
-                base_merkle_tree_root,
-                &revealed_indices,
-                &leaf_digests,
-                &auth_paths,
-            );
+        let mt_base_success = MT::verify_authentication_structure_from_leaves(
+            base_merkle_tree_root,
+            &revealed_indices,
+            &leaf_digests,
+            &auth_paths,
+        );
         if !mt_base_success {
             panic!("Failed to verify authentication path for base codeword");
         }
@@ -829,13 +828,12 @@ impl Stark {
             "Calculated {} leaf digests for extension elements",
             indices.len()
         ));
-        let mt_extension_success =
-            MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
-                extension_tree_merkle_root,
-                &revealed_indices,
-                &extension_leaf_digests,
-                &extension_auth_paths,
-            );
+        let mt_extension_success = MT::verify_authentication_structure_from_leaves(
+            extension_tree_merkle_root,
+            &revealed_indices,
+            &extension_leaf_digests,
+            &extension_auth_paths,
+        );
         if !mt_extension_success {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for extension codeword");
@@ -889,13 +887,12 @@ impl Stark {
             .collect();
         let revealed_combination_auth_paths: Vec<PartialAuthenticationPath<Digest>> =
             proof_stream.dequeue_length_prepended()?;
-        let mt_combination_success =
-            MerkleTree::<StarkHasher>::verify_authentication_structure_from_leaves(
-                combination_root,
-                &indices,
-                &revealed_combination_digests,
-                &revealed_combination_auth_paths,
-            );
+        let mt_combination_success = MT::verify_authentication_structure_from_leaves(
+            combination_root,
+            &indices,
+            &revealed_combination_digests,
+            &revealed_combination_auth_paths,
+        );
         if !mt_combination_success {
             // TODO: Replace this by a specific error type, or just return `Ok(false)`
             panic!("Failed to verify authentication path for combination codeword");
