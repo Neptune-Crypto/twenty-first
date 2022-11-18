@@ -16,7 +16,7 @@ use crate::util_types::algebraic_hasher::Hashable;
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct U32s<const N: usize> {
     #[serde(with = "BigArray")]
-    pub values: [u32; N],
+    values: [u32; N],
 }
 
 impl<const N: usize> Eq for U32s<N> {}
@@ -24,6 +24,10 @@ impl<const N: usize> Eq for U32s<N> {}
 impl<const N: usize> U32s<N> {
     pub fn new(values: [u32; N]) -> Self {
         Self { values }
+    }
+
+    pub fn values(self) -> [u32; N] {
+        self.values
     }
 
     fn set_bit(&mut self, bit_index: usize, val: bool) {
