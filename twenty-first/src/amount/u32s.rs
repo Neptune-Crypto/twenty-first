@@ -16,7 +16,7 @@ use crate::util_types::algebraic_hasher::Hashable;
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct U32s<const N: usize> {
     #[serde(with = "BigArray")]
-    values: [u32; N],
+    pub values: [u32; N],
 }
 
 impl<const N: usize> Eq for U32s<N> {}
