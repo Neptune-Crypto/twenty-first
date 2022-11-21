@@ -93,10 +93,10 @@ impl FromStr for Digest {
     }
 }
 
-impl TryFrom<Vec<BFieldElement>> for Digest {
+impl TryFrom<&[BFieldElement]> for Digest {
     type Error = String;
 
-    fn try_from(value: Vec<BFieldElement>) -> Result<Self, Self::Error> {
+    fn try_from(value: &[BFieldElement]) -> Result<Self, Self::Error> {
         let len = value.len();
         value.try_into().map(Digest::new).map_err(|_| {
             format!(
@@ -104,6 +104,14 @@ impl TryFrom<Vec<BFieldElement>> for Digest {
                 DIGEST_LENGTH, len,
             )
         })
+    }
+}
+
+impl TryFrom<Vec<BFieldElement>> for Digest {
+    type Error = String;
+
+    fn try_from(value: Vec<BFieldElement>) -> Result<Self, Self::Error> {
+        Digest::try_from(value.as_ref())
     }
 }
 
