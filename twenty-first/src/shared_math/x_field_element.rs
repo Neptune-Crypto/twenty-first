@@ -70,6 +70,28 @@ impl From<Polynomial<BFieldElement>> for XFieldElement {
     }
 }
 
+impl TryFrom<&[BFieldElement]> for XFieldElement {
+    type Error = String;
+
+    fn try_from(value: &[BFieldElement]) -> Result<Self, Self::Error> {
+        let len = value.len();
+        value.try_into().map(XFieldElement::new).map_err(|_| {
+            format!(
+                "Expected {} BFieldElements for digest, but got {}",
+                EXTENSION_DEGREE, len,
+            )
+        })
+    }
+}
+
+impl TryFrom<Vec<BFieldElement>> for XFieldElement {
+    type Error = String;
+
+    fn try_from(value: Vec<BFieldElement>) -> Result<Self, Self::Error> {
+        XFieldElement::try_from(value.as_ref())
+    }
+}
+
 impl XFieldElement {
     #[inline]
     pub fn shah_polynomial() -> Polynomial<BFieldElement> {
