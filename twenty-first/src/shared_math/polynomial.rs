@@ -423,10 +423,9 @@ where
             "Cannot fast interpolate through zero points.",
         );
 
-        if domain.len() == 1 {
-            return Polynomial {
-                coefficients: vec![values[0]],
-            };
+        const CUTOFF_POINT_FOR_FAST_INTERPOLATION: usize = 1024;
+        if domain.len() < CUTOFF_POINT_FOR_FAST_INTERPOLATION {
+            return Self::lagrange_interpolate(domain, values);
         }
 
         let half = domain.len() / 2;
@@ -439,15 +438,17 @@ where
         let right_offset: Vec<FF> =
             Self::fast_evaluate(&left_zerofier, &domain[half..], primitive_root, root_order);
 
+        let left_offset_inverse = FF::batch_inversion(left_offset);
+        let right_offset_inverse = FF::batch_inversion(right_offset);
         let left_targets: Vec<FF> = values[..half]
             .iter()
-            .zip(left_offset)
-            .map(|(n, d)| n.to_owned() / d)
+            .zip(left_offset_inverse)
+            .map(|(n, d)| n.to_owned() * d)
             .collect();
         let right_targets: Vec<FF> = values[half..]
             .iter()
-            .zip(right_offset)
-            .map(|(n, d)| n.to_owned() / d)
+            .zip(right_offset_inverse)
+            .map(|(n, d)| n.to_owned() * d)
             .collect();
 
         let left_interpolant =
