@@ -21,13 +21,15 @@ pub struct U32s<const N: usize> {
 
 impl<const N: usize> Eq for U32s<N> {}
 
+impl<const N: usize> AsRef<[u32; N]> for U32s<N> {
+    fn as_ref(&self) -> &[u32; N] {
+        &self.values
+    }
+}
+
 impl<const N: usize> U32s<N> {
     pub fn new(values: [u32; N]) -> Self {
         Self { values }
-    }
-
-    pub fn values(self) -> [u32; N] {
-        self.values
     }
 
     fn set_bit(&mut self, bit_index: usize, val: bool) {
