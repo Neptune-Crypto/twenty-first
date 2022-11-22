@@ -6,6 +6,8 @@ use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use std::collections::HashMap;
 use std::convert::From;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -469,6 +471,176 @@ where
             root_order,
         );
         left_term + right_term
+    }
+
+    pub fn batch_fast_interpolate(
+        domain: &[FF],
+        values_matrix: &Vec<Vec<FF>>,
+        primitive_root: &BFieldElement,
+        root_order: usize,
+    ) -> Vec<Self> {
+        debug_assert_eq!(
+            primitive_root.mod_pow_u32(root_order as u32),
+            BFieldElement::one(),
+            "Supplied element “primitive_root” must have supplied order.\
+            Supplied element was: {:?}\
+            Supplied order was: {:?}",
+            primitive_root,
+            root_order
+        );
+
+        assert!(
+            !domain.is_empty(),
+            "Cannot fast interpolate through zero points.",
+        );
+
+        let mut zerofier_dictionary: HashMap<(FF, FF), Polynomial<FF>> = HashMap::default();
+        let mut offset_inverse_dictionary: HashMap<(FF, FF), Vec<FF>> = HashMap::default();
+
+        Self::batch_fast_interpolate_with_memoization(
+            domain,
+            values_matrix,
+            primitive_root,
+            root_order,
+            &mut zerofier_dictionary,
+            &mut offset_inverse_dictionary,
+        )
+    }
+
+    fn batch_fast_interpolate_with_memoization(
+        domain: &[FF],
+        values_matrix: &Vec<Vec<FF>>,
+        primitive_root: &BFieldElement,
+        root_order: usize,
+        zerofier_dictionary: &mut HashMap<(FF, FF), Polynomial<FF>>,
+        offset_inverse_dictionary: &mut HashMap<(FF, FF), Vec<FF>>,
+    ) -> Vec<Self> {
+        // This value of 16 was found to be optimal through a benchmark on sword_smith's
+        // machine.
+        const OPTIMAL_CUTOFF_POINT_FOR_BATCHED_INTERPOLATION: usize = 16;
+        if domain.len() < OPTIMAL_CUTOFF_POINT_FOR_BATCHED_INTERPOLATION {
+            return values_matrix
+                .iter()
+                .map(|values| Self::lagrange_interpolate(domain, values))
+                .collect();
+        }
+
+        // calculate everything related to the domain
+        let half = domain.len() / 2;
+
+        let left_key = (domain[0], domain[half - 1]);
+        let left_zerofier = match zerofier_dictionary.get(&left_key) {
+            Some(z) => z.to_owned(),
+            None => {
+                let left_zerofier =
+                    Self::fast_zerofier(&domain[..half], primitive_root, root_order);
+                zerofier_dictionary.insert(left_key, left_zerofier.clone());
+                left_zerofier
+            }
+        };
+        let right_key = (domain[half], *domain.last().unwrap());
+        let right_zerofier = match zerofier_dictionary.get(&right_key) {
+            Some(z) => z.to_owned(),
+            None => {
+                let right_zerofier =
+                    Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+                zerofier_dictionary.insert(right_key, right_zerofier.clone());
+                right_zerofier
+            }
+        };
+
+        let left_offset_inverse = match offset_inverse_dictionary.get(&left_key) {
+            Some(vector) => vector.to_owned(),
+            None => {
+                let left_offset: Vec<FF> = Self::fast_evaluate(
+                    &right_zerofier,
+                    &domain[..half],
+                    primitive_root,
+                    root_order,
+                );
+                let left_offset_inverse = FF::batch_inversion(left_offset);
+                offset_inverse_dictionary.insert(left_key, left_offset_inverse.clone());
+                left_offset_inverse
+            }
+        };
+        let right_offset_inverse = match offset_inverse_dictionary.get(&right_key) {
+            Some(vector) => vector.to_owned(),
+            None => {
+                let right_offset: Vec<FF> = Self::fast_evaluate(
+                    &left_zerofier,
+                    &domain[half..],
+                    primitive_root,
+                    root_order,
+                );
+                let right_offset_inverse = FF::batch_inversion(right_offset);
+                offset_inverse_dictionary.insert(right_key, right_offset_inverse.clone());
+                right_offset_inverse
+            }
+        };
+
+        // prepare target matrices
+        let all_left_targets: Vec<_> = values_matrix
+            .par_iter()
+            .map(|values| {
+                values[..half]
+                    .iter()
+                    .zip(left_offset_inverse.iter())
+                    .map(|(n, d)| n.to_owned() * *d)
+                    .collect()
+            })
+            .collect();
+        let all_right_targets: Vec<_> = values_matrix
+            .par_iter()
+            .map(|values| {
+                values[half..]
+                    .par_iter()
+                    .zip(right_offset_inverse.par_iter())
+                    .map(|(n, d)| n.to_owned() * *d)
+                    .collect()
+            })
+            .collect();
+
+        // recurse
+        let left_interpolants = Self::batch_fast_interpolate_with_memoization(
+            &domain[..half],
+            &all_left_targets,
+            primitive_root,
+            root_order,
+            zerofier_dictionary,
+            offset_inverse_dictionary,
+        );
+        let right_interpolants = Self::batch_fast_interpolate_with_memoization(
+            &domain[half..],
+            &all_right_targets,
+            primitive_root,
+            root_order,
+            zerofier_dictionary,
+            offset_inverse_dictionary,
+        );
+
+        // add vectors of polynomials
+        let interpolants = left_interpolants
+            .par_iter()
+            .zip(right_interpolants.par_iter())
+            .map(|(left_interpolant, right_interpolant)| {
+                let left_term = Self::fast_multiply(
+                    left_interpolant,
+                    &right_zerofier,
+                    primitive_root,
+                    root_order,
+                );
+                let right_term = Self::fast_multiply(
+                    right_interpolant,
+                    &left_zerofier,
+                    primitive_root,
+                    root_order,
+                );
+
+                left_term + right_term
+            })
+            .collect();
+
+        interpolants
     }
 
     /// Fast evaluate on a coset domain, which is the group generated by `generator^i * offset`
@@ -2261,18 +2433,45 @@ mod test_polynomials {
         let evals = poly.fast_evaluate(&domain, &omega, 4);
         let reinterp = Polynomial::fast_interpolate(&domain, &evals, &omega, 4);
         assert_eq!(poly, reinterp);
+
+        let reinterps_batch: Vec<Polynomial<BFieldElement>> =
+            Polynomial::batch_fast_interpolate(&domain, &vec![evals], &omega, 4);
+        assert_eq!(poly, reinterps_batch[0]);
     }
 
     #[test]
     fn fast_interpolate_pbt() {
-        for num_points in [1, 2, 4, 8, 16, 32, 64, 128] {
+        for num_points in [1, 2, 4, 8, 16, 32, 64, 128, 2000] {
             let domain: Vec<BFieldElement> = random_elements(num_points);
             let values: Vec<BFieldElement> = random_elements(num_points);
-            let omega = BFieldElement::primitive_root_of_unity(num_points as u64).unwrap();
-            let interpolant = Polynomial::fast_interpolate(&domain, &values, &omega, num_points);
+            let order_of_omega = other::roundup_npo2(num_points as u64) as usize;
+            let omega = BFieldElement::primitive_root_of_unity(order_of_omega as u64).unwrap();
+
+            // Unbatched fast interpolation
+            let interpolant =
+                Polynomial::fast_interpolate(&domain, &values, &omega, order_of_omega);
 
             for (x, y) in domain.iter().zip(values) {
                 assert_eq!(y, interpolant.evaluate(x));
+            }
+
+            // Batched fast interpolation
+            let values_vec: Vec<Vec<BFieldElement>> = vec![
+                random_elements(num_points),
+                random_elements(num_points),
+                random_elements(num_points),
+                random_elements(num_points),
+                random_elements(num_points),
+            ];
+
+            let batch_interpolated =
+                Polynomial::batch_fast_interpolate(&domain, &values_vec, &omega, order_of_omega);
+            for (y_values, interpolant_from_batch_function) in
+                values_vec.into_iter().zip(batch_interpolated.into_iter())
+            {
+                for (x, y) in domain.iter().zip(y_values) {
+                    assert_eq!(y, interpolant_from_batch_function.evaluate(x));
+                }
             }
         }
     }
