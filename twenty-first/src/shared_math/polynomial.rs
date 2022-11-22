@@ -2734,6 +2734,18 @@ mod test_polynomials {
     }
 
     #[test]
+    fn lagrange_interpolate_size_one_test() {
+        type BPoly = Polynomial<BFieldElement>;
+        let interpoly =
+            BPoly::lagrange_interpolate(&[BFieldElement::new(14)], &[BFieldElement::new(7888854)]);
+        assert_eq!(
+            BFieldElement::new(7888854),
+            interpoly.evaluate(&BFieldElement::new(5))
+        );
+        assert!(interpoly.degree().is_zero());
+    }
+
+    #[test]
     fn lagrange_interpolate_test() {
         type BPoly = Polynomial<BFieldElement>;
         let mut rng = rand::thread_rng();
