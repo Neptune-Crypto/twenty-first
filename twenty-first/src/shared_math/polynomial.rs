@@ -2525,6 +2525,18 @@ mod test_polynomials {
 
             // match against lagrange interpolation
             assert_eq!(interpolant, lagrange_interpolant);
+
+            // Use batched-NTT-based interpolation
+            let batched_interpolants = Polynomial::<BFieldElement>::batch_fast_interpolate(
+                &domain,
+                &vec![values],
+                &omega,
+                order,
+            );
+
+            // match against lagrange interpolation
+            assert_eq!(batched_interpolants[0], lagrange_interpolant);
+            assert_eq!(1, batched_interpolants.len())
         }
     }
 
