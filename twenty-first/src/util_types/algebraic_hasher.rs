@@ -121,3 +121,40 @@ impl Hashable for BFieldElement {
         vec![*self]
     }
 }
+
+#[cfg(test)]
+mod algebraic_hasher_tests {
+    use rand::Rng;
+
+    use crate::shared_math::rescue_prime_regular::DIGEST_LENGTH;
+    use crate::shared_math::x_field_element::EXTENSION_DEGREE;
+
+    use super::*;
+
+    #[test]
+    fn to_sequence_length_test() {
+        let mut rng = rand::thread_rng();
+        let bfe_max = BFieldElement::new(BFieldElement::MAX);
+
+        let some_digest: Digest = rng.gen();
+        let zero_digest: Digest = Digest::new([BFieldElement::zero(); DIGEST_LENGTH]);
+        let max_digest: Digest = Digest::new([bfe_max; DIGEST_LENGTH]);
+        for digest in [some_digest, zero_digest, max_digest] {
+            assert_eq!(DIGEST_LENGTH, digest.to_sequence().len());
+        }
+
+        let some_u128: u128 = rng.gen();
+        let zero_u128: u128 = 0;
+        let max_u128: u128 = u128::MAX;
+        for u128 in [some_u128, zero_u128, max_u128] {
+            assert_eq!(DIGEST_LENGTH, u128.to_sequence().len());
+        }
+
+        let some_xfe: XFieldElement = rng.gen();
+        let zero_xfe: XFieldElement = XFieldElement::zero();
+        let max_xfe: XFieldElement = XFieldElement::new([bfe_max; EXTENSION_DEGREE]);
+        for xfe in [some_xfe, zero_xfe, max_xfe] {
+            assert_eq!(EXTENSION_DEGREE, xfe.to_sequence().len());
+        }
+    }
+}

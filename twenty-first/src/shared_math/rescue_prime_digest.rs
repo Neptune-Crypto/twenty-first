@@ -16,8 +16,6 @@ use crate::shared_math::traits::FromVecu8;
 pub struct Digest([BFieldElement; DIGEST_LENGTH]);
 // FIXME: Make Digest a record instead of a tuple.
 
-pub const MSG_DIGEST_SIZE_IN_BYTES: usize = 32;
-
 impl GetSize for Digest {
     fn get_stack_size() -> usize {
         std::mem::size_of::<Self>()
@@ -41,6 +39,16 @@ impl Digest {
 
     pub fn new(digest: [BFieldElement; DIGEST_LENGTH]) -> Self {
         Self(digest)
+    }
+
+    pub fn emojihash(&self) -> String {
+        let [a, b, c, d, e] = self.0.map(|bfe| {
+            emojihash::hash(&bfe.value().to_be_bytes())
+                .chars()
+                .take(DIGEST_LENGTH)
+                .collect::<String>()
+        });
+        format!("[{a}|{b}|{c}|{d}|{e}]")
     }
 }
 
@@ -145,33 +153,9 @@ impl From<[u8; Digest::BYTES]> for Digest {
     }
 }
 
-// The implementations for dev net byte arrays are not to be used on main net
-impl From<Digest> for [u8; MSG_DIGEST_SIZE_IN_BYTES] {
-    fn from(input: Digest) -> Self {
-        let whole: [u8; Digest::BYTES] = input.into();
-        whole[0..MSG_DIGEST_SIZE_IN_BYTES]
-            .to_vec()
-            .try_into()
-            .unwrap()
-    }
-}
-
 #[cfg(test)]
 mod digest_tests {
     use super::*;
-
-    #[test]
-    fn signature_digest_conversion_test() {
-        let bfe_vec = vec![
-            BFieldElement::new(12),
-            BFieldElement::new(24),
-            BFieldElement::new(36),
-            BFieldElement::new(48),
-            BFieldElement::new(60),
-        ];
-        let digest_from_array: Digest = bfe_vec.try_into().unwrap();
-        let _shorter: [u8; MSG_DIGEST_SIZE_IN_BYTES] = digest_from_array.into();
-    }
 
     #[test]
     pub fn get_size() {
