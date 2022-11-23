@@ -1,6 +1,7 @@
 use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
+use crate::util_types::emojihash_trait::{Emojihash, EMOJI_PER_ELEMENT};
 use num_traits::{One, Zero};
 use rand_distr::{Distribution, Standard};
 use std::hash::{Hash, Hasher};
@@ -51,8 +52,6 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
     2147483648u64 => 4614640910117430873,
     4294967296u64 => 1753635133440165772,
 };
-
-pub const EMOJI_PER_BFE: usize = 3;
 
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
@@ -205,14 +204,14 @@ impl BFieldElement {
         let (result, over) = tmp1.overflowing_add(tmp2);
         result.wrapping_add(Self::LOWER_MASK * (over as u64))
     }
+}
 
-    pub fn emojihash(&self) -> String {
-        let emojis = emojihash::hash(&self.0.to_be_bytes())
+impl Emojihash for BFieldElement {
+    fn emojihash(&self) -> String {
+        emojihash::hash(&self.0.to_be_bytes())
             .chars()
-            .take(EMOJI_PER_BFE)
-            .collect::<String>();
-
-        format!("[{emojis}]")
+            .take(EMOJI_PER_ELEMENT)
+            .collect::<String>()
     }
 }
 

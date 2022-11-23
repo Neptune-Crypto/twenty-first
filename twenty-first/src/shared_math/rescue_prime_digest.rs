@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_regular::DIGEST_LENGTH;
 use crate::shared_math::traits::FromVecu8;
+use crate::util_types::emojihash_trait::Emojihash;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Digest([BFieldElement; DIGEST_LENGTH]);
@@ -40,15 +41,11 @@ impl Digest {
     pub fn new(digest: [BFieldElement; DIGEST_LENGTH]) -> Self {
         Self(digest)
     }
+}
 
-    pub fn emojihash(&self) -> String {
-        let [a, b, c, d, e] = self.0.map(|bfe| {
-            emojihash::hash(&bfe.value().to_be_bytes())
-                .chars()
-                .take(DIGEST_LENGTH)
-                .collect::<String>()
-        });
-        format!("[{a}|{b}|{c}|{d}|{e}]")
+impl Emojihash for Digest {
+    fn emojihash(&self) -> String {
+        self.0.emojihash()
     }
 }
 

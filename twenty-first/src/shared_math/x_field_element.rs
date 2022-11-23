@@ -7,10 +7,11 @@ use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use super::rescue_prime_digest::Digest;
-use crate::shared_math::b_field_element::{BFieldElement, EMOJI_PER_BFE};
+use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use crate::shared_math::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
+use crate::util_types::emojihash_trait::Emojihash;
 
 pub const EXTENSION_DEGREE: usize = 3;
 
@@ -184,16 +185,11 @@ impl XFieldElement {
     pub fn decrement(&mut self, index: usize) {
         self.coefficients[index].decrement();
     }
+}
 
-    /// Convert item to pretty-printed string of emojis
-    pub fn emojihash(&self) -> String {
-        let [a, b, c] = self.coefficients.map(|bfe| {
-            emojihash::hash(&bfe.value().to_be_bytes())
-                .chars()
-                .take(EMOJI_PER_BFE)
-                .collect::<String>()
-        });
-        format!("[{a}|{b}|{c}]")
+impl Emojihash for XFieldElement {
+    fn emojihash(&self) -> String {
+        self.coefficients.emojihash()
     }
 }
 
@@ -1120,5 +1116,44 @@ mod x_field_element_test {
             let one = XFieldElement::one();
             assert_eq!(one, elem * elem.inverse_or_zero());
         }
+    }
+
+    fn emojihash_equivalence_prop(elem: XFieldElement) {
+        let expected = elem.emojihash();
+
+        let array: [BFieldElement; EXTENSION_DEGREE] = elem.coefficients;
+        assert_eq!(expected, array.emojihash());
+
+        let array_slice: &[BFieldElement] = array.as_ref();
+        assert_eq!(expected, array_slice.emojihash());
+
+        let vector: Vec<BFieldElement> = elem.coefficients.to_vec();
+        assert_eq!(expected, vector.emojihash());
+
+        let vector_slice: &[BFieldElement] = vector.as_ref();
+        assert_eq!(expected, vector_slice.emojihash());
+
+        let vector_ref: &Vec<BFieldElement> = vector.as_ref();
+        assert_eq!(expected, vector_ref.emojihash());
+    }
+
+    #[test]
+    fn emojihash_test() {
+        emojihash_equivalence_prop(XFieldElement::zero());
+
+        let mut rng = rand::thread_rng();
+        emojihash_equivalence_prop(rng.gen());
+
+        let bfes: Vec<BFieldElement> = random_elements(9);
+        let xfes: Vec<XFieldElement> = vec![
+            XFieldElement::new([bfes[0], bfes[1], bfes[2]]),
+            XFieldElement::new([bfes[3], bfes[4], bfes[5]]),
+            XFieldElement::new([bfes[6], bfes[7], bfes[8]]),
+        ];
+
+        assert_eq!(
+            bfes.emojihash().replace(&['[', ']', '|'], ""),
+            xfes.emojihash().replace(&['[', ']', '|'], ""),
+        );
     }
 }
