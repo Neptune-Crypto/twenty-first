@@ -1,6 +1,6 @@
 [package]
 name = "twenty-first"
-version = "0.7.1"
+version = "0.7.2"
 authors = ["Triton Software AG"]
 edition = "2021"
 
@@ -11,7 +11,13 @@ documentation = "https://github.com/Neptune-Crypto/twenty-first"
 repository = "https://github.com/Neptune-Crypto/twenty-first"
 readme = "../README.md"
 
-keywords = ["polynomial", "merkle-tree", "post-quantum", "algebra", "rescue-prime"]
+keywords = [
+    "polynomial",
+    "merkle-tree",
+    "post-quantum",
+    "algebra",
+    "rescue-prime",
+]
 categories = ["cryptography", "mathematics"]
 
 [dev-dependencies]
