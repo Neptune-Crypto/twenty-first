@@ -4,7 +4,10 @@ use itertools::Itertools;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
-use crate::shared_math::{ntt::ntt, traits::Inverse};
+use crate::shared_math::{
+    ntt::ntt,
+    traits::{Inverse, ModPowU32},
+};
 
 use super::{b_field_element::BFieldElement, traits::PrimitiveRootOfUnity};
 
@@ -706,6 +709,7 @@ impl Tip5State {
 pub struct Tip5 {
     lookup_table: [u16; 65536],
     mds: [BFieldElement; STATE_SIZE],
+    mds_swapped: [BFieldElement; STATE_SIZE],
     log2_state_size: u32,
     omega: BFieldElement,
     omega_inverse: BFieldElement,
@@ -715,6 +719,7 @@ impl Tip5 {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let mut lookup_table = [0u16; 65536];
+        let log2_state_size = 4u32;
         for i in 0..=u16::MAX {
             let gfe = Gf65536(i);
             let cubed = gfe * gfe * gfe;
@@ -725,15 +730,22 @@ impl Tip5 {
             1073741824, 2,
         ]
         .map(BFieldElement::new);
+        let mut mds_swapped = mds;
+        for k in 0..STATE_SIZE as u32 {
+            let rk = Self::bitreverse(k, log2_state_size);
+            if k < rk {
+                mds_swapped.swap(rk as usize, k as usize);
+            }
+        }
         let omega = BFieldElement::primitive_root_of_unity(STATE_SIZE as u64).unwrap();
         let omega_inverse = omega.inverse();
-        let log2_state_size = 4u32;
         assert_eq!(1 << log2_state_size, STATE_SIZE);
         ntt(&mut mds, omega, log2_state_size);
 
         Self {
             lookup_table,
             mds,
+            mds_swapped,
             log2_state_size,
             omega,
             omega_inverse,
@@ -782,12 +794,128 @@ impl Tip5 {
     }
 
     #[inline]
-    fn mds_ntt(&self, sponge: &mut Tip5State) {
-        ntt(&mut sponge.state, self.omega, self.log2_state_size);
-        for i in 0..STATE_SIZE {
-            sponge.state[i] *= self.mds[i];
+    fn bitreverse(mut n: u32, l: u32) -> u32 {
+        let mut r = 0;
+        for _ in 0..l {
+            r = (r << 1) | (n & 1);
+            n >>= 1;
         }
-        ntt(&mut sponge.state, self.omega_inverse, self.log2_state_size);
+        r
+    }
+
+    #[allow(clippy::many_single_char_names)]
+    fn ntt_withswap(x: &mut [BFieldElement], omega: BFieldElement, log_2_of_n: u32) {
+        let n = x.len() as u32;
+
+        // `n` must be a power of 2
+        debug_assert_eq!(n, 1 << log_2_of_n, "2^log2(n) == n");
+
+        // `omega` must be a primitive root of unity of order `n`
+        debug_assert!(
+            omega.mod_pow_u32(n).is_one(),
+            "Got {} which is not a {}th root of 1",
+            omega,
+            n
+        );
+        debug_assert!(!omega.mod_pow_u32(n / 2).is_one());
+
+        for k in 0..n {
+            let rk = Self::bitreverse(k, log_2_of_n);
+            if k < rk {
+                x.swap(rk as usize, k as usize);
+            }
+        }
+
+        let mut m = 1;
+        for _ in 0..log_2_of_n {
+            let w_m = omega.mod_pow_u32(n / (2 * m));
+            let mut k = 0;
+            while k < n {
+                let mut w = BFieldElement::one();
+                for j in 0..m {
+                    let mut t = x[(k + j + m) as usize];
+                    t *= w;
+                    let mut tmp = x[(k + j) as usize];
+                    tmp -= t;
+                    x[(k + j + m) as usize] = tmp;
+                    x[(k + j) as usize] += t;
+                    w *= w_m;
+                }
+
+                k += 2 * m;
+            }
+
+            m *= 2;
+        }
+    }
+
+    #[allow(clippy::many_single_char_names)]
+    fn ntt_noswap(x: &mut [BFieldElement], omega: BFieldElement) {
+        let n = STATE_SIZE;
+
+        let mut m = 1;
+        for _ in 0..4 {
+            let w_m = omega.mod_pow_u32((STATE_SIZE / (2 * m)).try_into().unwrap());
+            let mut k = 0;
+            while k < n {
+                let mut w = BFieldElement::one();
+                for j in 0..m {
+                    let mut t = x[(k + j + m) as usize];
+                    t *= w;
+                    let mut tmp = x[(k + j) as usize];
+                    tmp -= t;
+                    x[(k + j + m) as usize] = tmp;
+                    x[(k + j) as usize] += t;
+                    w *= w_m;
+                }
+
+                k += 2 * m;
+            }
+
+            m *= 2;
+        }
+    }
+
+    #[inline]
+    pub fn mds_withswap(&self, state: &mut [BFieldElement; STATE_SIZE]) {
+        Self::ntt_withswap(state, self.omega, self.log2_state_size);
+        for (i, m) in self.mds.iter().enumerate() {
+            state[i] *= *m;
+        }
+        Self::ntt_withswap(state, self.omega_inverse, self.log2_state_size);
+    }
+
+    #[inline]
+    pub fn mds_noswap(&self, state: &mut [BFieldElement; STATE_SIZE]) {
+        Self::ntt_noswap(state, self.omega);
+
+        state[0] *= BFieldElement::new(256);
+        state[1] *= BFieldElement::new(524288);
+        state[2] *= BFieldElement::new(1);
+        state[3] *= BFieldElement::new(16777216);
+        state[4] *= BFieldElement::new(2);
+        state[5] *= BFieldElement::new(8);
+        state[6] *= BFieldElement::new(1);
+        state[7] *= BFieldElement::new(1073741824);
+        state[8] *= BFieldElement::new(8192);
+        state[9] *= BFieldElement::new(16);
+        state[10] *= BFieldElement::new(268436456);
+        state[11] *= BFieldElement::new(2048);
+        state[12] *= BFieldElement::new(1024);
+        state[13] *= BFieldElement::new(128);
+        state[14] *= BFieldElement::new(4194304);
+        state[15] *= BFieldElement::new(2);
+
+        Self::ntt_noswap(state, self.omega_inverse);
+    }
+
+    #[inline]
+    pub fn mds_ntt(&self, state: &mut [BFieldElement; STATE_SIZE]) {
+        ntt(state, self.omega, self.log2_state_size);
+        for (i, m) in self.mds.iter().enumerate() {
+            state[i] *= *m;
+        }
+        ntt(state, self.omega_inverse, self.log2_state_size);
     }
 
     #[inline]
@@ -805,7 +933,7 @@ impl Tip5 {
         //     }
         // }
         // sponge.state = v;
-        self.mds_ntt(sponge);
+        self.mds_noswap(&mut sponge.state);
 
         // round constants A
         for i in 0..STATE_SIZE {
@@ -877,7 +1005,12 @@ impl Tip5 {
 mod tip5_tests {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-    use crate::shared_math::tip5::Gf65536;
+    use crate::shared_math::{
+        b_field_element::BFieldElement,
+        other::random_elements,
+        rescue_prime_regular::STATE_SIZE,
+        tip5::{Gf65536, Tip5},
+    };
 
     #[test]
     fn test_gf65536_multiply() {
@@ -996,5 +1129,24 @@ mod tip5_tests {
             "differential uniformity for fermat cube map: {}",
             du_inverted
         );
+    }
+
+    #[test]
+    fn mds_match() {
+        let mut a: [BFieldElement; STATE_SIZE] = random_elements(16).try_into().unwrap();
+        let mut b: [BFieldElement; STATE_SIZE] = a;
+        let mut c: [BFieldElement; STATE_SIZE] = b;
+
+        let tip5 = Tip5::new();
+
+        tip5.mds_ntt(&mut a);
+        tip5.mds_withswap(&mut b);
+        tip5.mds_withswap(&mut c);
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+
+        for m in tip5.mds_swapped {
+            println!("{}", m.value());
+        }
     }
 }
