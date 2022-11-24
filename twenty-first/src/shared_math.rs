@@ -7,5 +7,6 @@ pub mod polynomial;
 pub mod rescue_prime_digest;
 pub mod rescue_prime_regular;
 pub mod stark;
+pub mod tip5;
 pub mod traits;
 pub mod x_field_element;
