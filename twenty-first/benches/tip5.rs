@@ -4,6 +4,7 @@ use rand::RngCore;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::other::random_elements;
+use twenty_first::shared_math::rescue_prime_regular::DIGEST_LENGTH;
 use twenty_first::shared_math::tip5::Tip5;
 
 fn bench_10(c: &mut Criterion) {
@@ -54,7 +55,12 @@ fn bench_parallel(c: &mut Criterion) {
     let tip5 = Tip5::new();
 
     group.bench_function(BenchmarkId::new("Tip5 / Parallel Hash", size), |bencher| {
-        bencher.iter(|| elements.par_iter().map(|e| tip5.hash_10(e)));
+        bencher.iter(|| {
+            elements
+                .par_iter()
+                .map(|e| tip5.hash_10(e))
+                .collect::<Vec<[BFieldElement; DIGEST_LENGTH]>>()
+        });
     });
 }
 
