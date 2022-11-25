@@ -1050,7 +1050,7 @@ mod tip5_tests {
 
     #[inline]
     fn inverted_fermat_cube_map(x: u32) -> u32 {
-        65536 - fermat_cube_map(65535 - x)
+        65535 - fermat_cube_map(65535 - x)
     }
 
     #[test]
@@ -1072,7 +1072,7 @@ mod tip5_tests {
             touched[inverted_fermat_cube_map(i) as usize] = true;
         }
         assert!(touched.iter().all(|t| *t));
-        assert_eq!(fermat_cube_map(65535), 65535);
+        assert_eq!(inverted_fermat_cube_map(65535), 65535);
     }
 
     #[test]
