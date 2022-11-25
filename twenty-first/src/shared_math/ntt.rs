@@ -77,12 +77,11 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
         while k < n {
             let mut w = BFieldElement::one();
             for j in 0..m {
-                let mut t = x[(k + j + m) as usize];
-                t *= w;
-                let mut tmp = x[(k + j) as usize];
-                tmp -= t;
-                x[(k + j + m) as usize] = tmp;
-                x[(k + j) as usize] += t;
+                let u = x[(k + j) as usize];
+                let mut v = x[(k + j + m) as usize];
+                v *= w;
+                x[(k + j) as usize] = u + v;
+                x[(k + j + m) as usize] = u - v;
                 w *= w_m;
             }
 
