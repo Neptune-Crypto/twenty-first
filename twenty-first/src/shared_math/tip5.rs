@@ -1,6 +1,7 @@
 use std::ops::{Add, Mul};
 
 use itertools::Itertools;
+use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
@@ -9,7 +10,7 @@ use crate::shared_math::{
     traits::{Inverse, ModPowU32},
 };
 
-use super::{b_field_element::BFieldElement, traits::PrimitiveRootOfUnity};
+use super::{b_field_element::BFieldElement, polynomial::Polynomial, traits::PrimitiveRootOfUnity};
 
 pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
@@ -709,46 +710,80 @@ impl Tip5State {
 pub struct Tip5 {
     lookup_table: [u16; 65536],
     mds: [BFieldElement; STATE_SIZE],
+    mds_ntt: [BFieldElement; STATE_SIZE],
     mds_swapped: [BFieldElement; STATE_SIZE],
-    log2_state_size: u32,
+    log2_state_size: usize,
     omega: BFieldElement,
     omega_inverse: BFieldElement,
+    powers_of_omega: Vec<BFieldElement>,
+    powers_of_omega_inverse: Vec<BFieldElement>,
+    powers_of_omega_bitreversed: Vec<BFieldElement>,
+    powers_of_omega_inverse_bitreversed: Vec<BFieldElement>,
 }
 
 impl Tip5 {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let mut lookup_table = [0u16; 65536];
-        let log2_state_size = 4u32;
+        let log2_state_size = 4usize;
         for i in 0..=u16::MAX {
             let gfe = Gf65536(i);
             let cubed = gfe * gfe * gfe;
             lookup_table[i as usize] = cubed.0;
         }
-        let mut mds: [BFieldElement; STATE_SIZE] = [
+        let omega = BFieldElement::primitive_root_of_unity(STATE_SIZE as u64).unwrap();
+        let omega_inverse = omega.inverse();
+
+        let mds: [BFieldElement; STATE_SIZE] = [
             256, 8192, 2, 1024, 1, 268436456, 1, 4194304, 524288, 16, 8, 128, 16777216, 2048,
             1073741824, 2,
         ]
         .map(BFieldElement::new);
-        let mut mds_swapped = mds;
-        for k in 0..STATE_SIZE as u32 {
-            let rk = Self::bitreverse(k, log2_state_size);
-            if k < rk {
-                mds_swapped.swap(rk as usize, k as usize);
-            }
-        }
-        let omega = BFieldElement::primitive_root_of_unity(STATE_SIZE as u64).unwrap();
-        let omega_inverse = omega.inverse();
+
+        // pre-compute powers of omega
+        // let w_m = omega.mod_pow_u32(n / (2 * m)); where n = length and m = 1, 2, 4, ... < n
+        let powers_of_omega: Vec<BFieldElement> = (0..log2_state_size)
+            .map(|l| 1 << l)
+            .map(|m| STATE_SIZE / (2 * m))
+            .map(|e| omega.mod_pow(e as u64))
+            .collect();
+        let powers_of_omega_inverse: Vec<BFieldElement> = (0..log2_state_size)
+            .map(|l| 1 << l)
+            .map(|m| STATE_SIZE / (2 * m))
+            .map(|e| omega_inverse.mod_pow(e as u64))
+            .collect();
+        let all_powers_of_omega: Vec<BFieldElement> = (0..STATE_SIZE)
+            .map(|e| omega.mod_pow_u32(e as u32))
+            .collect();
+        let powers_of_omega_bitreversed: Vec<BFieldElement> = (0..STATE_SIZE)
+            .map(|n| Self::bitreverse(n as usize, log2_state_size))
+            .map(|reversed_index| all_powers_of_omega[reversed_index as usize])
+            .collect();
+        let powers_of_omega_inverse_bitreversed: Vec<BFieldElement> = (0..STATE_SIZE)
+            .map(|n| Self::bitreverse(n as usize, log2_state_size))
+            .map(|reversed_index| all_powers_of_omega[reversed_index as usize].inverse())
+            .collect();
+
+        let mut mds_ntt: [BFieldElement; STATE_SIZE] = mds.to_vec().try_into().unwrap();
+        Self::ntt_withswap(&mut mds_ntt, omega, log2_state_size);
+
+        let mut mds_swapped: [BFieldElement; STATE_SIZE] = mds.to_vec().try_into().unwrap();
+        Self::ntt_noswap(&mut mds_swapped);
+
         assert_eq!(1 << log2_state_size, STATE_SIZE);
-        ntt(&mut mds, omega, log2_state_size);
 
         Self {
             lookup_table,
             mds,
+            mds_ntt,
             mds_swapped,
             log2_state_size,
             omega,
             omega_inverse,
+            powers_of_omega,
+            powers_of_omega_inverse,
+            powers_of_omega_bitreversed,
+            powers_of_omega_inverse_bitreversed,
         }
     }
 
@@ -794,43 +829,26 @@ impl Tip5 {
     }
 
     #[inline]
-    fn bitreverse(mut n: u32, l: u32) -> u32 {
+    fn bitreverse(mut t: usize, log2_of_n: usize) -> usize {
         let mut r = 0;
-        for _ in 0..l {
-            r = (r << 1) | (n & 1);
-            n >>= 1;
+        for _ in 0..log2_of_n {
+            r = (r << 1) | (t & 1);
+            t >>= 1;
         }
         r
     }
 
     #[allow(clippy::many_single_char_names)]
-    fn ntt_withswap(x: &mut [BFieldElement], omega: BFieldElement, log_2_of_n: u32) {
-        let n = x.len() as u32;
+    fn ntt_withswap(x: &mut [BFieldElement], omega: BFieldElement, log_2_of_n: usize) {
+        Self::bitreverse_order(x);
 
-        // `n` must be a power of 2
-        debug_assert_eq!(n, 1 << log_2_of_n, "2^log2(n) == n");
-
-        // `omega` must be a primitive root of unity of order `n`
-        debug_assert!(
-            omega.mod_pow_u32(n).is_one(),
-            "Got {} which is not a {}th root of 1",
-            omega,
-            n
-        );
-        debug_assert!(!omega.mod_pow_u32(n / 2).is_one());
-
-        for k in 0..n {
-            let rk = Self::bitreverse(k, log_2_of_n);
-            if k < rk {
-                x.swap(rk as usize, k as usize);
-            }
-        }
-
-        let mut m = 1;
-        for _ in 0..log_2_of_n {
-            let w_m = omega.mod_pow_u32(n / (2 * m));
-            let mut k = 0;
-            while k < n {
+        let mut m: usize = 1;
+        for i in 0..log_2_of_n as usize {
+            let w_m = omega.mod_pow_u32((STATE_SIZE / (2 * m)).try_into().unwrap());
+            // let w_m = powers_of_omega[i as usize];
+            println!("omega {}: {}", i, w_m);
+            let mut k: usize = 0;
+            while k < STATE_SIZE as usize {
                 let mut w = BFieldElement::one();
                 for j in 0..m {
                     let mut t = x[(k + j + m) as usize];
@@ -849,37 +867,240 @@ impl Tip5 {
         }
     }
 
+    fn bitreverse_order(array: &mut [BFieldElement]) {
+        for k in 0..STATE_SIZE {
+            let rk = Self::bitreverse(k, 4);
+            if k < rk {
+                array.swap(rk, k);
+            }
+        }
+    }
+
     #[allow(clippy::many_single_char_names)]
-    fn ntt_noswap(x: &mut [BFieldElement], omega: BFieldElement) {
-        let n = STATE_SIZE;
+    fn ntt_noswap(x: &mut [BFieldElement]) {
+        const POWERS_OF_OMEGA_BITREVERSED: [BFieldElement; 8] = [
+            BFieldElement::new(1),
+            BFieldElement::new(281474976710656),
+            BFieldElement::new(18446744069397807105),
+            BFieldElement::new(18446742969902956801),
+            BFieldElement::new(17293822564807737345),
+            BFieldElement::new(4096),
+            BFieldElement::new(4503599626321920),
+            BFieldElement::new(18446744000695107585),
+        ];
 
-        let mut m = 1;
-        for _ in 0..4 {
-            let w_m = omega.mod_pow_u32((STATE_SIZE / (2 * m)).try_into().unwrap());
-            let mut k = 0;
-            while k < n {
-                let mut w = BFieldElement::one();
-                for j in 0..m {
-                    let mut t = x[(k + j + m) as usize];
-                    t *= w;
-                    let mut tmp = x[(k + j) as usize];
-                    tmp -= t;
-                    x[(k + j + m) as usize] = tmp;
-                    x[(k + j) as usize] += t;
-                    w *= w_m;
-                }
+        // outer loop iteration 1
+        for j in 0..8 {
+            let u = x[j];
+            let v = x[j + 8] * BFieldElement::one();
+            x[j] = u + v;
+            x[j + 8] = u - v;
+        }
 
-                k += 2 * m;
+        // outer loop iteration 2
+        for (i, zeta) in POWERS_OF_OMEGA_BITREVERSED.iter().enumerate().take(2) {
+            let s = i * 8;
+            for j in s..(s + 4) {
+                let u = x[j];
+                let v = x[j + 4] * *zeta;
+                x[j] = u + v;
+                x[j + 4] = u - v;
+            }
+        }
+
+        // outer loop iteration 3
+        for (i, zeta) in POWERS_OF_OMEGA_BITREVERSED.iter().enumerate().take(4) {
+            let s = i * 4;
+            for j in s..(s + 2) {
+                let u = x[j];
+                let v = x[j + 2] * *zeta;
+                x[j] = u + v;
+                x[j + 2] = u - v;
+            }
+        }
+
+        // outer loop iteration 4
+        for (i, zeta) in POWERS_OF_OMEGA_BITREVERSED.iter().enumerate().take(8) {
+            let s = i * 2;
+            let u = x[s];
+            let v = x[s + 1] * *zeta;
+            x[s] = u + v;
+            x[s + 1] = u - v;
+        }
+    }
+
+    #[allow(clippy::many_single_char_names)]
+    fn intt_noswap(x: &mut [BFieldElement]) {
+        const POWERS_OF_OMEGA_INVERSE: [BFieldElement; 8] = [
+            BFieldElement::new(1),
+            BFieldElement::new(68719476736),
+            BFieldElement::new(1099511627520),
+            BFieldElement::new(18446744069414580225),
+            BFieldElement::new(18446462594437873665),
+            BFieldElement::new(18442240469788262401),
+            BFieldElement::new(16777216),
+            BFieldElement::new(1152921504606846976),
+        ];
+
+        // outer loop iteration 1
+        {
+            // while k < STATE_SIZE as usize
+            // inner loop iteration 1
+            {
+                let u = x[1];
+                let v = x[0];
+                x[1] = v - u;
+                x[0] = v + u;
             }
 
-            m *= 2;
+            // inner loop iteration 2
+            {
+                let u = x[2 + 1];
+                let v = x[2];
+                x[2 + 1] = v - u;
+                x[2] = v + u;
+            }
+
+            // inner loop iteration 3
+            {
+                let u = x[4 + 1];
+                let v = x[4];
+                x[4 + 1] = v - u;
+                x[4] = v + u;
+            }
+
+            // inner loop iteration 4
+            {
+                let u = x[6 + 1];
+                let v = x[6];
+                x[6 + 1] = v - u;
+                x[6] = v + u;
+            }
+
+            // inner loop iteration 5
+            {
+                let u = x[8 + 1];
+                let v = x[8];
+                x[8 + 1] = v - u;
+                x[8] = v + u;
+            }
+
+            // inner loop iteration 6
+            {
+                let u = x[10 + 1];
+                let v = x[10];
+                x[10 + 1] = v - u;
+                x[10] = v + u;
+            }
+
+            // inner loop iteration 7
+            {
+                let u = x[12 + 1];
+                let v = x[12];
+                x[12 + 1] = v - u;
+                x[12] = v + u;
+            }
+
+            // inner loop iteration 7
+            {
+                let u = x[14 + 1];
+                let v = x[14];
+                x[14 + 1] = v - u;
+                x[14] = v + u;
+            }
         }
+
+        // outer loop iteration 2
+        {
+            // while k < STATE_SIZE as usize
+            // inner loop iteration 1
+            {
+                for j in 0..2 {
+                    let zeta = POWERS_OF_OMEGA_INVERSE[4 * j];
+                    {
+                        let u = x[j + 2] * zeta;
+                        let v = x[j];
+                        x[j + 2] = v - u;
+                        x[j] = v + u;
+                    }
+                    // inner loop iteration 2
+                    {
+                        let u = x[4 + j + 2] * zeta;
+                        let v = x[4 + j];
+                        x[4 + j + 2] = v - u;
+                        x[4 + j] = v + u;
+                    }
+                    // inner loop iteration 3
+                    {
+                        let u = x[8 + j + 2] * zeta;
+                        let v = x[8 + j];
+                        x[8 + j + 2] = v - u;
+                        x[8 + j] = v + u;
+                    }
+                    // inner loop iteration 4
+                    {
+                        let u = x[12 + j + 2] * zeta;
+                        let v = x[12 + j];
+                        x[12 + j + 2] = v - u;
+                        x[12 + j] = v + u;
+                    }
+                }
+            }
+        }
+
+        // outer loop iteration 3
+        {
+            // while k < STATE_SIZE as usize
+            {
+                for j in 0..4 {
+                    let zeta = POWERS_OF_OMEGA_INVERSE[2 * j];
+                    // inner loop iteration 1
+                    {
+                        let u = x[j + 4] * zeta;
+                        let v = x[j];
+                        x[j + 4] = v - u;
+                        x[j] = v + u;
+                    }
+                    // inner loop iteration 2
+                    {
+                        let u = x[8 + j + 4] * zeta;
+                        let v = x[8 + j];
+                        x[8 + j + 4] = v - u;
+                        x[8 + j] = v + u;
+                    }
+                }
+            }
+        }
+
+        // outer loop iteration 4
+        {
+            for j in 0..8 {
+                let zeta = POWERS_OF_OMEGA_INVERSE[j];
+                let u = x[j + 8] * zeta;
+                let v = x[j];
+                x[j + 8] = v - u;
+                x[j] = v + u;
+            }
+        }
+    }
+
+    pub fn mul_state(state: &mut [BFieldElement; STATE_SIZE], arg: BFieldElement) {
+        state.iter_mut().for_each(|s| *s *= arg);
+    }
+
+    #[inline]
+    pub fn mds_ntt(&self, state: &mut [BFieldElement; STATE_SIZE]) {
+        ntt(state, self.omega, self.log2_state_size as u32);
+        for (i, m) in self.mds_ntt.iter().enumerate() {
+            state[i] *= *m;
+        }
+        ntt(state, self.omega_inverse, self.log2_state_size as u32);
     }
 
     #[inline]
     pub fn mds_withswap(&self, state: &mut [BFieldElement; STATE_SIZE]) {
         Self::ntt_withswap(state, self.omega, self.log2_state_size);
-        for (i, m) in self.mds.iter().enumerate() {
+        for (i, m) in self.mds_ntt.iter().enumerate() {
             state[i] *= *m;
         }
         Self::ntt_withswap(state, self.omega_inverse, self.log2_state_size);
@@ -887,35 +1108,37 @@ impl Tip5 {
 
     #[inline]
     pub fn mds_noswap(&self, state: &mut [BFieldElement; STATE_SIZE]) {
-        Self::ntt_noswap(state, self.omega);
+        Self::ntt_noswap(state);
 
-        state[0] *= BFieldElement::new(256);
-        state[1] *= BFieldElement::new(524288);
-        state[2] *= BFieldElement::new(1);
-        state[3] *= BFieldElement::new(16777216);
-        state[4] *= BFieldElement::new(2);
-        state[5] *= BFieldElement::new(8);
-        state[6] *= BFieldElement::new(1);
-        state[7] *= BFieldElement::new(1073741824);
-        state[8] *= BFieldElement::new(8192);
-        state[9] *= BFieldElement::new(16);
-        state[10] *= BFieldElement::new(268436456);
-        state[11] *= BFieldElement::new(2048);
-        state[12] *= BFieldElement::new(1024);
-        state[13] *= BFieldElement::new(128);
-        state[14] *= BFieldElement::new(4194304);
-        state[15] *= BFieldElement::new(2);
-
-        Self::ntt_noswap(state, self.omega_inverse);
-    }
-
-    #[inline]
-    pub fn mds_ntt(&self, state: &mut [BFieldElement; STATE_SIZE]) {
-        ntt(state, self.omega, self.log2_state_size);
-        for (i, m) in self.mds.iter().enumerate() {
+        for (i, m) in self.mds_swapped.iter().enumerate() {
             state[i] *= *m;
         }
-        ntt(state, self.omega_inverse, self.log2_state_size);
+
+        Self::intt_noswap(state);
+    }
+
+    pub fn mds_schoolbook(&self, state: &mut [BFieldElement; STATE_SIZE]) {
+        let mut array = [BFieldElement::zero(); 2 * STATE_SIZE];
+        for i in 0..STATE_SIZE {
+            for j in 0..STATE_SIZE {
+                array[i + j] += state[i] * self.mds[j];
+            }
+        }
+        for i in 0..STATE_SIZE {
+            state[i] = array[i] + array[STATE_SIZE + i];
+        }
+        Self::mul_state(state, BFieldElement::new(STATE_SIZE as u64));
+    }
+
+    pub fn mds_polynomial(&self, state: &mut [BFieldElement; STATE_SIZE]) {
+        let a = Polynomial::new(state.to_vec());
+        let b = Polynomial::new(self.mds.to_vec());
+        let m = Polynomial::new(vec![BFieldElement::zero(), BFieldElement::one()])
+            .mod_pow(BigInt::from(STATE_SIZE))
+            - Polynomial::<BFieldElement>::one();
+        let coeffs = ((a * b) % m).coefficients;
+        state[..STATE_SIZE].copy_from_slice(&coeffs[..STATE_SIZE]);
+        Self::mul_state(state, BFieldElement::new(STATE_SIZE as u64));
     }
 
     #[inline]
@@ -1133,17 +1356,46 @@ mod tip5_tests {
 
     #[test]
     fn mds_match() {
-        let mut a: [BFieldElement; STATE_SIZE] = random_elements(16).try_into().unwrap();
-        let mut b: [BFieldElement; STATE_SIZE] = a;
-        let mut c: [BFieldElement; STATE_SIZE] = b;
+        let mut ntt_: [BFieldElement; STATE_SIZE] = random_elements(16).try_into().unwrap();
+        let mut withswap_: [BFieldElement; STATE_SIZE] = ntt_;
+        let mut no_swap: [BFieldElement; STATE_SIZE] = withswap_;
+        let mut schoolbook_: [BFieldElement; STATE_SIZE] = no_swap;
+        let mut polynomial_: [BFieldElement; STATE_SIZE] = schoolbook_;
 
         let tip5 = Tip5::new();
 
-        tip5.mds_ntt(&mut a);
-        tip5.mds_withswap(&mut b);
-        tip5.mds_withswap(&mut c);
-        assert_eq!(a, b);
-        assert_eq!(a, c);
+        tip5.mds_ntt(&mut ntt_);
+        tip5.mds_withswap(&mut withswap_);
+        tip5.mds_noswap(&mut no_swap);
+        tip5.mds_polynomial(&mut schoolbook_);
+        tip5.mds_schoolbook(&mut polynomial_);
+        let mut fails = false;
+        if ntt_ != withswap_ {
+            println!("ntt =/= withswap");
+            fails = true;
+        }
+        if withswap_ != no_swap {
+            println!("withswap =/= noswap");
+            fails = true;
+        }
+        if no_swap != schoolbook_ {
+            println!("noswap =/= schoolbook");
+            fails = true;
+        }
+        if schoolbook_ != polynomial_ {
+            println!("schoolbook =/= polynomial");
+            fails = true;
+        }
+        if polynomial_ != ntt_ {
+            println!("polynomial =/= ntt");
+            fails = true;
+        }
+        // assert_eq!(ntt_, withswap_, "ntt =/= withswap");
+        // assert_eq!(schoolbook_, polynomial_, "schoolbook =/= polynomial");
+        // assert_eq!(withswap_, schoolbook_, "withswap =/= schoolbook");
+        // assert_eq!(withswap_, no_swap, "withswap =/= noswap");
+        // assert_eq!(no_swap, schoolbook_, "noswap =/= schoolbook");
+        assert!(!fails);
 
         for m in tip5.mds_swapped {
             println!("{}", m.value());
