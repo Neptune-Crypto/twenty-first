@@ -132,10 +132,12 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
 
 #[cfg(test)]
 mod fast_ntt_attempt_tests {
+    use itertools::Itertools;
     use num_traits::{One, Zero};
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::random_elements;
+    use crate::shared_math::polynomial::Polynomial;
     use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::shared_math::x_field_element::XFieldElement;
 
@@ -356,5 +358,24 @@ mod fast_ntt_attempt_tests {
         // Verify that INTT(NTT(x)) = x
         intt::<BFieldElement>(&mut input_output, omega, 5);
         assert_eq!(original_input, input_output);
+    }
+
+    #[test]
+    pub fn test_compare_ntt_to_eval() {
+        for log_size in 1..10 {
+            let size = 1 << log_size;
+            let mut array: Vec<BFieldElement> = random_elements(size);
+            let polynomial = Polynomial::new(array.to_vec());
+
+            let omega = BFieldElement::primitive_root_of_unity(size.try_into().unwrap()).unwrap();
+            ntt(&mut array, omega, log_size.try_into().unwrap());
+
+            let evals = (0..size)
+                .map(|i| omega.mod_pow(i.try_into().unwrap()))
+                .map(|p| polynomial.evaluate(&p))
+                .collect_vec();
+
+            assert_eq!(evals, array);
+        }
     }
 }
