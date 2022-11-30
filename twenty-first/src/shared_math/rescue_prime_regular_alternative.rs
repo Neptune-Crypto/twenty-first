@@ -1,5 +1,3 @@
-use std::ptr::swap_nonoverlapping;
-
 use itertools::Itertools;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
@@ -928,9 +926,9 @@ impl RescuePrimeRegular {
         );
 
         // S-box
-        for i in 0..STATE_SIZE {
-            sponge.state[i] = sponge.state[i].mod_pow(ALPHA);
-        }
+        // for i in 0..STATE_SIZE {
+        //     sponge.state[i] = sponge.state[i].mod_pow(ALPHA);
+        // }
         //
         //sponge.state = Self::batch_mod_pow_alpha(sponge.state);
 
@@ -950,12 +948,12 @@ impl RescuePrimeRegular {
         }
 
         // Inverse S-box
-        for i in 0..STATE_SIZE {
-            sponge.state[i] = sponge.state[i].mod_pow(ALPHA_INV);
-        }
+        // for i in 0..STATE_SIZE {
+        //     sponge.state[i] = sponge.state[i].mod_pow(ALPHA_INV);
+        // }
         //
         // self.state = Self::batch_mod_pow(self.state, ALPHA_INV);
-        //sponge.state = Self::batch_mod_pow_alpha_inv(sponge.state);
+        sponge.state = Self::batch_mod_pow_alpha_inv(sponge.state);
 
         // MDS matrix
         for i in 0..STATE_SIZE {
@@ -1007,22 +1005,25 @@ impl RescuePrimeRegular {
     /// and as many 0 ∈ Fp elements as required to make the number of input elements
     /// a multiple of `RATE`.
     pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
-        let mut sponge = RescuePrimeRegularState::new();
+        //let mut sponge = RescuePrimeRegularState::new();
 
         let padded_input = [
             input,
             &[BFieldElement::one()][..],
-            &vec![BFieldElement::zero(); (RATE - ((input.len() + 1) % RATE)) % RATE],
+            &vec![BFieldElement::zero(); (RATE - (input.len() + 1) % RATE) % RATE],
         ]
         .concat();
 
-        // absorb
-        for chunk in padded_input.chunks_exact(RATE) {
-            for i in 0..RATE {
-                sponge.state[i] += chunk[i]
-            }
-            Self::xlix(&mut sponge)
-        }
+        let sponge = padded_input.chunks_exact(RATE).fold(
+            RescuePrimeRegularState::new(),
+            |mut sponge, chunk| {
+                for i in 0..RATE {
+                    sponge.state[i] += chunk[i]
+                }
+                Self::xlix(&mut sponge);
+                sponge
+            },
+        );
 
         // squeeze once
         sponge.state[..5].try_into().unwrap()

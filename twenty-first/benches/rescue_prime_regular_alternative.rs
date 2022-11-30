@@ -6,7 +6,7 @@ use twenty_first::shared_math::other::random_elements;
 use twenty_first::shared_math::rescue_prime_regular_alternative::RescuePrimeRegular;
 
 fn bench_10(c: &mut Criterion) {
-    let mut group = c.benchmark_group("rescue_prime_regular/hash_10");
+    let mut group = c.benchmark_group("rescue_prime_regular_alternative/hash_10");
 
     let size = 10;
     group.sample_size(100);
@@ -28,7 +28,7 @@ fn bench_10(c: &mut Criterion) {
 }
 
 fn bench_varlen(c: &mut Criterion) {
-    let mut group = c.benchmark_group("rescue_prime_regular/hash_varlen");
+    let mut group = c.benchmark_group("rescue_prime_regular_alternative/hash_varlen");
 
     let size = 16_384;
     group.sample_size(50);
