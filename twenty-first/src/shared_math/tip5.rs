@@ -805,7 +805,7 @@ impl Tip5 {
     }
 
     #[inline]
-    fn sbox(&self, element: &mut BFieldElement) -> BFieldElement {
+    fn split_and_lookup(&self, element: &mut BFieldElement) -> BFieldElement {
         let value = element.value();
 
         let a: u32 = (value >> 48).try_into().unwrap();
@@ -1160,23 +1160,26 @@ impl Tip5 {
     }
 
     #[inline]
-    fn round(&self, sponge: &mut Tip5State, round_index: usize) {
-        // S-box
-        for i in 0..STATE_SIZE {
-            self.sbox(&mut sponge.state[i]);
-        }
+    fn sbox_layer(&self, state: &mut [BFieldElement; STATE_SIZE]) {
+        // lookup
+        state.iter_mut().take(STATE_SIZE / 2).for_each(|s| {
+            self.split_and_lookup(s);
+        });
 
-        // MDS matrix
-        // let mut v: [BFieldElement; STATE_SIZE] = [BFieldElement::from(0u64); STATE_SIZE];
-        // for i in 0..STATE_SIZE {
-        //     for j in 0..STATE_SIZE {
-        //         v[i] += BFieldElement::from(MDS[i * STATE_SIZE + j]) * sponge.state[j];
-        //     }
-        // }
-        // sponge.state = v;
+        // power
+        for st in state.iter_mut().take(STATE_SIZE).skip(STATE_SIZE / 2) {
+            let sq = *st * *st;
+            let qu = sq * sq;
+            *st *= sq * qu;
+        }
+    }
+
+    #[inline]
+    fn round(&self, sponge: &mut Tip5State, round_index: usize) {
+        self.sbox_layer(&mut sponge.state);
+
         Self::mds_noswap(&mut sponge.state);
 
-        // round constants A
         for i in 0..STATE_SIZE {
             sponge.state[i] += BFieldElement::from(ROUND_CONSTANTS[round_index * STATE_SIZE + i]);
         }
