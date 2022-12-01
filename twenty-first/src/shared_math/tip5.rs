@@ -1107,10 +1107,28 @@ impl Tip5 {
     }
 
     #[inline]
-    pub fn mds_noswap(&self, state: &mut [BFieldElement; STATE_SIZE]) {
+    pub fn mds_noswap(state: &mut [BFieldElement; STATE_SIZE]) {
+        let mds: [BFieldElement; STATE_SIZE] = [
+            BFieldElement::new(1363685766),
+            BFieldElement::new(818401426),
+            BFieldElement::new(2843477530982740278),
+            BFieldElement::new(15603266536318963895),
+            BFieldElement::new(4617387998068915967),
+            BFieldElement::new(13834281883405632256),
+            BFieldElement::new(18438678032804473072),
+            BFieldElement::new(3140224485136655),
+            BFieldElement::new(3747273207304324287),
+            BFieldElement::new(14700029414217449666),
+            BFieldElement::new(9286765195715607938),
+            BFieldElement::new(9160541823450023167),
+            BFieldElement::new(18392355339471673798),
+            BFieldElement::new(89869970136635963),
+            BFieldElement::new(16012825548870059521),
+            BFieldElement::new(2397315778488370688),
+        ];
         Self::ntt_noswap(state);
 
-        for (i, m) in self.mds_swapped.iter().enumerate() {
+        for (i, m) in mds.iter().enumerate() {
             state[i] *= *m;
         }
 
@@ -1156,7 +1174,7 @@ impl Tip5 {
         //     }
         // }
         // sponge.state = v;
-        self.mds_noswap(&mut sponge.state);
+        Self::mds_noswap(&mut sponge.state);
 
         // round constants A
         for i in 0..STATE_SIZE {
@@ -1366,7 +1384,7 @@ mod tip5_tests {
 
         tip5.mds_ntt(&mut ntt_);
         tip5.mds_withswap(&mut withswap_);
-        tip5.mds_noswap(&mut no_swap);
+        Tip5::mds_noswap(&mut no_swap);
         tip5.mds_polynomial(&mut schoolbook_);
         tip5.mds_schoolbook(&mut polynomial_);
         let mut fails = false;
