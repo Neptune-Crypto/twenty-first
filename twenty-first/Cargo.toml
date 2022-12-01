@@ -89,7 +89,7 @@ name = "lagrange_interpolation"
 harness = false
 
 [[bench]]
-name = "inverse"
+name = "inverses"
 harness = false
 
 [[bench]]
