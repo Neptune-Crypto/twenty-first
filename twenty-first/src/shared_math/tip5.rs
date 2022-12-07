@@ -616,4 +616,22 @@ mod tip5_tests {
             du_inverted
         );
     }
+
+    #[test]
+    #[ignore = "used for calculating parameters"]
+    fn calculate_approximation_quality() {
+        let mut fermat_cubed = [0u16; 65536];
+        let mut bfield_cubed = [0u16; 65536];
+        for i in 0..65536 {
+            let cubed = (i as u64) * (i as u64) * (i as u64);
+            fermat_cubed[i] = (cubed % 65537) as u16;
+            bfield_cubed[i] = (cubed & 0xffff) as u16;
+        }
+        let equal_count = fermat_cubed
+            .iter()
+            .zip(bfield_cubed.iter())
+            .filter(|(a, b)| a == b)
+            .count();
+        println!("agreement with low-degree function: {}", equal_count);
+    }
 }
