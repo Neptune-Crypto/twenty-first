@@ -150,44 +150,95 @@ impl Tip5 {
         Self {}
     }
 
+    // #[inline]
+    // fn fermat_cube_map(x: u32) -> u32 {
+    //     let x2 = x * x;
+    //     let x2hi = x2 >> 16;
+    //     let x2lo = x2 & 0xffff;
+    //     let x2p = x2lo + u32::from(x2lo < x2hi) * 65537 - x2hi;
+    //     let x3 = x2p * x;
+    //     let x3hi = x3 >> 16;
+    //     let x3lo = x3 & 0xffff;
+    //     x3lo + u32::from(x3lo < x3hi) * 65537 - x3hi
+    // }
+
+    // #[inline]
+    // fn inverted_fermat_cube_map(x: u32) -> u32 {
+    //     65536 - Self::fermat_cube_map(65535 - x)
+    // }
+
     #[inline]
-    fn fermat_cube_map(x: u32) -> u32 {
+    fn fermat_cube_map(x: u16) -> u16 {
         let x2 = x * x;
-        let x2hi = x2 >> 16;
-        let x2lo = x2 & 0xffff;
-        let x2p = x2lo + u32::from(x2lo < x2hi) * 65537 - x2hi;
+        let x2hi = x2 >> 8;
+        let x2lo = x2 & 0xff;
+        let x2p = x2lo + u16::from(x2lo < x2hi) * 257 - x2hi;
         let x3 = x2p * x;
-        let x3hi = x3 >> 16;
-        let x3lo = x3 & 0xffff;
-        x3lo + u32::from(x3lo < x3hi) * 65537 - x3hi
+        let x3hi = x3 >> 8;
+        let x3lo = x3 & 0xff;
+        x3lo + u16::from(x3lo < x3hi) * 257 - x3hi
     }
 
     #[inline]
-    fn inverted_fermat_cube_map(x: u32) -> u32 {
-        65536 - Self::fermat_cube_map(65535 - x)
+    fn inverted_fermat_cube_map(x: u16) -> u16 {
+        257 - Self::fermat_cube_map(257 - x)
     }
+
+    // #[inline]
+    // fn split_and_lookup(&self, element: &mut BFieldElement) -> BFieldElement {
+    //     let value = element.value();
+
+    //     let a: u32 = (value >> 48).try_into().unwrap();
+    //     let b: u32 = ((value >> 32) & 0xffff).try_into().unwrap();
+    //     let c: u32 = ((value >> 16) & 0xffff).try_into().unwrap();
+    //     let d: u32 = (value & 0xffff).try_into().unwrap();
+
+    //     // let a_ = 65535 - self.lookup_table[(65535 - a) as usize];
+    //     // let b_ = 65535 - self.lookup_table[(65535 - b) as usize];
+    //     // let c_ = self.lookup_table[c as usize];
+    //     // let d_ = self.lookup_table[d as usize];
+
+    //     let a_ = Self::inverted_fermat_cube_map(a);
+    //     let b_ = Self::inverted_fermat_cube_map(b);
+    //     let c_ = Self::fermat_cube_map(c);
+    //     let d_ = Self::fermat_cube_map(d);
+
+    //     BFieldElement::new(
+    //         ((a_ as u64) << 48) | ((b_ as u64) << 32) | ((c_ as u64) << 16) | (d_ as u64),
+    //     )
+    // }
 
     #[inline]
     fn split_and_lookup(&self, element: &mut BFieldElement) -> BFieldElement {
         let value = element.value();
 
-        let a: u32 = (value >> 48).try_into().unwrap();
-        let b: u32 = ((value >> 32) & 0xffff).try_into().unwrap();
-        let c: u32 = ((value >> 16) & 0xffff).try_into().unwrap();
-        let d: u32 = (value & 0xffff).try_into().unwrap();
-
-        // let a_ = 65535 - self.lookup_table[(65535 - a) as usize];
-        // let b_ = 65535 - self.lookup_table[(65535 - b) as usize];
-        // let c_ = self.lookup_table[c as usize];
-        // let d_ = self.lookup_table[d as usize];
+        let a: u16 = (value >> 54).try_into().unwrap();
+        let b: u16 = ((value >> 48) & 0xff).try_into().unwrap();
+        let c: u16 = ((value >> 40) & 0xff).try_into().unwrap();
+        let d: u16 = ((value >> 32) & 0xff).try_into().unwrap();
+        let e: u16 = ((value >> 24) & 0xff).try_into().unwrap();
+        let f: u16 = ((value >> 16) & 0xff).try_into().unwrap();
+        let g: u16 = ((value >> 8) & 0xff).try_into().unwrap();
+        let h: u16 = (value & 0xff).try_into().unwrap();
 
         let a_ = Self::inverted_fermat_cube_map(a);
         let b_ = Self::inverted_fermat_cube_map(b);
-        let c_ = Self::fermat_cube_map(c);
-        let d_ = Self::fermat_cube_map(d);
+        let c_ = Self::inverted_fermat_cube_map(c);
+        let d_ = Self::inverted_fermat_cube_map(d);
+        let e_ = Self::fermat_cube_map(f);
+        let f_ = Self::fermat_cube_map(e);
+        let g_ = Self::fermat_cube_map(g);
+        let h_ = Self::fermat_cube_map(h);
 
         BFieldElement::new(
-            ((a_ as u64) << 48) | ((b_ as u64) << 32) | ((c_ as u64) << 16) | (d_ as u64),
+            ((a_ as u64) << 54)
+                | ((b_ as u64) << 48)
+                | ((c_ as u64) << 40)
+                | ((d_ as u64) << 32)
+                | ((e_ as u64) << 24)
+                | ((f_ as u64) << 16)
+                | ((g_ as u64) << 8)
+                | h_ as u64,
         )
     }
 
