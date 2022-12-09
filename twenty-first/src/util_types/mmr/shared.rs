@@ -16,6 +16,8 @@ pub fn right_child(node_index: u128) -> u128 {
 
 /// Get (index, height) of leftmost ancestor
 /// This ancestor does *not* have to be in the MMR
+/// This algorithm finds the closest $2^n - 1$ that's bigger than
+/// or equal to `node_index`.
 #[inline]
 pub fn leftmost_ancestor(node_index: u128) -> (u128, u128) {
     let mut h = 0;
@@ -24,6 +26,10 @@ pub fn leftmost_ancestor(node_index: u128) -> (u128, u128) {
         h += 1;
         ret = (1 << (h + 1)) - 1;
     }
+
+    // This function could also be defined as:
+    // let h = u128::BITS - node_index.leading_zeros() - 1;
+    // let ret = (1 << (h + 1)) - 1;
 
     (ret, h)
 }
