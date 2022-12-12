@@ -63,13 +63,6 @@ pub struct Stark {
 }
 
 impl Stark {
-    fn sample_weights(randomness: &Digest, count: usize) -> Vec<XFieldElement> {
-        StarkHasher::get_n_hash_rounds(randomness, count)
-            .iter()
-            .map(XFieldElement::sample)
-            .collect()
-    }
-
     pub fn new(
         trace_length: usize,
         source_code: String,
@@ -317,7 +310,7 @@ impl Stark {
 
         // Get coefficients for table extension
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
-            Self::sample_weights(&seed, EXTENSION_CHALLENGE_COUNT)
+            StarkHasher::sample_weights(&seed, EXTENSION_CHALLENGE_COUNT)
                 .try_into()
                 .unwrap();
         self.tables.borrow_mut().set_constraints(challenges);
@@ -433,7 +426,7 @@ impl Stark {
 
         let weights_count = num_randomizer_polynomials
             + 2 * (num_base_polynomials + num_extension_polynomials + num_quotient_polynomials);
-        let weights = Self::sample_weights(&weights_seed, weights_count);
+        let weights = StarkHasher::sample_weights(&weights_seed, weights_count);
 
         timer.elapsed("sample_weights");
 
@@ -611,8 +604,9 @@ impl Stark {
 
         // Get indices of leafs to prove nonlinear combination
         let indices_seed = proof_stream.prover_fiat_shamir();
-        let indices: Vec<usize> =
-            StarkHasher::sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
+        let upper_bound = self.fri.domain.length;
+        let num_indices = self.security_level;
+        let indices = StarkHasher::sample_indices(&indices_seed, upper_bound, num_indices);
 
         timer.elapsed("sample_indices");
 
@@ -679,7 +673,7 @@ impl Stark {
 
         // Get coefficients for table extension
         let challenges: [XFieldElement; EXTENSION_CHALLENGE_COUNT] =
-            Self::sample_weights(&seed, EXTENSION_CHALLENGE_COUNT)
+            StarkHasher::sample_weights(&seed, EXTENSION_CHALLENGE_COUNT)
                 .try_into()
                 .unwrap();
         self.tables.borrow_mut().set_constraints(challenges);
@@ -732,14 +726,15 @@ impl Stark {
             + 2 * num_extension_polynomials
             + 2 * num_quotient_polynomials
             + 2 * num_difference_quotients;
-        let weights: Vec<XFieldElement> = Self::sample_weights(&weights_seed, weights_count);
+        let weights: Vec<XFieldElement> = StarkHasher::sample_weights(&weights_seed, weights_count);
         timer.elapsed("Calculated weights");
 
         let combination_root: Digest = proof_stream.dequeue(Digest::BYTES)?;
 
         let indices_seed: Digest = proof_stream.verifier_fiat_shamir();
-        let indices =
-            StarkHasher::sample_indices(self.security_level, &indices_seed, self.fri.domain.length);
+        let upper_bound = self.fri.domain.length;
+        let num_indices = self.security_level;
+        let indices = StarkHasher::sample_indices(&indices_seed, upper_bound, num_indices);
         timer.elapsed("Got indices");
 
         // Verify low degree of combination polynomial
