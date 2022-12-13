@@ -6,10 +6,11 @@ use super::b_field_element::BFieldElement;
 
 pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
+pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
 pub const LOG2_STATE_SIZE: usize = 4;
 pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;
-pub const NUM_ROUNDS: usize = 7;
+pub const NUM_ROUNDS: usize = 3;
 
 /// constants come from Rescue-Prime Regular
 /// TODO: generate own constants
@@ -62,70 +63,6 @@ pub const ROUND_CONSTANTS: [u64; NUM_ROUNDS * STATE_SIZE] = [
     2012426895438224656,
     6886681868854518019,
     9323151312904004776,
-    14061124303940833928,
-    14720644192628944300,
-    3643016909963520634,
-    15164487940674916922,
-    18095609311840631082,
-    17450128049477479068,
-    13770238146408051799,
-    959547712344137104,
-    12896174981045071755,
-    15673600445734665670,
-    5421724936277706559,
-    15147580014608980436,
-    10475549030802107253,
-    9781768648599053415,
-    12208559126136453589,
-    14883846462224929329,
-    4104889747365723917,
-    748723978556009523,
-    1227256388689532469,
-    5479813539795083611,
-    8771502115864637772,
-    16732275956403307541,
-    4416407293527364014,
-    828170020209737786,
-    12657110237330569793,
-    6054985640939410036,
-    4339925773473390539,
-    12523290846763939879,
-    6515670251745069817,
-    3304839395869669984,
-    13139364704983394567,
-    7310284340158351735,
-    10864373318031796808,
-    17752126773383161797,
-    1934077736434853411,
-    12181011551355087129,
-    16512655861290250275,
-    17788869165454339633,
-    12226346139665475316,
-    521307319751404755,
-    18194723210928015140,
-    11017703779172233841,
-    15109417014344088693,
-    16118100307150379696,
-    16104548432406078622,
-    10637262801060241057,
-    10146828954247700859,
-    14927431817078997000,
-    8849391379213793752,
-    14873391436448856814,
-    15301636286727658488,
-    14600930856978269524,
-    14900320206081752612,
-    9439125422122803926,
-    17731778886181971775,
-    11364016993846997841,
-    11610707911054206249,
-    16438527050768899002,
-    1230592087960588528,
-    11390503834342845303,
-    10608561066917009324,
-    5454068995870010477,
-    13783920070953012756,
-    10807833173700567220,
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -150,23 +87,6 @@ impl Tip5 {
         Self {}
     }
 
-    // #[inline]
-    // fn fermat_cube_map(x: u32) -> u32 {
-    //     let x2 = x * x;
-    //     let x2hi = x2 >> 16;
-    //     let x2lo = x2 & 0xffff;
-    //     let x2p = x2lo + u32::from(x2lo < x2hi) * 65537 - x2hi;
-    //     let x3 = x2p * x;
-    //     let x3hi = x3 >> 16;
-    //     let x3lo = x3 & 0xffff;
-    //     x3lo + u32::from(x3lo < x3hi) * 65537 - x3hi
-    // }
-
-    // #[inline]
-    // fn inverted_fermat_cube_map(x: u32) -> u32 {
-    //     65536 - Self::fermat_cube_map(65535 - x)
-    // }
-
     #[inline]
     fn fermat_cube_map(x: u16) -> u16 {
         let x2 = x * x;
@@ -183,30 +103,6 @@ impl Tip5 {
     fn inverted_fermat_cube_map(x: u16) -> u16 {
         257 - Self::fermat_cube_map(257 - x)
     }
-
-    // #[inline]
-    // fn split_and_lookup(&self, element: &mut BFieldElement) -> BFieldElement {
-    //     let value = element.value();
-
-    //     let a: u32 = (value >> 48).try_into().unwrap();
-    //     let b: u32 = ((value >> 32) & 0xffff).try_into().unwrap();
-    //     let c: u32 = ((value >> 16) & 0xffff).try_into().unwrap();
-    //     let d: u32 = (value & 0xffff).try_into().unwrap();
-
-    //     // let a_ = 65535 - self.lookup_table[(65535 - a) as usize];
-    //     // let b_ = 65535 - self.lookup_table[(65535 - b) as usize];
-    //     // let c_ = self.lookup_table[c as usize];
-    //     // let d_ = self.lookup_table[d as usize];
-
-    //     let a_ = Self::inverted_fermat_cube_map(a);
-    //     let b_ = Self::inverted_fermat_cube_map(b);
-    //     let c_ = Self::fermat_cube_map(c);
-    //     let d_ = Self::fermat_cube_map(d);
-
-    //     BFieldElement::new(
-    //         ((a_ as u64) << 48) | ((b_ as u64) << 32) | ((c_ as u64) << 16) | (d_ as u64),
-    //     )
-    // }
 
     #[inline]
     fn split_and_lookup(&self, element: &mut BFieldElement) -> BFieldElement {
@@ -486,12 +382,12 @@ impl Tip5 {
     #[inline]
     fn sbox_layer(&self, state: &mut [BFieldElement; STATE_SIZE]) {
         // lookup
-        state.iter_mut().take(STATE_SIZE / 2).for_each(|s| {
+        state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
             self.split_and_lookup(s);
         });
 
         // power
-        for st in state.iter_mut().take(STATE_SIZE).skip(STATE_SIZE / 2) {
+        for st in state.iter_mut().skip(NUM_SPLIT_AND_LOOKUP) {
             let sq = *st * *st;
             let qu = sq * sq;
             *st *= sq * qu;
