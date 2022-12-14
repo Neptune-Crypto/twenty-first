@@ -53,7 +53,9 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
     4294967296u64 => 1753635133440165772,
 };
 
-// BFieldElement ∈ ℤ_{2^64 - 2^32 + 1}
+// BFieldElement ∈ ℤ_{2^64 - 2^32 + 1} using Montgomery representation.
+// This implementation follows https://eprint.iacr.org/2022/274.pdf
+// and https://github.com/novifinancial/winterfell/pull/101/files
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
 pub struct BFieldElement(u64);
 
@@ -66,8 +68,7 @@ impl Sum for BFieldElement {
 
 impl PartialEq for BFieldElement {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-            || Self::canonical_representation(self) == Self::canonical_representation(other)
+        Self::equals(self.0, other.0) == 0xFFFFFFFFFFFFFFFF
     }
 }
 
@@ -85,11 +86,13 @@ impl BFieldElement {
     // 2^64 - 2^32 + 1
     pub const QUOTIENT: u64 = 0xffff_ffff_0000_0001u64;
     pub const MAX: u64 = Self::QUOTIENT - 1;
-    const LOWER_MASK: u64 = 0xFFFFFFFF;
+
+    /// 2^128 mod QUOTIENT; this is used for conversion of elements into Montgomery representation.
+    const R2: u64 = 0xFFFFFFFE00000001;
 
     #[inline]
     pub const fn new(value: u64) -> Self {
-        Self(value % Self::QUOTIENT)
+        Self(Self::mod_reduce((value as u128) * (Self::R2 as u128)))
     }
 
     #[inline]
@@ -123,21 +126,17 @@ impl BFieldElement {
 
     // You should probably only use `increment` and `decrement` for testing purposes
     pub fn increment(&mut self) {
-        self.0 = Self::canonical_representation(&(*self + Self::one()));
+        *self += Self::one();
     }
 
     // You should probably only use `increment` and `decrement` for testing purposes
     pub fn decrement(&mut self) {
-        self.0 = Self::canonical_representation(&(*self - Self::one()));
+        *self -= Self::one();
     }
 
     #[inline]
     fn canonical_representation(&self) -> u64 {
-        if self.0 > Self::MAX {
-            self.0 - Self::QUOTIENT
-        } else {
-            self.0
-        }
+        Self::mod_reduce(self.0 as u128)
     }
 
     #[must_use]
@@ -178,35 +177,30 @@ impl BFieldElement {
         BFieldElement::new(u64::from_ne_bytes(bytes_copied))
     }
 
+    /// Montgomery reduction
     #[inline(always)]
-    fn mod_reduce(x: u128) -> u64 {
-        // Copied from (MIT licensed):
-        // https://github.com/anonauthorsub/asiaccs_2021_440/blob/5141f349e5915ab750208c0ab1b5f7be95adaeac/math/src/field/f64/mod.rs#L551
-        // assume x consists of four 32-bit values: a, b, c, d such that a contains 32 least
-        // significant bits and d contains 32 most significant bits. we break x into corresponding
-        // values as shown below
-        let ab = x as u64;
-        let cd = (x >> 64) as u64;
-        let c = (cd as u32) as u64;
-        let d = cd >> 32;
+    const fn mod_reduce(x: u128) -> u64 {
+        // See reference above for a description of the following implementation.
+        let xl = x as u64;
+        let xh = (x >> 64) as u64;
+        let (a, e) = xl.overflowing_add(xl << 32);
 
-        // compute ab - d; because d may be greater than ab we need to handle potential underflow
-        let (tmp0, under) = ab.overflowing_sub(d);
-        let tmp1 = tmp0.wrapping_sub(Self::LOWER_MASK * (under as u64));
+        let b = a.wrapping_sub(a >> 32).wrapping_sub(e as u64);
 
-        // compute c * 2^32 - c; this is guaranteed not to underflow
-        let tmp2 = (c << 32) - c;
+        let (r, c) = xh.overflowing_sub(b);
+        r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
+    }
 
-        // add temp values and return the result; because each of the temp may be up to 64 bits,
-        // we need to handle potential overflow
-        let (result, over) = tmp1.overflowing_add(tmp2);
-        result.wrapping_add(Self::LOWER_MASK * (over as u64))
+    #[inline(always)]
+    pub fn equals(lhs: u64, rhs: u64) -> u64 {
+        let t = lhs ^ rhs;
+        !((((t | t.wrapping_neg()) as i64) >> 63) as u64)
     }
 }
 
 impl Emojihash for BFieldElement {
     fn emojihash(&self) -> String {
-        emojihash::hash(&self.0.to_be_bytes())
+        emojihash::hash(&self.canonical_representation().to_be_bytes())
             .chars()
             .take(EMOJI_PER_ELEMENT)
             .collect::<String>()
@@ -215,26 +209,27 @@ impl Emojihash for BFieldElement {
 
 impl fmt::Display for BFieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let canonical_value = Self::canonical_representation(self);
         let cutoff = 256;
-        if self.value() >= Self::QUOTIENT - cutoff {
-            write!(f, "-{}", Self::QUOTIENT - self.value())
-        } else if self.value() <= cutoff {
-            write!(f, "{}", self.value())
+        if canonical_value >= Self::QUOTIENT - cutoff {
+            write!(f, "-{}", Self::QUOTIENT - canonical_value)
+        } else if canonical_value <= cutoff {
+            write!(f, "{}", canonical_value)
         } else {
-            write!(f, "{:>020}", self.value())
+            write!(f, "{:>020}", canonical_value)
         }
     }
 }
 
 impl From<u32> for BFieldElement {
     fn from(value: u32) -> Self {
-        BFieldElement::new(value.into())
+        Self::new(value.into())
     }
 }
 
 impl From<u64> for BFieldElement {
     fn from(value: u64) -> Self {
-        Self(value)
+        Self::new(value)
     }
 }
 
@@ -254,7 +249,7 @@ impl TryFrom<BFieldElement> for u32 {
     type Error = TryFromIntError;
 
     fn try_from(value: BFieldElement) -> Result<Self, Self::Error> {
-        u32::try_from(value.0)
+        u32::try_from(value.canonical_representation())
     }
 }
 
@@ -338,7 +333,7 @@ impl CyclicGroupGenerator for BFieldElement {
 
 impl Distribution<BFieldElement> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BFieldElement {
-        BFieldElement(rng.gen_range(0..=BFieldElement::MAX))
+        BFieldElement::new(rng.gen_range(0..=BFieldElement::MAX))
     }
 }
 
@@ -366,7 +361,7 @@ impl FiniteField for BFieldElement {}
 
 impl Zero for BFieldElement {
     fn zero() -> Self {
-        BFieldElement(0)
+        BFieldElement::new(0)
     }
 
     fn is_zero(&self) -> bool {
@@ -376,7 +371,7 @@ impl Zero for BFieldElement {
 
 impl One for BFieldElement {
     fn one() -> Self {
-        BFieldElement(1)
+        BFieldElement::new(1)
     }
 
     fn is_one(&self) -> bool {
@@ -389,19 +384,11 @@ impl Add for BFieldElement {
 
     #[allow(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
-    fn add(self, other: Self) -> Self {
-        let (result, overflow) = self.0.overflowing_add(other.0);
-        let mut val = result.wrapping_sub(Self::QUOTIENT * (overflow as u64));
-
-        // For some reason, this `if` codeblock improves NTT runtime by ~10 % and
-        // Rescue prime calculations with up to 45 % for `hash_pair`. I think it has
-        // something to do with a compiler optimization but I actually don't
-        // understand why this speedup occurs.
-        if val > Self::MAX {
-            val -= Self::QUOTIENT;
-        }
-
-        Self(val)
+    fn add(self, rhs: Self) -> Self {
+        // Compute a + b = a - (p - b).
+        let (x1, c1) = self.0.overflowing_sub(Self::QUOTIENT - rhs.0);
+        let adj = 0u32.wrapping_sub(c1 as u32);
+        Self(x1.wrapping_sub(adj as u64))
     }
 }
 
@@ -430,9 +417,8 @@ impl Mul for BFieldElement {
     type Output = Self;
 
     #[inline]
-    fn mul(self, other: Self) -> Self {
-        let val: u64 = Self::mod_reduce(self.0 as u128 * other.0 as u128);
-        Self(val)
+    fn mul(self, rhs: Self) -> Self {
+        Self(Self::mod_reduce((self.0 as u128) * (rhs.0 as u128)))
     }
 }
 
@@ -441,15 +427,16 @@ impl Neg for BFieldElement {
 
     #[inline]
     fn neg(self) -> Self {
-        Self(Self::QUOTIENT - self.canonical_representation())
+        Self::zero() - self
     }
 }
 
 impl Rem for BFieldElement {
     type Output = Self;
 
-    fn rem(self, other: Self) -> Self {
-        Self(self.0 % other.0)
+    // TODO: We should probably get rid of this
+    fn rem(self, _other: Self) -> Self {
+        Self::zero()
     }
 }
 
@@ -458,9 +445,10 @@ impl Sub for BFieldElement {
 
     #[allow(clippy::suspicious_arithmetic_impl)]
     #[inline]
-    fn sub(self, other: Self) -> Self {
-        let (result, overflow) = self.0.overflowing_sub(other.canonical_representation());
-        Self(result.wrapping_add(Self::QUOTIENT * (overflow as u64)))
+    fn sub(self, rhs: Self) -> Self {
+        let (x1, c1) = self.0.overflowing_sub(rhs.0);
+        let adj = 0u32.wrapping_sub(c1 as u32);
+        Self(x1.wrapping_sub(adj as u64))
     }
 }
 
@@ -508,15 +496,15 @@ mod b_prime_field_element_test {
     fn display_test() {
         // Ensure that display always prints the canonical value, not a number
         // exceeding BFieldElement::QUOTIENT
-        let seven: BFieldElement = BFieldElement(7);
-        let seven_alt: BFieldElement = BFieldElement(7 + BFieldElement::QUOTIENT);
+        let seven: BFieldElement = BFieldElement::new(7);
+        let seven_alt: BFieldElement = BFieldElement::new(7 + BFieldElement::QUOTIENT);
         assert_eq!("7", format!("{}", seven));
         assert_eq!("7", format!("{}", seven_alt));
 
-        let minus_one: BFieldElement = BFieldElement(BFieldElement::QUOTIENT - 1);
+        let minus_one: BFieldElement = BFieldElement::new(BFieldElement::QUOTIENT - 1);
         assert_eq!("-1", format!("{}", minus_one));
 
-        let minus_fifteen: BFieldElement = BFieldElement(BFieldElement::QUOTIENT - 15);
+        let minus_fifteen: BFieldElement = BFieldElement::new(BFieldElement::QUOTIENT - 15);
         assert_eq!("-15", format!("{}", minus_fifteen));
     }
 
@@ -673,9 +661,9 @@ mod b_prime_field_element_test {
 
         // With these "alt" values we verify that the degenerated representation of
         // B field elements works.
-        let one_alt = BFieldElement(BFieldElement::QUOTIENT + 1);
-        let two_alt = BFieldElement(BFieldElement::QUOTIENT + 2);
-        let three_alt = BFieldElement(BFieldElement::QUOTIENT + 3);
+        let one_alt = BFieldElement::new(BFieldElement::QUOTIENT + 1);
+        let two_alt = BFieldElement::new(BFieldElement::QUOTIENT + 2);
+        let three_alt = BFieldElement::new(BFieldElement::QUOTIENT + 3);
         assert_eq!(two_inv, BFieldElement::new(2).inverse());
         assert_eq!(three_inv, BFieldElement::new(3).inverse());
         assert_eq!(four_inv, BFieldElement::new(4).inverse());
@@ -894,7 +882,10 @@ mod b_prime_field_element_test {
     #[test]
     fn neg_test() {
         assert_eq!(-BFieldElement::zero(), BFieldElement::zero());
-        assert_eq!((-BFieldElement::one()).0, BFieldElement::MAX);
+        assert_eq!(
+            (-BFieldElement::one()).canonical_representation(),
+            BFieldElement::MAX
+        );
         let max = BFieldElement::new(BFieldElement::MAX);
         let max_plus_one = max + BFieldElement::one();
         let max_plus_two = max_plus_one + BFieldElement::one();
@@ -1017,6 +1008,19 @@ mod b_prime_field_element_test {
     }
 
     #[test]
+    fn u32_conversion() {
+        let val = BFieldElement::new(u32::MAX as u64);
+        let as_u32: u32 = val.try_into().unwrap();
+        assert_eq!(u32::MAX, as_u32);
+
+        for i in 1..100 {
+            let invalid_val_0 = BFieldElement::new((u32::MAX as u64) + i);
+            let converted_0 = TryInto::<u32>::try_into(invalid_val_0);
+            assert!(converted_0.is_err());
+        }
+    }
+
+    #[test]
     fn uniqueness_of_consecutive_emojis_bfe() {
         let mut prev = BFieldElement::zero().emojihash();
         for n in 1..256 {
@@ -1025,6 +1029,12 @@ mod b_prime_field_element_test {
             assert_ne!(curr, prev);
             prev = curr
         }
+
+        // Verify that emojihash is independent of representation
+        let val = BFieldElement::new(6672);
+        let same_val = BFieldElement::new(6672 + BFieldElement::QUOTIENT);
+        assert_eq!(val, same_val);
+        assert_eq!(val.emojihash(), same_val.emojihash());
     }
 
     #[test]
