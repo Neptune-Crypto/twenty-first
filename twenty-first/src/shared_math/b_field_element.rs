@@ -68,7 +68,8 @@ impl Sum for BFieldElement {
 
 impl PartialEq for BFieldElement {
     fn eq(&self, other: &Self) -> bool {
-        Self::equals(self.0, other.0) == 0xFFFFFFFFFFFFFFFF
+        let t = self.0 ^ other.0;
+        !((((t | t.wrapping_neg()) as i64) >> 63) as u64) == 0xFFFFFFFFFFFFFFFF
     }
 }
 
@@ -189,12 +190,6 @@ impl BFieldElement {
 
         let (r, c) = xh.overflowing_sub(b);
         r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
-    }
-
-    #[inline(always)]
-    pub fn equals(lhs: u64, rhs: u64) -> u64 {
-        let t = lhs ^ rhs;
-        !((((t | t.wrapping_neg()) as i64) >> 63) as u64)
     }
 }
 
