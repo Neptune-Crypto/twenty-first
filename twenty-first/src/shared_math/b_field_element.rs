@@ -15,7 +15,7 @@ use std::num::TryFromIntError;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 use std::{
     fmt::{self},
-    ops::{Add, Div, Mul, Neg, Rem, Sub},
+    ops::{Add, Div, Mul, Neg, Sub},
 };
 
 static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
@@ -423,15 +423,6 @@ impl Neg for BFieldElement {
     #[inline]
     fn neg(self) -> Self {
         Self::zero() - self
-    }
-}
-
-impl Rem for BFieldElement {
-    type Output = Self;
-
-    // TODO: We should probably get rid of this
-    fn rem(self, _other: Self) -> Self {
-        Self::zero()
     }
 }
 
