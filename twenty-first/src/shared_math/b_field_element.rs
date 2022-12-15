@@ -477,6 +477,7 @@ mod b_prime_field_element_test {
     use crate::shared_math::polynomial::Polynomial;
     use itertools::izip;
     use proptest::prelude::*;
+    use rand::thread_rng;
 
     #[test]
     fn display_test() {
@@ -1036,5 +1037,22 @@ mod b_prime_field_element_test {
         } else {
             assert_eq!(one, elem * elem.inverse_or_zero());
         }
+    }
+
+    #[test]
+    fn test_random_squares() {
+        let mut rng = thread_rng();
+        let p = 0xffff_ffff_0000_0001u128;
+        let a = rng.next_u64() % (p as u64);
+        for _ in 0..100 {
+            let asq = (((a as u128) * (a as u128)) % p) as u64;
+            let b = BFieldElement::new(a);
+            let bsq = BFieldElement::new(asq);
+            assert_eq!(bsq, b * b);
+            assert_eq!(bsq.value(), (b * b).value());
+            assert_eq!(b.value(), a);
+        }
+        let one = BFieldElement::new(1);
+        assert_eq!(one, one * one);
     }
 }
