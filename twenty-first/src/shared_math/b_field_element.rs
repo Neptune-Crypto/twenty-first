@@ -162,7 +162,7 @@ impl BFieldElement {
         acc
     }
 
-    /// Convert a `BFieldElement` from a byte slice.
+    /// Convert a `BFieldElement` from a byte slice in native endianness.
     pub fn from_ne_bytes(bytes: &[u8]) -> BFieldElement {
         let mut bytes_copied: [u8; 8] = [0; 8];
         bytes_copied.copy_from_slice(bytes);
