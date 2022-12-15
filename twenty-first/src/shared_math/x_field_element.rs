@@ -131,7 +131,8 @@ impl XFieldElement {
 
     pub fn sample(digest: &Digest) -> Self {
         let elements = digest.values();
-        XFieldElement::new([elements[0], elements[1], elements[2]])
+        XFieldElement::new([elements[2], elements[3], elements[4]])
+        // XFieldElement::new([elements[0], elements[1], elements[2]])
     }
 
     // TODO: Move this into Polynomial when PrimeField can implement Zero + One.
