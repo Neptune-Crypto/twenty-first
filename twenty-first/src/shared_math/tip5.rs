@@ -122,14 +122,9 @@ impl Tip5 {
 
     #[inline]
     fn fermat_cube_map(x: u16) -> u16 {
-        let x2 = x * x;
-        let x2hi = x2 >> 8;
-        let x2lo = x2 & 0xff;
-        let x2p = x2lo + u16::from(x2lo < x2hi) * 257 - x2hi;
-        let x3 = x2p * x;
-        let x3hi = x3 >> 8;
-        let x3lo = x3 & 0xff;
-        x3lo + u16::from(x3lo < x3hi) * 257 - x3hi
+        let xx: u64 = x.into();
+        let xxx = xx * xx * xx;
+        (xxx % 257) as u16
     }
 
     #[inline]
@@ -139,36 +134,28 @@ impl Tip5 {
 
     #[inline]
     fn split_and_lookup(&self, element: &mut BFieldElement) -> BFieldElement {
-        let value = element.value();
+        // let value = element.value();
+        let mut bytes = element.raw_bytes();
 
-        let a: u16 = (value >> 54).try_into().unwrap();
-        let b: u16 = ((value >> 48) & 0xff).try_into().unwrap();
-        let c: u16 = ((value >> 40) & 0xff).try_into().unwrap();
-        let d: u16 = ((value >> 32) & 0xff).try_into().unwrap();
-        let e: u16 = ((value >> 24) & 0xff).try_into().unwrap();
-        let f: u16 = ((value >> 16) & 0xff).try_into().unwrap();
-        let g: u16 = ((value >> 8) & 0xff).try_into().unwrap();
-        let h: u16 = (value & 0xff).try_into().unwrap();
+        #[allow(clippy::needless_range_loop)] // faster like so
+        for i in 4..8 {
+            bytes[i] = Self::inverted_fermat_cube_map(bytes[i].into()) as u8;
+        }
+        // bytes[7] = Self::inverted_fermat_cube_map(bytes[7].into()) as u8;
+        // bytes[6] = Self::inverted_fermat_cube_map(bytes[6].into()) as u8;
+        // bytes[5] = Self::inverted_fermat_cube_map(bytes[5].into()) as u8;
+        // bytes[4] = Self::inverted_fermat_cube_map(bytes[4].into()) as u8;
 
-        let a_ = Self::inverted_fermat_cube_map(a);
-        let b_ = Self::inverted_fermat_cube_map(b);
-        let c_ = Self::inverted_fermat_cube_map(c);
-        let d_ = Self::inverted_fermat_cube_map(d);
-        let e_ = Self::fermat_cube_map(f);
-        let f_ = Self::fermat_cube_map(e);
-        let g_ = Self::fermat_cube_map(g);
-        let h_ = Self::fermat_cube_map(h);
+        #[allow(clippy::needless_range_loop)] // faster like so
+        for i in 0..4 {
+            bytes[i] = Self::fermat_cube_map(bytes[i].into()) as u8;
+        }
+        // bytes[3] = Self::fermat_cube_map(bytes[3].into()) as u8;
+        // bytes[2] = Self::fermat_cube_map(bytes[2].into()) as u8;
+        // bytes[1] = Self::fermat_cube_map(bytes[1].into()) as u8;
+        // bytes[0] = Self::fermat_cube_map(bytes[0].into()) as u8;
 
-        BFieldElement::new(
-            ((a_ as u64) << 54)
-                | ((b_ as u64) << 48)
-                | ((c_ as u64) << 40)
-                | ((d_ as u64) << 32)
-                | ((e_ as u64) << 24)
-                | ((f_ as u64) << 16)
-                | ((g_ as u64) << 8)
-                | h_ as u64,
-        )
+        BFieldElement::from_raw_bytes(&bytes)
     }
 
     #[allow(clippy::many_single_char_names)]
