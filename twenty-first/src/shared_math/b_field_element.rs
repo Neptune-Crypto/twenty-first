@@ -190,6 +190,19 @@ impl BFieldElement {
         let (r, c) = xh.overflowing_sub(b);
         r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
     }
+
+    /// Return the raw bytes or 8-bit chunks of the Montgomery
+    /// representation, in little-endian byte order
+    pub fn raw_bytes(&self) -> [u8; 8] {
+        self.0.to_le_bytes()
+    }
+
+    /// Take a slice of 8 bytes and interpret it as an integer in
+    /// little-endian byte order, and cast it to a BFieldElement
+    /// in Montgomery representation
+    pub fn from_raw_bytes(bytes: &[u8; 8]) -> Self {
+        Self(u64::from_le_bytes(*bytes))
+    }
 }
 
 impl Emojihash for BFieldElement {
@@ -260,7 +273,7 @@ impl From<BFieldElement> for [u8; 8] {
 impl From<[u8; 8]> for BFieldElement {
     fn from(array: [u8; 8]) -> Self {
         let n: u64 = u64::from_le_bytes(array);
-        assert!(
+        debug_assert!(
             n <= Self::MAX,
             "Byte representation must represent a valid B field element, less than the quotient."
         );
@@ -1042,8 +1055,8 @@ mod b_prime_field_element_test {
     fn test_random_squares() {
         let mut rng = thread_rng();
         let p = 0xffff_ffff_0000_0001u128;
-        let a = rng.next_u64() % (p as u64);
         for _ in 0..100 {
+            let a = rng.next_u64() % (p as u64);
             let asq = (((a as u128) * (a as u128)) % p) as u64;
             let b = BFieldElement::new(a);
             let bsq = BFieldElement::new(asq);
@@ -1065,5 +1078,18 @@ mod b_prime_field_element_test {
         // elements are equal
         assert_eq!(a, b);
         assert_eq!(a.value(), b.value());
+    }
+
+    #[test]
+    fn test_random_raw() {
+        let mut rng = thread_rng();
+        let p = 0xffff_ffff_0000_0001u128;
+        for _ in 0..100 {
+            let a = rng.next_u64() % (p as u64);
+            let e = BFieldElement::new(a);
+            let bytes = e.raw_bytes();
+            let c = BFieldElement::from_raw_bytes(&bytes);
+            assert_eq!(e, c);
+        }
     }
 }
