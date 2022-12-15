@@ -45,7 +45,7 @@ where
 
     /// Return the number of leaves in the tree
     fn count_leaves(&mut self) -> u128 {
-        let peaks_and_heights: Vec<(_, u128)> = self.get_peaks_with_heights();
+        let peaks_and_heights: Vec<(_, u32)> = self.get_peaks_with_heights();
         let mut acc = 0;
         for (_, height) in peaks_and_heights {
             acc += 1 << height
@@ -187,7 +187,10 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
     pub fn prove_membership(&mut self, data_index: u128) -> (MmrMembershipProof<H>, Vec<Digest>) {
         // A proof consists of an authentication path
         // and a list of peaks
-        assert!(data_index < self.count_leaves());
+        assert!(
+            data_index < self.count_leaves(),
+            "Cannot prove membership of leaf outside of range. Got data_index {data_index}. Leaf count is {}", self.count_leaves()
+        );
 
         // Find out how long the authentication path is
         let node_index = data_index_to_node_index(data_index);
@@ -201,16 +204,14 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         // Build the authentication path
         let mut authentication_path: Vec<Digest> = vec![];
         let mut index = node_index;
-        let (mut index_is_right_child, mut index_height): (bool, u128) =
+        let (mut index_is_right_child, mut index_height): (bool, u32) =
             right_child_and_height(index);
-        while index_height < top_height as u128 {
+        while index_height < top_height as u32 {
             if index_is_right_child {
                 let left_sibling_index = left_sibling(index, index_height);
-                // authentication_path.push(self.digests[left_sibling_index as usize].clone());
                 authentication_path.push(self.digests.get(left_sibling_index));
             } else {
                 let right_sibling_index = right_sibling(index, index_height);
-                // authentication_path.push(self.digests[right_sibling_index as usize].clone());
                 authentication_path.push(self.digests.get(right_sibling_index));
             }
             index = parent(index);
@@ -227,7 +228,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
     }
 
     /// Return a list of tuples (peaks, height)
-    pub fn get_peaks_with_heights(&mut self) -> Vec<(Digest, u128)> {
+    pub fn get_peaks_with_heights(&mut self) -> Vec<(Digest, u32)> {
         if self.is_empty() {
             return vec![];
         }
@@ -237,13 +238,13 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         // 3. Take left child of sibling, continue until a node in tree is found
         // 4. Once new node is found, jump to right sibling (will not be included)
         // 5. Take left child of sibling, continue until a node in tree is found
-        let mut peaks_and_heights: Vec<(Digest, u128)> = vec![];
-        let (mut top_peak, mut top_height) = leftmost_ancestor(self.digests.len() - 1);
-        if top_peak > self.digests.len() - 1 {
+        let mut peaks_and_heights: Vec<(Digest, u32)> = vec![];
+        let (mut top_peak, mut top_height) = leftmost_ancestor(self.digests.len() as u128 - 1);
+        if top_peak > self.digests.len() as u128 - 1 {
             top_peak = left_child(top_peak, top_height);
             top_height -= 1;
         }
-        // peaks_and_heights.push((self.digests[top_peak as usize].clone(), top_height));
+
         peaks_and_heights.push((self.digests.get(top_peak), top_height));
         let mut height = top_height;
         let mut candidate = right_sibling(top_peak, height);
@@ -251,8 +252,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
             '_inner: while candidate > self.digests.len() && height > 0 {
                 candidate = left_child(candidate, height);
                 height -= 1;
-                if candidate < self.digests.len() {
-                    // peaks_and_heights.push((self.digests[candidate as usize].clone(), height));
+                if candidate < (self.digests.len() as u128) {
                     peaks_and_heights.push((self.digests.get(candidate), height));
                     candidate = right_sibling(candidate, height);
                     continue 'outer;
@@ -678,7 +678,7 @@ mod mmr_test {
         assert_eq!(1, mmr.count_leaves());
         assert_eq!(1, mmr.count_nodes());
 
-        let original_peaks_and_heights: Vec<(Digest, u128)> = mmr.get_peaks_with_heights();
+        let original_peaks_and_heights: Vec<(Digest, u32)> = mmr.get_peaks_with_heights();
         assert_eq!(1, original_peaks_and_heights.len());
         assert_eq!(0, original_peaks_and_heights[0].1);
 
@@ -740,7 +740,7 @@ mod mmr_test {
         assert_eq!(num_leaves, mmr.count_leaves());
         assert_eq!(1 + num_leaves, mmr.count_nodes());
 
-        let original_peaks_and_heights: Vec<(Digest, u128)> = mmr.get_peaks_with_heights();
+        let original_peaks_and_heights: Vec<(Digest, u32)> = mmr.get_peaks_with_heights();
         let expected_peaks = 2;
         assert_eq!(expected_peaks, original_peaks_and_heights.len());
 
@@ -804,8 +804,7 @@ mod mmr_test {
             assert_eq!(node_count, mmr.count_nodes());
 
             let original_peaks_and_heights = mmr.get_peaks_with_heights();
-            let peak_heights_1: Vec<u128> =
-                original_peaks_and_heights.iter().map(|x| x.1).collect();
+            let peak_heights_1: Vec<u32> = original_peaks_and_heights.iter().map(|x| x.1).collect();
 
             let (peak_heights_2, _) = get_peak_heights_and_peak_node_indices(data_size);
             assert_eq!(peak_heights_1, peak_heights_2);
@@ -929,9 +928,8 @@ mod mmr_test {
                 get_archival_mmr_from_digests(input_digests.clone());
             assert_eq!(data_size, mmr.count_leaves());
             assert_eq!(node_count, mmr.count_nodes());
-            let original_peaks_and_heights: Vec<(Digest, u128)> = mmr.get_peaks_with_heights();
-            let peak_heights_1: Vec<u128> =
-                original_peaks_and_heights.iter().map(|x| x.1).collect();
+            let original_peaks_and_heights: Vec<(Digest, u32)> = mmr.get_peaks_with_heights();
+            let peak_heights_1: Vec<u32> = original_peaks_and_heights.iter().map(|x| x.1).collect();
             let (peak_heights_2, _) = get_peak_heights_and_peak_node_indices(data_size);
             assert_eq!(peak_heights_1, peak_heights_2);
             assert_eq!(peak_count, original_peaks_and_heights.len() as u128);

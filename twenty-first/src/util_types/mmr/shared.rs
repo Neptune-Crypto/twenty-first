@@ -5,7 +5,7 @@ use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use super::mmr_membership_proof::MmrMembershipProof;
 
 #[inline]
-pub fn left_child(node_index: u128, height: u128) -> u128 {
+pub fn left_child(node_index: u128, height: u32) -> u128 {
     node_index - (1 << height)
 }
 
@@ -19,24 +19,16 @@ pub fn right_child(node_index: u128) -> u128 {
 /// This algorithm finds the closest $2^n - 1$ that's bigger than
 /// or equal to `node_index`.
 #[inline]
-pub fn leftmost_ancestor(node_index: u128) -> (u128, u128) {
-    let mut h = 0;
-    let mut ret = 1;
-    while ret < node_index {
-        h += 1;
-        ret = (1 << (h + 1)) - 1;
-    }
-
-    // This function could also be defined as:
-    // let h = u128::BITS - node_index.leading_zeros() - 1;
-    // let ret = (1 << (h + 1)) - 1;
+pub fn leftmost_ancestor(node_index: u128) -> (u128, u32) {
+    let h = u128::BITS - node_index.leading_zeros() - 1;
+    let ret = (1 << (h + 1)) - 1;
 
     (ret, h)
 }
 
 /// Return the tuple: (is_right_child, height)
 #[inline]
-pub fn right_child_and_height(node_index: u128) -> (bool, u128) {
+pub fn right_child_and_height(node_index: u128) -> (bool, u32) {
     // 1. Find leftmost_ancestor(n), if leftmost_ancestor(n) == n => left_child (false)
     // 2. Let node = leftmost_ancestor(n)
     // 3. while(true):
@@ -88,17 +80,18 @@ pub fn parent(node_index: u128) -> u128 {
 }
 
 #[inline]
-pub fn left_sibling(node_index: u128, height: u128) -> u128 {
+pub fn left_sibling(node_index: u128, height: u32) -> u128 {
     node_index - (1 << (height + 1)) + 1
 }
 
 #[inline]
-pub fn right_sibling(node_index: u128, height: u128) -> u128 {
+pub fn right_sibling(node_index: u128, height: u32) -> u128 {
     node_index + (1 << (height + 1)) - 1
 }
 
-pub fn get_height_from_data_index(data_index: u128) -> u128 {
-    log_2_floor(data_index + 1) as u128
+pub fn get_height_from_data_index(data_index: u128) -> u32 {
+    // This should be a safe cast as 2^(u32::MAX) is a *very* big number
+    log_2_floor(data_index + 1) as u32
 }
 
 pub fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
@@ -194,7 +187,7 @@ pub fn get_peak_heights(leaf_count: u128) -> Vec<u8> {
 
 /// Given leaf count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
-pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, Vec<u128>) {
+pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u32>, Vec<u128>) {
     if leaf_count == 0 {
         return (vec![], vec![]);
     }
@@ -207,7 +200,7 @@ pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, V
         top_height -= 1;
     }
 
-    let mut heights: Vec<u128> = vec![top_height];
+    let mut heights: Vec<u32> = vec![top_height];
     let mut node_indices: Vec<u128> = vec![top_peak];
     let mut height = top_height;
     let mut candidate = right_sibling(top_peak, height);
@@ -583,7 +576,7 @@ mod mmr_test {
 
     #[test]
     fn get_peak_heights_and_peak_node_indices_test() {
-        type TestCase = (u128, (Vec<u128>, Vec<u128>));
+        type TestCase = (u128, (Vec<u32>, Vec<u128>));
         let leaf_count_and_expected: Vec<TestCase> = vec![
             (0, (vec![], vec![])),
             (1, (vec![0], vec![1])),
