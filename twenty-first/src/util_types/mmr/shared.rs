@@ -41,29 +41,21 @@ pub fn right_child_and_height(node_index: u128) -> (bool, u32) {
     //    else:
     //        node = right_child(node);
 
-    // 1.
-    let (leftmost_ancestor, ancestor_height) = leftmost_ancestor(node_index);
-    if leftmost_ancestor == node_index {
-        return (false, ancestor_height);
-    }
-
-    let mut node = leftmost_ancestor;
-    let mut height = ancestor_height;
+    let (mut candidate, mut candidate_height) = leftmost_ancestor(node_index);
+    let mut candidate_is_right_child = false;
     loop {
-        let left_child = left_child(node, height);
-        height -= 1;
-        if node_index == left_child {
-            return (false, height);
+        if candidate == node_index {
+            return (candidate_is_right_child, candidate_height);
         }
-        if node_index < left_child {
-            node = left_child;
+
+        let left_child = left_child(candidate, candidate_height);
+        candidate_height -= 1;
+        candidate_is_right_child = left_child < node_index;
+        candidate = if candidate_is_right_child {
+            right_child(candidate)
         } else {
-            let right_child = right_child(node);
-            if node_index == right_child {
-                return (true, height);
-            }
-            node = right_child;
-        }
+            left_child
+        };
     }
 }
 
@@ -505,6 +497,29 @@ mod mmr_test {
         for (i, anticipation) in anticipations.iter().enumerate() {
             assert!(right_child_and_height(i as u128 + 1).0 == *anticipation);
         }
+    }
+
+    #[test]
+    fn is_right_child_and_height_test() {
+        assert_eq!((false, 0), right_child_and_height(1));
+        assert_eq!((true, 0), right_child_and_height(2));
+        assert_eq!((false, 1), right_child_and_height(3));
+        assert_eq!((false, 0), right_child_and_height(4));
+        assert_eq!((true, 0), right_child_and_height(5));
+        assert_eq!((true, 1), right_child_and_height(6));
+        assert_eq!((false, 2), right_child_and_height(7));
+        assert_eq!((false, 0), right_child_and_height(8));
+        assert_eq!((true, 0), right_child_and_height(9));
+        assert_eq!((false, 1), right_child_and_height(10));
+        assert_eq!((false, 0), right_child_and_height(11));
+        assert_eq!((true, 0), right_child_and_height(12));
+        assert_eq!((true, 1), right_child_and_height(13));
+        assert_eq!((true, 2), right_child_and_height(14));
+        assert_eq!((false, 3), right_child_and_height(15));
+        assert_eq!((false, 0), right_child_and_height(16));
+        assert_eq!((true, 0), right_child_and_height(17));
+        assert_eq!((false, 1), right_child_and_height(18));
+        assert_eq!((false, 63), right_child_and_height(u64::MAX as u128));
     }
 
     #[test]
