@@ -68,8 +68,7 @@ impl Sum for BFieldElement {
 
 impl PartialEq for BFieldElement {
     fn eq(&self, other: &Self) -> bool {
-        let t = self.0 ^ other.0;
-        !((((t | t.wrapping_neg()) as i64) >> 63) as u64) == 0xFFFFFFFFFFFFFFFF
+        self.0 == other.0
     }
 }
 
@@ -93,7 +92,7 @@ impl BFieldElement {
 
     #[inline]
     pub const fn new(value: u64) -> Self {
-        Self(Self::mod_reduce((value as u128) * (Self::R2 as u128)))
+        Self(Self::montyred((value as u128) * (Self::R2 as u128)))
     }
 
     #[inline]
@@ -137,7 +136,7 @@ impl BFieldElement {
 
     #[inline]
     fn canonical_representation(&self) -> u64 {
-        Self::mod_reduce(self.0 as u128)
+        Self::montyred(self.0 as u128)
     }
 
     #[must_use]
@@ -180,7 +179,7 @@ impl BFieldElement {
 
     /// Montgomery reduction
     #[inline(always)]
-    const fn mod_reduce(x: u128) -> u64 {
+    const fn montyred(x: u128) -> u64 {
         // See reference above for a description of the following implementation.
         let xl = x as u64;
         let xh = (x >> 64) as u64;
@@ -413,7 +412,7 @@ impl Mul for BFieldElement {
 
     #[inline]
     fn mul(self, rhs: Self) -> Self {
-        Self(Self::mod_reduce((self.0 as u128) * (rhs.0 as u128)))
+        Self(Self::montyred((self.0 as u128) * (rhs.0 as u128)))
     }
 }
 
@@ -1051,8 +1050,20 @@ mod b_prime_field_element_test {
             assert_eq!(bsq, b * b);
             assert_eq!(bsq.value(), (b * b).value());
             assert_eq!(b.value(), a);
+            assert_eq!(bsq.value(), asq);
         }
         let one = BFieldElement::new(1);
         assert_eq!(one, one * one);
+    }
+
+    #[test]
+    fn equals() {
+        let a = BFieldElement::one();
+        let b = BFieldElement::new(0xffff_ffff_0000_0001u64 - 1)
+            * BFieldElement::new(0xffff_ffff_0000_0001u64 - 1);
+
+        // elements are equal
+        assert_eq!(a, b);
+        assert_eq!(a.value(), b.value());
     }
 }
