@@ -112,24 +112,27 @@ impl Tip5State {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Tip5 {}
+pub struct Tip5 {
+    table: [u8; 256],
+}
 
 impl Tip5 {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self {}
+        let table: [u8; 256] = (0..256)
+            .into_iter()
+            .map(|t| Self::offset_fermat_cube_map(t as u16) as u8)
+            .collect_vec()
+            .try_into()
+            .unwrap();
+        Self { table }
     }
 
     #[inline]
-    fn fermat_cube_map(x: u16) -> u16 {
-        let xx: u64 = x.into();
+    fn offset_fermat_cube_map(x: u16) -> u16 {
+        let xx: u64 = (x + 1).into();
         let xxx = xx * xx * xx;
-        (xxx % 257) as u16
-    }
-
-    #[inline]
-    fn inverted_fermat_cube_map(x: u16) -> u16 {
-        257 - Self::fermat_cube_map(257 - x)
+        ((xxx + 256) % 257) as u16
     }
 
     #[inline]
@@ -138,22 +141,10 @@ impl Tip5 {
         let mut bytes = element.raw_bytes();
 
         #[allow(clippy::needless_range_loop)] // faster like so
-        for i in 4..8 {
-            bytes[i] = Self::inverted_fermat_cube_map(bytes[i].into()) as u8;
+        for i in 0..8 {
+            bytes[i] = Self::offset_fermat_cube_map(bytes[i].into()) as u8;
+            // bytes[i] = self.table[bytes[i] as usize];
         }
-        // bytes[7] = Self::inverted_fermat_cube_map(bytes[7].into()) as u8;
-        // bytes[6] = Self::inverted_fermat_cube_map(bytes[6].into()) as u8;
-        // bytes[5] = Self::inverted_fermat_cube_map(bytes[5].into()) as u8;
-        // bytes[4] = Self::inverted_fermat_cube_map(bytes[4].into()) as u8;
-
-        #[allow(clippy::needless_range_loop)] // faster like so
-        for i in 0..4 {
-            bytes[i] = Self::fermat_cube_map(bytes[i].into()) as u8;
-        }
-        // bytes[3] = Self::fermat_cube_map(bytes[3].into()) as u8;
-        // bytes[2] = Self::fermat_cube_map(bytes[2].into()) as u8;
-        // bytes[1] = Self::fermat_cube_map(bytes[1].into()) as u8;
-        // bytes[0] = Self::fermat_cube_map(bytes[0].into()) as u8;
 
         BFieldElement::from_raw_bytes(&bytes)
     }
@@ -489,63 +480,41 @@ impl Tip5 {
 mod tip5_tests {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-    #[inline]
-    fn fermat_cube_map(x: u32) -> u32 {
-        let x2 = x * x;
-        let x2hi = x2 >> 16;
-        let x2lo = x2 & 0xffff;
-        let x2p = x2lo + u32::from(x2lo < x2hi) * 65537 - x2hi;
-        let x3 = x2p * x;
-        let x3hi = x3 >> 16;
-        let x3lo = x3 & 0xffff;
-        x3lo + u32::from(x3lo < x3hi) * 65537 - x3hi
-    }
-
-    #[inline]
-    fn inverted_fermat_cube_map(x: u32) -> u32 {
-        65535 - fermat_cube_map(65535 - x)
-    }
+    use crate::shared_math::tip5::Tip5;
 
     #[test]
     #[ignore = "used for calculating parameters"]
     fn test_fermat_cube_map_is_permutation() {
-        let mut touched = [false; 65536];
-        for i in 0..65536 {
-            touched[fermat_cube_map(i) as usize] = true;
+        let mut touched = [false; 256];
+        for i in 0..256 {
+            touched[Tip5::offset_fermat_cube_map(i) as usize] = true;
         }
         assert!(touched.iter().all(|t| *t));
-        assert_eq!(fermat_cube_map(0), 0);
-    }
-
-    #[test]
-    #[ignore = "used for calculating parameters"]
-    fn test_inverted_fermat_cube_map_is_permutation() {
-        let mut touched = [false; 65536];
-        for i in 0..65536 {
-            touched[inverted_fermat_cube_map(i) as usize] = true;
-        }
-        assert!(touched.iter().all(|t| *t));
-        assert_eq!(inverted_fermat_cube_map(65535), 65535);
+        assert_eq!(Tip5::offset_fermat_cube_map(0), 0);
+        assert_eq!(Tip5::offset_fermat_cube_map(255), 255);
     }
 
     #[test]
     #[ignore = "used for calculating parameters"]
     fn calculate_differential_uniformity() {
         // cargo test calculate_differential_uniformity -- --include-ignored --nocapture
+        // addition-differential
         let count_satisfiers_fermat = |a, b| {
-            (0..(1 << 16))
+            (0..(1 << 8))
                 .map(|x| {
-                    u32::from(
-                        (0xffff + fermat_cube_map((x + a) & 0xffff) - fermat_cube_map(x)) & 0xffff
+                    u16::from(
+                        (256 + Tip5::offset_fermat_cube_map((x + a) & 0xff)
+                            - Tip5::offset_fermat_cube_map(x))
+                            & 0xff
                             == b,
                     )
                 })
                 .sum()
         };
-        let du_fermat: u32 = (1..65536)
+        let du_fermat: u16 = (1..256)
             .into_par_iter()
             .map(|a| {
-                (1..65536)
+                (1..256)
                     .into_iter()
                     .map(|b| count_satisfiers_fermat(a, b))
                     .max()
@@ -553,34 +522,44 @@ mod tip5_tests {
             })
             .max()
             .unwrap();
-        println!("differential uniformity for fermat cube map: {}", du_fermat);
+        println!(
+            "additive differential uniformity for fermat cube map: {}",
+            du_fermat
+        );
 
-        let count_satisfiers_inverted = |a, b| {
-            (0..(1 << 16))
+        // bitwise-differential
+        let count_satisfiers_fermat_bitwise = |a: u16, b: u16| {
+            (0..(1 << 8))
                 .map(|x| {
-                    u32::from(
-                        (0xffff + inverted_fermat_cube_map((x + a) & 0xffff)
-                            - inverted_fermat_cube_map(x))
-                            & 0xffff
+                    u16::from(
+                        (Tip5::offset_fermat_cube_map(x ^ a) ^ Tip5::offset_fermat_cube_map(x))
                             == b,
                     )
                 })
-                .sum()
+                .sum::<u16>()
         };
-        let du_inverted: u32 = (1..65536)
+        for a in 1..256 {
+            for b in 1..256 {
+                let num_satisfiers = count_satisfiers_fermat_bitwise(a, b);
+                if num_satisfiers == 256 {
+                    println!("a: {}, b: {} -> 256 satisfiers", a, b);
+                }
+            }
+        }
+        let du_fermat_bitwise: u16 = (1..256)
             .into_par_iter()
             .map(|a| {
-                (1..65536)
+                (1..256)
                     .into_iter()
-                    .map(|b| count_satisfiers_inverted(a, b))
+                    .map(|b| count_satisfiers_fermat_bitwise(a, b))
                     .max()
                     .unwrap()
             })
             .max()
             .unwrap();
         println!(
-            "differential uniformity for fermat cube map: {}",
-            du_inverted
+            "bitwise differential uniformity for fermat cube map: {}",
+            du_fermat_bitwise
         );
     }
 
