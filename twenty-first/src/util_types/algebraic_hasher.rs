@@ -13,34 +13,27 @@ pub trait AlgebraicHasher: Clone + Send + Sync {
         Self::hash_slice(&item.to_sequence())
     }
 
-    /// Given a uniform random `input` digest and a `max` that is a power of two,
-    /// produce a uniform random number in the interval `[0; max)`. The input should
-    /// be a Fiat-Shamir digest to ensure a high degree of randomness.
+    /// Given a uniform random `sample` and an `upper_bound` that is a power of
+    /// two, produce a uniform random number in the interval `[0; upper_bound)`.
     ///
-    /// - `input`: A hash digest
+    /// The sample should have a high degree of randomness.
+    ///
+    /// - `sample`: A hash digest
     /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
-    fn sample_index(seed: &Digest, upper_bound: usize) -> usize {
+    fn sample_index(sample: &Digest, upper_bound: usize) -> usize {
         assert!(
             other::is_power_of_two(upper_bound),
             "Non-inclusive upper bound {} must be a power of two",
             upper_bound
         );
 
-        let bytes = bincode::serialize(&seed.values()).unwrap();
-        let length_prefix_offset: usize = 8;
-        let mut byte_counter: usize = length_prefix_offset;
-        let mut max_bits: usize = other::log_2_floor(upper_bound as u128) as usize;
-        let mut acc: usize = 0;
+        assert!(
+            upper_bound <= 0x1_0000_0000,
+            "Non-inclusive upper bound {} must be at most 2^32",
+            upper_bound,
+        );
 
-        while max_bits > 0 {
-            let take = std::cmp::min(8, max_bits);
-            let add = (bytes[byte_counter] >> (8 - take)) as usize;
-            acc = (acc << take) + add;
-            max_bits -= take;
-            byte_counter += 1;
-        }
-
-        acc
+        sample.values()[4].value() as usize % upper_bound
     }
 
     // FIXME: This is not uniform.
