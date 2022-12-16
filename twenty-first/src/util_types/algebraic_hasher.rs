@@ -13,61 +13,80 @@ pub trait AlgebraicHasher: Clone + Send + Sync {
         Self::hash_slice(&item.to_sequence())
     }
 
-    /// Given a uniform random `input` digest and a `max` that is a power of two,
-    /// produce a uniform random number in the interval `[0; max)`. The input should
-    /// be a Fiat-Shamir digest to ensure a high degree of randomness.
+    /// Given a uniform random `sample` and an `upper_bound` that is a power of
+    /// two, produce a uniform random number in the interval `[0; upper_bound)`.
     ///
-    /// - `input`: A hash digest
+    /// The sample should have a high degree of randomness.
+    ///
+    /// - `sample`: A hash digest
     /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
-    fn sample_index(seed: &Digest, upper_bound: usize) -> usize {
+    fn sample_index(sample: &Digest, upper_bound: usize) -> usize {
         assert!(
             other::is_power_of_two(upper_bound),
-            "Non-inclusive upper bound {} is a power of two",
+            "Non-inclusive upper bound {} must be a power of two",
             upper_bound
         );
 
-        let bytes = bincode::serialize(&seed.values()).unwrap();
-        let length_prefix_offset: usize = 8;
-        let mut byte_counter: usize = length_prefix_offset;
-        let mut max_bits: usize = other::log_2_floor(upper_bound as u128) as usize;
-        let mut acc: usize = 0;
+        assert!(
+            upper_bound <= 0x1_0000_0000,
+            "Non-inclusive upper bound {} must be at most 2^32",
+            upper_bound,
+        );
 
-        while max_bits > 0 {
-            let take = std::cmp::min(8, max_bits);
-            let add = (bytes[byte_counter] >> (8 - take)) as usize;
-            acc = (acc << take) + add;
-            max_bits -= take;
-            byte_counter += 1;
-        }
-
-        acc
+        sample.values()[4].value() as usize % upper_bound
     }
 
     // FIXME: This is not uniform.
-    fn sample_index_not_power_of_two(seed: &Digest, max: usize) -> usize {
-        Self::sample_index(seed, (1 << 16) * other::roundup_npo2(max as u64) as usize) % max
+    fn sample_index_not_power_of_two(seed: &Digest, upper_bound: usize) -> usize {
+        Self::sample_index(
+            seed,
+            (1 << 16) * other::roundup_npo2(upper_bound as u64) as usize,
+        ) % upper_bound
     }
 
-    /// Given a uniform random `seed` digest, a `max` that is a power of two,
-    /// produce `count` uniform random numbers (sample indices) in the interval
-    /// `[0; max)`. The seed should be a Fiat-Shamir digest to ensure a high
+    /// Given a uniform random `seed` digest, an `upper_bound` that is a power of two,
+    /// produce `num_indices` uniform random numbers (sample indices) in the interval
+    /// `[0; upper_bound)`. The seed should be a Fiat-Shamir digest to ensure a high
     /// degree of randomness.
     ///
-    /// - `count`: The number of sample indices
-    /// - `seed`: A hash digest
-    /// - `max`: The (non-inclusive) upper bound (a power of two)
-    fn sample_indices(count: usize, seed: &Digest, max: usize) -> Vec<usize> {
-        Self::get_n_hash_rounds(seed, count)
+    /// - `seed`: A hash `Digest`
+    /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
+    /// - `num_indices`: The number of sample indices
+    fn sample_indices(seed: &Digest, upper_bound: usize, num_indices: usize) -> Vec<usize> {
+        Self::get_n_hash_rounds(seed, num_indices)
             .iter()
-            .map(|random_input| Self::sample_index(random_input, max))
+            .map(|random_input| Self::sample_index(random_input, upper_bound))
+            .collect()
+    }
+
+    /// Given a uniform random `seed` digest, produce `num_weights` uniform random
+    /// `XFieldElement`s (sample weights). The seed should be a Fiat-Shamir digest
+    /// to ensure a high degree of randomness.
+    ///
+    /// - `seed`: A hash `Digest`
+    /// - `num_weights`: The number of sample weights
+    fn sample_weights(seed: &Digest, num_weights: usize) -> Vec<XFieldElement> {
+        Self::get_n_hash_rounds(seed, num_weights)
+            .iter()
+            .map(XFieldElement::sample)
             .collect()
     }
 
     fn get_n_hash_rounds(seed: &Digest, count: usize) -> Vec<Digest> {
+        assert!(count <= BFieldElement::MAX as usize);
         let mut digests = Vec::with_capacity(count);
         (0..count)
             .into_par_iter()
-            .map(|i: usize| Self::hash_slice(&[seed.to_sequence(), i.to_sequence()].concat()))
+            .map(|counter: usize| {
+                let counter = Digest::new([
+                    BFieldElement::new(counter as u64),
+                    BFieldElement::zero(),
+                    BFieldElement::zero(),
+                    BFieldElement::zero(),
+                    BFieldElement::zero(),
+                ]);
+                Self::hash_pair(&counter, seed)
+            })
             .collect_into_vec(&mut digests);
 
         digests

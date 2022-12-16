@@ -129,9 +129,17 @@ impl XFieldElement {
         }
     }
 
+    /// Derive a sample `XFieldElement` from a random `Digest`.
+    ///
+    /// The specific elements of the digest (element 2, 3 and 4)
+    /// were chosen because the tasm equivalent of this function
+    /// can more efficiently pop elements 0 and 1, leading to a
+    /// more efficient `sample_weights()` implementation:
+    ///
+    /// https://github.com/Neptune-Crypto/twenty-first/pull/66#discussion_r1049771105
     pub fn sample(digest: &Digest) -> Self {
         let elements = digest.values();
-        XFieldElement::new([elements[0], elements[1], elements[2]])
+        XFieldElement::new([elements[2], elements[3], elements[4]])
     }
 
     // TODO: Move this into Polynomial when PrimeField can implement Zero + One.
