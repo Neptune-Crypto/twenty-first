@@ -71,8 +71,8 @@ impl From<Register> for Vec<BFieldElement> {
     }
 }
 
-impl Register {
-    pub fn default() -> Self {
+impl Default for Register {
+    fn default() -> Self {
         Self {
             cycle: BFieldElement::zero(),
             instruction_pointer: BFieldElement::zero(),
@@ -85,25 +85,13 @@ impl Register {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct BaseMatrices {
     pub processor_matrix: Vec<Register>,
     pub instruction_matrix: Vec<InstructionMatrixBaseRow>,
     pub memory_matrix: Vec<Vec<BFieldElement>>,
     pub input_matrix: Vec<BFieldElement>,
     pub output_matrix: Vec<BFieldElement>,
-}
-
-impl BaseMatrices {
-    pub fn default() -> Self {
-        Self {
-            processor_matrix: vec![],
-            instruction_matrix: vec![],
-            memory_matrix: vec![],
-            input_matrix: vec![],
-            output_matrix: vec![],
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -266,8 +254,10 @@ pub fn simulate(
     let zero = BFieldElement::zero();
     let one = BFieldElement::one();
     let two = BFieldElement::new(2);
-    let mut register = Register::default();
-    register.current_instruction = program[0];
+    let mut register = Register {
+        current_instruction: program[0],
+        ..Register::default()
+    };
     if program.len() < 2 {
         register.next_instruction = zero;
     } else {

@@ -505,7 +505,7 @@ mod accumulator_mmr_tests {
                 .zip(new_leafs.into_iter())
                 .collect();
 
-            assert_eq!(mutated_leaf_count as usize, mutation_data.len());
+            assert_eq!(mutated_leaf_count, mutation_data.len());
 
             let original_membership_proofs: Vec<MmrMembershipProof<H>> = membership_proof_indices
                 .iter()
@@ -529,8 +529,8 @@ mod accumulator_mmr_tests {
             assert_eq!(mmra.get_peaks(), ammr.get_peaks());
 
             // Verify that membership proofs from AMMR and MMRA are equal
-            assert_eq!(membership_proof_count as usize, mmra_mps.len());
-            assert_eq!(membership_proof_count as usize, ammr_mps.len());
+            assert_eq!(membership_proof_count, mmra_mps.len());
+            assert_eq!(membership_proof_count, ammr_mps.len());
             assert_eq!(ammr_mps, mmra_mps);
 
             // Verify that all membership proofs still work
@@ -571,9 +571,8 @@ mod accumulator_mmr_tests {
             let mut accumulator_mmr = MmrAccumulator::<H>::new(leaf_hashes_start.clone());
 
             for append_size in 0..18 {
-                let appends: Vec<Digest> = (2000..2000 + append_size)
-                    .map(|x| H::hash(&(x as u128)))
-                    .collect();
+                let appends: Vec<Digest> =
+                    (2000..2000 + append_size).map(|x| H::hash(&x)).collect();
                 let mutate_count = cmp::min(12, start_size);
                 for mutate_size in 0..mutate_count {
                     let new_leaf_values: Vec<Digest> = (13..13 + mutate_size)

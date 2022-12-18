@@ -667,7 +667,7 @@ mod mmr_membership_proof_test {
         mmr_size = 8;
         let leaf_hash: Digest = H::hash(&1337u128);
         archival_mmr.append(leaf_hash);
-        expected_peak_indices_and_heights = vec![(15, 3); mmr_size as usize];
+        expected_peak_indices_and_heights = vec![(15, 3); mmr_size];
         for (data_index, expected_peak_index) in
             (0..mmr_size as u128).zip(expected_peak_indices_and_heights.into_iter())
         {
@@ -834,7 +834,7 @@ mod mmr_membership_proof_test {
             );
 
             // update MMR
-            for i in 0..(modified_leaf_count as usize) {
+            for i in 0..modified_leaf_count {
                 let auth_path = authentication_paths[i].clone();
                 leaf_hashes[auth_path.data_index as usize] = new_leafs[i];
                 archival_mmr.mutate_leaf_raw(auth_path.data_index, new_leafs[i]);
@@ -853,8 +853,8 @@ mod mmr_membership_proof_test {
             assert_eq!(updated_mp_indices_0, updated_mp_indices_1);
 
             // test that all updated membership proofs are valid under the updated MMR
-            for i in 0..own_membership_proof_count {
-                let membership_proof = own_membership_proofs[i as usize].clone();
+            (0..own_membership_proof_count).for_each(|i| {
+                let membership_proof = own_membership_proofs[i].clone();
                 assert!(
                     membership_proof
                         .verify(
@@ -864,7 +864,7 @@ mod mmr_membership_proof_test {
                         )
                         .0
                 );
-            }
+            });
         }
     }
 
@@ -880,7 +880,7 @@ mod mmr_membership_proof_test {
         let (leaf_hashes, mut membership_proofs) =
             make_populated_archival_mmr::<H>(total_leaf_count);
 
-        for i in 0..total_leaf_count as usize {
+        for i in 0..total_leaf_count {
             let leaf_mutation_membership_proof = membership_proofs[i].clone();
             let new_leaf = leaf_hashes[i];
             let ret = MmrMembershipProof::batch_update_from_leaf_mutation(
@@ -954,10 +954,10 @@ mod mmr_membership_proof_test {
             );
         }
 
-        for i in 0..modified_leaf_count {
+        (0..modified_leaf_count).for_each(|i| {
             let data_index = i as u128;
-            archival_mmr.mutate_leaf_raw(data_index, new_leafs[i as usize]);
-        }
+            archival_mmr.mutate_leaf_raw(data_index, new_leafs[i]);
+        });
 
         for (i, mp) in membership_proofs.iter().enumerate() {
             assert!(

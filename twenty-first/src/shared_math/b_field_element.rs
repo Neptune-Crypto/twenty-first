@@ -161,15 +161,13 @@ impl BFieldElement {
     }
 
     pub fn legendre_symbol(&self) -> i8 {
-        let elem = self.mod_pow((Self::QUOTIENT - 1) as u64 / 2).0;
+        let elem = self.mod_pow((Self::QUOTIENT - 1) / 2).0;
 
         // Ugly hack to force a result in {-1,0,1}
         if elem == Self::QUOTIENT - 1 {
             -1
-        } else if elem == 0 {
-            0
         } else {
-            1
+            i8::from(elem != 0)
         }
     }
 
@@ -486,8 +484,8 @@ impl ModPowU64 for BFieldElement {
 impl PrimitiveRootOfUnity for BFieldElement {
     fn primitive_root_of_unity(n: u64) -> Option<BFieldElement> {
         // Check if n is one of the values for which we have pre-calculated roots
-        if PRIMITIVE_ROOTS.contains_key(&(n as u64)) {
-            Some(BFieldElement::new(PRIMITIVE_ROOTS[&(n as u64)]))
+        if PRIMITIVE_ROOTS.contains_key(&n) {
+            Some(BFieldElement::new(PRIMITIVE_ROOTS[&n]))
         } else if n <= 1 {
             Some(BFieldElement::one())
         } else {
@@ -505,13 +503,6 @@ mod b_prime_field_element_test {
     use crate::shared_math::polynomial::Polynomial;
     use itertools::izip;
     use proptest::prelude::*;
-
-    // TODO: Move this into separate file.
-    macro_rules! bfield_elem {
-        ($value:expr) => {{
-            BFieldElement::new($value)
-        }};
-    }
 
     #[test]
     fn display_test() {
@@ -531,15 +522,15 @@ mod b_prime_field_element_test {
 
     #[test]
     fn test_zero_one() {
-        let zero = bfield_elem!(0);
-        let one = bfield_elem!(1);
+        let zero = BFieldElement::new(0);
+        let one = BFieldElement::new(1);
 
         assert!(zero.is_zero());
         assert!(!zero.is_one());
         assert!(!one.is_zero());
         assert!(one.is_one());
-        assert!(bfield_elem!(BFieldElement::MAX + 1).is_zero());
-        assert!(bfield_elem!(BFieldElement::MAX + 2).is_one());
+        assert!(BFieldElement::new(BFieldElement::MAX + 1).is_zero());
+        assert!(BFieldElement::new(BFieldElement::MAX + 2).is_one());
     }
 
     #[test]
@@ -580,37 +571,37 @@ mod b_prime_field_element_test {
 
     #[test]
     fn simple_value_test() {
-        let zero: BFieldElement = bfield_elem!(0);
+        let zero: BFieldElement = BFieldElement::new(0);
         assert_eq!(0, zero.value());
         let one: BFieldElement = BFieldElement::one();
         assert_eq!(1, one.value());
 
-        let neinneinnein = bfield_elem!(999);
+        let neinneinnein = BFieldElement::new(999);
         assert_eq!(999, neinneinnein.value());
     }
 
     #[test]
     fn simple_generator_test() {
-        assert_eq!(bfield_elem!(7), BFieldElement::generator());
-        assert!(bfield_elem!(7)
+        assert_eq!(BFieldElement::new(7), BFieldElement::generator());
+        assert!(BFieldElement::new(7)
             .mod_pow(((1u128 << 64) - (1u128 << 32)) as u64)
             .is_one());
-        assert!(!bfield_elem!(7)
+        assert!(!BFieldElement::new(7)
             .mod_pow(((1u128 << 64) - (1u128 << 32)) as u64 / 2)
             .is_one());
     }
 
     #[test]
     fn simple_lift_test() {
-        let zero: BFieldElement = bfield_elem!(0);
+        let zero: BFieldElement = BFieldElement::new(0);
         assert!(zero.lift().is_zero());
         assert!(!zero.lift().is_one());
 
-        let one: BFieldElement = bfield_elem!(1);
+        let one: BFieldElement = BFieldElement::new(1);
         assert!(!one.lift().is_zero());
         assert!(one.lift().is_one());
 
-        let five: BFieldElement = bfield_elem!(5);
+        let five: BFieldElement = BFieldElement::new(5);
         let five_lifted: XFieldElement = five.lift();
         assert_eq!(Some(five), five_lifted.unlift());
     }
@@ -625,9 +616,9 @@ mod b_prime_field_element_test {
 
     #[test]
     fn next_and_previous_test() {
-        let mut val_a = bfield_elem!(0);
-        let mut val_b = bfield_elem!(1);
-        let mut val_c = bfield_elem!(BFieldElement::MAX - 1);
+        let mut val_a = BFieldElement::new(0);
+        let mut val_b = BFieldElement::new(1);
+        let mut val_c = BFieldElement::new(BFieldElement::MAX - 1);
         let max = BFieldElement::new(BFieldElement::MAX);
         val_a.increment();
         assert!(val_a.is_one());
@@ -648,15 +639,15 @@ mod b_prime_field_element_test {
         val_c.decrement();
         assert_eq!(max, val_c);
         val_c.decrement();
-        assert_eq!(bfield_elem!(BFieldElement::MAX - 1), val_c);
+        assert_eq!(BFieldElement::new(BFieldElement::MAX - 1), val_c);
     }
 
     proptest! {
         #[test]
         fn identity_tests(n in 0u64..BFieldElement::MAX) {
-            let zero = bfield_elem!(0);
-            let one = bfield_elem!(1);
-            let other = bfield_elem!(n);
+            let zero = BFieldElement::new(0);
+            let one = BFieldElement::new(1);
+            let other = BFieldElement::new(n);
 
             prop_assert_eq!(other, zero + other, "left zero identity");
             prop_assert_eq!(other, other + zero, "right zero identity");
@@ -667,36 +658,36 @@ mod b_prime_field_element_test {
 
     #[test]
     fn inversion_test() {
-        let one_inv = bfield_elem!(1);
-        let two_inv = bfield_elem!(9223372034707292161);
-        let three_inv = bfield_elem!(12297829379609722881);
-        let four_inv = bfield_elem!(13835058052060938241);
-        let five_inv = bfield_elem!(14757395255531667457);
-        let six_inv = bfield_elem!(15372286724512153601);
-        let seven_inv = bfield_elem!(2635249152773512046);
-        let eight_inv = bfield_elem!(16140901060737761281);
-        let nine_inv = bfield_elem!(4099276459869907627);
-        let ten_inv = bfield_elem!(16602069662473125889);
+        let one_inv = BFieldElement::new(1);
+        let two_inv = BFieldElement::new(9223372034707292161);
+        let three_inv = BFieldElement::new(12297829379609722881);
+        let four_inv = BFieldElement::new(13835058052060938241);
+        let five_inv = BFieldElement::new(14757395255531667457);
+        let six_inv = BFieldElement::new(15372286724512153601);
+        let seven_inv = BFieldElement::new(2635249152773512046);
+        let eight_inv = BFieldElement::new(16140901060737761281);
+        let nine_inv = BFieldElement::new(4099276459869907627);
+        let ten_inv = BFieldElement::new(16602069662473125889);
         let eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv =
-            bfield_elem!(13115294102219178839);
+            BFieldElement::new(13115294102219178839);
 
         // With these "alt" values we verify that the degenerated representation of
         // B field elements works.
         let one_alt = BFieldElement(BFieldElement::QUOTIENT + 1);
         let two_alt = BFieldElement(BFieldElement::QUOTIENT + 2);
         let three_alt = BFieldElement(BFieldElement::QUOTIENT + 3);
-        assert_eq!(two_inv, bfield_elem!(2).inverse());
-        assert_eq!(three_inv, bfield_elem!(3).inverse());
-        assert_eq!(four_inv, bfield_elem!(4).inverse());
-        assert_eq!(five_inv, bfield_elem!(5).inverse());
-        assert_eq!(six_inv, bfield_elem!(6).inverse());
-        assert_eq!(seven_inv, bfield_elem!(7).inverse());
-        assert_eq!(eight_inv, bfield_elem!(8).inverse());
-        assert_eq!(nine_inv, bfield_elem!(9).inverse());
-        assert_eq!(ten_inv, bfield_elem!(10).inverse());
+        assert_eq!(two_inv, BFieldElement::new(2).inverse());
+        assert_eq!(three_inv, BFieldElement::new(3).inverse());
+        assert_eq!(four_inv, BFieldElement::new(4).inverse());
+        assert_eq!(five_inv, BFieldElement::new(5).inverse());
+        assert_eq!(six_inv, BFieldElement::new(6).inverse());
+        assert_eq!(seven_inv, BFieldElement::new(7).inverse());
+        assert_eq!(eight_inv, BFieldElement::new(8).inverse());
+        assert_eq!(nine_inv, BFieldElement::new(9).inverse());
+        assert_eq!(ten_inv, BFieldElement::new(10).inverse());
         assert_eq!(
             eightfive_million_sixhundred_and_seventyone_onehundred_and_six_inv,
-            bfield_elem!(85671106).inverse()
+            BFieldElement::new(85671106).inverse()
         );
         assert_eq!(one_inv, one_alt.inverse());
         assert_eq!(two_inv, two_alt.inverse());
@@ -720,17 +711,17 @@ mod b_prime_field_element_test {
         ];
 
         let values = [
-            bfield_elem!(1),
-            bfield_elem!(2),
-            bfield_elem!(3),
-            bfield_elem!(4),
-            bfield_elem!(5),
-            bfield_elem!(6),
-            bfield_elem!(7),
-            bfield_elem!(8),
-            bfield_elem!(9),
-            bfield_elem!(10),
-            bfield_elem!(85671106),
+            BFieldElement::new(1),
+            BFieldElement::new(2),
+            BFieldElement::new(3),
+            BFieldElement::new(4),
+            BFieldElement::new(5),
+            BFieldElement::new(6),
+            BFieldElement::new(7),
+            BFieldElement::new(8),
+            BFieldElement::new(9),
+            BFieldElement::new(10),
+            BFieldElement::new(85671106),
             one_alt,
             two_alt,
             three_alt,
@@ -747,12 +738,12 @@ mod b_prime_field_element_test {
         let empty_inversion = BFieldElement::batch_inversion(vec![]);
         assert!(empty_inversion.is_empty());
 
-        let singleton_inversion = BFieldElement::batch_inversion(vec![bfield_elem!(2)]);
+        let singleton_inversion = BFieldElement::batch_inversion(vec![BFieldElement::new(2)]);
         assert_eq!(1, singleton_inversion.len());
         assert_eq!(two_inv, singleton_inversion[0]);
 
         let duplet_inversion =
-            BFieldElement::batch_inversion(vec![bfield_elem!(2), bfield_elem!(1)]);
+            BFieldElement::batch_inversion(vec![BFieldElement::new(2), BFieldElement::new(1)]);
         assert_eq!(2, duplet_inversion.len());
         assert_eq!(two_inv, duplet_inversion[0]);
         assert_eq!(one_inv, duplet_inversion[1]);
@@ -778,7 +769,7 @@ mod b_prime_field_element_test {
         for i in 0..test_iterations {
             let rands: Vec<BFieldElement> = random_elements(i);
             let rands_inv: Vec<BFieldElement> = BFieldElement::batch_inversion(rands.clone());
-            assert_eq!(i as usize, rands_inv.len());
+            assert_eq!(i, rands_inv.len());
             for (mut rand, rand_inv) in izip!(rands, rands_inv) {
                 assert!((rand * rand_inv).is_one());
                 assert!((rand_inv * rand).is_one());
@@ -947,17 +938,23 @@ mod b_prime_field_element_test {
 
     #[test]
     fn create_polynomial_test() {
-        let a: Polynomial<BFieldElement> =
-            Polynomial::new(vec![bfield_elem!(1), bfield_elem!(3), bfield_elem!(7)]);
-
-        let b: Polynomial<BFieldElement> = Polynomial::new(vec![
-            bfield_elem!(2),
-            bfield_elem!(5),
-            bfield_elem!(BFieldElement::MAX as u64),
+        let a: Polynomial<BFieldElement> = Polynomial::new(vec![
+            BFieldElement::new(1),
+            BFieldElement::new(3),
+            BFieldElement::new(7),
         ]);
 
-        let expected: Polynomial<BFieldElement> =
-            Polynomial::new(vec![bfield_elem!(3), bfield_elem!(8), bfield_elem!(6)]);
+        let b: Polynomial<BFieldElement> = Polynomial::new(vec![
+            BFieldElement::new(2),
+            BFieldElement::new(5),
+            BFieldElement::new(BFieldElement::MAX),
+        ]);
+
+        let expected: Polynomial<BFieldElement> = Polynomial::new(vec![
+            BFieldElement::new(3),
+            BFieldElement::new(8),
+            BFieldElement::new(6),
+        ]);
 
         assert_eq!(expected, a + b);
     }
@@ -1000,8 +997,8 @@ mod b_prime_field_element_test {
                 None => println!("Found no primitive root of unity for n = {}", power),
             };
             let root = root_result.unwrap();
-            assert!(root.mod_pow(power as u64).is_one());
-            assert!(!root.mod_pow(power as u64 / 2).is_one());
+            assert!(root.mod_pow(power).is_one());
+            assert!(!root.mod_pow(power / 2).is_one());
         }
     }
 

@@ -536,7 +536,7 @@ impl<FF: FiniteField> MPolynomial<FF> {
                 .borrow_mut()
                 .children
                 .push(nodes[end].clone());
-            let mut diff_exponents: Vec<u8> = nodes[end as usize]
+            let mut diff_exponents: Vec<u8> = nodes[end]
                 .borrow()
                 .data
                 .abs_exponents
@@ -550,12 +550,12 @@ impl<FF: FiniteField> MPolynomial<FF> {
                 diff_exponents[*x_point_index] = 0;
             }
             if diff_exponents.iter().sum::<u8>() == 1u8 {
-                nodes[end as usize].borrow_mut().data.single_point =
+                nodes[end].borrow_mut().data.single_point =
                     Some(diff_exponents.iter().position(|&x| x == 1).unwrap());
             }
-            nodes[end as usize].borrow_mut().data.diff_exponents = diff_exponents;
-            nodes[end as usize].borrow_mut().data.diff_sum = weight;
-            nodes[end as usize].borrow_mut().data.x_powers = x_power as usize;
+            nodes[end].borrow_mut().data.diff_exponents = diff_exponents;
+            nodes[end].borrow_mut().data.diff_sum = weight;
+            nodes[end].borrow_mut().data.x_powers = x_power as usize;
         }
         timer.elapsed("built nodes");
 
@@ -2011,9 +2011,9 @@ mod test_mpolynomials {
     fn precalculate_exponents_memoization_test() {
         for _ in 0..30 {
             let variable_count = 6;
-            let a = gen_mpolynomial(variable_count, 12, 7, BFieldElement::MAX as u64);
-            let b = gen_mpolynomial(variable_count, 12, 7, BFieldElement::MAX as u64);
-            let c = gen_mpolynomial(variable_count, 12, 7, BFieldElement::MAX as u64);
+            let a = gen_mpolynomial(variable_count, 12, 7, BFieldElement::MAX);
+            let b = gen_mpolynomial(variable_count, 12, 7, BFieldElement::MAX);
+            let c = gen_mpolynomial(variable_count, 12, 7, BFieldElement::MAX);
             let mpolynomials = vec![a, b, c];
             let mut point = gen_upolynomials(variable_count - 1, 5, BFieldElement::MAX);
 

@@ -447,7 +447,7 @@ impl StarkRp {
         for (tq, tq_degree) in transition_quotients.iter().zip(expected_tq_degrees.iter()) {
             let tq_x: Polynomial<XFieldElement> = Self::lift_b_x(tq);
             terms.push(tq_x.clone());
-            let shift = max_degree - (*tq_degree) as i64;
+            let shift = max_degree - *tq_degree;
 
             // Make new polynomial with max_degree degree by shifting all terms up
             let shifted = tq_x.shift_coefficients(shift as usize);
@@ -708,7 +708,7 @@ impl StarkRp {
             randomizer_values.insert(index, value);
         }
 
-        let omicron = BFieldElement::primitive_root_of_unity(omicron_domain_length as u64).unwrap();
+        let omicron = BFieldElement::primitive_root_of_unity(omicron_domain_length).unwrap();
         timer.elapsed("Insert randomizer values in HashMap");
 
         // Verify leafs of combination polynomial
@@ -823,7 +823,7 @@ impl StarkRp {
             {
                 let transition_quotient = *tcv / current_transition_zerofier_value;
                 terms.push(transition_quotient.lift());
-                let shift = max_degree as i64 - (*tq_degree) as i64;
+                let shift = max_degree as i64 - *tq_degree;
                 terms.push(
                     (transition_quotient * current_x.mod_pow(shift.try_into().unwrap())).lift(),
                 );

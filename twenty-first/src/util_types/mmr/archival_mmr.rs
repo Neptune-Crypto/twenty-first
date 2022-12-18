@@ -59,7 +59,7 @@ where
     /// retrieving a membership proof for a leaf. And the archival and accumulator MMR share
     /// this interface.
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof<H> {
-        let node_index = self.digests.len() as u128;
+        let node_index = self.digests.len();
         let data_index = node_index_to_data_index(node_index).unwrap();
         self.append_raw(new_leaf);
         self.prove_membership(data_index).0
@@ -164,7 +164,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         let mut acc_hash = new_leaf;
 
         // While parent exists in MMR, update parent
-        while parent_index < self.digests.len() as u128 {
+        while parent_index < self.digests.len() {
             let (is_right, height) = right_child_and_height(node_index);
             acc_hash = if is_right {
                 H::hash_pair(
@@ -238,8 +238,8 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         // 4. Once new node is found, jump to right sibling (will not be included)
         // 5. Take left child of sibling, continue until a node in tree is found
         let mut peaks_and_heights: Vec<(Digest, u128)> = vec![];
-        let (mut top_peak, mut top_height) = leftmost_ancestor(self.digests.len() as u128 - 1);
-        if top_peak > self.digests.len() as u128 - 1 {
+        let (mut top_peak, mut top_height) = leftmost_ancestor(self.digests.len() - 1);
+        if top_peak > self.digests.len() - 1 {
             top_peak = left_child(top_peak, top_height);
             top_height -= 1;
         }
@@ -248,10 +248,10 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         let mut height = top_height;
         let mut candidate = right_sibling(top_peak, height);
         'outer: while height > 0 {
-            '_inner: while candidate > (self.digests.len() as u128) && height > 0 {
+            '_inner: while candidate > self.digests.len() && height > 0 {
                 candidate = left_child(candidate, height);
                 height -= 1;
-                if candidate < (self.digests.len() as u128) {
+                if candidate < self.digests.len() {
                     // peaks_and_heights.push((self.digests[candidate as usize].clone(), height));
                     peaks_and_heights.push((self.digests.get(candidate), height));
                     candidate = right_sibling(candidate, height);
@@ -265,7 +265,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
 
     /// Append an element to the archival MMR
     pub fn append_raw(&mut self, new_leaf: Digest) {
-        let node_index = self.digests.len() as u128;
+        let node_index = self.digests.len();
         self.digests.push(new_leaf);
         let (parent_needed, own_height) = right_child_and_height(node_index);
         if parent_needed {
@@ -281,7 +281,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
             return None;
         }
 
-        let node_index = self.digests.len() as u128 - 1;
+        let node_index = self.digests.len() - 1;
         let mut ret = self.digests.pop().unwrap();
         let (_, mut height) = right_child_and_height(node_index);
         while height > 0 {
@@ -312,7 +312,7 @@ mod mmr_test {
     impl<H: AlgebraicHasher> ArchivalMmr<H> {
         /// Return the number of nodes in all the trees in the MMR
         fn count_nodes(&mut self) -> u128 {
-            self.digests.len() as u128 - 1
+            self.digests.len() - 1
         }
     }
 
@@ -548,7 +548,7 @@ mod mmr_test {
             let mut archival: ArchivalMmr<H> =
                 get_archival_mmr_from_digests(leaf_hashes_blake3.clone());
             let mut archival_end_state: ArchivalMmr<H> =
-                get_archival_mmr_from_digests(vec![new_leaf; size as usize]);
+                get_archival_mmr_from_digests(vec![new_leaf; size]);
             for i in 0..size {
                 let i = i as u128;
                 let (mp, _archival_peaks) = archival.prove_membership(i);
@@ -575,7 +575,7 @@ mod mmr_test {
             let mut archival: ArchivalMmr<H> =
                 get_archival_mmr_from_digests(leaf_hashes_blake3.clone());
             let mut archival_end_state: ArchivalMmr<H> =
-                get_archival_mmr_from_digests(vec![new_leaf; size as usize]);
+                get_archival_mmr_from_digests(vec![new_leaf; size]);
             for i in 0..size {
                 let i = i as u128;
                 let (mp, peaks_before_update) = archival.prove_membership(i);
@@ -825,7 +825,7 @@ mod mmr_test {
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid
             for index in 0..data_size {
-                let (membership_proof, peaks) = mmr.prove_membership(index as u128);
+                let (membership_proof, peaks) = mmr.prove_membership(index);
                 let valid_res =
                     membership_proof.verify(&peaks, &input_hashes[index as usize], data_size);
 

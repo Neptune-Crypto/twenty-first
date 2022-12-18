@@ -46,7 +46,7 @@ pub struct FriDomain {
 
 impl FriDomain {
     pub fn x_evaluate(&self, polynomial: &Polynomial<XFieldElement>) -> Vec<XFieldElement> {
-        polynomial.fast_coset_evaluate(&self.offset, self.omega, self.length as usize)
+        polynomial.fast_coset_evaluate(&self.offset, self.omega, self.length)
     }
 
     pub fn x_interpolate(&self, values: &[XFieldElement]) -> Polynomial<XFieldElement> {
@@ -67,7 +67,7 @@ impl FriDomain {
         let zero = BFieldElement::zero();
         let mut polynomial_representation: Vec<BFieldElement> =
             polynomial.scale(&self.offset).coefficients;
-        polynomial_representation.resize(self.length as usize, zero);
+        polynomial_representation.resize(self.length, zero);
         ntt(
             &mut polynomial_representation,
             self.omega,
@@ -528,7 +528,7 @@ mod fri_domain_tests {
                 length: order as usize,
             };
             let expected_x_values: Vec<BFieldElement> = (0..order)
-                .map(|i| BFieldElement::generator() * omega.mod_pow(i as u64))
+                .map(|i| BFieldElement::generator() * omega.mod_pow(i))
                 .collect();
             let x_values = domain.b_domain_values();
             assert_eq!(expected_x_values, x_values);

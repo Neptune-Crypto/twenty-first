@@ -192,8 +192,7 @@ impl Stark {
 
         // Instantiate FRI object
         let b_field_generator = BFieldElement::generator();
-        let b_field_omega =
-            BFieldElement::primitive_root_of_unity(fri_domain_length as u64).unwrap();
+        let b_field_omega = BFieldElement::primitive_root_of_unity(fri_domain_length).unwrap();
         let fri: Fri<StarkHasher> = Fri::new(
             b_field_generator,
             b_field_omega,
@@ -1125,8 +1124,10 @@ mod brainfuck_stark_tests {
         let zero = BFieldElement::zero();
         let one = BFieldElement::one();
         let two = BFieldElement::new(2);
-        let mut register = Register::default();
-        register.current_instruction = program[0];
+        let mut register = Register {
+            current_instruction: program[0],
+            ..Register::default()
+        };
         if program.len() < 2 {
             register.next_instruction = zero;
         } else {
@@ -1341,8 +1342,6 @@ mod brainfuck_stark_tests {
         let one = BFieldElement::one();
         let two = BFieldElement::new(2);
         let three = BFieldElement::new(3);
-        let mut register = Register::default();
-        register.current_instruction = program[0];
         let (_, _, output) = brainfuck::vm::run(&program, vec![]).unwrap();
         assert_eq!(vec![two], output);
         let regular_matrices: BaseMatrices = brainfuck::vm::simulate(&program, &[]).unwrap();

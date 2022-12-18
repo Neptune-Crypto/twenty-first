@@ -1050,7 +1050,7 @@ mod x_field_element_test {
 
         let expecteds = [1u64, 3, 9, 27, 81, 243].iter().map(|&x| {
             XFieldElement::new([
-                BFieldElement::new(x as u64),
+                BFieldElement::new(x),
                 BFieldElement::zero(),
                 BFieldElement::zero(),
             ])
@@ -1160,8 +1160,8 @@ mod x_field_element_test {
         ];
 
         assert_eq!(
-            bfes.emojihash().replace(&['[', ']', '|'], ""),
-            xfes.emojihash().replace(&['[', ']', '|'], ""),
+            bfes.emojihash().replace(['[', ']', '|'], ""),
+            xfes.emojihash().replace(['[', ']', '|'], ""),
         );
     }
 }

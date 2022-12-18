@@ -57,16 +57,6 @@ where
     Item: IntoIterator<Item = BFieldElement> + Clone,
     H: AlgebraicHasher,
 {
-    pub fn default() -> Self {
-        ProofStream {
-            items: vec![],
-            items_index: 0,
-            transcript: vec![],
-            transcript_index: 0,
-            _hasher: PhantomData,
-        }
-    }
-
     /// Reset the counter counting how many items were read. For testing purposes, so
     /// we don't have to re-run tests needlessly.
     pub fn reset_for_verifier(&mut self) {
