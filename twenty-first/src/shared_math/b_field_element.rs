@@ -203,6 +203,29 @@ impl BFieldElement {
     pub fn from_raw_bytes(bytes: &[u8; 8]) -> Self {
         Self(u64::from_le_bytes(*bytes))
     }
+
+    /// Return the raw 16-bit chunks of the Montgomery
+    /// representation, in little-endian chunk order
+    pub fn raw_u16s(&self) -> [u16; 4] {
+        [
+            (self.0 & 0xffff) as u16,
+            ((self.0 >> 16) & 0xffff) as u16,
+            ((self.0 >> 32) & 0xffff) as u16,
+            ((self.0 >> 48) & 0xffff) as u16,
+        ]
+    }
+
+    /// Take a slice of 4 16-bit chunks and interpret it as an integer in
+    /// little-endian chunk order, and cast it to a BFieldElement
+    /// in Montgomery representation
+    pub fn from_raw_u16s(chunks: &[u16; 4]) -> Self {
+        Self(
+            ((chunks[3] as u64) << 48)
+                | ((chunks[2] as u64) << 32)
+                | ((chunks[1] as u64) << 16)
+                | (chunks[0] as u64),
+        )
+    }
 }
 
 impl Emojihash for BFieldElement {
@@ -1090,6 +1113,20 @@ mod b_prime_field_element_test {
             let bytes = e.raw_bytes();
             let c = BFieldElement::from_raw_bytes(&bytes);
             assert_eq!(e, c);
+            let mut f = 0u64;
+            for i in 0..8 {
+                f += (bytes[i] as u64) << (8 * i);
+            }
+            assert_eq!(e, BFieldElement { 0: f });
+
+            let chunks = e.raw_u16s();
+            let g = BFieldElement::from_raw_u16s(&chunks);
+            assert_eq!(e, g);
+            let mut h = 0u64;
+            for i in 0..4 {
+                h += (chunks[i] as u64) << (16 * i);
+            }
+            assert_eq!(e, BFieldElement { 0: h });
         }
     }
 }
