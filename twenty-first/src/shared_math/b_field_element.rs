@@ -1114,19 +1114,24 @@ mod b_prime_field_element_test {
             let c = BFieldElement::from_raw_bytes(&bytes);
             assert_eq!(e, c);
             let mut f = 0u64;
+
+            // Clippy thinks this is a needless range loop. While `.iter().enumerate()` does
+            // work, it's not clear it's prettier.
+            #[allow(clippy::needless_range_loop)]
             for i in 0..8 {
                 f += (bytes[i] as u64) << (8 * i);
             }
-            assert_eq!(e, BFieldElement { 0: f });
+            assert_eq!(e, BFieldElement(f));
 
             let chunks = e.raw_u16s();
             let g = BFieldElement::from_raw_u16s(&chunks);
             assert_eq!(e, g);
             let mut h = 0u64;
+            #[allow(clippy::needless_range_loop)]
             for i in 0..4 {
                 h += (chunks[i] as u64) << (16 * i);
             }
-            assert_eq!(e, BFieldElement { 0: h });
+            assert_eq!(e, BFieldElement(h));
         }
     }
 }
