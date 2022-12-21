@@ -1,8 +1,8 @@
 use itertools::Itertools;
-use num_traits::{One, Zero};
+use num_traits::One;
 use serde::{Deserialize, Serialize};
 
-use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::traits::FiniteField;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
@@ -802,7 +802,7 @@ pub struct RescuePrimeRegularState {
 impl RescuePrimeRegularState {
     fn new() -> RescuePrimeRegularState {
         RescuePrimeRegularState {
-            state: [BFieldElement::zero(); STATE_SIZE],
+            state: [BFIELD_ZERO; STATE_SIZE],
         }
     }
 }
@@ -933,7 +933,7 @@ impl RescuePrimeRegular {
         sponge.state = Self::batch_mod_pow_alpha(sponge.state);
 
         // MDS matrix
-        let mut v: [BFieldElement; STATE_SIZE] = [BFieldElement::zero(); STATE_SIZE];
+        let mut v: [BFieldElement; STATE_SIZE] = [BFIELD_ZERO; STATE_SIZE];
         for i in 0..STATE_SIZE {
             for j in 0..STATE_SIZE {
                 v[i] += MDS[i * STATE_SIZE + j] * sponge.state[j];
@@ -956,7 +956,7 @@ impl RescuePrimeRegular {
 
         // MDS matrix
         for i in 0..STATE_SIZE {
-            v[i] = BFieldElement::zero();
+            v[i] = BFIELD_ZERO;
             for j in 0..STATE_SIZE {
                 v[i] += MDS[i * STATE_SIZE + j] * sponge.state[j];
             }
@@ -988,7 +988,7 @@ impl RescuePrimeRegular {
         sponge.state[..10].copy_from_slice(input);
 
         // apply domain separation for fixed-length input
-        sponge.state[10] = BFieldElement::one();
+        sponge.state[10] = BFIELD_ONE;
 
         // apply xlix
         Self::xlix(&mut sponge);
@@ -1007,9 +1007,9 @@ impl RescuePrimeRegular {
 
         // pad input
         let mut padded_input = input.to_vec();
-        padded_input.push(BFieldElement::one());
+        padded_input.push(BFIELD_ONE);
         while padded_input.len() % RATE != 0 {
-            padded_input.push(BFieldElement::zero());
+            padded_input.push(BFIELD_ZERO);
         }
 
         // absorb
@@ -1033,14 +1033,14 @@ impl RescuePrimeRegular {
     /// trace
     /// Produces the execution trace for one invocation of XLIX
     pub fn trace(input: &[BFieldElement; 10]) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
-        let mut trace = [[BFieldElement::zero(); STATE_SIZE]; 1 + NUM_ROUNDS];
+        let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
         let mut sponge = RescuePrimeRegularState::new();
 
         // absorb
         sponge.state[0..RATE].copy_from_slice(input);
 
         // domain separation
-        sponge.state[RATE] = BFieldElement::one();
+        sponge.state[RATE] = BFIELD_ONE;
 
         // record trace
         trace[0] = sponge.state;
@@ -1080,7 +1080,7 @@ impl AlgebraicHasher for RescuePrimeRegular {
     }
 
     fn hash_pair(left: &Digest, right: &Digest) -> Digest {
-        let mut input = [BFieldElement::zero(); 10];
+        let mut input = [BFIELD_ZERO; 10];
         input[..DIGEST_LENGTH].copy_from_slice(&left.values());
         input[DIGEST_LENGTH..].copy_from_slice(&right.values());
         Digest::new(RescuePrimeRegular::hash_10(&input))
@@ -1090,6 +1090,7 @@ impl AlgebraicHasher for RescuePrimeRegular {
 #[cfg(test)]
 mod rescue_prime_regular_tests {
     use itertools::Itertools;
+    use num_traits::Zero;
 
     use crate::shared_math::other::random_elements_array;
 
