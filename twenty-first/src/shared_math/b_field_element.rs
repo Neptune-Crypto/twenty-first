@@ -59,8 +59,8 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
 pub struct BFieldElement(u64);
 
-const BFIELD_ZERO: BFieldElement = BFieldElement::new(0);
-const BFIELD_ONE: BFieldElement = BFieldElement::new(1);
+pub const BFIELD_ZERO: BFieldElement = BFieldElement::new(0);
+pub const BFIELD_ONE: BFieldElement = BFieldElement::new(1);
 
 impl Sum for BFieldElement {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
