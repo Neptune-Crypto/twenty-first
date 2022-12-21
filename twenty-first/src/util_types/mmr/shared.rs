@@ -49,13 +49,13 @@ pub fn right_child_and_height(node_index: u128) -> (bool, u32) {
         }
 
         let left_child = left_child(candidate, candidate_height);
-        candidate_height -= 1;
         candidate_is_right_child = left_child < node_index;
         candidate = if candidate_is_right_child {
             right_child(candidate)
         } else {
             left_child
         };
+        candidate_height -= 1;
     }
 }
 
