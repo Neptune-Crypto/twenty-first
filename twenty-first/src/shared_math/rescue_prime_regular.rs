@@ -800,6 +800,7 @@ pub struct RescuePrimeRegularState {
 }
 
 impl RescuePrimeRegularState {
+    #[inline]
     fn new() -> RescuePrimeRegularState {
         RescuePrimeRegularState {
             state: [BFIELD_ZERO; STATE_SIZE],
@@ -917,6 +918,7 @@ impl RescuePrimeRegular {
 
     /// xlix_round
     /// Apply one round of the XLIX permutation.
+    #[inline]
     fn xlix_round(sponge: &mut RescuePrimeRegularState, round_index: usize) {
         debug_assert!(
             round_index < NUM_ROUNDS,
@@ -972,6 +974,7 @@ impl RescuePrimeRegular {
     /// xlix
     /// XLIX is the permutation defined by Rescue-Prime. This
     /// function applies XLIX to the state of a sponge.
+    #[inline]
     fn xlix(sponge: &mut RescuePrimeRegularState) {
         for i in 0..NUM_ROUNDS {
             Self::xlix_round(sponge, i);
@@ -1014,13 +1017,13 @@ impl RescuePrimeRegular {
 
         // absorb
         while !padded_input.is_empty() {
-            for (sponge_state_element, input_element) in sponge
+            for (sponge_state_element, &input_element) in sponge
                 .state
                 .iter_mut()
                 .take(RATE)
                 .zip_eq(padded_input.iter().take(RATE))
             {
-                *sponge_state_element += input_element.to_owned();
+                *sponge_state_element += input_element;
             }
             padded_input.drain(..RATE);
             Self::xlix(&mut sponge);
