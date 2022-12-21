@@ -933,7 +933,7 @@ impl RescuePrimeRegular {
         sponge.state = Self::batch_mod_pow_alpha(sponge.state);
 
         // MDS matrix
-        let mut v: [BFieldElement; STATE_SIZE] = [BFieldElement::from(0u64); STATE_SIZE];
+        let mut v: [BFieldElement; STATE_SIZE] = [BFieldElement::zero(); STATE_SIZE];
         for i in 0..STATE_SIZE {
             for j in 0..STATE_SIZE {
                 v[i] += MDS[i * STATE_SIZE + j] * sponge.state[j];
@@ -1040,7 +1040,7 @@ impl RescuePrimeRegular {
         sponge.state[0..RATE].copy_from_slice(input);
 
         // domain separation
-        sponge.state[RATE] = BFieldElement::new(1);
+        sponge.state[RATE] = BFieldElement::one();
 
         // record trace
         trace[0] = sponge.state;
