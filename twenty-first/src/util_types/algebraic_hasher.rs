@@ -1,7 +1,6 @@
-use num_traits::Zero;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
-use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
 use crate::shared_math::other;
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::shared_math::x_field_element::XFieldElement;
@@ -80,10 +79,10 @@ pub trait AlgebraicHasher: Clone + Send + Sync {
             .map(|counter: usize| {
                 let counter = Digest::new([
                     BFieldElement::new(counter as u64),
-                    BFieldElement::zero(),
-                    BFieldElement::zero(),
-                    BFieldElement::zero(),
-                    BFieldElement::zero(),
+                    BFIELD_ZERO,
+                    BFIELD_ZERO,
+                    BFIELD_ZERO,
+                    BFIELD_ZERO,
                 ]);
                 Self::hash_pair(&counter, seed)
             })
@@ -107,8 +106,8 @@ impl Hashable for u128 {
     fn to_sequence(&self) -> Vec<BFieldElement> {
         // Only shifting with 63 *should* prevent collissions for all numbers below u64::MAX.
         vec![
-            BFieldElement::zero(),
-            BFieldElement::zero(),
+            BFIELD_ZERO,
+            BFIELD_ZERO,
             BFieldElement::new((self >> 126) as u64),
             BFieldElement::new(((self >> 63) % BFieldElement::MAX as u128) as u64),
             BFieldElement::new((self % BFieldElement::MAX as u128) as u64),
@@ -143,6 +142,7 @@ impl Hashable for BFieldElement {
 
 #[cfg(test)]
 mod algebraic_hasher_tests {
+    use num_traits::Zero;
     use rand::Rng;
 
     use crate::shared_math::rescue_prime_regular::DIGEST_LENGTH;

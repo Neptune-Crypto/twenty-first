@@ -1104,12 +1104,7 @@ impl StarkRp {
                 MDS[i * STATE_SIZE..(i + 1) * STATE_SIZE]
                     .iter()
                     .zip(previous_state_pow_alpha.iter())
-                    .map(|(m, a)| {
-                        MPolynomial::from_constant(
-                            <BFieldElement as From<u64>>::from(*m),
-                            STATE_SIZE,
-                        ) * a.clone()
-                    })
+                    .map(|(m, a)| MPolynomial::from_constant(*m, STATE_SIZE) * a.clone())
                     .fold(MPolynomial::zero(variable_count), |x, y| x + y)
                     + first_step_constants[i].to_owned()
             })
@@ -1123,10 +1118,8 @@ impl StarkRp {
                     .iter()
                     .zip(next_state.iter().enumerate())
                     .map(|(m, (j, a))| {
-                        MPolynomial::from_constant(
-                            <BFieldElement as From<u64>>::from(*m),
-                            variable_count,
-                        ) * (a.clone() - second_step_constants[j].to_owned())
+                        MPolynomial::from_constant(*m, variable_count)
+                            * (a.clone() - second_step_constants[j].to_owned())
                     })
                     .fold(MPolynomial::zero(variable_count), |x, y| x + y)
                     .pow(ALPHA as u8)

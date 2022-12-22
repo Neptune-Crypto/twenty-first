@@ -59,6 +59,9 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
 pub struct BFieldElement(u64);
 
+pub const BFIELD_ZERO: BFieldElement = BFieldElement::new(0);
+pub const BFIELD_ONE: BFieldElement = BFieldElement::new(1);
+
 impl Sum for BFieldElement {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.reduce(|a, b| a + b)
@@ -188,7 +191,10 @@ impl BFieldElement {
         let b = a.wrapping_sub(a >> 32).wrapping_sub(e as u64);
 
         let (r, c) = xh.overflowing_sub(b);
-        r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
+
+        // See https://github.com/Neptune-Crypto/twenty-first/pull/70 for various ways
+        // of expressing this.
+        r.wrapping_sub((1 + !Self::QUOTIENT) * c as u64)
     }
 
     /// Return the raw bytes or 8-bit chunks of the Montgomery
@@ -391,7 +397,7 @@ impl FiniteField for BFieldElement {}
 
 impl Zero for BFieldElement {
     fn zero() -> Self {
-        BFieldElement::new(0)
+        BFIELD_ZERO
     }
 
     fn is_zero(&self) -> bool {
@@ -401,7 +407,7 @@ impl Zero for BFieldElement {
 
 impl One for BFieldElement {
     fn one() -> Self {
-        BFieldElement::new(1)
+        BFIELD_ONE
     }
 
     fn is_one(&self) -> bool {
@@ -417,8 +423,18 @@ impl Add for BFieldElement {
     fn add(self, rhs: Self) -> Self {
         // Compute a + b = a - (p - b).
         let (x1, c1) = self.0.overflowing_sub(Self::QUOTIENT - rhs.0);
-        let adj = 0u32.wrapping_sub(c1 as u32);
-        Self(x1.wrapping_sub(adj as u64))
+
+        // The following if/else is equivalent to the commented-out code below but
+        // the if/else was found to be faster.
+        // let adj = 0u32.wrapping_sub(c1 as u32);
+        // Self(x1.wrapping_sub(adj as u64))
+        // See
+        // https://github.com/Neptune-Crypto/twenty-first/pull/70
+        if c1 {
+            Self(x1.wrapping_add(Self::QUOTIENT))
+        } else {
+            Self(x1)
+        }
     }
 }
 
@@ -468,8 +484,21 @@ impl Sub for BFieldElement {
     #[inline]
     fn sub(self, rhs: Self) -> Self {
         let (x1, c1) = self.0.overflowing_sub(rhs.0);
-        let adj = 0u32.wrapping_sub(c1 as u32);
-        Self(x1.wrapping_sub(adj as u64))
+
+        // The following code is equivalent to the commented-out code below
+        // but they were determined to have near-equiavalent running times. Maybe because
+        // subtraction is not used very often.
+        // See: https://github.com/Neptune-Crypto/twenty-first/pull/70
+        // 1st alternative:
+        // if c1 {
+        //     Self(x1.wrapping_add(Self::QUOTIENT))
+        // } else {
+        //     Self(x1)
+        // }
+        // 2nd alternative:
+        // let adj = 0u32.wrapping_sub(c1 as u32);
+        // Self(x1.wrapping_sub(adj as u64))
+        Self(x1.wrapping_sub((1 + !Self::QUOTIENT) * c1 as u64))
     }
 }
 

@@ -8,7 +8,7 @@ use rand::Rng;
 use rand_distr::{Distribution, Standard};
 use serde::{Deserialize, Serialize};
 
-use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
 use crate::shared_math::rescue_prime_regular::DIGEST_LENGTH;
 use crate::shared_math::traits::FromVecu8;
 use crate::util_types::emojihash_trait::Emojihash;
@@ -51,7 +51,7 @@ impl Emojihash for Digest {
 
 impl Default for Digest {
     fn default() -> Self {
-        Self([BFieldElement::zero(); DIGEST_LENGTH])
+        Self([BFIELD_ZERO; DIGEST_LENGTH])
     }
 }
 
