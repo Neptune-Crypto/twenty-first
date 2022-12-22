@@ -801,7 +801,7 @@ pub struct RescuePrimeRegularState {
 
 impl RescuePrimeRegularState {
     #[inline]
-    fn new() -> RescuePrimeRegularState {
+    const fn new() -> RescuePrimeRegularState {
         RescuePrimeRegularState {
             state: [BFIELD_ZERO; STATE_SIZE],
         }
