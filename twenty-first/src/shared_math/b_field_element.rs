@@ -188,7 +188,20 @@ impl BFieldElement {
         let b = a.wrapping_sub(a >> 32).wrapping_sub(e as u64);
 
         let (r, c) = xh.overflowing_sub(b);
-        r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
+        if false {
+            // 20.244 µs, 36.057 ms
+            if c {
+                r.wrapping_add(Self::QUOTIENT)
+            } else {
+                r
+            }
+        } else if false {
+            // 19.920 µs, 35.558 ms
+            r.wrapping_sub((1 + !Self::QUOTIENT) * c as u64)
+        } else {
+            // 19.970 µs, 35.582 ms
+            r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
+        }
     }
 
     /// Return the raw bytes or 8-bit chunks of the Montgomery
@@ -417,8 +430,21 @@ impl Add for BFieldElement {
     fn add(self, rhs: Self) -> Self {
         // Compute a + b = a - (p - b).
         let (x1, c1) = self.0.overflowing_sub(Self::QUOTIENT - rhs.0);
-        let adj = 0u32.wrapping_sub(c1 as u32);
-        Self(x1.wrapping_sub(adj as u64))
+        if true {
+            // 20.310 µs, 36.144 ms
+            if c1 {
+                Self(x1.wrapping_add(Self::QUOTIENT))
+            } else {
+                Self(x1)
+            }
+        } else if false {
+            // 31.822 µs, 58.778 ms
+            Self(x1.wrapping_sub((1 + !Self::QUOTIENT) * c1 as u64))
+        } else {
+            // 31.956 µs, 59.174 ms
+            let adj = 0u32.wrapping_sub(c1 as u32);
+            Self(x1.wrapping_sub(adj as u64))
+        }
     }
 }
 
@@ -468,8 +494,22 @@ impl Sub for BFieldElement {
     #[inline]
     fn sub(self, rhs: Self) -> Self {
         let (x1, c1) = self.0.overflowing_sub(rhs.0);
-        let adj = 0u32.wrapping_sub(c1 as u32);
-        Self(x1.wrapping_sub(adj as u64))
+
+        if false {
+            // 20.264 µs, 36.115 ms
+            if c1 {
+                Self(x1.wrapping_add(Self::QUOTIENT))
+            } else {
+                Self(x1)
+            }
+        } else if false {
+            // 20.305 µs, 36.081 ms
+            Self(x1.wrapping_sub((1 + !Self::QUOTIENT) * c1 as u64))
+        } else {
+            // 20.310 µs, 36.144 ms
+            let adj = 0u32.wrapping_sub(c1 as u32);
+            Self(x1.wrapping_sub(adj as u64))
+        }
     }
 }
 
