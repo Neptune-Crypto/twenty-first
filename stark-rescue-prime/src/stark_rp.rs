@@ -1106,7 +1106,7 @@ impl StarkRp {
                     .zip(previous_state_pow_alpha.iter())
                     .map(|(m, a)| {
                         MPolynomial::from_constant(
-                            <BFieldElement as From<u64>>::from(*m),
+                            *m,
                             STATE_SIZE,
                         ) * a.clone()
                     })
@@ -1124,7 +1124,7 @@ impl StarkRp {
                     .zip(next_state.iter().enumerate())
                     .map(|(m, (j, a))| {
                         MPolynomial::from_constant(
-                            <BFieldElement as From<u64>>::from(*m),
+                            *m,
                             variable_count,
                         ) * (a.clone() - second_step_constants[j].to_owned())
                     })
