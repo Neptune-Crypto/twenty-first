@@ -943,8 +943,7 @@ impl RescuePrimeRegular {
 
         // round constants A
         for i in 0..STATE_SIZE {
-            sponge.state[i] +=
-                ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + i];
+            sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + i];
         }
 
         // Inverse S-box
@@ -966,8 +965,7 @@ impl RescuePrimeRegular {
 
         // round constants B
         for i in 0..STATE_SIZE {
-            sponge.state[i] +=
-                ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + STATE_SIZE + i];
+            sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE * 2 + STATE_SIZE + i];
         }
     }
 
