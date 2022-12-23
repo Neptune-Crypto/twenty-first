@@ -26,6 +26,34 @@ pub fn leftmost_ancestor(node_index: u128) -> (u128, u32) {
     (ret, h)
 }
 
+/// Traversing from this node upwards, count how many of the ancestor (including itself)
+/// is a right child. This number is used to determine how many nodes to insert when a
+/// new leaf is added.
+pub fn right_ancestor_count(node_index: u128) -> u32 {
+    let (mut candidate, mut candidate_height) = leftmost_ancestor(node_index);
+
+    // leftmost ancestor is always a left node, so count starts at 0.
+    let mut right_ancestor_count = 0;
+
+    loop {
+        if candidate == node_index {
+            return right_ancestor_count;
+        }
+
+        let left_child = left_child(candidate, candidate_height);
+        let candidate_is_right_child = left_child < node_index;
+        if candidate_is_right_child {
+            candidate = right_child(candidate);
+            right_ancestor_count += 1;
+        } else {
+            candidate = left_child;
+            right_ancestor_count = 0;
+        };
+
+        candidate_height -= 1;
+    }
+}
+
 /// Return the tuple: (is_right_child, height)
 #[inline]
 pub fn right_child_and_height(node_index: u128) -> (bool, u32) {
@@ -521,6 +549,72 @@ mod mmr_test {
         assert_eq!((true, 0), right_child_and_height(17));
         assert_eq!((false, 1), right_child_and_height(18));
         assert_eq!((false, 63), right_child_and_height(u64::MAX as u128));
+    }
+
+    #[test]
+    fn right_ancestor_count_test() {
+        assert_eq!(0, right_ancestor_count(1)); // 0b1 => 0
+        assert_eq!(1, right_ancestor_count(2)); // 0b10 => 1
+        assert_eq!(0, right_ancestor_count(3)); // 0b11 => 0
+        assert_eq!(0, right_ancestor_count(4)); // 0b100 => 0
+        assert_eq!(2, right_ancestor_count(5)); // 0b101 => 2
+        assert_eq!(1, right_ancestor_count(6)); // 0b110 => 1
+        assert_eq!(0, right_ancestor_count(7)); // 0b111 => 0
+        assert_eq!(0, right_ancestor_count(8)); // 0b1000 => 0
+        assert_eq!(1, right_ancestor_count(9)); // 0b1001 => 1
+        assert_eq!(0, right_ancestor_count(10)); // 0b1010 => 0
+        assert_eq!(0, right_ancestor_count(11)); // 0b1011 => 0
+        assert_eq!(3, right_ancestor_count(12)); // 0b1100 => 3
+        assert_eq!(2, right_ancestor_count(13)); // 0b1101 => 2
+        assert_eq!(1, right_ancestor_count(14)); // 0b1110 => 1
+        assert_eq!(0, right_ancestor_count(15)); // 0b1111 => 0
+        assert_eq!(0, right_ancestor_count(16)); // 0b10000 => 0
+        assert_eq!(1, right_ancestor_count(17)); // 0b10001 => 1
+        assert_eq!(0, right_ancestor_count(18)); // 0b10010 => 0
+        assert_eq!(0, right_ancestor_count(19)); // 0b10011 => 0
+        assert_eq!(2, right_ancestor_count(20)); // 0b10100 => 2
+        assert_eq!(1, right_ancestor_count(21)); // 0b10101 => 1
+        assert_eq!(0, right_ancestor_count(22)); // 0b10110 => 0
+        assert_eq!(0, right_ancestor_count(23)); // 0b10111 => 0
+        assert_eq!(1, right_ancestor_count(24)); // 0b11000 => 1
+        assert_eq!(0, right_ancestor_count(25)); // 0b11001 => 0
+        assert_eq!(0, right_ancestor_count(26)); // 0b11010 => 0
+        assert_eq!(4, right_ancestor_count(27)); // 0b11011 => 4
+        assert_eq!(3, right_ancestor_count(28)); // 0b11100 => 3
+        assert_eq!(2, right_ancestor_count(29)); // 0b11101 => 2
+        assert_eq!(1, right_ancestor_count(30)); // 0b11110 => 1
+        assert_eq!(0, right_ancestor_count(31)); // 0b11111 => 0
+        assert_eq!(0, right_ancestor_count(32)); // 0b100000 => 0
+        assert_eq!(1, right_ancestor_count(33)); // 0b100001 => 1
+        assert_eq!(0, right_ancestor_count(34)); // 0b100010 => 0
+        assert_eq!(0, right_ancestor_count(35)); // 0b100011 => 0
+        assert_eq!(2, right_ancestor_count(36)); // 0b100100 => 2
+        assert_eq!(1, right_ancestor_count(37)); // 0b100101 => 1
+        assert_eq!(0, right_ancestor_count(38)); // 0b100110 => 0
+        assert_eq!(0, right_ancestor_count(39)); // 0b100111 => 0
+        assert_eq!(1, right_ancestor_count(40)); // 0b101000 => 1
+        assert_eq!(0, right_ancestor_count(41)); // 0b101001 => 0
+    }
+
+    #[test]
+    fn right_ancestor_count_test_pbt() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..10000 {
+            let node_index = rng.next_u64() as u128;
+            let rac = right_ancestor_count(node_index);
+            let is_right_child = right_child_and_height(node_index).0;
+            if is_right_child {
+                assert!(
+                    rac > 0,
+                    "Right ancestor count must be non-zero when node is right child"
+                );
+            } else {
+                assert!(
+                    rac == 0,
+                    "Right ancestor count must be zero when node is not a right child"
+                );
+            }
+        }
     }
 
     #[test]
