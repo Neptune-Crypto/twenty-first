@@ -97,7 +97,7 @@ pub fn right_sibling(node_index: u128, height: u128) -> u128 {
     node_index + (1 << (height + 1)) - 1
 }
 
-fn get_height_from_data_index(data_index: u128) -> u128 {
+pub fn get_height_from_data_index(data_index: u128) -> u128 {
     log_2_floor(data_index + 1) as u128
 }
 
@@ -229,11 +229,7 @@ pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u128>, V
 
 /// Count the number of non-leaf nodes that were inserted *prior* to
 /// the insertion of this leaf.
-fn non_leaf_nodes_left(data_index: u128) -> u128 {
-    if data_index == 0 {
-        return 0;
-    }
-
+pub fn non_leaf_nodes_left(data_index: u128) -> u128 {
     let mut acc = 0;
     let mut data_index_acc = data_index;
     while data_index_acc > 0 {
