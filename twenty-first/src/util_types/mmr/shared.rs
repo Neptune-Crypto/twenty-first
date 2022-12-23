@@ -215,9 +215,9 @@ pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u32>, Ve
 /// Count the number of non-leaf nodes that were inserted *prior* to
 /// the insertion of this leaf.
 pub fn non_leaf_nodes_left(data_index: u128) -> u128 {
-    let mut acc = 0;
+    let mut ret = 0;
     let mut data_index_acc = data_index;
-    while data_index_acc > 0 {
+    while data_index_acc != 0 {
         // Accumulate how many nodes in the tree of the nearest left neighbor that are not leafs.
         // We count this number for the nearest left neighbor since only the non-leafs in that
         // tree were inserted prior to the leaf this function is called for.
@@ -226,11 +226,12 @@ pub fn non_leaf_nodes_left(data_index: u128) -> u128 {
         // Since more than one subtree left of the requested index can contain non-leafs, we have
         // to run this accumulater untill data_index_acc is zero.
         let left_data_height = get_height_from_data_index(data_index_acc - 1);
-        acc += (1 << left_data_height) - 1;
-        data_index_acc -= 1 << left_data_height;
+        let two_pow_left_data_height = 1 << left_data_height;
+        ret += two_pow_left_data_height - 1;
+        data_index_acc -= two_pow_left_data_height;
     }
 
-    acc
+    ret
 }
 
 /// Convert from data index to node index
