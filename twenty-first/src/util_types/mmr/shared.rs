@@ -54,39 +54,6 @@ pub fn right_ancestor_count_and_own_height(node_index: u128) -> (u32, u32) {
     }
 }
 
-/// Return the tuple: (is_right_child, height)
-#[inline]
-pub fn right_child_and_height(node_index: u128) -> (bool, u32) {
-    // 1. Find leftmost_ancestor(n), if leftmost_ancestor(n) == n => left_child (false)
-    // 2. Let node = leftmost_ancestor(n)
-    // 3. while(true):
-    //    if n == left_child(node):
-    //        return false
-    //    if n < left_child(node):
-    //        node = left_child(node)
-    //    if n == right_child(node):
-    //        return true
-    //    else:
-    //        node = right_child(node);
-
-    let (mut candidate, mut candidate_height) = leftmost_ancestor(node_index);
-    let mut candidate_is_right_child = false;
-    loop {
-        if candidate == node_index {
-            return (candidate_is_right_child, candidate_height);
-        }
-
-        let left_child = left_child(candidate, candidate_height);
-        candidate_is_right_child = left_child < node_index;
-        candidate = if candidate_is_right_child {
-            right_child(candidate)
-        } else {
-            left_child
-        };
-        candidate_height -= 1;
-    }
-}
-
 /// Get the node_index of the parent
 #[inline]
 pub fn parent(node_index: u128) -> u128 {
