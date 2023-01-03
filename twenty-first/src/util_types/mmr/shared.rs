@@ -29,7 +29,7 @@ pub fn leftmost_ancestor(node_index: u128) -> (u128, u32) {
 /// Traversing from this node upwards, count how many of the ancestor (including itself)
 /// is a right child. This number is used to determine how many nodes to insert when a
 /// new leaf is added.
-pub fn right_ancestor_count(node_index: u128) -> u32 {
+pub fn right_ancestor_count_and_own_height(node_index: u128) -> (u32, u32) {
     let (mut candidate, mut candidate_height) = leftmost_ancestor(node_index);
 
     // leftmost ancestor is always a left node, so count starts at 0.
@@ -37,7 +37,7 @@ pub fn right_ancestor_count(node_index: u128) -> u32 {
 
     loop {
         if candidate == node_index {
-            return right_ancestor_count;
+            return (right_ancestor_count, candidate_height);
         }
 
         let left_child = left_child(candidate, candidate_height);
@@ -90,9 +90,9 @@ pub fn right_child_and_height(node_index: u128) -> (bool, u32) {
 /// Get the node_index of the parent
 #[inline]
 pub fn parent(node_index: u128) -> u128 {
-    let (right, height) = right_child_and_height(node_index);
+    let (right_ancestor_count, height) = right_ancestor_count_and_own_height(node_index);
 
-    if right {
+    if right_ancestor_count != 0 {
         node_index + 1
     } else {
         node_index + (1 << (height + 1))
@@ -125,11 +125,12 @@ pub fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
 
     let mut non_leaf_nodes_after = 0u128;
     let mut node_index = node_index_of_rightmost_leaf;
-    let (mut is_right, mut _height) = right_child_and_height(node_index);
-    while is_right {
+    let mut right_count = right_ancestor_count_and_own_height(node_index).0;
+    while right_count != 0 {
         non_leaf_nodes_after += 1;
-        node_index = parent(node_index);
-        is_right = right_child_and_height(node_index).0;
+        // go to parent (parent of right child has node index plus 1)
+        node_index += 1;
+        right_count -= 1;
     }
 
     // Number of nodes is: non-leafs after, non-leafs before, and leaf count
@@ -160,12 +161,12 @@ pub fn leaf_index_to_peak_index(leaf_index: u128, leaf_count: u128) -> Option<u1
 pub fn node_indices_added_by_append(old_leaf_count: u128) -> Vec<u128> {
     let mut node_index = data_index_to_node_index(old_leaf_count);
     let mut added_node_indices = vec![node_index];
-    let mut is_right_child: bool = right_child_and_height(node_index).0;
-    while is_right_child {
+    let mut right_count = right_ancestor_count_and_own_height(node_index).0;
+    while right_count != 0 {
         // a right child's parent is found by adding 1 to the node index
         node_index += 1;
         added_node_indices.push(node_index);
-        is_right_child = right_child_and_height(node_index).0;
+        right_count -= 1;
     }
 
     added_node_indices
@@ -181,14 +182,23 @@ pub fn get_authentication_path_node_indices(
     let mut authentication_path_node_indices = vec![];
     let mut node_index = start_node_index;
     while node_index <= node_count && node_index != peak_node_index {
-        let (is_right, height) = right_child_and_height(node_index);
-        let sibling_node_index = if is_right {
-            left_sibling(node_index, height)
+        // TODO: Consider if this function can be written better, or discard
+        // it entirely.
+        let (right_ancestor_count, height) = right_ancestor_count_and_own_height(node_index);
+        let sibling_node_index: u128;
+        if right_ancestor_count != 0 {
+            sibling_node_index = left_sibling(node_index, height);
+
+            // parent of right child is +1
+            node_index += 1;
         } else {
-            right_sibling(node_index, height)
-        };
+            sibling_node_index = right_sibling(node_index, height);
+
+            // parent of left child:
+            node_index += 1 << (height + 1);
+        }
+
         authentication_path_node_indices.push(sibling_node_index);
-        node_index = parent(node_index);
     }
 
     if node_index == peak_node_index {
@@ -271,7 +281,7 @@ pub fn data_index_to_node_index(data_index: u128) -> u128 {
 
 /// Convert from node index to data index in log(size) time
 pub fn node_index_to_data_index(node_index: u128) -> Option<u128> {
-    let (_right, own_height) = right_child_and_height(node_index);
+    let (_right, own_height) = right_ancestor_count_and_own_height(node_index);
     if own_height != 0 {
         return None;
     }
@@ -302,11 +312,11 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
     new_leaf: Digest,
 ) -> Option<(Vec<Digest>, MmrMembershipProof<H>)> {
     let mut peaks = old_peaks;
-    let mut new_node_index = data_index_to_node_index(old_leaf_count);
-    let (mut new_node_is_right_child, _height) = right_child_and_height(new_node_index);
     peaks.push(new_leaf);
+    let mut new_node_index = data_index_to_node_index(old_leaf_count);
+    let (mut right_lineage_count, _height) = right_ancestor_count_and_own_height(new_node_index);
     let mut membership_proof = MmrMembershipProof::<H>::new(old_leaf_count, vec![]);
-    while new_node_is_right_child {
+    while right_lineage_count != 0 {
         let new_hash = peaks.pop().unwrap();
         let previous_peak_res = peaks.pop();
         let previous_peak = match previous_peak_res {
@@ -316,7 +326,7 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
         membership_proof.authentication_path.push(previous_peak);
         peaks.push(H::hash_pair(&previous_peak, &new_hash));
         new_node_index += 1;
-        new_node_is_right_child = right_child_and_height(new_node_index).0;
+        right_lineage_count -= 1;
     }
 
     Some((peaks, membership_proof))
@@ -335,13 +345,20 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
     let mut acc_hash: Digest = new_leaf.to_owned();
     let mut acc_index: u128 = node_index;
     for hash in membership_proof.authentication_path.iter() {
-        let (acc_right, _acc_height) = right_child_and_height(acc_index);
-        acc_hash = if acc_right {
-            H::hash_pair(hash, &acc_hash)
+        let (acc_right_lineage_count, acc_height) = right_ancestor_count_and_own_height(acc_index);
+        if acc_right_lineage_count != 0 {
+            // acc_index is right child
+            acc_hash = H::hash_pair(hash, &acc_hash);
+
+            // parent of right child is +1
+            acc_index += 1;
         } else {
-            H::hash_pair(&acc_hash, hash)
+            // acc_index is left child
+            acc_hash = H::hash_pair(&acc_hash, hash);
+
+            // parent of left child:
+            acc_index += 1 << (acc_height + 1);
         };
-        acc_index = parent(acc_index);
     }
 
     // Find the correct peak to update
@@ -509,112 +526,69 @@ mod mmr_test {
     }
 
     #[test]
-    fn is_right_child_test() {
-        // Consider this a 1-indexed list of the expected result where the input to the function is the
-        // (1-indexed) element of the list
-        let anticipations: Vec<bool> = vec![
-            false, true, false, false, true, true, false, false, true, false, false, true, true,
-            //1      2     3      4      5     6     7      8      9     10     11     12    13
-            true, false, false, true, false, false, true, true, false, false, true, false, false,
-            //14     15    16     17    18     19    20    21     22    23     24     25    26
-            true, true, true, true, false, false,
-            //27    28   29    30    31     32
-            true,
-            //33
-        ];
-
-        for (i, anticipation) in anticipations.iter().enumerate() {
-            assert!(right_child_and_height(i as u128 + 1).0 == *anticipation);
-        }
-    }
-
-    #[test]
-    fn is_right_child_and_height_test() {
-        assert_eq!((false, 0), right_child_and_height(1));
-        assert_eq!((true, 0), right_child_and_height(2));
-        assert_eq!((false, 1), right_child_and_height(3));
-        assert_eq!((false, 0), right_child_and_height(4));
-        assert_eq!((true, 0), right_child_and_height(5));
-        assert_eq!((true, 1), right_child_and_height(6));
-        assert_eq!((false, 2), right_child_and_height(7));
-        assert_eq!((false, 0), right_child_and_height(8));
-        assert_eq!((true, 0), right_child_and_height(9));
-        assert_eq!((false, 1), right_child_and_height(10));
-        assert_eq!((false, 0), right_child_and_height(11));
-        assert_eq!((true, 0), right_child_and_height(12));
-        assert_eq!((true, 1), right_child_and_height(13));
-        assert_eq!((true, 2), right_child_and_height(14));
-        assert_eq!((false, 3), right_child_and_height(15));
-        assert_eq!((false, 0), right_child_and_height(16));
-        assert_eq!((true, 0), right_child_and_height(17));
-        assert_eq!((false, 1), right_child_and_height(18));
-        assert_eq!((false, 63), right_child_and_height(u64::MAX as u128));
-    }
-
-    #[test]
     fn right_ancestor_count_test() {
-        assert_eq!(0, right_ancestor_count(1)); // 0b1 => 0
-        assert_eq!(1, right_ancestor_count(2)); // 0b10 => 1
-        assert_eq!(0, right_ancestor_count(3)); // 0b11 => 0
-        assert_eq!(0, right_ancestor_count(4)); // 0b100 => 0
-        assert_eq!(2, right_ancestor_count(5)); // 0b101 => 2
-        assert_eq!(1, right_ancestor_count(6)); // 0b110 => 1
-        assert_eq!(0, right_ancestor_count(7)); // 0b111 => 0
-        assert_eq!(0, right_ancestor_count(8)); // 0b1000 => 0
-        assert_eq!(1, right_ancestor_count(9)); // 0b1001 => 1
-        assert_eq!(0, right_ancestor_count(10)); // 0b1010 => 0
-        assert_eq!(0, right_ancestor_count(11)); // 0b1011 => 0
-        assert_eq!(3, right_ancestor_count(12)); // 0b1100 => 3
-        assert_eq!(2, right_ancestor_count(13)); // 0b1101 => 2
-        assert_eq!(1, right_ancestor_count(14)); // 0b1110 => 1
-        assert_eq!(0, right_ancestor_count(15)); // 0b1111 => 0
-        assert_eq!(0, right_ancestor_count(16)); // 0b10000 => 0
-        assert_eq!(1, right_ancestor_count(17)); // 0b10001 => 1
-        assert_eq!(0, right_ancestor_count(18)); // 0b10010 => 0
-        assert_eq!(0, right_ancestor_count(19)); // 0b10011 => 0
-        assert_eq!(2, right_ancestor_count(20)); // 0b10100 => 2
-        assert_eq!(1, right_ancestor_count(21)); // 0b10101 => 1
-        assert_eq!(0, right_ancestor_count(22)); // 0b10110 => 0
-        assert_eq!(0, right_ancestor_count(23)); // 0b10111 => 0
-        assert_eq!(1, right_ancestor_count(24)); // 0b11000 => 1
-        assert_eq!(0, right_ancestor_count(25)); // 0b11001 => 0
-        assert_eq!(0, right_ancestor_count(26)); // 0b11010 => 0
-        assert_eq!(4, right_ancestor_count(27)); // 0b11011 => 4
-        assert_eq!(3, right_ancestor_count(28)); // 0b11100 => 3
-        assert_eq!(2, right_ancestor_count(29)); // 0b11101 => 2
-        assert_eq!(1, right_ancestor_count(30)); // 0b11110 => 1
-        assert_eq!(0, right_ancestor_count(31)); // 0b11111 => 0
-        assert_eq!(0, right_ancestor_count(32)); // 0b100000 => 0
-        assert_eq!(1, right_ancestor_count(33)); // 0b100001 => 1
-        assert_eq!(0, right_ancestor_count(34)); // 0b100010 => 0
-        assert_eq!(0, right_ancestor_count(35)); // 0b100011 => 0
-        assert_eq!(2, right_ancestor_count(36)); // 0b100100 => 2
-        assert_eq!(1, right_ancestor_count(37)); // 0b100101 => 1
-        assert_eq!(0, right_ancestor_count(38)); // 0b100110 => 0
-        assert_eq!(0, right_ancestor_count(39)); // 0b100111 => 0
-        assert_eq!(1, right_ancestor_count(40)); // 0b101000 => 1
-        assert_eq!(0, right_ancestor_count(41)); // 0b101001 => 0
-    }
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(1)); // 0b1 => 0
+        assert_eq!((1, 0), right_ancestor_count_and_own_height(2)); // 0b10 => 1
+        assert_eq!((0, 1), right_ancestor_count_and_own_height(3)); // 0b11 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(4)); // 0b100 => 0
+        assert_eq!((2, 0), right_ancestor_count_and_own_height(5)); // 0b101 => 2
+        assert_eq!((1, 1), right_ancestor_count_and_own_height(6)); // 0b110 => 1
+        assert_eq!((0, 2), right_ancestor_count_and_own_height(7)); // 0b111 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(8)); // 0b1000 => 0
+        assert_eq!((1, 0), right_ancestor_count_and_own_height(9)); // 0b1001 => 1
+        assert_eq!((0, 1), right_ancestor_count_and_own_height(10)); // 0b1010 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(11)); // 0b1011 => 0
+        assert_eq!((3, 0), right_ancestor_count_and_own_height(12)); // 0b1100 => 3
+        assert_eq!((2, 1), right_ancestor_count_and_own_height(13)); // 0b1101 => 2
+        assert_eq!((1, 2), right_ancestor_count_and_own_height(14)); // 0b1110 => 1
+        assert_eq!((0, 3), right_ancestor_count_and_own_height(15)); // 0b1111 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(16)); // 0b10000 => 0
+        assert_eq!((1, 0), right_ancestor_count_and_own_height(17)); // 0b10001 => 1
+        assert_eq!((0, 1), right_ancestor_count_and_own_height(18)); // 0b10010 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(19)); // 0b10011 => 0
+        assert_eq!((2, 0), right_ancestor_count_and_own_height(20)); // 0b10100 => 2
+        assert_eq!((1, 1), right_ancestor_count_and_own_height(21)); // 0b10101 => 1
+        assert_eq!((0, 2), right_ancestor_count_and_own_height(22)); // 0b10110 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(23)); // 0b10111 => 0
+        assert_eq!((1, 0), right_ancestor_count_and_own_height(24)); // 0b11000 => 1
+        assert_eq!((0, 1), right_ancestor_count_and_own_height(25)); // 0b11001 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(26)); // 0b11010 => 0
+        assert_eq!((4, 0), right_ancestor_count_and_own_height(27)); // 0b11011 => 4
+        assert_eq!((3, 1), right_ancestor_count_and_own_height(28)); // 0b11100 => 3
+        assert_eq!((2, 2), right_ancestor_count_and_own_height(29)); // 0b11101 => 2
+        assert_eq!((1, 3), right_ancestor_count_and_own_height(30)); // 0b11110 => 1
+        assert_eq!((0, 4), right_ancestor_count_and_own_height(31)); // 0b11111 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(32)); // 0b100000 => 0
+        assert_eq!((1, 0), right_ancestor_count_and_own_height(33)); // 0b100001 => 1
+        assert_eq!((0, 1), right_ancestor_count_and_own_height(34)); // 0b100010 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(35)); // 0b100011 => 0
+        assert_eq!((2, 0), right_ancestor_count_and_own_height(36)); // 0b100100 => 2
+        assert_eq!((1, 1), right_ancestor_count_and_own_height(37)); // 0b100101 => 1
+        assert_eq!((0, 2), right_ancestor_count_and_own_height(38)); // 0b100110 => 0
+        assert_eq!((0, 0), right_ancestor_count_and_own_height(39)); // 0b100111 => 0
+        assert_eq!((1, 0), right_ancestor_count_and_own_height(40)); // 0b101000 => 1
+        assert_eq!((0, 1), right_ancestor_count_and_own_height(41)); // 0b101001 => 0
 
-    #[test]
-    fn right_ancestor_count_test_pbt() {
-        let mut rng = rand::thread_rng();
-        for _ in 0..10000 {
-            let node_index = rng.next_u64() as u128;
-            let rac = right_ancestor_count(node_index);
-            let is_right_child = right_child_and_height(node_index).0;
-            if is_right_child {
-                assert!(
-                    rac > 0,
-                    "Right ancestor count must be non-zero when node is right child"
-                );
-            } else {
-                assert!(
-                    rac == 0,
-                    "Right ancestor count must be zero when node is not a right child"
-                );
-            }
-        }
+        assert_eq!(
+            (61, 2),
+            right_ancestor_count_and_own_height(u64::MAX as u128 - 61)
+        ); // 0b111...11 => 0
+        assert_eq!(
+            (3, 60),
+            right_ancestor_count_and_own_height(u64::MAX as u128 - 3)
+        ); // 0b111...11 => 0
+        assert_eq!(
+            (2, 61),
+            right_ancestor_count_and_own_height(u64::MAX as u128 - 2)
+        ); // 0b111...11 => 0
+        assert_eq!(
+            (1, 62),
+            right_ancestor_count_and_own_height(u64::MAX as u128 - 1)
+        ); // 0b111...11 => 0
+        assert_eq!(
+            (0, 63),
+            right_ancestor_count_and_own_height(u64::MAX as u128)
+        ); // 0b111...11 => 0
     }
 
     #[test]

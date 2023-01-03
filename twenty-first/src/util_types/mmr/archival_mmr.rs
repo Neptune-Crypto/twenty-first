@@ -5,7 +5,7 @@ use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::shared::{
     data_index_to_node_index, left_child, left_sibling, leftmost_ancestor,
-    node_index_to_data_index, parent, right_child_and_height, right_sibling,
+    node_index_to_data_index, parent, right_ancestor_count_and_own_height, right_sibling,
 };
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
@@ -165,13 +165,15 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
 
         // While parent exists in MMR, update parent
         while parent_index < self.digests.len() {
-            let (is_right, height) = right_child_and_height(node_index);
-            acc_hash = if is_right {
+            let (right_lineage_count, height) = right_ancestor_count_and_own_height(node_index);
+            acc_hash = if right_lineage_count != 0 {
+                // node is right child
                 H::hash_pair(
                     &self.digests.get(left_sibling(node_index, height)),
                     &acc_hash,
                 )
             } else {
+                // node is left child
                 H::hash_pair(
                     &acc_hash,
                     &self.digests.get(right_sibling(node_index, height)),
@@ -204,19 +206,26 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         // Build the authentication path
         let mut authentication_path: Vec<Digest> = vec![];
         let mut index = node_index;
-        let (mut index_is_right_child, mut index_height): (bool, u32) =
-            right_child_and_height(index);
+        let (mut right_ancestor_count, mut index_height): (u32, u32) =
+            right_ancestor_count_and_own_height(index);
         while index_height < top_height as u32 {
-            if index_is_right_child {
+            if right_ancestor_count != 0 {
+                // index is right child
                 let left_sibling_index = left_sibling(index, index_height);
                 authentication_path.push(self.digests.get(left_sibling_index));
+
+                // parent of right child is index + 1
+                index += 1;
             } else {
+                // index is left child
                 let right_sibling_index = right_sibling(index, index_height);
                 authentication_path.push(self.digests.get(right_sibling_index));
+
+                // parent of left child:
+                index += 1 << (index_height + 1);
             }
-            index = parent(index);
-            let next_index_info = right_child_and_height(index);
-            index_is_right_child = next_index_info.0;
+            let next_index_info = right_ancestor_count_and_own_height(index);
+            right_ancestor_count = next_index_info.0;
             index_height = next_index_info.1;
         }
 
@@ -267,8 +276,10 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
     pub fn append_raw(&mut self, new_leaf: Digest) {
         let node_index = self.digests.len();
         self.digests.push(new_leaf);
-        let (parent_needed, own_height) = right_child_and_height(node_index);
-        if parent_needed {
+        let (right_parent_count, own_height) = right_ancestor_count_and_own_height(node_index);
+
+        // This function could be rewritten with a while-loop instead of being recursive.
+        if right_parent_count != 0 {
             let left_sibling_hash = self.digests.get(left_sibling(node_index, own_height));
             let parent_hash: Digest = H::hash_pair(&left_sibling_hash, &new_leaf);
             self.append_raw(parent_hash);
@@ -283,7 +294,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
 
         let node_index = self.digests.len() - 1;
         let mut ret = self.digests.pop().unwrap();
-        let (_, mut height) = right_child_and_height(node_index);
+        let (_, mut height) = right_ancestor_count_and_own_height(node_index);
         while height > 0 {
             ret = self.digests.pop().unwrap();
             height -= 1;

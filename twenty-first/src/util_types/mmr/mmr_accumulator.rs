@@ -5,10 +5,8 @@ use std::{collections::HashMap, fmt::Debug};
 use super::archival_mmr::ArchivalMmr;
 use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
-use super::shared::calculate_new_peaks_from_leaf_mutation;
-use super::shared::{
-    calculate_new_peaks_from_append, data_index_to_node_index, parent, right_child_and_height,
-};
+use super::shared::{calculate_new_peaks_from_append, data_index_to_node_index};
+use super::shared::{calculate_new_peaks_from_leaf_mutation, right_ancestor_count_and_own_height};
 use super::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
@@ -96,28 +94,13 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
     /// membership proof is valid. If the membership proof is wrong, the MMR
     /// will end up in a broken state.
     fn mutate_leaf(&mut self, old_membership_proof: &MmrMembershipProof<H>, new_leaf: &Digest) {
-        let node_index = data_index_to_node_index(old_membership_proof.data_index);
-        let mut acc_hash: Digest = new_leaf.to_owned();
-        let mut acc_index: u128 = node_index;
-        for hash in old_membership_proof.authentication_path.iter() {
-            let (acc_right, _acc_height) = right_child_and_height(acc_index);
-            acc_hash = if acc_right {
-                H::hash_pair(hash, &acc_hash)
-            } else {
-                H::hash_pair(&acc_hash, hash)
-            };
-            acc_index = parent(acc_index);
-        }
-
-        // Find the correct peak to mutate
-        let peak_index_res =
-            leaf_index_to_peak_index(old_membership_proof.data_index, self.leaf_count);
-        let peak_index = match peak_index_res {
-            None => panic!("Did not find any peak height for (leaf_count, data_index) combination. Got: leaf_count = {}, data_index = {}", self.leaf_count, old_membership_proof.data_index),
-            Some(pi) => pi,
-        };
-
-        self.peaks[peak_index as usize] = acc_hash;
+        self.peaks = calculate_new_peaks_from_leaf_mutation(
+            &self.peaks,
+            new_leaf,
+            self.leaf_count,
+            old_membership_proof,
+        )
+        .unwrap();
     }
 
     /// Returns true of the `new_peaks` input matches the calculated new MMR peaks resulting from the
@@ -235,8 +218,10 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             for (count, hash) in ap.authentication_path.iter().enumerate() {
                 // If sibling node is something that has already been calculated, we use that
                 // hash digest. Otherwise we use the one in our authentication path.
-                let (right, height) = right_child_and_height(node_index);
-                if right {
+                let (right_ancestor_count, height) =
+                    right_ancestor_count_and_own_height(node_index);
+                let is_right_child = right_ancestor_count != 0;
+                if is_right_child {
                     let left_sibling_index = left_sibling(node_index, height);
                     let sibling_hash: &Digest = match new_ap_digests.get(&left_sibling_index) {
                         Some(h) => h,
