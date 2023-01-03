@@ -248,8 +248,8 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         // 4. Once new node is found, jump to right sibling (will not be included)
         // 5. Take left child of sibling, continue until a node in tree is found
         let mut peaks_and_heights: Vec<(Digest, u32)> = vec![];
-        let (mut top_peak, mut top_height) = leftmost_ancestor(self.digests.len() as u128 - 1);
-        if top_peak > self.digests.len() as u128 - 1 {
+        let (mut top_peak, mut top_height) = leftmost_ancestor(self.digests.len() - 1);
+        if top_peak > self.digests.len() - 1 {
             top_peak = left_child(top_peak, top_height);
             top_height -= 1;
         }
@@ -261,7 +261,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
             '_inner: while candidate > self.digests.len() && height > 0 {
                 candidate = left_child(candidate, height);
                 height -= 1;
-                if candidate < (self.digests.len() as u128) {
+                if candidate < self.digests.len() {
                     peaks_and_heights.push((self.digests.get(candidate), height));
                     candidate = right_sibling(candidate, height);
                     continue 'outer;
