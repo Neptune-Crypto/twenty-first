@@ -357,34 +357,21 @@ impl Tip5 {
         }
     }
 
-    pub fn mul_state(state: &mut [BFieldElement; STATE_SIZE], arg: BFieldElement) {
-        state.iter_mut().for_each(|s| *s *= arg);
-    }
-
     #[inline]
     pub fn mds_noswap(state: &mut [BFieldElement; STATE_SIZE]) {
-        let mds: [BFieldElement; STATE_SIZE] = [
-            BFieldElement::new(1363685766),
-            BFieldElement::new(818401426),
-            BFieldElement::new(2843477530982740278),
-            BFieldElement::new(15603266536318963895),
-            BFieldElement::new(4617387998068915967),
-            BFieldElement::new(13834281883405632256),
-            BFieldElement::new(18438678032804473072),
-            BFieldElement::new(3140224485136655),
-            BFieldElement::new(3747273207304324287),
-            BFieldElement::new(14700029414217449666),
-            BFieldElement::new(9286765195715607938),
-            BFieldElement::new(9160541823450023167),
-            BFieldElement::new(18392355339471673798),
-            BFieldElement::new(89869970136635963),
-            BFieldElement::new(16012825548870059521),
-            BFieldElement::new(2397315778488370688),
-        ];
+        const SHIFTS: [u8; STATE_SIZE] = [4, 1, 4, 3, 3, 7, 0, 5, 1, 5, 0, 2, 6, 2, 4, 1];
+        let mut array: [u128; STATE_SIZE] = [0; STATE_SIZE];
         Self::ntt_noswap(state);
 
-        for (i, m) in mds.iter().enumerate() {
-            state[i] *= *m;
+        for i in 0..STATE_SIZE {
+            array[i] = state[i].raw_u128() << SHIFTS[i];
+        }
+        let mut reduced = [0u64; STATE_SIZE];
+        for i in 0..STATE_SIZE {
+            reduced[i] = BFieldElement::montyred(array[i]);
+        }
+        for i in 0..16 {
+            state[i] = BFieldElement::from_raw_u64(reduced[i]);
         }
 
         Self::intt_noswap(state);
@@ -480,7 +467,7 @@ impl Tip5 {
 mod tip5_tests {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-    use crate::shared_math::tip5::Tip5;
+    use crate::shared_math::{b_field_element::BFieldElement, tip5::Tip5};
 
     #[test]
     #[ignore = "used for calculating parameters"]
@@ -579,5 +566,49 @@ mod tip5_tests {
             .filter(|(a, b)| a == b)
             .count();
         println!("agreement with low-degree function: {}", equal_count);
+    }
+
+    #[test]
+    fn test_mds_test_vector() {
+        let mut x = [
+            5735458159267578080,
+            11079291868388879320,
+            7126936809174926852,
+            13782161578414002790,
+            164785954911215634,
+            3118898034727063217,
+            6737535956326810438,
+            5144821635942763745,
+            16200832071427728225,
+            8640629006986782903,
+            11570592580608458034,
+            2895124598773988749,
+            3420957867360511946,
+            5796711531533733319,
+            5282341612640982074,
+            7026199320889950703,
+        ]
+        .map(BFieldElement::new);
+        let y = [
+            4104170903924047333,
+            6387491404022818542,
+            14981184993811752484,
+            16496996924371698202,
+            5837420782411553495,
+            4264374326976985633,
+            5211883823040202320,
+            11836807491772316903,
+            8162670480249154941,
+            5581482934627657894,
+            9403344895570333937,
+            8567874241156119862,
+            15302967789437559413,
+            13072768661755417248,
+            18135835343258257325,
+            9011523754984921044,
+        ]
+        .map(BFieldElement::new);
+        Tip5::mds_noswap(&mut x);
+        assert_eq!(x, y);
     }
 }

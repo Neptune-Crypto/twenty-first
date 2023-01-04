@@ -171,7 +171,7 @@ impl BFieldElement {
 
     /// Montgomery reduction
     #[inline(always)]
-    const fn montyred(x: u128) -> u64 {
+    pub const fn montyred(x: u128) -> u64 {
         // See reference above for a description of the following implementation.
         let xl = x as u64;
         let xh = (x >> 64) as u64;
@@ -220,6 +220,14 @@ impl BFieldElement {
                 | ((chunks[1] as u64) << 16)
                 | (chunks[0] as u64),
         )
+    }
+
+    pub fn raw_u128(&self) -> u128 {
+        self.0.into()
+    }
+
+    pub fn from_raw_u64(e: u64) -> BFieldElement {
+        BFieldElement(e)
     }
 }
 
