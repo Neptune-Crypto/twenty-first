@@ -12,92 +12,6 @@ pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;
 pub const NUM_ROUNDS: usize = 5;
 
-/// constants come from Rescue-Prime Regular
-/// TODO: generate own constants
-/// NOTE: some constants in here are duplicated
-pub const ROUND_CONSTANTS: [u64; NUM_ROUNDS * STATE_SIZE] = [
-    3006656781416918236,
-    4369161505641058227,
-    6684374425476535479,
-    15779820574306927140,
-    9604497860052635077,
-    6451419160553310210,
-    16926195364602274076,
-    6738541355147603274,
-    13653823767463659393,
-    16331310420018519380,
-    10921208506902903237,
-    5856388654420905056,
-    180518533287168595,
-    6394055120127805757,
-    4624620449883041133,
-    4245779370310492662,
-    11436753067664141475,
-    9565904130524743243,
-    1795462928700216574,
-    6069083569854718822,
-    16847768509740167846,
-    4958030292488314453,
-    6638656158077421079,
-    7387994719600814898,
-    1380138540257684527,
-    2756275326704598308,
-    6162254851582803897,
-    4357202747710082448,
-    12150731779910470904,
-    3121517886069239079,
-    14951334357190345445,
-    11174705360936334066,
-    17619090104023680035,
-    9879300494565649603,
-    6833140673689496042,
-    8026685634318089317,
-    6481786893261067369,
-    15148392398843394510,
-    11231860157121869734,
-    2645253741394956018,
-    15345701758979398253,
-    1715545688795694261,
-    3419893440622363282,
-    12314745080283886274,
-    16173382637268011204,
-    2012426895438224656,
-    6886681868854518019,
-    9323151312904004776,
-    4245779370310492662,
-    11436753067664141475,
-    9565904130524743243,
-    1795462928700216574,
-    6069083569854718822,
-    16847768509740167846,
-    4958030292488314453,
-    6638656158077421079,
-    7387994719600814898,
-    1380138540257684527,
-    2756275326704598308,
-    6162254851582803897,
-    4357202747710082448,
-    12150731779910470904,
-    3121517886069239079,
-    14951334357190345445,
-    11174705360936334066,
-    17619090104023680035,
-    9879300494565649603,
-    6833140673689496042,
-    8026685634318089317,
-    6481786893261067369,
-    15148392398843394510,
-    11231860157121869734,
-    2645253741394956018,
-    15345701758979398253,
-    1715545688795694261,
-    3419893440622363282,
-    12314745080283886274,
-    16173382637268011204,
-    2012426895438224656,
-    6886681868854518019,
-];
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Tip5State {
     pub state: [BFieldElement; STATE_SIZE],
@@ -114,6 +28,7 @@ impl Tip5State {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tip5 {
     table: [u8; 256],
+    round_constants: [BFieldElement; NUM_ROUNDS * STATE_SIZE],
 }
 
 impl Tip5 {
@@ -125,7 +40,30 @@ impl Tip5 {
             .collect_vec()
             .try_into()
             .unwrap();
-        Self { table }
+        let to_int = |bytes: &[u8]| {
+            bytes
+                .iter()
+                .take(16)
+                .enumerate()
+                .map(|(i, b)| (*b as u128) << (8 * i))
+                .sum::<u128>()
+        };
+        let p = (1u128 << 64) - (1u128 << 32) + 1u128;
+        let round_constants = (0..NUM_ROUNDS * STATE_SIZE)
+            .map(|i| ["Tip5".to_string().as_bytes(), &[(i as u8)]].concat())
+            .map(|bytes| blake3::hash(&bytes))
+            .map(|hash| *hash.as_bytes())
+            .map(|bytes| to_int(&bytes))
+            .map(|i| (i % p) as u64)
+            .map(BFieldElement::from_raw_u64)
+            .collect_vec()
+            .try_into()
+            .unwrap();
+
+        Self {
+            table,
+            round_constants,
+        }
     }
 
     #[inline]
@@ -142,8 +80,8 @@ impl Tip5 {
 
         #[allow(clippy::needless_range_loop)] // faster like so
         for i in 0..8 {
-            bytes[i] = Self::offset_fermat_cube_map(bytes[i].into()) as u8;
-            // bytes[i] = self.table[bytes[i] as usize];
+            // bytes[i] = Self::offset_fermat_cube_map(bytes[i].into()) as u8;
+            bytes[i] = self.table[bytes[i] as usize];
         }
 
         BFieldElement::from_raw_bytes(&bytes)
@@ -399,7 +337,7 @@ impl Tip5 {
         Self::mds_noswap(&mut sponge.state);
 
         for i in 0..STATE_SIZE {
-            sponge.state[i] += BFieldElement::from(ROUND_CONSTANTS[round_index * STATE_SIZE + i]);
+            sponge.state[i] += self.round_constants[round_index * STATE_SIZE + i];
         }
     }
 
