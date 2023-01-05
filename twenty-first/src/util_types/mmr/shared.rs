@@ -227,8 +227,11 @@ pub fn non_leaf_nodes_left(data_index: u128) -> u128 {
     // Number of nodes in tree of height h = 2^(h + 1) - 1
     // Number of non-leaves is `#(nodes) - #(leaves)`.
     // Thus: f(x) = sum_{h}(2^h - 1)
+
+    // An upper limit for the loop iterator is the log_2_floor(data_index)
     let mut ret = 0;
-    for h in 0..u128::BITS {
+    let n = u128::BITS - data_index.leading_zeros();
+    for h in 0..n {
         let pow = (1 << h) & data_index;
         if pow != 0 {
             ret += pow - 1;
