@@ -26,6 +26,32 @@ pub fn leftmost_ancestor(node_index: u128) -> (u128, u32) {
     (ret, h)
 }
 
+pub fn right_lineage_length(mut node_index: u128) -> u128 {
+    let mut bit_width = 1u128;
+    let mut npo2 = 2u128;
+    while npo2 <= node_index {
+        npo2 *= 2;
+        bit_width += 1;
+    }
+
+    let mut dist = npo2 - node_index;
+    while dist > bit_width {
+        if node_index == 2 {
+            return 1;
+        // } else if 2 * node_index == npo2 {
+        } else if node_index & (node_index - 1) == 0 {
+            return 0;
+        } else {
+            npo2 /= 2;
+            bit_width -= 1;
+            node_index = node_index - npo2 + 1;
+            dist = npo2 - node_index;
+        }
+    }
+
+    dist - 1
+}
+
 /// Traversing from this node upwards, count how many of the ancestor (including itself)
 /// is a right child. This number is used to determine how many nodes to insert when a
 /// new leaf is added.
@@ -556,6 +582,32 @@ mod mmr_test {
             (0, 63),
             right_ancestor_count_and_own_height(u64::MAX as u128)
         ); // 0b111...11 => 0
+    }
+
+    #[test]
+    fn right_lineage_length_iterative() {
+        let mut valid = true;
+        for i in 0..100 {
+            let rll = right_lineage_length(i) as u32;
+            let rac = right_ancestor_count_and_own_height(i).0;
+            if rll != rac {
+                valid = false;
+                println!("Mismatch for node index = {i}. Expected RAC {rac}. Got {rll}");
+            }
+        }
+        assert!(valid, "New implementation must agree with the old");
+    }
+
+    #[test]
+    fn right_lineage_length_pbt() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..10000 {
+            let rand = rng.next_u64();
+            println!("{rand}");
+            let rll = right_lineage_length(rand as u128) as u32;
+            let rac = right_ancestor_count_and_own_height(rand as u128).0;
+            assert_eq!(rac, rll);
+        }
     }
 
     #[test]
