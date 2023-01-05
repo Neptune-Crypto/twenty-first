@@ -4,7 +4,7 @@ use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, M
 use crate::util_types::emojihash_trait::{Emojihash, EMOJI_PER_ELEMENT};
 use num_traits::{One, Zero};
 use rand_distr::{Distribution, Standard};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 use phf::phf_map;
 use rand::Rng;
@@ -56,7 +56,7 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1} using Montgomery representation.
 // This implementation follows https://eprint.iacr.org/2022/274.pdf
 // and https://github.com/novifinancial/winterfell/pull/101/files
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
 pub struct BFieldElement(u64);
 
 pub const BFIELD_ZERO: BFieldElement = BFieldElement::new(0);
@@ -66,20 +66,6 @@ impl Sum for BFieldElement {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.reduce(|a, b| a + b)
             .unwrap_or_else(BFieldElement::zero)
-    }
-}
-
-impl PartialEq for BFieldElement {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl Eq for BFieldElement {}
-
-impl Hash for BFieldElement {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.canonical_representation().hash(state);
     }
 }
 
@@ -535,6 +521,7 @@ impl PrimitiveRootOfUnity for BFieldElement {
 #[cfg(test)]
 mod b_prime_field_element_test {
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::Hasher;
 
     use crate::shared_math::b_field_element::*;
     use crate::shared_math::other::{random_elements, random_elements_array, xgcd};
