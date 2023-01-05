@@ -562,21 +562,27 @@ mod tip5_tests {
         let mut preimage = [BFieldElement::zero(); RATE];
         let mut digest = [BFieldElement::zero(); DIGEST_LENGTH];
         let tip5 = Tip5::new();
-        for _ in 0..10 {
+        for i in 0..6 {
             digest = tip5.hash_10(&preimage);
             println!(
                 "{:?} -> {:?}",
                 preimage.iter().map(|b| b.value()).collect_vec(),
                 digest.iter().map(|b| b.value()).collect_vec()
             );
-            preimage[0..DIGEST_LENGTH].copy_from_slice(&digest);
+            preimage[i..DIGEST_LENGTH + i].copy_from_slice(&digest);
         }
+        digest = tip5.hash_10(&preimage);
+        println!(
+            "{:?} -> {:?}",
+            preimage.iter().map(|b| b.value()).collect_vec(),
+            digest.iter().map(|b| b.value()).collect_vec()
+        );
         let final_digest = [
-            3581845286189674823,
-            2862362320630677204,
-            17957395897046410649,
-            6136807419837142280,
-            18404493095419603912,
+            14558289001666338382,
+            8910286450360777215,
+            8687235873380904976,
+            9731988339297305717,
+            14852227464718284881,
         ]
         .map(BFieldElement::new);
         assert_eq!(digest, final_digest);
