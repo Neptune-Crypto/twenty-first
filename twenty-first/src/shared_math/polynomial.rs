@@ -753,7 +753,7 @@ where
 }
 
 impl<FF: FiniteField> Polynomial<FF> {
-    pub fn new(coefficients: Vec<FF>) -> Self {
+    pub const fn new(coefficients: Vec<FF>) -> Self {
         Self { coefficients }
     }
 

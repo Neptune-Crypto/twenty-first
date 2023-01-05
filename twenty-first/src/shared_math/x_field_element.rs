@@ -97,12 +97,12 @@ impl XFieldElement {
     }
 
     #[inline]
-    pub fn new(coefficients: [BFieldElement; EXTENSION_DEGREE]) -> Self {
+    pub const fn new(coefficients: [BFieldElement; EXTENSION_DEGREE]) -> Self {
         Self { coefficients }
     }
 
     #[inline]
-    pub fn new_u64(coeffs: [u64; EXTENSION_DEGREE]) -> Self {
+    pub const fn new_u64(coeffs: [u64; EXTENSION_DEGREE]) -> Self {
         Self {
             coefficients: [
                 BFieldElement::new(coeffs[0]),
@@ -113,8 +113,8 @@ impl XFieldElement {
     }
 
     #[inline]
-    pub fn new_const(element: BFieldElement) -> Self {
-        let zero = BFieldElement::zero();
+    pub const fn new_const(element: BFieldElement) -> Self {
+        let zero = BFieldElement::new(0);
 
         Self {
             coefficients: [element, zero, zero],
