@@ -45,7 +45,7 @@ fn bench_varlen(c: &mut Criterion) {
 }
 
 fn bench_parallel(c: &mut Criterion) {
-    let mut group = c.benchmark_group("tip5/hash_varlen");
+    let mut group = c.benchmark_group("tip5/parallel");
 
     let size = 65536;
     group.sample_size(50);
