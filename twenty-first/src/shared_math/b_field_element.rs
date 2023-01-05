@@ -420,8 +420,18 @@ impl Add for BFieldElement {
     fn add(self, rhs: Self) -> Self {
         // Compute a + b = a - (p - b).
         let (x1, c1) = self.0.overflowing_sub(Self::QUOTIENT - rhs.0);
-        let adj = 0u32.wrapping_sub(c1 as u32);
-        Self(x1.wrapping_sub(adj as u64))
+
+        // The following if/else is equivalent to the commented-out code below but
+        // the if/else was found to be faster.
+        // let adj = 0u32.wrapping_sub(c1 as u32);
+        // Self(x1.wrapping_sub(adj as u64))
+        // See
+        // https://github.com/Neptune-Crypto/twenty-first/pull/70
+        if c1 {
+            Self(x1.wrapping_add(Self::QUOTIENT))
+        } else {
+            Self(x1)
+        }
     }
 }
 
