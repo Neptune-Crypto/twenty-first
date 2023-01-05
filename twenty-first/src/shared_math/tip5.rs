@@ -18,9 +18,9 @@ pub struct Tip5State {
 }
 
 impl Tip5State {
-    fn new() -> Tip5State {
+    const fn new() -> Tip5State {
         Tip5State {
-            state: [BFieldElement::zero(); STATE_SIZE],
+            state: [BFieldElement::new(0); STATE_SIZE],
         }
     }
 }
@@ -35,7 +35,6 @@ impl Tip5 {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let table: [u8; 256] = (0..256)
-            .into_iter()
             .map(|t| Self::offset_fermat_cube_map(t as u16) as u8)
             .collect_vec()
             .try_into()
