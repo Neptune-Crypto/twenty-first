@@ -560,7 +560,7 @@ mod tip5_tests {
     #[test]
     fn hash10_test_vectors() {
         let mut preimage = [BFieldElement::zero(); RATE];
-        let mut digest = [BFieldElement::zero(); DIGEST_LENGTH];
+        let mut digest: [BFieldElement; DIGEST_LENGTH];
         let tip5 = Tip5::new();
         for i in 0..6 {
             digest = tip5.hash_10(&preimage);
