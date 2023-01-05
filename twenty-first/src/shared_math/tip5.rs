@@ -367,11 +367,12 @@ impl Tip5 {
         sponge.state[..5].try_into().unwrap()
     }
 
-    /// hash_varlen hashes an arbitrary number of field elements.
+    /// Hash an arbitrary number of field elements.
     ///
-    /// Takes care of padding by applying the padding rule: append a single 1 ∈ Fp
-    /// and as many 0 ∈ Fp elements as required to make the number of input elements
-    /// a multiple of `RATE`.
+    /// This function takes care of padding by applying the padding
+    /// rule: append a single 1 ∈ Fp and as many 0 ∈ Fp elements as
+    /// are required to make the number of input elements a multiple
+    /// of `RATE`.
     pub fn hash_varlen(&self, input: &[BFieldElement]) -> [BFieldElement; 5] {
         let mut sponge = Tip5State::new();
 
@@ -403,9 +404,15 @@ impl Tip5 {
 
 #[cfg(test)]
 mod tip5_tests {
+    use itertools::Itertools;
+    use num_traits::Zero;
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-    use crate::shared_math::{b_field_element::BFieldElement, tip5::Tip5};
+    use crate::shared_math::{
+        b_field_element::BFieldElement, rescue_prime_optimized::DIGEST_LENGTH, tip5::Tip5,
+    };
+
+    use super::RATE;
 
     #[test]
     #[ignore = "used for calculating parameters"]
@@ -548,5 +555,62 @@ mod tip5_tests {
         .map(BFieldElement::new);
         Tip5::mds_noswap(&mut x);
         assert_eq!(x, y);
+    }
+
+    #[test]
+    fn hash10_test_vectors() {
+        let mut preimage = [BFieldElement::zero(); RATE];
+        let mut digest = [BFieldElement::zero(); DIGEST_LENGTH];
+        let tip5 = Tip5::new();
+        for _ in 0..10 {
+            digest = tip5.hash_10(&preimage);
+            println!(
+                "{:?} -> {:?}",
+                preimage.iter().map(|b| b.value()).collect_vec(),
+                digest.iter().map(|b| b.value()).collect_vec()
+            );
+            preimage[0..DIGEST_LENGTH].copy_from_slice(&digest);
+        }
+        let final_digest = [
+            3581845286189674823,
+            2862362320630677204,
+            17957395897046410649,
+            6136807419837142280,
+            18404493095419603912,
+        ]
+        .map(BFieldElement::new);
+        assert_eq!(digest, final_digest);
+    }
+
+    #[test]
+    fn hash_varlen_test_vectors() {
+        let mut digest_sum = [BFieldElement::zero(); DIGEST_LENGTH];
+        let tip5 = Tip5::new();
+        for i in 0..20 {
+            let preimage = (0..i).into_iter().map(BFieldElement::new).collect_vec();
+            let digest = tip5.hash_varlen(&preimage);
+            println!(
+                "{:?} -> {:?}",
+                preimage.iter().map(|b| b.value()).collect_vec(),
+                digest.iter().map(|b| b.value()).collect_vec()
+            );
+            digest_sum
+                .iter_mut()
+                .zip(digest.iter())
+                .for_each(|(s, d)| *s += *d);
+        }
+        println!(
+            "sum of digests: {:?}",
+            digest_sum.iter().map(|b| b.value()).collect_vec()
+        );
+        let expected_sum = [
+            8476864380936389014,
+            7923359605828412643,
+            2436794214779586248,
+            12117847227056347517,
+            7400965751243819750,
+        ]
+        .map(BFieldElement::new);
+        assert_eq!(expected_sum, digest_sum);
     }
 }
