@@ -58,7 +58,7 @@ fn bench_parallel(c: &mut Criterion) {
             bencher.iter(|| {
                 elements
                     .par_iter()
-                    .map(|e| RescuePrimeRegular::hash_10(e))
+                    .map(RescuePrimeRegular::hash_10)
                     .collect::<Vec<[BFieldElement; DIGEST_LENGTH]>>()
             });
         },

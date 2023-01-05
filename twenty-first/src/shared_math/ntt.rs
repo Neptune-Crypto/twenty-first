@@ -230,11 +230,11 @@ pub fn intt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], ome
         while k < n {
             let mut w = BFieldElement::one();
             for j in 0..m {
-                let u = x[(k + j) as usize];
-                let mut v = x[(k + j + m) as usize];
+                let u = x[k + j];
+                let mut v = x[k + j + m];
                 v *= w;
-                x[(k + j) as usize] = u + v;
-                x[(k + j + m) as usize] = u - v;
+                x[k + j] = u + v;
+                x[k + j + m] = u - v;
                 w *= w_m;
             }
 
