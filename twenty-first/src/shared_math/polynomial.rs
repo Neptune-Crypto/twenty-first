@@ -766,7 +766,7 @@ where
         }
 
         // split
-        let half = (n / 2) as usize;
+        let half = n / 2;
         let ahi = Polynomial {
             coefficients: lhs.coefficients[half..].to_vec(),
         };
