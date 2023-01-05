@@ -220,20 +220,19 @@ pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u32>, Ve
 /// Count the number of non-leaf nodes that were inserted *prior* to
 /// the insertion of this leaf.
 pub fn non_leaf_nodes_left(data_index: u128) -> u128 {
+    // This formula is derived as follows:
+    // To get the heights of peaks before this data index was inserted, bit-decompose
+    // the number of leaves before it was inserted.
+    // Number of leaves in tree of height h = 2^h
+    // Number of nodes in tree of height h = 2^(h + 1) - 1
+    // Number of non-leaves is `#(nodes) - #(leaves)`.
+    // Thus: f(x) = sum_{h}(2^h - 1)
     let mut ret = 0;
-    let mut data_index_acc = data_index;
-    while data_index_acc != 0 {
-        // Accumulate how many nodes in the tree of the nearest left neighbor that are not leafs.
-        // We count this number for the nearest left neighbor since only the non-leafs in that
-        // tree were inserted prior to the leaf this function is called for.
-        // For a tree of height 2, there are 2^2 - 1 non-leaf nodes, note that height starts at
-        // 0.
-        // Since more than one subtree left of the requested index can contain non-leafs, we have
-        // to run this accumulater untill data_index_acc is zero.
-        let left_data_height = get_height_from_data_index(data_index_acc - 1);
-        let two_pow_left_data_height = 1 << left_data_height;
-        ret += two_pow_left_data_height - 1;
-        data_index_acc -= two_pow_left_data_height;
+    for h in 0..u128::BITS {
+        let pow = (1 << h) & data_index;
+        if pow != 0 {
+            ret += pow - 1;
+        }
     }
 
     ret
@@ -385,10 +384,16 @@ mod mmr_test {
         assert_eq!(4, non_leaf_nodes_left(7));
         assert_eq!(7, non_leaf_nodes_left(8));
         assert_eq!(7, non_leaf_nodes_left(9));
+
         assert_eq!(8, non_leaf_nodes_left(10));
         assert_eq!(8, non_leaf_nodes_left(11));
         assert_eq!(10, non_leaf_nodes_left(12));
         assert_eq!(10, non_leaf_nodes_left(13));
+        assert_eq!(11, non_leaf_nodes_left(14));
+        assert_eq!(11, non_leaf_nodes_left(15));
+        assert_eq!(15, non_leaf_nodes_left(16));
+        assert_eq!(15, non_leaf_nodes_left(17));
+        assert_eq!(16, non_leaf_nodes_left(18));
     }
 
     #[test]
