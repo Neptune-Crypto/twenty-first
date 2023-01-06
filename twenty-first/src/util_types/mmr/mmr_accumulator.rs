@@ -6,7 +6,7 @@ use super::archival_mmr::ArchivalMmr;
 use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::shared::{calculate_new_peaks_from_append, data_index_to_node_index};
-use super::shared::{calculate_new_peaks_from_leaf_mutation, right_ancestor_count_and_own_height};
+use super::shared::{calculate_new_peaks_from_leaf_mutation, right_lineage_length_and_own_height};
 use super::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
@@ -219,7 +219,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
                 // If sibling node is something that has already been calculated, we use that
                 // hash digest. Otherwise we use the one in our authentication path.
                 let (right_ancestor_count, height) =
-                    right_ancestor_count_and_own_height(node_index);
+                    right_lineage_length_and_own_height(node_index);
                 let is_right_child = right_ancestor_count != 0;
                 if is_right_child {
                     let left_sibling_index = left_sibling(node_index, height);

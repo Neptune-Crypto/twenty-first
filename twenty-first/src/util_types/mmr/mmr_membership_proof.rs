@@ -14,7 +14,7 @@ use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 use super::shared::{
     data_index_to_node_index, get_authentication_path_node_indices,
     get_peak_heights_and_peak_node_indices, leaf_count_to_node_count, leaf_index_to_peak_index,
-    left_sibling, node_indices_added_by_append, parent, right_ancestor_count_and_own_height,
+    left_sibling, node_indices_added_by_append, parent, right_lineage_length_and_own_height,
     right_sibling,
 };
 
@@ -82,7 +82,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         let mut acc_hash: Digest = leaf_hash.to_owned();
         let mut acc_index: u128 = node_index;
         for hash in self.authentication_path.iter() {
-            let (acc_right, acc_height) = right_ancestor_count_and_own_height(acc_index);
+            let (acc_right, acc_height) = right_lineage_length_and_own_height(acc_index);
             if acc_right != 0 {
                 // acc_index is a right child
                 acc_hash = H::hash_pair(hash, &acc_hash);
@@ -118,7 +118,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         let mut node_index = data_index_to_node_index(self.data_index);
         let mut node_indices = vec![];
         for _ in 0..self.authentication_path.len() {
-            let (right_ancestor_count, height) = right_ancestor_count_and_own_height(node_index);
+            let (right_ancestor_count, height) = right_lineage_length_and_own_height(node_index);
             let is_right_child = right_ancestor_count != 0;
             if is_right_child {
                 node_indices.push(left_sibling(node_index, height));
@@ -382,7 +382,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
             }
 
             let (acc_right_ancestor_count, acc_height) =
-                right_ancestor_count_and_own_height(node_index);
+                right_lineage_length_and_own_height(node_index);
             if acc_right_ancestor_count != 0 {
                 acc_hash = H::hash_pair(hash, &acc_hash);
 
@@ -449,7 +449,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
             }
 
             let (right_ancestor_count, acc_height) =
-                right_ancestor_count_and_own_height(node_index);
+                right_lineage_length_and_own_height(node_index);
             if right_ancestor_count != 0 {
                 // node is right child
                 acc_hash = H::hash_pair(hash, &acc_hash);
@@ -541,7 +541,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
                 // hash digest. Otherwise we use the one in our authentication path.
 
                 let (right_ancestor_count, height) =
-                    right_ancestor_count_and_own_height(node_index);
+                    right_lineage_length_and_own_height(node_index);
                 if right_ancestor_count != 0 {
                     let left_sibling_index = left_sibling(node_index, height);
                     let sibling_hash: &Digest = match new_ap_digests.get(&left_sibling_index) {
