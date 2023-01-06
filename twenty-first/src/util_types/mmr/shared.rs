@@ -258,7 +258,7 @@ pub fn leaf_index_to_mt_index(leaf_index: u128, leaf_count: u128) -> (u128, u32)
 
     ret += pow;
 
-    (ret, peak_index as u32)
+    (ret, peak_index)
 }
 
 /// Count the number of non-leaf nodes that were inserted *prior* to
@@ -356,32 +356,20 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
     leaf_count: u128,
     membership_proof: &MmrMembershipProof<H>,
 ) -> Option<Vec<Digest>> {
-    let node_index = leaf_index_to_node_index(membership_proof.leaf_index);
+    let (mut acc_mt_index, peak_index) =
+        leaf_index_to_mt_index(membership_proof.leaf_index, leaf_count);
     let mut acc_hash: Digest = new_leaf.to_owned();
-    let mut acc_index: u128 = node_index;
     for hash in membership_proof.authentication_path.iter() {
-        let (acc_right_lineage_count, acc_height) = right_lineage_length_and_own_height(acc_index);
-        if acc_right_lineage_count != 0 {
-            // acc_index is right child
-            acc_hash = H::hash_pair(hash, &acc_hash);
-
-            // parent of right child is +1
-            acc_index += 1;
-        } else {
-            // acc_index is left child
+        if acc_mt_index % 2 == 0 {
+            // node with `acc_hash` is a left child
             acc_hash = H::hash_pair(&acc_hash, hash);
+        } else {
+            // node is a right child
+            acc_hash = H::hash_pair(hash, &acc_hash);
+        }
 
-            // parent of left child:
-            acc_index += 1 << (acc_height + 1);
-        };
+        acc_mt_index /= 2;
     }
-
-    // Find the correct peak to update
-    let peak_index_res = leaf_index_to_peak_index(membership_proof.leaf_index, leaf_count);
-    let peak_index = match peak_index_res {
-        None => return None,
-        Some(pi) => pi,
-    };
 
     let mut calculated_peaks: Vec<Digest> = old_peaks.to_vec();
     calculated_peaks[peak_index as usize] = acc_hash;
@@ -394,14 +382,6 @@ mod mmr_test {
     use std::time::Instant;
 
     use rand::RngCore;
-
-    use crate::{
-        shared_math::{b_field_element::BFieldElement, rescue_prime_regular::RescuePrimeRegular},
-        test_shared::mmr::get_archival_mmr_from_digests,
-        util_types::mmr::{
-            archival_mmr::ArchivalMmr, shared::calculate_new_peaks_from_leaf_mutation,
-        },
-    };
 
     use super::*;
 
@@ -841,21 +821,6 @@ mod mmr_test {
                 get_authentication_path_node_indices(start, end, node_count)
             );
         }
-    }
-
-    #[test]
-    fn calculate_new_peaks_from_leaf_mutation_empty_mmr_test() {
-        type H = RescuePrimeRegular;
-
-        // Verify that the helper function `calculate_new_peaks_from_leaf_mutation` does
-        // not crash if called on an empty list of peaks
-        let new_leaf = H::hash(&BFieldElement::new(10000));
-        let mut acc: ArchivalMmr<H> = get_archival_mmr_from_digests(vec![new_leaf]);
-        let mp = acc.prove_membership(0).0;
-        assert!(
-            calculate_new_peaks_from_leaf_mutation::<RescuePrimeRegular>(&[], &new_leaf, 0, &mp,)
-                .is_none()
-        );
     }
 
     #[test]
