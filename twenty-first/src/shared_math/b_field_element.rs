@@ -162,18 +162,7 @@ impl BFieldElement {
         acc
     }
 
-    pub fn legendre_symbol(&self) -> i8 {
-        let elem = self.mod_pow((Self::QUOTIENT - 1) / 2).0;
-
-        // Ugly hack to force a result in {-1,0,1}
-        if elem == Self::QUOTIENT - 1 {
-            -1
-        } else {
-            i8::from(elem != 0)
-        }
-    }
-
-    /// Convert a `BFieldElement` from a byte slice.
+    /// Convert a `BFieldElement` from a byte slice in native endianness.
     pub fn from_ne_bytes(bytes: &[u8]) -> BFieldElement {
         let mut bytes_copied: [u8; 8] = [0; 8];
         bytes_copied.copy_from_slice(bytes);
@@ -182,7 +171,7 @@ impl BFieldElement {
 
     /// Montgomery reduction
     #[inline(always)]
-    const fn montyred(x: u128) -> u64 {
+    pub const fn montyred(x: u128) -> u64 {
         // See reference above for a description of the following implementation.
         let xl = x as u64;
         let xh = (x >> 64) as u64;
@@ -231,6 +220,14 @@ impl BFieldElement {
                 | ((chunks[1] as u64) << 16)
                 | (chunks[0] as u64),
         )
+    }
+
+    pub fn raw_u128(&self) -> u128 {
+        self.0.into()
+    }
+
+    pub fn from_raw_u64(e: u64) -> BFieldElement {
+        BFieldElement(e)
     }
 }
 
@@ -397,7 +394,7 @@ impl FiniteField for BFieldElement {}
 
 impl Zero for BFieldElement {
     fn zero() -> Self {
-        BFIELD_ZERO
+        BFieldElement::new(0)
     }
 
     fn is_zero(&self) -> bool {
@@ -407,7 +404,7 @@ impl Zero for BFieldElement {
 
 impl One for BFieldElement {
     fn one() -> Self {
-        BFIELD_ONE
+        BFieldElement::new(1)
     }
 
     fn is_one(&self) -> bool {
@@ -1143,19 +1140,19 @@ mod b_prime_field_element_test {
             let c = BFieldElement::from_raw_bytes(&bytes);
             assert_eq!(e, c);
             let mut f = 0u64;
-            for i in 0..8 {
-                f += (bytes[i] as u64) << (8 * i);
+            for (i, b) in bytes.iter().enumerate() {
+                f += (*b as u64) << (8 * i);
             }
-            assert_eq!(e, BFieldElement { 0: f });
+            assert_eq!(e, BFieldElement(f));
 
             let chunks = e.raw_u16s();
             let g = BFieldElement::from_raw_u16s(&chunks);
             assert_eq!(e, g);
             let mut h = 0u64;
-            for i in 0..4 {
-                h += (chunks[i] as u64) << (16 * i);
+            for (i, ch) in chunks.iter().enumerate() {
+                h += (*ch as u64) << (16 * i);
             }
-            assert_eq!(e, BFieldElement { 0: h });
+            assert_eq!(e, BFieldElement(h));
         }
     }
 }
