@@ -26,30 +26,17 @@ pub fn leftmost_ancestor(node_index: u128) -> (u128, u32) {
     (ret, h)
 }
 
-pub fn right_lineage_length(mut node_index: u128) -> u128 {
-    let mut bit_width = 1u128;
-    let mut npo2 = 2u128;
-    while npo2 <= node_index {
-        npo2 *= 2;
-        bit_width += 1;
-    }
+pub fn right_lineage_length(node_index: u128) -> u32 {
+    let bit_width = u128::BITS - node_index.leading_zeros();
+    let npo2 = 1 << bit_width;
 
-    let mut dist = npo2 - node_index;
-    while dist > bit_width {
-        if node_index == 2 {
-            return 1;
-        // } else if 2 * node_index == npo2 {
-        } else if node_index & (node_index - 1) == 0 {
-            return 0;
-        } else {
-            npo2 /= 2;
-            bit_width -= 1;
-            node_index = node_index - npo2 + 1;
-            dist = npo2 - node_index;
-        }
-    }
+    let dist = npo2 - node_index;
 
-    dist - 1
+    if (bit_width as u128) < dist {
+        right_lineage_length(node_index - (npo2 >> 1) + 1)
+    } else {
+        (dist - 1) as u32
+    }
 }
 
 /// Traversing from this node upwards, count how many of the ancestor (including itself)
@@ -369,6 +356,8 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
 
 #[cfg(test)]
 mod mmr_test {
+    use std::time::Instant;
+
     use rand::RngCore;
 
     use crate::{
@@ -587,7 +576,7 @@ mod mmr_test {
     #[test]
     fn right_lineage_length_iterative() {
         let mut valid = true;
-        for i in 0..100 {
+        for i in 0..1000 {
             let rll = right_lineage_length(i) as u32;
             let rac = right_ancestor_count_and_own_height(i).0;
             if rll != rac {
@@ -753,5 +742,26 @@ mod mmr_test {
             calculate_new_peaks_from_leaf_mutation::<RescuePrimeRegular>(&[], &new_leaf, 0, &mp,)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn test_rll_rac() {
+        for n in (1 << 31)..(1 << 32) {
+            let tick = Instant::now();
+            let rac = right_ancestor_count_and_own_height(n).0;
+            let tock = Instant::now();
+            let rll = right_lineage_length(n);
+            let tuck = Instant::now();
+
+            assert_eq!(rac, rll);
+
+            let rac_time = tock - tick;
+            let rll_time = tuck - tock;
+            let relation = rac_time.as_secs_f64() / rll_time.as_secs_f64();
+            println!(
+                "{}. ({}) RAC: {:#?} / RLL: {:#?} / speed up: {}x",
+                n, rll, rac_time, rll_time, relation
+            );
+        }
     }
 }
