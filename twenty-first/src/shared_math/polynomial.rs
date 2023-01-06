@@ -14,7 +14,7 @@ use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Rem, Sub};
 
 use super::b_field_element::BFieldElement;
-use super::other::{self, is_power_of_two, log_2_ceil};
+use super::other::{self, log_2_ceil};
 use super::traits::{Inverse, PrimitiveRootOfUnity};
 
 fn degree_raw<T: Add + Div + Mul + Sub + Display + Zero>(coefficients: &[T]) -> isize {
@@ -750,54 +750,6 @@ where
 
         scaled_quotient.scale(&offset.inverse())
     }
-
-    pub fn karatsuba(lhs: Self, rhs: Self) -> Self {
-        let n = lhs.coefficients.len();
-        debug_assert_eq!(n, rhs.coefficients.len(), "degrees must match");
-        debug_assert!(
-            is_power_of_two(n),
-            "degree must be one less than power of two"
-        );
-
-        // terminate recursion
-        let cutoff_point = 32;
-        if n <= cutoff_point {
-            return lhs * rhs;
-        }
-
-        // split
-        let half = n / 2;
-        let ahi = Polynomial {
-            coefficients: lhs.coefficients[half..].to_vec(),
-        };
-        let alo = Polynomial {
-            coefficients: lhs.coefficients[..half].to_vec(),
-        };
-        let asum = ahi.clone() + alo.clone();
-        let bhi = Polynomial {
-            coefficients: rhs.coefficients[half..].to_vec(),
-        };
-        let blo = Polynomial {
-            coefficients: rhs.coefficients[..half].to_vec(),
-        };
-        let bsum = bhi.clone() + blo.clone();
-
-        // recurse
-        let prod_his = Self::karatsuba(ahi, bhi);
-        let prod_los = Self::karatsuba(alo, blo);
-        let prod_sums = Self::karatsuba(asum, bsum);
-
-        // recombine and return
-        let mid_unshifted = prod_sums - prod_his.clone() - prod_los.clone();
-        let hi = Polynomial {
-            coefficients: [vec![FF::zero(); 2 * half], prod_his.coefficients].concat(),
-        };
-        let mid = Polynomial {
-            coefficients: [vec![FF::zero(); half], mid_unshifted.coefficients].concat(),
-        };
-
-        hi + mid + prod_los
-    }
 }
 
 impl<FF: FiniteField> Polynomial<FF> {
@@ -1342,7 +1294,6 @@ mod test_polynomials {
     use crate::shared_math::other::{random_elements, random_elements_distinct};
     use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::shared_math::x_field_element::XFieldElement;
-    use crate::timing_reporter::TimingReporter;
 
     #[test]
     fn polynomial_display_test() {
@@ -3162,31 +3113,5 @@ mod test_polynomials {
                 assert_eq!(p, original_p);
             }
         }
-    }
-
-    #[test]
-    fn test_karatsuba() {
-        let n = 4096;
-        let lhs = Polynomial {
-            coefficients: random_elements::<BFieldElement>(n),
-        };
-        let rhs = Polynomial {
-            coefficients: random_elements::<BFieldElement>(n),
-        };
-
-        let mut tr = TimingReporter::start();
-        tr.elapsed("Multiplication:");
-
-        let karatsuba_product = Polynomial::karatsuba(lhs.clone(), rhs.clone());
-        tr.elapsed("karatsuba");
-
-        let regular_product = lhs * rhs;
-        tr.elapsed("regular");
-
-        let report = tr.finish();
-
-        assert_eq!(karatsuba_product, regular_product);
-
-        println!("{}", report);
     }
 }
