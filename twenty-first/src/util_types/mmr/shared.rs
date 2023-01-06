@@ -574,20 +574,6 @@ mod mmr_test {
     }
 
     #[test]
-    fn right_lineage_length_iterative() {
-        let mut valid = true;
-        for i in 0..1000 {
-            let rll = right_lineage_length(i) as u32;
-            let rac = right_lineage_length_and_own_height(i).0;
-            if rll != rac {
-                valid = false;
-                println!("Mismatch for node index = {i}. Expected RAC {rac}. Got {rll}");
-            }
-        }
-        assert!(valid, "New implementation must agree with the old");
-    }
-
-    #[test]
     fn right_lineage_length_pbt() {
         let mut rng = rand::thread_rng();
         for _ in 0..10000 {
