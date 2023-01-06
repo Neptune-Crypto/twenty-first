@@ -242,13 +242,15 @@ pub fn non_leaf_nodes_left(data_index: u128) -> u128 {
     // Thus: f(x) = sum_{h}(2^h - 1)
 
     // An upper limit for the loop iterator is the log_2_floor(data_index)
+    let log_2_floor_plus_one = u128::BITS - data_index.leading_zeros();
+    let mut h = 0;
     let mut ret = 0;
-    let n = u128::BITS - data_index.leading_zeros();
-    for h in 0..n {
+    while h != log_2_floor_plus_one {
         let pow = (1 << h) & data_index;
         if pow != 0 {
             ret += pow - 1;
         }
+        h += 1;
     }
 
     ret
