@@ -5,7 +5,7 @@ use std::{collections::HashMap, fmt::Debug};
 use super::archival_mmr::ArchivalMmr;
 use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
-use super::shared::{calculate_new_peaks_from_append, data_index_to_node_index};
+use super::shared::{calculate_new_peaks_from_append, leaf_index_to_node_index};
 use super::shared::{calculate_new_peaks_from_leaf_mutation, right_lineage_length_and_own_height};
 use super::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
 use crate::shared_math::rescue_prime_digest::Digest;
@@ -114,7 +114,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         // Verify that all leaf mutations operate on unique leafs and that they do
         // not exceed the total leaf count
         let manipulated_leaf_indices: Vec<u128> =
-            leaf_mutations.iter().map(|x| x.1.data_index).collect();
+            leaf_mutations.iter().map(|x| x.1.leaf_index).collect();
         if !has_unique_elements(manipulated_leaf_indices.clone()) {
             return false;
         }
@@ -207,7 +207,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         // throughout the updating as their neighbor leaf digests change values.
         // The hash map `new_ap_digests` takes care of that.
         while let Some((ap, new_leaf)) = mutation_data.pop() {
-            let mut node_index = data_index_to_node_index(ap.data_index);
+            let mut node_index = leaf_index_to_node_index(ap.leaf_index);
             let former_value = new_ap_digests.insert(node_index, new_leaf);
             assert!(
                 former_value.is_none(),
@@ -252,7 +252,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             }
 
             // Update the peak
-            let peaks_index = leaf_index_to_peak_index(ap.data_index, self.count_leaves());
+            let peaks_index = leaf_index_to_peak_index(ap.leaf_index, self.count_leaves());
             match peaks_index {
                 None => panic!("Could not find peak in MMR. Is the leaf index/data index beyond the size of the MMR?"),
                 Some(pi) => { self.peaks[pi as usize] = acc_hash; },
@@ -453,8 +453,8 @@ mod accumulator_mmr_tests {
             let mut all_indices_mut0 = all_indices.clone();
             let mut mutated_leaf_indices: Vec<u128> = vec![];
             for _ in 0..mutated_leaf_count {
-                let data_index = all_indices_mut0.remove(rng.gen_range(0..all_indices_mut0.len()));
-                mutated_leaf_indices.push(data_index);
+                let leaf_index = all_indices_mut0.remove(rng.gen_range(0..all_indices_mut0.len()));
+                mutated_leaf_indices.push(leaf_index);
             }
 
             // Pick membership proofs that we want to update
@@ -462,8 +462,8 @@ mod accumulator_mmr_tests {
             let mut all_indices_mut1 = all_indices.clone();
             let mut membership_proof_indices: Vec<u128> = vec![];
             for _ in 0..membership_proof_count {
-                let data_index = all_indices_mut1.remove(rng.gen_range(0..all_indices_mut1.len()));
-                membership_proof_indices.push(data_index);
+                let leaf_index = all_indices_mut1.remove(rng.gen_range(0..all_indices_mut1.len()));
+                membership_proof_indices.push(leaf_index);
             }
 
             // Calculate the terminal leafs, as they look after the batch leaf mutation
@@ -530,7 +530,7 @@ mod accumulator_mmr_tests {
                 "If mutated leaf count is non-zero, at least on peaks must be different"
             );
             mutation_data.into_iter().for_each(|(mp, digest)| {
-                ammr_copy.mutate_leaf_raw(mp.data_index, digest);
+                ammr_copy.mutate_leaf_raw(mp.leaf_index, digest);
             });
             assert_eq!(ammr_copy.get_peaks(), ammr.get_peaks(), "Mutation though batch mutation function must transform the MMR like a list of individual leaf mutations");
         }
