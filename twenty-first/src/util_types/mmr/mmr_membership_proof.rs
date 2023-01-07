@@ -13,7 +13,7 @@ use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
 use super::shared::{
     get_authentication_path_node_indices, get_peak_heights_and_peak_node_indices,
-    leaf_count_to_node_count, leaf_index_to_node_index, leaf_index_to_peak_index, left_sibling,
+    leaf_count_to_node_count, leaf_index_to_mt_index, leaf_index_to_node_index, left_sibling,
     node_indices_added_by_append, parent, right_lineage_length_and_own_height, right_sibling,
 };
 
@@ -76,35 +76,21 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         leaf_hash: &Digest,
         leaf_count: u128,
     ) -> (bool, Option<Digest>) {
-        let node_index = leaf_index_to_node_index(self.leaf_index);
+        let (mut mt_index, peak_index) = leaf_index_to_mt_index(self.leaf_index, leaf_count);
 
         let mut acc_hash: Digest = leaf_hash.to_owned();
-        let mut acc_index: u128 = node_index;
         for hash in self.authentication_path.iter() {
-            let (acc_right, acc_height) = right_lineage_length_and_own_height(acc_index);
-            if acc_right != 0 {
-                // acc_index is a right child
-                acc_hash = H::hash_pair(hash, &acc_hash);
-
-                // parent of right child is +1
-                acc_index += 1;
-            } else {
-                // acc_index is a left child
+            if mt_index % 2 == 0 {
+                // node is left child
                 acc_hash = H::hash_pair(&acc_hash, hash);
+            } else {
+                // node is right child
+                acc_hash = H::hash_pair(hash, &acc_hash);
+            }
 
-                // parent of left child:
-                acc_index += 1 << (acc_height + 1);
-            };
+            mt_index /= 2;
         }
 
-        // Find the correct peak index
-        let peak_index_res = leaf_index_to_peak_index(self.leaf_index, leaf_count);
-        let peak_index = match peak_index_res {
-            None => return (false, None),
-            Some(pi) => pi,
-        };
-
-        // Compare the peak at the expected index with accumulated hash
         if peaks[peak_index as usize] != acc_hash {
             return (false, None);
         }
