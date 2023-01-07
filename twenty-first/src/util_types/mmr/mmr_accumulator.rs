@@ -7,9 +7,10 @@ use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::shared::{calculate_new_peaks_from_append, leaf_index_to_node_index};
 use super::shared::{calculate_new_peaks_from_leaf_mutation, right_lineage_length_and_own_height};
-use super::shared::{leaf_index_to_peak_index, left_sibling, right_sibling};
+use super::shared::{left_sibling, right_sibling};
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
+use crate::util_types::mmr::shared::leaf_index_to_mt_index;
 use crate::util_types::shared::bag_peaks;
 use crate::utils::has_unique_elements;
 
@@ -252,11 +253,8 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             }
 
             // Update the peak
-            let peaks_index = leaf_index_to_peak_index(ap.leaf_index, self.count_leaves());
-            match peaks_index {
-                None => panic!("Could not find peak in MMR. Is the leaf index/data index beyond the size of the MMR?"),
-                Some(pi) => { self.peaks[pi as usize] = acc_hash; },
-            }
+            let (_, peak_index) = leaf_index_to_mt_index(ap.leaf_index, self.count_leaves());
+            self.peaks[peak_index as usize] = acc_hash;
         }
 
         // Update all the supplied membership proofs

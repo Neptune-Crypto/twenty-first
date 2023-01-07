@@ -117,25 +117,6 @@ pub fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
     non_leaf_nodes_after + non_leaf_nodes_left + leaf_count
 }
 
-/// leaf_index_to_peak_index
-/// Compute the index of the peak that contains the given leaf index,
-/// given the leaf count.
-pub fn leaf_index_to_peak_index(leaf_index: u128, leaf_count: u128) -> Option<u128> {
-    if leaf_index >= leaf_count {
-        None
-    } else {
-        let mut num_set_bits = 0;
-        let mut leaf_count_copy = leaf_count;
-        while leaf_count_copy != 0 {
-            if leaf_count_copy < leaf_index + 1 {
-                num_set_bits += 1;
-            }
-            leaf_count_copy &= leaf_count_copy - 1;
-        }
-        Some(num_set_bits)
-    }
-}
-
 /// Return the indices of the nodes added by an append, including the
 /// peak that this append gave rise to
 pub fn node_indices_added_by_append(old_leaf_count: u128) -> Vec<u128> {
@@ -557,49 +538,40 @@ mod mmr_test {
     }
 
     #[test]
-    fn leaf_index_to_peak_index_test() {
-        assert_eq!(0, leaf_index_to_peak_index(0, 1).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(0, 2).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(1, 2).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(0, 3).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(1, 3).unwrap());
-        assert_eq!(1, leaf_index_to_peak_index(2, 3).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(0, 4).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(1, 4).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(2, 4).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(3, 4).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(0, 5).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(1, 5).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(2, 5).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(3, 5).unwrap());
-        assert_eq!(1, leaf_index_to_peak_index(4, 5).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(0, 7).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(1, 7).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(2, 7).unwrap());
-        assert_eq!(0, leaf_index_to_peak_index(3, 7).unwrap());
-        assert_eq!(1, leaf_index_to_peak_index(4, 7).unwrap());
-        assert_eq!(1, leaf_index_to_peak_index(5, 7).unwrap());
-        assert_eq!(2, leaf_index_to_peak_index(6, 7).unwrap());
-        assert!(leaf_index_to_peak_index(0, (1 << 32) - 1).unwrap() == 0);
-        assert!(leaf_index_to_peak_index(1, (1 << 32) - 1).unwrap() == 0);
-        assert!(leaf_index_to_peak_index((1 << 31) - 1, (1 << 32) - 1).unwrap() == 0);
-        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30) - 1, (1 << 32) - 1).unwrap() == 1);
-        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 29) - 1, (1 << 32) - 1).unwrap() == 1);
-        assert!(leaf_index_to_peak_index(1 << 31, (1 << 32) - 1).unwrap() == 1);
+    fn peak_index_test() {
+        // Verify that the function to find the Merkle tree index returns the correct peak index
+        assert_eq!(0, leaf_index_to_mt_index(0, 1).1);
+        assert_eq!(0, leaf_index_to_mt_index(0, 2).1);
+        assert_eq!(0, leaf_index_to_mt_index(1, 2).1);
+        assert_eq!(0, leaf_index_to_mt_index(0, 3).1);
+        assert_eq!(0, leaf_index_to_mt_index(1, 3).1);
+        assert_eq!(1, leaf_index_to_mt_index(2, 3).1);
+        assert_eq!(0, leaf_index_to_mt_index(0, 4).1);
+        assert_eq!(0, leaf_index_to_mt_index(1, 4).1);
+        assert_eq!(0, leaf_index_to_mt_index(2, 4).1);
+        assert_eq!(0, leaf_index_to_mt_index(3, 4).1);
+        assert_eq!(0, leaf_index_to_mt_index(0, 5).1);
+        assert_eq!(0, leaf_index_to_mt_index(1, 5).1);
+        assert_eq!(0, leaf_index_to_mt_index(2, 5).1);
+        assert_eq!(0, leaf_index_to_mt_index(3, 5).1);
+        assert_eq!(1, leaf_index_to_mt_index(4, 5).1);
+        assert_eq!(0, leaf_index_to_mt_index(0, 7).1);
+        assert_eq!(0, leaf_index_to_mt_index(1, 7).1);
+        assert_eq!(0, leaf_index_to_mt_index(2, 7).1);
+        assert_eq!(0, leaf_index_to_mt_index(3, 7).1);
+        assert_eq!(1, leaf_index_to_mt_index(4, 7).1);
+        assert_eq!(1, leaf_index_to_mt_index(5, 7).1);
+        assert_eq!(2, leaf_index_to_mt_index(6, 7).1);
+        assert!(leaf_index_to_mt_index(0, (1 << 32) - 1).1 == 0);
+        assert!(leaf_index_to_mt_index(1, (1 << 32) - 1).1 == 0);
+        assert!(leaf_index_to_mt_index((1 << 31) - 1, (1 << 32) - 1).1 == 0);
+        assert!(leaf_index_to_mt_index((1 << 31) + (1 << 30) - 1, (1 << 32) - 1).1 == 1);
+        assert!(leaf_index_to_mt_index((1 << 31) + (1 << 29) - 1, (1 << 32) - 1).1 == 1);
+        assert!(leaf_index_to_mt_index(1 << 31, (1 << 32) - 1).1 == 1);
         assert!(
-            leaf_index_to_peak_index((1 << 31) + (1 << 30) + (1 << 29) - 1, (1 << 32) - 1).unwrap()
-                == 2
+            leaf_index_to_mt_index((1 << 31) + (1 << 30) + (1 << 29) - 1, (1 << 32) - 1).1 == 2
         );
-        assert!(leaf_index_to_peak_index((1 << 31) + (1 << 30), (1 << 32) - 1).unwrap() == 2);
-
-        // Verify that None is returned if leaf index exceeds leaf count
-        assert!(leaf_index_to_peak_index(1, 0).is_none());
-        assert!(leaf_index_to_peak_index(1, 1).is_none());
-        assert!(leaf_index_to_peak_index(2, 1).is_none());
-        assert!(leaf_index_to_peak_index(100, 1).is_none());
-        assert!(leaf_index_to_peak_index(100, 99).is_none());
-        assert!(leaf_index_to_peak_index(100, 100).is_none());
-        assert!(leaf_index_to_peak_index(100, 101).is_some());
+        assert!(leaf_index_to_mt_index((1 << 31) + (1 << 30), (1 << 32) - 1).1 == 2);
     }
 
     #[test]
