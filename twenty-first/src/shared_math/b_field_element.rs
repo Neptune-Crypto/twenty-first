@@ -1181,4 +1181,38 @@ mod b_prime_field_element_test {
             assert_eq!(e, BFieldElement(h));
         }
     }
+
+    #[test]
+    fn test_fixed_inverse() {
+        // (8561862112314395584, 17307602810081694772)
+        let a = BFieldElement::new(8561862112314395584);
+        let a_inv = a.inverse();
+        let a_inv_or_0 = a.inverse_or_zero();
+        let expected = BFieldElement::new(17307602810081694772);
+        assert_eq!(a_inv, a_inv_or_0);
+        assert_eq!(a_inv, expected);
+    }
+
+    #[test]
+    fn test_fixed_modpow() {
+        let exponent = 16608971246357572739u64;
+        let base = BFieldElement::new(7808276826625786800);
+        let expected = BFieldElement::new(2288673415394035783);
+        assert_eq!(base.mod_pow_u64(exponent), expected);
+    }
+
+    #[test]
+    fn test_fixed_mul() {
+        let a = BFieldElement::new(2779336007265862836);
+        let b = BFieldElement::new(8146517303801474933);
+        let c = a * b;
+        let expected = BFieldElement::new(1857758653037316764);
+        assert_eq!(c, expected);
+
+        let a = BFieldElement::new(9223372036854775808);
+        let b = BFieldElement::new(9223372036854775808);
+        let c = a * b;
+        let expected = BFieldElement::new(18446744068340842497);
+        assert_eq!(c, expected);
+    }
 }
