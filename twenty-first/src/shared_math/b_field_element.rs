@@ -4,7 +4,7 @@ use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, M
 use crate::util_types::emojihash_trait::{Emojihash, EMOJI_PER_ELEMENT};
 use num_traits::{One, Zero};
 use rand_distr::{Distribution, Standard};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 use phf::phf_map;
 use rand::Rng;
@@ -56,7 +56,7 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 // BFieldElement ∈ ℤ_{2^64 - 2^32 + 1} using Montgomery representation.
 // This implementation follows https://eprint.iacr.org/2022/274.pdf
 // and https://github.com/novifinancial/winterfell/pull/101/files
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
 pub struct BFieldElement(u64);
 
 pub const BFIELD_ZERO: BFieldElement = BFieldElement::new(0);
@@ -66,20 +66,6 @@ impl Sum for BFieldElement {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.reduce(|a, b| a + b)
             .unwrap_or_else(BFieldElement::zero)
-    }
-}
-
-impl PartialEq for BFieldElement {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl Eq for BFieldElement {}
-
-impl Hash for BFieldElement {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.canonical_representation().hash(state);
     }
 }
 
@@ -99,31 +85,42 @@ impl BFieldElement {
     }
 
     #[inline]
-    pub fn value(&self) -> u64 {
+    pub const fn value(&self) -> u64 {
         self.canonical_representation()
     }
 
     #[inline]
     /// Square the base M times and multiply the result by the tail value
-    pub fn power_accumulator<const N: usize, const M: usize>(
+    pub const fn power_accumulator<const N: usize, const M: usize>(
         base: [Self; N],
         tail: [Self; N],
     ) -> [Self; N] {
         let mut result = base;
-        for _ in 0..M {
-            result.iter_mut().for_each(|r| *r *= *r);
+        let mut i = 0;
+        while i < M {
+            let mut j = 0;
+            while j < N {
+                result[j] = Self(Self::montyred(result[j].0 as u128 * result[j].0 as u128));
+                j += 1;
+            }
+            i += 1;
         }
-        result.iter_mut().zip(tail).for_each(|(r, t)| *r *= t);
+
+        let mut j = 0;
+        while j < N {
+            result[j] = Self(Self::montyred(result[j].0 as u128 * tail[j].0 as u128));
+            j += 1;
+        }
         result
     }
 
     /// Get a generator for the entire field
-    pub fn generator() -> Self {
+    pub const fn generator() -> Self {
         BFieldElement::new(7)
     }
 
     #[inline]
-    pub fn lift(&self) -> XFieldElement {
+    pub const fn lift(&self) -> XFieldElement {
         XFieldElement::new_const(*self)
     }
 
@@ -138,25 +135,27 @@ impl BFieldElement {
     }
 
     #[inline]
-    fn canonical_representation(&self) -> u64 {
+    const fn canonical_representation(&self) -> u64 {
         Self::montyred(self.0 as u128)
     }
 
     #[must_use]
     #[inline]
-    pub fn mod_pow(&self, exp: u64) -> Self {
+    pub const fn mod_pow(&self, exp: u64) -> Self {
         // Special case for handling 0^0 = 1
         if exp == 0 {
-            return BFieldElement::one();
+            return BFieldElement::new(1);
         }
 
-        let mut acc = BFieldElement::one();
+        let mut acc = BFieldElement::new(1);
         let bit_length = u64::BITS - exp.leading_zeros();
-        for i in 0..bit_length {
-            acc = acc * acc;
+        let mut i = 0;
+        while i < bit_length {
+            acc = Self(Self::montyred(acc.0 as u128 * acc.0 as u128));
             if exp & (1 << (bit_length - 1 - i)) != 0 {
-                acc *= *self;
+                acc = Self(Self::montyred(acc.0 as u128 * self.0 as u128));
             }
+            i += 1;
         }
 
         acc
@@ -188,20 +187,20 @@ impl BFieldElement {
 
     /// Return the raw bytes or 8-bit chunks of the Montgomery
     /// representation, in little-endian byte order
-    pub fn raw_bytes(&self) -> [u8; 8] {
+    pub const fn raw_bytes(&self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
 
     /// Take a slice of 8 bytes and interpret it as an integer in
     /// little-endian byte order, and cast it to a BFieldElement
     /// in Montgomery representation
-    pub fn from_raw_bytes(bytes: &[u8; 8]) -> Self {
+    pub const fn from_raw_bytes(bytes: &[u8; 8]) -> Self {
         Self(u64::from_le_bytes(*bytes))
     }
 
     /// Return the raw 16-bit chunks of the Montgomery
     /// representation, in little-endian chunk order
-    pub fn raw_u16s(&self) -> [u16; 4] {
+    pub const fn raw_u16s(&self) -> [u16; 4] {
         [
             (self.0 & 0xffff) as u16,
             ((self.0 >> 16) & 0xffff) as u16,
@@ -213,7 +212,7 @@ impl BFieldElement {
     /// Take a slice of 4 16-bit chunks and interpret it as an integer in
     /// little-endian chunk order, and cast it to a BFieldElement
     /// in Montgomery representation
-    pub fn from_raw_u16s(chunks: &[u16; 4]) -> Self {
+    pub const fn from_raw_u16s(chunks: &[u16; 4]) -> Self {
         Self(
             ((chunks[3] as u64) << 48)
                 | ((chunks[2] as u64) << 32)
@@ -319,10 +318,12 @@ impl Inverse for BFieldElement {
         );
 
         #[inline(always)]
-        fn exp(base: BFieldElement, exponent: u64) -> BFieldElement {
+        const fn exp(base: BFieldElement, exponent: u64) -> BFieldElement {
             let mut res = base;
-            for _ in 0..exponent {
-                res *= res
+            let mut i = 0;
+            while i < exponent {
+                res = Self(BFieldElement::montyred(res.0 as u128 * res.0 as u128));
+                i += 1;
             }
             res
         }
@@ -393,20 +394,24 @@ impl FromVecu8 for BFieldElement {
 impl FiniteField for BFieldElement {}
 
 impl Zero for BFieldElement {
+    #[inline]
     fn zero() -> Self {
         BFieldElement::new(0)
     }
 
+    #[inline]
     fn is_zero(&self) -> bool {
         self.canonical_representation() == 0
     }
 }
 
 impl One for BFieldElement {
+    #[inline]
     fn one() -> Self {
         BFieldElement::new(1)
     }
 
+    #[inline]
     fn is_one(&self) -> bool {
         self.canonical_representation() == 1
     }
@@ -532,6 +537,7 @@ impl PrimitiveRootOfUnity for BFieldElement {
 #[cfg(test)]
 mod b_prime_field_element_test {
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::Hasher;
 
     use crate::shared_math::b_field_element::*;
     use crate::shared_math::other::{random_elements, random_elements_array, xgcd};
@@ -1009,6 +1015,24 @@ mod b_prime_field_element_test {
         assert_eq!(2, a_factor);
         assert_eq!(-1, b_factor);
         assert_eq!(expected_gcd_ab, a_factor * a + b_factor * b);
+    }
+
+    #[test]
+    fn mod_pow_test_powers_of_two() {
+        let two = BFieldElement::new(2);
+        // 2^63 < 2^64, so no wrap-around of B-field element
+        for i in 0..64 {
+            assert_eq!(BFieldElement::new(1 << i), two.mod_pow(i));
+        }
+    }
+
+    #[test]
+    fn mod_pow_test_powers_of_three() {
+        let three = BFieldElement::new(3);
+        // 3^40 < 2^64, so no wrap-around of B-field element
+        for i in 0..41 {
+            assert_eq!(BFieldElement::new(3u64.pow(i as u32)), three.mod_pow(i));
+        }
     }
 
     #[test]

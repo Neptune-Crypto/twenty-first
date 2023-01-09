@@ -11,7 +11,7 @@ use twenty_first::shared_math::{ntt, polynomial};
 fn lagrange_interpolation(c: &mut Criterion) {
     let mut group = c.benchmark_group("lagrange_interpolation");
 
-    let log2_of_sizes: Vec<usize> = vec![3, 4, 7, 10, 12, 14];
+    let log2_of_sizes: Vec<usize> = vec![10, 14];
 
     // Benchmarking forward ntt on BFieldElements
     for &log2_of_size in log2_of_sizes.iter() {

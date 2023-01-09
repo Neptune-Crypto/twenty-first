@@ -6,8 +6,8 @@ use twenty_first::shared_math::traits::Inverse;
 
 /// Run with `cargo criterion --bench inverse`
 fn inverse(c: &mut Criterion) {
-    let mut group = c.benchmark_group("inverses");
-    group.sample_size(64); // runs
+    let mut group = c.benchmark_group("Inverses");
+    group.sample_size(10); // runs
     let count = 1024 * 1024; // count of elements to be inversed per run
 
     let rnd_elems: Vec<BFieldElement> = random_elements(count);
