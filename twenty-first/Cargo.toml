@@ -65,10 +65,6 @@ emojihash-rs = "0.2"
 get-size = { version = "^0.1", features = ["derive"] }
 
 [[bench]]
-name = "polynomial_square"
-harness = false
-
-[[bench]]
 name = "rescue_prime_regular"
 harness = false
 

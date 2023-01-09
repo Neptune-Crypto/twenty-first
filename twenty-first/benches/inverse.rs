@@ -8,7 +8,7 @@ use twenty_first::timing_reporter::TimingReporter;
 /// Run with `cargo criterion --bench inverse`
 fn inverse(c: &mut Criterion) {
     let mut group = c.benchmark_group("Inverses");
-    group.sample_size(64); // runs
+    group.sample_size(10); // runs
     let count = 1024 * 1024; // count of elements to be inversed per run
 
     let mut timer = TimingReporter::start();
