@@ -397,20 +397,24 @@ impl FromVecu8 for BFieldElement {
 impl FiniteField for BFieldElement {}
 
 impl Zero for BFieldElement {
+    #[inline]
     fn zero() -> Self {
         BFIELD_ZERO
     }
 
+    #[inline]
     fn is_zero(&self) -> bool {
         self.canonical_representation() == 0
     }
 }
 
 impl One for BFieldElement {
+    #[inline]
     fn one() -> Self {
         BFIELD_ONE
     }
 
+    #[inline]
     fn is_one(&self) -> bool {
         self.canonical_representation() == 1
     }
