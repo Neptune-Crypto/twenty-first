@@ -10,7 +10,7 @@ use super::shared::{calculate_new_peaks_from_leaf_mutation, right_lineage_length
 use super::shared::{left_sibling, right_sibling};
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::mmr::shared::leaf_index_to_mt_index;
+use crate::util_types::mmr::shared::leaf_index_to_mt_index_and_peak_index;
 use crate::util_types::shared::bag_peaks;
 use crate::utils::has_unique_elements;
 
@@ -253,7 +253,8 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             }
 
             // Update the peak
-            let (_, peak_index) = leaf_index_to_mt_index(ap.leaf_index, self.count_leaves());
+            let (_, peak_index) =
+                leaf_index_to_mt_index_and_peak_index(ap.leaf_index, self.count_leaves());
             self.peaks[peak_index as usize] = acc_hash;
         }
 

@@ -13,8 +13,9 @@ use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
 use super::shared::{
     get_authentication_path_node_indices, get_peak_heights_and_peak_node_indices,
-    leaf_count_to_node_count, leaf_index_to_mt_index, leaf_index_to_node_index, left_sibling,
-    node_indices_added_by_append, parent, right_lineage_length_and_own_height, right_sibling,
+    leaf_count_to_node_count, leaf_index_to_mt_index_and_peak_index, leaf_index_to_node_index,
+    left_sibling, node_indices_added_by_append, parent, right_lineage_length_and_own_height,
+    right_sibling,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,7 +77,8 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         leaf_hash: &Digest,
         leaf_count: u128,
     ) -> (bool, Option<Digest>) {
-        let (mut mt_index, peak_index) = leaf_index_to_mt_index(self.leaf_index, leaf_count);
+        let (mut mt_index, peak_index) =
+            leaf_index_to_mt_index_and_peak_index(self.leaf_index, leaf_count);
 
         let mut acc_hash: Digest = leaf_hash.to_owned();
         for hash in self.authentication_path.iter() {
