@@ -44,6 +44,23 @@ where
     }
 }
 
+impl<H, M> PartialEq for MerkleTree<H, M>
+where
+    H: AlgebraicHasher,
+    M: MerkleTreeMaker<H>,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.nodes == other.nodes && self._hasher == other._hasher && self._maker == other._maker
+    }
+}
+
+impl<H, M> Eq for MerkleTree<H, M>
+where
+    H: AlgebraicHasher,
+    M: MerkleTreeMaker<H>,
+{
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct PartialAuthenticationPath<Digest>(pub Vec<Option<Digest>>);
 
@@ -476,6 +493,50 @@ where
         }
         result
     }
+
+    /// Merges two existing MerkleTrees of same size into one.
+    pub fn merge(
+        left: &MerkleTree<H, CpuParallel>,
+        right: &MerkleTree<H, CpuParallel>,
+    ) -> MerkleTree<H, CpuParallel> {
+        assert_eq!(left.nodes.len(), right.nodes.len());
+        assert!(2 <= left.nodes.len());
+        let m_size = 2 * left.nodes.len();
+
+        let mut result = vec![left.nodes[0]; m_size];
+        // write new root
+        let left_root = left.nodes[1];
+        let right_root = right.nodes[1];
+        let merge_root = H::hash_pair(&left_root, &right_root);
+        result[1] = merge_root;
+
+        let mut level_width = 1;
+        let mut l = 1;
+        let mut r = 1;
+        let mut m = 2;
+        while m < m_size {
+            for _ in 0..level_width {
+                result[m] = left.nodes[l];
+                m += 1;
+                l += 1;
+            }
+            for _ in 0..level_width {
+                result[m] = right.nodes[r];
+                m += 1;
+                r += 1;
+            }
+            level_width <<= 1;
+        }
+        MerkleTree::<H, CpuParallel> {
+            nodes: result,
+            _hasher: PhantomData,
+            _maker: PhantomData,
+        }
+    }
+
+    pub fn verify_consistency(&self) -> bool {
+        todo!()
+    }
 }
 
 #[derive(Debug)]
@@ -716,6 +777,7 @@ mod merkle_tree_test {
     use crate::test_shared::corrupt_digest;
     use crate::util_types::algebraic_hasher::Hashable;
     use itertools::Itertools;
+    use num_traits::Zero;
     use rand::{Rng, RngCore};
     use std::iter::zip;
 
@@ -1644,5 +1706,40 @@ mod merkle_tree_test {
         type MT = MerkleTree<H, M>;
 
         MT::root_from_arbitrary_number_of_digests(&[]);
+    }
+
+    #[test]
+    fn merge_tree_test() {
+        type H = RescuePrimeRegular;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
+        let z = BFieldElement::zero();
+
+        let left_leaves: Vec<Digest> = (0..4)
+            .map(|x| {
+                let x_bfe = BFieldElement::new(x);
+                Digest::new([z, z, z, z, x_bfe])
+            })
+            .collect();
+
+        let right_leaves: Vec<Digest> = (4..8)
+            .map(|x| {
+                let x_bfe = BFieldElement::new(x);
+                Digest::new([z, z, z, z, x_bfe])
+            })
+            .collect();
+
+        let merged_leaves: Vec<Digest> = (0..8)
+            .map(|x| {
+                let x_bfe = BFieldElement::new(x);
+                Digest::new([z, z, z, z, x_bfe])
+            })
+            .collect();
+
+        let left_mt: MT = M::from_digests(&left_leaves);
+        let right_mt: MT = M::from_digests(&right_leaves);
+        let merged_mt: MT = M::from_digests(&merged_leaves);
+
+        assert_eq!(merged_mt, MerkleTree::<H, M>::merge(&left_mt, &right_mt));
     }
 }
