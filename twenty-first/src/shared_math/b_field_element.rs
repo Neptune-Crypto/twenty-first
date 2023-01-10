@@ -221,11 +221,13 @@ impl BFieldElement {
         )
     }
 
+    #[inline]
     pub fn raw_u128(&self) -> u128 {
         self.0.into()
     }
 
-    pub fn from_raw_u64(e: u64) -> BFieldElement {
+    #[inline]
+    pub const fn from_raw_u64(e: u64) -> BFieldElement {
         BFieldElement(e)
     }
 }
