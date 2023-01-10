@@ -534,8 +534,11 @@ where
         }
     }
 
-    pub fn verify_consistency(&self) -> bool {
-        todo!()
+    /// Verifies that a Merkle Tree's internal nodes are computed correctly.
+    pub fn check_consistency(&self) -> bool {
+        let leaves = self.get_all_leaves();
+        let mt = M::from_digests(&leaves);
+        *self == mt
     }
 }
 
@@ -1741,5 +1744,24 @@ mod merkle_tree_test {
         let merged_mt: MT = M::from_digests(&merged_leaves);
 
         assert_eq!(merged_mt, MerkleTree::<H, M>::merge(&left_mt, &right_mt));
+    }
+
+    #[test]
+    fn check_consistency_test() {
+        type H = RescuePrimeRegular;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
+        let z = BFieldElement::zero();
+
+        let leaves: Vec<Digest> = (0..64)
+            .map(|x| {
+                let x_bfe = BFieldElement::new(x);
+                Digest::new([z, z, z, z, x_bfe])
+            })
+            .collect();
+
+        let mt: MT = M::from_digests(&leaves);
+
+        assert!(mt.check_consistency());
     }
 }
