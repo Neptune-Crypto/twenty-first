@@ -927,10 +927,10 @@ impl RescuePrimeRegular {
 
         // S-box
         // for i in 0..STATE_SIZE {
-        //     self.state[i] = self.state[i].mod_pow_u64(ALPHA);
+        //     sponge.state[i] = sponge.state[i].mod_pow(ALPHA);
         // }
         //
-        sponge.state = Self::batch_mod_pow_alpha(sponge.state);
+        //sponge.state = Self::batch_mod_pow_alpha(sponge.state);
 
         // MDS matrix
         let mut v: [BFieldElement; STATE_SIZE] = [BFieldElement::from(0u64); STATE_SIZE];
@@ -949,7 +949,7 @@ impl RescuePrimeRegular {
 
         // Inverse S-box
         // for i in 0..STATE_SIZE {
-        //     self.state[i] = self.state[i].mod_pow_u64(ALPHA_INV);
+        //     sponge.state[i] = sponge.state[i].mod_pow(ALPHA_INV);
         // }
         //
         // self.state = Self::batch_mod_pow(self.state, ALPHA_INV);
@@ -1005,28 +1005,25 @@ impl RescuePrimeRegular {
     /// and as many 0 ∈ Fp elements as required to make the number of input elements
     /// a multiple of `RATE`.
     pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
-        let mut sponge = RescuePrimeRegularState::new();
+        //let mut sponge = RescuePrimeRegularState::new();
 
-        // pad input
-        let mut padded_input = input.to_vec();
-        padded_input.push(BFieldElement::one());
-        while padded_input.len() % RATE != 0 {
-            padded_input.push(BFieldElement::zero());
-        }
+        let padded_input = [
+            input,
+            &[BFieldElement::one()][..],
+            &vec![BFieldElement::zero(); (RATE - (input.len() + 1) % RATE) % RATE],
+        ]
+        .concat();
 
-        // absorb
-        while !padded_input.is_empty() {
-            for (sponge_state_element, input_element) in sponge
-                .state
-                .iter_mut()
-                .take(RATE)
-                .zip_eq(padded_input.iter().take(RATE))
-            {
-                *sponge_state_element += input_element.to_owned();
-            }
-            padded_input.drain(..RATE);
-            Self::xlix(&mut sponge);
-        }
+        let sponge = padded_input.chunks_exact(RATE).fold(
+            RescuePrimeRegularState::new(),
+            |mut sponge, chunk| {
+                for i in 0..RATE {
+                    sponge.state[i] += chunk[i]
+                }
+                Self::xlix(&mut sponge);
+                sponge
+            },
+        );
 
         // squeeze once
         sponge.state[..5].try_into().unwrap()
@@ -1091,6 +1088,7 @@ impl AlgebraicHasher for RescuePrimeRegular {
 
 #[cfg(test)]
 mod rescue_prime_regular_tests {
+    use criterion::profiler::ExternalProfiler;
     use itertools::Itertools;
 
     use crate::shared_math::other::random_elements_array;
@@ -1421,5 +1419,51 @@ mod rescue_prime_regular_tests {
             let output_b = RescuePrimeRegular::hash_10(&input);
             assert_eq!(output_a, output_b);
         }
+    }
+
+    #[test]
+    fn single() {
+        let input: [BFieldElement; 10] = [0; 10].map(BFieldElement::new);
+
+        let expected: [BFieldElement; 5] = [
+            13772361690486541727,
+            13930107128811878860,
+            10372771888229343819,
+            3089663060285256636,
+            13524175591068575265,
+        ]
+        .map(BFieldElement::new);
+
+        let actual = RescuePrimeRegular::hash_10(&input);
+        assert_eq!(expected, actual[..5]);
+    }
+
+    #[test]
+    fn xlix() {
+        let mut sponge = RescuePrimeRegularState {
+            state: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(BFieldElement::new),
+        };
+
+        let expected = [
+            BFieldElement::new(12540160971320428993),
+            BFieldElement::new(12715796236381522033),
+            BFieldElement::new(17625421765656277400),
+            BFieldElement::new(4287567932922685320),
+            BFieldElement::new(18131101139378981652),
+            BFieldElement::new(2583394647818783777),
+            BFieldElement::new(4666179056099342595),
+            BFieldElement::new(14808635022483777923),
+            BFieldElement::new(3023021651988000964),
+            BFieldElement::new(17034129237592691113),
+            BFieldElement::new(8180556657687271803),
+            BFieldElement::new(12693918936561225470),
+            BFieldElement::new(3818391970775134817),
+            BFieldElement::new(16858233916294722342),
+            BFieldElement::new(18304560619712925115),
+            BFieldElement::new(10380712539835648741),
+        ];
+
+        RescuePrimeRegular::xlix_round(&mut sponge, 0);
+        assert_eq!(expected, sponge.state);
     }
 }
