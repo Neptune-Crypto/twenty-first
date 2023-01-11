@@ -537,8 +537,8 @@ where
     /// Verifies that a Merkle Tree's internal nodes are computed correctly.
     pub fn check_consistency(&self) -> bool {
         let leaves = self.get_all_leaves();
-        let mt = M::from_digests(&leaves);
-        *self == mt
+        let mt: MerkleTree<H, CpuParallel> = CpuParallel::from_digests(&leaves);
+        *self.nodes == mt.nodes
     }
 }
 
