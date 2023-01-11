@@ -1,14 +1,15 @@
+use std::convert::TryFrom;
+use std::fmt::Display;
+use std::iter::Sum;
+use std::ops::{Add, Div, Mul, Rem, Sub};
+
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
+use rand::Rng;
+use rand_distr::{Distribution, Standard};
 use serde_big_array;
 use serde_big_array::BigArray;
 use serde_derive::{Deserialize, Serialize};
-use std::{
-    convert::TryFrom,
-    fmt::Display,
-    iter::Sum,
-    ops::{Add, Div, Mul, Rem, Sub},
-};
 
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::util_types::algebraic_hasher::Hashable;
@@ -295,6 +296,13 @@ impl<const N: usize> Mul for U32s<N> {
 impl<const N: usize> Sum for U32s<N> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::zero(), |a, b| a + b)
+    }
+}
+
+impl<const N: usize> Distribution<U32s<N>> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> U32s<N> {
+        let values = rng.sample::<[u32; N], Standard>(Standard);
+        U32s { values }
     }
 }
 
