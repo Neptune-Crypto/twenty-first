@@ -339,7 +339,9 @@ impl<const N: usize> Hashable for U32s<N> {
 
 #[cfg(test)]
 mod u32s_tests {
-    use rand::{Rng, RngCore};
+    use rand::Rng;
+
+    use crate::shared_math::other::random_elements;
 
     use super::*;
 
@@ -544,7 +546,7 @@ mod u32s_tests {
 
     #[test]
     fn mul_two_div_two_pbt() {
-        let vals = get_u32s::<4>(100, Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF]));
+        let vals = random_masked_u32s(100, [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF]);
         for val in vals {
             let mut calculated = val;
             calculated.mul_two();
@@ -555,18 +557,16 @@ mod u32s_tests {
 
     #[test]
     fn identity_mul_test() {
-        let masks: [Option<[u32; 4]>; 4] = [
-            Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF]),
-            Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x0]),
-            Some([0xFFFFFFFF, 0xFFFFFFFF, 0x0, 0x0]),
-            Some([0xFFFFFFFF, 0x0, 0x0, 0x0]),
+        let masks: Vec<[u32; 4]> = vec![
+            [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF],
+            [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x0],
+            [0xFFFFFFFF, 0xFFFFFFFF, 0x0, 0x0],
+            [0xFFFFFFFF, 0x0, 0x0, 0x0],
         ];
-        let mut rhs: U32s<4>;
         for (i, mask) in masks.into_iter().enumerate() {
-            // for i in 0..4 {
-            rhs = U32s::new([0; 4]);
+            let mut rhs = U32s::new([0; 4]);
             rhs.values[i] = 1u32;
-            let vals = get_u32s::<4>(100, mask);
+            let vals = random_masked_u32s(100, mask);
             for val in vals {
                 let mut expected = val;
                 expected.values.rotate_right(i);
@@ -578,7 +578,7 @@ mod u32s_tests {
     #[test]
     fn div_mul_pbt() {
         let count = 40;
-        let vals: Vec<U32s<4>> = get_u32s::<4>(2 * count, None);
+        let vals: Vec<U32s<4>> = random_elements(2 * count);
         for i in 0..count {
             let (quot, rem) = vals[2 * i].rem_div(&vals[2 * i + 1]);
             assert_eq!(vals[2 * i], quot * vals[2 * i + 1] + rem);
@@ -588,8 +588,7 @@ mod u32s_tests {
         }
 
         // Restrict divisors to 2^64, so quotients are usually in the range of 2^64
-        let divisors: Vec<U32s<4>> =
-            get_u32s::<4>(2 * count, Some([0xFFFFFFFF, 0xFFFFFFFF, 0x00, 0x00]));
+        let divisors = random_masked_u32s(2 * count, [0xFFFFFFFF, 0xFFFFFFFF, 0x00, 0x00]);
         for i in 0..2 * count {
             let (quot, rem) = vals[i].rem_div(&divisors[i]);
             assert_eq!(vals[i], quot * divisors[i] + rem);
@@ -621,7 +620,7 @@ mod u32s_tests {
     #[test]
     fn biguinteger_conversion_pbt() {
         let count = 100;
-        let inputs = get_u32s::<5>(count, None);
+        let inputs: Vec<U32s<5>> = random_elements(count);
         for input in inputs {
             let biguint: BigUint = input.into();
             let back_again: U32s<5> = biguint.into();
@@ -632,10 +631,8 @@ mod u32s_tests {
     #[test]
     fn sub_add_pbt() {
         let count = 100;
-        let inputs = get_u32s::<4>(
-            2 * count,
-            Some([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF]),
-        );
+        let mask = [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x7FFFFFFF];
+        let inputs = random_masked_u32s(2 * count, mask);
 
         let zero = U32s::<4>::zero();
         let one = U32s::<4>::one();
@@ -668,7 +665,7 @@ mod u32s_tests {
     #[test]
     fn div_2_pbt() {
         let count = 100;
-        let vals: Vec<U32s<4>> = get_u32s::<4>(count, None);
+        let vals: Vec<U32s<4>> = random_elements(count);
         for val in vals {
             let even: bool = (val.values[0] & 0x00000001u32) == 0;
             let mut calculated = val;
@@ -687,7 +684,7 @@ mod u32s_tests {
         let outer_count = 100;
         let inner_count = 20;
         let mut rng = rand::thread_rng();
-        let vals: Vec<U32s<4>> = get_u32s::<4>(outer_count, None);
+        let vals: Vec<U32s<4>> = random_elements(outer_count);
         for mut val in vals {
             let bit_value: bool = rng.gen();
             for _ in 0..inner_count {
@@ -698,29 +695,16 @@ mod u32s_tests {
         }
     }
 
-    fn get_u32s<const N: usize>(count: usize, and_mask: Option<[u32; N]>) -> Vec<U32s<N>> {
-        let mut rng = rand::thread_rng();
-        let mut rets: Vec<U32s<N>> = vec![];
-        for _ in 0..count {
-            let mut a: U32s<N> = U32s::new([0; N]);
-            for i in 0..N {
-                a.values[i] = rng.next_u32();
+    fn random_masked_u32s<const N: usize>(count: usize, and_mask: [u32; N]) -> Vec<U32s<N>> {
+        let mut elems: Vec<U32s<N>> = random_elements(count);
+
+        for elem in elems.iter_mut() {
+            for (value, mask) in elem.values.iter_mut().zip(and_mask) {
+                *value &= mask;
             }
-
-            a = match and_mask {
-                None => a,
-                Some(mask) => {
-                    (0..N).for_each(|i| {
-                        a.values[i] &= mask[i];
-                    });
-                    a
-                }
-            };
-
-            rets.push(a);
         }
 
-        rets
+        elems
     }
 
     #[test]
