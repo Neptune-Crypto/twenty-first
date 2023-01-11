@@ -14,7 +14,7 @@ use crate::shared_math::traits::FromVecu8;
 use crate::util_types::emojihash_trait::Emojihash;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct Digest([BFieldElement; DIGEST_LENGTH]);
+pub struct Digest(pub [BFieldElement; DIGEST_LENGTH]);
 // FIXME: Make Digest a record instead of a tuple.
 
 impl GetSize for Digest {
