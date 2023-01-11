@@ -495,10 +495,7 @@ where
     }
 
     /// Merges two existing MerkleTrees of same size into one.
-    pub fn merge(
-        left: &MerkleTree<H, CpuParallel>,
-        right: &MerkleTree<H, CpuParallel>,
-    ) -> MerkleTree<H, CpuParallel> {
+    pub fn merge(left: &MerkleTree<H, M>, right: &MerkleTree<H, M>) -> MerkleTree<H, CpuParallel> {
         assert_eq!(left.nodes.len(), right.nodes.len());
         assert!(2 <= left.nodes.len());
         let m_size = 2 * left.nodes.len();
