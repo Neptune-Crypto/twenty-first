@@ -4,11 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::traits::FiniteField;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
+use crate::util_types::algebraic_hasher::{AlgebraicHasher, INPUT_LENGTH, OUTPUT_LENGTH};
 
-use super::rescue_prime_digest::Digest;
+use super::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
-pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
 pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;
@@ -1078,15 +1077,12 @@ impl RescuePrimeRegular {
 }
 
 impl AlgebraicHasher for RescuePrimeRegular {
-    fn hash_slice(elements: &[BFieldElement]) -> Digest {
-        Digest::new(RescuePrimeRegular::hash_varlen(elements))
+    fn hash_op(input: &[BFieldElement; INPUT_LENGTH]) -> [BFieldElement; OUTPUT_LENGTH] {
+        RescuePrimeRegular::hash_10(input)
     }
 
-    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
-        let mut input = [BFIELD_ZERO; 10];
-        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
-        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
-        Digest::new(RescuePrimeRegular::hash_10(&input))
+    fn hash_slice(elements: &[BFieldElement]) -> Digest {
+        Digest::new(RescuePrimeRegular::hash_varlen(elements))
     }
 }
 

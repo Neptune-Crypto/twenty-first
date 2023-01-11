@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::traits::FiniteField;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
+use crate::util_types::algebraic_hasher::{AlgebraicHasher, INPUT_LENGTH, OUTPUT_LENGTH};
 
 use super::rescue_prime_digest::Digest;
 
@@ -816,15 +816,12 @@ impl RescuePrimeOptimized {
 }
 
 impl AlgebraicHasher for RescuePrimeOptimized {
-    fn hash_slice(elements: &[BFieldElement]) -> Digest {
-        Digest::new(RescuePrimeOptimized::hash_varlen(elements))
+    fn hash_op(input: &[BFieldElement; INPUT_LENGTH]) -> [BFieldElement; OUTPUT_LENGTH] {
+        RescuePrimeOptimized::hash_10(input)
     }
 
-    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
-        let mut input = [BFieldElement::zero(); 10];
-        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
-        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
-        Digest::new(RescuePrimeOptimized::hash_10(&input))
+    fn hash_slice(elements: &[BFieldElement]) -> Digest {
+        Digest::new(RescuePrimeOptimized::hash_varlen(elements))
     }
 }
 

@@ -9,6 +9,7 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::iter::zip;
+use twenty_first::shared_math::rescue_prime_digest::DIGEST_LENGTH;
 
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::fri::Fri;

@@ -2,12 +2,38 @@ use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIter
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
 use crate::shared_math::other;
-use crate::shared_math::rescue_prime_digest::Digest;
+use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 use crate::shared_math::x_field_element::XFieldElement;
 
+pub const INPUT_LENGTH: usize = 10;
+pub const OUTPUT_LENGTH: usize = 5;
+
 pub trait AlgebraicHasher: Clone + Send + Sync {
+    /// The `hash_op` method corresponds to the `hash` instruction in Triton VM.
+    ///
+    /// It can hash up to `INPUT_LENGTH` elements at once and returns a
+    /// part of the sponge of size `OUTPUT_LENGTH`.
+    fn hash_op(input: &[BFieldElement; INPUT_LENGTH]) -> [BFieldElement; OUTPUT_LENGTH];
+
+    /// The `hash_slice` method has no correspondence in Triton VM.
+    ///
+    /// It can hash a variable amount of elements by gradually feeding the sponge.
     fn hash_slice(elements: &[BFieldElement]) -> Digest;
-    fn hash_pair(left: &Digest, right: &Digest) -> Digest;
+
+    /// The ´hash_pair` method is defined in terms of `hash_op`.
+    ///
+    /// It interprets `INPUT_LENGTH` number of `BFieldElement`s as two `Digest`
+    /// and `OUTPUT_LENGTH` number of `BFieldElement`s as one `Digest`.
+    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+        let mut input = [BFIELD_ZERO; INPUT_LENGTH];
+        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
+        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
+        Digest::from_hash_op(Self::hash_op(&input))
+    }
+
+    /// TODO: The `hash` method is currently defined in terms of `hash_slice`,
+    /// but since Triton VM does not have `hash_slice`, either Triton VM needs
+    /// support for this, or `hash` needs to use `hash_op` instead.
     fn hash<T: Hashable>(item: &T) -> Digest {
         Self::hash_slice(&item.to_sequence())
     }
@@ -145,7 +171,7 @@ mod algebraic_hasher_tests {
     use num_traits::Zero;
     use rand::Rng;
 
-    use crate::shared_math::rescue_prime_regular::DIGEST_LENGTH;
+    use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;
