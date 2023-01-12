@@ -676,7 +676,7 @@ mod mmr_test {
         for _ in 0..10000 {
             let rand = rng.next_u64();
             println!("{rand}");
-            let rll = right_lineage_length(rand as u128) as u32;
+            let rll = right_lineage_length(rand as u128);
             let rac = right_lineage_length_and_own_height(rand as u128).0;
             assert_eq!(rac, rll);
         }

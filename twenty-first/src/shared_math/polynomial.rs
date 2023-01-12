@@ -2610,7 +2610,7 @@ mod test_polynomials {
 
     #[test]
     pub fn polynomial_divide_test() {
-        let minus_one = BFieldElement::QUOTIENT - 1;
+        let minus_one = BFieldElement::P - 1;
         let zero = BFieldElement::zero();
         let one = BFieldElement::one();
         let two = BFieldElement::new(2);

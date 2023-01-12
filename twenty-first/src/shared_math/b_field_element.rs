@@ -73,10 +73,10 @@ impl BFieldElement {
     pub const BYTES: usize = 8;
 
     // 2^64 - 2^32 + 1
-    pub const QUOTIENT: u64 = 0xffff_ffff_0000_0001u64;
-    pub const MAX: u64 = Self::QUOTIENT - 1;
+    pub const P: u64 = 0xffff_ffff_0000_0001u64;
+    pub const MAX: u64 = Self::P - 1;
 
-    /// 2^128 mod QUOTIENT; this is used for conversion of elements into Montgomery representation.
+    /// 2^128 mod P; this is used for conversion of elements into Montgomery representation.
     const R2: u64 = 0xFFFFFFFE00000001;
 
     #[inline]
@@ -182,7 +182,7 @@ impl BFieldElement {
 
         // See https://github.com/Neptune-Crypto/twenty-first/pull/70 for various ways
         // of expressing this.
-        r.wrapping_sub((1 + !Self::QUOTIENT) * c as u64)
+        r.wrapping_sub((1 + !Self::P) * c as u64)
     }
 
     /// Return the raw bytes or 8-bit chunks of the Montgomery
@@ -245,8 +245,8 @@ impl fmt::Display for BFieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let canonical_value = Self::canonical_representation(self);
         let cutoff = 256;
-        if canonical_value >= Self::QUOTIENT - cutoff {
-            write!(f, "-{}", Self::QUOTIENT - canonical_value)
+        if canonical_value >= Self::P - cutoff {
+            write!(f, "-{}", Self::P - canonical_value)
         } else if canonical_value <= cutoff {
             write!(f, "{}", canonical_value)
         } else {
@@ -426,7 +426,7 @@ impl Add for BFieldElement {
     #[inline(always)]
     fn add(self, rhs: Self) -> Self {
         // Compute a + b = a - (p - b).
-        let (x1, c1) = self.0.overflowing_sub(Self::QUOTIENT - rhs.0);
+        let (x1, c1) = self.0.overflowing_sub(Self::P - rhs.0);
 
         // The following if/else is equivalent to the commented-out code below but
         // the if/else was found to be faster.
@@ -435,7 +435,7 @@ impl Add for BFieldElement {
         // See
         // https://github.com/Neptune-Crypto/twenty-first/pull/70
         if c1 {
-            Self(x1.wrapping_add(Self::QUOTIENT))
+            Self(x1.wrapping_add(Self::P))
         } else {
             Self(x1)
         }
@@ -495,14 +495,14 @@ impl Sub for BFieldElement {
         // See: https://github.com/Neptune-Crypto/twenty-first/pull/70
         // 1st alternative:
         // if c1 {
-        //     Self(x1.wrapping_add(Self::QUOTIENT))
+        //     Self(x1.wrapping_add(Self::P))
         // } else {
         //     Self(x1)
         // }
         // 2nd alternative:
         // let adj = 0u32.wrapping_sub(c1 as u32);
         // Self(x1.wrapping_sub(adj as u64))
-        Self(x1.wrapping_sub((1 + !Self::QUOTIENT) * c1 as u64))
+        Self(x1.wrapping_sub((1 + !Self::P) * c1 as u64))
     }
 }
 
@@ -551,16 +551,16 @@ mod b_prime_field_element_test {
     #[test]
     fn display_test() {
         // Ensure that display always prints the canonical value, not a number
-        // exceeding BFieldElement::QUOTIENT
+        // exceeding BFieldElement::P
         let seven: BFieldElement = BFieldElement::new(7);
-        let seven_alt: BFieldElement = BFieldElement::new(7 + BFieldElement::QUOTIENT);
+        let seven_alt: BFieldElement = BFieldElement::new(7 + BFieldElement::P);
         assert_eq!("7", format!("{}", seven));
         assert_eq!("7", format!("{}", seven_alt));
 
-        let minus_one: BFieldElement = BFieldElement::new(BFieldElement::QUOTIENT - 1);
+        let minus_one: BFieldElement = BFieldElement::new(BFieldElement::P - 1);
         assert_eq!("-1", format!("{}", minus_one));
 
-        let minus_fifteen: BFieldElement = BFieldElement::new(BFieldElement::QUOTIENT - 15);
+        let minus_fifteen: BFieldElement = BFieldElement::new(BFieldElement::P - 15);
         assert_eq!("-15", format!("{}", minus_fifteen));
     }
 
@@ -590,7 +590,7 @@ mod b_prime_field_element_test {
         assert_eq!(a, a_converted_back);
 
         // Same but with a value above Self::MAX
-        let b = BFieldElement::new(123 + BFieldElement::QUOTIENT);
+        let b = BFieldElement::new(123 + BFieldElement::P);
         let array_b: [u8; 8] = b.into();
         assert_eq!(array_a, array_b);
 
@@ -717,9 +717,9 @@ mod b_prime_field_element_test {
 
         // With these "alt" values we verify that the degenerated representation of
         // B field elements works.
-        let one_alt = BFieldElement::new(BFieldElement::QUOTIENT + 1);
-        let two_alt = BFieldElement::new(BFieldElement::QUOTIENT + 2);
-        let three_alt = BFieldElement::new(BFieldElement::QUOTIENT + 3);
+        let one_alt = BFieldElement::new(BFieldElement::P + 1);
+        let two_alt = BFieldElement::new(BFieldElement::P + 2);
+        let three_alt = BFieldElement::new(BFieldElement::P + 3);
         assert_eq!(two_inv, BFieldElement::new(2).inverse());
         assert_eq!(three_inv, BFieldElement::new(3).inverse());
         assert_eq!(four_inv, BFieldElement::new(4).inverse());
@@ -1077,7 +1077,7 @@ mod b_prime_field_element_test {
     #[test]
     #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
     fn multiplicative_inverse_of_p() {
-        let zero = BFieldElement::new(BFieldElement::QUOTIENT);
+        let zero = BFieldElement::new(BFieldElement::P);
         zero.inverse();
     }
 
@@ -1106,7 +1106,7 @@ mod b_prime_field_element_test {
 
         // Verify that emojihash is independent of representation
         let val = BFieldElement::new(6672);
-        let same_val = BFieldElement::new(6672 + BFieldElement::QUOTIENT);
+        let same_val = BFieldElement::new(6672 + BFieldElement::P);
         assert_eq!(val, same_val);
         assert_eq!(val.emojihash(), same_val.emojihash());
     }
@@ -1180,5 +1180,39 @@ mod b_prime_field_element_test {
             }
             assert_eq!(e, BFieldElement(h));
         }
+    }
+
+    #[test]
+    fn test_fixed_inverse() {
+        // (8561862112314395584, 17307602810081694772)
+        let a = BFieldElement::new(8561862112314395584);
+        let a_inv = a.inverse();
+        let a_inv_or_0 = a.inverse_or_zero();
+        let expected = BFieldElement::new(17307602810081694772);
+        assert_eq!(a_inv, a_inv_or_0);
+        assert_eq!(a_inv, expected);
+    }
+
+    #[test]
+    fn test_fixed_modpow() {
+        let exponent = 16608971246357572739u64;
+        let base = BFieldElement::new(7808276826625786800);
+        let expected = BFieldElement::new(2288673415394035783);
+        assert_eq!(base.mod_pow_u64(exponent), expected);
+    }
+
+    #[test]
+    fn test_fixed_mul() {
+        let a = BFieldElement::new(2779336007265862836);
+        let b = BFieldElement::new(8146517303801474933);
+        let c = a * b;
+        let expected = BFieldElement::new(1857758653037316764);
+        assert_eq!(c, expected);
+
+        let a = BFieldElement::new(9223372036854775808);
+        let b = BFieldElement::new(9223372036854775808);
+        let c = a * b;
+        let expected = BFieldElement::new(18446744068340842497);
+        assert_eq!(c, expected);
     }
 }
