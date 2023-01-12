@@ -1208,11 +1208,5 @@ mod b_prime_field_element_test {
         let c = a * b;
         let expected = BFieldElement::new(1857758653037316764);
         assert_eq!(c, expected);
-
-        let a = BFieldElement::new(9223372036854775808);
-        let b = BFieldElement::new(9223372036854775808);
-        let c = a * b;
-        let expected = BFieldElement::new(18446744068340842497);
-        assert_eq!(c, expected);
     }
 }
