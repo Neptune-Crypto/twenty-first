@@ -1,11 +1,11 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use num_traits::{One, Zero};
 
+use stark_shared::proof_stream::ProofStream;
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::rescue_prime_regular::{RescuePrimeRegular, STATE_SIZE};
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 use twenty_first::timing_reporter::TimingReporter;
-use twenty_first::util_types::proof_stream::ProofStream;
 
 use stark_rescue_prime::stark_rp::StarkRp;
 

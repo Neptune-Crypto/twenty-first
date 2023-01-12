@@ -10,8 +10,9 @@ use std::error::Error;
 use std::fmt;
 use std::iter::zip;
 
+use stark_shared::fri::Fri;
+use stark_shared::proof_stream::ProofStream;
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::fri::Fri;
 use twenty_first::shared_math::mpolynomial::MPolynomial;
 use twenty_first::shared_math::ntt::intt;
 use twenty_first::shared_math::other::log_2_ceil;
@@ -31,7 +32,6 @@ use twenty_first::util_types::merkle_tree::{
     MerkleTree, PartialAuthenticationPath, SaltedMerkleTree,
 };
 use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
-use twenty_first::util_types::proof_stream::ProofStream;
 
 use crate::stark_constraints::BoundaryConstraint;
 

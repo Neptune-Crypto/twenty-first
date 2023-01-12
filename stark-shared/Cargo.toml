@@ -1,15 +1,15 @@
 [package]
-name = "stark-brainfuck"
+name = "stark-shared"
 version = "0.3.0"
 authors = ["Triton Software AG"]
 edition = "2021"
 
 license = "GPL-2.0"
-description = "A Turing-complete zk-STARK engine consisting of a virtual machine, prover and verifier."
+description = "STARK-related cryptography shared between STARK tutorial implementations"
 homepage = "https://github.com/Neptune-Crypto/twenty-first"
 documentation = "https://github.com/Neptune-Crypto/twenty-first"
 repository = "https://github.com/Neptune-Crypto/twenty-first"
-readme = "../README.md"
+readme = "README.md"
 
 keywords = ["post-quantum", "algebra", "rescue-prime"]
 categories = ["cryptography", "mathematics"]
@@ -28,14 +28,10 @@ features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
 
 [dependencies]
 twenty-first = { path = "../twenty-first" }
-stark-shared = { path = "../stark-shared" }
-blake3 = "1.2"
-console = "0.15"
+bincode = "*"
+serde = { version = "1.0", features = ["derive"] }
 itertools = "0.10"
+blake3 = "1.2"
 num-traits = "0.2"
-rand = "0.8"
 rayon = "1.5"
-
-[[bench]]
-name = "stark_bf"
-harness = false
+# rand = "0.8"
