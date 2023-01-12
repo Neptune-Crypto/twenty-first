@@ -1,14 +1,13 @@
 use itertools::Itertools;
-use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::traits::FiniteField;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, INPUT_LENGTH, OUTPUT_LENGTH};
 
-use super::rescue_prime_digest::Digest;
+use super::b_field_element::{BFIELD_ONE, BFIELD_ZERO};
+use super::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
-pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
 pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;
@@ -286,7 +285,7 @@ pub struct RescuePrimeOptimizedState {
 impl RescuePrimeOptimizedState {
     fn new() -> RescuePrimeOptimizedState {
         RescuePrimeOptimizedState {
-            state: [BFieldElement::zero(); STATE_SIZE],
+            state: [BFIELD_ZERO; STATE_SIZE],
         }
     }
 }
@@ -386,7 +385,7 @@ impl RescuePrimeOptimized {
         array: [BFieldElement; STATE_SIZE],
         power: u64,
     ) -> [BFieldElement; STATE_SIZE] {
-        let mut acc = [BFieldElement::one(); STATE_SIZE];
+        let mut acc = [BFIELD_ONE; STATE_SIZE];
         for i in (0..64).rev() {
             if i != 63 {
                 Self::batch_square(&mut acc);
@@ -415,7 +414,7 @@ impl RescuePrimeOptimized {
         // outer loop iteration 1
         for j in 0..8 {
             let u = x[j];
-            let v = x[j + 8] * BFieldElement::one();
+            let v = x[j + 8] * BFIELD_ONE;
             x[j] = u + v;
             x[j + 8] = u - v;
         }
@@ -675,7 +674,7 @@ impl RescuePrimeOptimized {
 
         // MDS matrix
         // for i in 0..STATE_SIZE {
-        //     v[i] = BFieldElement::zero();
+        //     v[i] = BFIELD_ZERO;
         //     for j in 0..STATE_SIZE {
         //         v[i] += BFieldElement::from(MDS[i * STATE_SIZE + j]) * sponge.state[j];
         //     }
@@ -710,20 +709,20 @@ impl RescuePrimeOptimized {
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is equal to the rate.
-    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; 5] {
+    pub fn hash_10(input: &[BFieldElement; INPUT_LENGTH]) -> [BFieldElement; OUTPUT_LENGTH] {
         let mut sponge = RescuePrimeOptimizedState::new();
 
         // absorb once
-        sponge.state[..10].copy_from_slice(input);
+        sponge.state[..INPUT_LENGTH].copy_from_slice(input);
 
         // apply domain separation for fixed-length input
-        sponge.state[10] = BFieldElement::one();
+        sponge.state[INPUT_LENGTH] = BFIELD_ONE;
 
         // apply xlix
         Self::xlix(&mut sponge);
 
         // squeeze once
-        sponge.state[..5].try_into().unwrap()
+        sponge.state[..OUTPUT_LENGTH].try_into().unwrap()
     }
 
     /// hash_varlen hashes an arbitrary number of field elements.
@@ -741,11 +740,11 @@ impl RescuePrimeOptimized {
         // need padding?
         let mut padded_input = if input.len() % RATE != 0 {
             let mut padded_input = input.to_vec();
-            padded_input.push(BFieldElement::one());
+            padded_input.push(BFIELD_ONE);
             while padded_input.len() % RATE != 0 {
-                padded_input.push(BFieldElement::zero());
+                padded_input.push(BFIELD_ZERO);
             }
-            sponge.state[0] = BFieldElement::one();
+            sponge.state[0] = BFIELD_ONE;
             padded_input
         } else {
             input.to_vec()
@@ -773,8 +772,10 @@ impl RescuePrimeOptimized {
 
     /// trace
     /// Produces the execution trace for one invocation of XLIX
-    pub fn trace(input: &[BFieldElement; 10]) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
-        let mut trace = [[BFieldElement::zero(); STATE_SIZE]; 1 + NUM_ROUNDS];
+    pub fn trace(
+        input: &[BFieldElement; INPUT_LENGTH],
+    ) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
+        let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
         let mut sponge = RescuePrimeOptimizedState::new();
 
         // absorb
@@ -802,14 +803,14 @@ impl RescuePrimeOptimized {
     /// Computes the fixed-length hash digest and returns the trace
     /// along with it.
     pub fn hash_10_with_trace(
-        input: &[BFieldElement; 10],
+        input: &[BFieldElement; INPUT_LENGTH],
     ) -> (
-        [BFieldElement; DIGEST_LENGTH],
+        [BFieldElement; OUTPUT_LENGTH],
         [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS],
     ) {
         let trace: [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] = Self::trace(input);
-        let output: [BFieldElement; DIGEST_LENGTH] =
-            trace[NUM_ROUNDS][0..DIGEST_LENGTH].try_into().unwrap();
+        let output: [BFieldElement; OUTPUT_LENGTH] =
+            trace[NUM_ROUNDS][..OUTPUT_LENGTH].try_into().unwrap();
 
         (output, trace)
     }
@@ -827,7 +828,6 @@ impl AlgebraicHasher for RescuePrimeOptimized {
 
 #[cfg(test)]
 mod rescue_prime_optimized_tests {
-
     use crate::shared_math::other::random_elements_array;
 
     use super::*;
@@ -835,7 +835,7 @@ mod rescue_prime_optimized_tests {
     #[test]
     fn trace_consistent_test() {
         for _ in 0..10 {
-            let input: [BFieldElement; 10] = random_elements_array();
+            let input: [BFieldElement; INPUT_LENGTH] = random_elements_array();
             let (output_a, _) = RescuePrimeOptimized::hash_10_with_trace(&input);
             let output_b = RescuePrimeOptimized::hash_10(&input);
             assert_eq!(output_a, output_b);

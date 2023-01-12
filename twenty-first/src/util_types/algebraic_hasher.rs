@@ -6,7 +6,7 @@ use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 use crate::shared_math::x_field_element::XFieldElement;
 
 pub const INPUT_LENGTH: usize = 10;
-pub const OUTPUT_LENGTH: usize = 5;
+pub const OUTPUT_LENGTH: usize = 10;
 
 pub trait AlgebraicHasher: Clone + Send + Sync {
     /// The `hash_op` method corresponds to the `hash` instruction in Triton VM.

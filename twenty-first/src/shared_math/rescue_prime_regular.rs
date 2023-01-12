@@ -1,12 +1,11 @@
 use itertools::Itertools;
-use num_traits::One;
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::traits::FiniteField;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, INPUT_LENGTH, OUTPUT_LENGTH};
 
-use super::rescue_prime_digest::{Digest, DIGEST_LENGTH};
+use super::rescue_prime_digest::Digest;
 
 pub const STATE_SIZE: usize = 16;
 pub const CAPACITY: usize = 6;
@@ -902,7 +901,7 @@ impl RescuePrimeRegular {
         array: [BFieldElement; STATE_SIZE],
         power: u64,
     ) -> [BFieldElement; STATE_SIZE] {
-        let mut acc = [BFieldElement::one(); STATE_SIZE];
+        let mut acc = [BFIELD_ONE; STATE_SIZE];
         for i in (0..64).rev() {
             if i != 63 {
                 Self::batch_square(&mut acc);
@@ -983,20 +982,20 @@ impl RescuePrimeRegular {
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
-    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; 5] {
+    pub fn hash_10(input: &[BFieldElement; INPUT_LENGTH]) -> [BFieldElement; OUTPUT_LENGTH] {
         let mut sponge = RescuePrimeRegularState::new();
 
         // absorb once
-        sponge.state[..10].copy_from_slice(input);
+        sponge.state[..INPUT_LENGTH].copy_from_slice(input);
 
         // apply domain separation for fixed-length input
-        sponge.state[10] = BFIELD_ONE;
+        sponge.state[INPUT_LENGTH] = BFIELD_ONE;
 
         // apply xlix
         Self::xlix(&mut sponge);
 
         // squeeze once
-        sponge.state[..5].try_into().unwrap()
+        sponge.state[..OUTPUT_LENGTH].try_into().unwrap()
     }
 
     /// hash_varlen hashes an arbitrary number of field elements.
@@ -1004,7 +1003,7 @@ impl RescuePrimeRegular {
     /// Takes care of padding by applying the padding rule: append a single 1 ∈ Fp
     /// and as many 0 ∈ Fp elements as required to make the number of input elements
     /// a multiple of `RATE`.
-    pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
+    pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; OUTPUT_LENGTH] {
         let mut sponge = RescuePrimeRegularState::new();
 
         // pad input
@@ -1029,12 +1028,14 @@ impl RescuePrimeRegular {
         }
 
         // squeeze once
-        sponge.state[..5].try_into().unwrap()
+        sponge.state[..OUTPUT_LENGTH].try_into().unwrap()
     }
 
     /// trace
     /// Produces the execution trace for one invocation of XLIX
-    pub fn trace(input: &[BFieldElement; 10]) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
+    pub fn trace(
+        input: &[BFieldElement; INPUT_LENGTH],
+    ) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
         let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
         let mut sponge = RescuePrimeRegularState::new();
 
@@ -1063,14 +1064,14 @@ impl RescuePrimeRegular {
     /// Computes the fixed-length hash digest and returns the trace
     /// along with it.
     pub fn hash_10_with_trace(
-        input: &[BFieldElement; 10],
+        input: &[BFieldElement; INPUT_LENGTH],
     ) -> (
-        [BFieldElement; DIGEST_LENGTH],
+        [BFieldElement; OUTPUT_LENGTH],
         [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS],
     ) {
         let trace: [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] = Self::trace(input);
-        let output: [BFieldElement; DIGEST_LENGTH] =
-            trace[NUM_ROUNDS][0..DIGEST_LENGTH].try_into().unwrap();
+        let output: [BFieldElement; OUTPUT_LENGTH] =
+            trace[NUM_ROUNDS][0..OUTPUT_LENGTH].try_into().unwrap();
 
         (output, trace)
     }
@@ -1081,15 +1082,15 @@ impl AlgebraicHasher for RescuePrimeRegular {
         RescuePrimeRegular::hash_10(input)
     }
 
+    // TODO: Replace the `hash_slice` implementation with `squeeze` and `absorb`.
     fn hash_slice(elements: &[BFieldElement]) -> Digest {
-        Digest::new(RescuePrimeRegular::hash_varlen(elements))
+        Digest::from_hash_op(RescuePrimeRegular::hash_varlen(elements))
     }
 }
 
 #[cfg(test)]
 mod rescue_prime_regular_tests {
     use itertools::Itertools;
-    use num_traits::Zero;
 
     use crate::shared_math::other::random_elements_array;
 
@@ -1098,13 +1099,18 @@ mod rescue_prime_regular_tests {
     #[test]
     fn test_compliance() {
         // hash 10, first batch
-        let targets_first_batch: [[u64; 5]; 10] = [
+        let targets_first_batch: [[u64; INPUT_LENGTH]; 10] = [
             [
                 13772361690486541727,
                 13930107128811878860,
                 10372771888229343819,
                 3089663060285256636,
                 13524175591068575265,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 6189874031558670378,
@@ -1112,6 +1118,11 @@ mod rescue_prime_regular_tests {
                 11094778135221566221,
                 14014056563831415241,
                 17624827189757302581,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 8051330103982111662,
@@ -1119,6 +1130,11 @@ mod rescue_prime_regular_tests {
                 13272421194765666592,
                 10549698261930941220,
                 11916714144939538031,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 16599150548794199309,
@@ -1126,6 +1142,11 @@ mod rescue_prime_regular_tests {
                 1383032563775085972,
                 13461691265189540514,
                 5850245107934240031,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 1945888927084124766,
@@ -1133,6 +1154,11 @@ mod rescue_prime_regular_tests {
                 571115580035577760,
                 11111259412951139324,
                 5196253525869594875,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 7114248945826389783,
@@ -1140,6 +1166,11 @@ mod rescue_prime_regular_tests {
                 1725038494551646750,
                 5126322762295353904,
                 263075078948948040,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 6920355036596643958,
@@ -1147,6 +1178,11 @@ mod rescue_prime_regular_tests {
                 17849302350128548438,
                 17338513521733790109,
                 16932869691567724957,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 105964463927719565,
@@ -1154,6 +1190,11 @@ mod rescue_prime_regular_tests {
                 8894170595070814364,
                 5355551316895236465,
                 5948538211133255,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 17155306598521508982,
@@ -1161,6 +1202,11 @@ mod rescue_prime_regular_tests {
                 16093490088522805438,
                 3181770408060478711,
                 1640164811138798343,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 4347619024993392377,
@@ -1168,25 +1214,35 @@ mod rescue_prime_regular_tests {
                 4909926852610789363,
                 7049913000384061828,
                 5525683604796387635,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
         ];
 
         for (i, target) in targets_first_batch.into_iter().enumerate() {
             let expected = target.map(BFieldElement::new);
-            let mut input = [BFieldElement::zero(); 10];
+            let mut input = [BFIELD_ZERO; INPUT_LENGTH];
             input[input.len() - 1] = BFieldElement::from(i as u64);
             let actual = RescuePrimeRegular::hash_10(&input);
             assert_eq!(expected, actual);
         }
 
         // hash 10, second batch
-        let targets_second_batch: [[u64; 5]; 10] = [
+        let targets_second_batch: [[u64; INPUT_LENGTH]; 10] = [
             [
                 1161630535021658359,
                 12802704886281901257,
                 5310064968286039002,
                 16402665326204561132,
                 15530842331109449708,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 14361074708917363055,
@@ -1194,6 +1250,11 @@ mod rescue_prime_regular_tests {
                 14423563135619089510,
                 12919806918032553606,
                 1236538015722961393,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 15557076570140697692,
@@ -1201,6 +1262,11 @@ mod rescue_prime_regular_tests {
                 13484852599853983709,
                 13107035934236521262,
                 12263607846531896566,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 6606345110125563613,
@@ -1208,6 +1274,11 @@ mod rescue_prime_regular_tests {
                 10369781804093423850,
                 11406738559336087061,
                 9592587996153825778,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 6941529093020236364,
@@ -1215,6 +1286,11 @@ mod rescue_prime_regular_tests {
                 11208725571809152547,
                 11694492597767881733,
                 16029873915245617377,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 1593003208162720544,
@@ -1222,6 +1298,11 @@ mod rescue_prime_regular_tests {
                 12557012035524685001,
                 11271950808101345806,
                 9333507744968394366,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 10813877996011332235,
@@ -1229,6 +1310,11 @@ mod rescue_prime_regular_tests {
                 629292377717800414,
                 15727071196577879481,
                 4491609621508834803,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 4266637802759423528,
@@ -1236,6 +1322,11 @@ mod rescue_prime_regular_tests {
                 10064576707545119428,
                 7511635467227872433,
                 6960370489820239537,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 14498937510007389283,
@@ -1243,6 +1334,11 @@ mod rescue_prime_regular_tests {
                 11153197751373890408,
                 4310772621580754358,
                 2864799328000030300,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 6189874031558670378,
@@ -1250,24 +1346,34 @@ mod rescue_prime_regular_tests {
                 11094778135221566221,
                 14014056563831415241,
                 17624827189757302581,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
         ];
         for (i, target) in targets_second_batch.into_iter().enumerate() {
             let expected = target.map(BFieldElement::new);
-            let mut input = [BFieldElement::zero(); 10];
-            input[i] = BFieldElement::one();
+            let mut input = [BFIELD_ZERO; INPUT_LENGTH];
+            input[i] = BFIELD_ONE;
             let actual = RescuePrimeRegular::hash_10(&input);
             assert_eq!(expected, actual);
         }
 
         // hash varlen, third batch
-        let targets_third_batch: [[u64; 5]; 20] = [
+        let targets_third_batch: [[u64; INPUT_LENGTH]; 20] = [
             [
                 9954340196098770044,
                 16766478858550921719,
                 14795358262939961687,
                 5971715312175262159,
                 10621735453321362721,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 12391337510008436236,
@@ -1275,6 +1381,11 @@ mod rescue_prime_regular_tests {
                 9377428313701566093,
                 6455690240973939776,
                 17925569643122616714,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 14112140563534526715,
@@ -1282,6 +1393,11 @@ mod rescue_prime_regular_tests {
                 16277751626976027823,
                 4331384491863420413,
                 15800084865512048249,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 15410161320350300674,
@@ -1289,6 +1405,11 @@ mod rescue_prime_regular_tests {
                 1871289024748006724,
                 1120358582983879653,
                 10608258519034552134,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 1107344292722494872,
@@ -1296,6 +1417,11 @@ mod rescue_prime_regular_tests {
                 4218215235563531160,
                 7497689442794338714,
                 3900922406630849053,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 16822019589580184555,
@@ -1303,6 +1429,11 @@ mod rescue_prime_regular_tests {
                 14569641731101827620,
                 17919386380356552805,
                 7463713352054333042,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 674513153759557192,
@@ -1310,6 +1441,11 @@ mod rescue_prime_regular_tests {
                 7545202825089012468,
                 7455443267898983077,
                 11460188487338022037,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 1452905481212349824,
@@ -1317,6 +1453,11 @@ mod rescue_prime_regular_tests {
                 16799505315703203495,
                 15502476305285227202,
                 14418240163510509007,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 2169799351531593851,
@@ -1324,6 +1465,11 @@ mod rescue_prime_regular_tests {
                 12571509576917037512,
                 2730951366471393395,
                 10868840823954592153,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 5004294054773159410,
@@ -1331,6 +1477,11 @@ mod rescue_prime_regular_tests {
                 14190623520133446702,
                 16843665251688123638,
                 4543333205754908370,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 16497508931324347828,
@@ -1338,6 +1489,11 @@ mod rescue_prime_regular_tests {
                 5027352471010305075,
                 15362732119758725484,
                 13390969807239861733,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 1743559568736995800,
@@ -1345,6 +1501,11 @@ mod rescue_prime_regular_tests {
                 5763576938286686837,
                 7541138447063081288,
                 17969015713376415699,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 10441678943133242957,
@@ -1352,6 +1513,11 @@ mod rescue_prime_regular_tests {
                 18288160234755515065,
                 3671382450876247307,
                 3447450231474938402,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 11057569330409963321,
@@ -1359,6 +1525,11 @@ mod rescue_prime_regular_tests {
                 16529019269578375042,
                 1908152979369527531,
                 7121827819059879337,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 17067972955397432517,
@@ -1366,6 +1537,11 @@ mod rescue_prime_regular_tests {
                 15263972887304976204,
                 9246522127607732383,
                 17610927156233305697,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 5980270367087450085,
@@ -1373,6 +1549,11 @@ mod rescue_prime_regular_tests {
                 3198993023459349000,
                 5035257001959372883,
                 5260797048498744804,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 8542899768037601505,
@@ -1380,6 +1561,11 @@ mod rescue_prime_regular_tests {
                 2299137376555803866,
                 952010414036958775,
                 9717098700918296507,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 8231024478155080292,
@@ -1387,6 +1573,11 @@ mod rescue_prime_regular_tests {
                 191017068357133911,
                 1512051294906340420,
                 12055973608766483576,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 16653142742451850722,
@@ -1394,6 +1585,11 @@ mod rescue_prime_regular_tests {
                 4805241920959388929,
                 937662086458078174,
                 17775208482321191727,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
             [
                 14634923894397095166,
@@ -1401,6 +1597,11 @@ mod rescue_prime_regular_tests {
                 3048493836613607105,
                 2432649783604354905,
                 7424726151688166928,
+                0,
+                0,
+                0,
+                0,
+                0,
             ],
         ];
         for (i, target) in targets_third_batch.into_iter().enumerate() {
@@ -1414,7 +1615,7 @@ mod rescue_prime_regular_tests {
     #[test]
     fn trace_consistent_test() {
         for _ in 0..10 {
-            let input: [BFieldElement; 10] = random_elements_array();
+            let input: [BFieldElement; INPUT_LENGTH] = random_elements_array();
             let (output_a, _) = RescuePrimeRegular::hash_10_with_trace(&input);
             let output_b = RescuePrimeRegular::hash_10(&input);
             assert_eq!(output_a, output_b);

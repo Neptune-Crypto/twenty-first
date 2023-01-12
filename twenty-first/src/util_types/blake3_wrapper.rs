@@ -1,8 +1,5 @@
-use blake3::OUT_LEN;
-use num_traits::Zero;
-
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::rescue_prime_digest::Digest;
+use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
+use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 use super::algebraic_hasher::{INPUT_LENGTH, OUTPUT_LENGTH};
@@ -28,20 +25,23 @@ impl AlgebraicHasher for blake3::Hasher {
 /// Convert a `blake3::Hash` to a `[BFieldElement; OUTPUT_LENGTH]`.
 ///
 /// This is used by legacy STARKs as well as twenty-first unit tests.
+///
+/// **Note:** Since a `blake3::Hash` is 256 bits and `[BFieldElement; OUTPUT_LENGTH]`
+/// is closer to 640 bits, **do not use this for cryptographic purposes.**
 pub fn blake3_hash_op(digest: &blake3::Hash) -> [BFieldElement; OUTPUT_LENGTH] {
-    let bytes: &[u8; OUT_LEN] = digest.as_bytes();
-    [
-        BFieldElement::from_ne_bytes(&bytes[0..8]),
-        BFieldElement::from_ne_bytes(&bytes[8..16]),
-        BFieldElement::from_ne_bytes(&bytes[16..24]),
-        BFieldElement::from_ne_bytes(&bytes[24..32]),
-        BFieldElement::zero(),
-    ]
+    let bytes: &[u8; blake3::OUT_LEN] = digest.as_bytes();
+    let mut output = [BFIELD_ZERO; OUTPUT_LENGTH];
+    output[0] = BFieldElement::from_ne_bytes(&bytes[0..8]);
+    output[1] = BFieldElement::from_ne_bytes(&bytes[8..16]);
+    output[2] = BFieldElement::from_ne_bytes(&bytes[16..24]);
+    output[3] = BFieldElement::from_ne_bytes(&bytes[24..32]);
+    output
 }
 
 /// Convert a `blake3::Hash` to a `rescue_prime_digest::Digest`.
 ///
 /// This is used by legacy STARKs as well as twenty-first unit tests.
 pub fn from_blake3_digest(digest: &blake3::Hash) -> Digest {
-    Digest::new(blake3_hash_op(digest))
+    let output: [BFieldElement; OUTPUT_LENGTH] = blake3_hash_op(digest);
+    Digest::new((&output[..DIGEST_LENGTH]).try_into().unwrap())
 }
