@@ -77,6 +77,10 @@ name = "tip5"
 harness = false
 
 [[bench]]
+name = "poseidon"
+harness = false
+
+[[bench]]
 name = "ntt_forward"
 harness = false
 
