@@ -87,6 +87,7 @@ impl Tip5 {
     }
 
     #[allow(clippy::many_single_char_names)]
+    #[inline]
     fn ntt_noswap(x: &mut [BFieldElement]) {
         const POWERS_OF_OMEGA_BITREVERSED: [BFieldElement; 8] = [
             BFieldElement::new(1),
@@ -140,6 +141,7 @@ impl Tip5 {
     }
 
     #[allow(clippy::many_single_char_names)]
+    #[inline]
     fn intt_noswap(x: &mut [BFieldElement]) {
         const POWERS_OF_OMEGA_INVERSE: [BFieldElement; 8] = [
             BFieldElement::new(1),
@@ -341,6 +343,7 @@ impl Tip5 {
     }
 
     // permutation
+    #[inline]
     fn permutation(&self, sponge: &mut Tip5State) {
         for i in 0..NUM_ROUNDS {
             self.round(sponge, i);
