@@ -340,16 +340,19 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
     let (mut acc_mt_index, peak_index) =
         leaf_index_to_mt_index_and_peak_index(membership_proof.leaf_index, leaf_count);
     let mut acc_hash: Digest = new_leaf.to_owned();
-    for hash in membership_proof.authentication_path.iter() {
-        if acc_mt_index % 2 == 0 {
-            // node with `acc_hash` is a left child
-            acc_hash = H::hash_pair(&acc_hash, hash);
+    let mut i = 0;
+    while acc_mt_index != 1 {
+        let ap_element = membership_proof.authentication_path[i];
+        if acc_mt_index % 2 == 1 {
+            // Node with `acc_hash` is a right child
+            acc_hash = H::hash_pair(&ap_element, &acc_hash);
         } else {
-            // node is a right child
-            acc_hash = H::hash_pair(hash, &acc_hash);
+            // Node with `acc_hash` is a left child
+            acc_hash = H::hash_pair(&acc_hash, &ap_element);
         }
 
         acc_mt_index /= 2;
+        i += 1;
     }
 
     let mut calculated_peaks: Vec<Digest> = old_peaks.to_vec();

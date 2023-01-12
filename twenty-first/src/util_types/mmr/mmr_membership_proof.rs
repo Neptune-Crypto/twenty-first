@@ -8,6 +8,7 @@ use std::marker::PhantomData;
 use std::{fmt::Debug, iter::FromIterator};
 
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::other::log_2_floor;
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
@@ -80,20 +81,30 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         let (mut mt_index, peak_index) =
             leaf_index_to_mt_index_and_peak_index(self.leaf_index, leaf_count);
 
+        // Verify that authentication path has correct length to fail gracefully when fed
+        // a too short authentication path.
+        if log_2_floor(mt_index) != self.authentication_path.len() as u64 {
+            return (false, None);
+        }
+
+        let mut i = 0;
         let mut acc_hash: Digest = leaf_hash.to_owned();
-        for hash in self.authentication_path.iter() {
+        while mt_index != 1 {
+            let ap_element = self.authentication_path[i];
             if mt_index % 2 == 0 {
-                // node is left child
-                acc_hash = H::hash_pair(&acc_hash, hash);
+                // node of `acc_hash` is left child
+                acc_hash = H::hash_pair(&acc_hash, &ap_element);
             } else {
-                // node is right child
-                acc_hash = H::hash_pair(hash, &acc_hash);
+                // node of `acc_hash` is right child
+                acc_hash = H::hash_pair(&ap_element, &acc_hash);
             }
 
+            i += 1;
             mt_index /= 2;
         }
 
-        if peaks[peak_index as usize] != acc_hash {
+        let expected_peak = peaks[peak_index as usize];
+        if expected_peak != acc_hash {
             return (false, None);
         }
 
