@@ -28,6 +28,7 @@ features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
 
 [dependencies]
 twenty-first = { path = "../twenty-first" }
+stark-shared = { path = "../stark-shared" }
 blake3 = "1.2"
 serde_json = "1.0"
 num-traits = "0.2"

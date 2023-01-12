@@ -3,8 +3,8 @@ use std::cell::RefCell;
 use std::cmp;
 use std::rc::Rc;
 
+use stark_shared::fri::FriDomain;
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::fri::FriDomain;
 use twenty_first::shared_math::mpolynomial::Degree;
 use twenty_first::shared_math::traits::FiniteField;
 use twenty_first::shared_math::x_field_element::XFieldElement;

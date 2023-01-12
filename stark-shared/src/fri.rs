@@ -5,19 +5,19 @@ use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
 
-use super::b_field_element::BFieldElement;
-use super::other::{log_2_ceil, log_2_floor};
-use super::polynomial::Polynomial;
-use super::traits::{CyclicGroupGenerator, ModPowU32};
-use super::x_field_element::XFieldElement;
-use crate::shared_math::ntt::{intt, ntt};
-use crate::shared_math::traits::FiniteField;
-use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
-use crate::util_types::merkle_tree::{CpuParallel, MerkleTree, PartialAuthenticationPath};
-use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
-use crate::util_types::proof_stream::ProofStream;
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::ntt::{intt, ntt};
+use twenty_first::shared_math::other::{log_2_ceil, log_2_floor};
+use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::shared_math::rescue_prime_digest::Digest;
+use twenty_first::shared_math::traits::FiniteField;
+use twenty_first::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
+use twenty_first::shared_math::x_field_element::XFieldElement;
+use twenty_first::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
+use twenty_first::util_types::merkle_tree::{CpuParallel, MerkleTree, PartialAuthenticationPath};
+use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
 
-use super::rescue_prime_digest::Digest;
+use crate::proof_stream::ProofStream;
 
 impl Error for ValidationError {}
 
@@ -505,10 +505,11 @@ where
 mod fri_domain_tests {
     use num_traits::One;
 
+    use twenty_first::shared_math::b_field_element::BFieldElement;
+    use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+    use twenty_first::shared_math::x_field_element::XFieldElement;
+
     use super::*;
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::traits::PrimitiveRootOfUnity;
-    use crate::shared_math::x_field_element::XFieldElement;
 
     #[test]
     fn x_values_test() {
@@ -571,13 +572,15 @@ mod fri_domain_tests {
 
 #[cfg(test)]
 mod fri_tests {
-    use super::*;
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
-    use crate::shared_math::traits::PrimitiveRootOfUnity;
-    use crate::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
-    use crate::shared_math::x_field_element::XFieldElement;
     use itertools::Itertools;
+
+    use twenty_first::shared_math::b_field_element::BFieldElement;
+    use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
+    use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
+    use twenty_first::shared_math::traits::{CyclicGroupGenerator, ModPowU32};
+    use twenty_first::shared_math::x_field_element::XFieldElement;
+
+    use super::*;
 
     #[test]
     fn get_rounds_count_test() {

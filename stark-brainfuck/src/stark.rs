@@ -8,14 +8,15 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::rc::Rc;
 
+use stark_shared::fri::Fri;
+use stark_shared::proof_stream::ProofStream;
+use stark_shared::stark_verify_error::StarkVerifyError;
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::fri::Fri;
 use twenty_first::shared_math::mpolynomial::Degree;
 use twenty_first::shared_math::other::{is_power_of_two, random_elements};
 use twenty_first::shared_math::other::{random_elements_array, roundup_npo2};
 use twenty_first::shared_math::polynomial::Polynomial;
 use twenty_first::shared_math::rescue_prime_digest::Digest;
-use twenty_first::shared_math::stark::stark_verify_error::StarkVerifyError;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 use twenty_first::shared_math::traits::{Inverse, ModPowU32};
 use twenty_first::shared_math::x_field_element::XFieldElement;
@@ -23,7 +24,6 @@ use twenty_first::timing_reporter::TimingReporter;
 use twenty_first::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 use twenty_first::util_types::merkle_tree::{CpuParallel, MerkleTree, PartialAuthenticationPath};
 use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
-use twenty_first::util_types::proof_stream::ProofStream;
 
 use crate::evaluation_argument::{
     EvaluationArgument, ProgramEvaluationArgument, PROGRAM_EVALUATION_CHALLENGE_INDICES_COUNT,

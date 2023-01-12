@@ -1,9 +1,8 @@
 use serde::{de::DeserializeOwned, Serialize};
 use std::{error::Error, fmt, result::Result};
 
-use crate::shared_math::rescue_prime_digest::Digest;
-
-use super::blake3_wrapper::from_blake3_digest;
+use twenty_first::shared_math::rescue_prime_digest::Digest;
+use twenty_first::util_types::blake3_wrapper::from_blake3_digest;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ProofStream {
@@ -150,7 +149,7 @@ impl ProofStream {
 #[cfg(test)]
 pub mod test_proof_stream {
     use super::*;
-    use crate::shared_math::b_field_element::BFieldElement;
+    use twenty_first::shared_math::b_field_element::BFieldElement;
 
     #[test]
     fn ps_test_default_empty_initiation() {
