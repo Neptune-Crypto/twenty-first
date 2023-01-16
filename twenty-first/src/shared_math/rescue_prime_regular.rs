@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::traits::FiniteField;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
+use crate::util_types::algebraic_hasher::{AlgebraicHasher, AlgebraicHasherNew, SpongeHasher};
 
 use super::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
@@ -1083,6 +1083,7 @@ impl RescuePrimeRegular {
     }
 }
 
+// TODO: Remove old AlgebraicHasher in favor of AlgebraicHasherNew + SpongeHasher
 impl AlgebraicHasher for RescuePrimeRegular {
     fn hash_slice(elements: &[BFieldElement]) -> Digest {
         Digest::new(RescuePrimeRegular::hash_varlen(elements))
@@ -1093,6 +1094,45 @@ impl AlgebraicHasher for RescuePrimeRegular {
         input[..DIGEST_LENGTH].copy_from_slice(&left.values());
         input[DIGEST_LENGTH..].copy_from_slice(&right.values());
         Digest::new(RescuePrimeRegular::hash_10(&input))
+    }
+}
+
+impl AlgebraicHasherNew for RescuePrimeRegular {
+    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+        let mut input = [BFIELD_ZERO; 10];
+        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
+        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
+        Digest::new(RescuePrimeRegular::hash_10(&input))
+    }
+}
+
+impl SpongeHasher for RescuePrimeRegular {
+    type SpongeState = RescuePrimeRegularState;
+
+    fn absorb_init(input: &[BFieldElement]) -> Self::SpongeState {
+        let mut sponge = RescuePrimeRegularState::new();
+
+        Self::absorb(&mut sponge, input);
+
+        sponge
+    }
+
+    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
+        // absorb
+        sponge.state[..RATE].copy_from_slice(input);
+
+        // xlix
+        Self::xlix(sponge);
+    }
+
+    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE] {
+        // squeeze
+        let produce: [BFieldElement; RATE] = (&sponge.state[..RATE]).try_into().unwrap();
+
+        // xlix
+        Self::xlix(sponge);
+
+        produce
     }
 }
 

@@ -14,8 +14,8 @@ pub trait SpongeHasher: Clone + Send + Sync {
     type SpongeState;
 
     fn absorb_init(input: &[BFieldElement]) -> Self::SpongeState;
-    fn absorb(state: &mut Self::SpongeState, input: &[BFieldElement]);
-    fn squeeze(state: &mut Self::SpongeState) -> [BFieldElement; RATE];
+    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement]);
+    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
 
     /// Given a sponge state and an `upper_bound` that is a power of two,
     /// produce `num_indices` uniform random numbers (sample indices) in
