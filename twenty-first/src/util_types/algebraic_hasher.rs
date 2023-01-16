@@ -192,7 +192,7 @@ mod algebraic_hasher_tests {
     use num_traits::Zero;
     use rand::Rng;
 
-    use crate::shared_math::rescue_prime_regular::DIGEST_LENGTH;
+    use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;

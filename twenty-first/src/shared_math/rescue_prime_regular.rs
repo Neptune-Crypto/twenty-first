@@ -6,9 +6,8 @@ use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO
 use crate::shared_math::traits::FiniteField;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
-use super::rescue_prime_digest::Digest;
+use super::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
-pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
 pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;

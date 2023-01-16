@@ -3,6 +3,7 @@ use num_traits::{One, Zero};
 
 use stark_shared::proof_stream::ProofStream;
 use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::rescue_prime_digest::DIGEST_LENGTH;
 use twenty_first::shared_math::rescue_prime_regular::{RescuePrimeRegular, STATE_SIZE};
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 use twenty_first::timing_reporter::TimingReporter;

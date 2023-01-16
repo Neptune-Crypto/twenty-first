@@ -21,6 +21,7 @@ use twenty_first::shared_math::other::random_elements_array;
 use twenty_first::shared_math::other::roundup_npo2;
 use twenty_first::shared_math::polynomial::Polynomial;
 use twenty_first::shared_math::rescue_prime_digest::Digest;
+use twenty_first::shared_math::rescue_prime_digest::DIGEST_LENGTH;
 use twenty_first::shared_math::rescue_prime_regular::*;
 use twenty_first::shared_math::traits::CyclicGroupGenerator;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
