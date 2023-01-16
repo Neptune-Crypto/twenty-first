@@ -1,9 +1,56 @@
+use std::iter;
+
+use itertools::Itertools;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
-use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
+use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::other;
 use crate::shared_math::rescue_prime_digest::Digest;
-use crate::shared_math::x_field_element::XFieldElement;
+use crate::shared_math::x_field_element::{XFieldElement, EXTENSION_DEGREE};
+
+pub trait SpongeHasher: Clone + Send + Sync {
+    type SpongeState;
+
+    fn absorb_init(input: &[BFieldElement]) -> Self::SpongeState;
+    fn absorb(state: &mut Self::SpongeState, input: &[BFieldElement]);
+    fn squeeze(state: &mut Self::SpongeState) -> [BFieldElement; 10];
+
+    /// Given a sponge state and an `upper_bound` that is a power of two,
+    /// produce `num_indices` uniform random numbers (sample indices) in
+    /// the interval `[0; upper_bound)`.
+    ///
+    /// - `state`: A `Self::SpongeState`
+    /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
+    /// - `num_indices`: The number of sample indices
+    fn sample_indices(
+        state: &mut Self::SpongeState,
+        upper_bound: usize,
+        num_indices: usize,
+    ) -> Vec<usize> {
+        assert!(upper_bound <= BFieldElement::MAX as usize);
+        let num_squeezes = num_indices / 10;
+        (0..num_squeezes)
+            .flat_map(|_| Self::squeeze(state))
+            .take(num_indices)
+            .map(|elem| elem.value() as usize % upper_bound)
+            .collect()
+    }
+
+    fn sample_weights(state: &mut Self::SpongeState, num_weights: usize) -> Vec<XFieldElement> {
+        let num_squeezes = (num_weights * EXTENSION_DEGREE) / 10;
+        (0..num_squeezes)
+            .map(|_| Self::squeeze(state))
+            .flat_map(|elems| {
+                vec![
+                    XFieldElement::new([elems[0], elems[1], elems[2]]),
+                    XFieldElement::new([elems[3], elems[4], elems[5]]),
+                    XFieldElement::new([elems[6], elems[7], elems[8]]),
+                    // spill 1 element, elems[9], per squeeze
+                ]
+            })
+            .collect()
+    }
+}
 
 pub trait AlgebraicHasher: Clone + Send + Sync {
     fn hash_slice(elements: &[BFieldElement]) -> Digest;
