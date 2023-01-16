@@ -1203,16 +1203,20 @@ mod b_prime_field_element_test {
 
     #[test]
     fn test_fixed_mul() {
-        let a = BFieldElement::new(2779336007265862836);
-        let b = BFieldElement::new(8146517303801474933);
-        let c = a * b;
-        let expected = BFieldElement::new(1857758653037316764);
-        assert_eq!(c, expected);
+        {
+            let a = BFieldElement::new(2779336007265862836);
+            let b = BFieldElement::new(8146517303801474933);
+            let c = a * b;
+            let expected = BFieldElement::new(1857758653037316764);
+            assert_eq!(c, expected);
+        }
 
-        let a = BFieldElement::new(9223372036854775808);
-        let b = BFieldElement::new(9223372036854775808);
-        let c = a * b;
-        let expected = BFieldElement::new(18446744068340842497);
-        assert_eq!(c, expected);
+        {
+            let a = BFieldElement::new(9223372036854775808);
+            let b = BFieldElement::new(9223372036854775808);
+            let c = a * b;
+            let expected = BFieldElement::new(18446744068340842497);
+            assert_eq!(c, expected);
+        }
     }
 }
