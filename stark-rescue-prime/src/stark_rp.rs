@@ -1275,7 +1275,8 @@ pub mod test_stark {
 
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
-        let (output, trace) = RescuePrimeRegular::hash_10_with_trace(&input);
+        let trace = RescuePrimeRegular::trace(&input);
+        let output = &trace[trace.len() - 1][0..DIGEST_LENGTH];
         assert_eq!(9, trace.len());
 
         let mut npo2 = trace.len() + num_randomizers;
@@ -1288,7 +1289,7 @@ pub mod test_stark {
 
         let omicron = BFieldElement::primitive_root_of_unity(npo2 as u64).unwrap();
         let air_constraints = StarkRp::get_air_constraints(omicron);
-        let boundary_constraints = StarkRp::get_boundary_constraints(&output);
+        let boundary_constraints = StarkRp::get_boundary_constraints(output);
         let mut proof_stream = ProofStream::default();
 
         let prove_result = stark.prove(
@@ -1336,7 +1337,8 @@ pub mod test_stark {
 
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
-        let (output, trace) = RescuePrimeRegular::hash_10_with_trace(&input);
+        let trace = RescuePrimeRegular::trace(&input);
+        let output = &trace[trace.len() - 1][0..DIGEST_LENGTH];
 
         let mut npo2 = trace.len() + num_randomizers as usize;
         if npo2 & (npo2 - 1) != 0 {
@@ -1350,7 +1352,7 @@ pub mod test_stark {
         let mut timer = TimingReporter::start();
         let air_constraints = StarkRp::get_air_constraints(omicron);
         timer.elapsed("get_air_constraints(omicron)");
-        let boundary_constraints = StarkRp::get_boundary_constraints(&output);
+        let boundary_constraints = StarkRp::get_boundary_constraints(output);
         timer.elapsed("get_boundary_constraints(output)");
         let report = timer.finish();
         println!("{}", report);
@@ -1400,7 +1402,9 @@ pub mod test_stark {
         );
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
-        let (output, trace) = RescuePrimeRegular::hash_10_with_trace(&input);
+        let trace = RescuePrimeRegular::trace(&input);
+        let output = &trace[trace.len() - 1][0..DIGEST_LENGTH];
+
         assert_eq!(9, trace.len());
 
         let mut npo2 = trace.len() + num_randomizers as usize;
@@ -1413,7 +1417,7 @@ pub mod test_stark {
 
         let omicron = BFieldElement::primitive_root_of_unity(npo2 as u64).unwrap();
         let air_constraints = StarkRp::get_air_constraints(omicron);
-        let boundary_constraints = StarkRp::get_boundary_constraints(&output);
+        let boundary_constraints = StarkRp::get_boundary_constraints(output);
         let mut proof_stream = ProofStream::default();
 
         let prove_result = stark.prove(

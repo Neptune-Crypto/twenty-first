@@ -797,22 +797,6 @@ impl RescuePrimeOptimized {
 
         trace
     }
-
-    /// hash_10_with_trace
-    /// Computes the fixed-length hash digest and returns the trace
-    /// along with it.
-    pub fn hash_10_with_trace(
-        input: &[BFieldElement; 10],
-    ) -> (
-        [BFieldElement; DIGEST_LENGTH],
-        [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS],
-    ) {
-        let trace: [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] = Self::trace(input);
-        let output: [BFieldElement; DIGEST_LENGTH] =
-            trace[NUM_ROUNDS][0..DIGEST_LENGTH].try_into().unwrap();
-
-        (output, trace)
-    }
 }
 
 impl AlgebraicHasher for RescuePrimeOptimized {
@@ -825,23 +809,5 @@ impl AlgebraicHasher for RescuePrimeOptimized {
         input[..DIGEST_LENGTH].copy_from_slice(&left.values());
         input[DIGEST_LENGTH..].copy_from_slice(&right.values());
         Digest::new(RescuePrimeOptimized::hash_10(&input))
-    }
-}
-
-#[cfg(test)]
-mod rescue_prime_optimized_tests {
-
-    use crate::shared_math::other::random_elements_array;
-
-    use super::*;
-
-    #[test]
-    fn trace_consistent_test() {
-        for _ in 0..10 {
-            let input: [BFieldElement; 10] = random_elements_array();
-            let (output_a, _) = RescuePrimeOptimized::hash_10_with_trace(&input);
-            let output_b = RescuePrimeOptimized::hash_10(&input);
-            assert_eq!(output_a, output_b);
-        }
     }
 }

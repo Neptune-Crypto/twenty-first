@@ -1058,22 +1058,6 @@ impl RescuePrimeRegular {
 
         trace
     }
-
-    /// hash_10_with_trace
-    /// Computes the fixed-length hash digest and returns the trace
-    /// along with it.
-    pub fn hash_10_with_trace(
-        input: &[BFieldElement; 10],
-    ) -> (
-        [BFieldElement; DIGEST_LENGTH],
-        [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS],
-    ) {
-        let trace: [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] = Self::trace(input);
-        let output: [BFieldElement; DIGEST_LENGTH] =
-            trace[NUM_ROUNDS][0..DIGEST_LENGTH].try_into().unwrap();
-
-        (output, trace)
-    }
 }
 
 impl AlgebraicHasher for RescuePrimeRegular {
@@ -1093,8 +1077,6 @@ impl AlgebraicHasher for RescuePrimeRegular {
 mod rescue_prime_regular_tests {
     use itertools::Itertools;
     use num_traits::Zero;
-
-    use crate::shared_math::other::random_elements_array;
 
     use super::*;
 
@@ -1411,16 +1393,6 @@ mod rescue_prime_regular_tests {
             let input = (0..i as u64).map(BFieldElement::new).collect_vec();
             let actual = RescuePrimeRegular::hash_varlen(&input);
             assert_eq!(expected, actual);
-        }
-    }
-
-    #[test]
-    fn trace_consistent_test() {
-        for _ in 0..10 {
-            let input: [BFieldElement; 10] = random_elements_array();
-            let (output_a, _) = RescuePrimeRegular::hash_10_with_trace(&input);
-            let output_b = RescuePrimeRegular::hash_10(&input);
-            assert_eq!(output_a, output_b);
         }
     }
 }
