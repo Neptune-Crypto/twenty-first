@@ -1058,6 +1058,29 @@ impl RescuePrimeRegular {
 
         trace
     }
+
+    /// full_trace
+    /// Produces the execution trace for one invocation of XLIX
+    pub fn full_trace(
+        state: [BFieldElement; STATE_SIZE],
+    ) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
+        let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
+        let mut state = RescuePrimeRegularState { state };
+
+        // record trace
+        trace[0] = state.state;
+
+        // apply N rounds
+        for round_index in 0..NUM_ROUNDS {
+            // apply round function to state
+            Self::xlix_round(&mut state, round_index);
+
+            // record trace
+            trace[1 + round_index] = state.state;
+        }
+
+        trace
+    }
 }
 
 impl AlgebraicHasher for RescuePrimeRegular {
