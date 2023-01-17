@@ -30,7 +30,7 @@ pub trait SpongeHasher: Clone + Send + Sync {
         num_indices: usize,
     ) -> Vec<usize> {
         assert!(upper_bound <= BFieldElement::MAX as usize);
-        let num_squeezes = num_indices / RATE;
+        let num_squeezes = (num_indices + RATE) / RATE;
         (0..num_squeezes)
             .flat_map(|_| Self::squeeze(state))
             .take(num_indices)
@@ -134,7 +134,7 @@ pub trait AlgebraicHasher: Clone + Send + Sync {
     ///
     /// - `seed`: A hash `Digest`
     /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
-    /// - `num_indices`: The number of sample indices
+    /// - `num_indices`: The number of indices to sample
     fn sample_indices(seed: &Digest, upper_bound: usize, num_indices: usize) -> Vec<usize> {
         Self::get_n_hash_rounds(seed, num_indices)
             .iter()
