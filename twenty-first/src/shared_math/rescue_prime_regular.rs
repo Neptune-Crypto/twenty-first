@@ -983,7 +983,7 @@ impl RescuePrimeRegular {
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
-    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; 5] {
+    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; DIGEST_LENGTH] {
         let mut sponge = RescuePrimeRegularState::new();
 
         // absorb once
@@ -1063,7 +1063,7 @@ impl AlgebraicHasher for RescuePrimeRegular {
     }
 
     fn hash_pair(left: &Digest, right: &Digest) -> Digest {
-        let mut input = [BFIELD_ZERO; 10];
+        let mut input = [BFIELD_ZERO; 2 * DIGEST_LENGTH];
         input[..DIGEST_LENGTH].copy_from_slice(&left.values());
         input[DIGEST_LENGTH..].copy_from_slice(&right.values());
         Digest::new(RescuePrimeRegular::hash_10(&input))
