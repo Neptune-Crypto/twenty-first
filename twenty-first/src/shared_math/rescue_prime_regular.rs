@@ -1092,7 +1092,10 @@ impl SpongeHasher for RescuePrimeRegular {
 
     fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
         // absorb
-        sponge.state[..RATE].copy_from_slice(input);
+        sponge.state[..RATE]
+            .iter_mut()
+            .zip_eq(input.iter())
+            .for_each(|(a, &b)| *a += b);
 
         // xlix
         Self::xlix(sponge);
