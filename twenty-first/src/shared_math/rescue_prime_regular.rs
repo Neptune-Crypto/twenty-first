@@ -1034,34 +1034,7 @@ impl RescuePrimeRegular {
 
     /// trace
     /// Produces the execution trace for one invocation of XLIX
-    pub fn trace(input: &[BFieldElement; 10]) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
-        let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
-        let mut sponge = RescuePrimeRegularState::new();
-
-        // absorb
-        sponge.state[0..RATE].copy_from_slice(input);
-
-        // domain separation
-        sponge.state[RATE] = BFIELD_ONE;
-
-        // record trace
-        trace[0] = sponge.state;
-
-        // apply N rounds
-        for round_index in 0..NUM_ROUNDS {
-            // apply round function to state
-            Self::xlix_round(&mut sponge, round_index);
-
-            // record trace
-            trace[1 + round_index] = sponge.state;
-        }
-
-        trace
-    }
-
-    /// full_trace
-    /// Produces the execution trace for one invocation of XLIX
-    pub fn full_trace(
+    pub fn trace(
         state: [BFieldElement; STATE_SIZE],
     ) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
         let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
