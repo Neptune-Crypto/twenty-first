@@ -30,7 +30,7 @@ pub trait SpongeHasher: Clone + Send + Sync {
         num_indices: usize,
     ) -> Vec<usize> {
         assert!(upper_bound <= BFieldElement::MAX as usize);
-        let num_squeezes = (num_indices + RATE) / RATE;
+        let num_squeezes = roundup_nearest_multiple(num_indices, RATE) / RATE;
         (0..num_squeezes)
             .flat_map(|_| Self::squeeze(state))
             .take(num_indices)
@@ -39,7 +39,7 @@ pub trait SpongeHasher: Clone + Send + Sync {
     }
 
     fn sample_weights(state: &mut Self::SpongeState, num_weights: usize) -> Vec<XFieldElement> {
-        let num_squeezes = (num_weights * EXTENSION_DEGREE) / RATE;
+        let num_squeezes = roundup_nearest_multiple(num_weights * EXTENSION_DEGREE, RATE) / RATE;
         (0..num_squeezes)
             .map(|_| Self::squeeze(state))
             .flat_map(|elems| {
