@@ -64,6 +64,10 @@ pub trait SpongeHasher: Clone + Send + Sync {
 pub trait AlgebraicHasherNew: SpongeHasher {
     fn hash_pair(left: &Digest, right: &Digest) -> Digest;
 
+    fn hash<T: Hashable>(value: &T) -> Digest {
+        Self::hash_varlen(&value.to_sequence())
+    }
+
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
         // calculate padded length
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
