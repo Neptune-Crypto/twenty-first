@@ -1,9 +1,109 @@
+use std::iter;
+
+use itertools::Itertools;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
-use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
-use crate::shared_math::other;
-use crate::shared_math::rescue_prime_digest::Digest;
-use crate::shared_math::x_field_element::XFieldElement;
+use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
+use crate::shared_math::other::{self, is_power_of_two, roundup_nearest_multiple};
+use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
+use crate::shared_math::x_field_element::{XFieldElement, EXTENSION_DEGREE};
+
+pub const RATE: usize = 10;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Domain {
+    VariableLength,
+    FixedLength,
+}
+
+pub trait SpongeHasher: Clone + Send + Sync {
+    type SpongeState;
+
+    fn absorb_init(input: &[BFieldElement; RATE]) -> Self::SpongeState;
+    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]);
+    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
+
+    /// Given a sponge state and an `upper_bound` that is a power of two,
+    /// produce `num_indices` uniform random numbers (sample indices) in
+    /// the interval `[0; upper_bound)`.
+    ///
+    /// - `state`: A `Self::SpongeState`
+    /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
+    /// - `num_indices`: The number of sample indices
+    fn sample_indices(
+        state: &mut Self::SpongeState,
+        upper_bound: usize,
+        num_indices: usize,
+    ) -> Vec<usize> {
+        assert!(is_power_of_two(upper_bound));
+        assert!(upper_bound <= BFieldElement::MAX as usize);
+        let num_squeezes = roundup_nearest_multiple(num_indices, RATE) / RATE;
+        (0..num_squeezes)
+            .flat_map(|_| Self::squeeze(state))
+            .take(num_indices)
+            .map(|elem| elem.value() as usize % upper_bound)
+            .collect()
+    }
+
+    fn sample_weights(state: &mut Self::SpongeState, num_weights: usize) -> Vec<XFieldElement> {
+        let num_squeezes = roundup_nearest_multiple(num_weights * EXTENSION_DEGREE, RATE) / RATE;
+        (0..num_squeezes)
+            .map(|_| Self::squeeze(state))
+            .flat_map(|elems| {
+                vec![
+                    XFieldElement::new([elems[0], elems[1], elems[2]]),
+                    XFieldElement::new([elems[3], elems[4], elems[5]]),
+                    XFieldElement::new([elems[6], elems[7], elems[8]]),
+                    // spill 1 element, elems[9], per squeeze
+                ]
+            })
+            .collect()
+    }
+}
+
+pub trait AlgebraicHasherNew: SpongeHasher {
+    fn hash_pair(left: &Digest, right: &Digest) -> Digest;
+
+    fn hash<T: Hashable>(value: &T) -> Digest {
+        Self::hash_varlen(&value.to_sequence())
+    }
+
+    fn hash_varlen(input: &[BFieldElement]) -> Digest {
+        // calculate padded length
+        let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
+
+        // absorb repeatedly
+        let input_iter = input.iter();
+        let padding_iter = [&BFIELD_ONE].into_iter().chain(iter::repeat(&BFIELD_ZERO));
+        let padded_input = input_iter
+            .chain(padding_iter)
+            .take(padded_length)
+            .chunks(RATE);
+        let mut padded_input_iter = padded_input.into_iter().map(|chunk| {
+            chunk
+                .into_iter()
+                .copied()
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap()
+        });
+
+        // absorb_init
+        let absorb_init_elems: [BFieldElement; RATE] =
+            padded_input_iter.next().expect("at least one absorb");
+        let mut sponge = Self::absorb_init(&absorb_init_elems);
+
+        // absorb
+        for absorb_elems in padded_input_iter {
+            Self::absorb(&mut sponge, &absorb_elems);
+        }
+
+        // squeeze
+        let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
+
+        Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
+    }
+}
 
 pub trait AlgebraicHasher: Clone + Send + Sync {
     fn hash_slice(elements: &[BFieldElement]) -> Digest;
@@ -50,7 +150,7 @@ pub trait AlgebraicHasher: Clone + Send + Sync {
     ///
     /// - `seed`: A hash `Digest`
     /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
-    /// - `num_indices`: The number of sample indices
+    /// - `num_indices`: The number of indices to sample
     fn sample_indices(seed: &Digest, upper_bound: usize, num_indices: usize) -> Vec<usize> {
         Self::get_n_hash_rounds(seed, num_indices)
             .iter()
@@ -145,7 +245,7 @@ mod algebraic_hasher_tests {
     use num_traits::Zero;
     use rand::Rng;
 
-    use crate::shared_math::rescue_prime_regular::DIGEST_LENGTH;
+    use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;

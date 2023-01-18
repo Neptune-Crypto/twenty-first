@@ -4,11 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::traits::FiniteField;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
+use crate::util_types::algebraic_hasher::{
+    self, AlgebraicHasher, AlgebraicHasherNew, SpongeHasher,
+};
 
-use super::rescue_prime_digest::Digest;
+use super::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
-pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
 pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;
@@ -801,7 +802,16 @@ pub struct RescuePrimeRegularState {
 
 impl RescuePrimeRegularState {
     #[inline]
-    const fn new() -> RescuePrimeRegularState {
+    pub const fn new(domain: algebraic_hasher::Domain) -> RescuePrimeRegularState {
+        use algebraic_hasher::Domain::*;
+
+        let mut state = [BFIELD_ZERO; STATE_SIZE];
+
+        match domain {
+            VariableLength => (),
+            FixedLength => state[RATE] = BFIELD_ONE,
+        }
+
         RescuePrimeRegularState {
             state: [BFIELD_ZERO; STATE_SIZE],
         }
@@ -984,8 +994,8 @@ impl RescuePrimeRegular {
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
-    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; 5] {
-        let mut sponge = RescuePrimeRegularState::new();
+    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; DIGEST_LENGTH] {
+        let mut sponge = RescuePrimeRegularState::new(algebraic_hasher::Domain::FixedLength);
 
         // absorb once
         sponge.state[..10].copy_from_slice(input);
@@ -1000,88 +1010,45 @@ impl RescuePrimeRegular {
         sponge.state[..5].try_into().unwrap()
     }
 
-    /// hash_varlen hashes an arbitrary number of field elements.
-    ///
-    /// Takes care of padding by applying the padding rule: append a single 1 ∈ Fp
-    /// and as many 0 ∈ Fp elements as required to make the number of input elements
-    /// a multiple of `RATE`.
-    pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
-        let mut sponge = RescuePrimeRegularState::new();
-
-        // pad input
-        let mut padded_input = input.to_vec();
-        padded_input.push(BFIELD_ONE);
-        while padded_input.len() % RATE != 0 {
-            padded_input.push(BFIELD_ZERO);
-        }
-
-        // absorb
-        while !padded_input.is_empty() {
-            for (sponge_state_element, &input_element) in sponge
-                .state
-                .iter_mut()
-                .take(RATE)
-                .zip_eq(padded_input.iter().take(RATE))
-            {
-                *sponge_state_element += input_element;
-            }
-            padded_input.drain(..RATE);
-            Self::xlix(&mut sponge);
-        }
-
-        // squeeze once
-        sponge.state[..5].try_into().unwrap()
-    }
-
     /// trace
     /// Produces the execution trace for one invocation of XLIX
-    pub fn trace(input: &[BFieldElement; 10]) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
+    pub fn trace(
+        state: [BFieldElement; STATE_SIZE],
+    ) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
         let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
-        let mut sponge = RescuePrimeRegularState::new();
-
-        // absorb
-        sponge.state[0..RATE].copy_from_slice(input);
-
-        // domain separation
-        sponge.state[RATE] = BFIELD_ONE;
+        let mut state = RescuePrimeRegularState { state };
 
         // record trace
-        trace[0] = sponge.state;
+        trace[0] = state.state;
 
         // apply N rounds
         for round_index in 0..NUM_ROUNDS {
             // apply round function to state
-            Self::xlix_round(&mut sponge, round_index);
+            Self::xlix_round(&mut state, round_index);
 
             // record trace
-            trace[1 + round_index] = sponge.state;
+            trace[1 + round_index] = state.state;
         }
 
         trace
     }
+}
 
-    /// hash_10_with_trace
-    /// Computes the fixed-length hash digest and returns the trace
-    /// along with it.
-    pub fn hash_10_with_trace(
-        input: &[BFieldElement; 10],
-    ) -> (
-        [BFieldElement; DIGEST_LENGTH],
-        [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS],
-    ) {
-        let trace: [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] = Self::trace(input);
-        let output: [BFieldElement; DIGEST_LENGTH] =
-            trace[NUM_ROUNDS][0..DIGEST_LENGTH].try_into().unwrap();
+// TODO: Remove old AlgebraicHasher in favor of AlgebraicHasherNew + SpongeHasher
+impl AlgebraicHasher for RescuePrimeRegular {
+    fn hash_slice(elements: &[BFieldElement]) -> Digest {
+        RescuePrimeRegular::hash_varlen(elements)
+    }
 
-        (output, trace)
+    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+        let mut input = [BFIELD_ZERO; 2 * DIGEST_LENGTH];
+        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
+        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
+        Digest::new(RescuePrimeRegular::hash_10(&input))
     }
 }
 
-impl AlgebraicHasher for RescuePrimeRegular {
-    fn hash_slice(elements: &[BFieldElement]) -> Digest {
-        Digest::new(RescuePrimeRegular::hash_varlen(elements))
-    }
-
+impl AlgebraicHasherNew for RescuePrimeRegular {
     fn hash_pair(left: &Digest, right: &Digest) -> Digest {
         let mut input = [BFIELD_ZERO; 10];
         input[..DIGEST_LENGTH].copy_from_slice(&left.values());
@@ -1090,12 +1057,43 @@ impl AlgebraicHasher for RescuePrimeRegular {
     }
 }
 
+impl SpongeHasher for RescuePrimeRegular {
+    type SpongeState = RescuePrimeRegularState;
+
+    fn absorb_init(input: &[BFieldElement; RATE]) -> Self::SpongeState {
+        let mut sponge = RescuePrimeRegularState::new(algebraic_hasher::Domain::VariableLength);
+
+        Self::absorb(&mut sponge, input);
+
+        sponge
+    }
+
+    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {
+        // absorb
+        sponge.state[..RATE]
+            .iter_mut()
+            .zip_eq(input.iter())
+            .for_each(|(a, &b)| *a += b);
+
+        // xlix
+        Self::xlix(sponge);
+    }
+
+    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE] {
+        // squeeze
+        let produce: [BFieldElement; RATE] = (&sponge.state[..RATE]).try_into().unwrap();
+
+        // xlix
+        Self::xlix(sponge);
+
+        produce
+    }
+}
+
 #[cfg(test)]
 mod rescue_prime_regular_tests {
     use itertools::Itertools;
     use num_traits::Zero;
-
-    use crate::shared_math::other::random_elements_array;
 
     use super::*;
 
@@ -1408,20 +1406,10 @@ mod rescue_prime_regular_tests {
             ],
         ];
         for (i, target) in targets_third_batch.into_iter().enumerate() {
-            let expected = target.map(BFieldElement::new);
+            let expected = Digest::new(target.map(BFieldElement::new));
             let input = (0..i as u64).map(BFieldElement::new).collect_vec();
             let actual = RescuePrimeRegular::hash_varlen(&input);
             assert_eq!(expected, actual);
-        }
-    }
-
-    #[test]
-    fn trace_consistent_test() {
-        for _ in 0..10 {
-            let input: [BFieldElement; 10] = random_elements_array();
-            let (output_a, _) = RescuePrimeRegular::hash_10_with_trace(&input);
-            let output_b = RescuePrimeRegular::hash_10(&input);
-            assert_eq!(output_a, output_b);
         }
     }
 }

@@ -66,6 +66,13 @@ pub fn roundup_npo2(x: u64) -> u64 {
     1 << log_2_ceil(x as u128)
 }
 
+pub fn roundup_nearest_multiple(mut x: usize, multiple: usize) -> usize {
+    if x % multiple != 0 {
+        x += multiple - (x % multiple);
+    }
+    x
+}
+
 /// Simultaneously perform division and remainder.
 ///
 /// While there is apparently no built-in Rust function for this,
@@ -280,6 +287,15 @@ mod test_other {
                 is_power_of_two(leaf_count),
                 "The leaf count should be a power of two."
             );
+        }
+    }
+
+    #[test]
+    fn roundup_nearest_multiple_test() {
+        let cases = [(0, 10, 0), (1, 10, 10), (10, 10, 10), (11, 10, 20)];
+        for (x, multiple, expected) in cases {
+            let actual = roundup_nearest_multiple(x, multiple);
+            assert_eq!(expected, actual);
         }
     }
 }

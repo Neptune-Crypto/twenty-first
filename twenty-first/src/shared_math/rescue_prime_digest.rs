@@ -9,13 +9,13 @@ use rand_distr::{Distribution, Standard};
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
-use crate::shared_math::rescue_prime_regular::DIGEST_LENGTH;
 use crate::shared_math::traits::FromVecu8;
 use crate::util_types::emojihash_trait::Emojihash;
 
+pub const DIGEST_LENGTH: usize = 5;
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Digest([BFieldElement; DIGEST_LENGTH]);
-// FIXME: Make Digest a record instead of a tuple.
 
 impl GetSize for Digest {
     fn get_stack_size() -> usize {

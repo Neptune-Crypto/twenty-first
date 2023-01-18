@@ -1,9 +1,11 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use num_traits::{One, Zero};
 
+use stark_rescue_prime::rescue_prime_trace;
 use stark_shared::proof_stream::ProofStream;
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::rescue_prime_regular::{RescuePrimeRegular, STATE_SIZE};
+use twenty_first::shared_math::rescue_prime_digest::DIGEST_LENGTH;
+use twenty_first::shared_math::rescue_prime_regular::STATE_SIZE;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 use twenty_first::timing_reporter::TimingReporter;
 
@@ -24,13 +26,15 @@ fn stark_medium(criterion: &mut Criterion) {
 
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
-        let (output, trace) = RescuePrimeRegular::hash_10_with_trace(&input);
+        let trace = rescue_prime_trace(&input);
+        let output = &trace[trace.len() - 1][0..DIGEST_LENGTH];
+
         timer.elapsed("rp.eval_and_trace(...)");
         let omicron = BFieldElement::primitive_root_of_unity(32).unwrap();
         timer.elapsed("BFieldElement::get_primitive_root_of_unity(32)");
         let air_constraints = StarkRp::get_air_constraints(omicron);
         timer.elapsed("rp.get_air_constraints(omicron)");
-        let boundary_constraints = StarkRp::get_boundary_constraints(&output);
+        let boundary_constraints = StarkRp::get_boundary_constraints(output);
         timer.elapsed("rp.get_boundary_constraints(...)");
 
         let report = timer.finish();
