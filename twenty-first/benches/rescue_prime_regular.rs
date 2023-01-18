@@ -6,6 +6,7 @@ use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::other::random_elements;
 use twenty_first::shared_math::rescue_prime_digest::DIGEST_LENGTH;
 use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
+use twenty_first::util_types::algebraic_hasher::AlgebraicHasherNew;
 
 fn bench_10(c: &mut Criterion) {
     let mut group = c.benchmark_group("rescue_prime_regular/hash_10");

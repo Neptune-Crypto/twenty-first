@@ -1010,39 +1010,6 @@ impl RescuePrimeRegular {
         sponge.state[..5].try_into().unwrap()
     }
 
-    /// hash_varlen hashes an arbitrary number of field elements.
-    ///
-    /// Takes care of padding by applying the padding rule: append a single 1 ∈ Fp
-    /// and as many 0 ∈ Fp elements as required to make the number of input elements
-    /// a multiple of `RATE`.
-    pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
-        let mut sponge = RescuePrimeRegularState::new(algebraic_hasher::Domain::VariableLength);
-
-        // pad input
-        let mut padded_input = input.to_vec();
-        padded_input.push(BFIELD_ONE);
-        while padded_input.len() % RATE != 0 {
-            padded_input.push(BFIELD_ZERO);
-        }
-
-        // absorb
-        while !padded_input.is_empty() {
-            for (sponge_state_element, &input_element) in sponge
-                .state
-                .iter_mut()
-                .take(RATE)
-                .zip_eq(padded_input.iter().take(RATE))
-            {
-                *sponge_state_element += input_element;
-            }
-            padded_input.drain(..RATE);
-            Self::xlix(&mut sponge);
-        }
-
-        // squeeze once
-        sponge.state[..5].try_into().unwrap()
-    }
-
     /// trace
     /// Produces the execution trace for one invocation of XLIX
     pub fn trace(
@@ -1070,7 +1037,7 @@ impl RescuePrimeRegular {
 // TODO: Remove old AlgebraicHasher in favor of AlgebraicHasherNew + SpongeHasher
 impl AlgebraicHasher for RescuePrimeRegular {
     fn hash_slice(elements: &[BFieldElement]) -> Digest {
-        Digest::new(RescuePrimeRegular::hash_varlen(elements))
+        RescuePrimeRegular::hash_varlen(elements)
     }
 
     fn hash_pair(left: &Digest, right: &Digest) -> Digest {
@@ -1439,7 +1406,7 @@ mod rescue_prime_regular_tests {
             ],
         ];
         for (i, target) in targets_third_batch.into_iter().enumerate() {
-            let expected = target.map(BFieldElement::new);
+            let expected = Digest::new(target.map(BFieldElement::new));
             let input = (0..i as u64).map(BFieldElement::new).collect_vec();
             let actual = RescuePrimeRegular::hash_varlen(&input);
             assert_eq!(expected, actual);
