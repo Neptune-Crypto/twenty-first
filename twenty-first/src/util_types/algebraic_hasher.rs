@@ -29,6 +29,7 @@ pub trait SpongeHasher: Clone + Send + Sync {
         upper_bound: usize,
         num_indices: usize,
     ) -> Vec<usize> {
+        assert!(is_power_of_two(upper_bound));
         assert!(upper_bound <= BFieldElement::MAX as usize);
         let num_squeezes = roundup_nearest_multiple(num_indices, RATE) / RATE;
         (0..num_squeezes)
@@ -72,12 +73,12 @@ pub trait AlgebraicHasherNew: SpongeHasher {
             .into_iter()
             .map(|chunk| chunk.into_iter().copied().collect::<Vec<_>>());
 
-        // absorb_init once
+        // absorb_init
         let absorb_init_elems: Vec<BFieldElement> =
             padded_input_iter.next().expect("at least one absorb");
         let mut sponge = Self::absorb_init(&absorb_init_elems);
 
-        // absorb variably
+        // absorb
         for absorb_elems in padded_input_iter {
             Self::absorb(&mut sponge, &absorb_elems);
         }

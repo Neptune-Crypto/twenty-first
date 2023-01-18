@@ -1179,7 +1179,6 @@ pub mod test_stark {
     use rand::Rng;
     use serde_json;
 
-    use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use twenty_first::timing_reporter::TimingReporter;
 
     fn gen_polynomial() -> Polynomial<BFieldElement> {

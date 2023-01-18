@@ -91,3 +91,7 @@ harness = false
 [[bench]]
 name = "merkle_tree"
 harness = false
+
+[[bench]]
+name = "sponge_hashing"
+harness = false

@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::traits::FiniteField;
-use crate::util_types::algebraic_hasher::{AlgebraicHasher, AlgebraicHasherNew, SpongeHasher};
+use crate::util_types::algebraic_hasher::{
+    self, AlgebraicHasher, AlgebraicHasherNew, SpongeHasher,
+};
 
 use super::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
