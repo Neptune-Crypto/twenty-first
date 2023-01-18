@@ -1093,7 +1093,7 @@ impl AlgebraicHasherNew for RescuePrimeRegular {
 impl SpongeHasher for RescuePrimeRegular {
     type SpongeState = RescuePrimeRegularState;
 
-    fn absorb_init(input: &[BFieldElement]) -> Self::SpongeState {
+    fn absorb_init(input: &[BFieldElement; RATE]) -> Self::SpongeState {
         let mut sponge = RescuePrimeRegularState::new(algebraic_hasher::Domain::VariableLength);
 
         Self::absorb(&mut sponge, input);
@@ -1101,7 +1101,7 @@ impl SpongeHasher for RescuePrimeRegular {
         sponge
     }
 
-    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
+    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {
         // absorb
         sponge.state[..RATE]
             .iter_mut()

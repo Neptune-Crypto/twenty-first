@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use twenty_first::shared_math::other::random_elements;
+use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::other::{random_elements, random_elements_array};
 use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
 use twenty_first::util_types::algebraic_hasher::{AlgebraicHasherNew, SpongeHasher, RATE};
 
@@ -25,7 +26,7 @@ fn sample_indices_bench<H: SpongeHasher>(c: &mut Criterion) {
 
     group.sample_size(1000);
     group.bench_function(BenchmarkId::new("sample_indices", num_indices), |bencher| {
-        let seed = random_elements(RATE);
+        let seed = random_elements_array::<BFieldElement, RATE>();
         let mut sponge = H::absorb_init(&seed);
         bencher.iter(|| {
             H::sample_indices(&mut sponge, upper_bound, num_indices);
@@ -40,7 +41,7 @@ fn sample_weights_bench<H: SpongeHasher>(c: &mut Criterion) {
 
     group.sample_size(1000);
     group.bench_function(BenchmarkId::new("sample_weights", num_weights), |bencher| {
-        let seed = random_elements(RATE);
+        let seed = random_elements_array::<BFieldElement, RATE>();
         let mut sponge = H::absorb_init(&seed);
         bencher.iter(|| H::sample_weights(&mut sponge, num_weights));
     });

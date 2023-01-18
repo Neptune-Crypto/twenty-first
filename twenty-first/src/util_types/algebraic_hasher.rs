@@ -19,8 +19,8 @@ pub enum Domain {
 pub trait SpongeHasher: Clone + Send + Sync {
     type SpongeState;
 
-    fn absorb_init(input: &[BFieldElement]) -> Self::SpongeState;
-    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement]);
+    fn absorb_init(input: &[BFieldElement; RATE]) -> Self::SpongeState;
+    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]);
     fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
 
     /// Given a sponge state and an `upper_bound` that is a power of two,
@@ -68,19 +68,24 @@ pub trait AlgebraicHasherNew: SpongeHasher {
         // calculate padded length
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
 
-        // apply padding
+        // absorb repeatedly
         let input_iter = input.iter();
         let padding_iter = [&BFIELD_ONE].into_iter().chain(iter::repeat(&BFIELD_ZERO));
         let padded_input = input_iter
             .chain(padding_iter)
             .take(padded_length)
             .chunks(RATE);
-        let mut padded_input_iter = padded_input
-            .into_iter()
-            .map(|chunk| chunk.into_iter().copied().collect::<Vec<_>>());
+        let mut padded_input_iter = padded_input.into_iter().map(|chunk| {
+            chunk
+                .into_iter()
+                .copied()
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap()
+        });
 
         // absorb_init
-        let absorb_init_elems: Vec<BFieldElement> =
+        let absorb_init_elems: [BFieldElement; RATE] =
             padded_input_iter.next().expect("at least one absorb");
         let mut sponge = Self::absorb_init(&absorb_init_elems);
 
