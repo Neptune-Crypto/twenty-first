@@ -27,11 +27,11 @@ default-features = false
 features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
 
 [dependencies]
-twenty-first = { path = "../twenty-first" }
+# pinned to avoid refactoring
+twenty-first = "=0.11.0"
 bincode = "*"
 serde = { version = "1.0", features = ["derive"] }
 itertools = "0.10"
 blake3 = "1.2"
 num-traits = "0.2"
 rayon = "1.5"
-# rand = "0.8"

@@ -21,7 +21,6 @@ use twenty_first::shared_math::other::random_elements_array;
 use twenty_first::shared_math::other::roundup_npo2;
 use twenty_first::shared_math::polynomial::Polynomial;
 use twenty_first::shared_math::rescue_prime_digest::Digest;
-use twenty_first::shared_math::rescue_prime_digest::DIGEST_LENGTH;
 use twenty_first::shared_math::rescue_prime_regular::*;
 use twenty_first::shared_math::traits::CyclicGroupGenerator;
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
@@ -1172,8 +1171,6 @@ impl StarkRp {
 
 #[cfg(test)]
 pub mod test_stark {
-    use crate::rescue_prime_trace;
-
     use super::*;
 
     use rand::Rng;
@@ -1239,7 +1236,7 @@ pub mod test_stark {
 
         // Verify that the AIR constraints evaluation over the trace is zero along the trace
         let input_2 = [BFieldElement::new(42); 10];
-        let trace = crate::rescue_prime_trace(&input_2);
+        let trace = RescuePrimeRegular::trace(&input_2);
         println!("Computing get_air_constraints(omicron)...");
         let now = std::time::Instant::now();
         let air_constraints = StarkRp::get_air_constraints(omicron);
@@ -1276,7 +1273,7 @@ pub mod test_stark {
 
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
-        let trace = rescue_prime_trace(&input);
+        let trace = RescuePrimeRegular::trace(&input);
         let output = &trace[trace.len() - 1][0..DIGEST_LENGTH];
         assert_eq!(9, trace.len());
 
@@ -1338,7 +1335,7 @@ pub mod test_stark {
 
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
-        let trace = rescue_prime_trace(&input);
+        let trace = RescuePrimeRegular::trace(&input);
         let output = &trace[trace.len() - 1][0..DIGEST_LENGTH];
 
         let mut npo2 = trace.len() + num_randomizers as usize;
@@ -1403,7 +1400,7 @@ pub mod test_stark {
         );
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
-        let trace = rescue_prime_trace(&input);
+        let trace = RescuePrimeRegular::trace(&input);
         let output = &trace[trace.len() - 1][0..DIGEST_LENGTH];
 
         assert_eq!(9, trace.len());

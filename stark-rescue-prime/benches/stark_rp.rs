@@ -1,11 +1,11 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use num_traits::{One, Zero};
 
-use stark_rescue_prime::rescue_prime_trace;
 use stark_shared::proof_stream::ProofStream;
 use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::rescue_prime_digest::DIGEST_LENGTH;
-use twenty_first::shared_math::rescue_prime_regular::STATE_SIZE;
+use twenty_first::shared_math::rescue_prime_regular::{
+    RescuePrimeRegular, DIGEST_LENGTH, STATE_SIZE,
+};
 use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
 use twenty_first::timing_reporter::TimingReporter;
 
@@ -26,7 +26,7 @@ fn stark_medium(criterion: &mut Criterion) {
 
         let mut input = [BFieldElement::zero(); 10];
         input[0] = BFieldElement::one();
-        let trace = rescue_prime_trace(&input);
+        let trace = RescuePrimeRegular::trace(&input);
         let output = &trace[trace.len() - 1][0..DIGEST_LENGTH];
 
         timer.elapsed("rp.eval_and_trace(...)");

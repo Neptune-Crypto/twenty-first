@@ -27,7 +27,8 @@ default-features = false
 features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
 
 [dependencies]
-twenty-first = { path = "../twenty-first" }
+# pinned to avoid refactoring
+twenty-first = "=0.11.0"
 stark-shared = { path = "../stark-shared" }
 blake3 = "1.2"
 console = "0.15"
