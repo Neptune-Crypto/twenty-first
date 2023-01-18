@@ -802,7 +802,16 @@ pub struct RescuePrimeRegularState {
 
 impl RescuePrimeRegularState {
     #[inline]
-    const fn new() -> RescuePrimeRegularState {
+    pub const fn new(domain: algebraic_hasher::Domain) -> RescuePrimeRegularState {
+        use algebraic_hasher::Domain::*;
+
+        let mut state = [BFIELD_ZERO; STATE_SIZE];
+
+        match domain {
+            VariableLength => (),
+            FixedLength => state[RATE] = BFIELD_ONE,
+        }
+
         RescuePrimeRegularState {
             state: [BFIELD_ZERO; STATE_SIZE],
         }
@@ -986,7 +995,7 @@ impl RescuePrimeRegular {
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
     pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; DIGEST_LENGTH] {
-        let mut sponge = RescuePrimeRegularState::new();
+        let mut sponge = RescuePrimeRegularState::new(algebraic_hasher::Domain::FixedLength);
 
         // absorb once
         sponge.state[..10].copy_from_slice(input);
@@ -1007,7 +1016,7 @@ impl RescuePrimeRegular {
     /// and as many 0 ∈ Fp elements as required to make the number of input elements
     /// a multiple of `RATE`.
     pub fn hash_varlen(input: &[BFieldElement]) -> [BFieldElement; 5] {
-        let mut sponge = RescuePrimeRegularState::new();
+        let mut sponge = RescuePrimeRegularState::new(algebraic_hasher::Domain::VariableLength);
 
         // pad input
         let mut padded_input = input.to_vec();
@@ -1085,7 +1094,7 @@ impl SpongeHasher for RescuePrimeRegular {
     type SpongeState = RescuePrimeRegularState;
 
     fn absorb_init(input: &[BFieldElement]) -> Self::SpongeState {
-        let mut sponge = RescuePrimeRegularState::new();
+        let mut sponge = RescuePrimeRegularState::new(algebraic_hasher::Domain::VariableLength);
 
         Self::absorb(&mut sponge, input);
 

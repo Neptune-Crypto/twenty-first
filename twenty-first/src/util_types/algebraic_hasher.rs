@@ -4,11 +4,17 @@ use itertools::Itertools;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
-use crate::shared_math::other::{self, roundup_nearest_multiple};
+use crate::shared_math::other::{self, is_power_of_two, roundup_nearest_multiple};
 use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 use crate::shared_math::x_field_element::{XFieldElement, EXTENSION_DEGREE};
 
 pub const RATE: usize = 10;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Domain {
+    VariableLength,
+    FixedLength,
+}
 
 pub trait SpongeHasher: Clone + Send + Sync {
     type SpongeState;
