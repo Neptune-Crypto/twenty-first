@@ -44,7 +44,6 @@ itertools = "0.10"
 nom = "7.1"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
-once_cell = "1.17"
 parity-scale-codec = "3"
 paw = "1.0"
 phf = { version = "0.10", features = ["macros"] }

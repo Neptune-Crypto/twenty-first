@@ -1,6 +1,5 @@
 use itertools::Itertools;
 use num_traits::One;
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
@@ -38,69 +37,128 @@ impl Tip5State {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Tip5 {
-    table: [u8; 256],
-    round_constants: [BFieldElement; NUM_ROUNDS * STATE_SIZE],
-}
+pub struct Tip5 {}
 
-static TIP5_INSTANCE: OnceCell<Tip5> = OnceCell::new();
+/// The lookup table with a high algebraic degree used in the TIP-5 permutation. To verify its
+/// correctness, see the test “lookup_table_is_correct.”
+pub const LOOKUP_TABLE: [u8; 256] = [
+    0, 7, 26, 63, 124, 215, 85, 254, 214, 228, 45, 185, 140, 173, 33, 240, 29, 177, 176, 32, 8,
+    110, 87, 202, 204, 99, 150, 106, 230, 14, 235, 128, 213, 239, 212, 138, 23, 130, 208, 6, 44,
+    71, 93, 116, 146, 189, 251, 81, 199, 97, 38, 28, 73, 179, 95, 84, 152, 48, 35, 119, 49, 88,
+    242, 3, 148, 169, 72, 120, 62, 161, 166, 83, 175, 191, 137, 19, 100, 129, 112, 55, 221, 102,
+    218, 61, 151, 237, 68, 164, 17, 147, 46, 234, 203, 216, 22, 141, 65, 57, 123, 12, 244, 54, 219,
+    231, 96, 77, 180, 154, 5, 253, 133, 165, 98, 195, 205, 134, 245, 30, 9, 188, 59, 142, 186, 197,
+    181, 144, 92, 31, 224, 163, 111, 74, 58, 69, 113, 196, 67, 246, 225, 10, 121, 50, 60, 157, 90,
+    122, 2, 250, 101, 75, 178, 159, 24, 36, 201, 11, 243, 132, 198, 190, 114, 233, 39, 52, 21, 209,
+    108, 238, 91, 187, 18, 104, 194, 37, 153, 34, 200, 143, 126, 155, 236, 118, 64, 80, 172, 89,
+    94, 193, 135, 183, 86, 107, 252, 13, 167, 206, 136, 220, 207, 103, 171, 160, 76, 182, 227, 217,
+    158, 56, 174, 4, 66, 109, 139, 162, 184, 211, 249, 47, 125, 232, 117, 43, 16, 42, 127, 20, 241,
+    25, 149, 105, 156, 51, 53, 168, 145, 247, 223, 79, 78, 226, 15, 222, 82, 115, 70, 210, 27, 41,
+    1, 170, 40, 131, 192, 229, 248, 255,
+];
+
+/// The round constants used in the Tip5 permutation. To verify their correctness, see the test
+/// “round_constants_are_correct.”
+pub const ROUND_CONSTANTS: [BFieldElement; NUM_ROUNDS * STATE_SIZE] = [
+    BFieldElement::new(13630775303355457758),
+    BFieldElement::new(16896927574093233874),
+    BFieldElement::new(10379449653650130495),
+    BFieldElement::new(1965408364413093495),
+    BFieldElement::new(15232538947090185111),
+    BFieldElement::new(15892634398091747074),
+    BFieldElement::new(3989134140024871768),
+    BFieldElement::new(2851411912127730865),
+    BFieldElement::new(8709136439293758776),
+    BFieldElement::new(3694858669662939734),
+    BFieldElement::new(12692440244315327141),
+    BFieldElement::new(10722316166358076749),
+    BFieldElement::new(12745429320441639448),
+    BFieldElement::new(17932424223723990421),
+    BFieldElement::new(7558102534867937463),
+    BFieldElement::new(15551047435855531404),
+    BFieldElement::new(17532528648579384106),
+    BFieldElement::new(5216785850422679555),
+    BFieldElement::new(15418071332095031847),
+    BFieldElement::new(11921929762955146258),
+    BFieldElement::new(9738718993677019874),
+    BFieldElement::new(3464580399432997147),
+    BFieldElement::new(13408434769117164050),
+    BFieldElement::new(264428218649616431),
+    BFieldElement::new(4436247869008081381),
+    BFieldElement::new(4063129435850804221),
+    BFieldElement::new(2865073155741120117),
+    BFieldElement::new(5749834437609765994),
+    BFieldElement::new(6804196764189408435),
+    BFieldElement::new(17060469201292988508),
+    BFieldElement::new(9475383556737206708),
+    BFieldElement::new(12876344085611465020),
+    BFieldElement::new(13835756199368269249),
+    BFieldElement::new(1648753455944344172),
+    BFieldElement::new(9836124473569258483),
+    BFieldElement::new(12867641597107932229),
+    BFieldElement::new(11254152636692960595),
+    BFieldElement::new(16550832737139861108),
+    BFieldElement::new(11861573970480733262),
+    BFieldElement::new(1256660473588673495),
+    BFieldElement::new(13879506000676455136),
+    BFieldElement::new(10564103842682358721),
+    BFieldElement::new(16142842524796397521),
+    BFieldElement::new(3287098591948630584),
+    BFieldElement::new(685911471061284805),
+    BFieldElement::new(5285298776918878023),
+    BFieldElement::new(18310953571768047354),
+    BFieldElement::new(3142266350630002035),
+    BFieldElement::new(549990724933663297),
+    BFieldElement::new(4901984846118077401),
+    BFieldElement::new(11458643033696775769),
+    BFieldElement::new(8706785264119212710),
+    BFieldElement::new(12521758138015724072),
+    BFieldElement::new(11877914062416978196),
+    BFieldElement::new(11333318251134523752),
+    BFieldElement::new(3933899631278608623),
+    BFieldElement::new(16635128972021157924),
+    BFieldElement::new(10291337173108950450),
+    BFieldElement::new(4142107155024199350),
+    BFieldElement::new(16973934533787743537),
+    BFieldElement::new(11068111539125175221),
+    BFieldElement::new(17546769694830203606),
+    BFieldElement::new(5315217744825068993),
+    BFieldElement::new(4609594252909613081),
+    BFieldElement::new(3350107164315270407),
+    BFieldElement::new(17715942834299349177),
+    BFieldElement::new(9600609149219873996),
+    BFieldElement::new(12894357635820003949),
+    BFieldElement::new(4597649658040514631),
+    BFieldElement::new(7735563950920491847),
+    BFieldElement::new(1663379455870887181),
+    BFieldElement::new(13889298103638829706),
+    BFieldElement::new(7375530351220884434),
+    BFieldElement::new(3502022433285269151),
+    BFieldElement::new(9231805330431056952),
+    BFieldElement::new(9252272755288523725),
+    BFieldElement::new(10014268662326746219),
+    BFieldElement::new(15565031632950843234),
+    BFieldElement::new(1209725273521819323),
+    BFieldElement::new(6024642864597845108),
+];
 
 impl Tip5 {
-    pub fn global() -> &'static Self {
-        #[allow(deprecated)]
-        TIP5_INSTANCE.get_or_init(Self::new)
-    }
-
-    #[deprecated(note = "use Tip5::global() for a singleton instance.")]
-    #[allow(clippy::new_without_default)]
-    fn new() -> Self {
-        let table: [u8; 256] = (0..256)
-            .map(|t| Self::offset_fermat_cube_map(t as u16) as u8)
-            .collect_vec()
-            .try_into()
-            .unwrap();
-        let to_int = |bytes: &[u8]| {
-            bytes
-                .iter()
-                .take(16)
-                .enumerate()
-                .map(|(i, b)| (*b as u128) << (8 * i))
-                .sum::<u128>()
-        };
-        let p = (1u128 << 64) - (1u128 << 32) + 1u128;
-        let round_constants = (0..NUM_ROUNDS * STATE_SIZE)
-            .map(|i| ["Tip5".to_string().as_bytes(), &[(i as u8)]].concat())
-            .map(|bytes| blake3::hash(&bytes))
-            .map(|hash| *hash.as_bytes())
-            .map(|bytes| to_int(&bytes))
-            .map(|i| (i % p) as u64)
-            .map(BFieldElement::from_raw_u64)
-            .collect_vec()
-            .try_into()
-            .unwrap();
-
-        Self {
-            table,
-            round_constants,
-        }
-    }
-
     #[inline]
-    fn offset_fermat_cube_map(x: u16) -> u16 {
-        let xx: u64 = (x + 1).into();
+    pub const fn offset_fermat_cube_map(x: u16) -> u16 {
+        let xx = (x + 1) as u64;
         let xxx = xx * xx * xx;
         ((xxx + 256) % 257) as u16
     }
 
     #[inline]
-    fn split_and_lookup(&self, element: &mut BFieldElement) -> BFieldElement {
+    fn split_and_lookup(element: &mut BFieldElement) -> BFieldElement {
         // let value = element.value();
         let mut bytes = element.raw_bytes();
 
         #[allow(clippy::needless_range_loop)] // faster like so
         for i in 0..8 {
             // bytes[i] = Self::offset_fermat_cube_map(bytes[i].into()) as u8;
-            bytes[i] = self.table[bytes[i] as usize];
+            bytes[i] = LOOKUP_TABLE[bytes[i] as usize];
         }
 
         BFieldElement::from_raw_bytes(&bytes)
@@ -337,10 +395,10 @@ impl Tip5 {
     }
 
     #[inline]
-    fn sbox_layer(&self, state: &mut [BFieldElement; STATE_SIZE]) {
+    fn sbox_layer(state: &mut [BFieldElement; STATE_SIZE]) {
         // lookup
         state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
-            self.split_and_lookup(s);
+            Self::split_and_lookup(s);
         });
 
         // power
@@ -352,28 +410,28 @@ impl Tip5 {
     }
 
     #[inline]
-    fn round(&self, sponge: &mut Tip5State, round_index: usize) {
-        self.sbox_layer(&mut sponge.state);
+    fn round(sponge: &mut Tip5State, round_index: usize) {
+        Self::sbox_layer(&mut sponge.state);
 
         Self::mds_noswap(&mut sponge.state);
 
         for i in 0..STATE_SIZE {
-            sponge.state[i] += self.round_constants[round_index * STATE_SIZE + i];
+            sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
         }
     }
 
     // permutation
     #[inline]
-    fn permutation(&self, sponge: &mut Tip5State) {
+    fn permutation(sponge: &mut Tip5State) {
         for i in 0..NUM_ROUNDS {
-            self.round(sponge, i);
+            Self::round(sponge, i);
         }
     }
 
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
-    pub fn hash_10(&self, input: &[BFieldElement; 10]) -> [BFieldElement; DIGEST_LENGTH] {
+    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; DIGEST_LENGTH] {
         let mut sponge = Tip5State::new(Domain::FixedLength);
 
         // absorb once
@@ -383,7 +441,7 @@ impl Tip5 {
         sponge.state[10] = BFieldElement::one();
 
         // apply permutation
-        self.permutation(&mut sponge);
+        Self::permutation(&mut sponge);
 
         // squeeze once
         sponge.state[..DIGEST_LENGTH].try_into().unwrap()
@@ -397,23 +455,19 @@ impl AlgebraicHasher for Tip5 {
     }
 
     fn hash_pair(left: &Digest, right: &Digest) -> Digest {
-        let tip5 = Tip5::global();
-
         let mut input = [BFIELD_ZERO; 2 * DIGEST_LENGTH];
         input[..DIGEST_LENGTH].copy_from_slice(&left.values());
         input[DIGEST_LENGTH..].copy_from_slice(&right.values());
-        Digest::new(tip5.hash_10(&input))
+        Digest::new(Tip5::hash_10(&input))
     }
 }
 
 impl AlgebraicHasherNew for Tip5 {
     fn hash_pair(left: &Digest, right: &Digest) -> Digest {
-        let tip5 = Tip5::global();
-
         let mut input = [BFIELD_ZERO; 10];
         input[..DIGEST_LENGTH].copy_from_slice(&left.values());
         input[DIGEST_LENGTH..].copy_from_slice(&right.values());
-        Digest::new(tip5.hash_10(&input))
+        Digest::new(Tip5::hash_10(&input))
     }
 }
 
@@ -429,8 +483,6 @@ impl SpongeHasher for Tip5 {
     }
 
     fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {
-        let tip5 = Tip5::global();
-
         // absorb
         sponge.state[..RATE]
             .iter_mut()
@@ -438,17 +490,15 @@ impl SpongeHasher for Tip5 {
             .for_each(|(a, &b)| *a += b);
 
         // xlix
-        tip5.permutation(sponge);
+        Tip5::permutation(sponge);
     }
 
     fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE] {
-        let tip5 = Tip5::global();
-
         // squeeze
         let produce: [BFieldElement; RATE] = (&sponge.state[..RATE]).try_into().unwrap();
 
         // xlix
-        tip5.permutation(sponge);
+        Tip5::permutation(sponge);
 
         produce
     }
@@ -463,9 +513,66 @@ mod tip5_tests {
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::tip5::Tip5;
+    use crate::shared_math::tip5::LOOKUP_TABLE;
+    use crate::shared_math::tip5::NUM_ROUNDS;
+    use crate::shared_math::tip5::ROUND_CONSTANTS;
+    use crate::shared_math::tip5::STATE_SIZE;
     use crate::util_types::algebraic_hasher::AlgebraicHasherNew;
 
     use super::RATE;
+
+    #[test]
+    fn lookup_table_is_correct() {
+        let table: [u8; 256] = (0..256)
+            .map(|t| Tip5::offset_fermat_cube_map(t as u16) as u8)
+            .collect_vec()
+            .try_into()
+            .unwrap();
+
+        println!(
+            "Entire lookup table:\n{}",
+            table.iter().map(|t| format!("{:02x}", t)).join(", ")
+        );
+
+        (0_usize..256).for_each(|i| {
+            assert_eq!(
+                LOOKUP_TABLE[i], table[i],
+                "Lookup tables must agree at every index, including index {i}."
+            )
+        });
+    }
+
+    #[test]
+    fn round_constants_are_correct() {
+        let to_int = |bytes: &[u8]| {
+            bytes
+                .iter()
+                .take(16)
+                .enumerate()
+                .map(|(i, b)| (*b as u128) << (8 * i))
+                .sum::<u128>()
+        };
+        let round_constants = (0..NUM_ROUNDS * STATE_SIZE)
+            .map(|i| ["Tip5".to_string().as_bytes(), &[(i as u8)]].concat())
+            .map(|bytes| blake3::hash(&bytes))
+            .map(|hash| *hash.as_bytes())
+            .map(|bytes| to_int(&bytes))
+            .map(|i| (i % BFieldElement::P as u128) as u64)
+            .map(BFieldElement::from_raw_u64)
+            .collect_vec();
+
+        println!(
+            "In case you changed something, here are all round constants:\n{}",
+            round_constants.iter().map(|c| format!("{c}")).join(", ")
+        );
+
+        (0_usize..NUM_ROUNDS * STATE_SIZE).for_each(|i| {
+            assert_eq!(
+                ROUND_CONSTANTS[i], round_constants[i],
+                "Round constants must agree at every index, including index {i}."
+            )
+        });
+    }
 
     #[test]
     #[ignore = "used for calculating parameters"]
@@ -614,9 +721,8 @@ mod tip5_tests {
     fn hash10_test_vectors() {
         let mut preimage = [BFieldElement::zero(); RATE];
         let mut digest: [BFieldElement; DIGEST_LENGTH];
-        let tip5 = Tip5::global();
         for i in 0..6 {
-            digest = tip5.hash_10(&preimage);
+            digest = Tip5::hash_10(&preimage);
             println!(
                 "{:?} -> {:?}",
                 preimage.iter().map(|b| b.value()).collect_vec(),
@@ -624,7 +730,7 @@ mod tip5_tests {
             );
             preimage[i..DIGEST_LENGTH + i].copy_from_slice(&digest);
         }
-        digest = tip5.hash_10(&preimage);
+        digest = Tip5::hash_10(&preimage);
         println!(
             "{:?} -> {:?}",
             preimage.iter().map(|b| b.value()).collect_vec(),

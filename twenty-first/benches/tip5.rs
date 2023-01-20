@@ -22,10 +22,8 @@ fn bench_10(c: &mut Criterion) {
         .try_into()
         .unwrap();
 
-    let tip5 = Tip5::global();
-
     group.bench_function(BenchmarkId::new("Tip5 / Hash 10", size), |bencher| {
-        bencher.iter(|| tip5.hash_10(&single_element));
+        bencher.iter(|| Tip5::hash_10(&single_element));
     });
 }
 
@@ -52,13 +50,12 @@ fn bench_parallel(c: &mut Criterion) {
     let elements: Vec<[BFieldElement; 10]> = (0..size)
         .map(|_| random_elements(10).try_into().unwrap())
         .collect();
-    let tip5 = Tip5::global();
 
     group.bench_function(BenchmarkId::new("Tip5 / Parallel Hash", size), |bencher| {
         bencher.iter(|| {
             elements
                 .par_iter()
-                .map(|e| tip5.hash_10(e))
+                .map(Tip5::hash_10)
                 .collect::<Vec<[BFieldElement; DIGEST_LENGTH]>>()
         });
     });
