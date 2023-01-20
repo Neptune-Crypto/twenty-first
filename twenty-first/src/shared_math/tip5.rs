@@ -486,7 +486,6 @@ impl SpongeHasher for Tip5 {
             .zip_eq(input.iter())
             .for_each(|(a, &b)| *a += b);
 
-        // xlix
         Tip5::permutation(sponge);
     }
 
@@ -494,7 +493,6 @@ impl SpongeHasher for Tip5 {
         // squeeze
         let produce: [BFieldElement; RATE] = (&sponge.state[..RATE]).try_into().unwrap();
 
-        // xlix
         Tip5::permutation(sponge);
 
         produce
