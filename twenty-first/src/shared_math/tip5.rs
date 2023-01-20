@@ -437,9 +437,6 @@ impl Tip5 {
         // absorb once
         sponge.state[..10].copy_from_slice(input);
 
-        // apply domain separation for fixed-length input
-        sponge.state[10] = BFieldElement::one();
-
         // apply permutation
         Self::permutation(&mut sponge);
 
