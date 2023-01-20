@@ -1,10 +1,14 @@
 use itertools::Itertools;
-use num_traits::{One, Zero};
+use num_traits::One;
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
-use super::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
+use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
+use crate::util_types::algebraic_hasher::{
+    AlgebraicHasher, AlgebraicHasherNew, Domain, SpongeHasher,
+};
 
-pub const DIGEST_LENGTH: usize = 5;
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
 pub const LOG2_STATE_SIZE: usize = 4;
@@ -18,10 +22,18 @@ pub struct Tip5State {
 }
 
 impl Tip5State {
-    const fn new() -> Tip5State {
-        Tip5State {
-            state: [BFieldElement::new(0); STATE_SIZE],
+    #[inline]
+    pub const fn new(domain: Domain) -> Self {
+        use Domain::*;
+
+        let mut state = [BFIELD_ZERO; STATE_SIZE];
+
+        match domain {
+            VariableLength => (),
+            FixedLength => state[RATE] = BFIELD_ONE,
         }
+
+        Self { state }
     }
 }
 
@@ -31,9 +43,17 @@ pub struct Tip5 {
     round_constants: [BFieldElement; NUM_ROUNDS * STATE_SIZE],
 }
 
+static TIP5_INSTANCE: OnceCell<Tip5> = OnceCell::new();
+
 impl Tip5 {
+    pub fn global() -> &'static Self {
+        #[allow(deprecated)]
+        TIP5_INSTANCE.get_or_init(Self::new)
+    }
+
+    #[deprecated(note = "use Tip5::global() for a singleton instance.")]
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    fn new() -> Self {
         let table: [u8; 256] = (0..256)
             .map(|t| Self::offset_fermat_cube_map(t as u16) as u8)
             .collect_vec()
@@ -353,8 +373,8 @@ impl Tip5 {
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
-    pub fn hash_10(&self, input: &[BFieldElement; 10]) -> [BFieldElement; 5] {
-        let mut sponge = Tip5State::new();
+    pub fn hash_10(&self, input: &[BFieldElement; 10]) -> [BFieldElement; DIGEST_LENGTH] {
+        let mut sponge = Tip5State::new(Domain::FixedLength);
 
         // absorb once
         sponge.state[..10].copy_from_slice(input);
@@ -366,41 +386,71 @@ impl Tip5 {
         self.permutation(&mut sponge);
 
         // squeeze once
-        sponge.state[..5].try_into().unwrap()
+        sponge.state[..DIGEST_LENGTH].try_into().unwrap()
+    }
+}
+
+// TODO: Remove old AlgebraicHasher in favor of AlgebraicHasherNew + SpongeHasher
+impl AlgebraicHasher for Tip5 {
+    fn hash_slice(elements: &[BFieldElement]) -> Digest {
+        Tip5::hash_varlen(elements)
     }
 
-    /// Hash an arbitrary number of field elements.
-    ///
-    /// This function takes care of padding by applying the padding
-    /// rule: append a single 1 ∈ Fp and as many 0 ∈ Fp elements as
-    /// are required to make the number of input elements a multiple
-    /// of `RATE`.
-    pub fn hash_varlen(&self, input: &[BFieldElement]) -> [BFieldElement; 5] {
-        let mut sponge = Tip5State::new();
+    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+        let tip5 = Tip5::global();
 
-        // pad input
-        let mut padded_input = input.to_vec();
-        padded_input.push(BFieldElement::one());
-        while padded_input.len() % RATE != 0 {
-            padded_input.push(BFieldElement::zero());
-        }
+        let mut input = [BFIELD_ZERO; 2 * DIGEST_LENGTH];
+        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
+        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
+        Digest::new(tip5.hash_10(&input))
+    }
+}
+
+impl AlgebraicHasherNew for Tip5 {
+    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+        let tip5 = Tip5::global();
+
+        let mut input = [BFIELD_ZERO; 10];
+        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
+        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
+        Digest::new(tip5.hash_10(&input))
+    }
+}
+
+impl SpongeHasher for Tip5 {
+    type SpongeState = Tip5State;
+
+    fn absorb_init(input: &[BFieldElement; RATE]) -> Self::SpongeState {
+        let mut sponge = Tip5State::new(Domain::VariableLength);
+
+        Self::absorb(&mut sponge, input);
+
+        sponge
+    }
+
+    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {
+        let tip5 = Tip5::global();
 
         // absorb
-        while !padded_input.is_empty() {
-            for (sponge_state_element, input_element) in sponge
-                .state
-                .iter_mut()
-                .take(RATE)
-                .zip_eq(padded_input.iter().take(RATE))
-            {
-                *sponge_state_element += input_element.to_owned();
-            }
-            padded_input.drain(..RATE);
-            self.permutation(&mut sponge);
-        }
+        sponge.state[..RATE]
+            .iter_mut()
+            .zip_eq(input.iter())
+            .for_each(|(a, &b)| *a += b);
 
-        // squeeze once
-        sponge.state[..5].try_into().unwrap()
+        // xlix
+        tip5.permutation(sponge);
+    }
+
+    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE] {
+        let tip5 = Tip5::global();
+
+        // squeeze
+        let produce: [BFieldElement; RATE] = (&sponge.state[..RATE]).try_into().unwrap();
+
+        // xlix
+        tip5.permutation(sponge);
+
+        produce
     }
 }
 
@@ -410,9 +460,10 @@ mod tip5_tests {
     use num_traits::Zero;
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-    use crate::shared_math::{
-        b_field_element::BFieldElement, rescue_prime_optimized::DIGEST_LENGTH, tip5::Tip5,
-    };
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
+    use crate::shared_math::tip5::Tip5;
+    use crate::util_types::algebraic_hasher::AlgebraicHasherNew;
 
     use super::RATE;
 
@@ -563,7 +614,7 @@ mod tip5_tests {
     fn hash10_test_vectors() {
         let mut preimage = [BFieldElement::zero(); RATE];
         let mut digest: [BFieldElement; DIGEST_LENGTH];
-        let tip5 = Tip5::new();
+        let tip5 = Tip5::global();
         for i in 0..6 {
             digest = tip5.hash_10(&preimage);
             println!(
@@ -593,18 +644,17 @@ mod tip5_tests {
     #[test]
     fn hash_varlen_test_vectors() {
         let mut digest_sum = [BFieldElement::zero(); DIGEST_LENGTH];
-        let tip5 = Tip5::new();
         for i in 0..20 {
             let preimage = (0..i).into_iter().map(BFieldElement::new).collect_vec();
-            let digest = tip5.hash_varlen(&preimage);
+            let digest = Tip5::hash_varlen(&preimage);
             println!(
                 "{:?} -> {:?}",
                 preimage.iter().map(|b| b.value()).collect_vec(),
-                digest.iter().map(|b| b.value()).collect_vec()
+                digest.values().iter().map(|b| b.value()).collect_vec()
             );
             digest_sum
                 .iter_mut()
-                .zip(digest.iter())
+                .zip(digest.values().iter())
                 .for_each(|(s, d)| *s += *d);
         }
         println!(
