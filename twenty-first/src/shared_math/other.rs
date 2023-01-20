@@ -67,8 +67,9 @@ pub fn roundup_npo2(x: u64) -> u64 {
 }
 
 pub fn roundup_nearest_multiple(mut x: usize, multiple: usize) -> usize {
-    if x % multiple != 0 {
-        x += multiple - (x % multiple);
+    let remainder = x % multiple;
+    if remainder != 0 {
+        x += multiple - remainder;
     }
     x
 }

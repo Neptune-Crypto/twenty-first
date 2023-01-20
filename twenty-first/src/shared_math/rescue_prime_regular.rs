@@ -802,7 +802,7 @@ pub struct RescuePrimeRegularState {
 
 impl RescuePrimeRegularState {
     #[inline]
-    pub const fn new(domain: algebraic_hasher::Domain) -> RescuePrimeRegularState {
+    pub const fn new(domain: algebraic_hasher::Domain) -> Self {
         use algebraic_hasher::Domain::*;
 
         let mut state = [BFIELD_ZERO; STATE_SIZE];
@@ -812,9 +812,7 @@ impl RescuePrimeRegularState {
             FixedLength => state[RATE] = BFIELD_ONE,
         }
 
-        RescuePrimeRegularState {
-            state: [BFIELD_ZERO; STATE_SIZE],
-        }
+        Self { state }
     }
 }
 
