@@ -3,8 +3,7 @@ use num_traits::Zero;
 
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_digest::Digest;
-use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
-use crate::util_types::algebraic_hasher::{AlgebraicHasherNew, SpongeHasher, RATE};
+use crate::util_types::algebraic_hasher::{AlgebraicHasher, SpongeHasher, RATE};
 
 impl SpongeHasher for blake3::Hasher {
     type SpongeState = blake3::Hasher;
@@ -37,27 +36,13 @@ impl SpongeHasher for blake3::Hasher {
     }
 }
 
-impl AlgebraicHasherNew for blake3::Hasher {
+impl AlgebraicHasher for blake3::Hasher {
     fn hash_pair(left: &Digest, right: &Digest) -> Digest {
         let mut hasher = blake3::Hasher::new();
         for elem in left.values().iter().chain(right.values().iter()) {
             hasher.update(&elem.value().to_be_bytes());
         }
         from_blake3_digest(&hasher.finalize())
-    }
-}
-
-impl AlgebraicHasher for blake3::Hasher {
-    fn hash_slice(elements: &[BFieldElement]) -> Digest {
-        let mut hasher = Self::new();
-        for elem in elements.iter() {
-            hasher.update(&elem.value().to_be_bytes());
-        }
-        from_blake3_digest(&hasher.finalize())
-    }
-
-    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
-        Self::hash_slice(&vec![left.to_sequence(), right.to_sequence()].concat())
     }
 }
 
