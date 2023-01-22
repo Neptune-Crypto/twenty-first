@@ -72,7 +72,7 @@ pub trait AlgebraicHasherNew: SpongeHasher {
         // calculate padded length
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
 
-        // absorb repeatedly
+        // pad input
         let input_iter = input.iter();
         let padding_iter = [&BFIELD_ONE].into_iter().chain(iter::repeat(&BFIELD_ZERO));
         let padded_input = input_iter
@@ -93,7 +93,7 @@ pub trait AlgebraicHasherNew: SpongeHasher {
             padded_input_iter.next().expect("at least one absorb");
         let mut sponge = Self::absorb_init(&absorb_init_elems);
 
-        // absorb
+        // absorb repeatedly
         for absorb_elems in padded_input_iter {
             Self::absorb(&mut sponge, &absorb_elems);
         }

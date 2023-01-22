@@ -6,6 +6,7 @@ use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::other::random_elements;
 use twenty_first::shared_math::rescue_prime_digest::DIGEST_LENGTH;
 use twenty_first::shared_math::tip5::Tip5;
+use twenty_first::util_types::algebraic_hasher::AlgebraicHasherNew;
 
 fn bench_10(c: &mut Criterion) {
     let mut group = c.benchmark_group("tip5/hash_10");
@@ -21,10 +22,8 @@ fn bench_10(c: &mut Criterion) {
         .try_into()
         .unwrap();
 
-    let tip5 = Tip5::new();
-
     group.bench_function(BenchmarkId::new("Tip5 / Hash 10", size), |bencher| {
-        bencher.iter(|| tip5.hash_10(&single_element));
+        bencher.iter(|| Tip5::hash_10(&single_element));
     });
 }
 
@@ -34,12 +33,11 @@ fn bench_varlen(c: &mut Criterion) {
     let size = 16_384;
     group.sample_size(50);
     let elements: Vec<BFieldElement> = random_elements(size);
-    let tip5 = Tip5::new();
 
     group.bench_function(
         BenchmarkId::new("Tip5 / Hash Variable Length", size),
         |bencher| {
-            bencher.iter(|| tip5.hash_varlen(&elements));
+            bencher.iter(|| Tip5::hash_varlen(&elements));
         },
     );
 }
@@ -52,13 +50,12 @@ fn bench_parallel(c: &mut Criterion) {
     let elements: Vec<[BFieldElement; 10]> = (0..size)
         .map(|_| random_elements(10).try_into().unwrap())
         .collect();
-    let tip5 = Tip5::new();
 
     group.bench_function(BenchmarkId::new("Tip5 / Parallel Hash", size), |bencher| {
         bencher.iter(|| {
             elements
                 .par_iter()
-                .map(|e| tip5.hash_10(e))
+                .map(Tip5::hash_10)
                 .collect::<Vec<[BFieldElement; DIGEST_LENGTH]>>()
         });
     });
