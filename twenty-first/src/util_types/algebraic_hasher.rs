@@ -196,33 +196,7 @@ pub trait Hashable {
     fn to_sequence(&self) -> Vec<BFieldElement>;
 }
 
-impl Hashable for Digest {
-    fn to_sequence(&self) -> Vec<BFieldElement> {
-        self.values().to_vec()
-    }
-}
-
-impl Hashable for u128 {
-    fn to_sequence(&self) -> Vec<BFieldElement> {
-        // Only shifting with 63 *should* prevent collissions for all numbers below u64::MAX.
-        vec![
-            BFIELD_ZERO,
-            BFIELD_ZERO,
-            BFieldElement::new((self >> 126) as u64),
-            BFieldElement::new(((self >> 63) % BFieldElement::MAX as u128) as u64),
-            BFieldElement::new((self % BFieldElement::MAX as u128) as u64),
-        ]
-    }
-}
-
-impl Hashable for XFieldElement {
-    fn to_sequence(&self) -> Vec<BFieldElement> {
-        self.coefficients.to_vec()
-    }
-}
-
-// FIXME: Not safe.
-impl Hashable for usize {
+impl Hashable for bool {
     fn to_sequence(&self) -> Vec<BFieldElement> {
         vec![BFieldElement::new(*self as u64)]
     }
@@ -240,40 +214,107 @@ impl Hashable for BFieldElement {
     }
 }
 
+impl Hashable for u64 {
+    fn to_sequence(&self) -> Vec<BFieldElement> {
+        let lo: u64 = self & 0xffff_ffff;
+        let hi: u64 = self >> 32;
+
+        vec![BFieldElement::new(lo), BFieldElement::new(hi)]
+    }
+}
+
+impl Hashable for usize {
+    fn to_sequence(&self) -> Vec<BFieldElement> {
+        assert_eq!(usize::BITS, u64::BITS);
+        (*self as u64).to_sequence()
+    }
+}
+
+impl Hashable for XFieldElement {
+    fn to_sequence(&self) -> Vec<BFieldElement> {
+        self.coefficients.to_vec()
+    }
+}
+
+impl Hashable for Digest {
+    fn to_sequence(&self) -> Vec<BFieldElement> {
+        self.values().to_vec()
+    }
+}
+
+impl Hashable for u128 {
+    fn to_sequence(&self) -> Vec<BFieldElement> {
+        let lo: u64 = (self & 0xffff_ffff) as u64;
+        let lo_mid: u64 = ((self >> 32) & 0xffff_ffff) as u64;
+        let hi_mid: u64 = ((self >> 64) & 0xffff_ffff) as u64;
+        let hi: u64 = ((self >> 96) & 0xffff_ffff) as u64;
+
+        vec![
+            BFieldElement::new(lo),
+            BFieldElement::new(lo_mid),
+            BFieldElement::new(hi_mid),
+            BFieldElement::new(hi),
+        ]
+    }
+}
+
 #[cfg(test)]
 mod algebraic_hasher_tests {
     use num_traits::Zero;
     use rand::Rng;
+    use rand_distr::{Distribution, Standard};
 
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;
 
-    #[test]
-    fn to_sequence_length_test() {
+    fn to_sequence_prop<T>(smallest: T, largest: T)
+    where
+        T: Eq + Hashable,
+        Standard: Distribution<T>,
+    {
+        let smallest_seq = smallest.to_sequence();
+        let largest_seq = largest.to_sequence();
+        assert_ne!(smallest_seq, largest_seq);
+        assert_eq!(smallest_seq.len(), largest_seq.len());
+
         let mut rng = rand::thread_rng();
+        let random_a: T = rng.gen();
+        let random_b: T = rng.gen();
+
+        if random_a != random_b {
+            assert_ne!(random_a.to_sequence(), random_b.to_sequence());
+        } else {
+            assert_eq!(random_a.to_sequence(), random_b.to_sequence());
+        }
+    }
+
+    #[test]
+    fn to_sequence_test() {
+        // bool
+        to_sequence_prop(false, true);
+
+        // u32
+        to_sequence_prop(0u32, u32::MAX);
+
+        // u64
+        to_sequence_prop(0u64, u64::MAX);
+
+        // BFieldElement
         let bfe_max = BFieldElement::new(BFieldElement::MAX);
+        to_sequence_prop(BFIELD_ZERO, bfe_max);
 
-        let some_digest: Digest = rng.gen();
-        let zero_digest: Digest = Digest::new([BFieldElement::zero(); DIGEST_LENGTH]);
-        let max_digest: Digest = Digest::new([bfe_max; DIGEST_LENGTH]);
-        for digest in [some_digest, zero_digest, max_digest] {
-            assert_eq!(DIGEST_LENGTH, digest.to_sequence().len());
-        }
+        // XFieldElement
+        let xfe_max = XFieldElement::new([bfe_max; EXTENSION_DEGREE]);
+        to_sequence_prop(XFieldElement::zero(), xfe_max);
 
-        let some_u128: u128 = rng.gen();
-        let zero_u128: u128 = 0;
-        let max_u128: u128 = u128::MAX;
-        for u128 in [some_u128, zero_u128, max_u128] {
-            assert_eq!(DIGEST_LENGTH, u128.to_sequence().len());
-        }
+        // Digest
+        let digest_zero = Digest::new([BFIELD_ZERO; DIGEST_LENGTH]);
+        let digest_max = Digest::new([bfe_max; DIGEST_LENGTH]);
+        to_sequence_prop(digest_zero, digest_max);
 
-        let some_xfe: XFieldElement = rng.gen();
-        let zero_xfe: XFieldElement = XFieldElement::zero();
-        let max_xfe: XFieldElement = XFieldElement::new([bfe_max; EXTENSION_DEGREE]);
-        for xfe in [some_xfe, zero_xfe, max_xfe] {
-            assert_eq!(EXTENSION_DEGREE, xfe.to_sequence().len());
-        }
+        // u128
+        to_sequence_prop(0u128, u128::MAX);
     }
 }
