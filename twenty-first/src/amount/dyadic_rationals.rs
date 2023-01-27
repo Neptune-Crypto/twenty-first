@@ -6,7 +6,6 @@ use std::ops::{Add, Mul, Sub};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DyadicRational {
-    // TODO: Consider changing mantissa type to `u32` or to `U32s<N>`
     mantissa: BigUint,
     exponent: u32,
 }
