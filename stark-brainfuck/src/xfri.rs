@@ -27,7 +27,7 @@ impl Error for ValidationError {}
 
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Deserialization error for LowDegreeProof: {:?}", self)
+        write!(f, "Deserialization error for LowDegreeProof: {self:?}")
     }
 }
 
@@ -204,7 +204,7 @@ impl<H: AlgebraicHasher> Fri<H> {
                 .collect();
             Self::enqueue_auth_pairs(&b_indices, &codewords[r], &merkle_trees[r], proof_stream);
             current_domain_len /= 2;
-            timer.elapsed(&format!("Query phase {}", r));
+            timer.elapsed(&format!("Query phase {r}"));
         }
 
         println!("FRI-prover, timing report\n{}", timer.finish());
@@ -434,16 +434,16 @@ impl<H: AlgebraicHasher> Fri<H> {
         // query step 1:  loop over FRI rounds, verify "B"s, compute values for "C"s
         timer.elapsed("Starting query phase step 1 (loop)");
         for r in 0..num_rounds {
-            timer.elapsed(&format!("Round {} started.", r));
+            timer.elapsed(&format!("Round {r} started."));
 
             // get "B" indices and verify set membership of corresponding values
             b_indices = b_indices
                 .iter()
                 .map(|x| (x + current_domain_len / 2) % current_domain_len)
                 .collect();
-            timer.elapsed(&format!("Get b-indices for current round ({})", r));
+            timer.elapsed(&format!("Get b-indices for current round ({r})"));
             let b_values = Self::dequeue_and_authenticate(&b_indices, roots[r], proof_stream)?;
-            timer.elapsed(&format!("Read & verify b-auth paths round {}", r));
+            timer.elapsed(&format!("Read & verify b-auth paths round {r}"));
             debug_assert_eq!(
                 self.colinearity_checks_count,
                 a_indices.len(),
@@ -488,7 +488,7 @@ impl<H: AlgebraicHasher> Fri<H> {
             a_indices = c_indices;
             a_values = c_values;
 
-            timer.elapsed(&format!("Round {} finished.", r));
+            timer.elapsed(&format!("Round {r} finished."));
         }
         timer.elapsed("Stopping query phase step 1 (loop)");
 
@@ -715,7 +715,7 @@ mod xfri_tests {
         let (_, merkle_root_of_round_0) = fri.prove(&subgroup, &mut proof_stream).unwrap();
         let verdict = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
         if let Err(e) = verdict {
-            panic!("Found error: {}", e);
+            panic!("Found error: {e}");
         }
     }
 
@@ -739,7 +739,7 @@ mod xfri_tests {
         let (_, merkle_root_of_round_0) = fri.prove(&codeword, &mut proof_stream).unwrap();
         let verdict = fri.verify(&mut proof_stream, &merkle_root_of_round_0);
         if let Err(e) = verdict {
-            panic!("Found error: {}", e);
+            panic!("Found error: {e}");
         }
     }
 
@@ -785,7 +785,7 @@ mod xfri_tests {
             let bad_verify_result = fri.verify(&mut proof_stream, &bad_merkle_root);
 
             assert!(bad_verify_result.is_err());
-            println!("bad_verify_result = {:?}", bad_verify_result);
+            println!("bad_verify_result = {bad_verify_result:?}");
 
             // TODO: Add negative test with bad Merkle authentication path
             // This probably requires manipulating the proof stream somehow.

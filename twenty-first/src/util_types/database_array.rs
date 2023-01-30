@@ -13,9 +13,7 @@ impl<const N: u128, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, 
     pub fn get(&mut self, index: u128) -> T {
         assert!(
             N > index,
-            "Cannot get outside of length. Length: {}, index: {}",
-            N,
-            index
+            "Cannot get outside of length. Length: {N}, index: {index}"
         );
         let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
         let elem_as_bytes_res = self.db.get(&index_bytes);
@@ -29,8 +27,7 @@ impl<const N: u128, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, 
         let indices: Vec<u128> = indices_and_vals.iter().map(|(index, _)| *index).collect();
         assert!(
             indices.iter().all(|index| *index < N),
-            "All indices must be lower than length of array. Got: {:?}",
-            indices
+            "All indices must be lower than length of array. Got: {indices:?}"
         );
         let mut batch_write = WriteBatch::new();
         for (index, val) in indices_and_vals.iter() {
@@ -48,9 +45,7 @@ impl<const N: u128, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, 
     pub fn set(&mut self, index: u128, value: T) {
         assert!(
             N > index,
-            "Cannot set outside of length. Length: {}, index: {}",
-            N,
-            index
+            "Cannot set outside of length. Length: {N}, index: {index}"
         );
         let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
         let value_bytes: Vec<u8> = bincode::serialize(&value).unwrap();

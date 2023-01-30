@@ -88,7 +88,7 @@ impl Error for StarkProofError {}
 
 impl fmt::Display for StarkProofError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -125,7 +125,7 @@ impl Error for StarkVerifyError {}
 
 impl fmt::Display for StarkVerifyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -566,7 +566,7 @@ impl StarkRp {
 
         timer.elapsed("calculate bq_mt.get_multi_proof(quadrupled_indices) for randomizer");
         let report = timer.finish();
-        println!("{}", report);
+        println!("{report}");
 
         Ok((fri_domain_length as u32, omega))
     }
@@ -748,11 +748,11 @@ impl StarkRp {
         for (i, current_index) in indices.into_iter().enumerate() {
             let current_x: BFieldElement =
                 self.field_generator * omega.mod_pow(current_index as u64);
-            timer.elapsed(&format!("current_x {}", i));
+            timer.elapsed(&format!("current_x {i}"));
             let next_index: usize =
                 (current_index + blowup_factor_new as usize) % fri_domain_length as usize;
             let next_x: BFieldElement = self.field_generator * omega.mod_pow(next_index as u64);
-            timer.elapsed(&format!("next_x {}", i));
+            timer.elapsed(&format!("next_x {i}"));
             let mut current_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
                 .map(|r| {
                     boundary_quotients[r][&current_index]
@@ -760,19 +760,19 @@ impl StarkRp {
                         + boundary_interpolants[r].evaluate(&current_x)
                 })
                 .collect();
-            timer.elapsed(&format!("current_trace {}", i));
+            timer.elapsed(&format!("current_trace {i}"));
             let mut next_trace: Vec<BFieldElement> = (0..self.num_registers as usize)
                 .map(|r| {
                     boundary_quotients[r][&next_index] * boundary_zerofiers[r].evaluate(&next_x)
                         + boundary_interpolants[r].evaluate(&next_x)
                 })
                 .collect();
-            timer.elapsed(&format!("next_trace {}", i));
+            timer.elapsed(&format!("next_trace {i}"));
 
             let mut point: Vec<BFieldElement> = vec![current_x];
             point.append(&mut current_trace);
             point.append(&mut next_trace);
-            timer.elapsed(&format!("generate \"point\" {}", i));
+            timer.elapsed(&format!("generate \"point\" {i}"));
 
             // println!("point length: {}", point.len());
             // println!(
@@ -793,7 +793,7 @@ impl StarkRp {
             // TODO: For some reason this mod pow precalculation is super slow
             let precalculated_mod_pows: HashMap<(usize, u8), BFieldElement> =
                 MPolynomial::<BFieldElement>::precalculate_scalar_mod_pows(max_exponent, &point);
-            timer.elapsed(&format!("precalculate mod_pows {}", i));
+            timer.elapsed(&format!("precalculate mod_pows {i}"));
             let intermediate_results: HashMap<Vec<u8>, BFieldElement> =
                 MPolynomial::<BFieldElement>::precalculate_scalar_exponents(
                     &point,
@@ -801,18 +801,17 @@ impl StarkRp {
                     &exponents_list,
                 )?;
             timer.elapsed(&format!(
-                "precalculate transition_constraint_values intermediate results {}",
-                i
+                "precalculate transition_constraint_values intermediate results {i}"
             ));
             let transition_constraint_values: Vec<BFieldElement> = transition_constraints
                 .iter()
                 .map(|tc| tc.evaluate_with_precalculation(&point, &intermediate_results))
                 .collect();
-            timer.elapsed(&format!("transition_constraint_values {}", i));
+            timer.elapsed(&format!("transition_constraint_values {i}"));
 
             let current_transition_zerofier_value: BFieldElement =
                 transition_zerofier.evaluate(&current_x);
-            timer.elapsed(&format!("current_transition_zerofier_value {}", i));
+            timer.elapsed(&format!("current_transition_zerofier_value {i}"));
 
             // Get combination polynomial evaluation value
             // Loop over all registers for transition quotient values, and for boundary quotient values
@@ -845,7 +844,7 @@ impl StarkRp {
                 .fold(XFieldElement::zero(), |sum, (&weight, &term)| {
                     sum + term * weight
                 });
-            timer.elapsed(&format!("combination {}", i));
+            timer.elapsed(&format!("combination {i}"));
 
             if values[i] != combination {
                 return Err(Box::new(StarkVerifyError::LinearCombinationMismatch(
@@ -855,7 +854,7 @@ impl StarkRp {
         }
         timer.elapsed("Verify revealed values from combination polynomial");
         let report = timer.finish();
-        println!("{}", report);
+        println!("{report}");
         Ok(())
     }
 
@@ -1241,10 +1240,10 @@ pub mod test_stark {
         let now = std::time::Instant::now();
         let air_constraints = StarkRp::get_air_constraints(omicron);
         let elapsed = now.elapsed();
-        println!("Completed get_air_constraints(omicron) in {:?}!", elapsed);
+        println!("Completed get_air_constraints(omicron) in {elapsed:?}!");
 
         for round in 0..NUM_ROUNDS - 1 {
-            println!("Round {}", round);
+            println!("Round {round}");
             for air_constraint in air_constraints.iter() {
                 let mut point = vec![omicron.mod_pow(round as u64)];
                 for i in 0..STATE_SIZE {
@@ -1353,7 +1352,7 @@ pub mod test_stark {
         let boundary_constraints = StarkRp::get_boundary_constraints(output);
         timer.elapsed("get_boundary_constraints(output)");
         let report = timer.finish();
-        println!("{}", report);
+        println!("{report}");
 
         let mut proof_stream = ProofStream::default();
 
@@ -1428,7 +1427,7 @@ pub mod test_stark {
 
         let (fri_domain_length, omega) = match prove_result {
             Ok(res) => res,
-            Err(e) => panic!("Error while generating proof: {}", e),
+            Err(e) => panic!("Error while generating proof: {e}"),
         };
 
         let verify_result = stark.verify(

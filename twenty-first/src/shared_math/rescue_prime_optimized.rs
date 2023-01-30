@@ -645,9 +645,7 @@ impl RescuePrimeOptimized {
     fn xlix_round(sponge: &mut RescuePrimeOptimizedState, round_index: usize) {
         debug_assert!(
             round_index < NUM_ROUNDS,
-            "Cannot apply {}th round; only have {} in total.",
-            round_index,
-            NUM_ROUNDS
+            "Cannot apply {round_index}th round; only have {NUM_ROUNDS} in total."
         );
 
         // MDS matrix

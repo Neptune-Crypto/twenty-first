@@ -27,7 +27,7 @@ impl Error for StarkVerifyError {}
 
 impl fmt::Display for StarkVerifyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

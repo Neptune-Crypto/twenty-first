@@ -69,10 +69,7 @@ impl TryFrom<&[BFieldElement]> for XFieldElement {
     fn try_from(value: &[BFieldElement]) -> Result<Self, Self::Error> {
         let len = value.len();
         value.try_into().map(XFieldElement::new).map_err(|_| {
-            format!(
-                "Expected {} BFieldElements for digest, but got {}",
-                EXTENSION_DEGREE, len,
-            )
+            format!("Expected {EXTENSION_DEGREE} BFieldElements for digest, but got {len}")
         })
     }
 }
@@ -1105,7 +1102,7 @@ mod x_field_element_test {
         let mut prev = XFieldElement::zero().emojihash();
         for xfe in rand_xs {
             let curr = xfe.emojihash();
-            println!("{}", curr);
+            println!("{curr}");
             assert_ne!(curr, prev);
             prev = curr
         }

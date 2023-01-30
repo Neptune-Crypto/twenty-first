@@ -526,7 +526,7 @@ mod tip5_tests {
 
         println!(
             "Entire lookup table:\n{}",
-            table.iter().map(|t| format!("{:02x}", t)).join(", ")
+            table.iter().map(|t| format!("{t:02x}")).join(", ")
         );
 
         (0_usize..256).for_each(|i| {
@@ -609,10 +609,7 @@ mod tip5_tests {
             })
             .max()
             .unwrap();
-        println!(
-            "additive differential uniformity for fermat cube map: {}",
-            du_fermat
-        );
+        println!("additive differential uniformity for fermat cube map: {du_fermat}");
 
         // bitwise-differential
         let count_satisfiers_fermat_bitwise = |a: u16, b: u16| {
@@ -629,7 +626,7 @@ mod tip5_tests {
             for b in 1..256 {
                 let num_satisfiers = count_satisfiers_fermat_bitwise(a, b);
                 if num_satisfiers == 256 {
-                    println!("a: {}, b: {} -> 256 satisfiers", a, b);
+                    println!("a: {a}, b: {b} -> 256 satisfiers");
                 }
             }
         }
@@ -644,10 +641,7 @@ mod tip5_tests {
             })
             .max()
             .unwrap();
-        println!(
-            "bitwise differential uniformity for fermat cube map: {}",
-            du_fermat_bitwise
-        );
+        println!("bitwise differential uniformity for fermat cube map: {du_fermat_bitwise}");
     }
 
     #[test]
@@ -665,7 +659,7 @@ mod tip5_tests {
             .zip(bfield_cubed.iter())
             .filter(|(a, b)| a == b)
             .count();
-        println!("agreement with low-degree function: {}", equal_count);
+        println!("agreement with low-degree function: {equal_count}");
     }
 
     #[test]

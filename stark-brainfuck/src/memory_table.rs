@@ -79,7 +79,7 @@ impl MemoryTable {
             } else {
                 assert!(
                     !pt.current_instruction.is_zero(),
-                    "Processor matrix must be unpadded when deriving memory matrix. Row {} has instruction zero. Input was: {:?}", i, processor_matrix
+                    "Processor matrix must be unpadded when deriving memory matrix. Row {i} has instruction zero. Input was: {processor_matrix:?}" 
                 );
             }
             matrix.push(vec![
@@ -316,8 +316,7 @@ impl TableTrait for MemoryTable {
         let b_field_polylen = b_field_polynomials.len();
         assert_eq!(
             6, b_field_polylen,
-            "number of transition constraints from MemoryTable is {}, but expected 6",
-            b_field_polylen
+            "number of transition constraints from MemoryTable is {b_field_polylen}, but expected 6"
         );
 
         let x_field_variables: [MPolynomial<XFieldElement>; 2 * Self::FULL_WIDTH] =

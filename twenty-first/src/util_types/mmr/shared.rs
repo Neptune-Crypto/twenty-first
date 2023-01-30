@@ -830,8 +830,7 @@ mod mmr_test {
             let rll_time = tuck - tock;
             let relation = rac_time.as_secs_f64() / rll_time.as_secs_f64();
             println!(
-                "{}. ({}) RAC: {:#?} / RLL: {:#?} / speed up: {}x",
-                n, rll, rac_time, rll_time, relation
+                "{n}. ({rll}) RAC: {rac_time:#?} / RLL: {rll_time:#?} / speed up: {relation}x"
             );
         }
     }

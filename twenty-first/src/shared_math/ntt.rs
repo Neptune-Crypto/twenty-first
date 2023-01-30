@@ -58,9 +58,7 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
     // `omega` must be a primitive root of unity of order `n`
     debug_assert!(
         omega.mod_pow_u32(n).is_one(),
-        "Got {} which is not a {}th root of 1",
-        omega,
-        n
+        "Got {omega} which is not a {n}th root of 1"
     );
     debug_assert!(!omega.mod_pow_u32(n / 2).is_one());
 
@@ -160,9 +158,7 @@ pub fn ntt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], omeg
     // `omega` must be a primitive root of unity of order `n`
     debug_assert!(
         omega.mod_pow_u32(n as u32).is_one(),
-        "Got {} which is not a {}th root of 1",
-        omega,
-        n
+        "Got {omega} which is not a {n}th root of 1"
     );
     debug_assert!(!omega.mod_pow_u32((n / 2).try_into().unwrap()).is_one());
 
@@ -210,9 +206,7 @@ pub fn intt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], ome
     // `omega` must be a primitive root of unity of order `n`
     debug_assert!(
         omega_inverse.mod_pow_u32(n.try_into().unwrap()).is_one(),
-        "Got {} which is not a {}th root of 1",
-        omega_inverse,
-        n
+        "Got {omega_inverse} which is not a {n}th root of 1"
     );
     debug_assert!(!omega_inverse
         .mod_pow_u32((n / 2).try_into().unwrap())
@@ -343,10 +337,10 @@ mod fast_ntt_attempt_tests {
         ];
         let omega = XFieldElement::primitive_root_of_unity(4).unwrap();
 
-        println!("input_output = {:?}", input_output);
+        println!("input_output = {input_output:?}");
         ntt::<XFieldElement>(&mut input_output, omega.unlift().unwrap(), 2);
         assert_eq!(expected, input_output);
-        println!("input_output = {:?}", input_output);
+        println!("input_output = {input_output:?}");
 
         // Verify that INTT(NTT(x)) = x
         intt::<XFieldElement>(&mut input_output, omega.unlift().unwrap(), 2);
@@ -443,7 +437,7 @@ mod fast_ntt_attempt_tests {
         let omega = BFieldElement::primitive_root_of_unity(32).unwrap();
         ntt::<BFieldElement>(&mut input_output, omega, 5);
         // let actual_output = ntt(&mut input_output, &omega, 5);
-        println!("actual_output = {:?}", input_output);
+        println!("actual_output = {input_output:?}");
         let expected = vec![
             BFieldElement::new(20),
             BFieldElement::new(0),
@@ -508,7 +502,7 @@ mod fast_ntt_attempt_tests {
     fn test_ntt_noswap() {
         for log_size in 1..8 {
             let size = 1 << log_size;
-            println!("size: {}", size);
+            println!("size: {size}");
             let a: Vec<BFieldElement> = random_elements(size);
             let omega = BFieldElement::primitive_root_of_unity(size.try_into().unwrap()).unwrap();
             let mut a1 = a.clone();

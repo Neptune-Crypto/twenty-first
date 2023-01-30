@@ -46,7 +46,7 @@ impl TableCollection {
             2 => &self.memory_table.0.extended_codewords,
             3 => &self.input_table.0.extended_codewords,
             4 => &self.output_table.0.extended_codewords,
-            _ => panic!("Unrecognized index. Got: {}", index),
+            _ => panic!("Unrecognized index. Got: {index}"),
         }
     }
 
@@ -57,7 +57,7 @@ impl TableCollection {
             2 => self.memory_table.interpolant_degree(),
             3 => self.input_table.interpolant_degree(),
             4 => self.output_table.interpolant_degree(),
-            _ => panic!("Unrecognized index. Got: {}", index),
+            _ => panic!("Unrecognized index. Got: {index}"),
         }
     }
 
@@ -318,19 +318,19 @@ mod brainfuck_table_collection_tests {
             assert_eq!(
                 expected_base_bounds,
                 table_collection.get_all_base_degree_bounds(),
-                "base degree bounds must match expected value from Python BF-STARK tutorial for code {}", code
+                "base degree bounds must match expected value from Python BF-STARK tutorial for code {code}"
             );
             assert_eq!(
                 expected_extension_bounds,
                 table_collection.get_all_extension_degree_bounds(),
-                "extension degree bounds must match expected value from Python BF-STARK tutorial for code {}", code
+                "extension degree bounds must match expected value from Python BF-STARK tutorial for code {code}"
             );
             let challenges: [XFieldElement; 11] = random_elements_array();
             let terminals: [XFieldElement; 5] = random_elements_array();
             assert_eq!(
                 expected_quotient_bounds,
                 table_collection.all_quotient_degree_bounds(challenges, terminals),
-                "extension degree bounds must match expected value from Python BF-STARK tutorial for code {}", code
+                "extension degree bounds must match expected value from Python BF-STARK tutorial for code {code}"
             );
         }
     }
@@ -439,7 +439,7 @@ mod brainfuck_table_collection_tests {
 
         // sample random evaluation points. They are re-used across property tests for r_0 and r_1
         let omicron: BFieldElement = t_collect_0_rand.processor_table.omicron();
-        println!("omicron = {}", omicron);
+        println!("omicron = {omicron}");
         let eval_points = random_elements(100);
 
         // check the expected invariants
@@ -469,10 +469,7 @@ mod brainfuck_table_collection_tests {
                 if r_2.is_zero() {
                     assert!(
                         ip_2.is_zero(),
-                        "in column {}, r_2 was zero but ip_2 was not:\n\tip_2 = {}\n\tr_2 = {}",
-                        col_id,
-                        ip_2,
-                        r_2
+                        "in column {col_id}, r_2 was zero but ip_2 was not:\n\tip_2 = {ip_2}\n\tr_2 = {r_2}"
                     );
                 } else {
                     assert_ne!(

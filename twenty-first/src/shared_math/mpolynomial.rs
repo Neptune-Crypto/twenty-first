@@ -220,7 +220,7 @@ impl Error for PrecalculationError {}
 
 impl fmt::Display for PrecalculationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -242,7 +242,7 @@ impl<FF: FiniteField> Display for MPolynomial<FF> {
                 .join(" + ")
         };
 
-        write!(f, "{}", output)
+        write!(f, "{output}")
     }
 }
 
@@ -317,9 +317,9 @@ impl<FF: FiniteField> MPolynomial<FF> {
                 continue;
             }
             let factor_str = if *exponent == 1 {
-                format!("x_{}", i)
+                format!("x_{i}")
             } else {
-                format!("x_{}^{}", i, exponent)
+                format!("x_{i}^{exponent}")
             };
             str_elems.push(factor_str);
         }
@@ -567,7 +567,7 @@ impl<FF: FiniteField> MPolynomial<FF> {
         );
         timer.elapsed("traversed tree");
         let report = timer.finish();
-        println!("{}", report);
+        println!("{report}");
 
         Ok(())
     }
@@ -1633,7 +1633,7 @@ mod test_mpolynomials {
         );
         match precalculation_result {
             Ok(_) => (),
-            Err(e) => panic!("error: {}", e),
+            Err(e) => panic!("error: {e}"),
         };
 
         let x_cubed: Polynomial<BFieldElement> =
@@ -2034,7 +2034,7 @@ mod test_mpolynomials {
             );
             match precalculation_result {
                 Ok(_) => (),
-                Err(e) => panic!("error: {}", e),
+                Err(e) => panic!("error: {e}"),
             };
 
             // Verify precalculation results
@@ -2349,7 +2349,7 @@ mod test_mpolynomials {
         };
 
         let expected = "1 + 6*x_0^2 + 5*x_1 + 7*x_0^3*x_1^4";
-        assert_eq!(expected, format!("{}", mpoly));
+        assert_eq!(expected, format!("{mpoly}"));
     }
 
     #[test]
@@ -2373,7 +2373,7 @@ mod test_mpolynomials {
             "(16·x² + 15·x + 14)*x_0^3*x_1^4",
         ]
         .concat();
-        assert_eq!(expected, format!("{}", mpoly));
+        assert_eq!(expected, format!("{mpoly}"));
     }
 
     #[test]

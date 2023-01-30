@@ -122,14 +122,12 @@ pub trait AlgebraicHasher: Clone + Send + Sync {
     fn sample_index(sample: &Digest, upper_bound: usize) -> usize {
         assert!(
             other::is_power_of_two(upper_bound),
-            "Non-inclusive upper bound {} must be a power of two",
-            upper_bound
+            "Non-inclusive upper bound {upper_bound} must be a power of two"
         );
 
         assert!(
             upper_bound <= 0x1_0000_0000,
-            "Non-inclusive upper bound {} must be at most 2^32",
-            upper_bound,
+            "Non-inclusive upper bound {upper_bound} must be at most 2^32",
         );
 
         sample.values()[4].value() as usize % upper_bound

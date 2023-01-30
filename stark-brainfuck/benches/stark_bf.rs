@@ -47,9 +47,9 @@ fn compile_simulate_prove_verify(program_code: &str, input: &[BFieldElement]) {
 
     match verifier_verdict {
         Ok(_) => (),
-        Err(err) => panic!("error in STARK verifier: {}", err),
+        Err(err) => panic!("error in STARK verifier: {err}"),
     };
-    println!("{}", report);
+    println!("{report}");
 }
 
 fn stark_bf(c: &mut Criterion) {

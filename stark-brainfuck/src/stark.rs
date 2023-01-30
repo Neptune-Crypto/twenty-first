@@ -94,7 +94,7 @@ impl Stark {
 
         // Verify that program compiles
         let program = match vm::compile(&source_code) {
-            None => panic!("Failed to compile program received. Got: {}", source_code),
+            None => panic!("Failed to compile program received. Got: {source_code}"),
             Some(prog) => prog,
         };
 
@@ -188,7 +188,7 @@ impl Stark {
         max_degree = roundup_npo2(max_degree) - 1;
         let fri_domain_length: u64 = (max_degree + 1) * expansion_factor;
 
-        println!("fri_domain_length = {}", fri_domain_length);
+        println!("fri_domain_length = {fri_domain_length}");
 
         // Instantiate FRI object
         let b_field_generator = BFieldElement::generator();
@@ -656,7 +656,7 @@ impl Stark {
         timer.elapsed("open combination codeword at same positions");
 
         let report = timer.finish();
-        println!("{}", report);
+        println!("{report}");
         println!("Created proof containing {} bytes", proof_stream.len());
 
         Ok(proof_stream)
@@ -1078,7 +1078,7 @@ impl Stark {
         timer.elapsed("Verified terminals");
 
         let report = timer.finish();
-        println!("{}", report);
+        println!("{report}");
 
         Ok(true)
     }
@@ -1398,7 +1398,7 @@ mod brainfuck_stark_tests {
         let mut malicious_proof_stream: ProofStream =
             malicious_stark.prove(bad_matrices.clone()).unwrap();
         let verify_bad_proof = malicious_stark.verify(&mut malicious_proof_stream);
-        println!("verify_bad_proof = {:?}", verify_bad_proof);
+        println!("verify_bad_proof = {verify_bad_proof:?}");
         assert!(
             verify_bad_proof.is_err(),
             "Manipulated matrix values must be caught"
@@ -1443,7 +1443,7 @@ mod brainfuck_stark_tests {
             let verifier_verdict: Result<bool, Box<dyn Error>> = stark.verify(&mut proof_stream);
             match verifier_verdict {
                 Ok(_) => (),
-                Err(err) => panic!("error in STARK verifier: {}", err),
+                Err(err) => panic!("error in STARK verifier: {err}"),
             };
         }
     }

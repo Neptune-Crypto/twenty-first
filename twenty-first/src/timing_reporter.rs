@@ -45,7 +45,7 @@ impl TimingReporter {
                     .unwrap_or(&Duration::ZERO),
             );
 
-            println!("EVENT: {} in {:.2?}", label, rel_duration);
+            println!("EVENT: {label} in {rel_duration:.2?}");
         }
 
         self.durations.push((label, duration));
@@ -123,14 +123,14 @@ impl Display for TimingReport {
         let space = 2;
         // Print header
         writeln!(f, "\n")?; // Add at least one empty line before report
-        writeln!(f, "{}", header_label)?;
+        writeln!(f, "{header_label}")?;
         let ornament = "=".repeat(header_label.len());
-        writeln!(f, "{}", ornament)?;
+        writeln!(f, "{ornament}")?;
         // Print entries
         for (label, duration) in colored_columns {
             let padding =
                 String::from_utf8(vec![b' '; max_label_width - label.len() + space]).unwrap();
-            writeln!(f, "{}{}{}", label, padding, duration)?;
+            writeln!(f, "{label}{padding}{duration}")?;
         }
 
         writeln!(

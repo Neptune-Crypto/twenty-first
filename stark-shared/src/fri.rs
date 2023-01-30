@@ -23,7 +23,7 @@ impl Error for ValidationError {}
 
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Deserialization error for LowDegreeProof: {:?}", self)
+        write!(f, "Deserialization error for LowDegreeProof: {self:?}")
     }
 }
 

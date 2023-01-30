@@ -108,8 +108,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         let length = self.len();
         assert!(
             indices.iter().all(|index| *index < length),
-            "All indices must be lower than length of array. Got: {:?}",
-            indices
+            "All indices must be lower than length of array. Got: {indices:?}"
         );
         let mut batch_write = WriteBatch::new();
         for (index, val) in indices_and_vals.iter() {

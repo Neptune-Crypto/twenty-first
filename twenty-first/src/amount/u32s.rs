@@ -194,8 +194,7 @@ impl<const N: usize> Sub for U32s<N> {
         }
         assert!(
             !carry_old,
-            "overflow error in subtraction of U32s. Input: ({:?}-{:?})",
-            self, rhs
+            "overflow error in subtraction of U32s. Input: ({self:?}-{rhs:?})"
         );
         res
     }
@@ -216,8 +215,7 @@ impl<const N: usize> Add for U32s<N> {
         }
         assert!(
             !carry_old,
-            "overflow error in addition of U32s. Input: ({:?}+{:?})",
-            self, other
+            "overflow error in addition of U32s. Input: ({self:?}+{other:?})"
         );
 
         res
@@ -494,8 +492,7 @@ mod u32s_tests {
             assert_eq!(
                 i == 16 || i == 42,
                 a.get_bit(i),
-                "bit i must match set value for i = {}",
-                i
+                "bit i must match set value for i = {i}"
             );
         }
     }
@@ -725,8 +722,8 @@ mod u32s_tests {
         let v = u64::MAX;
         let u32s = U32s::<4>::try_from(v).unwrap();
 
-        let v_string = format!("{}", v);
-        let u32s_string = format!("{}", u32s);
+        let v_string = format!("{v}");
+        let u32s_string = format!("{u32s}");
 
         assert_eq!(v_string, u32s_string)
     }

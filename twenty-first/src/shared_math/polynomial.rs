@@ -174,7 +174,7 @@ where
         let root_res = BFieldElement::primitive_root_of_unity(order);
         let root = match root_res {
             Some(n) => n,
-            None => panic!("Failed to find primitive root for order = {}", order),
+            None => panic!("Failed to find primitive root for order = {order}"),
         };
 
         let mut coefficients = self.coefficients.to_vec();
@@ -329,10 +329,8 @@ where
             primitive_root.mod_pow_u32(root_order as u32),
             BFieldElement::one(),
             "Supplied element “primitive_root” must have supplied order.\
-            Supplied element was: {:?}\
-            Supplied order was: {:?}",
-            primitive_root,
-            root_order
+            Supplied element was: {primitive_root:?}\
+            Supplied order was: {root_order:?}"
         );
 
         if domain.is_empty() {
@@ -352,10 +350,8 @@ where
             primitive_root.mod_pow_u32((root_order / 2) as u32),
             BFieldElement::one(),
             "Supplied element “primitive_root” must be primitive root of supplied order.\
-            Supplied element was: {:?}\
-            Supplied order was: {:?}",
-            primitive_root,
-            root_order
+            Supplied element was: {primitive_root:?}\
+            Supplied order was: {root_order:?}"
         );
 
         let half = domain.len() / 2;
@@ -414,10 +410,8 @@ where
             primitive_root.mod_pow_u32(root_order as u32),
             BFieldElement::one(),
             "Supplied element “primitive_root” must have supplied order.\
-            Supplied element was: {:?}\
-            Supplied order was: {:?}",
-            primitive_root,
-            root_order
+            Supplied element was: {primitive_root:?}\
+            Supplied order was: {root_order:?}"
         );
 
         assert!(
@@ -483,10 +477,8 @@ where
             primitive_root.mod_pow_u32(root_order as u32),
             BFieldElement::one(),
             "Supplied element “primitive_root” must have supplied order.\
-            Supplied element was: {:?}\
-            Supplied order was: {:?}",
-            primitive_root,
-            root_order
+            Supplied element was: {primitive_root:?}\
+            Supplied order was: {root_order:?}"
         );
 
         assert!(
@@ -939,7 +931,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         }
 
         if !has_unique_elements(points.iter().map(|p| p.0)) {
-            println!("Non-unique element spotted Got: {:?}", points);
+            println!("Non-unique element spotted Got: {points:?}");
             return false;
         }
 
@@ -980,7 +972,7 @@ impl<FF: FiniteField> Polynomial<FF> {
             panic!("Cannot interpolate through zero points.");
         }
         if !has_unique_elements(points.iter().map(|x| x.0)) {
-            panic!("Repeated x values received. Got: {:?}", points);
+            panic!("Repeated x values received. Got: {points:?}");
         }
 
         let xs: Vec<FF> = points.iter().map(|x| x.0.to_owned()).collect();
@@ -1084,10 +1076,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         let degree_rhs = divisor.degree();
         // cannot divide by zero
         if degree_rhs < 0 {
-            panic!(
-                "Cannot divide polynomial by zero. Got: ({:?})/({:?})",
-                self, divisor
-            );
+            panic!("Cannot divide polynomial by zero. Got: ({self:?})/({divisor:?})");
         }
 
         // zero divided by anything gives zero. degree == -1 <=> polynomial = 0
@@ -2197,7 +2186,7 @@ mod test_polynomials {
     #[test]
     fn fast_multiply_test() {
         let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
-        println!("primitive_root = {}", primitive_root);
+        println!("primitive_root = {primitive_root}");
         let a: Polynomial<BFieldElement> = Polynomial {
             coefficients: vec![
                 BFieldElement::from(1u64),
@@ -2228,8 +2217,8 @@ mod test_polynomials {
         };
         let c_fast = Polynomial::fast_multiply(&a, &b, &primitive_root, 32);
         let c_normal = a.clone() * b.clone();
-        println!("c_normal = {}", c_normal);
-        println!("c_fast = {}", c_fast);
+        println!("c_normal = {c_normal}");
+        println!("c_fast = {c_fast}");
         assert_eq!(c_normal, c_fast);
         assert_eq!(
             Polynomial::zero(),
@@ -2278,18 +2267,15 @@ mod test_polynomials {
         let actual = Polynomial::<BFieldElement>::fast_zerofier(&domain, &omega, root_order);
         assert!(
             actual.evaluate(&_1_17).is_zero(),
-            "expecting {} = 0 when x = 1",
-            actual
+            "expecting {actual} = 0 when x = 1"
         );
         assert!(
             actual.evaluate(&_5_17).is_zero(),
-            "expecting {} = 0 when x = 5",
-            actual
+            "expecting {actual} = 0 when x = 5"
         );
         assert!(
             !actual.evaluate(&omega).is_zero(),
-            "expecting {} != 0 when x = 9",
-            actual
+            "expecting {actual} != 0 when x = 9"
         );
 
         let _7_17 = BFieldElement::from(7u64);
@@ -2300,13 +2286,11 @@ mod test_polynomials {
         let actual_2 = Polynomial::<BFieldElement>::fast_zerofier(&domain_2, &omega2, root_order_2);
         assert!(
             actual_2.evaluate(&_7_17).is_zero(),
-            "expecting {} = 0 when x = 7",
-            actual_2
+            "expecting {actual_2} = 0 when x = 7"
         );
         assert!(
             actual_2.evaluate(&_10_17).is_zero(),
-            "expecting {} = 0 when x = 10",
-            actual_2
+            "expecting {actual_2} = 0 when x = 10"
         );
     }
 
@@ -2570,7 +2554,7 @@ mod test_polynomials {
     fn fast_coset_divide_test() {
         let offset = BFieldElement::primitive_root_of_unity(64).unwrap();
         let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
-        println!("primitive_root = {}", primitive_root);
+        println!("primitive_root = {primitive_root}");
         let a: Polynomial<BFieldElement> = Polynomial {
             coefficients: vec![
                 BFieldElement::from(1u64),

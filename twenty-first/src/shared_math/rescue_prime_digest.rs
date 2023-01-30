@@ -104,10 +104,7 @@ impl TryFrom<&[BFieldElement]> for Digest {
     fn try_from(value: &[BFieldElement]) -> Result<Self, Self::Error> {
         let len = value.len();
         value.try_into().map(Digest::new).map_err(|_| {
-            format!(
-                "Expected {} BFieldElements for digest, but got {}",
-                DIGEST_LENGTH, len,
-            )
+            format!("Expected {DIGEST_LENGTH} BFieldElements for digest, but got {len}")
         })
     }
 }

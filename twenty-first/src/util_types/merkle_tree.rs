@@ -1611,8 +1611,7 @@ mod merkle_tree_test {
         );
         assert!(
             verdict,
-            "Rejected: `leaf: {:?}` at `leaf_idx: {:?}` failed to verify.",
-            payload_leaf, test_leaf_idx,
+            "Rejected: `leaf: {payload_leaf:?}` at `leaf_idx: {test_leaf_idx:?}` failed to verify."
         );
     }
 

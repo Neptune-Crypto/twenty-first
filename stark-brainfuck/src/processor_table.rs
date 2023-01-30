@@ -273,7 +273,7 @@ impl ProcessorTable {
                 polynomials[2] = memory_value_next.to_owned() - memory_value.to_owned();
             }
             _ => {
-                panic!("Unrecognized instruction. Got: {}", instruction);
+                panic!("Unrecognized instruction. Got: {instruction}");
             }
         }
 

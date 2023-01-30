@@ -38,7 +38,7 @@ fn stark_medium(criterion: &mut Criterion) {
         timer.elapsed("rp.get_boundary_constraints(...)");
 
         let report = timer.finish();
-        println!("{}", report);
+        println!("{report}");
 
         bencher.iter(|| {
             let mut proof_stream = ProofStream::default();

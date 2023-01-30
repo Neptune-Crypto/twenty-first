@@ -248,9 +248,9 @@ impl fmt::Display for BFieldElement {
         if canonical_value >= Self::P - cutoff {
             write!(f, "-{}", Self::P - canonical_value)
         } else if canonical_value <= cutoff {
-            write!(f, "{}", canonical_value)
+            write!(f, "{canonical_value}")
         } else {
-            write!(f, "{:>020}", canonical_value)
+            write!(f, "{canonical_value:>020}")
         }
     }
 }
@@ -554,14 +554,14 @@ mod b_prime_field_element_test {
         // exceeding BFieldElement::P
         let seven: BFieldElement = BFieldElement::new(7);
         let seven_alt: BFieldElement = BFieldElement::new(7 + BFieldElement::P);
-        assert_eq!("7", format!("{}", seven));
-        assert_eq!("7", format!("{}", seven_alt));
+        assert_eq!("7", format!("{seven}"));
+        assert_eq!("7", format!("{seven_alt}"));
 
         let minus_one: BFieldElement = BFieldElement::new(BFieldElement::P - 1);
-        assert_eq!("-1", format!("{}", minus_one));
+        assert_eq!("-1", format!("{minus_one}"));
 
         let minus_fifteen: BFieldElement = BFieldElement::new(BFieldElement::P - 15);
-        assert_eq!("-15", format!("{}", minus_fifteen));
+        assert_eq!("-15", format!("{minus_fifteen}"));
     }
 
     #[test]
@@ -609,7 +609,7 @@ mod b_prime_field_element_test {
     #[test]
     fn disallow_conversion_of_u8_array_outside_range() {
         let bad_bfe_array: [u8; 8] = [u8::MAX; 8];
-        println!("bad_bfe_array = {:?}", bad_bfe_array);
+        println!("bad_bfe_array = {bad_bfe_array:?}");
         let _value: BFieldElement = bad_bfe_array.into();
     }
 
@@ -1058,8 +1058,8 @@ mod b_prime_field_element_test {
             let power = 1 << i;
             let root_result = BFieldElement::primitive_root_of_unity(power);
             match root_result {
-                Some(root) => println!("{} => {},", power, root),
-                None => println!("Found no primitive root of unity for n = {}", power),
+                Some(root) => println!("{power} => {root},"),
+                None => println!("Found no primitive root of unity for n = {power}"),
             };
             let root = root_result.unwrap();
             assert!(root.mod_pow(power).is_one());
@@ -1099,7 +1099,7 @@ mod b_prime_field_element_test {
         let mut prev = BFieldElement::zero().emojihash();
         for n in 1..256 {
             let curr = BFieldElement::new(n).emojihash();
-            println!("{}, n: {n}", curr);
+            println!("{curr}, n: {n}");
             assert_ne!(curr, prev);
             prev = curr
         }
