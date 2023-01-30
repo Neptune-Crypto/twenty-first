@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::traits::FiniteField;
 
-pub const DIGEST_LENGTH: usize = 5;
+use super::rescue_prime_digest::DIGEST_LENGTH;
+
 pub const STATE_SIZE: usize = 16;
 pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;
