@@ -27,7 +27,13 @@ impl Tip5State {
 
         match domain {
             VariableLength => (),
-            FixedLength => state[RATE] = BFIELD_ONE,
+            FixedLength => {
+                let mut i = RATE;
+                while i < STATE_SIZE {
+                    state[i] = BFIELD_ONE;
+                    i += 1;
+                }
+            }
         }
 
         Self { state }
@@ -710,11 +716,11 @@ mod tip5_tests {
             digest.iter().map(|b| b.value()).collect_vec()
         );
         let final_digest = [
-            14558289001666338382,
-            8910286450360777215,
-            8687235873380904976,
-            9731988339297305717,
-            14852227464718284881,
+            11624820369960046983,
+            9870887832019477602,
+            9889124322496704709,
+            16025862226051106532,
+            8482740071231775635,
         ]
         .map(BFieldElement::new);
         assert_eq!(digest, final_digest);
