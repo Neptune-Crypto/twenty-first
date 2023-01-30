@@ -1,10 +1,9 @@
 use std::iter;
 
 use itertools::Itertools;
-use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
-use crate::shared_math::other::{self, is_power_of_two, roundup_nearest_multiple};
+use crate::shared_math::other::{is_power_of_two, roundup_nearest_multiple};
 use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 use crate::shared_math::x_field_element::{XFieldElement, EXTENSION_DEGREE};
 
@@ -61,7 +60,7 @@ pub trait SpongeHasher: Clone + Send + Sync {
     }
 }
 
-pub trait AlgebraicHasherNew: SpongeHasher {
+pub trait AlgebraicHasher: SpongeHasher {
     fn hash_pair(left: &Digest, right: &Digest) -> Digest;
 
     fn hash<T: Hashable>(value: &T) -> Digest {
@@ -102,91 +101,6 @@ pub trait AlgebraicHasherNew: SpongeHasher {
         let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
-    }
-}
-
-pub trait AlgebraicHasher: Clone + Send + Sync {
-    fn hash_slice(elements: &[BFieldElement]) -> Digest;
-    fn hash_pair(left: &Digest, right: &Digest) -> Digest;
-    fn hash<T: Hashable>(item: &T) -> Digest {
-        Self::hash_slice(&item.to_sequence())
-    }
-
-    /// Given a uniform random `sample` and an `upper_bound` that is a power of
-    /// two, produce a uniform random number in the interval `[0; upper_bound)`.
-    ///
-    /// The sample should have a high degree of randomness.
-    ///
-    /// - `sample`: A hash digest
-    /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
-    fn sample_index(sample: &Digest, upper_bound: usize) -> usize {
-        assert!(
-            other::is_power_of_two(upper_bound),
-            "Non-inclusive upper bound {upper_bound} must be a power of two"
-        );
-
-        assert!(
-            upper_bound <= 0x1_0000_0000,
-            "Non-inclusive upper bound {upper_bound} must be at most 2^32",
-        );
-
-        sample.values()[4].value() as usize % upper_bound
-    }
-
-    // FIXME: This is not uniform.
-    fn sample_index_not_power_of_two(seed: &Digest, upper_bound: usize) -> usize {
-        Self::sample_index(
-            seed,
-            (1 << 16) * other::roundup_npo2(upper_bound as u64) as usize,
-        ) % upper_bound
-    }
-
-    /// Given a uniform random `seed` digest, an `upper_bound` that is a power of two,
-    /// produce `num_indices` uniform random numbers (sample indices) in the interval
-    /// `[0; upper_bound)`. The seed should be a Fiat-Shamir digest to ensure a high
-    /// degree of randomness.
-    ///
-    /// - `seed`: A hash `Digest`
-    /// - `upper_bound`: The (non-inclusive) upper bound (a power of two)
-    /// - `num_indices`: The number of indices to sample
-    fn sample_indices(seed: &Digest, upper_bound: usize, num_indices: usize) -> Vec<usize> {
-        Self::get_n_hash_rounds(seed, num_indices)
-            .iter()
-            .map(|random_input| Self::sample_index(random_input, upper_bound))
-            .collect()
-    }
-
-    /// Given a uniform random `seed` digest, produce `num_weights` uniform random
-    /// `XFieldElement`s (sample weights). The seed should be a Fiat-Shamir digest
-    /// to ensure a high degree of randomness.
-    ///
-    /// - `seed`: A hash `Digest`
-    /// - `num_weights`: The number of sample weights
-    fn sample_weights(seed: &Digest, num_weights: usize) -> Vec<XFieldElement> {
-        Self::get_n_hash_rounds(seed, num_weights)
-            .iter()
-            .map(XFieldElement::sample)
-            .collect()
-    }
-
-    fn get_n_hash_rounds(seed: &Digest, count: usize) -> Vec<Digest> {
-        assert!(count <= BFieldElement::MAX as usize);
-        let mut digests = Vec::with_capacity(count);
-        (0..count)
-            .into_par_iter()
-            .map(|counter: usize| {
-                let counter = Digest::new([
-                    BFieldElement::new(counter as u64),
-                    BFIELD_ZERO,
-                    BFIELD_ZERO,
-                    BFIELD_ZERO,
-                    BFIELD_ZERO,
-                ]);
-                Self::hash_pair(&counter, seed)
-            })
-            .collect_into_vec(&mut digests);
-
-        digests
     }
 }
 

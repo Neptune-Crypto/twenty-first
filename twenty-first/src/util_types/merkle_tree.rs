@@ -714,7 +714,6 @@ mod merkle_tree_test {
     };
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::test_shared::corrupt_digest;
-    use crate::util_types::algebraic_hasher::Hashable;
     use itertools::Itertools;
     use rand::{Rng, RngCore};
     use std::iter::zip;
@@ -1413,16 +1412,10 @@ mod merkle_tree_test {
 
         for (n_values, expected_path_length) in izip!(n_valuess, expected_path_lengths) {
             let values: Vec<BFieldElement> = random_elements(*n_values);
-            let leaves: Vec<Digest> = values
-                .iter()
-                .map(|x| H::hash_slice(&x.to_sequence()))
-                .collect();
+            let leaves: Vec<Digest> = values.iter().map(H::hash).collect();
             let salts_per_leaf = 3;
             let salts_preimage: Vec<BFieldElement> = random_elements(values.len() * salts_per_leaf);
-            let salts: Vec<_> = salts_preimage
-                .iter()
-                .map(|x| H::hash_slice(&x.to_sequence()))
-                .collect();
+            let salts: Vec<_> = salts_preimage.iter().map(H::hash).collect();
             let tree = SaltedMerkleTree::<H>::from_digests(&leaves, &salts);
 
             for _ in 0..3 {
@@ -1528,7 +1521,7 @@ mod merkle_tree_test {
             .map(|i| [BFieldElement::new(i as u64)])
             .collect_vec();
 
-        let leafs = values.iter().map(|leaf| H::hash_slice(leaf)).collect_vec();
+        let leafs = values.iter().map(|leaf| H::hash_varlen(leaf)).collect_vec();
 
         let tree: MT = M::from_digests(&leafs);
 
@@ -1578,7 +1571,7 @@ mod merkle_tree_test {
             .map(|i| [BFieldElement::new(i); 1])
             .collect_vec();
 
-        let mut leafs: Vec<Digest> = values.iter().map(|leaf| H::hash_slice(leaf)).collect_vec();
+        let mut leafs: Vec<Digest> = values.iter().map(|leaf| H::hash_varlen(leaf)).collect_vec();
 
         // A payload integrity test
         let test_leaf_idx = 42;
@@ -1586,7 +1579,7 @@ mod merkle_tree_test {
         let payload_leaf = vec![BFieldElement::new((test_leaf_idx + payload_offset) as u64)];
 
         // Embed
-        leafs[test_leaf_idx] = H::hash_slice(&payload_leaf);
+        leafs[test_leaf_idx] = H::hash_varlen(&payload_leaf);
 
         let tree: MT = M::from_digests(&leafs[..]);
 
@@ -1602,12 +1595,12 @@ mod merkle_tree_test {
         let verdict = MT::verify_authentication_path_from_leaf_hash(
             root_hash,
             test_leaf_idx as u32,
-            H::hash_slice(&payload_leaf),
+            H::hash_varlen(&payload_leaf),
             ap,
         );
         assert_eq!(
             tree.get_leaf_by_index(test_leaf_idx),
-            H::hash_slice(&payload_leaf)
+            H::hash_varlen(&payload_leaf)
         );
         assert!(
             verdict,

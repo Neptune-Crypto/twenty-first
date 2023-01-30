@@ -4,9 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
-use crate::util_types::algebraic_hasher::{
-    AlgebraicHasher, AlgebraicHasherNew, Domain, SpongeHasher,
-};
+use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
@@ -445,21 +443,7 @@ impl Tip5 {
     }
 }
 
-// TODO: Remove old AlgebraicHasher in favor of AlgebraicHasherNew + SpongeHasher
 impl AlgebraicHasher for Tip5 {
-    fn hash_slice(elements: &[BFieldElement]) -> Digest {
-        Tip5::hash_varlen(elements)
-    }
-
-    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
-        let mut input = [BFIELD_ZERO; 2 * DIGEST_LENGTH];
-        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
-        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
-        Digest::new(Tip5::hash_10(&input))
-    }
-}
-
-impl AlgebraicHasherNew for Tip5 {
     fn hash_pair(left: &Digest, right: &Digest) -> Digest {
         let mut input = [BFIELD_ZERO; 10];
         input[..DIGEST_LENGTH].copy_from_slice(&left.values());
@@ -512,7 +496,7 @@ mod tip5_tests {
     use crate::shared_math::tip5::NUM_ROUNDS;
     use crate::shared_math::tip5::ROUND_CONSTANTS;
     use crate::shared_math::tip5::STATE_SIZE;
-    use crate::util_types::algebraic_hasher::AlgebraicHasherNew;
+    use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
     use super::RATE;
 

@@ -2,9 +2,9 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::other::{random_elements, random_elements_array};
 use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
-use twenty_first::util_types::algebraic_hasher::{AlgebraicHasherNew, SpongeHasher, RATE};
+use twenty_first::util_types::algebraic_hasher::{AlgebraicHasher, SpongeHasher, RATE};
 
-fn hash_varlen_bench<H: AlgebraicHasherNew>(c: &mut Criterion) {
+fn hash_varlen_bench<H: AlgebraicHasher>(c: &mut Criterion) {
     let mut group = c.benchmark_group("sponge");
 
     let input_length = 150;

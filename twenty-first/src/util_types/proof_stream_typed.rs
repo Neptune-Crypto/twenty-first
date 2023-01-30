@@ -94,11 +94,11 @@ where
     }
 
     pub fn prover_fiat_shamir(&self) -> Digest {
-        H::hash_slice(&self.transcript)
+        H::hash_varlen(&self.transcript)
     }
 
     pub fn verifier_fiat_shamir(&self) -> Digest {
-        H::hash_slice(&self.transcript[0..self.transcript_index])
+        H::hash_varlen(&self.transcript[0..self.transcript_index])
     }
 }
 
