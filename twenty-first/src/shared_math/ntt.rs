@@ -45,7 +45,7 @@ use super::{
 ///
 /// This transform is performed in-place.
 #[allow(clippy::many_single_char_names)]
-pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
+pub fn ntt<FF: Clone + FiniteField + MulAssign<BFieldElement>>(
     x: &mut [FF],
     omega: BFieldElement,
     log_2_of_n: u32,
@@ -62,12 +62,21 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
     );
     debug_assert!(!omega.mod_pow_u32(n / 2).is_one());
 
-    for k in 0..n {
-        let rk = bitreverse(k, log_2_of_n);
-        if k < rk {
-            x.swap(rk as usize, k as usize);
-        }
+    //permute(n, log_2_of_n, x);
+    //let mut y = [FF::zero(); std::mem::size_of::<*x>()];
+    let mut y = x.to_owned();
+
+    for idx in 0..x.len() {
+        let new_idx =
+            idx.reverse_bits() >> (std::mem::size_of::<usize>() * 8 - (log_2_of_n as usize));
+        //println!("HERE: LOG2N: {log_2_of_n} IDX: {idx:} NEW_IDX: {new_idx:}");
+        y[new_idx] = x[idx];
     }
+
+    x.copy_from_slice(&y[..]);
+    // for idx in 0..x.len() {
+    //     idx.swap_bits();
+    // }
 
     let mut m = 1;
     for _ in 0..log_2_of_n {
@@ -90,6 +99,18 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
         m *= 2;
     }
 }
+
+// const fn permute<FF, const N: u32>(n: u32, log_2_of_n: u32, x: &mut [FF])
+// where
+//     FF: FiniteField + MulAssign<BFieldElement>,
+// {
+//     for k in 0..n {
+//         let rk = bitreverse(k, log_2_of_n);
+//         if k < rk {
+//             x.swap(rk as usize, k as usize);
+//         }
+//     }
+// }
 
 /// ## Perform INTT on slices of prime-field elements
 ///
