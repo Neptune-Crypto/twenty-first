@@ -155,7 +155,7 @@ impl Tip5 {
     }
 
     #[inline]
-    fn split_and_lookup(element: &mut BFieldElement) -> BFieldElement {
+    fn split_and_lookup(element: &mut BFieldElement) {
         // let value = element.value();
         let mut bytes = element.raw_bytes();
 
@@ -165,7 +165,7 @@ impl Tip5 {
             bytes[i] = LOOKUP_TABLE[bytes[i] as usize];
         }
 
-        BFieldElement::from_raw_bytes(&bytes)
+        *element = BFieldElement::from_raw_bytes(&bytes);
     }
 
     #[allow(clippy::many_single_char_names)]
