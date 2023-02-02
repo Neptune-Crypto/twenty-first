@@ -227,6 +227,11 @@ impl BFieldElement {
     }
 
     #[inline]
+    pub fn raw_u64(&self) -> u64 {
+        self.0
+    }
+
+    #[inline]
     pub const fn from_raw_u64(e: u64) -> BFieldElement {
         BFieldElement(e)
     }
