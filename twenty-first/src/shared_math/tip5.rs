@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
+
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
 pub const STATE_SIZE: usize = 16;
@@ -227,6 +228,75 @@ impl Tip5 {
             x[s] = u + v;
             x[s + 1] = u - v;
         }
+    }
+
+    #[allow(clippy::many_single_char_names)]
+    #[inline]
+    fn ntt_2(x: [u64; 2]) -> [[u64; 2]; 2] {
+        [[x[0] + x[1], 0u64], [x[0], x[1]]]
+    }
+
+    fn ntt_4(x: [u64; 4]) -> [[u64; 4]; 4] {
+        const N: usize = 4;
+        const HALF: usize = N / 2;
+        let odds = Self::ntt_2([x[1], x[3]]);
+        let evens = Self::ntt_2([x[0], x[2]]);
+
+        let mut result = [[0u64; N]; N];
+        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
+        result[0][0] = evens[0][0] + odds[0][0];
+        for i in 1..N {
+            for j in 0..HALF {
+                result[i][2 * j] = evens[i % HALF][j];
+            }
+            for j in 0..HALF {
+                result[i][(i + 2 * j) % N] += odds[i % HALF][j];
+            }
+        }
+
+        result
+    }
+
+    fn ntt_8(x: [u64; 8]) -> [[u64; 8]; 8] {
+        const N: usize = 8;
+        const HALF: usize = N / 2;
+        let odds = Self::ntt_4([x[1], x[3], x[5], x[7]]);
+        let evens = Self::ntt_4([x[0], x[2], x[4], x[6]]);
+
+        let mut result = [[0u64; N]; N];
+        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
+        result[0][0] = evens[0][0] + odds[0][0];
+        for i in 1..N {
+            for j in 0..HALF {
+                result[i][2 * j] = evens[i % HALF][j];
+            }
+            for j in 0..HALF {
+                result[i][(i + 2 * j) % N] += odds[i % HALF][j];
+            }
+        }
+
+        result
+    }
+
+    pub fn ntt_16(x: [u64; 16]) -> [[u64; 16]; 16] {
+        const N: usize = 16;
+        const HALF: usize = N / 2;
+        let odds = Self::ntt_8([x[1], x[3], x[5], x[7], x[9], x[11], x[13], x[15]]);
+        let evens = Self::ntt_8([x[0], x[2], x[4], x[6], x[8], x[10], x[12], x[14]]);
+
+        let mut result = [[0u64; N]; N];
+        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
+        result[0][0] = evens[0][0] + odds[0][0];
+        for i in 1..N {
+            for j in 0..HALF {
+                result[i][2 * j] = evens[i % HALF][j];
+            }
+            for j in 0..HALF {
+                result[i][(i + 2 * j) % N] += odds[i % HALF][j];
+            }
+        }
+
+        result
     }
 
     #[allow(clippy::many_single_char_names)]
@@ -678,9 +748,12 @@ mod tip5_tests {
     use itertools::Itertools;
     use num_traits::One;
     use num_traits::Zero;
+    use rand::thread_rng;
+    use rand::RngCore;
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::ntt::ntt;
     use crate::shared_math::other::random_elements;
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::tip5::Tip5;
@@ -688,6 +761,7 @@ mod tip5_tests {
     use crate::shared_math::tip5::NUM_ROUNDS;
     use crate::shared_math::tip5::ROUND_CONSTANTS;
     use crate::shared_math::tip5::STATE_SIZE;
+    use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
     use super::RATE;
@@ -1006,5 +1080,36 @@ mod tip5_tests {
         mds_procedure(&mut vec);
 
         assert_eq!(vec, mv);
+    }
+
+    #[test]
+    fn test_symbolic_ntt() {
+        let mut rng = thread_rng();
+        const SIZE: usize = STATE_SIZE;
+        let mut vec: [BFieldElement; SIZE] = [BFieldElement::zero(); SIZE];
+        let mut st = [0u64; SIZE];
+        for i in 0..SIZE {
+            let e = rng.next_u32() as u64;
+            vec[i] = BFieldElement::from_raw_u64(e);
+            st[i] = e;
+        }
+
+        let sym = Tip5::ntt_16(st);
+
+        let omega = BFieldElement::primitive_root_of_unity(SIZE.try_into().unwrap()).unwrap();
+
+        let collapsed: [BFieldElement; SIZE] = sym
+            .map(|row| {
+                (0..SIZE)
+                    .map(|i| BFieldElement::from_raw_u64(row[i]) * omega.mod_pow(i as u64))
+                    .sum()
+            })
+            .to_vec()
+            .try_into()
+            .unwrap();
+
+        ntt::<BFieldElement>(&mut vec, omega, 4);
+
+        assert_eq!(vec, collapsed);
     }
 }
