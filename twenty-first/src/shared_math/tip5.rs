@@ -179,16 +179,29 @@ impl Tip5 {
     #[allow(clippy::many_single_char_names)]
     #[inline]
     fn ntt_noswap(x: &mut [BFieldElement]) {
+        // const POWERS_OF_OMEGA_BITREVERSED: [BFieldElement; 8] = [
+        //     BFieldElement::new(1),
+        //     BFieldElement::new(281474976710656),
+        //     BFieldElement::new(18446744069397807105),
+        //     BFieldElement::new(18446742969902956801),
+        //     BFieldElement::new(17293822564807737345),
+        //     BFieldElement::new(4096),
+        //     BFieldElement::new(4503599626321920),
+        //     BFieldElement::new(18446744000695107585),
+        // ];
         const POWERS_OF_OMEGA_BITREVERSED: [BFieldElement; 8] = [
             BFieldElement::new(1),
             BFieldElement::new(281474976710656),
-            BFieldElement::new(18446744069397807105),
-            BFieldElement::new(18446742969902956801),
-            BFieldElement::new(17293822564807737345),
+            BFieldElement::new(16777216),
+            BFieldElement::new(1099511627520),
             BFieldElement::new(4096),
+            BFieldElement::new(1152921504606846976),
+            BFieldElement::new(68719476736),
             BFieldElement::new(4503599626321920),
-            BFieldElement::new(18446744000695107585),
         ];
+        const SHIFTS: [usize; 8] = [0, 48, 24, 72, 12, 60, 36, 84];
+        let powers_of_omega = SHIFTS.map(|sh| BFieldElement::new(1) << sh);
+        assert_eq!(powers_of_omega, POWERS_OF_OMEGA_BITREVERSED);
 
         // outer loop iteration 1
         for j in 0..8 {
@@ -199,32 +212,32 @@ impl Tip5 {
         }
 
         // outer loop iteration 2
-        for (i, zeta) in POWERS_OF_OMEGA_BITREVERSED.iter().enumerate().take(2) {
+        for (i, zeta) in SHIFTS.iter().enumerate().take(2) {
             let s = i * 8;
             for j in s..(s + 4) {
                 let u = x[j];
-                let v = x[j + 4] * *zeta;
+                let v = x[j + 4] << *zeta;
                 x[j] = u + v;
                 x[j + 4] = u - v;
             }
         }
 
         // outer loop iteration 3
-        for (i, zeta) in POWERS_OF_OMEGA_BITREVERSED.iter().enumerate().take(4) {
+        for (i, zeta) in SHIFTS.iter().enumerate().take(4) {
             let s = i * 4;
             for j in s..(s + 2) {
                 let u = x[j];
-                let v = x[j + 2] * *zeta;
+                let v = x[j + 2] << *zeta;
                 x[j] = u + v;
                 x[j + 2] = u - v;
             }
         }
 
         // outer loop iteration 4
-        for (i, zeta) in POWERS_OF_OMEGA_BITREVERSED.iter().enumerate().take(8) {
+        for (i, zeta) in SHIFTS.iter().enumerate().take(8) {
             let s = i * 2;
             let u = x[s];
-            let v = x[s + 1] * *zeta;
+            let v = x[s + 1] << *zeta;
             x[s] = u + v;
             x[s + 1] = u - v;
         }
@@ -367,16 +380,32 @@ impl Tip5 {
     #[allow(clippy::many_single_char_names)]
     #[inline]
     fn intt_noswap(x: &mut [BFieldElement]) {
+        // const POWERS_OF_OMEGA_INVERSE: [BFieldElement; 8] = [
+        //     BFieldElement::new(1),
+        //     BFieldElement::new(68719476736),
+        //     BFieldElement::new(1099511627520),
+        //     BFieldElement::new(18446744069414580225),
+        //     BFieldElement::new(18446462594437873665),
+        //     BFieldElement::new(18442240469788262401),
+        //     BFieldElement::new(16777216),
+        //     BFieldElement::new(1152921504606846976),
+        // ];
         const POWERS_OF_OMEGA_INVERSE: [BFieldElement; 8] = [
             BFieldElement::new(1),
-            BFieldElement::new(68719476736),
-            BFieldElement::new(1099511627520),
-            BFieldElement::new(18446744069414580225),
-            BFieldElement::new(18446462594437873665),
             BFieldElement::new(18442240469788262401),
-            BFieldElement::new(16777216),
-            BFieldElement::new(1152921504606846976),
+            BFieldElement::new(18446742969902956801),
+            BFieldElement::new(17293822564807737345),
+            BFieldElement::new(18446462594437873665),
+            BFieldElement::new(18446744000695107585),
+            BFieldElement::new(18446744069397807105),
+            BFieldElement::new(18446744069414580225),
         ];
+        const SHIFTS: [usize; 8] = [0, 12, 24, 36, 48, 60, 72, 84];
+        let powers_of_omega = SHIFTS.map(|sh| BFieldElement::new(1) >> sh);
+        assert_eq!(
+            powers_of_omega, POWERS_OF_OMEGA_INVERSE,
+            "left hand side: {powers_of_omega:?}, versus right hand side: {POWERS_OF_OMEGA_INVERSE:?}"
+        );
 
         // outer loop iteration 1
         {
@@ -452,30 +481,30 @@ impl Tip5 {
             // inner loop iteration 1
             {
                 for j in 0..2 {
-                    let zeta = POWERS_OF_OMEGA_INVERSE[4 * j];
+                    let zeta = SHIFTS[4 * j];
                     {
-                        let u = x[j + 2] * zeta;
+                        let u = x[j + 2] >> zeta;
                         let v = x[j];
                         x[j + 2] = v - u;
                         x[j] = v + u;
                     }
                     // inner loop iteration 2
                     {
-                        let u = x[4 + j + 2] * zeta;
+                        let u = x[4 + j + 2] >> zeta;
                         let v = x[4 + j];
                         x[4 + j + 2] = v - u;
                         x[4 + j] = v + u;
                     }
                     // inner loop iteration 3
                     {
-                        let u = x[8 + j + 2] * zeta;
+                        let u = x[8 + j + 2] >> zeta;
                         let v = x[8 + j];
                         x[8 + j + 2] = v - u;
                         x[8 + j] = v + u;
                     }
                     // inner loop iteration 4
                     {
-                        let u = x[12 + j + 2] * zeta;
+                        let u = x[12 + j + 2] >> zeta;
                         let v = x[12 + j];
                         x[12 + j + 2] = v - u;
                         x[12 + j] = v + u;
@@ -489,17 +518,17 @@ impl Tip5 {
             // while k < STATE_SIZE as usize
             {
                 for j in 0..4 {
-                    let zeta = POWERS_OF_OMEGA_INVERSE[2 * j];
+                    let zeta = SHIFTS[2 * j];
                     // inner loop iteration 1
                     {
-                        let u = x[j + 4] * zeta;
+                        let u = x[j + 4] >> zeta;
                         let v = x[j];
                         x[j + 4] = v - u;
                         x[j] = v + u;
                     }
                     // inner loop iteration 2
                     {
-                        let u = x[8 + j + 4] * zeta;
+                        let u = x[8 + j + 4] >> zeta;
                         let v = x[8 + j];
                         x[8 + j + 4] = v - u;
                         x[8 + j] = v + u;
@@ -511,8 +540,8 @@ impl Tip5 {
         // outer loop iteration 4
         {
             for j in 0..8 {
-                let zeta = POWERS_OF_OMEGA_INVERSE[j];
-                let u = x[j + 8] * zeta;
+                let zeta = SHIFTS[j];
+                let u = x[j + 8] >> zeta;
                 let v = x[j];
                 x[j + 8] = v - u;
                 x[j] = v + u;
@@ -833,6 +862,7 @@ impl SpongeHasher for Tip5 {
 
 #[cfg(test)]
 mod tip5_tests {
+
     use itertools::Itertools;
     use num_traits::One;
     use num_traits::Zero;
@@ -841,6 +871,7 @@ mod tip5_tests {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::ntt;
     use crate::shared_math::ntt::ntt;
     use crate::shared_math::other::random_elements;
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
@@ -1106,6 +1137,8 @@ mod tip5_tests {
 
     #[test]
     fn test_linearity_of_mds() {
+        // let mds_procedure = Tip5::mds_split;
+        let mds_procedure = Tip5::mds_noswap;
         let a: BFieldElement = random_elements(1)[0];
         let b: BFieldElement = random_elements(1)[0];
         let mut u: [BFieldElement; STATE_SIZE] = random_elements(STATE_SIZE).try_into().unwrap();
@@ -1119,9 +1152,9 @@ mod tip5_tests {
             .try_into()
             .unwrap();
 
-        Tip5::mds_split(&mut u);
-        Tip5::mds_split(&mut v);
-        Tip5::mds_split(&mut w);
+        mds_procedure(&mut u);
+        mds_procedure(&mut v);
+        mds_procedure(&mut w);
 
         let w_: [BFieldElement; STATE_SIZE] = u
             .iter()
@@ -1139,8 +1172,8 @@ mod tip5_tests {
         let mut e1 = [BFieldElement::zero(); STATE_SIZE];
         e1[0] = BFieldElement::one();
 
-        let mds_procedure = Tip5::mds_split;
-        // let mds_procedure = Tip5::mds_noswap;
+        // let mds_procedure = Tip5::mds_split;
+        let mds_procedure = Tip5::mds_noswap;
 
         mds_procedure(&mut e1);
 
@@ -1188,5 +1221,26 @@ mod tip5_tests {
         ntt::<BFieldElement>(&mut vec, omega, 4);
 
         assert_eq!(vec, smart);
+    }
+
+    #[test]
+    fn test_ntt_noswap() {
+        let a: Vec<BFieldElement> = random_elements(16);
+        let mut b = a.clone();
+        Tip5::ntt_noswap(&mut b);
+        let mut c = a.clone();
+        ntt::<BFieldElement>(&mut c, BFieldElement::new(1 << 12), 4);
+        for i in 0..16 {
+            if i < ntt::bitreverse(i, 4) {
+                c.swap(i as usize, ntt::bitreverse(i, 4) as usize);
+            }
+        }
+
+        assert_eq!(c, b);
+
+        Tip5::intt_noswap(&mut b);
+        b.iter_mut()
+            .for_each(|bb| *bb = *bb / BFieldElement::new(16));
+        assert_eq!(a, b);
     }
 }
