@@ -547,6 +547,9 @@ impl Shl<usize> for BFieldElement {
     /// Multiply by a power of 2
     #[inline(always)]
     fn shl(self, shamt: usize) -> Self::Output {
+        if shamt == 0 {
+            return self;
+        }
         if shamt > 32 {
             return self.shl(32).shl(shamt - 32);
         }
@@ -567,16 +570,22 @@ impl Shr<usize> for BFieldElement {
     type Output = BFieldElement;
 
     fn shr(self, shamt: usize) -> Self::Output {
+        if shamt == 0 {
+            return self;
+        }
         if shamt > 32 {
             return self.shr(32).shr(shamt - 32);
         }
         let underflow = ((1 << shamt) - 1) & self.raw_u64();
         let a = self.raw_u64() >> shamt;
-        let b = underflow << (32 - shamt);
-        let c = b + 1 - ((b + 1) << 32);
-        let (r, o) = a.overflowing_add(c);
+        // difference = underflow << (64-shamt) - underflow << (32-shamt) + underflow / 2^shamt;
+        // return raw/2^shamt - difference
+        // = a - (underflow << (64-shamt)) + (underflow << (32-shamt))
+        // = a - ((underflow << 32) - underflow) << (32-shamt)
+        let b = ((underflow << 32) - underflow) << (32 - shamt);
+        let (r, o) = a.overflowing_sub(b);
         if o {
-            BFieldElement::from_raw_u64(r + (1 << 32) - 1)
+            BFieldElement::from_raw_u64(r - (1 << 32) + 1)
         } else {
             BFieldElement::from_raw_u64(r)
         }
@@ -1268,20 +1277,54 @@ mod b_prime_field_element_test {
     }
 
     #[test]
-    fn test_shl() {
+    fn test_shift() {
         let mut rng = thread_rng();
-        let a: BFieldElement = random_elements(1)[0];
-        let shamt = (rng.next_u32() % 64) as usize;
-        let b = BFieldElement::new(1 << shamt);
+        let two = BFieldElement::new(2);
+        let thirty_two = BFieldElement::new(1 << 32);
+        let thirty_three = BFieldElement::new(1 << 33);
         assert_eq!(
-            a * b,
-            a << shamt,
-            "assert failed when calculating {a} << {shamt}"
+            BFieldElement::new(18446744065119617026),
+            BFieldElement::new(1) >> 32
         );
         assert_eq!(
-            a / b,
-            a >> shamt,
-            "assert failed when calculating {a} >> {shamt}"
+            BFieldElement::new(17293822564807737345),
+            BFieldElement::new(18446744065119617026) >> 4
         );
+        assert_eq!(
+            BFieldElement::new(17293822564807737345),
+            BFieldElement::new(1) >> 36
+        );
+        for _ in 0..1000 {
+            let a: BFieldElement = random_elements(1)[0];
+            let shamt = (rng.next_u32() % 64) as usize;
+            assert_eq!(
+                two.mod_pow_u32(shamt as u32),
+                BFieldElement::new(1) << shamt
+            );
+            assert_eq!(
+                two.inverse().mod_pow_u32(shamt as u32),
+                BFieldElement::new(1) >> shamt
+            );
+            let b = BFieldElement::new(1 << shamt);
+            assert_eq!(
+                a * b,
+                a << shamt,
+                "assert failed when calculating {a} << {shamt}"
+            );
+            assert_eq!(
+                a / b,
+                a >> shamt,
+                "assert failed when calculating {a} >> {shamt}"
+            );
+            let shamt2 = (rng.next_u32() % 200) as usize;
+            assert_eq!((a << shamt2) >> shamt2, a);
+            assert_eq!((a >> shamt2) << shamt2, a);
+            assert_eq!(a << 1, a * two);
+            assert_eq!(a >> 1, a / two);
+            assert_eq!(a << 32, a * thirty_two);
+            assert_eq!(a >> 32, a / thirty_two);
+            assert_eq!(a << 33, a * thirty_three);
+            assert_eq!(a >> 33, a / thirty_three);
+        }
     }
 }
