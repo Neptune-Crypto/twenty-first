@@ -232,69 +232,134 @@ impl Tip5 {
 
     #[allow(clippy::many_single_char_names)]
     #[inline]
-    fn ntt_2(x: [u64; 2]) -> [[u64; 2]; 2] {
-        [[x[0] + x[1], 0u64], [x[0], x[1]]]
+    fn ntt_2(x: [BFieldElement; 2]) -> [BFieldElement; 2] {
+        [x[0] + x[1], x[0] - x[1]]
     }
 
-    fn ntt_4(x: [u64; 4]) -> [[u64; 4]; 4] {
+    fn ntt_4(x: [BFieldElement; 4]) -> [BFieldElement; 4] {
         const N: usize = 4;
-        const HALF: usize = N / 2;
         let odds = Self::ntt_2([x[1], x[3]]);
         let evens = Self::ntt_2([x[0], x[2]]);
 
-        let mut result = [[0u64; N]; N];
+        let mut result = [BFieldElement::zero(); N];
         // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
-        result[0][0] = evens[0][0] + odds[0][0];
-        for i in 1..N {
-            for j in 0..HALF {
-                result[i][2 * j] = evens[i % HALF][j];
-            }
-            for j in 0..HALF {
-                result[i][(i + 2 * j) % N] += odds[i % HALF][j];
-            }
-        }
+        result[0] = evens[0] + odds[0];
+        result[1] = evens[1] + (odds[1] << 48);
+        result[2] = evens[0] - odds[0];
+        result[3] = evens[1] - (odds[1] << 48);
 
         result
     }
 
-    fn ntt_8(x: [u64; 8]) -> [[u64; 8]; 8] {
+    fn ntt_8(x: [BFieldElement; 8]) -> [BFieldElement; 8] {
         const N: usize = 8;
-        const HALF: usize = N / 2;
         let odds = Self::ntt_4([x[1], x[3], x[5], x[7]]);
         let evens = Self::ntt_4([x[0], x[2], x[4], x[6]]);
 
-        let mut result = [[0u64; N]; N];
+        let mut result = [BFieldElement::zero(); N];
         // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
-        result[0][0] = evens[0][0] + odds[0][0];
-        for i in 1..N {
-            for j in 0..HALF {
-                result[i][2 * j] = evens[i % HALF][j];
-            }
-            for j in 0..HALF {
-                result[i][(i + 2 * j) % N] += odds[i % HALF][j];
-            }
-        }
+        result[0] = evens[0] + odds[0];
+        result[1] = evens[1] + (odds[1] << 24);
+        result[2] = evens[2] + (odds[2] << 48);
+        result[3] = evens[3] + (odds[3] << 72);
+        result[4] = evens[0] - odds[0];
+        result[5] = evens[1] - (odds[1] << 24);
+        result[6] = evens[2] - (odds[2] << 48);
+        result[7] = evens[3] - (odds[3] << 72);
 
         result
     }
 
-    pub fn ntt_16(x: [u64; 16]) -> [[u64; 16]; 16] {
+    pub fn ntt_16(x: [BFieldElement; 16]) -> [BFieldElement; 16] {
         const N: usize = 16;
-        const HALF: usize = N / 2;
         let odds = Self::ntt_8([x[1], x[3], x[5], x[7], x[9], x[11], x[13], x[15]]);
         let evens = Self::ntt_8([x[0], x[2], x[4], x[6], x[8], x[10], x[12], x[14]]);
 
-        let mut result = [[0u64; N]; N];
+        let mut result = [BFieldElement::zero(); N];
         // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
-        result[0][0] = evens[0][0] + odds[0][0];
-        for i in 1..N {
-            for j in 0..HALF {
-                result[i][2 * j] = evens[i % HALF][j];
-            }
-            for j in 0..HALF {
-                result[i][(i + 2 * j) % N] += odds[i % HALF][j];
-            }
-        }
+        result[0] = evens[0] + odds[0];
+        result[1] = evens[1] + (odds[1] << 12);
+        result[2] = evens[2] + (odds[2] << 24);
+        result[3] = evens[3] + (odds[3] << 36);
+        result[4] = evens[4] + (odds[4] << 48);
+        result[5] = evens[5] + (odds[5] << 60);
+        result[6] = evens[6] + (odds[6] << 72);
+        result[7] = evens[7] + (odds[7] << 84);
+        result[8] = evens[0] - odds[0];
+        result[9] = evens[1] - (odds[1] << 12);
+        result[10] = evens[2] - (odds[2] << 24);
+        result[11] = evens[3] - (odds[3] << 36);
+        result[12] = evens[4] - (odds[4] << 48);
+        result[13] = evens[5] - (odds[5] << 60);
+        result[14] = evens[6] - (odds[6] << 72);
+        result[15] = evens[7] - (odds[7] << 84);
+
+        result
+    }
+
+    #[allow(clippy::many_single_char_names)]
+    #[inline]
+    fn intt_2(x: [BFieldElement; 2]) -> [BFieldElement; 2] {
+        [x[0] + x[1], x[0] - x[1]]
+    }
+
+    fn intt_4(x: [BFieldElement; 4]) -> [BFieldElement; 4] {
+        const N: usize = 4;
+        let odds = Self::intt_2([x[1], x[3]]);
+        let evens = Self::intt_2([x[0], x[2]]);
+
+        let mut result = [BFieldElement::zero(); N];
+        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
+        result[0] = evens[0] + odds[0];
+        result[1] = evens[1] + (odds[1] >> 48);
+        result[2] = evens[0] - odds[0];
+        result[3] = evens[1] - (odds[1] >> 48);
+
+        result
+    }
+
+    fn intt_8(x: [BFieldElement; 8]) -> [BFieldElement; 8] {
+        const N: usize = 8;
+        let odds = Self::intt_4([x[1], x[3], x[5], x[7]]);
+        let evens = Self::intt_4([x[0], x[2], x[4], x[6]]);
+
+        let mut result = [BFieldElement::zero(); N];
+        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
+        result[0] = evens[0] + odds[0];
+        result[1] = evens[1] + (odds[1] >> 24);
+        result[2] = evens[2] + (odds[2] >> 48);
+        result[3] = evens[3] + (odds[3] >> 72);
+        result[4] = evens[0] - odds[0];
+        result[5] = evens[1] - (odds[1] >> 24);
+        result[6] = evens[2] - (odds[2] >> 48);
+        result[7] = evens[3] - (odds[3] >> 72);
+
+        result
+    }
+
+    pub fn intt_16(x: [BFieldElement; 16]) -> [BFieldElement; 16] {
+        const N: usize = 16;
+        let odds = Self::intt_8([x[1], x[3], x[5], x[7], x[9], x[11], x[13], x[15]]);
+        let evens = Self::intt_8([x[0], x[2], x[4], x[6], x[8], x[10], x[12], x[14]]);
+
+        let mut result = [BFieldElement::zero(); N];
+        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
+        result[0] = evens[0] + odds[0];
+        result[1] = evens[1] + (odds[1] >> 12);
+        result[2] = evens[2] + (odds[2] >> 24);
+        result[3] = evens[3] + (odds[3] >> 36);
+        result[4] = evens[4] + (odds[4] >> 48);
+        result[5] = evens[5] + (odds[5] >> 60);
+        result[6] = evens[6] + (odds[6] >> 72);
+        result[7] = evens[7] + (odds[7] >> 84);
+        result[8] = evens[0] - odds[0];
+        result[9] = evens[1] - (odds[1] >> 12);
+        result[10] = evens[2] - (odds[2] >> 24);
+        result[11] = evens[3] - (odds[3] >> 36);
+        result[12] = evens[4] - (odds[4] >> 48);
+        result[13] = evens[5] - (odds[5] >> 60);
+        result[14] = evens[6] - (odds[6] >> 72);
+        result[15] = evens[7] - (odds[7] >> 84);
 
         result
     }
@@ -457,6 +522,7 @@ impl Tip5 {
 
     #[inline]
     pub fn mds_noswap(state: &mut [BFieldElement; STATE_SIZE]) {
+        // without bitreverse: [4, 1, 3, 6, 4, 0, 0, 4, 1, 5, 7, 2, 3, 2, 5, 1]
         const SHIFTS: [u8; STATE_SIZE] = [4, 1, 4, 3, 3, 7, 0, 5, 1, 5, 0, 2, 6, 2, 4, 1];
         let mut array: [u128; STATE_SIZE] = [0; STATE_SIZE];
         Self::ntt_noswap(state);
@@ -473,6 +539,28 @@ impl Tip5 {
         }
 
         Self::intt_noswap(state);
+    }
+
+    #[inline]
+    pub fn mds_swap(state: &mut [BFieldElement; STATE_SIZE]) {
+        const SHIFTS: [u8; STATE_SIZE] = [4, 1, 4, 3, 3, 7, 0, 5, 1, 5, 0, 2, 6, 2, 4, 1];
+        let mut array: [u128; STATE_SIZE] = [0; STATE_SIZE];
+        let state_copy = state.to_owned();
+        state.copy_from_slice(&Self::ntt_16(state_copy));
+
+        for i in 0..STATE_SIZE {
+            array[i] = state[i].raw_u128() << SHIFTS[i];
+        }
+        let mut reduced = [0u64; STATE_SIZE];
+        for i in 0..STATE_SIZE {
+            reduced[i] = BFieldElement::montyred(array[i]);
+        }
+        for i in 0..16 {
+            state[i] = BFieldElement::from_raw_u64(reduced[i]);
+        }
+
+        let state_copy_ = state.to_owned();
+        state.copy_from_slice(&Self::intt_16(state_copy_));
     }
 
     #[inline(always)]
@@ -674,8 +762,8 @@ impl Tip5 {
     fn round(sponge: &mut Tip5State, round_index: usize) {
         Self::sbox_layer(&mut sponge.state);
 
-        //Self::mds_noswap(&mut sponge.state);
-        Self::mds_split(&mut sponge.state);
+        Self::mds_noswap(&mut sponge.state);
+        // Self::mds_split(&mut sponge.state);
 
         for i in 0..STATE_SIZE {
             sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
@@ -761,7 +849,6 @@ mod tip5_tests {
     use crate::shared_math::tip5::NUM_ROUNDS;
     use crate::shared_math::tip5::ROUND_CONSTANTS;
     use crate::shared_math::tip5::STATE_SIZE;
-    use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
     use super::RATE;
@@ -1083,7 +1170,7 @@ mod tip5_tests {
     }
 
     #[test]
-    fn test_symbolic_ntt() {
+    fn test_smart_ntt() {
         let mut rng = thread_rng();
         const SIZE: usize = STATE_SIZE;
         let mut vec: [BFieldElement; SIZE] = [BFieldElement::zero(); SIZE];
@@ -1094,22 +1181,12 @@ mod tip5_tests {
             st[i] = e;
         }
 
-        let sym = Tip5::ntt_16(st);
+        let smart = Tip5::ntt_16(vec);
 
-        let omega = BFieldElement::primitive_root_of_unity(SIZE.try_into().unwrap()).unwrap();
-
-        let collapsed: [BFieldElement; SIZE] = sym
-            .map(|row| {
-                (0..SIZE)
-                    .map(|i| BFieldElement::from_raw_u64(row[i]) * omega.mod_pow(i as u64))
-                    .sum()
-            })
-            .to_vec()
-            .try_into()
-            .unwrap();
+        let omega = BFieldElement::new(1 << 12);
 
         ntt::<BFieldElement>(&mut vec, omega, 4);
 
-        assert_eq!(vec, collapsed);
+        assert_eq!(vec, smart);
     }
 }
