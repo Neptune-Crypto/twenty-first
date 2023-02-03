@@ -240,7 +240,7 @@ pub fn intt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], ome
 }
 
 #[inline]
-fn bitreverse(mut n: u32, l: u32) -> u32 {
+pub(crate) fn bitreverse(mut n: u32, l: u32) -> u32 {
     let mut r = 0;
     for _ in 0..l {
         r = (r << 1) | (n & 1);
