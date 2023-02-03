@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::iter::Sum;
 use std::num::TryFromIntError;
-use std::ops::{AddAssign, MulAssign, SubAssign};
+use std::ops::{AddAssign, MulAssign, Shl, Shr, SubAssign};
 use std::{
     fmt::{self},
     ops::{Add, Div, Mul, Neg, Sub},
@@ -537,6 +537,48 @@ impl PrimitiveRootOfUnity for BFieldElement {
             Some(BFieldElement::one())
         } else {
             None
+        }
+    }
+}
+
+impl Shl<usize> for BFieldElement {
+    type Output = BFieldElement;
+
+    /// Multiply by a power of 2
+    #[inline(always)]
+    fn shl(self, shamt: usize) -> Self::Output {
+        if shamt > 32 {
+            return self.shl(32).shl(shamt - 32);
+        }
+        let overflow = self.raw_u64() >> (64 - shamt);
+        let a = self.raw_u64() << shamt;
+        let b = overflow;
+        let c = (b << 32) - b;
+        let (r, o) = a.overflowing_add(c);
+        if o {
+            BFieldElement::from_raw_u64(r + (1 << 32) - 1)
+        } else {
+            BFieldElement::from_raw_u64(r)
+        }
+    }
+}
+
+impl Shr<usize> for BFieldElement {
+    type Output = BFieldElement;
+
+    fn shr(self, shamt: usize) -> Self::Output {
+        if shamt > 32 {
+            return self.shr(32).shr(shamt - 32);
+        }
+        let underflow = ((1 << shamt) - 1) & self.raw_u64();
+        let a = self.raw_u64() >> shamt;
+        let b = underflow << (32 - shamt);
+        let c = b + 1 - ((b + 1) << 32);
+        let (r, o) = a.overflowing_add(c);
+        if o {
+            BFieldElement::from_raw_u64(r + (1 << 32) - 1)
+        } else {
+            BFieldElement::from_raw_u64(r)
         }
     }
 }
@@ -1223,5 +1265,23 @@ mod b_prime_field_element_test {
             let expected = BFieldElement::new(18446744068340842497);
             assert_eq!(c, expected);
         }
+    }
+
+    #[test]
+    fn test_shl() {
+        let mut rng = thread_rng();
+        let a: BFieldElement = random_elements(1)[0];
+        let shamt = (rng.next_u32() % 64) as usize;
+        let b = BFieldElement::new(1 << shamt);
+        assert_eq!(
+            a * b,
+            a << shamt,
+            "assert failed when calculating {a} << {shamt}"
+        );
+        assert_eq!(
+            a / b,
+            a >> shamt,
+            "assert failed when calculating {a} >> {shamt}"
+        );
     }
 }
