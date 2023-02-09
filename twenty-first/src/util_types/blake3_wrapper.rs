@@ -8,10 +8,8 @@ use crate::util_types::algebraic_hasher::{AlgebraicHasher, SpongeHasher, RATE};
 impl SpongeHasher for blake3::Hasher {
     type SpongeState = blake3::Hasher;
 
-    fn absorb_init(input: &[BFieldElement; RATE]) -> Self::SpongeState {
-        let mut sponge = blake3::Hasher::new();
-        Self::absorb(&mut sponge, input);
-        sponge
+    fn init() -> Self::SpongeState {
+        blake3::Hasher::new()
     }
 
     fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {

@@ -461,12 +461,8 @@ impl AlgebraicHasher for Tip5 {
 impl SpongeHasher for Tip5 {
     type SpongeState = Tip5State;
 
-    fn absorb_init(input: &[BFieldElement; RATE]) -> Self::SpongeState {
-        let mut sponge = Tip5State::new(Domain::VariableLength);
-
-        Self::absorb(&mut sponge, input);
-
-        sponge
+    fn init() -> Self::SpongeState {
+        Tip5State::new(Domain::VariableLength)
     }
 
     fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {
