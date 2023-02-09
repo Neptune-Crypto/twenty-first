@@ -9,18 +9,51 @@ use crate::shared_math::x_field_element::{XFieldElement, EXTENSION_DEGREE};
 
 pub const RATE: usize = 10;
 
+/// The hasher [Domain] differentiates between the modes of hashing.
+///
+/// The main purpose of declaring the domain is to prevent collisions between
+/// different types of hashing by introducing defining differences in the way
+/// the hash function's internal state (e.g. a sponge state's capacity) is
+/// initialized.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Domain {
+    /// The `VariableLength` domain is used for hashing objects that potentially
+    /// serialize to more than [RATE] number of field elements.
     VariableLength,
+
+    /// The `FixedLength` domain is used for hashing objects that always fit
+    /// within [RATE] number of fields elements, e.g. a pair of [Digest].
     FixedLength,
 }
 
 pub trait SpongeHasher: Clone + Send + Sync {
     type SpongeState;
 
-    fn absorb_init(input: &[BFieldElement; RATE]) -> Self::SpongeState;
+    /// Initialize a sponge state
+    fn init() -> Self::SpongeState;
+
+    /// Absorb an array of [RATE] field elements into the sponge's state, mutating it.
     fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]);
+
+    /// Squeeze an array of [RATE] field elements out from the sponge's state, mutating it.
     fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
+
+    /// Chunk `input` into arrays of [RATE] elements and repeatedly [SpongeHasher::absorb()].
+    ///
+    /// **Note:** This method panics if `input` does not contain a multiple of [RATE] elements.
+    fn absorb_repeatedly<'a, I>(sponge: &mut Self::SpongeState, input: I)
+    where
+        I: Iterator<Item = &'a BFieldElement>,
+    {
+        for chunk in input.chunks(RATE).into_iter() {
+            let absorb_elems: [BFieldElement; RATE] = chunk
+                .cloned()
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("a multiple of RATE elements");
+            Self::absorb(sponge, &absorb_elems);
+        }
+    }
 
     /// Given a sponge state and an `upper_bound` that is a power of two,
     /// produce `num_indices` uniform random numbers (sample indices) in
@@ -68,36 +101,16 @@ pub trait AlgebraicHasher: SpongeHasher {
     }
 
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
-        // calculate padded length
+        // calculate padded length; padding is at least one element
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
 
-        // pad input
+        // pad input with [1, 0, 0, ...]
         let input_iter = input.iter();
         let padding_iter = [&BFIELD_ONE].into_iter().chain(iter::repeat(&BFIELD_ZERO));
-        let padded_input = input_iter
-            .chain(padding_iter)
-            .take(padded_length)
-            .chunks(RATE);
-        let mut padded_input_iter = padded_input.into_iter().map(|chunk| {
-            chunk
-                .into_iter()
-                .copied()
-                .collect::<Vec<_>>()
-                .try_into()
-                .unwrap()
-        });
+        let padded_input = input_iter.chain(padding_iter).take(padded_length);
 
-        // absorb_init
-        let absorb_init_elems: [BFieldElement; RATE] =
-            padded_input_iter.next().expect("at least one absorb");
-        let mut sponge = Self::absorb_init(&absorb_init_elems);
-
-        // absorb repeatedly
-        for absorb_elems in padded_input_iter {
-            Self::absorb(&mut sponge, &absorb_elems);
-        }
-
-        // squeeze
+        let mut sponge = Self::init();
+        Self::absorb_repeatedly(&mut sponge, padded_input);
         let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())

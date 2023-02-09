@@ -299,6 +299,8 @@ where
             partial_tree.insert(index, *leaf_hash);
 
             // Insert hashes for known leaves from partial authentication paths.
+            // FIXME: LSP fails to infer type for izip!() properly; this line fixates the type.
+            let partial_auth_path: PartialAuthenticationPath<Digest> = partial_auth_path;
             for hash_option in partial_auth_path.0.iter() {
                 if let Some(hash) = hash_option {
                     partial_tree.insert(index ^ 1, *hash);
