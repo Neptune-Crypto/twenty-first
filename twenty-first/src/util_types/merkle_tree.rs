@@ -250,8 +250,7 @@ where
     }
 
     /// Verifies a list of leaf_indices and corresponding
-    /// auth_pairs
-    ///     ///  against a Merkle root.
+    /// auth_pairs against a Merkle root.
     ///
     /// # Arguments
     ///
@@ -265,6 +264,10 @@ where
         leaf_digests: &[Digest],
         partial_auth_paths: &[PartialAuthenticationPath<Digest>],
     ) -> bool {
+        debug_assert_eq!(leaf_indices.len(), leaf_digests.len());
+        debug_assert_eq!(leaf_indices.len(), partial_auth_paths.len());
+
+        // The leaf indices, leaf digests, and partial auth paths must all be the same length.
         if leaf_indices.len() != partial_auth_paths.len()
             || leaf_indices.len() != leaf_digests.len()
         {
@@ -274,9 +277,6 @@ where
         if leaf_indices.is_empty() {
             return true;
         }
-        debug_assert_eq!(leaf_indices.len(), leaf_digests.len());
-        debug_assert_eq!(leaf_digests.len(), partial_auth_paths.len());
-        debug_assert_eq!(partial_auth_paths.len(), leaf_indices.len());
 
         let mut partial_auth_paths: Vec<PartialAuthenticationPath<Digest>> =
             partial_auth_paths.to_owned();
@@ -371,6 +371,8 @@ where
                     // whether it exists and return false if it does not
 
                     if !partial_tree.contains_key(&sibling) {
+                        // This might mean that the requested indices are not the same ones as the
+                        // originally requested ones.
                         return false;
                     }
 
