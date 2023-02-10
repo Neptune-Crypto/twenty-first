@@ -26,7 +26,7 @@ impl<H: AlgebraicHasher> From<ArchivalMmr<H>> for MmrAccumulator<H> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MmrAccumulator<H: AlgebraicHasher> {
-    leaf_count: u128,
+    leaf_count: u64,
     peaks: Vec<Digest>,
     _hasher: PhantomData<H>,
 }
@@ -42,7 +42,7 @@ impl<H: AlgebraicHasher> From<&mut ArchivalMmr<H>> for MmrAccumulator<H> {
 }
 
 impl<H: AlgebraicHasher> MmrAccumulator<H> {
-    pub fn init(peaks: Vec<Digest>, leaf_count: u128) -> Self {
+    pub fn init(peaks: Vec<Digest>, leaf_count: u64) -> Self {
         Self {
             leaf_count,
             peaks,
@@ -77,7 +77,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         self.leaf_count == 0
     }
 
-    fn count_leaves(&mut self) -> u128 {
+    fn count_leaves(&mut self) -> u64 {
         self.leaf_count
     }
 
@@ -114,7 +114,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
     ) -> bool {
         // Verify that all leaf mutations operate on unique leafs and that they do
         // not exceed the total leaf count
-        let manipulated_leaf_indices: Vec<u128> =
+        let manipulated_leaf_indices: Vec<u64> =
             leaf_mutations.iter().map(|x| x.1.leaf_index).collect();
         if !has_unique_elements(manipulated_leaf_indices.clone()) {
             return false;
@@ -200,7 +200,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         mut mutation_data: Vec<(MmrMembershipProof<H>, Digest)>,
     ) -> Vec<usize> {
         // Calculate all derivable paths
-        let mut new_ap_digests: HashMap<u128, Digest> = HashMap::new();
+        let mut new_ap_digests: HashMap<u64, Digest> = HashMap::new();
 
         // Calculate the derivable digests from a number of leaf mutations and their
         // associated authentication paths. Notice that all authentication paths
@@ -446,11 +446,11 @@ mod accumulator_mmr_tests {
                 get_archival_mmr_from_digests(initial_leaf_digests.clone());
 
             let mutated_leaf_count = rng.gen_range(0..mmr_leaf_count);
-            let all_indices: Vec<u128> = (0..mmr_leaf_count as u128).collect();
+            let all_indices: Vec<u64> = (0..mmr_leaf_count as u64).collect();
 
             // Pick indices for leaves that are being mutated
             let mut all_indices_mut0 = all_indices.clone();
-            let mut mutated_leaf_indices: Vec<u128> = vec![];
+            let mut mutated_leaf_indices: Vec<u64> = vec![];
             for _ in 0..mutated_leaf_count {
                 let leaf_index = all_indices_mut0.remove(rng.gen_range(0..all_indices_mut0.len()));
                 mutated_leaf_indices.push(leaf_index);
@@ -459,7 +459,7 @@ mod accumulator_mmr_tests {
             // Pick membership proofs that we want to update
             let membership_proof_count = rng.gen_range(0..mmr_leaf_count);
             let mut all_indices_mut1 = all_indices.clone();
-            let mut membership_proof_indices: Vec<u128> = vec![];
+            let mut membership_proof_indices: Vec<u64> = vec![];
             for _ in 0..membership_proof_count {
                 let leaf_index = all_indices_mut1.remove(rng.gen_range(0..all_indices_mut1.len()));
                 membership_proof_indices.push(leaf_index);
@@ -565,8 +565,8 @@ mod accumulator_mmr_tests {
 
                     // Ensure that indices are unique since batch updating cannot update
                     // the same leaf twice in one go
-                    let mutated_indices: Vec<u128> =
-                        random_elements_range(mutate_size, 0..start_size as u128)
+                    let mutated_indices: Vec<u64> =
+                        random_elements_range(mutate_size, 0..start_size as u64)
                             .into_iter()
                             .sorted()
                             .unique()

@@ -5,12 +5,12 @@ use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use super::mmr_membership_proof::MmrMembershipProof;
 
 #[inline]
-pub fn left_child(node_index: u128, height: u32) -> u128 {
+pub fn left_child(node_index: u64, height: u32) -> u64 {
     node_index - (1 << height)
 }
 
 #[inline]
-pub fn right_child(node_index: u128) -> u128 {
+pub fn right_child(node_index: u64) -> u64 {
     node_index - 1
 }
 
@@ -19,20 +19,20 @@ pub fn right_child(node_index: u128) -> u128 {
 /// This algorithm finds the closest $2^n - 1$ that's bigger than
 /// or equal to `node_index`.
 #[inline]
-pub fn leftmost_ancestor(node_index: u128) -> (u128, u32) {
-    let h = u128::BITS - node_index.leading_zeros() - 1;
+pub fn leftmost_ancestor(node_index: u64) -> (u64, u32) {
+    let h = u64::BITS - node_index.leading_zeros() - 1;
     let ret = (1 << (h + 1)) - 1;
 
     (ret, h)
 }
 
-pub fn right_lineage_length(node_index: u128) -> u32 {
-    let bit_width = u128::BITS - node_index.leading_zeros();
+pub fn right_lineage_length(node_index: u64) -> u32 {
+    let bit_width = u64::BITS - node_index.leading_zeros();
     let npo2 = 1 << bit_width;
 
     let dist = npo2 - node_index;
 
-    if (bit_width as u128) < dist {
+    if (bit_width as u64) < dist {
         right_lineage_length(node_index - (npo2 >> 1) + 1)
     } else {
         (dist - 1) as u32
@@ -42,7 +42,7 @@ pub fn right_lineage_length(node_index: u128) -> u32 {
 /// Traversing from this node upwards, count how many of the ancestor (including itself)
 /// is a right child. This number is used to determine how many nodes to insert when a
 /// new leaf is added.
-pub fn right_lineage_length_and_own_height(node_index: u128) -> (u32, u32) {
+pub fn right_lineage_length_and_own_height(node_index: u64) -> (u32, u32) {
     let (mut candidate, mut candidate_height) = leftmost_ancestor(node_index);
 
     // leftmost ancestor is always a left node, so count starts at 0.
@@ -69,7 +69,7 @@ pub fn right_lineage_length_and_own_height(node_index: u128) -> (u32, u32) {
 
 /// Get the node_index of the parent
 #[inline]
-pub fn parent(node_index: u128) -> u128 {
+pub fn parent(node_index: u64) -> u64 {
     let (right_ancestor_count, height) = right_lineage_length_and_own_height(node_index);
 
     if right_ancestor_count != 0 {
@@ -80,21 +80,21 @@ pub fn parent(node_index: u128) -> u128 {
 }
 
 #[inline]
-pub fn left_sibling(node_index: u128, height: u32) -> u128 {
+pub fn left_sibling(node_index: u64, height: u32) -> u64 {
     node_index - (1 << (height + 1)) + 1
 }
 
 #[inline]
-pub fn right_sibling(node_index: u128, height: u32) -> u128 {
+pub fn right_sibling(node_index: u64, height: u32) -> u64 {
     node_index + (1 << (height + 1)) - 1
 }
 
-pub fn get_height_from_leaf_index(leaf_index: u128) -> u32 {
+pub fn get_height_from_leaf_index(leaf_index: u64) -> u32 {
     // This should be a safe cast as 2^(u32::MAX) is a *very* big number
-    log_2_floor(leaf_index + 1) as u32
+    log_2_floor(leaf_index as u128 + 1) as u32
 }
 
-pub fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
+pub fn leaf_count_to_node_count(leaf_count: u64) -> u64 {
     if leaf_count == 0 {
         return 0;
     }
@@ -103,7 +103,7 @@ pub fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
     let non_leaf_nodes_left = non_leaf_nodes_left(rightmost_leaf_leaf_index);
     let node_index_of_rightmost_leaf = leaf_index_to_node_index(rightmost_leaf_leaf_index);
 
-    let mut non_leaf_nodes_after = 0u128;
+    let mut non_leaf_nodes_after = 0u64;
     let mut node_index = node_index_of_rightmost_leaf;
     let mut right_count = right_lineage_length(node_index);
     while right_count != 0 {
@@ -119,7 +119,7 @@ pub fn leaf_count_to_node_count(leaf_count: u128) -> u128 {
 
 /// Return the indices of the nodes added by an append, including the
 /// peak that this append gave rise to
-pub fn node_indices_added_by_append(old_leaf_count: u128) -> Vec<u128> {
+pub fn node_indices_added_by_append(old_leaf_count: u64) -> Vec<u64> {
     let mut node_index = leaf_index_to_node_index(old_leaf_count);
     let mut added_node_indices = vec![node_index];
     let mut right_count = right_lineage_length(node_index);
@@ -136,17 +136,17 @@ pub fn node_indices_added_by_append(old_leaf_count: u128) -> Vec<u128> {
 /// Get the node indices of the authentication path hash digest needed
 /// to calculate the digest of `peak_node_index` from `start_node_index`
 pub fn get_authentication_path_node_indices(
-    start_node_index: u128,
-    peak_node_index: u128,
-    node_count: u128,
-) -> Option<Vec<u128>> {
+    start_node_index: u64,
+    peak_node_index: u64,
+    node_count: u64,
+) -> Option<Vec<u64>> {
     let mut authentication_path_node_indices = vec![];
     let mut node_index = start_node_index;
     while node_index <= node_count && node_index != peak_node_index {
         // TODO: Consider if this function can be written better, or discard
         // it entirely.
         let (right_ancestor_count, height) = right_lineage_length_and_own_height(node_index);
-        let sibling_node_index: u128;
+        let sibling_node_index: u64;
         if right_ancestor_count != 0 {
             sibling_node_index = left_sibling(node_index, height);
 
@@ -170,7 +170,7 @@ pub fn get_authentication_path_node_indices(
 }
 
 /// Return a list of the peak heights for a given leaf count
-pub fn get_peak_heights(leaf_count: u128) -> Vec<u8> {
+pub fn get_peak_heights(leaf_count: u64) -> Vec<u8> {
     // The peak heights in an MMR can be read directly from the bit-decomposition
     // of the leaf count.
     bit_representation(leaf_count)
@@ -178,7 +178,7 @@ pub fn get_peak_heights(leaf_count: u128) -> Vec<u8> {
 
 /// Given leaf count, return a vector representing the height of
 /// the peaks. Input is the number of leafs in the MMR
-pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u32>, Vec<u128>) {
+pub fn get_peak_heights_and_peak_node_indices(leaf_count: u64) -> (Vec<u32>, Vec<u64>) {
     if leaf_count == 0 {
         return (vec![], vec![]);
     }
@@ -192,7 +192,7 @@ pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u32>, Ve
     }
 
     let mut heights: Vec<u32> = vec![top_height];
-    let mut node_indices: Vec<u128> = vec![top_peak];
+    let mut node_indices: Vec<u64> = vec![top_peak];
     let mut height = top_height;
     let mut candidate = right_sibling(top_peak, height);
     'outer: while height > 0 {
@@ -214,14 +214,14 @@ pub fn get_peak_heights_and_peak_node_indices(leaf_count: u128) -> (Vec<u32>, Ve
 /// Convert the leaf index into a Merkle tree index where the index refers to the tree that the leaf
 /// is located in as if it were a Merkle tree. Also returns a peak index which points to which Merkle
 /// tree this leaf is contained in.
-pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u128, leaf_count: u128) -> (u128, u32) {
+pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, leaf_count: u64) -> (u64, u32) {
     // This assert also guarantees that leaf_count is never zero
     assert!(
         leaf_index < leaf_count,
         "Leaf index must be stricly smaller than leaf count"
     );
 
-    let max_tree_height = u128::BITS - leaf_count.leading_zeros() - 1;
+    let max_tree_height = u64::BITS - leaf_count.leading_zeros() - 1;
     let mut h = max_tree_height;
     let mut ret = leaf_index;
     let mut maybe_pow;
@@ -244,7 +244,7 @@ pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u128, leaf_count: u128)
 
 /// Count the number of non-leaf nodes that were inserted *prior* to
 /// the insertion of this leaf.
-pub fn non_leaf_nodes_left(leaf_index: u128) -> u128 {
+pub fn non_leaf_nodes_left(leaf_index: u64) -> u64 {
     // This formula is derived as follows:
     // To get the heights of peaks before this leaf index was inserted, bit-decompose
     // the number of leaves before it was inserted.
@@ -254,7 +254,7 @@ pub fn non_leaf_nodes_left(leaf_index: u128) -> u128 {
     // Thus: f(x) = sum_{h}(2^h - 1)
 
     // An upper limit for the loop iterator is the log_2_floor(leaf_index)
-    let log_2_floor_plus_one = u128::BITS - leaf_index.leading_zeros();
+    let log_2_floor_plus_one = u64::BITS - leaf_index.leading_zeros();
     let mut h = 0;
     let mut ret = 0;
     while h != log_2_floor_plus_one {
@@ -269,14 +269,14 @@ pub fn non_leaf_nodes_left(leaf_index: u128) -> u128 {
 }
 
 /// Convert from leaf index to node index
-pub fn leaf_index_to_node_index(leaf_index: u128) -> u128 {
+pub fn leaf_index_to_node_index(leaf_index: u64) -> u64 {
     let diff = non_leaf_nodes_left(leaf_index);
 
     leaf_index + diff + 1
 }
 
 /// Convert from node index to leaf index in log(size) time
-pub fn node_index_to_leaf_index(node_index: u128) -> Option<u128> {
+pub fn node_index_to_leaf_index(node_index: u64) -> Option<u64> {
     let (_right, own_height) = right_lineage_length_and_own_height(node_index);
     if own_height != 0 {
         return None;
@@ -303,7 +303,7 @@ pub fn node_index_to_leaf_index(node_index: u128) -> Option<u128> {
 /// proof for the added leaf.
 /// Returns None if configuration is impossible (too small `old_peaks` input vector)
 pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
-    old_leaf_count: u128,
+    old_leaf_count: u64,
     old_peaks: Vec<Digest>,
     new_leaf: Digest,
 ) -> Option<(Vec<Digest>, MmrMembershipProof<H>)> {
@@ -334,7 +334,7 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
 pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
     old_peaks: &[Digest],
     new_leaf: &Digest,
-    leaf_count: u128,
+    leaf_count: u64,
     membership_proof: &MmrMembershipProof<H>,
 ) -> Option<Vec<Digest>> {
     let (mut acc_mt_index, peak_index) =
@@ -599,7 +599,7 @@ mod mmr_test {
         let mut rng = rand::thread_rng();
         for _ in 0..10000 {
             let rand = rng.next_u32();
-            let inversion_result = node_index_to_leaf_index(leaf_index_to_node_index(rand as u128));
+            let inversion_result = node_index_to_leaf_index(leaf_index_to_node_index(rand as u64));
             match inversion_result {
                 None => panic!(),
                 Some(inversion) => assert_eq!(rand, inversion as u32),
@@ -652,35 +652,32 @@ mod mmr_test {
         assert_eq!((0, 1), right_lineage_length_and_own_height(41)); // 0b101001 => 0
 
         assert_eq!(
-            (61, 2),
-            right_lineage_length_and_own_height(u64::MAX as u128 - 61)
+            (61, 1),
+            right_lineage_length_and_own_height(u64::MAX / 2 - 61)
         ); // 0b111...11 => 0
         assert_eq!(
-            (3, 60),
-            right_lineage_length_and_own_height(u64::MAX as u128 - 3)
+            (3, 59),
+            right_lineage_length_and_own_height(u64::MAX / 2 - 3)
         ); // 0b111...11 => 0
         assert_eq!(
-            (2, 61),
-            right_lineage_length_and_own_height(u64::MAX as u128 - 2)
+            (2, 60),
+            right_lineage_length_and_own_height(u64::MAX / 2 - 2)
         ); // 0b111...11 => 0
         assert_eq!(
-            (1, 62),
-            right_lineage_length_and_own_height(u64::MAX as u128 - 1)
+            (1, 61),
+            right_lineage_length_and_own_height(u64::MAX / 2 - 1)
         ); // 0b111...11 => 0
-        assert_eq!(
-            (0, 63),
-            right_lineage_length_and_own_height(u64::MAX as u128)
-        ); // 0b111...11 => 0
+        assert_eq!((0, 62), right_lineage_length_and_own_height(u64::MAX / 2)); // 0b111...11 => 0
     }
 
     #[test]
     fn right_lineage_length_pbt() {
         let mut rng = rand::thread_rng();
         for _ in 0..10000 {
-            let rand = rng.next_u64();
+            let rand = rng.next_u64() / 2;
             println!("{rand}");
-            let rll = right_lineage_length(rand as u128);
-            let rac = right_lineage_length_and_own_height(rand as u128).0;
+            let rll = right_lineage_length(rand);
+            let rac = right_lineage_length_and_own_height(rand).0;
             assert_eq!(rac, rll);
         }
     }
@@ -743,18 +740,18 @@ mod mmr_test {
 
     #[test]
     fn leaf_count_to_node_count_test() {
-        let node_counts: Vec<u128> = vec![
+        let node_counts: Vec<u64> = vec![
             0, 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41,
             42, 46, 47, 49, 50, 53, 54, 56, 57, 63, 64,
         ];
         for (i, node_count) in node_counts.iter().enumerate() {
-            assert_eq!(*node_count, leaf_count_to_node_count(i as u128));
+            assert_eq!(*node_count, leaf_count_to_node_count(i as u64));
         }
     }
 
     #[test]
     fn get_peak_heights_and_peak_node_indices_test() {
-        type TestCase = (u128, (Vec<u32>, Vec<u128>));
+        type TestCase = (u64, (Vec<u32>, Vec<u64>));
         let leaf_count_and_expected: Vec<TestCase> = vec![
             (0, (vec![], vec![])),
             (1, (vec![0], vec![1])),
@@ -795,8 +792,8 @@ mod mmr_test {
 
     #[test]
     fn get_authentication_path_node_indices_test() {
-        type Interval = (u128, u128, u128);
-        type TestCase = (Interval, Option<Vec<u128>>);
+        type Interval = (u64, u64, u64);
+        type TestCase = (Interval, Option<Vec<u64>>);
         let start_end_node_count_expected: Vec<TestCase> = vec![
             ((1, 31, 31), Some(vec![2, 6, 14, 30])),
             ((2, 31, 31), Some(vec![1, 6, 14, 30])),

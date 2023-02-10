@@ -25,14 +25,14 @@ pub fn log_2_ceil(x: u128) -> u64 {
 }
 
 /// Convert a number to an array showing which bits are set in its bit representation
-pub fn bit_representation(x: u128) -> Vec<u8> {
+pub fn bit_representation(x: u64) -> Vec<u8> {
     // The peak heights in an MMR can be read directly from the bit-decomposition
     // of the leaf count.
     if x == 0 {
         return vec![];
     }
 
-    let bit_count: u64 = log_2_floor(x);
+    let bit_count: u64 = log_2_floor(x as u128);
     let mut heights = vec![];
     for i in 0..=bit_count {
         if ((1 << i) & x) != 0 {
