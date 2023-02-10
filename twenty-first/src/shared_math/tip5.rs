@@ -699,8 +699,8 @@ impl Tip5 {
         let mut hh = [0i64; 4 * N - 1];
         for i in 0..(2 * N - 1) {
             hh[i] += hh_lo[i];
-            hh[i + N / 2] += hh_li[i] - hh_lo[i] - hh_hi[i];
-            hh[i + N] += hh_hi[i];
+            hh[i + N] += hh_li[i] - hh_lo[i] - hh_hi[i];
+            hh[i + N * 2] += hh_hi[i];
         }
 
         let mut result = [0i64; 2 * N];
@@ -764,8 +764,8 @@ impl Tip5 {
         let mut hh = [0i64; 4 * N - 1];
         for i in 0..(2 * N - 1) {
             hh[i] += hh_lo[i];
-            hh[i + N / 2] += hh_li[i] - hh_lo[i] - hh_hi[i];
-            hh[i + N] += hh_hi[i];
+            hh[i + N] += hh_li[i] - hh_lo[i] - hh_hi[i];
+            hh[i + N * 2] += hh_hi[i];
         }
 
         let mut result = [0i64; 2 * N];
@@ -1374,6 +1374,26 @@ mod tip5_tests {
         let b: [i64; 16] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 
         let c = Tip5::fast_cyclomul16(a, b);
+
+        println!("{:?}", c);
+    }
+
+    #[test]
+    fn test_fast_cyclomul8() {
+        let a: [i64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+        let b: [i64; 8] = [2, 3, 4, 5, 6, 7, 8, 9];
+
+        let c = Tip5::fast_cyclomul8(a, b);
+
+        println!("{:?}", c);
+    }
+
+    #[test]
+    fn test_fast_negacyclomul8() {
+        let a: [i64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+        let b: [i64; 8] = [2, 3, 4, 5, 6, 7, 8, 9];
+
+        let c = Tip5::fast_negacyclomul8(a, b);
 
         println!("{:?}", c);
     }
