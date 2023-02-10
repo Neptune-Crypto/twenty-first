@@ -245,140 +245,6 @@ impl Tip5 {
 
     #[allow(clippy::many_single_char_names)]
     #[inline]
-    fn ntt_2(x: [BFieldElement; 2]) -> [BFieldElement; 2] {
-        [x[0] + x[1], x[0] - x[1]]
-    }
-
-    fn ntt_4(x: [BFieldElement; 4]) -> [BFieldElement; 4] {
-        const N: usize = 4;
-        let odds = Self::ntt_2([x[1], x[3]]);
-        let evens = Self::ntt_2([x[0], x[2]]);
-
-        let mut result = [BFieldElement::zero(); N];
-        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
-        result[0] = evens[0] + odds[0];
-        result[1] = evens[1] + (odds[1] << 48);
-        result[2] = evens[0] - odds[0];
-        result[3] = evens[1] - (odds[1] << 48);
-
-        result
-    }
-
-    fn ntt_8(x: [BFieldElement; 8]) -> [BFieldElement; 8] {
-        const N: usize = 8;
-        let odds = Self::ntt_4([x[1], x[3], x[5], x[7]]);
-        let evens = Self::ntt_4([x[0], x[2], x[4], x[6]]);
-
-        let mut result = [BFieldElement::zero(); N];
-        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
-        result[0] = evens[0] + odds[0];
-        result[1] = evens[1] + (odds[1] << 24);
-        result[2] = evens[2] + (odds[2] << 48);
-        result[3] = evens[3] + (odds[3] << 72);
-        result[4] = evens[0] - odds[0];
-        result[5] = evens[1] - (odds[1] << 24);
-        result[6] = evens[2] - (odds[2] << 48);
-        result[7] = evens[3] - (odds[3] << 72);
-
-        result
-    }
-
-    pub fn ntt_16(x: [BFieldElement; 16]) -> [BFieldElement; 16] {
-        const N: usize = 16;
-        let odds = Self::ntt_8([x[1], x[3], x[5], x[7], x[9], x[11], x[13], x[15]]);
-        let evens = Self::ntt_8([x[0], x[2], x[4], x[6], x[8], x[10], x[12], x[14]]);
-
-        let mut result = [BFieldElement::zero(); N];
-        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
-        result[0] = evens[0] + odds[0];
-        result[1] = evens[1] + (odds[1] << 12);
-        result[2] = evens[2] + (odds[2] << 24);
-        result[3] = evens[3] + (odds[3] << 36);
-        result[4] = evens[4] + (odds[4] << 48);
-        result[5] = evens[5] + (odds[5] << 60);
-        result[6] = evens[6] + (odds[6] << 72);
-        result[7] = evens[7] + (odds[7] << 84);
-        result[8] = evens[0] - odds[0];
-        result[9] = evens[1] - (odds[1] << 12);
-        result[10] = evens[2] - (odds[2] << 24);
-        result[11] = evens[3] - (odds[3] << 36);
-        result[12] = evens[4] - (odds[4] << 48);
-        result[13] = evens[5] - (odds[5] << 60);
-        result[14] = evens[6] - (odds[6] << 72);
-        result[15] = evens[7] - (odds[7] << 84);
-
-        result
-    }
-
-    #[allow(clippy::many_single_char_names)]
-    #[inline]
-    fn intt_2(x: [BFieldElement; 2]) -> [BFieldElement; 2] {
-        [x[0] + x[1], x[0] - x[1]]
-    }
-
-    fn intt_4(x: [BFieldElement; 4]) -> [BFieldElement; 4] {
-        const N: usize = 4;
-        let odds = Self::intt_2([x[1], x[3]]);
-        let evens = Self::intt_2([x[0], x[2]]);
-
-        let mut result = [BFieldElement::zero(); N];
-        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
-        result[0] = evens[0] + odds[0];
-        result[1] = evens[1] + (odds[1] >> 48);
-        result[2] = evens[0] - odds[0];
-        result[3] = evens[1] - (odds[1] >> 48);
-
-        result
-    }
-
-    fn intt_8(x: [BFieldElement; 8]) -> [BFieldElement; 8] {
-        const N: usize = 8;
-        let odds = Self::intt_4([x[1], x[3], x[5], x[7]]);
-        let evens = Self::intt_4([x[0], x[2], x[4], x[6]]);
-
-        let mut result = [BFieldElement::zero(); N];
-        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
-        result[0] = evens[0] + odds[0];
-        result[1] = evens[1] + (odds[1] >> 24);
-        result[2] = evens[2] + (odds[2] >> 48);
-        result[3] = evens[3] + (odds[3] >> 72);
-        result[4] = evens[0] - odds[0];
-        result[5] = evens[1] - (odds[1] >> 24);
-        result[6] = evens[2] - (odds[2] >> 48);
-        result[7] = evens[3] - (odds[3] >> 72);
-
-        result
-    }
-
-    pub fn intt_16(x: [BFieldElement; 16]) -> [BFieldElement; 16] {
-        const N: usize = 16;
-        let odds = Self::intt_8([x[1], x[3], x[5], x[7], x[9], x[11], x[13], x[15]]);
-        let evens = Self::intt_8([x[0], x[2], x[4], x[6], x[8], x[10], x[12], x[14]]);
-
-        let mut result = [BFieldElement::zero(); N];
-        // result = [evens[i % half] + odds[i % half] * omega^i for i in 0..n]
-        result[0] = evens[0] + odds[0];
-        result[1] = evens[1] + (odds[1] >> 12);
-        result[2] = evens[2] + (odds[2] >> 24);
-        result[3] = evens[3] + (odds[3] >> 36);
-        result[4] = evens[4] + (odds[4] >> 48);
-        result[5] = evens[5] + (odds[5] >> 60);
-        result[6] = evens[6] + (odds[6] >> 72);
-        result[7] = evens[7] + (odds[7] >> 84);
-        result[8] = evens[0] - odds[0];
-        result[9] = evens[1] - (odds[1] >> 12);
-        result[10] = evens[2] - (odds[2] >> 24);
-        result[11] = evens[3] - (odds[3] >> 36);
-        result[12] = evens[4] - (odds[4] >> 48);
-        result[13] = evens[5] - (odds[5] >> 60);
-        result[14] = evens[6] - (odds[6] >> 72);
-        result[15] = evens[7] - (odds[7] >> 84);
-
-        result
-    }
-
-    #[allow(clippy::many_single_char_names)]
-    #[inline]
     fn intt_noswap(x: &mut [BFieldElement]) {
         // const POWERS_OF_OMEGA_INVERSE: [BFieldElement; 8] = [
         //     BFieldElement::new(1),
@@ -570,28 +436,6 @@ impl Tip5 {
         Self::intt_noswap(state);
     }
 
-    #[inline]
-    pub fn mds_swap(state: &mut [BFieldElement; STATE_SIZE]) {
-        const SHIFTS: [u8; STATE_SIZE] = [4, 1, 4, 3, 3, 7, 0, 5, 1, 5, 0, 2, 6, 2, 4, 1];
-        let mut array: [u128; STATE_SIZE] = [0; STATE_SIZE];
-        let state_copy = state.to_owned();
-        state.copy_from_slice(&Self::ntt_16(state_copy));
-
-        for i in 0..STATE_SIZE {
-            array[i] = state[i].raw_u128() << SHIFTS[i];
-        }
-        let mut reduced = [0u64; STATE_SIZE];
-        for i in 0..STATE_SIZE {
-            reduced[i] = BFieldElement::montyred(array[i]);
-        }
-        for i in 0..16 {
-            state[i] = BFieldElement::from_raw_u64(reduced[i]);
-        }
-
-        let state_copy_ = state.to_owned();
-        state.copy_from_slice(&Self::intt_16(state_copy_));
-    }
-
     #[inline(always)]
     #[allow(clippy::shadow_unrelated)]
     pub fn mds_multiply_freq(state: [i64; 16]) -> [i64; 16] {
@@ -615,6 +459,37 @@ impl Tip5 {
 
         [
             s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15,
+        ]
+    }
+
+    // #[inline(always)]
+    // fn karatsuba2(x: [i64; 2], y: [i64; 2]) -> [i64; 3] {
+    //     let z0 = x[0] * y[0];
+    //     let z2 = x[1] * y[1];
+    //     let z1 = (x[0] + x[1]) * (y[0] + y[1]) - z0 - z2;
+    //     [z0, z1, z2]
+    // }
+
+    #[inline(always)]
+    fn karatsuba2(a: [i64; 2], b: [i64; 2]) -> [i64; 3] {
+        let lo = a[0] * b[0];
+        let hi = a[1] * b[1];
+        [lo, (a[0] + a[1]) * (b[0] + b[1]) - lo - hi, hi]
+    }
+
+    #[inline(always)]
+    fn karatsuba4(a: [i64; 4], b: [i64; 4]) -> [i64; 7] {
+        let lo = Self::karatsuba2([a[0], a[1]], [b[0], b[1]]);
+        let hi = Self::karatsuba2([a[2], a[3]], [b[2], b[3]]);
+        let li = Self::karatsuba2([a[0] + a[2], a[1] + a[3]], [b[0] + b[2], b[1] + b[3]]);
+        [
+            lo[0],
+            lo[1],
+            lo[2] + li[0] - lo[0] - hi[0],
+            li[1] - lo[1] - hi[1],
+            li[2] - lo[2] - hi[2] + hi[0],
+            hi[1],
+            hi[2],
         ]
     }
 
@@ -772,6 +647,245 @@ impl Tip5 {
         *state = result;
     }
 
+    #[inline(always)]
+    fn fast_cyclomul16(f: [i64; 16], g: [i64; 16]) -> [i64; 16] {
+        const N: usize = 8;
+        let mut ff_lo = [0i64; N];
+        let mut gg_lo = [0i64; N];
+        let mut ff_hi = [0i64; N];
+        let mut gg_hi = [0i64; N];
+        for i in 0..N {
+            ff_lo[i] = f[i] + f[i + N];
+            ff_hi[i] = f[i] - f[i + N];
+            gg_lo[i] = g[i] + g[i + N];
+            gg_hi[i] = g[i] - g[i + N];
+        }
+
+        let hh_lo = Self::fast_cyclomul8(ff_lo, gg_lo);
+        let hh_hi = Self::fast_negacyclomul8(ff_hi, gg_hi);
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..N {
+            hh[i] = (hh_lo[i] + hh_hi[i]) >> 1;
+            hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
+        }
+
+        return hh;
+    }
+
+    #[inline(always)]
+    fn fast_negacyclomul8(f: [i64; 8], g: [i64; 8]) -> [i64; 8] {
+        const N: usize = 4;
+        let mut ff_lo = [0i64; N];
+        let mut gg_lo = [0i64; N];
+        let mut ff_hi = [0i64; N];
+        let mut gg_hi = [0i64; N];
+        let mut ff_li = [0i64; N];
+        let mut gg_li = [0i64; N];
+
+        for i in 0..N {
+            ff_lo[i] = f[i];
+            ff_hi[i] = f[i + N];
+            ff_li[i] = f[i] + f[i + N];
+            gg_lo[i] = g[i];
+            gg_hi[i] = g[i + N];
+            gg_li[i] = g[i] + g[i + N];
+        }
+
+        let hh_lo = Self::karatsuba4(ff_lo, gg_lo);
+        let hh_hi = Self::karatsuba4(ff_hi, gg_hi);
+        let hh_li = Self::karatsuba4(ff_li, gg_li);
+
+        let mut hh = [0i64; 4 * N - 1];
+        for i in 0..(2 * N - 1) {
+            hh[i] += hh_lo[i];
+            hh[i + N / 2] += hh_li[i] - hh_lo[i] - hh_hi[i];
+            hh[i + N] += hh_hi[i];
+        }
+
+        let mut result = [0i64; 2 * N];
+        for i in 0..2 * N - 1 {
+            result[i] = hh[i] - hh[2 * N + i];
+        }
+        result[2 * N - 1] = hh[2 * N - 1];
+
+        return result;
+    }
+
+    #[inline(always)]
+    fn fast_cyclomul8(f: [i64; 8], g: [i64; 8]) -> [i64; 8] {
+        const N: usize = 4;
+        let mut ff_lo = [0i64; N];
+        let mut gg_lo = [0i64; N];
+        let mut ff_hi = [0i64; N];
+        let mut gg_hi = [0i64; N];
+        for i in 0..N {
+            ff_lo[i] = f[i] + f[i + N];
+            ff_hi[i] = f[i] - f[i + N];
+            gg_lo[i] = g[i] + g[i + N];
+            gg_hi[i] = g[i] - g[i + N];
+        }
+
+        let hh_lo = Self::fast_cyclomul4(ff_lo, gg_lo);
+        let hh_hi = Self::fast_negacyclomul4(ff_hi, gg_hi);
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..N {
+            hh[i] = (hh_lo[i] + hh_hi[i]) >> 1;
+            hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
+        }
+
+        return hh;
+    }
+
+    #[inline(always)]
+    fn fast_negacyclomul4(f: [i64; 4], g: [i64; 4]) -> [i64; 4] {
+        const N: usize = 2;
+        let mut ff_lo = [0i64; N];
+        let mut gg_lo = [0i64; N];
+        let mut ff_hi = [0i64; N];
+        let mut gg_hi = [0i64; N];
+        let mut ff_li = [0i64; N];
+        let mut gg_li = [0i64; N];
+
+        for i in 0..N {
+            ff_lo[i] = f[i];
+            ff_hi[i] = f[i + N];
+            ff_li[i] = f[i] + f[i + N];
+            gg_lo[i] = g[i];
+            gg_hi[i] = g[i + N];
+            gg_li[i] = g[i] + g[i + N];
+        }
+
+        let hh_lo = Self::karatsuba2(ff_lo, gg_lo);
+        let hh_hi = Self::karatsuba2(ff_hi, gg_hi);
+        let hh_li = Self::karatsuba2(ff_li, gg_li);
+
+        let mut hh = [0i64; 4 * N - 1];
+        for i in 0..(2 * N - 1) {
+            hh[i] += hh_lo[i];
+            hh[i + N / 2] += hh_li[i] - hh_lo[i] - hh_hi[i];
+            hh[i + N] += hh_hi[i];
+        }
+
+        let mut result = [0i64; 2 * N];
+        for i in 0..2 * N - 1 {
+            result[i] = hh[i] - hh[2 * N + i];
+        }
+        result[2 * N - 1] = hh[2 * N - 1];
+
+        return result;
+    }
+
+    #[inline(always)]
+    fn fast_cyclomul4(f: [i64; 4], g: [i64; 4]) -> [i64; 4] {
+        const N: usize = 2;
+        let mut ff_lo = [0i64; N];
+        let mut gg_lo = [0i64; N];
+        let mut ff_hi = [0i64; N];
+        let mut gg_hi = [0i64; N];
+        for i in 0..N {
+            ff_lo[i] = f[i] + f[i + N];
+            ff_hi[i] = f[i] - f[i + N];
+            gg_lo[i] = g[i] + g[i + N];
+            gg_hi[i] = g[i] - g[i + N];
+        }
+
+        let hh_lo = Self::fast_cyclomul2(ff_lo, gg_lo);
+        let hh_hi = Self::fast_negacyclomul2(ff_hi, gg_hi);
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..N {
+            hh[i] = (hh_lo[i] + hh_hi[i]) >> 1;
+            hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
+        }
+
+        return hh;
+    }
+
+    #[inline(always)]
+    fn fast_negacyclomul2(f: [i64; 2], g: [i64; 2]) -> [i64; 2] {
+        let mut ff_lo = 0i64;
+        let mut gg_lo = 0i64;
+        let mut ff_hi = 0i64;
+        let mut gg_hi = 0i64;
+        let mut ff_li = 0i64;
+        let mut gg_li = 0i64;
+
+        ff_lo = f[0];
+        ff_hi = f[1];
+        ff_li = f[0] + f[1];
+        gg_lo = g[0];
+        gg_hi = g[1];
+        gg_li = g[0] + g[1];
+
+        let hh_lo = ff_lo * gg_lo;
+        let hh_hi = ff_hi * gg_hi;
+        let hh_li = ff_li * gg_li;
+
+        let mut hh = [0i64; 3];
+        hh[0] += hh_lo;
+        hh[1] += hh_li - hh_lo - hh_hi;
+        hh[2] += hh_hi;
+
+        let mut result = [0i64; 2];
+        result[0] = hh[0] - hh[2];
+        result[1] = hh[1];
+
+        return result;
+    }
+
+    #[inline(always)]
+    fn fast_cyclomul2(f: [i64; 2], g: [i64; 2]) -> [i64; 2] {
+        let mut ff_lo = 0i64;
+        let mut gg_lo = 0i64;
+        let mut ff_hi = 0i64;
+        let mut gg_hi = 0i64;
+        ff_lo = f[0] + f[1];
+        ff_hi = f[0] - f[1];
+        gg_lo = g[0] + g[1];
+        gg_hi = g[0] - g[1];
+
+        let hh_lo = ff_lo * gg_lo;
+        let hh_hi = ff_hi * gg_hi;
+
+        let mut hh = [0i64; 2];
+        hh[0] = (hh_lo + hh_hi) >> 1;
+        hh[1] = (hh_lo - hh_hi) >> 1;
+
+        return hh;
+    }
+
+    #[inline(always)]
+    fn mds_cyclomul(state: &mut [BFieldElement; STATE_SIZE]) {
+        const CONSTANTS: [i64; STATE_SIZE] =
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let mut result = [BFieldElement::zero(); STATE_SIZE];
+
+        let mut lo: [i64; STATE_SIZE] = [0; STATE_SIZE];
+        let mut hi: [i64; STATE_SIZE] = [0; STATE_SIZE];
+        for (i, b) in state.iter().enumerate() {
+            hi[i] = (b.raw_u64() >> 32) as i64;
+            lo[i] = (b.raw_u64() as u32) as i64;
+        }
+
+        lo = Self::fast_cyclomul16(lo, CONSTANTS);
+        hi = Self::fast_cyclomul16(hi, CONSTANTS);
+
+        for r in 0..STATE_SIZE {
+            let s = lo[r] as u128 + ((hi[r] as u128) << 32);
+            let s_hi = (s >> 64) as u64;
+            let s_lo = s as u64;
+            let z = (s_hi << 32) - s_hi;
+            let (res, over) = s_lo.overflowing_add(z);
+
+            result[r] = BFieldElement::from_raw_u64(
+                res.wrapping_add(0u32.wrapping_sub(over as u32) as u64),
+            );
+        }
+        *state = result;
+    }
+
     #[inline]
     fn sbox_layer(state: &mut [BFieldElement; STATE_SIZE]) {
         // lookup
@@ -791,8 +905,9 @@ impl Tip5 {
     fn round(sponge: &mut Tip5State, round_index: usize) {
         Self::sbox_layer(&mut sponge.state);
 
-        Self::mds_noswap(&mut sponge.state);
+        // Self::mds_noswap(&mut sponge.state);
         // Self::mds_split(&mut sponge.state);
+        Self::mds_cyclomul(&mut sponge.state);
 
         for i in 0..STATE_SIZE {
             sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
@@ -1137,8 +1252,8 @@ mod tip5_tests {
 
     #[test]
     fn test_linearity_of_mds() {
-        // let mds_procedure = Tip5::mds_split;
-        let mds_procedure = Tip5::mds_noswap;
+        let mds_procedure = Tip5::mds_split;
+        // let mds_procedure = Tip5::mds_noswap;
         let a: BFieldElement = random_elements(1)[0];
         let b: BFieldElement = random_elements(1)[0];
         let mut u: [BFieldElement; STATE_SIZE] = random_elements(STATE_SIZE).try_into().unwrap();
@@ -1173,7 +1288,8 @@ mod tip5_tests {
         e1[0] = BFieldElement::one();
 
         // let mds_procedure = Tip5::mds_split;
-        let mds_procedure = Tip5::mds_noswap;
+        // let mds_procedure = Tip5::mds_noswap;
+        let mds_procedure = Tip5::mds_cyclomul;
 
         mds_procedure(&mut e1);
 
@@ -1202,26 +1318,26 @@ mod tip5_tests {
         assert_eq!(vec, mv);
     }
 
-    #[test]
-    fn test_smart_ntt() {
-        let mut rng = thread_rng();
-        const SIZE: usize = STATE_SIZE;
-        let mut vec: [BFieldElement; SIZE] = [BFieldElement::zero(); SIZE];
-        let mut st = [0u64; SIZE];
-        for i in 0..SIZE {
-            let e = rng.next_u32() as u64;
-            vec[i] = BFieldElement::from_raw_u64(e);
-            st[i] = e;
-        }
+    // #[test]
+    // fn test_smart_ntt() {
+    //     let mut rng = thread_rng();
+    //     const SIZE: usize = STATE_SIZE;
+    //     let mut vec: [BFieldElement; SIZE] = [BFieldElement::zero(); SIZE];
+    //     let mut st = [0u64; SIZE];
+    //     for i in 0..SIZE {
+    //         let e = rng.next_u32() as u64;
+    //         vec[i] = BFieldElement::from_raw_u64(e);
+    //         st[i] = e;
+    //     }
 
-        let smart = Tip5::ntt_16(vec);
+    //     let smart = Tip5::ntt_16(vec);
 
-        let omega = BFieldElement::new(1 << 12);
+    //     let omega = BFieldElement::new(1 << 12);
 
-        ntt::<BFieldElement>(&mut vec, omega, 4);
+    //     ntt::<BFieldElement>(&mut vec, omega, 4);
 
-        assert_eq!(vec, smart);
-    }
+    //     assert_eq!(vec, smart);
+    // }
 
     #[test]
     fn test_ntt_noswap() {
@@ -1242,5 +1358,41 @@ mod tip5_tests {
         b.iter_mut()
             .for_each(|bb| *bb = *bb / BFieldElement::new(16));
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn generate_bubble_constants() {
+        let mut rng = thread_rng();
+        for _ in 0..32 {
+            println!("{},", rng.next_u32() % 128);
+        }
+    }
+
+    #[test]
+    fn test_fast_cyclomul16() {
+        let a: [i64; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let b: [i64; 16] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+        let c = Tip5::fast_cyclomul16(a, b);
+
+        println!("{:?}", c);
+    }
+
+    #[test]
+    fn test_fast_negacyclomul4() {
+        let a: [i64; 4] = [1, 2, 3, 4];
+        let b: [i64; 4] = [2, 3, 4, 5];
+
+        let c = Tip5::fast_negacyclomul4(a, b);
+
+        println!("{:?}", c);
+    }
+
+    #[test]
+    fn test_karatsuba() {
+        let a: [i64; 4] = [1, 2, 3, 4];
+        let b: [i64; 4] = [2, 3, 4, 5];
+        let c = Tip5::karatsuba4(a, b);
+        println!("{:?}", c);
     }
 }
