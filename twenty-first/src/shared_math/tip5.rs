@@ -478,103 +478,10 @@ impl Tip5 {
     }
 
     #[inline(always)]
-    fn karatsuba2_hardcoded<const B0: i64, const B1: i64>(a: [i64; 2]) -> [i64; 3] {
-        let lo = a[0] * B0;
-        let hi = a[1] * B1;
-        [lo, (a[0] + a[1]) * ({ B0 + B1 }) - lo - hi, hi]
-    }
-
-    #[inline(always)]
     fn karatsuba4(a: [i64; 4], b: [i64; 4]) -> [i64; 7] {
         let lo = Self::karatsuba2([a[0], a[1]], [b[0], b[1]]);
         let hi = Self::karatsuba2([a[2], a[3]], [b[2], b[3]]);
         let li = Self::karatsuba2([a[0] + a[2], a[1] + a[3]], [b[0] + b[2], b[1] + b[3]]);
-        [
-            lo[0],
-            lo[1],
-            lo[2] + li[0] - lo[0] - hi[0],
-            li[1] - lo[1] - hi[1],
-            li[2] - lo[2] - hi[2] + hi[0],
-            hi[1],
-            hi[2],
-        ]
-    }
-
-    #[inline(always)]
-    fn karatsuba4_hardcoded_a(a: [i64; 4]) -> [i64; 7] {
-        const B0: i64 = 4451;
-        const B1: i64 = -26413;
-        const B2: i64 = -12601;
-        const B3: i64 = -7078;
-        const B02: i64 = -8150;
-        const B13: i64 = -33491;
-        let lo = Self::karatsuba2_hardcoded::<B0, B1>([a[0], a[1]]);
-        let hi = Self::karatsuba2_hardcoded::<B2, B3>([a[2], a[3]]);
-        let li = Self::karatsuba2_hardcoded::<B02, B13>([a[0] + a[2], a[1] + a[3]]);
-        [
-            lo[0],
-            lo[1],
-            lo[2] + li[0] - lo[0] - hi[0],
-            li[1] - lo[1] - hi[1],
-            li[2] - lo[2] - hi[2] + hi[0],
-            hi[1],
-            hi[2],
-        ]
-    }
-
-    #[inline(always)]
-    fn karatsuba4_hardcoded_b(a: [i64; 4]) -> [i64; 7] {
-        // -4567, -16445, 27067, -5811
-        const B0: i64 = -4567;
-        const B1: i64 = -16445;
-        const B2: i64 = 27067;
-        const B3: i64 = -5811;
-        const B02: i64 = 22500;
-        const B13: i64 = -22256;
-        let lo = Self::karatsuba2_hardcoded::<B0, B1>([a[0], a[1]]);
-        let hi = Self::karatsuba2_hardcoded::<B2, B3>([a[2], a[3]]);
-        let li = Self::karatsuba2_hardcoded::<B02, B13>([a[0] + a[2], a[1] + a[3]]);
-        [
-            lo[0],
-            lo[1],
-            lo[2] + li[0] - lo[0] - hi[0],
-            li[1] - lo[1] - hi[1],
-            li[2] - lo[2] - hi[2] + hi[0],
-            hi[1],
-            hi[2],
-        ]
-    }
-
-    #[inline(always)]
-    fn karatsuba4_hardcoded_c(a: [i64; 4]) -> [i64; 7] {
-        // [-116, -42858, 14466, -12889]
-        const B0: i64 = -116;
-        const B1: i64 = -42858;
-        const B2: i64 = 14466;
-        const B3: i64 = -12889;
-        const B02: i64 = 14350;
-        const B13: i64 = -55747;
-        let lo = Self::karatsuba2_hardcoded::<B0, B1>([a[0], a[1]]);
-        let hi = Self::karatsuba2_hardcoded::<B2, B3>([a[2], a[3]]);
-        let li = Self::karatsuba2_hardcoded::<B02, B13>([a[0] + a[2], a[1] + a[3]]);
-        [
-            lo[0],
-            lo[1],
-            lo[2] + li[0] - lo[0] - hi[0],
-            li[1] - lo[1] - hi[1],
-            li[2] - lo[2] - hi[2] + hi[0],
-            hi[1],
-            hi[2],
-        ]
-    }
-
-    #[inline(always)]
-    fn karatsuba4_hardcoded<const B0: i64, const B1: i64, const B2: i64, const B3: i64>(
-        a: [i64; 4],
-    ) -> [i64; 7] {
-        let lo = Self::karatsuba2_hardcoded::<B0, B1>([a[0], a[1]]);
-        let hi = Self::karatsuba2_hardcoded::<B2, B3>([a[2], a[3]]);
-        let li = Self::karatsuba2([a[0] + a[2], a[1] + a[3]], [B0 + B2, B1 + B3]);
         [
             lo[0],
             lo[1],
@@ -767,37 +674,6 @@ impl Tip5 {
     }
 
     #[inline(always)]
-    fn fast_cyclomul16_hardcoded(f: [i64; 16]) -> [i64; 16] {
-        const N: usize = 8;
-        // constants: Sha256("Tip5")
-        // const CONSTANTS: [i64; STATE_SIZE] = [
-        //     61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901,
-        //     12021, 59689, 26798, 17845,
-        // ];
-        // const CONSTANTS_LO: [i64; N] = [118353, 28629, 70101, 74724, 19475, 102933, 80663, 29879];
-        // const CONSTANTS_HI: [i64; N] = [4451, -26413, -12601, -7078, -4567, -16445, 27067, -5811];
-        let mut ff_lo = [0i64; N];
-        let mut ff_hi = [0i64; N];
-        for i in 0..N {
-            ff_lo[i] = f[i] + f[i + N];
-            ff_hi[i] = f[i] - f[i + N];
-        }
-
-        // hardcoded right-hand side: [118353, 28629, 70101, 74724, 19475, 102933, 80663, 29879]
-        let hh_lo = Self::fast_cyclomul8_hardcoded(ff_lo);
-        // hardcoded right-hand side: [4451, -26413, -12601, -7078, -4567, -16445, 27067, -5811]
-        let hh_hi = Self::fast_negacyclomul8_hardcoded(ff_hi);
-
-        let mut hh = [0i64; 2 * N];
-        for i in 0..N {
-            hh[i] = (hh_lo[i] + hh_hi[i]) >> 1;
-            hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
-        }
-
-        return hh;
-    }
-
-    #[inline(always)]
     fn fast_negacyclomul8(f: [i64; 8], g: [i64; 8]) -> [i64; 8] {
         const N: usize = 4;
         let mut ff_lo = [0i64; N];
@@ -837,43 +713,6 @@ impl Tip5 {
     }
 
     #[inline(always)]
-    fn fast_negacyclomul8_hardcoded(f: [i64; 8]) -> [i64; 8] {
-        const N: usize = 4;
-        // const CONSTANTS: [i64; 2 * N] = [4451, -26413, -12601, -7078, -4567, -16445, 27067, -5811];
-        // const CONSTANTS_LO: [i64; N] = [4451, -26413, -12601, -7078];
-        // const CONSTANTS_HI: [i64; N] = [-4567, -16445, 27067, -5811];
-        // const CONSTANTS_LI: [i64; N] = [-116, -42858, 14466, -12889];
-        let mut ff_lo = [0i64; N];
-        let mut ff_hi = [0i64; N];
-        let mut ff_li = [0i64; N];
-
-        for i in 0..N {
-            ff_lo[i] = f[i];
-            ff_hi[i] = f[i + N];
-            ff_li[i] = f[i] + f[i + N];
-        }
-
-        let hh_lo = Self::karatsuba4_hardcoded_a(ff_lo);
-        let hh_hi = Self::karatsuba4_hardcoded_b(ff_hi);
-        let hh_li = Self::karatsuba4_hardcoded_c(ff_li);
-
-        let mut hh = [0i64; 4 * N - 1];
-        for i in 0..(2 * N - 1) {
-            hh[i] += hh_lo[i];
-            hh[i + N] += hh_li[i] - hh_lo[i] - hh_hi[i];
-            hh[i + N * 2] += hh_hi[i];
-        }
-
-        let mut result = [0i64; 2 * N];
-        for i in 0..2 * N - 1 {
-            result[i] = hh[i] - hh[2 * N + i];
-        }
-        result[2 * N - 1] = hh[2 * N - 1];
-
-        return result;
-    }
-
-    #[inline(always)]
     fn fast_cyclomul8(f: [i64; 8], g: [i64; 8]) -> [i64; 8] {
         const N: usize = 4;
         let mut ff_lo = [0i64; N];
@@ -889,34 +728,6 @@ impl Tip5 {
 
         let hh_lo = Self::fast_cyclomul4(ff_lo, gg_lo);
         let hh_hi = Self::fast_negacyclomul4(ff_hi, gg_hi);
-
-        let mut hh = [0i64; 2 * N];
-        for i in 0..N {
-            hh[i] = (hh_lo[i] + hh_hi[i]) >> 1;
-            hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
-        }
-
-        return hh;
-    }
-
-    #[inline(always)]
-    fn fast_cyclomul8_hardcoded(f: [i64; 8]) -> [i64; 8] {
-        const N: usize = 4;
-        // constants: Sha("Tip5")
-        // const CONSTANTS: [i64; 2 * N] = [118353, 28629, 70101, 74724, 19475, 102933, 80663, 29879];
-        // const CONSTANTS_LO: [i64; N] = [137828, 131562, 150764, 104603];
-        // const CONSTANTS_HI: [i64; N] = [98878, -74304, -10562, 44845];
-        let mut ff_lo = [0i64; N];
-        let mut ff_hi = [0i64; N];
-        for i in 0..N {
-            ff_lo[i] = f[i] + f[i + N];
-            ff_hi[i] = f[i] - f[i + N];
-        }
-
-        // hardcoded right-hand side: [137828, 131562, 150764, 104603]
-        let hh_lo = Self::fast_cyclomul4_hardcoded(ff_lo);
-        // hardcoded right-hand side: [98878, -74304, -10562, 44845]
-        let hh_hi = Self::fast_negacyclomul4_hardcoded(ff_hi);
 
         let mut hh = [0i64; 2 * N];
         for i in 0..N {
@@ -967,43 +778,6 @@ impl Tip5 {
     }
 
     #[inline(always)]
-    fn fast_negacyclomul4_hardcoded(f: [i64; 4]) -> [i64; 4] {
-        const N: usize = 2;
-        // const CONSTANTS: [i64; 2 * N] = [98878, -74304, -10562, 44845];
-        const CONSTANTS_LO: [i64; N] = [98878, -74304];
-        const CONSTANTS_HI: [i64; N] = [-10562, 44845];
-        const CONSTANTS_LI: [i64; N] = [88316, -29459];
-        let mut ff_lo = [0i64; N];
-        let mut ff_hi = [0i64; N];
-        let mut ff_li = [0i64; N];
-
-        for i in 0..N {
-            ff_lo[i] = f[i];
-            ff_hi[i] = f[i + N];
-            ff_li[i] = f[i] + f[i + N];
-        }
-
-        let hh_lo = Self::karatsuba2_hardcoded::<{ CONSTANTS_LO[0] }, { CONSTANTS_LO[1] }>(ff_lo);
-        let hh_hi = Self::karatsuba2_hardcoded::<{ CONSTANTS_HI[0] }, { CONSTANTS_HI[1] }>(ff_hi);
-        let hh_li = Self::karatsuba2_hardcoded::<{ CONSTANTS_LI[0] }, { CONSTANTS_LI[1] }>(ff_li);
-
-        let mut hh = [0i64; 4 * N - 1];
-        for i in 0..(2 * N - 1) {
-            hh[i] += hh_lo[i];
-            hh[i + N] += hh_li[i] - hh_lo[i] - hh_hi[i];
-            hh[i + N * 2] += hh_hi[i];
-        }
-
-        let mut result = [0i64; 2 * N];
-        for i in 0..2 * N - 1 {
-            result[i] = hh[i] - hh[2 * N + i];
-        }
-        result[2 * N - 1] = hh[2 * N - 1];
-
-        return result;
-    }
-
-    #[inline(always)]
     fn fast_cyclomul4(f: [i64; 4], g: [i64; 4]) -> [i64; 4] {
         const N: usize = 2;
         let mut ff_lo = [0i64; N];
@@ -1019,34 +793,6 @@ impl Tip5 {
 
         let hh_lo = Self::fast_cyclomul2(ff_lo, gg_lo);
         let hh_hi = Self::fast_negacyclomul2(ff_hi, gg_hi);
-
-        let mut hh = [0i64; 2 * N];
-        for i in 0..N {
-            hh[i] = (hh_lo[i] + hh_hi[i]) >> 1;
-            hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
-        }
-
-        return hh;
-    }
-
-    #[inline(always)]
-    fn fast_cyclomul4_hardcoded(f: [i64; 4]) -> [i64; 4] {
-        const N: usize = 2;
-        // constants: Sha256("Tip5")
-        // const CONSTANTS: [i64; 2 * N] = [137828, 131562, 150764, 104603];
-        // const CONSTANTS_LO: [i64; N] = [288592, 236165];
-        // const CONSTANTS_HI: [i64; N] = [-12936, 26959];
-        let mut ff_lo = [0i64; N];
-        let mut ff_hi = [0i64; N];
-        for i in 0..N {
-            ff_lo[i] = f[i] + f[i + N];
-            ff_hi[i] = f[i] - f[i + N];
-        }
-
-        // hardcoded right-hand side: [288592, 236165]
-        let hh_lo = Self::fast_cyclomul2_hardcoded(ff_lo);
-        // hadcoded right-hand side: [-12936, 26959]
-        let hh_hi = Self::fast_negacyclomul2_hardcoded(ff_hi);
 
         let mut hh = [0i64; 2 * N];
         for i in 0..N {
@@ -1090,24 +836,6 @@ impl Tip5 {
     }
 
     #[inline(always)]
-    fn fast_negacyclomul2_hardcoded(f: [i64; 2]) -> [i64; 2] {
-        // const CONSTANTS: [i64; 2] = [-12936, 26959];
-
-        let ff_lo = f[0];
-        let ff_hi = f[1];
-        let ff_li = f[0] + f[1];
-        const CONSTANT_LO: i64 = -12936;
-        const CONSTANT_HI: i64 = 26959;
-        const CONSTANT_LI: i64 = 14023;
-
-        let hh_lo = ff_lo * CONSTANT_LO;
-        let hh_hi = ff_hi * CONSTANT_HI;
-        let hh_li = ff_li * CONSTANT_LI;
-
-        return [hh_lo - hh_hi, hh_li - hh_lo - hh_hi];
-    }
-
-    #[inline(always)]
     fn fast_cyclomul2(f: [i64; 2], g: [i64; 2]) -> [i64; 2] {
         let mut ff_lo = 0i64;
         let mut gg_lo = 0i64;
@@ -1129,32 +857,12 @@ impl Tip5 {
     }
 
     #[inline(always)]
-    fn fast_cyclomul2_hardcoded(f: [i64; 2]) -> [i64; 2] {
-        const N: usize = 1;
-        // constants: Sha256("Tip5")
-        // const CONSTANTS: [i64; 2 * N] = [288592, 236165];
-        const CONSTANT_LO: i64 = 288592 + 236165;
-        const CONSTANT_HI: i64 = 288592 - 236165;
-        let ff_lo = f[0] + f[1];
-        let ff_hi = f[0] - f[1];
-
-        let hh_lo = ff_lo * CONSTANT_LO;
-        let hh_hi = ff_hi * CONSTANT_HI;
-
-        let mut hh = [0i64; 2];
-        hh[0] = (hh_lo + hh_hi) >> 1;
-        hh[1] = (hh_lo - hh_hi) >> 1;
-
-        return hh;
-    }
-
-    #[inline(always)]
     fn mds_cyclomul(state: &mut [BFieldElement; STATE_SIZE]) {
         // constants: Sha256("Tip5")
-        // const CONSTANTS: [i64; STATE_SIZE] = [
-        //     61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901,
-        //     12021, 59689, 26798, 17845,
-        // ];
+        const CONSTANTS: [i64; STATE_SIZE] = [
+            61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901,
+            12021, 59689, 26798, 17845,
+        ];
         let mut result = [BFieldElement::zero(); STATE_SIZE];
 
         let mut lo: [i64; STATE_SIZE] = [0; STATE_SIZE];
@@ -1169,8 +877,8 @@ impl Tip5 {
         //     61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901,
         //     12021, 59689, 26798, 17845,
         // ]
-        lo = Self::fast_cyclomul16_hardcoded(lo);
-        hi = Self::fast_cyclomul16_hardcoded(hi);
+        lo = Self::fast_cyclomul16(lo, CONSTANTS);
+        hi = Self::fast_cyclomul16(hi, CONSTANTS);
 
         for r in 0..STATE_SIZE {
             let s = lo[r] as u128 + ((hi[r] as u128) << 32);
