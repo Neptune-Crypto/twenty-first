@@ -482,6 +482,7 @@ impl Tip5 {
         let lo = Self::karatsuba2([a[0], a[1]], [b[0], b[1]]);
         let hi = Self::karatsuba2([a[2], a[3]], [b[2], b[3]]);
         let li = Self::karatsuba2([a[0] + a[2], a[1] + a[3]], [b[0] + b[2], b[1] + b[3]]);
+
         [
             lo[0],
             lo[1],
@@ -662,7 +663,7 @@ impl Tip5 {
         }
 
         let hh_lo = Self::fast_cyclomul8(ff_lo, gg_lo);
-        let hh_hi = Self::fast_negacyclomul8(ff_hi, gg_hi);
+        let hh_hi = Self::complex_negacyclomul8(ff_hi, gg_hi);
 
         let mut hh = [0i64; 2 * N];
         for i in 0..N {
@@ -670,7 +671,193 @@ impl Tip5 {
             hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
         }
 
+        hh
+    }
+
+    #[inline(always)]
+    fn complex_sum<const N: usize>(f: [(i64, i64); N], g: [(i64, i64); N]) -> [(i64, i64); N] {
+        let mut h = [(0i64, 0i64); N];
+        for i in 0..N {
+            h[i].0 = f[i].0 + g[i].0;
+            h[i].1 = f[i].1 + g[i].1;
+        }
+        h
+    }
+
+    #[inline(always)]
+    fn complex_diff<const N: usize>(f: [(i64, i64); N], g: [(i64, i64); N]) -> [(i64, i64); N] {
+        let mut h = [(0i64, 0i64); N];
+        for i in 0..N {
+            h[i].0 = f[i].0 - g[i].0;
+            h[i].1 = f[i].1 - g[i].1;
+        }
+        h
+    }
+
+    #[inline(always)]
+    fn complex_product(f: (i64, i64), g: (i64, i64)) -> (i64, i64) {
+        let lo = f.0 * g.0;
+        let hi = f.1 * g.1;
+        let li = (f.0 + f.1) * (g.0 + g.1) - lo - hi;
+        (lo - hi, li)
+    }
+
+    #[inline(always)]
+    fn complex_karatsuba2(f: [(i64, i64); 2], g: [(i64, i64); 2]) -> [(i64, i64); 3] {
+        const N: usize = 1;
+
+        let ff = (f[0].0 + f[1].0, f[0].1 + f[1].1);
+        let gg = (g[0].0 + g[1].0, g[0].1 + g[1].1);
+
+        let lo = Self::complex_product(f[0], g[0]);
+        let hi = Self::complex_product(f[1], g[1]);
+
+        let ff_times_gg = Self::complex_product(ff, gg);
+        let lo_plus_hi = (lo.0 + hi.0, lo.1 + hi.1);
+
+        let li = (ff_times_gg.0 - lo_plus_hi.0, ff_times_gg.1 - lo_plus_hi.1);
+
+        let mut result = [(0i64, 0i64); 4 * N - 1];
+        result[0].0 += lo.0;
+        result[0].1 += lo.1;
+        result[N].0 += li.0;
+        result[N].1 += li.1;
+        result[2 * N].0 += hi.0;
+        result[2 * N].1 += hi.1;
+
+        result
+    }
+
+    #[inline(always)]
+    fn complex_karatsuba4(f: [(i64, i64); 4], g: [(i64, i64); 4]) -> [(i64, i64); 7] {
+        const N: usize = 2;
+
+        let ff = Self::complex_sum::<2>(f[..N].try_into().unwrap(), f[N..].try_into().unwrap());
+        let gg = Self::complex_sum::<2>(g[..N].try_into().unwrap(), g[N..].try_into().unwrap());
+
+        let lo = Self::complex_karatsuba2(f[..N].try_into().unwrap(), g[..N].try_into().unwrap());
+        let hi = Self::complex_karatsuba2(f[N..].try_into().unwrap(), g[N..].try_into().unwrap());
+
+        let li = Self::complex_diff::<3>(
+            Self::complex_karatsuba2(ff, gg),
+            Self::complex_sum::<3>(lo, hi),
+        );
+
+        let mut result = [(0i64, 0i64); 4 * N - 1];
+        for i in 0..(2 * N - 1) {
+            result[i].0 = lo[i].0;
+            result[i].1 = lo[i].1;
+        }
+        for i in 0..(2 * N - 1) {
+            result[N + i].0 += li[i].0;
+            result[N + i].1 += li[i].1;
+        }
+        for i in 0..(2 * N - 1) {
+            result[2 * N + i].0 += hi[i].0;
+            result[2 * N + i].1 += hi[i].1;
+        }
+
+        result
+    }
+
+    #[inline(always)]
+    fn complex_negacyclomul8(f: [i64; 8], g: [i64; 8]) -> [i64; 8] {
+        const N: usize = 4;
+
+        let mut f0 = [(0i64, 0i64); N];
+        // let mut f1 = [(0i64,0i64); N];
+        let mut g0 = [(0i64, 0i64); N];
+        // let mut g1 = [(0i64,0i64); N];
+
+        for i in 0..N {
+            f0[i] = (f[i], -f[N + i]);
+            // f1[i] = (f[i],  f[N+i]);
+            g0[i] = (g[i], -g[N + i]);
+            // g1[i] = (g[i],  g[N+i]);
+        }
+
+        let h0 = Self::complex_karatsuba4(f0, g0);
+        // h1 = complex_karatsuba(f1, g1)
+
+        // h = a * h0 + b * h1
+        // where a = 2^-1 * (i*X^(n/2) + 1)
+        // and  b = 2^-1 * (-i*X^(n/2) + 1)
+
+        let mut h = [0i64; 3 * N - 1];
+        for i in 0..(2 * N - 1) {
+            h[i] += h0[i].0;
+            h[i + N] -= h0[i].1;
+            // h[i] += h0[i].0 / 2
+            // h[i+N] -= h0[i].1 / 2
+            // h[i] += h1[i].0 / 2
+            // h[i+N] -= h1[i].1 / 2
+        }
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..(2 * N) {
+            hh[i] += h[i];
+        }
+        for i in (2 * N)..(3 * N - 1) {
+            hh[i - 2 * N] -= h[i];
+        }
+
         return hh;
+    }
+
+    #[inline(always)]
+    fn complex_negacyclomul4(f: [i64; 4], g: [i64; 4]) -> [i64; 4] {
+        const N: usize = 2;
+
+        let mut f0 = [(0i64, 0i64); N];
+        // let mut f1 = [(0i64,0i64); N];
+        let mut g0 = [(0i64, 0i64); N];
+        // let mut g1 = [(0i64,0i64); N];
+
+        for i in 0..N {
+            f0[i] = (f[i], -f[N + i]);
+            // f1[i] = (f[i],  f[N+i]);
+            g0[i] = (g[i], -g[N + i]);
+            // g1[i] = (g[i],  g[N+i]);
+        }
+
+        let h0 = Self::complex_karatsuba2(f0, g0);
+        // h1 = complex_karatsuba(f1, g1)
+
+        // h = a * h0 + b * h1
+        // where a = 2^-1 * (i*X^(n/2) + 1)
+        // and  b = 2^-1 * (-i*X^(n/2) + 1)
+
+        let mut h = [0i64; 4 * N - 1];
+        for i in 0..(2 * N - 1) {
+            h[i] += h0[i].0;
+            h[i + N] -= h0[i].1;
+            // h[i] += h0[i].0 / 2
+            // h[i+N] -= h0[i].1 / 2
+            // h[i] += h1[i].0 / 2
+            // h[i+N] -= h1[i].1 / 2
+        }
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..(2 * N) {
+            hh[i] += h[i];
+        }
+        for i in (2 * N)..(4 * N - 1) {
+            hh[i - 2 * N] -= h[i];
+        }
+
+        return hh;
+    }
+
+    #[inline(always)]
+    fn complex_negacyclomul2(f: [i64; 2], g: [i64; 2]) -> [i64; 2] {
+        const N: usize = 1;
+
+        let f0 = (f[0], -f[1]);
+        let g0 = (g[0], -g[1]);
+
+        let h0 = Self::complex_product(f0, g0);
+
+        [h0.0, -h0.1]
     }
 
     #[inline(always)]
@@ -709,7 +896,7 @@ impl Tip5 {
         }
         result[2 * N - 1] = hh[2 * N - 1];
 
-        return result;
+        result
     }
 
     #[inline(always)]
@@ -735,7 +922,7 @@ impl Tip5 {
             hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
         }
 
-        return hh;
+        hh
     }
 
     #[inline(always)]
@@ -761,20 +948,12 @@ impl Tip5 {
         let hh_hi = Self::karatsuba2(ff_hi, gg_hi);
         let hh_li = Self::karatsuba2(ff_li, gg_li);
 
-        let mut hh = [0i64; 4 * N - 1];
-        for i in 0..(2 * N - 1) {
-            hh[i] += hh_lo[i];
-            hh[i + N] += hh_li[i] - hh_lo[i] - hh_hi[i];
-            hh[i + N * 2] += hh_hi[i];
-        }
-
-        let mut result = [0i64; 2 * N];
-        for i in 0..2 * N - 1 {
-            result[i] = hh[i] - hh[2 * N + i];
-        }
-        result[2 * N - 1] = hh[2 * N - 1];
-
-        return result;
+        [
+            hh_lo[0] - (hh_li[2] - hh_lo[2] - hh_hi[2] + hh_hi[0]),
+            hh_lo[1] - hh_hi[1],
+            hh_lo[2] + hh_li[0] - hh_lo[0] - hh_hi[0] - hh_hi[2],
+            hh_li[1] - hh_lo[1] - hh_hi[1],
+        ]
     }
 
     #[inline(always)]
@@ -800,51 +979,31 @@ impl Tip5 {
             hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
         }
 
-        return hh;
+        hh
     }
 
     #[inline(always)]
     fn fast_negacyclomul2(f: [i64; 2], g: [i64; 2]) -> [i64; 2] {
-        let mut ff_lo = 0i64;
-        let mut gg_lo = 0i64;
-        let mut ff_hi = 0i64;
-        let mut gg_hi = 0i64;
-        let mut ff_li = 0i64;
-        let mut gg_li = 0i64;
-
-        ff_lo = f[0];
-        ff_hi = f[1];
-        ff_li = f[0] + f[1];
-        gg_lo = g[0];
-        gg_hi = g[1];
-        gg_li = g[0] + g[1];
+        let ff_lo = f[0];
+        let ff_hi = f[1];
+        let ff_li = f[0] + f[1];
+        let gg_lo = g[0];
+        let gg_hi = g[1];
+        let gg_li = g[0] + g[1];
 
         let hh_lo = ff_lo * gg_lo;
         let hh_hi = ff_hi * gg_hi;
         let hh_li = ff_li * gg_li;
 
-        let mut hh = [0i64; 3];
-        hh[0] += hh_lo;
-        hh[1] += hh_li - hh_lo - hh_hi;
-        hh[2] += hh_hi;
-
-        let mut result = [0i64; 2];
-        result[0] = hh[0] - hh[2];
-        result[1] = hh[1];
-
-        return result;
+        [hh_lo - hh_hi, hh_li - hh_lo - hh_hi]
     }
 
     #[inline(always)]
     fn fast_cyclomul2(f: [i64; 2], g: [i64; 2]) -> [i64; 2] {
-        let mut ff_lo = 0i64;
-        let mut gg_lo = 0i64;
-        let mut ff_hi = 0i64;
-        let mut gg_hi = 0i64;
-        ff_lo = f[0] + f[1];
-        ff_hi = f[0] - f[1];
-        gg_lo = g[0] + g[1];
-        gg_hi = g[0] - g[1];
+        let ff_lo = f[0] + f[1];
+        let ff_hi = f[0] - f[1];
+        let gg_lo = g[0] + g[1];
+        let gg_hi = g[0] - g[1];
 
         let hh_lo = ff_lo * gg_lo;
         let hh_hi = ff_hi * gg_hi;
@@ -853,7 +1012,7 @@ impl Tip5 {
         hh[0] = (hh_lo + hh_hi) >> 1;
         hh[1] = (hh_lo - hh_hi) >> 1;
 
-        return hh;
+        hh
     }
 
     #[inline(always)]
@@ -1326,27 +1485,6 @@ mod tip5_tests {
         assert_eq!(vec, mv);
     }
 
-    // #[test]
-    // fn test_smart_ntt() {
-    //     let mut rng = thread_rng();
-    //     const SIZE: usize = STATE_SIZE;
-    //     let mut vec: [BFieldElement; SIZE] = [BFieldElement::zero(); SIZE];
-    //     let mut st = [0u64; SIZE];
-    //     for i in 0..SIZE {
-    //         let e = rng.next_u32() as u64;
-    //         vec[i] = BFieldElement::from_raw_u64(e);
-    //         st[i] = e;
-    //     }
-
-    //     let smart = Tip5::ntt_16(vec);
-
-    //     let omega = BFieldElement::new(1 << 12);
-
-    //     ntt::<BFieldElement>(&mut vec, omega, 4);
-
-    //     assert_eq!(vec, smart);
-    // }
-
     #[test]
     fn test_ntt_noswap() {
         let a: Vec<BFieldElement> = random_elements(16);
@@ -1369,58 +1507,57 @@ mod tip5_tests {
     }
 
     #[test]
-    fn generate_bubble_constants() {
-        let mut rng = thread_rng();
-        for _ in 0..32 {
-            println!("{},", rng.next_u32() % 128);
-        }
-    }
-
-    #[test]
-    fn test_fast_cyclomul16() {
-        let a: [i64; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
-        let b: [i64; 16] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-
-        let c = Tip5::fast_cyclomul16(a, b);
-
-        println!("{:?}", c);
-    }
-
-    #[test]
-    fn test_fast_cyclomul8() {
-        let a: [i64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
-        let b: [i64; 8] = [2, 3, 4, 5, 6, 7, 8, 9];
-
-        let c = Tip5::fast_cyclomul8(a, b);
-
-        println!("{:?}", c);
-    }
-
-    #[test]
-    fn test_fast_negacyclomul8() {
-        let a: [i64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
-        let b: [i64; 8] = [2, 3, 4, 5, 6, 7, 8, 9];
-
-        let c = Tip5::fast_negacyclomul8(a, b);
-
-        println!("{:?}", c);
-    }
-
-    #[test]
-    fn test_fast_negacyclomul4() {
-        let a: [i64; 4] = [1, 2, 3, 4];
-        let b: [i64; 4] = [2, 3, 4, 5];
-
-        let c = Tip5::fast_negacyclomul4(a, b);
-
-        println!("{:?}", c);
-    }
-
-    #[test]
     fn test_karatsuba() {
         let a: [i64; 4] = [1, 2, 3, 4];
         let b: [i64; 4] = [2, 3, 4, 5];
         let c = Tip5::karatsuba4(a, b);
         println!("{:?}", c);
+    }
+
+    #[test]
+    fn test_negacyclomul() {
+        let mut rng = thread_rng();
+        const N: usize = 8;
+        let mut f = [0i64; N];
+        let mut g = [0i64; N];
+        for i in 0..N {
+            f[i] = (rng.next_u32() % 65536) as i64;
+            g[i] = (rng.next_u32() % 65536) as i64;
+        }
+
+        let h0 = Tip5::fast_negacyclomul8(f, g);
+        let h1 = Tip5::complex_negacyclomul8(f, g);
+
+        assert_eq!(h0, h1);
+    }
+
+    #[test]
+    fn test_complex_karatsuba() {
+        const N: usize = 4;
+        let mut f = [(0i64, 0i64); N];
+        let mut g = [(0i64, 0i64); N];
+        for i in 0..N {
+            f[i].0 = i as i64;
+            g[i].0 = 1;
+            f[i].1 = 1;
+            g[i].1 = i as i64;
+        }
+
+        let h0 = Tip5::complex_karatsuba4(f, g);
+        let h1 = [(0, 1), (0, 2), (0, 4), (0, 8), (0, 13), (0, 14), (0, 10)];
+
+        assert_eq!(h0, h1);
+    }
+
+    #[test]
+    fn test_complex_product() {
+        let mut rng = thread_rng();
+        for _ in 0..1000 {
+            let f = (rng.next_u32() as i64, rng.next_u32() as i64);
+            let g = (rng.next_u32() as i64, rng.next_u32() as i64);
+            let h0 = Tip5::complex_product(f, g);
+            let h1 = (f.0 * g.0 - f.1 * g.1, f.0 * g.1 + f.1 * g.0);
+            assert_eq!(h1, h0);
+        }
     }
 }

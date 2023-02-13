@@ -425,3 +425,141 @@ def test_fast_cyclomul():
     h_ = fast_cyclomul16(f,g)
 
     assert(h_ == h), f"fastmul does not give same result as ordinary mul.\nh_: {h_}\nh:: {h}"
+
+def complex_sum(f, g):
+    return [(a[0] + b[0], a[1] + b[1]) for a, b in zip(f, g)]
+
+def complex_diff(f, g):
+    return [(a[0] - b[0], a[1] - b[1]) for a, b in zip(f, g)]
+
+def complex_mul(a, b):
+    lo = a[0] * b[0]
+    hi = a[1] * b[1]
+    li = (a[0] + a[1]) * (b[0] + b[1]) - lo - hi
+    return (lo - hi, li)
+
+def test_complex_mul():
+    p = 2^64 - 2^32 + 1
+    field = FiniteField(p)
+
+    a = (field.random_element(), field.random_element())
+    b = (field.random_element(), field.random_element())
+
+    c = (a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0])
+    assert(c == complex_mul(a,b))
+
+def complex_karatsuba(f, g):
+    if len(f) == 1:
+        return [complex_mul(f[0], g[0])]
+
+    n = len(f)
+    half = n//2
+
+    lo = complex_karatsuba(f[:half], g[:half])
+    hi = complex_karatsuba(f[half:], g[half:])
+    ff = complex_sum(f[:half], f[half:])
+    gg = complex_sum(g[:half], g[half:])
+
+    li = complex_diff(complex_karatsuba(ff, gg), complex_sum(lo, hi))
+
+
+    if len(f) == 4:
+        print("lo:", lo)
+        print("hi:", hi)
+        print("li:", li)
+
+    field = f[0][0].parent()
+    result = [[field(0), field(0)] for i in range(2*n-1)]
+    for i in range(len(lo)):
+        result[i][0] += lo[i][0]
+        result[i][1] += lo[i][1]
+    for i in range(len(li)):
+        result[half+i][0] += li[i][0]
+        result[half+i][1] += li[i][1]
+    for i in range(len(hi)):
+        result[n+i][0] += hi[i][0]
+        result[n+i][1] += hi[i][1]
+
+    return [tuple(r) for r in result]
+
+def test_complex_karatsuba():
+    
+    p = 2^64 - 2^32 + 1
+    field = FiniteField(p)
+
+    f = [(field.random_element(), field.random_element()) for i in range(4)]
+    g = [(field.random_element(), field.random_element()) for i in range(4)]
+
+    h = complex_karatsuba(f, g)
+
+    fr = [a[0] for a in f]
+    fi = [a[1] for a in f]
+    gr = [a[0] for a in g]
+    gi = [a[1] for a in g]
+
+    hr = [a - b for a, b in zip(karatsuba(fr, gr), karatsuba(fi, gi))]
+    hi = [a + b for a, b in zip(karatsuba(fr, gi), karatsuba(fi, gr))]
+    h_ = [(a, b) for a, b in zip(hr, hi)]
+
+    assert(h_ == h), f"complex karatsuba not working\ngot: {h}\nexp: {h_}"
+
+    print(h)
+
+def complex_negacyclomul(f, g):
+    n = len(f)
+    half = n//2
+
+    flo = f[:half]
+    fhi = f[half:]
+
+    glo = g[:half]
+    ghi = g[half:]
+
+    f0 = [(lo, -hi) for lo, hi in zip(flo, fhi)]
+    f1 = [(lo, hi) for lo, hi in zip(flo, fhi)]
+    g0 = [(lo, -hi) for lo, hi in zip(glo, ghi)]
+    g1 = [(lo, hi) for lo, hi in zip(glo, ghi)]
+
+    h0 = complex_karatsuba(f0, g0)
+
+    #h1 = complex_karatsuba(f1, g1)
+
+    # h = a * h0 + b * h1
+    # where a = 2^-1 * (i*X^(n/2) + 1)
+    # and  b = 2^-1 * (-i*X^(n/2) + 1)
+
+    field = f[0].parent()
+    h = [field(0) for i in range(2*n-1)]
+    #hi = [field(0) for i in range(2*n-1)]
+    for i in range(len(h0)):
+        h[i] += h0[i][0] # / 2
+        h[i+half] -= h0[i][1] # / 2
+        #h[i] += h1[i][0] / 2
+        #h[i+half] += h1[i][1] / 2
+
+    hh = [field(0) for i in range(n)]
+    for i in range(len(h)):
+        if i < n:
+            hh[i] += h[i]
+        else:
+            hh[i-n] -= h[i]
+
+    return hh
+
+def test_complex_negacyclomul():
+    p = 2^64 - 2^32 + 1
+    field = FiniteField(p)
+
+    f = [field.random_element() for i in range(8)]
+    g = [field.random_element() for i in range(8)]
+
+    f = [ZZ(i) for i in range(8)]
+    g = [ZZ(1) for i in range(8)]
+
+    h = negacyclomul(f,g)
+
+    h_ = complex_negacyclomul(f,g)
+
+    assert(h_ == h), f"complex negacyclomul does not give same result as ordinary negacyclomul.\ngot: {h_}\nexp: {h}"
+
+
