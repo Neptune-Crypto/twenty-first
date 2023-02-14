@@ -78,6 +78,10 @@ name = "tip5"
 harness = false
 
 [[bench]]
+name = "poseidon_naive"
+harness = false
+
+[[bench]]
 name = "poseidon"
 harness = false
 
