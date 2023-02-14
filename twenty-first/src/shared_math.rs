@@ -3,6 +3,7 @@ pub mod mpolynomial;
 pub mod ntt;
 pub mod other;
 pub mod polynomial;
+pub mod poseidon;
 pub mod rescue_prime_digest;
 pub mod rescue_prime_optimized;
 pub mod rescue_prime_regular;

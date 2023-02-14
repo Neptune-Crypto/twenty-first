@@ -63,6 +63,7 @@ serde_with = "1"
 structopt = { version = "0.3", features = ["paw"] }
 emojihash-rs = "0.2"
 get-size = { version = "^0.1", features = ["derive"] }
+unroll = "0.1"
 
 [[bench]]
 name = "rescue_prime_regular"
@@ -74,6 +75,14 @@ harness = false
 
 [[bench]]
 name = "tip5"
+harness = false
+
+[[bench]]
+name = "poseidon_naive"
+harness = false
+
+[[bench]]
+name = "poseidon"
 harness = false
 
 [[bench]]
