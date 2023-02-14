@@ -14,12 +14,25 @@ pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;
 pub const NUM_ROUNDS: usize = 5;
 
-// Partial FFT16 of circular([3, 1, 11, 6, 10, 4, 2, 2, 5, 3, 13, 4, 14, 8, 6, 4])
 // Note this NOT an MDS matrix. Finding an MDS matrix which has small powers of two partial FFT16
 // is a requirement for what follows.
-const MDS_FREQ_BLOCK_ONE: [i64; 4] = [8, 4, 8, 4];
-const MDS_FREQ_BLOCK_TWO: [(i64, i64); 4] = [(-1, 2), (-1, 2), (-1, 2), (1, 1)];
-const MDS_FREQ_BLOCK_THREE: [i64; 4] = [-4, -2, 4, 1];
+// Al's magic constants:
+// Partial FFT16 of circular([3, 1, 11, 6, 10, 4, 2, 2, 5, 3, 13, 4, 14, 8, 6, 4])
+// const MDS_FREQ_BLOCK_ONE: [i64; 4] = [8, 4, 8, 4];
+// const MDS_FREQ_BLOCK_TWO: [(i64, i64); 4] = [(-1, 2), (-1, 2), (-1, 2), (1, 1)];
+// const MDS_FREQ_BLOCK_THREE: [i64; 4] = [-4, -2, 4, 1];
+
+// Alan's magic constants:
+// corresponds to matrix.circulant( [ 61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901, 12021, 59689, 26798, 17845 ] )
+// which is the SHA256 of "Tip5"
+const MDS_FREQ_BLOCK_ONE: [i64; 4] = [137828, 131562, 150764, 104603];
+const MDS_FREQ_BLOCK_TWO: [(i64, i64); 4] = [
+    (4451, 4567),
+    (-26413, 16445),
+    (-12601, -27067),
+    (-7078, 5811),
+];
+const MDS_FREQ_BLOCK_THREE: [i64; 4] = [98878, -74304, -10562, 44845];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Tip5State {
@@ -472,9 +485,10 @@ impl Tip5 {
 
     #[inline(always)]
     fn karatsuba2(a: [i64; 2], b: [i64; 2]) -> [i64; 3] {
-        let lo = a[0] * b[0];
-        let hi = a[1] * b[1];
-        [lo, (a[0] + a[1]) * (b[0] + b[1]) - lo - hi, hi]
+        // let lo = a[0] * b[0];
+        // let hi = a[1] * b[1];
+        // [lo, (a[0] + a[1]) * (b[0] + b[1]) - lo - hi, hi]
+        [a[0] * b[0], a[0] * b[1] + a[1] * b[0], a[1] * b[1]]
     }
 
     #[inline(always)]
@@ -696,10 +710,8 @@ impl Tip5 {
 
     #[inline(always)]
     fn complex_product(f: (i64, i64), g: (i64, i64)) -> (i64, i64) {
-        let lo = f.0 * g.0;
-        let hi = f.1 * g.1;
-        let li = (f.0 + f.1) * (g.0 + g.1) - lo - hi;
-        (lo - hi, li)
+        // don't karatsuba; this is faster
+        (f.0 * g.0 - f.1 * g.1, f.0 * g.1 + f.1 * g.0)
     }
 
     #[inline(always)]
@@ -1018,6 +1030,13 @@ impl Tip5 {
     #[inline(always)]
     fn mds_cyclomul(state: &mut [BFieldElement; STATE_SIZE]) {
         // constants: Sha256("Tip5")
+        // const CONSTANTS: [i64; STATE_SIZE] = [
+        //     61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901,
+        //     12021, 59689, 26798, 17845,
+        // ];
+        // const CONSTANTS: [i64; STATE_SIZE] = [
+        //     -2, 7, -3, -11, -11, 9, -2, -6, -6, 5, -1, -7, -13, 11, 2, -8,
+        // ];
         const CONSTANTS: [i64; STATE_SIZE] = [
             61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901,
             12021, 59689, 26798, 17845,
@@ -1504,14 +1523,6 @@ mod tip5_tests {
         b.iter_mut()
             .for_each(|bb| *bb = *bb / BFieldElement::new(16));
         assert_eq!(a, b);
-    }
-
-    #[test]
-    fn test_karatsuba() {
-        let a: [i64; 4] = [1, 2, 3, 4];
-        let b: [i64; 4] = [2, 3, 4, 5];
-        let c = Tip5::karatsuba4(a, b);
-        println!("{:?}", c);
     }
 
     #[test]

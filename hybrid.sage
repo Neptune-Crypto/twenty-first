@@ -1,3 +1,5 @@
+load("mds.sage")
+
 def fft( vec, omega=None ):
     if len(vec) == 1:
         return vec
@@ -393,7 +395,30 @@ def fast_negacyclomul8(f,g):
 
     return result[:len(f)]
 
-def fast_cyclomul16(f, g):
+def fast_cyclomul8( f, g ):
+    field = f[0].parent()
+    omega = field(1<<12)
+
+    ff = [field(0) for i in range(8)]
+    for i in range(4):
+        ff[i] = f[i] + f[i+4]
+    for i in range(4):
+        ff[i+4] = f[i] - f[i+4]
+
+    gg = [field(0) for i in range(8)]
+    for i in range(4):
+        gg[i] = g[i] + g[i+4]
+    for i in range(4):
+        gg[i+4] = g[i] - g[i+4]
+
+    print("gg_lo:", gg[:4])
+    print("gg_hi:", gg[4:])
+
+    hh = cyclomul(ff[:4], gg[:4]) + negacyclomul(ff[4:], gg[4:])
+
+    return [(hh[i] + hh[i+4])/2 for i in range(4)] + [(hh[i] - hh[i+4])/2 for i in range(4)]
+
+def fast_cyclomul16( f, g ):
     field = f[0].parent()
     omega = field(1<<12)
 
@@ -409,7 +434,7 @@ def fast_cyclomul16(f, g):
     for i in range(8):
         gg[i+8] = g[i] - g[i+8]
 
-    hh = cyclomul(ff[:8], gg[:8]) + fast_negacyclomul8(ff[8:], gg[8:])
+    hh = fast_cyclomul8(ff[:8], gg[:8]) + complex_negacyclomul(ff[8:], gg[8:])
 
     return [(hh[i] + hh[i+8])/2 for i in range(8)] + [(hh[i] - hh[i+8])/2 for i in range(8)]
 
@@ -417,8 +442,10 @@ def test_fast_cyclomul():
     p = 2^64 - 2^32 + 1
     field = FiniteField(p)
 
-    f = [field.random_element() for i in range(16)]
+    f = [ZZ(field.random_element()) for i in range(16)]
     g = [field.random_element() for i in range(16)]
+    g = [ZZ(e) for e in [3, 4, 6, 8, 14, 4, 13, 3, 5, 2, 2, 4, 10, 6, 11, 1]]
+    g = [ 61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901, 12021, 59689, 26798, 17845 ]
 
     h = cyclomul(f,g)
 
@@ -462,12 +489,6 @@ def complex_karatsuba(f, g):
 
     li = complex_diff(complex_karatsuba(ff, gg), complex_sum(lo, hi))
 
-
-    if len(f) == 4:
-        print("lo:", lo)
-        print("hi:", hi)
-        print("li:", li)
-
     field = f[0][0].parent()
     result = [[field(0), field(0)] for i in range(2*n-1)]
     for i in range(len(lo)):
@@ -503,9 +524,7 @@ def test_complex_karatsuba():
 
     assert(h_ == h), f"complex karatsuba not working\ngot: {h}\nexp: {h_}"
 
-    print(h)
-
-def complex_negacyclomul(f, g):
+def complex_negacyclomul( f, g ):
     n = len(f)
     half = n//2
 
@@ -518,7 +537,8 @@ def complex_negacyclomul(f, g):
     f0 = [(lo, -hi) for lo, hi in zip(flo, fhi)]
     f1 = [(lo, hi) for lo, hi in zip(flo, fhi)]
     g0 = [(lo, -hi) for lo, hi in zip(glo, ghi)]
-    g1 = [(lo, hi) for lo, hi in zip(glo, ghi)]
+
+    print("g0:", g0)
 
     h0 = complex_karatsuba(f0, g0)
 
@@ -562,4 +582,106 @@ def test_complex_negacyclomul():
 
     assert(h_ == h), f"complex negacyclomul does not give same result as ordinary negacyclomul.\ngot: {h_}\nexp: {h}"
 
+def fixed_fast_cyclomul16(f, gg_lo, gg_hi, g0):
+    
+    field = f[0].parent()
+    omega = field(1<<12)
 
+    ff = [field(0) for i in range(16)]
+    for i in range(8):
+        ff[i] = f[i] + f[i+8]
+    for i in range(8):
+        ff[i+8] = f[i] - f[i+8]
+
+    hh_lo = fixed_fast_cyclomul8(ff[:8], [4*g for g in gg_lo], [4 * g for g in gg_hi])
+    hh_hi = fixed_complex_negacyclomul(ff[8:], [(2*a, 2*b) for a, b in g0])
+    hh = hh_lo + hh_hi
+
+    return [(hh[i] + hh[i+8])/2 for i in range(8)] + [(hh[i] - hh[i+8])/2 for i in range(8)]
+
+def fixed_fast_cyclomul8(f, gg_lo, gg_hi):
+    field = f[0].parent()
+    omega = field(1<<12)
+
+    ff = [field(0) for i in range(8)]
+    for i in range(4):
+        ff[i] = f[i] + f[i+4]
+    for i in range(4):
+        ff[i+4] = f[i] - f[i+4]
+
+    hh = cyclomul(ff[:4], gg_lo) + negacyclomul(ff[4:], gg_hi)
+
+    return [(hh[i] + hh[i+4])/2 for i in range(4)] + [(hh[i] - hh[i+4])/2 for i in range(4)]
+
+def fixed_complex_negacyclomul(f, g0):
+    n = len(f)
+    half = n//2
+
+    flo = f[:half]
+    fhi = f[half:]
+
+    f0 = [(lo, -hi) for lo, hi in zip(flo, fhi)]
+    f1 = [(lo, hi) for lo, hi in zip(flo, fhi)]
+
+    h0 = complex_karatsuba(f0, g0)
+
+    # h = a * h0 + b * h1
+    # where a = 2^-1 * (i*X^(n/2) + 1)
+    # and  b = 2^-1 * (-i*X^(n/2) + 1)
+
+    field = f[0].parent()
+    h = [field(0) for i in range(2*n-1)]
+    for i in range(len(h0)):
+        h[i] += h0[i][0] 
+        h[i+half] -= h0[i][1] 
+
+    hh = [field(0) for i in range(n)]
+    for i in range(len(h)):
+        if i < n:
+            hh[i] += h[i]
+        else:
+            hh[i-n] -= h[i]
+
+    return hh
+
+def test_fixed_magic_constants():
+    # Al's magic constants
+    gg_lo = [8, 4, 8, 4]
+    gg_hi = [-4, -2, 4, 1]
+    g0 = [(-1, 2), (-1, 2), (-1, 2), (1, 1)]
+    
+    f = [1] + [0 for i in range(15)]
+
+    h = fixed_fast_cyclomul16(f, gg_lo, gg_hi, g0)
+
+    h[1:] = reversed(h[1:])
+
+    print("first row of circulant matrix:", h)
+
+def sample_magic_constants():
+    p = 2^64 - 2^32 + 1
+    field = FiniteField(p)
+
+    is_mds = False
+    while not is_mds:
+        gg_lo = [2^(ZZ(Integers(14).random_element())) for i in range(4)]
+
+        gg_hi = [(-1)^(ZZ(Integers(2).random_element())) * 2^(ZZ(Integers(14).random_element())) for i in range(4)]
+
+        g0 = [((-1)^(ZZ(Integers(2).random_element())) * 2^(ZZ(Integers(13).random_element())), (-1)^(ZZ(Integers(2).random_element())) * 2^(ZZ(Integers(13).random_element()))) for i in range(4)]
+
+        f = [1] + [0 for i in range(15)]
+        h = fixed_fast_cyclomul16(f, gg_lo, gg_hi, g0)
+
+        h[1:] = reversed(h[1:])
+
+        print("")
+        print("// corresponds to matrix.circulant(", h, ")")
+        print("const MDS_FREQ_BLOCK_ONE: [i64;4] = ", gg_lo, ";")
+        print("const MDS_FREQ_BLOCK_THREE: [i64;4] = ", gg_hi, ";")
+        print("const MDS_FREQ_BLOCK_TWO: [(i64,i64); 4] = ", g0, ";")
+
+        row = [field(r) for r in h]
+        mat = matrix.circulant(row)
+        is_mds = is_mds_fast(mat)
+        
