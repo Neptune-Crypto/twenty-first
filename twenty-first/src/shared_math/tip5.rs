@@ -1,9 +1,10 @@
 use itertools::Itertools;
-use num_traits::One;
+use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
 use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
+
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
 pub const STATE_SIZE: usize = 16;
@@ -168,237 +169,317 @@ impl Tip5 {
         *element = BFieldElement::from_raw_bytes(&bytes);
     }
 
-    #[allow(clippy::many_single_char_names)]
-    #[inline]
-    fn ntt_noswap(x: &mut [BFieldElement]) {
-        const POWERS_OF_OMEGA_BITREVERSED: [BFieldElement; 8] = [
-            BFieldElement::new(1),
-            BFieldElement::new(281474976710656),
-            BFieldElement::new(18446744069397807105),
-            BFieldElement::new(18446742969902956801),
-            BFieldElement::new(17293822564807737345),
-            BFieldElement::new(4096),
-            BFieldElement::new(4503599626321920),
-            BFieldElement::new(18446744000695107585),
+    #[inline(always)]
+    fn fast_cyclomul16(f: [i64; 16], g: [i64; 16]) -> [i64; 16] {
+        const N: usize = 8;
+        let mut ff_lo = [0i64; N];
+        let mut gg_lo = [0i64; N];
+        let mut ff_hi = [0i64; N];
+        let mut gg_hi = [0i64; N];
+        for i in 0..N {
+            ff_lo[i] = f[i] + f[i + N];
+            ff_hi[i] = f[i] - f[i + N];
+            gg_lo[i] = g[i] + g[i + N];
+            gg_hi[i] = g[i] - g[i + N];
+        }
+
+        let hh_lo = Self::fast_cyclomul8(ff_lo, gg_lo);
+        let hh_hi = Self::complex_negacyclomul8(ff_hi, gg_hi);
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..N {
+            hh[i] = (hh_lo[i] + hh_hi[i]) >> 1;
+            hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
+        }
+
+        hh
+    }
+
+    #[inline(always)]
+    fn complex_sum<const N: usize>(f: [(i64, i64); N], g: [(i64, i64); N]) -> [(i64, i64); N] {
+        let mut h = [(0i64, 0i64); N];
+        for i in 0..N {
+            h[i].0 = f[i].0 + g[i].0;
+            h[i].1 = f[i].1 + g[i].1;
+        }
+        h
+    }
+
+    #[inline(always)]
+    fn complex_diff<const N: usize>(f: [(i64, i64); N], g: [(i64, i64); N]) -> [(i64, i64); N] {
+        let mut h = [(0i64, 0i64); N];
+        for i in 0..N {
+            h[i].0 = f[i].0 - g[i].0;
+            h[i].1 = f[i].1 - g[i].1;
+        }
+        h
+    }
+
+    #[inline(always)]
+    fn complex_product(f: (i64, i64), g: (i64, i64)) -> (i64, i64) {
+        // don't karatsuba; this is faster
+        (f.0 * g.0 - f.1 * g.1, f.0 * g.1 + f.1 * g.0)
+    }
+
+    #[inline(always)]
+    fn complex_karatsuba2(f: [(i64, i64); 2], g: [(i64, i64); 2]) -> [(i64, i64); 3] {
+        const N: usize = 1;
+
+        let ff = (f[0].0 + f[1].0, f[0].1 + f[1].1);
+        let gg = (g[0].0 + g[1].0, g[0].1 + g[1].1);
+
+        let lo = Self::complex_product(f[0], g[0]);
+        let hi = Self::complex_product(f[1], g[1]);
+
+        let ff_times_gg = Self::complex_product(ff, gg);
+        let lo_plus_hi = (lo.0 + hi.0, lo.1 + hi.1);
+
+        let li = (ff_times_gg.0 - lo_plus_hi.0, ff_times_gg.1 - lo_plus_hi.1);
+
+        let mut result = [(0i64, 0i64); 4 * N - 1];
+        result[0].0 += lo.0;
+        result[0].1 += lo.1;
+        result[N].0 += li.0;
+        result[N].1 += li.1;
+        result[2 * N].0 += hi.0;
+        result[2 * N].1 += hi.1;
+
+        result
+    }
+
+    #[inline(always)]
+    fn complex_karatsuba4(f: [(i64, i64); 4], g: [(i64, i64); 4]) -> [(i64, i64); 7] {
+        const N: usize = 2;
+
+        let ff = Self::complex_sum::<2>(f[..N].try_into().unwrap(), f[N..].try_into().unwrap());
+        let gg = Self::complex_sum::<2>(g[..N].try_into().unwrap(), g[N..].try_into().unwrap());
+
+        let lo = Self::complex_karatsuba2(f[..N].try_into().unwrap(), g[..N].try_into().unwrap());
+        let hi = Self::complex_karatsuba2(f[N..].try_into().unwrap(), g[N..].try_into().unwrap());
+
+        let li = Self::complex_diff::<3>(
+            Self::complex_karatsuba2(ff, gg),
+            Self::complex_sum::<3>(lo, hi),
+        );
+
+        let mut result = [(0i64, 0i64); 4 * N - 1];
+        for i in 0..(2 * N - 1) {
+            result[i].0 = lo[i].0;
+            result[i].1 = lo[i].1;
+        }
+        for i in 0..(2 * N - 1) {
+            result[N + i].0 += li[i].0;
+            result[N + i].1 += li[i].1;
+        }
+        for i in 0..(2 * N - 1) {
+            result[2 * N + i].0 += hi[i].0;
+            result[2 * N + i].1 += hi[i].1;
+        }
+
+        result
+    }
+
+    #[inline(always)]
+    fn complex_negacyclomul8(f: [i64; 8], g: [i64; 8]) -> [i64; 8] {
+        const N: usize = 4;
+
+        let mut f0 = [(0i64, 0i64); N];
+        // let mut f1 = [(0i64,0i64); N];
+        let mut g0 = [(0i64, 0i64); N];
+        // let mut g1 = [(0i64,0i64); N];
+
+        for i in 0..N {
+            f0[i] = (f[i], -f[N + i]);
+            // f1[i] = (f[i],  f[N+i]);
+            g0[i] = (g[i], -g[N + i]);
+            // g1[i] = (g[i],  g[N+i]);
+        }
+
+        let h0 = Self::complex_karatsuba4(f0, g0);
+        // h1 = complex_karatsuba(f1, g1)
+
+        // h = a * h0 + b * h1
+        // where a = 2^-1 * (i*X^(n/2) + 1)
+        // and  b = 2^-1 * (-i*X^(n/2) + 1)
+
+        let mut h = [0i64; 3 * N - 1];
+        for i in 0..(2 * N - 1) {
+            h[i] += h0[i].0;
+            h[i + N] -= h0[i].1;
+            // h[i] += h0[i].0 / 2
+            // h[i+N] -= h0[i].1 / 2
+            // h[i] += h1[i].0 / 2
+            // h[i+N] -= h1[i].1 / 2
+        }
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..(2 * N) {
+            hh[i] += h[i];
+        }
+        for i in (2 * N)..(3 * N - 1) {
+            hh[i - 2 * N] -= h[i];
+        }
+
+        hh
+    }
+
+    #[inline(always)]
+    fn complex_negacyclomul4(f: [i64; 4], g: [i64; 4]) -> [i64; 4] {
+        const N: usize = 2;
+
+        let mut f0 = [(0i64, 0i64); N];
+        // let mut f1 = [(0i64,0i64); N];
+        let mut g0 = [(0i64, 0i64); N];
+        // let mut g1 = [(0i64,0i64); N];
+
+        for i in 0..N {
+            f0[i] = (f[i], -f[N + i]);
+            // f1[i] = (f[i],  f[N+i]);
+            g0[i] = (g[i], -g[N + i]);
+            // g1[i] = (g[i],  g[N+i]);
+        }
+
+        let h0 = Self::complex_karatsuba2(f0, g0);
+        // h1 = complex_karatsuba(f1, g1)
+
+        // h = a * h0 + b * h1
+        // where a = 2^-1 * (i*X^(n/2) + 1)
+        // and  b = 2^-1 * (-i*X^(n/2) + 1)
+
+        let mut h = [0i64; 4 * N - 1];
+        for i in 0..(2 * N - 1) {
+            h[i] += h0[i].0;
+            h[i + N] -= h0[i].1;
+            // h[i] += h0[i].0 / 2
+            // h[i+N] -= h0[i].1 / 2
+            // h[i] += h1[i].0 / 2
+            // h[i+N] -= h1[i].1 / 2
+        }
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..(2 * N) {
+            hh[i] += h[i];
+        }
+        for i in (2 * N)..(4 * N - 1) {
+            hh[i - 2 * N] -= h[i];
+        }
+
+        hh
+    }
+
+    #[inline(always)]
+    fn complex_negacyclomul2(f: [i64; 2], g: [i64; 2]) -> [i64; 2] {
+        let f0 = (f[0], -f[1]);
+        let g0 = (g[0], -g[1]);
+
+        let h0 = Self::complex_product(f0, g0);
+
+        [h0.0, -h0.1]
+    }
+
+    #[inline(always)]
+    fn fast_cyclomul8(f: [i64; 8], g: [i64; 8]) -> [i64; 8] {
+        const N: usize = 4;
+        let mut ff_lo = [0i64; N];
+        let mut gg_lo = [0i64; N];
+        let mut ff_hi = [0i64; N];
+        let mut gg_hi = [0i64; N];
+        for i in 0..N {
+            ff_lo[i] = f[i] + f[i + N];
+            ff_hi[i] = f[i] - f[i + N];
+            gg_lo[i] = g[i] + g[i + N];
+            gg_hi[i] = g[i] - g[i + N];
+        }
+
+        let hh_lo = Self::fast_cyclomul4(ff_lo, gg_lo);
+        let hh_hi = Self::complex_negacyclomul4(ff_hi, gg_hi);
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..N {
+            hh[i] = (hh_lo[i] + hh_hi[i]) >> 1;
+            hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
+        }
+
+        hh
+    }
+
+    #[inline(always)]
+    fn fast_cyclomul4(f: [i64; 4], g: [i64; 4]) -> [i64; 4] {
+        const N: usize = 2;
+        let mut ff_lo = [0i64; N];
+        let mut gg_lo = [0i64; N];
+        let mut ff_hi = [0i64; N];
+        let mut gg_hi = [0i64; N];
+        for i in 0..N {
+            ff_lo[i] = f[i] + f[i + N];
+            ff_hi[i] = f[i] - f[i + N];
+            gg_lo[i] = g[i] + g[i + N];
+            gg_hi[i] = g[i] - g[i + N];
+        }
+
+        let hh_lo = Self::fast_cyclomul2(ff_lo, gg_lo);
+        let hh_hi = Self::complex_negacyclomul2(ff_hi, gg_hi);
+
+        let mut hh = [0i64; 2 * N];
+        for i in 0..N {
+            hh[i] = (hh_lo[i] + hh_hi[i]) >> 1;
+            hh[i + N] = (hh_lo[i] - hh_hi[i]) >> 1;
+        }
+
+        hh
+    }
+
+    #[inline(always)]
+    fn fast_cyclomul2(f: [i64; 2], g: [i64; 2]) -> [i64; 2] {
+        let ff_lo = f[0] + f[1];
+        let ff_hi = f[0] - f[1];
+        let gg_lo = g[0] + g[1];
+        let gg_hi = g[0] - g[1];
+
+        let hh_lo = ff_lo * gg_lo;
+        let hh_hi = ff_hi * gg_hi;
+
+        let mut hh = [0i64; 2];
+        hh[0] = (hh_lo + hh_hi) >> 1;
+        hh[1] = (hh_lo - hh_hi) >> 1;
+
+        hh
+    }
+
+    #[inline(always)]
+    fn mds_cyclomul(state: &mut [BFieldElement; STATE_SIZE]) {
+        // constants: Sha256("Tip5")
+        const CONSTANTS: [i64; STATE_SIZE] = [
+            61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901,
+            12021, 59689, 26798, 17845,
         ];
+        let mut result = [BFieldElement::zero(); STATE_SIZE];
 
-        // outer loop iteration 1
-        for j in 0..8 {
-            let u = x[j];
-            let v = x[j + 8] * BFieldElement::one();
-            x[j] = u + v;
-            x[j + 8] = u - v;
+        let mut lo: [i64; STATE_SIZE] = [0; STATE_SIZE];
+        let mut hi: [i64; STATE_SIZE] = [0; STATE_SIZE];
+        for (i, b) in state.iter().enumerate() {
+            hi[i] = (b.raw_u64() >> 32) as i64;
+            lo[i] = (b.raw_u64() as u32) as i64;
         }
 
-        // outer loop iteration 2
-        for (i, zeta) in POWERS_OF_OMEGA_BITREVERSED.iter().enumerate().take(2) {
-            let s = i * 8;
-            for j in s..(s + 4) {
-                let u = x[j];
-                let v = x[j + 4] * *zeta;
-                x[j] = u + v;
-                x[j + 4] = u - v;
-            }
-        }
+        lo = Self::fast_cyclomul16(lo, CONSTANTS);
+        hi = Self::fast_cyclomul16(hi, CONSTANTS);
 
-        // outer loop iteration 3
-        for (i, zeta) in POWERS_OF_OMEGA_BITREVERSED.iter().enumerate().take(4) {
-            let s = i * 4;
-            for j in s..(s + 2) {
-                let u = x[j];
-                let v = x[j + 2] * *zeta;
-                x[j] = u + v;
-                x[j + 2] = u - v;
-            }
-        }
+        for r in 0..STATE_SIZE {
+            let s = lo[r] as u128 + ((hi[r] as u128) << 32);
+            let s_hi = (s >> 64) as u64;
+            let s_lo = s as u64;
+            let z = (s_hi << 32) - s_hi;
+            let (res, over) = s_lo.overflowing_add(z);
 
-        // outer loop iteration 4
-        for (i, zeta) in POWERS_OF_OMEGA_BITREVERSED.iter().enumerate().take(8) {
-            let s = i * 2;
-            let u = x[s];
-            let v = x[s + 1] * *zeta;
-            x[s] = u + v;
-            x[s + 1] = u - v;
+            result[r] = BFieldElement::from_raw_u64(
+                res.wrapping_add(0u32.wrapping_sub(over as u32) as u64),
+            );
         }
+        *state = result;
     }
 
-    #[allow(clippy::many_single_char_names)]
-    #[inline]
-    fn intt_noswap(x: &mut [BFieldElement]) {
-        const POWERS_OF_OMEGA_INVERSE: [BFieldElement; 8] = [
-            BFieldElement::new(1),
-            BFieldElement::new(68719476736),
-            BFieldElement::new(1099511627520),
-            BFieldElement::new(18446744069414580225),
-            BFieldElement::new(18446462594437873665),
-            BFieldElement::new(18442240469788262401),
-            BFieldElement::new(16777216),
-            BFieldElement::new(1152921504606846976),
-        ];
-
-        // outer loop iteration 1
-        {
-            // while k < STATE_SIZE as usize
-            // inner loop iteration 1
-            {
-                let u = x[1];
-                let v = x[0];
-                x[1] = v - u;
-                x[0] = v + u;
-            }
-
-            // inner loop iteration 2
-            {
-                let u = x[2 + 1];
-                let v = x[2];
-                x[2 + 1] = v - u;
-                x[2] = v + u;
-            }
-
-            // inner loop iteration 3
-            {
-                let u = x[4 + 1];
-                let v = x[4];
-                x[4 + 1] = v - u;
-                x[4] = v + u;
-            }
-
-            // inner loop iteration 4
-            {
-                let u = x[6 + 1];
-                let v = x[6];
-                x[6 + 1] = v - u;
-                x[6] = v + u;
-            }
-
-            // inner loop iteration 5
-            {
-                let u = x[8 + 1];
-                let v = x[8];
-                x[8 + 1] = v - u;
-                x[8] = v + u;
-            }
-
-            // inner loop iteration 6
-            {
-                let u = x[10 + 1];
-                let v = x[10];
-                x[10 + 1] = v - u;
-                x[10] = v + u;
-            }
-
-            // inner loop iteration 7
-            {
-                let u = x[12 + 1];
-                let v = x[12];
-                x[12 + 1] = v - u;
-                x[12] = v + u;
-            }
-
-            // inner loop iteration 7
-            {
-                let u = x[14 + 1];
-                let v = x[14];
-                x[14 + 1] = v - u;
-                x[14] = v + u;
-            }
-        }
-
-        // outer loop iteration 2
-        {
-            // while k < STATE_SIZE as usize
-            // inner loop iteration 1
-            {
-                for j in 0..2 {
-                    let zeta = POWERS_OF_OMEGA_INVERSE[4 * j];
-                    {
-                        let u = x[j + 2] * zeta;
-                        let v = x[j];
-                        x[j + 2] = v - u;
-                        x[j] = v + u;
-                    }
-                    // inner loop iteration 2
-                    {
-                        let u = x[4 + j + 2] * zeta;
-                        let v = x[4 + j];
-                        x[4 + j + 2] = v - u;
-                        x[4 + j] = v + u;
-                    }
-                    // inner loop iteration 3
-                    {
-                        let u = x[8 + j + 2] * zeta;
-                        let v = x[8 + j];
-                        x[8 + j + 2] = v - u;
-                        x[8 + j] = v + u;
-                    }
-                    // inner loop iteration 4
-                    {
-                        let u = x[12 + j + 2] * zeta;
-                        let v = x[12 + j];
-                        x[12 + j + 2] = v - u;
-                        x[12 + j] = v + u;
-                    }
-                }
-            }
-        }
-
-        // outer loop iteration 3
-        {
-            // while k < STATE_SIZE as usize
-            {
-                for j in 0..4 {
-                    let zeta = POWERS_OF_OMEGA_INVERSE[2 * j];
-                    // inner loop iteration 1
-                    {
-                        let u = x[j + 4] * zeta;
-                        let v = x[j];
-                        x[j + 4] = v - u;
-                        x[j] = v + u;
-                    }
-                    // inner loop iteration 2
-                    {
-                        let u = x[8 + j + 4] * zeta;
-                        let v = x[8 + j];
-                        x[8 + j + 4] = v - u;
-                        x[8 + j] = v + u;
-                    }
-                }
-            }
-        }
-
-        // outer loop iteration 4
-        {
-            for j in 0..8 {
-                let zeta = POWERS_OF_OMEGA_INVERSE[j];
-                let u = x[j + 8] * zeta;
-                let v = x[j];
-                x[j + 8] = v - u;
-                x[j] = v + u;
-            }
-        }
-    }
-
-    #[inline]
-    pub fn mds_noswap(state: &mut [BFieldElement; STATE_SIZE]) {
-        const SHIFTS: [u8; STATE_SIZE] = [4, 1, 4, 3, 3, 7, 0, 5, 1, 5, 0, 2, 6, 2, 4, 1];
-        let mut array: [u128; STATE_SIZE] = [0; STATE_SIZE];
-        Self::ntt_noswap(state);
-
-        for i in 0..STATE_SIZE {
-            array[i] = state[i].raw_u128() << SHIFTS[i];
-        }
-        let mut reduced = [0u64; STATE_SIZE];
-        for i in 0..STATE_SIZE {
-            reduced[i] = BFieldElement::montyred(array[i]);
-        }
-        for i in 0..16 {
-            state[i] = BFieldElement::from_raw_u64(reduced[i]);
-        }
-
-        Self::intt_noswap(state);
-    }
-
-    #[inline]
+    #[inline(always)]
     fn sbox_layer(state: &mut [BFieldElement; STATE_SIZE]) {
         // lookup
         state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
@@ -413,11 +494,11 @@ impl Tip5 {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn round(sponge: &mut Tip5State, round_index: usize) {
         Self::sbox_layer(&mut sponge.state);
 
-        Self::mds_noswap(&mut sponge.state);
+        Self::mds_cyclomul(&mut sponge.state);
 
         for i in 0..STATE_SIZE {
             sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
@@ -425,7 +506,7 @@ impl Tip5 {
     }
 
     // permutation
-    #[inline]
+    #[inline(always)]
     fn permutation(sponge: &mut Tip5State) {
         for i in 0..NUM_ROUNDS {
             Self::round(sponge, i);
@@ -487,11 +568,16 @@ impl SpongeHasher for Tip5 {
 
 #[cfg(test)]
 mod tip5_tests {
+
     use itertools::Itertools;
+    use num_traits::One;
     use num_traits::Zero;
+    use rand::thread_rng;
+    use rand::RngCore;
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::other::random_elements;
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::tip5::LOOKUP_TABLE;
@@ -649,50 +735,6 @@ mod tip5_tests {
     }
 
     #[test]
-    fn test_mds_test_vector() {
-        let mut x = [
-            5735458159267578080,
-            11079291868388879320,
-            7126936809174926852,
-            13782161578414002790,
-            164785954911215634,
-            3118898034727063217,
-            6737535956326810438,
-            5144821635942763745,
-            16200832071427728225,
-            8640629006986782903,
-            11570592580608458034,
-            2895124598773988749,
-            3420957867360511946,
-            5796711531533733319,
-            5282341612640982074,
-            7026199320889950703,
-        ]
-        .map(BFieldElement::new);
-        let y = [
-            4104170903924047333,
-            6387491404022818542,
-            14981184993811752484,
-            16496996924371698202,
-            5837420782411553495,
-            4264374326976985633,
-            5211883823040202320,
-            11836807491772316903,
-            8162670480249154941,
-            5581482934627657894,
-            9403344895570333937,
-            8567874241156119862,
-            15302967789437559413,
-            13072768661755417248,
-            18135835343258257325,
-            9011523754984921044,
-        ]
-        .map(BFieldElement::new);
-        Tip5::mds_noswap(&mut x);
-        assert_eq!(x, y);
-    }
-
-    #[test]
     fn hash10_test_vectors() {
         let mut preimage = [BFieldElement::zero(); RATE];
         let mut digest: [BFieldElement; DIGEST_LENGTH];
@@ -712,14 +754,20 @@ mod tip5_tests {
             digest.iter().map(|b| b.value()).collect_vec()
         );
         let final_digest = [
-            13893101008570085259,
-            12868275854371526426,
-            14048396406819570654,
-            5452119458724574669,
-            6240471940533869882,
+            10869784347448351760,
+            1853783032222938415,
+            6856460589287344822,
+            17178399545409290325,
+            7650660984651717733,
         ]
         .map(BFieldElement::new);
-        assert_eq!(digest, final_digest);
+        assert_eq!(
+            digest,
+            final_digest,
+            "expected: {:?}\nbut got: {:?}",
+            final_digest.map(|d| d.value()),
+            digest.map(|d| d.value()),
+        )
     }
 
     #[test]
@@ -743,13 +791,117 @@ mod tip5_tests {
             digest_sum.iter().map(|b| b.value()).collect_vec()
         );
         let expected_sum = [
-            2239969078742881976,
-            15666586250577462559,
-            9635526344449925727,
-            16655273469642706699,
-            5222591716361630589,
+            6483667016211232820,
+            1120398765245047030,
+            9375424207996641714,
+            17770540514093105302,
+            17391179748947955,
         ]
         .map(BFieldElement::new);
-        assert_eq!(expected_sum, digest_sum);
+        assert_eq!(
+            expected_sum,
+            digest_sum,
+            "expected: {:?}\nbut got: {:?}",
+            expected_sum.map(|s| s.value()),
+            digest_sum.map(|s| s.value())
+        );
+    }
+
+    #[test]
+    fn test_linearity_of_mds() {
+        let mds_procedure = Tip5::mds_cyclomul;
+        // let mds_procedure = Tip5::mds_noswap;
+        let a: BFieldElement = random_elements(1)[0];
+        let b: BFieldElement = random_elements(1)[0];
+        let mut u: [BFieldElement; STATE_SIZE] = random_elements(STATE_SIZE).try_into().unwrap();
+        let mut v: [BFieldElement; STATE_SIZE] = random_elements(STATE_SIZE).try_into().unwrap();
+
+        let mut w: [BFieldElement; STATE_SIZE] = u
+            .iter()
+            .zip(v.iter())
+            .map(|(uu, vv)| a * *uu + b * *vv)
+            .collect::<Vec<BFieldElement>>()
+            .try_into()
+            .unwrap();
+
+        mds_procedure(&mut u);
+        mds_procedure(&mut v);
+        mds_procedure(&mut w);
+
+        let w_: [BFieldElement; STATE_SIZE] = u
+            .iter()
+            .zip(v.iter())
+            .map(|(uu, vv)| a * *uu + b * *vv)
+            .collect::<Vec<BFieldElement>>()
+            .try_into()
+            .unwrap();
+
+        assert_eq!(w, w_);
+    }
+
+    #[test]
+    fn test_mds_circulancy() {
+        let mut e1 = [BFieldElement::zero(); STATE_SIZE];
+        e1[0] = BFieldElement::one();
+
+        // let mds_procedure = Tip5::mds_split;
+        // let mds_procedure = Tip5::mds_noswap;
+        let mds_procedure = Tip5::mds_cyclomul;
+
+        mds_procedure(&mut e1);
+
+        let mut mat_first_row = [BFieldElement::zero(); STATE_SIZE];
+        mat_first_row[0] = e1[0];
+        for i in 1..STATE_SIZE {
+            mat_first_row[i] = e1[STATE_SIZE - i];
+        }
+
+        println!(
+            "mds matrix first row: {:?}",
+            mat_first_row.map(|b| b.value())
+        );
+
+        let mut vec: [BFieldElement; STATE_SIZE] = random_elements(STATE_SIZE).try_into().unwrap();
+
+        let mut mv = [BFieldElement::zero(); STATE_SIZE];
+        for i in 0..STATE_SIZE {
+            for j in 0..STATE_SIZE {
+                mv[i] += mat_first_row[(STATE_SIZE - i + j) % STATE_SIZE] * vec[j];
+            }
+        }
+
+        mds_procedure(&mut vec);
+
+        assert_eq!(vec, mv);
+    }
+
+    #[test]
+    fn test_complex_karatsuba() {
+        const N: usize = 4;
+        let mut f = [(0i64, 0i64); N];
+        let mut g = [(0i64, 0i64); N];
+        for i in 0..N {
+            f[i].0 = i as i64;
+            g[i].0 = 1;
+            f[i].1 = 1;
+            g[i].1 = i as i64;
+        }
+
+        let h0 = Tip5::complex_karatsuba4(f, g);
+        let h1 = [(0, 1), (0, 2), (0, 4), (0, 8), (0, 13), (0, 14), (0, 10)];
+
+        assert_eq!(h0, h1);
+    }
+
+    #[test]
+    fn test_complex_product() {
+        let mut rng = thread_rng();
+        for _ in 0..1000 {
+            let f = (rng.next_u32() as i64, rng.next_u32() as i64);
+            let g = (rng.next_u32() as i64, rng.next_u32() as i64);
+            let h0 = Tip5::complex_product(f, g);
+            let h1 = (f.0 * g.0 - f.1 * g.1, f.0 * g.1 + f.1 * g.0);
+            assert_eq!(h1, h0);
+        }
     }
 }
