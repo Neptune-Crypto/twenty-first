@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use num_traits::{One, Zero};
+use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
@@ -167,266 +167,6 @@ impl Tip5 {
         }
 
         *element = BFieldElement::from_raw_bytes(&bytes);
-    }
-
-    #[allow(clippy::many_single_char_names)]
-    #[inline]
-    fn ntt_noswap(x: &mut [BFieldElement]) {
-        // const POWERS_OF_OMEGA_BITREVERSED: [BFieldElement; 8] = [
-        //     BFieldElement::new(1),
-        //     BFieldElement::new(281474976710656),
-        //     BFieldElement::new(18446744069397807105),
-        //     BFieldElement::new(18446742969902956801),
-        //     BFieldElement::new(17293822564807737345),
-        //     BFieldElement::new(4096),
-        //     BFieldElement::new(4503599626321920),
-        //     BFieldElement::new(18446744000695107585),
-        // ];
-        const POWERS_OF_OMEGA_BITREVERSED: [BFieldElement; 8] = [
-            BFieldElement::new(1),
-            BFieldElement::new(281474976710656),
-            BFieldElement::new(16777216),
-            BFieldElement::new(1099511627520),
-            BFieldElement::new(4096),
-            BFieldElement::new(1152921504606846976),
-            BFieldElement::new(68719476736),
-            BFieldElement::new(4503599626321920),
-        ];
-        const SHIFTS: [usize; 8] = [0, 48, 24, 72, 12, 60, 36, 84];
-        let powers_of_omega = SHIFTS.map(|sh| BFieldElement::new(1) << sh);
-        assert_eq!(powers_of_omega, POWERS_OF_OMEGA_BITREVERSED);
-
-        // outer loop iteration 1
-        for j in 0..8 {
-            let u = x[j];
-            let v = x[j + 8] * BFieldElement::one();
-            x[j] = u + v;
-            x[j + 8] = u - v;
-        }
-
-        // outer loop iteration 2
-        for (i, zeta) in SHIFTS.iter().enumerate().take(2) {
-            let s = i * 8;
-            for j in s..(s + 4) {
-                let u = x[j];
-                let v = x[j + 4] << *zeta;
-                x[j] = u + v;
-                x[j + 4] = u - v;
-            }
-        }
-
-        // outer loop iteration 3
-        for (i, zeta) in SHIFTS.iter().enumerate().take(4) {
-            let s = i * 4;
-            for j in s..(s + 2) {
-                let u = x[j];
-                let v = x[j + 2] << *zeta;
-                x[j] = u + v;
-                x[j + 2] = u - v;
-            }
-        }
-
-        // outer loop iteration 4
-        for (i, zeta) in SHIFTS.iter().enumerate().take(8) {
-            let s = i * 2;
-            let u = x[s];
-            let v = x[s + 1] << *zeta;
-            x[s] = u + v;
-            x[s + 1] = u - v;
-        }
-    }
-
-    #[allow(clippy::many_single_char_names)]
-    #[inline]
-    fn intt_noswap(x: &mut [BFieldElement]) {
-        // const POWERS_OF_OMEGA_INVERSE: [BFieldElement; 8] = [
-        //     BFieldElement::new(1),
-        //     BFieldElement::new(68719476736),
-        //     BFieldElement::new(1099511627520),
-        //     BFieldElement::new(18446744069414580225),
-        //     BFieldElement::new(18446462594437873665),
-        //     BFieldElement::new(18442240469788262401),
-        //     BFieldElement::new(16777216),
-        //     BFieldElement::new(1152921504606846976),
-        // ];
-        const POWERS_OF_OMEGA_INVERSE: [BFieldElement; 8] = [
-            BFieldElement::new(1),
-            BFieldElement::new(18442240469788262401),
-            BFieldElement::new(18446742969902956801),
-            BFieldElement::new(17293822564807737345),
-            BFieldElement::new(18446462594437873665),
-            BFieldElement::new(18446744000695107585),
-            BFieldElement::new(18446744069397807105),
-            BFieldElement::new(18446744069414580225),
-        ];
-        const SHIFTS: [usize; 8] = [0, 12, 24, 36, 48, 60, 72, 84];
-        let powers_of_omega = SHIFTS.map(|sh| BFieldElement::new(1) >> sh);
-        assert_eq!(
-            powers_of_omega, POWERS_OF_OMEGA_INVERSE,
-            "left hand side: {powers_of_omega:?}, versus right hand side: {POWERS_OF_OMEGA_INVERSE:?}"
-        );
-
-        // outer loop iteration 1
-        {
-            // while k < STATE_SIZE as usize
-            // inner loop iteration 1
-            {
-                let u = x[1];
-                let v = x[0];
-                x[1] = v - u;
-                x[0] = v + u;
-            }
-
-            // inner loop iteration 2
-            {
-                let u = x[2 + 1];
-                let v = x[2];
-                x[2 + 1] = v - u;
-                x[2] = v + u;
-            }
-
-            // inner loop iteration 3
-            {
-                let u = x[4 + 1];
-                let v = x[4];
-                x[4 + 1] = v - u;
-                x[4] = v + u;
-            }
-
-            // inner loop iteration 4
-            {
-                let u = x[6 + 1];
-                let v = x[6];
-                x[6 + 1] = v - u;
-                x[6] = v + u;
-            }
-
-            // inner loop iteration 5
-            {
-                let u = x[8 + 1];
-                let v = x[8];
-                x[8 + 1] = v - u;
-                x[8] = v + u;
-            }
-
-            // inner loop iteration 6
-            {
-                let u = x[10 + 1];
-                let v = x[10];
-                x[10 + 1] = v - u;
-                x[10] = v + u;
-            }
-
-            // inner loop iteration 7
-            {
-                let u = x[12 + 1];
-                let v = x[12];
-                x[12 + 1] = v - u;
-                x[12] = v + u;
-            }
-
-            // inner loop iteration 7
-            {
-                let u = x[14 + 1];
-                let v = x[14];
-                x[14 + 1] = v - u;
-                x[14] = v + u;
-            }
-        }
-
-        // outer loop iteration 2
-        {
-            // while k < STATE_SIZE as usize
-            // inner loop iteration 1
-            {
-                for j in 0..2 {
-                    let zeta = SHIFTS[4 * j];
-                    {
-                        let u = x[j + 2] >> zeta;
-                        let v = x[j];
-                        x[j + 2] = v - u;
-                        x[j] = v + u;
-                    }
-                    // inner loop iteration 2
-                    {
-                        let u = x[4 + j + 2] >> zeta;
-                        let v = x[4 + j];
-                        x[4 + j + 2] = v - u;
-                        x[4 + j] = v + u;
-                    }
-                    // inner loop iteration 3
-                    {
-                        let u = x[8 + j + 2] >> zeta;
-                        let v = x[8 + j];
-                        x[8 + j + 2] = v - u;
-                        x[8 + j] = v + u;
-                    }
-                    // inner loop iteration 4
-                    {
-                        let u = x[12 + j + 2] >> zeta;
-                        let v = x[12 + j];
-                        x[12 + j + 2] = v - u;
-                        x[12 + j] = v + u;
-                    }
-                }
-            }
-        }
-
-        // outer loop iteration 3
-        {
-            // while k < STATE_SIZE as usize
-            {
-                for j in 0..4 {
-                    let zeta = SHIFTS[2 * j];
-                    // inner loop iteration 1
-                    {
-                        let u = x[j + 4] >> zeta;
-                        let v = x[j];
-                        x[j + 4] = v - u;
-                        x[j] = v + u;
-                    }
-                    // inner loop iteration 2
-                    {
-                        let u = x[8 + j + 4] >> zeta;
-                        let v = x[8 + j];
-                        x[8 + j + 4] = v - u;
-                        x[8 + j] = v + u;
-                    }
-                }
-            }
-        }
-
-        // outer loop iteration 4
-        {
-            for j in 0..8 {
-                let zeta = SHIFTS[j];
-                let u = x[j + 8] >> zeta;
-                let v = x[j];
-                x[j + 8] = v - u;
-                x[j] = v + u;
-            }
-        }
-    }
-
-    #[inline]
-    pub fn mds_noswap(state: &mut [BFieldElement; STATE_SIZE]) {
-        // without bitreverse: [4, 1, 3, 6, 4, 0, 0, 4, 1, 5, 7, 2, 3, 2, 5, 1]
-        const SHIFTS: [u8; STATE_SIZE] = [4, 1, 4, 3, 3, 7, 0, 5, 1, 5, 0, 2, 6, 2, 4, 1];
-        let mut array: [u128; STATE_SIZE] = [0; STATE_SIZE];
-        Self::ntt_noswap(state);
-
-        for i in 0..STATE_SIZE {
-            array[i] = state[i].raw_u128() << SHIFTS[i];
-        }
-        let mut reduced = [0u64; STATE_SIZE];
-        for i in 0..STATE_SIZE {
-            reduced[i] = BFieldElement::montyred(array[i]);
-        }
-        for i in 0..16 {
-            state[i] = BFieldElement::from_raw_u64(reduced[i]);
-        }
-
-        Self::intt_noswap(state);
     }
 
     #[inline(always)]
@@ -739,7 +479,7 @@ impl Tip5 {
         *state = result;
     }
 
-    #[inline]
+    #[inline(always)]
     fn sbox_layer(state: &mut [BFieldElement; STATE_SIZE]) {
         // lookup
         state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
@@ -754,7 +494,7 @@ impl Tip5 {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn round(sponge: &mut Tip5State, round_index: usize) {
         Self::sbox_layer(&mut sponge.state);
 
@@ -766,7 +506,7 @@ impl Tip5 {
     }
 
     // permutation
-    #[inline]
+    #[inline(always)]
     fn permutation(sponge: &mut Tip5State) {
         for i in 0..NUM_ROUNDS {
             Self::round(sponge, i);
@@ -837,8 +577,6 @@ mod tip5_tests {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::ntt;
-    use crate::shared_math::ntt::ntt;
     use crate::shared_math::other::random_elements;
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::tip5::Tip5;
@@ -1135,27 +873,6 @@ mod tip5_tests {
         mds_procedure(&mut vec);
 
         assert_eq!(vec, mv);
-    }
-
-    #[test]
-    fn test_ntt_noswap() {
-        let a: Vec<BFieldElement> = random_elements(16);
-        let mut b = a.clone();
-        Tip5::ntt_noswap(&mut b);
-        let mut c = a.clone();
-        ntt::<BFieldElement>(&mut c, BFieldElement::new(1 << 12), 4);
-        for i in 0..16 {
-            if i < ntt::bitreverse(i, 4) {
-                c.swap(i as usize, ntt::bitreverse(i, 4) as usize);
-            }
-        }
-
-        assert_eq!(c, b);
-
-        Tip5::intt_noswap(&mut b);
-        b.iter_mut()
-            .for_each(|bb| *bb = *bb / BFieldElement::new(16));
-        assert_eq!(a, b);
     }
 
     #[test]
