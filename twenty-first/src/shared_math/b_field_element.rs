@@ -230,6 +230,11 @@ impl BFieldElement {
     pub const fn from_raw_u64(e: u64) -> BFieldElement {
         BFieldElement(e)
     }
+
+    #[inline]
+    pub fn raw_u64(&self) -> u64 {
+        self.0
+    }
 }
 
 impl Emojihash for BFieldElement {
