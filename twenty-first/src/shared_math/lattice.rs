@@ -1,4 +1,4 @@
-use itertools::Itertools;
+use num_traits::Zero;
 
 use super::b_field_element::BFieldElement;
 
@@ -188,35 +188,98 @@ pub fn coset_ntt_noswap_64(array: &mut [BFieldElement; 64]) {
     }
 }
 
+pub fn had64(a: &[BFieldElement; 64], b: &[BFieldElement; 64]) -> [BFieldElement; 64] {
+    let mut c = [BFieldElement::zero(); 64];
+    for i in 0..64 {
+        c[i] = a[i] * b[i];
+    }
+    c
+}
+
+pub fn add64(a: &[BFieldElement; 64], b: &[BFieldElement; 64]) -> [BFieldElement; 64] {
+    let mut c = [BFieldElement::zero(); 64];
+    for i in 0..64 {
+        c[i] = a[i] + b[i];
+    }
+    c
+}
+
 /// Multiply two polynomials in the ring
 /// Fp[X] / (X^64 + 1)
 /// using coset-NTT.
-pub fn fast_cycloring_mul_64(
-    a: &[BFieldElement; 64],
-    b: &[BFieldElement; 64],
-) -> [BFieldElement; 64] {
+pub fn cycloring64_mul(a: &[BFieldElement; 64], b: &[BFieldElement; 64]) -> [BFieldElement; 64] {
     let mut a_copy = *a;
     let mut b_copy = *b;
 
     coset_ntt_noswap_64(&mut a_copy);
     coset_ntt_noswap_64(&mut b_copy);
 
-    let mut c: [BFieldElement; 64] = a_copy
-        .iter()
-        .zip(b_copy.iter())
-        .map(|(&l, &r)| l * r)
-        .collect_vec()
-        .try_into()
-        .unwrap();
+    let mut c = had64(&a_copy, &b_copy);
 
     coset_intt_noswap_64(&mut c);
 
     c
 }
 
+pub fn embed_msg(msg: [u8; 32]) -> [BFieldElement; 64] {
+    let mut embedding: [BFieldElement; 64] = [BFieldElement::zero(); 64];
+    for i in 0..msg.len() {
+        let mut integer = 0u64;
+        for j in 0..4 {
+            let bit = (msg[i] >> j) & 1;
+            integer += (bit as u64) << (15 + 16 * j);
+        }
+        embedding[2 * i] = BFieldElement::new(integer);
+
+        integer = 0;
+        for j in 0..4 {
+            let bit = (msg[i] >> (4 + j)) & 1;
+            integer += (bit as u64) << (15 + 16 * j);
+        }
+        embedding[2 * i + 1] = BFieldElement::new(integer);
+    }
+    embedding
+}
+
+pub fn extract_msg(embedding: [BFieldElement; 64]) -> [u8; 32] {
+    let mut msg = [0u8; 32];
+    for (ctr, pair) in embedding.chunks(2).enumerate() {
+        let mut byte = 0u8;
+        let mut value = pair[0].value();
+        for j in 0..4 {
+            let chunk = value & 0xffff;
+            value >>= 16;
+
+            let bit = if chunk < (1 << 14) || (1 << 16) - chunk < (1 << 14) {
+                0
+            } else {
+                1
+            };
+            byte |= bit << j;
+        }
+
+        value = pair[1].value();
+        for j in 0..4 {
+            let chunk = value & 0xffff;
+            value >>= 16;
+
+            let bit = if chunk < (1 << 14) || (1 << 16) - chunk < (1 << 14) {
+                0
+            } else {
+                1
+            };
+            byte |= bit << (4 + j);
+        }
+        msg[ctr] = byte;
+    }
+    msg
+}
+
 #[cfg(test)]
 mod lattice_test {
+    use itertools::Itertools;
     use num_traits::Zero;
+    use rand::{thread_rng, RngCore};
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::lattice::*;
@@ -238,8 +301,23 @@ mod lattice_test {
             }
         }
 
-        let c_fast = fast_cycloring_mul_64(&a, &b);
+        let c_fast = cycloring64_mul(&a, &b);
 
         assert_eq!(c_fast, c_schoolbook);
+    }
+
+    #[test]
+    fn test_embedding() {
+        let mut rng = thread_rng();
+        let msg: [u8; 32] = (0..32)
+            .into_iter()
+            .map(|_| (rng.next_u32() % 256) as u8)
+            .collect_vec()
+            .try_into()
+            .unwrap();
+        let embedding = embed_msg(msg);
+        let extracted = extract_msg(embedding);
+
+        assert_eq!(msg, extracted);
     }
 }
