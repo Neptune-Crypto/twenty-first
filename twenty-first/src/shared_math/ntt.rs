@@ -118,7 +118,7 @@ pub fn intt<FF: FiniteField + MulAssign<BFieldElement>>(
     }
 }
 #[inline]
-fn bitreverse_usize(mut n: usize, l: usize) -> usize {
+pub fn bitreverse_usize(mut n: usize, l: usize) -> usize {
     let mut r = 0;
     for _ in 0..l {
         r = (r << 1) | (n & 1);
@@ -148,7 +148,7 @@ pub fn bitreverse_order<FF>(array: &mut [FF]) {
 ///  - the powers_of_omega_bitreversed can be precomputed (which
 ///    is not the case here).
 /// In that case, be sure to use the matching `intt_noswap` and
-/// don't forget to unscale by n.
+/// don't forget to unscale by n, e.g. using `unscale`.
 pub fn ntt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], omega: BFieldElement) {
     let n: usize = x.len();
 
@@ -236,6 +236,15 @@ pub fn intt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], ome
         }
 
         m *= 2;
+    }
+}
+
+/// Unscale the array by multiplying every element by the
+/// inverse of the array's length. Useful for following up intt.
+pub fn unscale(array: &mut [BFieldElement]) {
+    let ninv = BFieldElement::new(array.len() as u64).inverse();
+    for a in array.iter_mut() {
+        *a *= ninv;
     }
 }
 
