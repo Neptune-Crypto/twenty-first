@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use num_traits::Zero;
 
 use super::b_field_element::BFieldElement;
@@ -273,6 +274,51 @@ pub fn extract_msg(embedding: [BFieldElement; 64]) -> [u8; 32] {
         msg[ctr] = byte;
     }
     msg
+}
+
+const fn num_set_bits(a: u8) -> u8 {
+    let mut sum = 0;
+    let mut i = 0;
+    while i < 8 {
+        let bit = if a & (1 << i) != 0 { 1 } else { 0 };
+        sum += bit;
+        i += 1;
+    }
+    sum
+}
+
+const fn num_set_bits_table() -> [u8; 256] {
+    let mut table: [u8; 256] = [0u8; 256];
+    let mut i = 1;
+    while i < 256 {
+        table[i] = num_set_bits(i as u8);
+        i += 1;
+    }
+    table
+}
+
+fn sample_short_bfield_element(randomness: &[u8; 8]) -> BFieldElement {
+    const NUM_SET_BITS: [u8; 256] = num_set_bits_table();
+    let left = ((NUM_SET_BITS[randomness[0] as usize] as u64) << (3 * 16))
+        + ((NUM_SET_BITS[randomness[1] as usize] as u64) << (2 * 16))
+        + ((NUM_SET_BITS[randomness[2] as usize] as u64) << 16)
+        + (NUM_SET_BITS[randomness[3] as usize] as u64);
+    let right = ((NUM_SET_BITS[randomness[4] as usize] as u64) << (3 * 16))
+        + ((NUM_SET_BITS[randomness[5] as usize] as u64) << (2 * 16))
+        + ((NUM_SET_BITS[randomness[6] as usize] as u64) << 16)
+        + (NUM_SET_BITS[randomness[7] as usize] as u64);
+    BFieldElement::new(left) - BFieldElement::new(right)
+}
+
+fn sample_short_cycloring_element(randomness: &[u8; 8 * 64]) -> [BFieldElement; 64] {
+    randomness
+        .chunks(8)
+        .into_iter()
+        .map(|r| TryInto::<[u8; 8]>::try_into(r).unwrap())
+        .map(|r| sample_short_bfield_element(&r))
+        .collect_vec()
+        .try_into()
+        .unwrap()
 }
 
 #[cfg(test)]
