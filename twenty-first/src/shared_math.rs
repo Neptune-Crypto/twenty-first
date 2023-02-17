@@ -1,4 +1,5 @@
 pub mod b_field_element;
+pub mod lattice;
 pub mod mpolynomial;
 pub mod ntt;
 pub mod other;
