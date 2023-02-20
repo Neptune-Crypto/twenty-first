@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Mul};
+use std::ops::{Add, AddAssign, Mul, Sub};
 
 use itertools::Itertools;
 use num_traits::Zero;
@@ -193,12 +193,13 @@ pub fn coset_ntt_noswap_64(array: &mut [BFieldElement; 64]) {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CyclotomicRingElement {
+pub struct CyclotomicRingElement {
     coefficients: [BFieldElement; 64],
 }
 
 impl CyclotomicRingElement {
-    pub fn sample_short(randomness: &[u8; 8 * 64]) -> CyclotomicRingElement {
+    pub fn sample_short(randomness: &[u8]) -> CyclotomicRingElement {
+        debug_assert!(randomness.len() >= 8 * 64);
         CyclotomicRingElement {
             coefficients: randomness
                 .chunks(8)
@@ -258,6 +259,21 @@ impl AddAssign for CyclotomicRingElement {
     }
 }
 
+impl Sub for CyclotomicRingElement {
+    type Output = CyclotomicRingElement;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        CyclotomicRingElement {
+            coefficients: (0..64)
+                .into_iter()
+                .map(|i| self.coefficients[i] - rhs.coefficients[i])
+                .collect_vec()
+                .try_into()
+                .unwrap(),
+        }
+    }
+}
+
 impl Mul for CyclotomicRingElement {
     type Output = CyclotomicRingElement;
 
@@ -292,7 +308,7 @@ impl Zero for CyclotomicRingElement {
     }
 }
 
-pub fn embed_msg(msg: [u8; 32]) -> [BFieldElement; 64] {
+pub fn embed_msg(msg: [u8; 32]) -> CyclotomicRingElement {
     let mut embedding: [BFieldElement; 64] = [BFieldElement::zero(); 64];
     for i in 0..msg.len() {
         let mut integer = 0u64;
@@ -309,12 +325,14 @@ pub fn embed_msg(msg: [u8; 32]) -> [BFieldElement; 64] {
         }
         embedding[2 * i + 1] = BFieldElement::new(integer);
     }
-    embedding
+    CyclotomicRingElement {
+        coefficients: embedding,
+    }
 }
 
-pub fn extract_msg(embedding: [BFieldElement; 64]) -> [u8; 32] {
+pub fn extract_msg(embedding: CyclotomicRingElement) -> [u8; 32] {
     let mut msg = [0u8; 32];
-    for (ctr, pair) in embedding.chunks(2).enumerate() {
+    for (ctr, pair) in embedding.coefficients.chunks(2).enumerate() {
         let mut byte = 0u8;
         let mut value = pair[0].value();
         for j in 0..4 {
@@ -389,10 +407,12 @@ pub struct ModuleElement<const N: usize> {
 }
 
 impl<const N: usize> ModuleElement<N> {
-    pub fn sample_short(randomness: &[[u8; 8 * 64]; N]) -> Self {
+    pub fn sample_short(randomness: &[u8]) -> Self {
+        debug_assert!(randomness.len() >= 8 * 64 * N);
         let mut elements = [CyclotomicRingElement::zero(); N];
         for n in 0..N {
-            elements[n] = CyclotomicRingElement::sample_short(&randomness[n]);
+            elements[n] =
+                CyclotomicRingElement::sample_short(&randomness[8 * 64 * n..8 * 64 * (n + 1)]);
         }
         Self { elements }
     }
@@ -561,6 +581,125 @@ impl<const N: usize> Add for ModuleElement<N> {
     }
 }
 
+impl<const N: usize> Sub for ModuleElement<N> {
+    type Output = ModuleElement<N>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let elements: [CyclotomicRingElement; N] = (0..N)
+            .into_par_iter()
+            .map(|i| self.elements[i] - rhs.elements[i])
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        ModuleElement::<N> { elements }
+    }
+}
+
+pub mod kem {
+    use rand::RngCore;
+    use rand_core::OsRng;
+
+    use super::{embed_msg, extract_msg, ModuleElement};
+    use crate::shared_math::fips202::{sha3_256, shake256};
+
+    pub struct SecretKey {
+        key: [u8; 32],
+        seed: [u8; 32],
+    }
+
+    pub struct PublicKey {
+        seed: [u8; 32],
+        ga: ModuleElement<3>,
+    }
+
+    #[derive(PartialEq, Eq)]
+    pub struct Ciphertext {
+        bg: ModuleElement<3>,
+        bga_m: ModuleElement<1>,
+    }
+
+    fn derive_public_matrix(seed: &[u8; 32]) -> ModuleElement<9> {
+        const NUM_BYTES: usize = 9 * 64 * 9;
+        let randomness = shake256(seed, NUM_BYTES);
+        ModuleElement::<9>::sample_uniform(&randomness)
+    }
+
+    fn derive_secret_vectors(seed: &[u8; 32]) -> (ModuleElement<3>, ModuleElement<3>) {
+        const NUM_BYTES: usize = 2 * 3 * 64 * 8;
+        let randomness = shake256(seed, NUM_BYTES);
+        let a = ModuleElement::<3>::sample_short(&randomness[0..(NUM_BYTES / 2)]);
+        let b = ModuleElement::<3>::sample_short(&randomness[(NUM_BYTES / 2)..]);
+        (a, b)
+    }
+
+    /// Generate a public-secret key pair for key encapsulation.
+    pub fn keygen() -> (SecretKey, PublicKey) {
+        let mut seed: [u8; 32] = [0u8; 32];
+        OsRng.fill_bytes(&mut seed);
+
+        let mut key: [u8; 32] = [0u8; 32];
+        OsRng.fill_bytes(&mut key);
+        let sk = SecretKey { key, seed };
+
+        let pk = derive_public_key(&key, &seed);
+        (sk, pk)
+    }
+
+    fn derive_public_key(key: &[u8; 32], seed: &[u8; 32]) -> PublicKey {
+        let (a, c) = derive_secret_vectors(key);
+        let g = derive_public_matrix(seed);
+        let ga = ModuleElement::<9>::multiply_hadamard::<3, 9, 1, 3, 3, 3>(g, a.ntt()) + c.ntt();
+
+        PublicKey { seed: *seed, ga }
+    }
+
+    /// Generate a ciphertext with the given seed (`payload`) from
+    /// which to derive all randomness.
+    fn generate_ciphertext_derandomized(pk: PublicKey, payload: [u8; 32]) -> Ciphertext {
+        let (b, d) = derive_secret_vectors(&payload);
+        let b_ntt = b.ntt();
+        let d_ntt = d.ntt();
+        let g = derive_public_matrix(&pk.seed);
+        let bg = ModuleElement::<9>::multiply_hadamard::<1, 3, 3, 9, 3, 3>(b_ntt, g) + d_ntt;
+
+        let m = embed_msg(payload);
+        let bga_m = ModuleElement::<3>::multiply_hadamard::<1, 3, 1, 3, 3, 1>(b_ntt, pk.ga)
+            + ModuleElement::<1> { elements: [m] }.ntt();
+
+        Ciphertext { bg, bga_m }
+    }
+
+    /// Encapsulate: generate a ciphertext and an associated shared
+    /// symmetric key.
+    pub fn enc(pk: PublicKey) -> ([u8; 32], Ciphertext) {
+        let mut payload = [0u8; 32];
+        OsRng.fill_bytes(&mut payload);
+        let ciphertext = generate_ciphertext_derandomized(pk, payload);
+        let shared_key: [u8; 32] = sha3_256(&payload);
+
+        (shared_key, ciphertext)
+    }
+
+    /// Decapsulate: use the secret key to extract the corresponding
+    /// shared symmetric key from a ciphertext (if successful).
+    pub fn dec(sk: SecretKey, ctxt: Ciphertext) -> Option<[u8; 32]> {
+        let (a, _) = derive_secret_vectors(&sk.key);
+        let bga = ModuleElement::<3>::multiply_hadamard::<1, 3, 1, 3, 3, 1>(ctxt.bg, a.ntt());
+        let m = (ctxt.bga_m - bga).intt();
+        let payload = extract_msg(m.elements[0]);
+
+        let pk = derive_public_key(&sk.key, &sk.seed);
+        let regenerated_ciphertext = generate_ciphertext_derandomized(pk, payload);
+
+        if regenerated_ciphertext != ctxt {
+            return None;
+        }
+
+        let shared_key = sha3_256(&payload);
+        Some(shared_key)
+    }
+}
+
 #[cfg(test)]
 mod lattice_test {
     use itertools::Itertools;
@@ -612,7 +751,7 @@ mod lattice_test {
     #[test]
     fn test_module_distributivity() {
         let mut rng = thread_rng();
-        let randomness = (0..(2 * 3 + 2 * 3 + 3 * 1) * 64 * 9)
+        let randomness = (0..(2 * 3 + 2 * 3 + 3) * 64 * 9)
             .into_iter()
             .map(|_| (rng.next_u32() % 256) as u8)
             .collect_vec();
@@ -623,8 +762,8 @@ mod lattice_test {
         stop += 2 * 3 * 9 * 64;
         let b = ModuleElement::<{ 2 * 3 }>::sample_uniform(&randomness[start..stop]);
         start = stop;
-        stop += 3 * 1 * 9 * 64;
-        let c = ModuleElement::<{ 3 * 1 }>::sample_uniform(&randomness[start..stop]);
+        stop += 3 * 9 * 64;
+        let c = ModuleElement::<3>::sample_uniform(&randomness[start..stop]);
 
         let sumprod = ModuleElement::<1>::multiply::<2, 6, 1, 3, 3, 2>(a + b, c);
         let prodsum = ModuleElement::<1>::multiply::<2, 6, 1, 3, 3, 2>(a, c)
@@ -636,7 +775,7 @@ mod lattice_test {
     #[test]
     fn test_module_multiply() {
         let mut rng = thread_rng();
-        let randomness = (0..(2 * 3 + 2 * 3 + 3 * 1) * 64 * 9)
+        let randomness = (0..(2 * 3 + 2 * 3 + 3) * 64 * 9)
             .into_iter()
             .map(|_| (rng.next_u32() % 256) as u8)
             .collect_vec();
