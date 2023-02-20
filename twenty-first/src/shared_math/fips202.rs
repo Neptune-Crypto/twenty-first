@@ -107,23 +107,23 @@ pub fn shake256(input: &[u8], output_length: usize) -> Vec<u8> {
 }
 
 ///  Function to compute SHA3-224 on the input message. The output length is fixed to 28 bytes.
-pub fn sha3_224(input: &[u8]) -> Vec<u8> {
-    keccak(1152, 448, input, 0x06, 28)
+pub fn sha3_224(input: &[u8]) -> [u8; 28] {
+    keccak(1152, 448, input, 0x06, 28).try_into().unwrap()
 }
 
 ///  Function to compute SHA3-256 on the input message. The output length is fixed to 32 bytes.
-pub fn sha3_256(input: &[u8]) -> Vec<u8> {
-    keccak(1088, 512, input, 0x06, 32)
+pub fn sha3_256(input: &[u8]) -> [u8; 32] {
+    keccak(1088, 512, input, 0x06, 32).try_into().unwrap()
 }
 
 ///  Function to compute SHA3-384 on the input message. The output length is fixed to 48 bytes.
-pub fn sha3_384(input: &[u8]) -> Vec<u8> {
-    keccak(832, 768, input, 0x06, 48)
+pub fn sha3_384(input: &[u8]) -> [u8; 48] {
+    keccak(832, 768, input, 0x06, 48).try_into().unwrap()
 }
 
 ///  Function to compute SHA3-512 on the input message. The output length is fixed to 64 bytes.
-pub fn sha3_512(input: &[u8]) -> Vec<u8> {
-    keccak(576, 1024, input, 0x06, 64)
+pub fn sha3_512(input: &[u8]) -> [u8; 64] {
+    keccak(576, 1024, input, 0x06, 64).try_into().unwrap()
 }
 
 #[cfg(test)]
@@ -145,9 +145,9 @@ mod fips202_test {
 
         assert_eq!(shake128(input, 64), output_shake128.to_vec());
         assert_eq!(shake256(input, 64), output_shake256.to_vec());
-        assert_eq!(sha3_224(input), output_sha3_224.to_vec());
-        assert_eq!(sha3_256(input), output_sha3_256.to_vec());
-        assert_eq!(sha3_384(input), output_sha3_384.to_vec());
-        assert_eq!(sha3_512(input), output_sha3_512.to_vec());
+        assert_eq!(sha3_224(input), *output_sha3_224);
+        assert_eq!(sha3_256(input), *output_sha3_256);
+        assert_eq!(sha3_384(input), *output_sha3_384);
+        assert_eq!(sha3_512(input), *output_sha3_512);
     }
 }
