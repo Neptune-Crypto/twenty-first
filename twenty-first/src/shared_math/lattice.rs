@@ -596,49 +596,51 @@ impl<const N: usize> Sub for ModuleElement<N> {
 }
 
 pub mod kem {
-    use rand::RngCore;
-    use rand_core::OsRng;
+    use rand::{thread_rng, RngCore};
 
     use super::{embed_msg, extract_msg, ModuleElement};
     use crate::shared_math::fips202::{sha3_256, shake256};
 
+    #[derive(PartialEq, Eq, Clone)]
     pub struct SecretKey {
         key: [u8; 32],
         seed: [u8; 32],
     }
 
+    #[derive(PartialEq, Eq, Clone)]
     pub struct PublicKey {
         seed: [u8; 32],
-        ga: ModuleElement<3>,
+        ga: ModuleElement<4>,
     }
 
-    #[derive(PartialEq, Eq)]
+    #[derive(PartialEq, Eq, Clone)]
     pub struct Ciphertext {
-        bg: ModuleElement<3>,
+        bg: ModuleElement<4>,
         bga_m: ModuleElement<1>,
     }
 
-    fn derive_public_matrix(seed: &[u8; 32]) -> ModuleElement<9> {
-        const NUM_BYTES: usize = 9 * 64 * 9;
+    fn derive_public_matrix(seed: &[u8; 32]) -> ModuleElement<16> {
+        const NUM_BYTES: usize = 9 * 64 * 16;
         let randomness = shake256(seed, NUM_BYTES);
-        ModuleElement::<9>::sample_uniform(&randomness)
+        ModuleElement::<16>::sample_uniform(&randomness)
     }
 
-    fn derive_secret_vectors(seed: &[u8; 32]) -> (ModuleElement<3>, ModuleElement<3>) {
-        const NUM_BYTES: usize = 2 * 3 * 64 * 8;
+    fn derive_secret_vectors(seed: &[u8; 32]) -> (ModuleElement<4>, ModuleElement<4>) {
+        const NUM_BYTES: usize = 2 * 4 * 64 * 8;
         let randomness = shake256(seed, NUM_BYTES);
-        let a = ModuleElement::<3>::sample_short(&randomness[0..(NUM_BYTES / 2)]);
-        let b = ModuleElement::<3>::sample_short(&randomness[(NUM_BYTES / 2)..]);
+        let a = ModuleElement::<4>::sample_short(&randomness[0..(NUM_BYTES / 2)]);
+        let b = ModuleElement::<4>::sample_short(&randomness[(NUM_BYTES / 2)..]);
         (a, b)
     }
 
     /// Generate a public-secret key pair for key encapsulation.
     pub fn keygen() -> (SecretKey, PublicKey) {
+        let mut rng = thread_rng();
         let mut seed: [u8; 32] = [0u8; 32];
-        OsRng.fill_bytes(&mut seed);
+        rng.fill_bytes(&mut seed);
 
         let mut key: [u8; 32] = [0u8; 32];
-        OsRng.fill_bytes(&mut key);
+        rng.fill_bytes(&mut key);
         let sk = SecretKey { key, seed };
 
         let pk = derive_public_key(&key, &seed);
@@ -648,7 +650,7 @@ pub mod kem {
     fn derive_public_key(key: &[u8; 32], seed: &[u8; 32]) -> PublicKey {
         let (a, c) = derive_secret_vectors(key);
         let g = derive_public_matrix(seed);
-        let ga = ModuleElement::<9>::multiply_hadamard::<3, 9, 1, 3, 3, 3>(g, a.ntt()) + c.ntt();
+        let ga = ModuleElement::<16>::multiply_hadamard::<4, 16, 1, 4, 4, 4>(g, a.ntt()) + c.ntt();
 
         PublicKey { seed: *seed, ga }
     }
@@ -660,10 +662,10 @@ pub mod kem {
         let b_ntt = b.ntt();
         let d_ntt = d.ntt();
         let g = derive_public_matrix(&pk.seed);
-        let bg = ModuleElement::<9>::multiply_hadamard::<1, 3, 3, 9, 3, 3>(b_ntt, g) + d_ntt;
+        let bg = ModuleElement::<9>::multiply_hadamard::<1, 4, 4, 16, 4, 4>(b_ntt, g) + d_ntt;
 
         let m = embed_msg(payload);
-        let bga_m = ModuleElement::<3>::multiply_hadamard::<1, 3, 1, 3, 3, 1>(b_ntt, pk.ga)
+        let bga_m = ModuleElement::<3>::multiply_hadamard::<1, 4, 1, 4, 4, 1>(b_ntt, pk.ga)
             + ModuleElement::<1> { elements: [m] }.ntt();
 
         Ciphertext { bg, bga_m }
@@ -672,8 +674,9 @@ pub mod kem {
     /// Encapsulate: generate a ciphertext and an associated shared
     /// symmetric key.
     pub fn enc(pk: PublicKey) -> ([u8; 32], Ciphertext) {
+        let mut rng = thread_rng();
         let mut payload = [0u8; 32];
-        OsRng.fill_bytes(&mut payload);
+        rng.fill_bytes(&mut payload);
         let ciphertext = generate_ciphertext_derandomized(pk, payload);
         let shared_key: [u8; 32] = sha3_256(&payload);
 
@@ -684,7 +687,7 @@ pub mod kem {
     /// shared symmetric key from a ciphertext (if successful).
     pub fn dec(sk: SecretKey, ctxt: Ciphertext) -> Option<[u8; 32]> {
         let (a, _) = derive_secret_vectors(&sk.key);
-        let bga = ModuleElement::<3>::multiply_hadamard::<1, 3, 1, 3, 3, 1>(ctxt.bg, a.ntt());
+        let bga = ModuleElement::<3>::multiply_hadamard::<1, 4, 1, 4, 4, 1>(ctxt.bg, a.ntt());
         let m = (ctxt.bga_m - bga).intt();
         let payload = extract_msg(m.elements[0]);
 
@@ -790,5 +793,21 @@ mod lattice_test {
             ModuleElement::<1>::fast_multiply::<2, 6, 2, 6, 3, 4>(a, b),
             ModuleElement::<1>::multiply::<2, 6, 2, 6, 3, 4>(a, b)
         );
+    }
+
+    #[test]
+    fn test_kem() {
+        // correctness
+        let (sk, pk) = kem::keygen();
+        let (alice_key, ctxt) = kem::enc(pk);
+        if let Some(bob_key) = kem::dec(sk, ctxt.clone()) {
+            assert_eq!(alice_key, bob_key);
+        } else {
+            panic!()
+        }
+
+        // sanity
+        let (other_sk, _) = kem::keygen();
+        assert!(kem::dec(other_sk, ctxt).is_none());
     }
 }
