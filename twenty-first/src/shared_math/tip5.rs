@@ -513,6 +513,21 @@ impl Tip5 {
         }
     }
 
+    /// Functionally equivalent to [`permutation`](Self::permutation). Returns the trace of
+    /// applying the permutation; that is, the initial state of the sponge as well as its state
+    /// after each round.
+    pub fn trace(sponge: &mut Tip5State) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
+        let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
+
+        trace[0] = sponge.state;
+        for i in 0..NUM_ROUNDS {
+            Self::round(sponge, i);
+            trace[1 + i] = sponge.state;
+        }
+
+        trace
+    }
+
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
