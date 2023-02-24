@@ -1,5 +1,4 @@
 pub mod algebraic_hasher;
-pub mod algebraic_prng;
 pub mod blake3_wrapper;
 pub mod database_array;
 pub mod database_vector;

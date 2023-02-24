@@ -3,9 +3,9 @@ use std::iter;
 use itertools::Itertools;
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
-use crate::shared_math::other::roundup_nearest_multiple;
+use crate::shared_math::other::{is_power_of_two, roundup_nearest_multiple};
 use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
-use crate::shared_math::x_field_element::XFieldElement;
+use crate::shared_math::x_field_element::{XFieldElement, EXTENSION_DEGREE};
 
 pub const RATE: usize = 10;
 
@@ -58,12 +58,21 @@ pub trait SpongeHasher: Clone + Send + Sync {
 }
 
 pub trait AlgebraicHasher: SpongeHasher {
+    /// Hash two [Digest]s into one.
     fn hash_pair(left: &Digest, right: &Digest) -> Digest;
 
+    /// Hash a `value: &T` to a [Digest].
+    ///
+    /// The `T` must implement [Hashable].
     fn hash<T: Hashable>(value: &T) -> Digest {
         Self::hash_varlen(&value.to_sequence())
     }
 
+    /// Hash a variable-length sequence of [BFieldElement].
+    ///
+    /// - Apply the correct padding
+    /// - [SpongeHasher::absorb_repeatedly()]
+    /// - [SpongeHasher::squeeze()] once.
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
         // calculate padded length; padding is at least one element
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
@@ -78,6 +87,50 @@ pub trait AlgebraicHasher: SpongeHasher {
         let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
+    }
+
+    /// Produce `num_scalars` random scalar values in the range `[0, upper_bound)`.
+    ///
+    /// - The randomness depends on `state`.
+    /// - `upper_bound` must be a power of 2.
+    ///
+    /// If `num_scalars` is not divisible by `RATE`, spill the remaining elements of the last `squeeze`.
+    fn sample_scalars(
+        state: &mut Self::SpongeState,
+        upper_bound: u32,
+        num_scalars: usize,
+    ) -> Vec<u32> {
+        assert!(is_power_of_two(upper_bound));
+        let num_squeezes = (num_scalars + Self::RATE - 1) / Self::RATE;
+        (0..num_squeezes)
+            .flat_map(|_| Self::squeeze(state))
+            .take(num_scalars)
+            .map(|b| (b.value() % upper_bound as u64) as u32)
+            .collect()
+    }
+
+    /// Produce `num_elements` random [XFieldElement] values.
+    ///
+    /// - The randomness depends on `state`.
+    ///
+    /// Since [RATE] is not divisible by [EXTENSION_DEGREE], produce as many [XFieldElement] per
+    /// `squeeze` as possible, and spill the remaining element(s). This causes some internal
+    /// fragmentation, but it greatly simplifies building [AlgebraicHasher::sample_xfield()] on
+    /// Triton VM.
+    fn sample_xfield(state: &mut Self::SpongeState, num_elements: usize) -> Vec<XFieldElement> {
+        // let num_squeezes = (num_elements * EXTENSION_DEGREE + Self::RATE - 1) / Self::RATE;
+        let num_squeezes = num_elements * EXTENSION_DEGREE / Self::RATE;
+        (0..num_squeezes)
+            .map(|_| Self::squeeze(state))
+            .flat_map(|elems| {
+                vec![
+                    XFieldElement::new([elems[0], elems[1], elems[2]]),
+                    XFieldElement::new([elems[3], elems[4], elems[5]]),
+                    XFieldElement::new([elems[6], elems[7], elems[8]]),
+                    // spill 1 element, elems[9], per squeeze
+                ]
+            })
+            .collect()
     }
 }
 
@@ -154,6 +207,7 @@ mod algebraic_hasher_tests {
     use rand_distr::{Distribution, Standard};
 
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
+    use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;
@@ -205,5 +259,32 @@ mod algebraic_hasher_tests {
 
         // u128
         to_sequence_prop(0u128, u128::MAX);
+    }
+
+    fn sample_scalars_prop(max: u32, num_indices: usize) {
+        let mut sponge = Tip5::init();
+
+        let indices = Tip5::sample_scalars(&mut sponge, max, num_indices);
+        assert_eq!(num_indices, indices.len());
+        assert!(indices.into_iter().all(|index| index < max));
+    }
+
+    #[test]
+    fn sample_scalars_test() {
+        let cases = [
+            (2, 0),
+            (4, 1),
+            (8, 9),
+            (16, 10),
+            (32, 11),
+            (64, 19),
+            (128, 20),
+            (256, 21),
+            (512, 65),
+        ];
+
+        for (upper_bound, num_indices) in cases {
+            sample_scalars_prop(upper_bound, num_indices);
+        }
     }
 }
