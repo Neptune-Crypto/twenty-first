@@ -64,6 +64,7 @@ structopt = { version = "0.3", features = ["paw"] }
 emojihash-rs = "0.2"
 get-size = { version = "^0.1", features = ["derive"] }
 unroll = "0.1"
+keccak = "0.1.3"
 
 [[bench]]
 name = "rescue_prime_regular"
