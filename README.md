@@ -13,6 +13,13 @@ This library contains primarily the following cryptographic primitives:
   - An arithmetization-oriented hash function with a compact description in terms of AIR
   - [Rescue-Prime: a Standard Specification (SoK)](https://eprint.iacr.org/2020/1143.pdf)
   - [Anatomy of a STARK, Part 5: A Rescue-Prime STARK](https://neptune.cash/learn/stark-anatomy/rescue-prime/)
+- The Tip5 hash function
+  - [The Tip5 Hash Function for Recursive STARKs](https://eprint.iacr.org/2023/107)
+- Lattice-crypto
+  - arithmetic for the quotient ring $\mathbb{F}_ p[X] / \langle X^64 + 1 \rangle$
+  - arithmetic for modules over this quotient ring
+  - a IND-CCA2-secure key encapsulation mechanism
+  - [Lattice-Based Cryptography in Miden VM](https://eprint.iacr.org/2022/1041)
 - FRI
   - Fast Reed-Solomon IOP of Proximity
   - [Anatomy of a STARK, Part 3: FRI](https://neptune.cash/learn/stark-anatomy/fri/)
