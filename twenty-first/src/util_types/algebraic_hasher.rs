@@ -3,7 +3,7 @@ use std::iter;
 use itertools::Itertools;
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
-use crate::shared_math::other::roundup_nearest_multiple;
+use crate::shared_math::other::{is_power_of_two, roundup_nearest_multiple};
 use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 use crate::shared_math::x_field_element::XFieldElement;
 
@@ -58,12 +58,21 @@ pub trait SpongeHasher: Clone + Send + Sync {
 }
 
 pub trait AlgebraicHasher: SpongeHasher {
+    /// Hash two [Digest]s into one.
     fn hash_pair(left: &Digest, right: &Digest) -> Digest;
 
+    /// Hash a `value: &T` to a [Digest].
+    ///
+    /// The `T` must implement [Hashable].
     fn hash<T: Hashable>(value: &T) -> Digest {
         Self::hash_varlen(&value.to_sequence())
     }
 
+    /// Hash a variable-length sequence of [BFieldElement].
+    ///
+    /// - Apply the correct padding
+    /// - [SpongeHasher::absorb_repeatedly()]
+    /// - [SpongeHasher::squeeze()] once.
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
         // calculate padded length; padding is at least one element
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
@@ -78,6 +87,24 @@ pub trait AlgebraicHasher: SpongeHasher {
         let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
+    }
+
+    /// Produce `num_indices` random values in the range `[0, upper_bound)`.
+    ///
+    /// - The randomness depends on `state`.
+    /// - `upper_bound` must be a power of 2.
+    fn sample_indices(
+        state: &mut Self::SpongeState,
+        upper_bound: u32,
+        num_indices: usize,
+    ) -> Vec<u32> {
+        assert!(is_power_of_two(upper_bound));
+        let num_squeezes = (num_indices + Self::RATE - 1) / Self::RATE;
+        (0..num_squeezes)
+            .flat_map(|_| Self::squeeze(state))
+            .take(num_indices)
+            .map(|b| (b.value() % upper_bound as u64) as u32)
+            .collect()
     }
 }
 
@@ -154,6 +181,7 @@ mod algebraic_hasher_tests {
     use rand_distr::{Distribution, Standard};
 
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
+    use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;
@@ -205,5 +233,32 @@ mod algebraic_hasher_tests {
 
         // u128
         to_sequence_prop(0u128, u128::MAX);
+    }
+
+    fn sample_indices_prop(max: u32, num_indices: usize) {
+        let mut sponge = Tip5::init();
+
+        let indices = Tip5::sample_indices(&mut sponge, max, num_indices);
+        assert_eq!(num_indices, indices.len());
+        assert!(indices.into_iter().all(|index| index < max));
+    }
+
+    #[test]
+    fn sample_indices_test() {
+        let cases = [
+            (2, 0),
+            (4, 1),
+            (8, 9),
+            (16, 10),
+            (32, 11),
+            (64, 19),
+            (128, 20),
+            (256, 21),
+            (512, 65),
+        ];
+
+        for (upper_bound, num_indices) in cases {
+            sample_indices_prop(upper_bound, num_indices);
+        }
     }
 }
