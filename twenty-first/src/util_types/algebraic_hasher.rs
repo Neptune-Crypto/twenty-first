@@ -27,6 +27,7 @@ pub enum Domain {
 }
 
 pub trait SpongeHasher: Clone + Send + Sync {
+    const RATE: usize;
     type SpongeState: Clone;
 
     /// Initialize a sponge state

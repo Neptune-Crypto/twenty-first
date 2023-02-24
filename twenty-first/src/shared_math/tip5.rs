@@ -555,6 +555,7 @@ impl AlgebraicHasher for Tip5 {
 }
 
 impl SpongeHasher for Tip5 {
+    const RATE: usize = RATE;
     type SpongeState = Tip5State;
 
     fn init() -> Self::SpongeState {
