@@ -16,7 +16,7 @@ This library contains primarily the following cryptographic primitives:
 - The Tip5 hash function
   - [The Tip5 Hash Function for Recursive STARKs](https://eprint.iacr.org/2023/107)
 - Lattice-crypto
-  - arithmetic for the quotient ring $\mathbb{F}_ p[X] / \langle X^64 + 1 \rangle$
+  - arithmetic for the quotient ring $\mathbb{F}_ p[X] / \langle X^{64} + 1 \rangle$
   - arithmetic for modules over this quotient ring
   - a IND-CCA2-secure key encapsulation mechanism
   - [Lattice-Based Cryptography in Miden VM](https://eprint.iacr.org/2022/1041)
