@@ -4,7 +4,7 @@ use crate::shared_math::x_field_element::XFieldElement;
 
 use super::algebraic_hasher::SpongeHasher;
 
-trait AlgebraicPrng {
+pub trait AlgebraicPrng {
     type PrngState;
     fn sample_xfield(state: &mut Self::PrngState, num_elements: usize) -> Vec<XFieldElement>;
     fn sample_indices(state: &mut Self::PrngState, max: u32, num_elements: usize) -> Vec<u32>;
