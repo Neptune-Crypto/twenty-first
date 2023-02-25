@@ -307,7 +307,10 @@ mod algebraic_hasher_tests {
         let mut product = XFieldElement::one();
         for amount in amounts {
             let scalars = Tip5::sample_scalars(&mut sponge, amount);
-            product *= scalars.iter().fold(XFieldElement::one(), |a, f| a * *f);
+            assert_eq!(amount, scalars.len());
+            product *= scalars
+                .into_iter()
+                .fold(XFieldElement::one(), XFieldElement::mul);
         }
         assert_ne!(product, XFieldElement::zero()); // false failure with prob ~2^{-192}
     }
