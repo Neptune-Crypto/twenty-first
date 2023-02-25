@@ -201,6 +201,8 @@ impl Hashable for u128 {
 
 #[cfg(test)]
 mod algebraic_hasher_tests {
+    use std::ops::Mul;
+
     use num_traits::{One, Zero};
     use rand::{thread_rng, Rng, RngCore};
     use rand_distr::{Distribution, Standard};
