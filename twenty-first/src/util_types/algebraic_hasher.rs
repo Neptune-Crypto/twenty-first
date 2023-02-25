@@ -118,7 +118,6 @@ pub trait AlgebraicHasher: SpongeHasher {
     /// fragmentation, but it greatly simplifies building [AlgebraicHasher::sample_xfield()] on
     /// Triton VM.
     fn sample_scalars(state: &mut Self::SpongeState, num_elements: usize) -> Vec<XFieldElement> {
-        // let num_squeezes = (num_elements * EXTENSION_DEGREE + Self::RATE - 1) / Self::RATE;
         let num_squeezes = num_elements * EXTENSION_DEGREE / Self::RATE;
         (0..num_squeezes)
             .map(|_| Self::squeeze(state))
