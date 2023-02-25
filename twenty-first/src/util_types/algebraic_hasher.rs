@@ -89,22 +89,22 @@ pub trait AlgebraicHasher: SpongeHasher {
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
     }
 
-    /// Produce `num_scalars` random scalar values in the range `[0, upper_bound)`.
+    /// Produce `num_indices` random integer values in the range `[0, upper_bound)`.
     ///
     /// - The randomness depends on `state`.
     /// - `upper_bound` must be a power of 2.
     ///
-    /// If `num_scalars` is not divisible by `RATE`, spill the remaining elements of the last `squeeze`.
-    fn sample_scalars(
+    /// If `num_indices` is not divisible by `RATE`, spill the remaining elements of the last `squeeze`.
+    fn sample_indices(
         state: &mut Self::SpongeState,
         upper_bound: u32,
-        num_scalars: usize,
+        num_indices: usize,
     ) -> Vec<u32> {
         assert!(is_power_of_two(upper_bound));
-        let num_squeezes = (num_scalars + Self::RATE - 1) / Self::RATE;
+        let num_squeezes = (num_indices + Self::RATE - 1) / Self::RATE;
         (0..num_squeezes)
             .flat_map(|_| Self::squeeze(state))
-            .take(num_scalars)
+            .take(num_indices)
             .map(|b| (b.value() % upper_bound as u64) as u32)
             .collect()
     }
@@ -117,7 +117,7 @@ pub trait AlgebraicHasher: SpongeHasher {
     /// `squeeze` as possible, and spill the remaining element(s). This causes some internal
     /// fragmentation, but it greatly simplifies building [AlgebraicHasher::sample_xfield()] on
     /// Triton VM.
-    fn sample_xfield(state: &mut Self::SpongeState, num_elements: usize) -> Vec<XFieldElement> {
+    fn sample_scalars(state: &mut Self::SpongeState, num_elements: usize) -> Vec<XFieldElement> {
         // let num_squeezes = (num_elements * EXTENSION_DEGREE + Self::RATE - 1) / Self::RATE;
         let num_squeezes = num_elements * EXTENSION_DEGREE / Self::RATE;
         (0..num_squeezes)
@@ -202,12 +202,12 @@ impl Hashable for u128 {
 
 #[cfg(test)]
 mod algebraic_hasher_tests {
-    use num_traits::Zero;
-    use rand::Rng;
+    use num_traits::{One, Zero};
+    use rand::{thread_rng, Rng, RngCore};
     use rand_distr::{Distribution, Standard};
 
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
-    use crate::shared_math::tip5::Tip5;
+    use crate::shared_math::tip5::{Tip5, Tip5State};
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;
@@ -261,16 +261,28 @@ mod algebraic_hasher_tests {
         to_sequence_prop(0u128, u128::MAX);
     }
 
-    fn sample_scalars_prop(max: u32, num_indices: usize) {
-        let mut sponge = Tip5::init();
+    fn seed_tip5(sponge: &mut Tip5State) {
+        let mut rng = thread_rng();
+        Tip5::absorb(
+            sponge,
+            &(0..RATE)
+                .map(|_| BFieldElement::new(rng.next_u64()))
+                .collect_vec()
+                .try_into()
+                .unwrap(),
+        );
+    }
 
-        let indices = Tip5::sample_scalars(&mut sponge, max, num_indices);
+    fn sample_indices_prop(max: u32, num_indices: usize) {
+        let mut sponge = Tip5::init();
+        seed_tip5(&mut sponge);
+        let indices = Tip5::sample_indices(&mut sponge, max, num_indices);
         assert_eq!(num_indices, indices.len());
         assert!(indices.into_iter().all(|index| index < max));
     }
 
     #[test]
-    fn sample_scalars_test() {
+    fn sample_indices_test() {
         let cases = [
             (2, 0),
             (4, 1),
@@ -284,7 +296,20 @@ mod algebraic_hasher_tests {
         ];
 
         for (upper_bound, num_indices) in cases {
-            sample_scalars_prop(upper_bound, num_indices);
+            sample_indices_prop(upper_bound, num_indices);
         }
+    }
+
+    #[test]
+    fn sample_scalars_test() {
+        let amounts = [0, 1, 2, 3, 4];
+        let mut sponge = Tip5::init();
+        seed_tip5(&mut sponge);
+        let mut product = XFieldElement::one();
+        for amount in amounts {
+            let scalars = Tip5::sample_scalars(&mut sponge, amount);
+            product *= scalars.iter().fold(XFieldElement::one(), |a, f| a * *f);
+        }
+        assert_ne!(product, XFieldElement::zero()); // false failure with prob ~2^{-192}
     }
 }
