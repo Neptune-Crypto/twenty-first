@@ -7,6 +7,8 @@ use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
+use super::x_field_element::{XFieldElement, EXTENSION_DEGREE};
+
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
 pub const LOG2_STATE_SIZE: usize = 4;
@@ -552,6 +554,32 @@ impl AlgebraicHasher for Tip5 {
         input[DIGEST_LENGTH..].copy_from_slice(&right.values());
         Digest::new(Tip5::hash_10(&input))
     }
+
+    /// Produce `num_elements` random [XFieldElement] values.
+    ///
+    /// - The randomness depends on `state`.
+    ///
+    /// Since [RATE] is not divisible by [EXTENSION_DEGREE], produce as many [XFieldElement] per
+    /// `squeeze` as possible, and spill the remaining element(s). This causes some internal
+    /// fragmentation, but it greatly simplifies building [AlgebraicHasher::sample_xfield()] on
+    /// Triton VM.
+    ///
+    fn sample_scalars(state: &mut Self::SpongeState, num_elements: usize) -> Vec<XFieldElement> {
+        let xfes_per_squeeze = Self::RATE / EXTENSION_DEGREE; // 3
+        let num_squeezes = (num_elements + xfes_per_squeeze - 1) / xfes_per_squeeze;
+        (0..num_squeezes)
+            .flat_map(|_| {
+                Self::squeeze(state)
+                    .into_iter()
+                    .take(xfes_per_squeeze * EXTENSION_DEGREE)
+                    .collect_vec()
+            })
+            .collect_vec()
+            .chunks(3)
+            .take(num_elements)
+            .map(|elem| XFieldElement::new([elem[0], elem[1], elem[2]]))
+            .collect_vec()
+    }
 }
 
 impl SpongeHasher for Tip5 {
@@ -600,8 +628,12 @@ mod tip5_tests {
     use crate::shared_math::tip5::NUM_ROUNDS;
     use crate::shared_math::tip5::ROUND_CONSTANTS;
     use crate::shared_math::tip5::STATE_SIZE;
+    use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::algebraic_hasher::AlgebraicHasher;
+    use crate::util_types::algebraic_hasher::SpongeHasher;
+    use std::ops::Mul;
 
+    use super::Tip5State;
     use super::RATE;
 
     #[test]
@@ -919,5 +951,33 @@ mod tip5_tests {
             let h1 = (f.0 * g.0 - f.1 * g.1, f.0 * g.1 + f.1 * g.0);
             assert_eq!(h1, h0);
         }
+    }
+
+    fn seed_tip5(sponge: &mut Tip5State) {
+        let mut rng = thread_rng();
+        Tip5::absorb(
+            sponge,
+            &(0..RATE)
+                .map(|_| BFieldElement::new(rng.next_u64()))
+                .collect_vec()
+                .try_into()
+                .unwrap(),
+        );
+    }
+
+    #[test]
+    fn sample_scalars_test() {
+        let amounts = [0, 1, 2, 3, 4];
+        let mut sponge = Tip5::init();
+        seed_tip5(&mut sponge);
+        let mut product = XFieldElement::one();
+        for amount in amounts {
+            let scalars = Tip5::sample_scalars(&mut sponge, amount);
+            assert_eq!(amount, scalars.len());
+            product *= scalars
+                .into_iter()
+                .fold(XFieldElement::one(), XFieldElement::mul);
+        }
+        assert_ne!(product, XFieldElement::zero()); // false failure with prob ~2^{-192}
     }
 }
