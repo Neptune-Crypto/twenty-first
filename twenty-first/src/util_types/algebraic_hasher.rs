@@ -113,22 +113,21 @@ pub trait AlgebraicHasher: SpongeHasher {
     ///
     /// - The randomness depends on `state`.
     ///
-    /// Since [RATE] is not divisible by [EXTENSION_DEGREE], produce as many [XFieldElement] per
-    /// `squeeze` as possible, and spill the remaining element(s). This causes some internal
-    /// fragmentation, but it greatly simplifies building [AlgebraicHasher::sample_xfield()] on
-    /// Triton VM.
+    /// If `num_elements` is not divisible by `RATE`, spill the remaining elements of the last `squeeze`.
     fn sample_scalars(state: &mut Self::SpongeState, num_elements: usize) -> Vec<XFieldElement> {
-        let num_squeezes = num_elements * EXTENSION_DEGREE / Self::RATE;
+        let num_squeezes = (num_elements * EXTENSION_DEGREE + Self::RATE - 1) / Self::RATE;
+        debug_assert!(
+            num_elements * EXTENSION_DEGREE <= num_squeezes * Self::RATE,
+            "need {} elements but getting {}",
+            num_elements * EXTENSION_DEGREE,
+            num_squeezes * Self::RATE
+        );
         (0..num_squeezes)
-            .map(|_| Self::squeeze(state))
-            .flat_map(|elems| {
-                vec![
-                    XFieldElement::new([elems[0], elems[1], elems[2]]),
-                    XFieldElement::new([elems[3], elems[4], elems[5]]),
-                    XFieldElement::new([elems[6], elems[7], elems[8]]),
-                    // spill 1 element, elems[9], per squeeze
-                ]
-            })
+            .flat_map(|_| Self::squeeze(state))
+            .collect_vec()
+            .chunks(3)
+            .take(num_elements)
+            .map(|elem| XFieldElement::new([elem[0], elem[1], elem[2]]))
             .collect()
     }
 }
