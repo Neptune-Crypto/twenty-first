@@ -5,7 +5,10 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, SpongeHasher, RATE};
 
+use super::algebraic_hasher;
+
 impl SpongeHasher for blake3::Hasher {
+    const RATE: usize = algebraic_hasher::RATE;
     type SpongeState = blake3::Hasher;
 
     fn init() -> Self::SpongeState {

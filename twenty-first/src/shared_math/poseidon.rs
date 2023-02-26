@@ -1834,6 +1834,7 @@ impl PoseidonState {
 }
 
 impl SpongeHasher for Poseidon {
+    const RATE: usize = RATE;
     type SpongeState = PoseidonState;
 
     fn init() -> Self::SpongeState {

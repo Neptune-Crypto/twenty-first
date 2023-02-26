@@ -1038,6 +1038,7 @@ impl AlgebraicHasher for RescuePrimeRegular {
 }
 
 impl SpongeHasher for RescuePrimeRegular {
+    const RATE: usize = RATE;
     type SpongeState = RescuePrimeRegularState;
 
     fn init() -> Self::SpongeState {
