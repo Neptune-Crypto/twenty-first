@@ -3,7 +3,7 @@ use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
-use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
+pub use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
