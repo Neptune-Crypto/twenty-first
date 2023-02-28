@@ -149,6 +149,14 @@ pub const ROUND_CONSTANTS: [BFieldElement; NUM_ROUNDS * STATE_SIZE] = [
     BFieldElement::new(6024642864597845108),
 ];
 
+/// The defining, first column of the (circulant) MDS matrix.
+/// Derived from the SHA-256 hash of the ASCII string “Tip5” by dividing the digest into 16-bit
+/// chunks.
+pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] = [
+    61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901, 12021, 59689,
+    26798, 17845,
+];
+
 impl Tip5 {
     #[inline]
     pub const fn offset_fermat_cube_map(x: u16) -> u16 {
@@ -450,11 +458,6 @@ impl Tip5 {
 
     #[inline(always)]
     fn mds_cyclomul(state: &mut [BFieldElement; STATE_SIZE]) {
-        // constants: Sha256("Tip5")
-        const CONSTANTS: [i64; STATE_SIZE] = [
-            61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901,
-            12021, 59689, 26798, 17845,
-        ];
         let mut result = [BFieldElement::zero(); STATE_SIZE];
 
         let mut lo: [i64; STATE_SIZE] = [0; STATE_SIZE];
@@ -464,8 +467,8 @@ impl Tip5 {
             lo[i] = (b.raw_u64() as u32) as i64;
         }
 
-        lo = Self::fast_cyclomul16(lo, CONSTANTS);
-        hi = Self::fast_cyclomul16(hi, CONSTANTS);
+        lo = Self::fast_cyclomul16(lo, MDS_MATRIX_FIRST_COLUMN);
+        hi = Self::fast_cyclomul16(hi, MDS_MATRIX_FIRST_COLUMN);
 
         for r in 0..STATE_SIZE {
             let s = lo[r] as u128 + ((hi[r] as u128) << 32);
