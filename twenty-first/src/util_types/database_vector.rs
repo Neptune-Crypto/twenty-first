@@ -63,6 +63,30 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         ret
     }
 
+    pub fn overwrite_with_vec(&mut self, new_vector: Vec<T>) {
+        let old_length = self.len();
+        let new_length = new_vector.len() as u128;
+        self.set_length(new_length);
+
+        let mut batch_write = WriteBatch::new();
+        for (index, val) in new_vector.into_iter().enumerate() {
+            // Notice that `index` has to be cast to the type of the index for this data structure.
+            // Otherwise this function will create a corrupted database.
+            let index_bytes: Vec<u8> = bincode::serialize(&(index as u128)).unwrap();
+            let value_bytes: Vec<u8> = bincode::serialize(&val).unwrap();
+            batch_write.put(&index_bytes, &value_bytes);
+        }
+
+        for index in new_length..old_length {
+            let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
+            batch_write.delete(&index_bytes);
+        }
+
+        self.db
+            .write(batch_write, true)
+            .expect("Failed to batch-write to database in overwrite_with_vec");
+    }
+
     /// Create a new, empty database vector
     pub fn new(db: DB) -> Self {
         let mut ret = DatabaseVector {
@@ -108,7 +132,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         let length = self.len();
         assert!(
             indices.iter().all(|index| *index < length),
-            "All indices must be lower than length of array. Got: {indices:?}"
+            "All indices must be lower than length of vector. Got: {indices:?}"
         );
         let mut batch_write = WriteBatch::new();
         for (index, val) in indices_and_vals.iter() {
@@ -119,7 +143,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
 
         self.db
             .write(batch_write, true)
-            .expect("Failed to batch-write to database");
+            .expect("Failed to batch-write to database in batch_set");
     }
 
     pub fn pop(&mut self) -> Option<T> {
@@ -153,11 +177,15 @@ mod database_vector_tests {
     use super::*;
     use rusty_leveldb::DB;
 
-    #[test]
-    fn push_pop_test() {
+    fn test_constructor() -> DatabaseVector<u64> {
         let opt = rusty_leveldb::in_memory();
         let db = DB::open("mydatabase", opt).unwrap();
-        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        DatabaseVector::new(db)
+    }
+
+    #[test]
+    fn push_pop_test() {
+        let mut db_vector = test_constructor();
         assert_eq!(0, db_vector.len());
         assert!(db_vector.is_empty());
 
@@ -186,10 +214,29 @@ mod database_vector_tests {
     }
 
     #[test]
+    fn overwrite_with_vec_test() {
+        let mut db_vector = test_constructor();
+        for _ in 0..10 {
+            db_vector.push(17);
+        }
+
+        // Verify that shortening the vector works
+        let mut new_vector_values: Vec<u64> = (200..202).collect();
+        db_vector.overwrite_with_vec(new_vector_values);
+        assert_eq!(2, db_vector.len());
+        assert_eq!(200, db_vector.get(0));
+
+        // Verify that increasing the vector works
+        new_vector_values = (200..350).collect();
+        db_vector.overwrite_with_vec(new_vector_values);
+        assert_eq!(150, db_vector.len());
+        assert_eq!(200, db_vector.get(0));
+        assert_eq!(300, db_vector.get(100));
+    }
+
+    #[test]
     fn batch_set_test() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
-        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        let mut db_vector = test_constructor();
         for _ in 0..100 {
             db_vector.push(17);
         }
@@ -200,13 +247,17 @@ mod database_vector_tests {
         assert_eq!(4141, db_vector.get(41));
         assert_eq!(4444, db_vector.get(44));
         assert_eq!(17, db_vector.get(39));
+
+        let new_vector_values: Vec<u64> = (200..202).collect();
+        println!("new_vector_values = {new_vector_values:?}");
+        db_vector.overwrite_with_vec(new_vector_values);
+        assert_eq!(2, db_vector.len());
+        assert_eq!(200, db_vector.get(0));
     }
 
     #[test]
     fn push_many_test() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
-        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        let mut db_vector = test_constructor();
         for _ in 0..1000 {
             db_vector.push(17);
         }
@@ -217,18 +268,14 @@ mod database_vector_tests {
     #[should_panic = "Cannot get outside of length. Length: 0, index: 0"]
     #[test]
     fn panic_on_index_out_of_range_empty_test() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
-        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        let mut db_vector = test_constructor();
         db_vector.get(0);
     }
 
     #[should_panic = "Cannot get outside of length. Length: 1, index: 1"]
     #[test]
     fn panic_on_index_out_of_range_length_one_test() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
-        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        let mut db_vector = test_constructor();
         db_vector.push(5558999);
         db_vector.get(1);
     }
@@ -236,9 +283,7 @@ mod database_vector_tests {
     #[should_panic = "Cannot set outside of length. Length: 1, index: 1"]
     #[test]
     fn panic_on_index_out_of_range_length_one_set_test() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
-        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        let mut db_vector = test_constructor();
         db_vector.push(5558999);
         db_vector.set(1, 14);
     }
@@ -246,9 +291,7 @@ mod database_vector_tests {
     #[test]
     fn restore_test() {
         // Verify that we can restore a database vector object from a database object
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
-        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        let mut db_vector = test_constructor();
         assert!(db_vector.is_empty());
         let extracted_db = db_vector.db;
         let mut new_db_vector: DatabaseVector<u64> = DatabaseVector::restore(extracted_db);
@@ -258,9 +301,7 @@ mod database_vector_tests {
     #[test]
     fn index_zero_test() {
         // Verify that index zero does not overwrite the stored length
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
-        let mut db_vector: DatabaseVector<u64> = DatabaseVector::new(db);
+        let mut db_vector = test_constructor();
         db_vector.push(17);
         assert_eq!(1, db_vector.len());
         assert_eq!(17u64, db_vector.get(0));
