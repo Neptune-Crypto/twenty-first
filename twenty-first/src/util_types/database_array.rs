@@ -2,15 +2,17 @@ use rusty_leveldb::{WriteBatch, DB};
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
+type IndexType = u128;
+
 /// Permanent storage of a fixed-length array with elements of type `T`.
-pub struct DatabaseArray<const N: u128, T: Serialize + DeserializeOwned + Default> {
+pub struct DatabaseArray<const N: IndexType, T: Serialize + DeserializeOwned + Default> {
     db: DB,
     _type: PhantomData<T>,
 }
 
-impl<const N: u128, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, T> {
+impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, T> {
     /// Return the element at position index. Returns `T::defeault()` if value is unset
-    pub fn get(&mut self, index: u128) -> T {
+    pub fn get(&mut self, index: IndexType) -> T {
         assert!(
             N > index,
             "Cannot get outside of length. Length: {N}, index: {index}"
@@ -23,8 +25,8 @@ impl<const N: u128, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, 
         }
     }
 
-    pub fn batch_set(&mut self, indices_and_vals: &[(u128, T)]) {
-        let indices: Vec<u128> = indices_and_vals.iter().map(|(index, _)| *index).collect();
+    pub fn batch_set(&mut self, indices_and_vals: &[(IndexType, T)]) {
+        let indices: Vec<IndexType> = indices_and_vals.iter().map(|(index, _)| *index).collect();
         assert!(
             indices.iter().all(|index| *index < N),
             "All indices must be lower than length of array. Got: {indices:?}"
@@ -42,7 +44,7 @@ impl<const N: u128, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, 
     }
 
     /// Set the value at index
-    pub fn set(&mut self, index: u128, value: T) {
+    pub fn set(&mut self, index: IndexType, value: T) {
         assert!(
             N > index,
             "Cannot set outside of length. Length: {N}, index: {index}"

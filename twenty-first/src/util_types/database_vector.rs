@@ -9,7 +9,8 @@ use std::marker::PhantomData;
 /// are all 16 bytes long when using 128s, then its OK to use a 1-byte key here.
 // const LENGTH_KEY: Vec<u8> = vec![];
 const LENGTH_KEY: [u8; 1] = [0];
-const INDEX_ZERO: u128 = 0u128;
+type IndexType = u128;
+const INDEX_ZERO: IndexType = 0;
 
 pub struct DatabaseVector<T: Serialize + DeserializeOwned> {
     db: DB,
@@ -17,14 +18,14 @@ pub struct DatabaseVector<T: Serialize + DeserializeOwned> {
 }
 
 impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
-    fn set_length(&mut self, length: u128) {
+    fn set_length(&mut self, length: IndexType) {
         let length_as_bytes = bincode::serialize(&length).unwrap();
         self.db
             .put(&LENGTH_KEY, &length_as_bytes)
             .expect("Length write must succeed");
     }
 
-    fn delete(&mut self, index: u128) {
+    fn delete(&mut self, index: IndexType) {
         let index_as_bytes = bincode::serialize(&index).unwrap();
         self.db
             .delete(&index_as_bytes)
@@ -46,7 +47,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         self.db.flush().expect("Flush must succeed.")
     }
 
-    pub fn len(&mut self) -> u128 {
+    pub fn len(&mut self) -> IndexType {
         let length_as_bytes = self.db.get(&LENGTH_KEY).expect("Length must exist");
         bincode::deserialize(&length_as_bytes).unwrap()
     }
@@ -65,14 +66,14 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
 
     pub fn overwrite_with_vec(&mut self, new_vector: Vec<T>) {
         let old_length = self.len();
-        let new_length = new_vector.len() as u128;
+        let new_length = new_vector.len() as IndexType;
         self.set_length(new_length);
 
         let mut batch_write = WriteBatch::new();
         for (index, val) in new_vector.into_iter().enumerate() {
             // Notice that `index` has to be cast to the type of the index for this data structure.
             // Otherwise this function will create a corrupted database.
-            let index_bytes: Vec<u8> = bincode::serialize(&(index as u128)).unwrap();
+            let index_bytes: Vec<u8> = bincode::serialize(&(index as IndexType)).unwrap();
             let value_bytes: Vec<u8> = bincode::serialize(&val).unwrap();
             batch_write.put(&index_bytes, &value_bytes);
         }
@@ -103,7 +104,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         ret
     }
 
-    pub fn get(&mut self, index: u128) -> T {
+    pub fn get(&mut self, index: IndexType) -> T {
         debug_assert!(
             self.len() > index,
             "Cannot get outside of length. Length: {}, index: {}",
@@ -115,7 +116,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         bincode::deserialize(&elem_as_bytes).unwrap()
     }
 
-    pub fn set(&mut self, index: u128, value: T) {
+    pub fn set(&mut self, index: IndexType, value: T) {
         debug_assert!(
             self.len() > index,
             "Cannot set outside of length. Length: {}, index: {}",
@@ -127,8 +128,8 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         self.db.put(&index_bytes, &value_bytes).unwrap();
     }
 
-    pub fn batch_set(&mut self, indices_and_vals: &[(u128, T)]) {
-        let indices: Vec<u128> = indices_and_vals.iter().map(|(index, _)| *index).collect();
+    pub fn batch_set(&mut self, indices_and_vals: &[(IndexType, T)]) {
+        let indices: Vec<IndexType> = indices_and_vals.iter().map(|(index, _)| *index).collect();
         let length = self.len();
         assert!(
             indices.iter().all(|index| *index < length),
