@@ -7,17 +7,11 @@ use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::{fmt::Debug, iter::FromIterator};
 
+use super::{shared_advanced, shared_basic};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::other::log_2_floor;
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
-
-use super::shared::{
-    get_authentication_path_node_indices, get_peak_heights_and_peak_node_indices,
-    leaf_count_to_node_count, leaf_index_to_mt_index_and_peak_index, leaf_index_to_node_index,
-    left_sibling, node_indices_added_by_append, parent, right_lineage_length_and_own_height,
-    right_sibling,
-};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MmrMembershipProof<H: AlgebraicHasher + Sized> {
@@ -79,7 +73,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         leaf_count: u64,
     ) -> (bool, Option<Digest>) {
         let (mut mt_index, peak_index) =
-            leaf_index_to_mt_index_and_peak_index(self.leaf_index, leaf_count);
+            shared_basic::leaf_index_to_mt_index_and_peak_index(self.leaf_index, leaf_count);
 
         // Verify that authentication path has correct length to fail gracefully when fed
         // a too short authentication path.
@@ -113,18 +107,19 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
     /// Return the node indices for the authentication path in this membership proof
     pub fn get_node_indices(&self) -> Vec<u64> {
-        let mut node_index = leaf_index_to_node_index(self.leaf_index);
+        let mut node_index = shared_basic::leaf_index_to_node_index(self.leaf_index);
         let mut node_indices = vec![];
         for _ in 0..self.authentication_path.len() {
-            let (right_ancestor_count, height) = right_lineage_length_and_own_height(node_index);
+            let (right_ancestor_count, height) =
+                shared_advanced::right_lineage_length_and_own_height(node_index);
             let is_right_child = right_ancestor_count != 0;
             if is_right_child {
-                node_indices.push(left_sibling(node_index, height));
+                node_indices.push(shared_advanced::left_sibling(node_index, height));
 
                 // parent of right child is +1
                 node_index += 1;
             } else {
-                node_indices.push(right_sibling(node_index, height));
+                node_indices.push(shared_advanced::right_sibling(node_index, height));
 
                 // parent of left child:
                 node_index += 1 << (height + 1);
@@ -136,10 +131,10 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
     /// Return the node indices for the hash values that can be derived from this proof
     fn get_direct_path_indices(&self) -> Vec<u64> {
-        let mut node_index = leaf_index_to_node_index(self.leaf_index);
+        let mut node_index = shared_basic::leaf_index_to_node_index(self.leaf_index);
         let mut node_indices = vec![node_index];
         for _ in 0..self.authentication_path.len() {
-            node_index = parent(node_index);
+            node_index = shared_advanced::parent(node_index);
             node_indices.push(node_index);
         }
 
@@ -177,7 +172,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         let (own_old_peak_index, own_old_peak_height) = self.get_peak_index_and_height();
 
         // 2
-        let added_node_indices = node_indices_added_by_append(old_mmr_leaf_count);
+        let added_node_indices = shared_advanced::node_indices_added_by_append(old_mmr_leaf_count);
 
         // 3
         // Any peak is a left child, so we don't have to check if it's a right or left child.
@@ -191,20 +186,21 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
         // 4 Get node indices of missing digests
         let new_peak_index: u64 = *added_node_indices.last().unwrap();
-        let new_node_count: u64 = leaf_count_to_node_count(old_mmr_leaf_count + 1);
-        let node_indices_for_missing_digests: Vec<u64> = get_authentication_path_node_indices(
-            own_old_peak_index,
-            new_peak_index,
-            new_node_count,
-        )
-        .unwrap();
+        let new_node_count: u64 = shared_advanced::leaf_count_to_node_count(old_mmr_leaf_count + 1);
+        let node_indices_for_missing_digests: Vec<u64> =
+            shared_advanced::get_authentication_path_node_indices(
+                own_old_peak_index,
+                new_peak_index,
+                new_node_count,
+            )
+            .unwrap();
 
         // 5 collect all derivable peaks in a hashmap indexed by node index
         // 5.a, collect all node hash digests that are present in the old peaks
         // The keys in the hash map are node indices
         let mut known_digests: HashMap<u64, Digest> = HashMap::new();
         let (_old_mmr_peak_heights, old_mmr_peak_indices) =
-            get_peak_heights_and_peak_node_indices(old_mmr_leaf_count);
+            shared_advanced::get_peak_heights_and_peak_node_indices(old_mmr_leaf_count);
         for (old_peak_index, old_peak_digest) in
             old_mmr_peak_indices.iter().zip(old_mmr_peaks.iter())
         {
@@ -257,7 +253,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // 1. Get node indices for nodes added by the append
         //   a. If length of this list is one, newly added leaf was a left child. Return.
         // 2. Get all derivable node digests, store in hash map
-        let added_node_indices = node_indices_added_by_append(old_leaf_count);
+        let added_node_indices = shared_advanced::node_indices_added_by_append(old_leaf_count);
         if added_node_indices.len() == 1 {
             return vec![];
         }
@@ -267,7 +263,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // The keys in the hash map are node indices
         let mut known_digests: HashMap<u64, Digest> = HashMap::new();
         let (_old_peak_heights, old_peak_indices) =
-            get_peak_heights_and_peak_node_indices(old_leaf_count);
+            shared_advanced::get_peak_heights_and_peak_node_indices(old_leaf_count);
         for (old_peak_index, old_peak_digest) in old_peak_indices.iter().zip(old_peaks.iter()) {
             known_digests.insert(*old_peak_index, old_peak_digest.to_owned());
         }
@@ -296,7 +292,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // Loop over all membership proofs and insert missing hashes for each
         let mut modified: Vec<usize> = vec![];
         let new_peak_index: u64 = *added_node_indices.last().unwrap();
-        let new_node_count: u64 = leaf_count_to_node_count(old_leaf_count + 1);
+        let new_node_count: u64 = shared_advanced::leaf_count_to_node_count(old_leaf_count + 1);
         for (i, membership_proof) in membership_proofs.iter_mut().enumerate() {
             let (old_peak_index, old_peak_height) = membership_proof.get_peak_index_and_height();
 
@@ -309,12 +305,13 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
             modified.push(i);
 
-            let node_indices_for_missing_digests: Vec<u64> = get_authentication_path_node_indices(
-                old_peak_index,
-                new_peak_index,
-                new_node_count,
-            )
-            .unwrap();
+            let node_indices_for_missing_digests: Vec<u64> =
+                shared_advanced::get_authentication_path_node_indices(
+                    old_peak_index,
+                    new_peak_index,
+                    new_node_count,
+                )
+                .unwrap();
 
             // Sanity check
             debug_assert!(
@@ -363,7 +360,8 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // If intersection is **not** empty, we need to calculate all deducible node hashes from the
         // `membership_proof` until we meet the intersecting node.
         let mut deducible_hashes: HashMap<u64, Digest> = HashMap::new();
-        let mut node_index = leaf_index_to_node_index(leaf_mutation_membership_proof.leaf_index);
+        let mut node_index =
+            shared_basic::leaf_index_to_node_index(leaf_mutation_membership_proof.leaf_index);
         deducible_hashes.insert(node_index, *new_leaf);
         let mut acc_hash: Digest = new_leaf.to_owned();
 
@@ -380,7 +378,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
             }
 
             let (acc_right_ancestor_count, acc_height) =
-                right_lineage_length_and_own_height(node_index);
+                shared_advanced::right_lineage_length_and_own_height(node_index);
             if acc_right_ancestor_count != 0 {
                 acc_hash = H::hash_pair(hash, &acc_hash);
 
@@ -428,7 +426,8 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         //    are deducible from the leaf update proof.
 
         let mut deducible_hashes: HashMap<u64, Digest> = HashMap::new();
-        let mut node_index = leaf_index_to_node_index(leaf_mutation_membership_proof.leaf_index);
+        let mut node_index =
+            shared_basic::leaf_index_to_node_index(leaf_mutation_membership_proof.leaf_index);
         deducible_hashes.insert(node_index, *new_leaf);
         let mut acc_hash: Digest = new_leaf.to_owned();
 
@@ -447,7 +446,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
             }
 
             let (right_ancestor_count, acc_height) =
-                right_lineage_length_and_own_height(node_index);
+                shared_advanced::right_lineage_length_and_own_height(node_index);
             if right_ancestor_count != 0 {
                 // node is right child
                 acc_hash = H::hash_pair(hash, &acc_hash);
@@ -520,7 +519,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // throughout the updating as their neighbor leaf digests change values.
         // The hash map `new_ap_digests` takes care of that.
         while let Some((ap, new_leaf)) = authentication_paths_and_leafs.pop() {
-            let mut node_index = leaf_index_to_node_index(ap.leaf_index);
+            let mut node_index = shared_basic::leaf_index_to_node_index(ap.leaf_index);
             let former_value = new_ap_digests.insert(node_index, new_leaf);
             assert!(
                 former_value.is_none(),
@@ -539,9 +538,9 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
                 // hash digest. Otherwise we use the one in our authentication path.
 
                 let (right_ancestor_count, height) =
-                    right_lineage_length_and_own_height(node_index);
+                    shared_advanced::right_lineage_length_and_own_height(node_index);
                 if right_ancestor_count != 0 {
-                    let left_sibling_index = left_sibling(node_index, height);
+                    let left_sibling_index = shared_advanced::left_sibling(node_index, height);
                     let sibling_hash: &Digest = match new_ap_digests.get(&left_sibling_index) {
                         Some(h) => h,
                         None => hash,
@@ -551,7 +550,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
                     // Find parent node index
                     node_index += 1;
                 } else {
-                    let right_sibling_index = right_sibling(node_index, height);
+                    let right_sibling_index = shared_advanced::right_sibling(node_index, height);
                     let sibling_hash: &Digest = match new_ap_digests.get(&right_sibling_index) {
                         Some(h) => h,
                         None => hash,

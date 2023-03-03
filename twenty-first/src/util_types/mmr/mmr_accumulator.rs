@@ -5,12 +5,10 @@ use std::{collections::HashMap, fmt::Debug};
 use super::archival_mmr::ArchivalMmr;
 use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
-use super::shared::{calculate_new_peaks_from_append, leaf_index_to_node_index};
-use super::shared::{calculate_new_peaks_from_leaf_mutation, right_lineage_length_and_own_height};
-use super::shared::{left_sibling, right_sibling};
+use super::shared_basic;
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::mmr::shared::leaf_index_to_mt_index_and_peak_index;
+use crate::util_types::mmr::shared_advanced;
 use crate::util_types::shared::bag_peaks;
 use crate::utils::has_unique_elements;
 
@@ -82,9 +80,12 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
     }
 
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof<H> {
-        let (new_peaks, membership_proof) =
-            calculate_new_peaks_from_append::<H>(self.leaf_count, self.peaks.clone(), new_leaf)
-                .unwrap();
+        let (new_peaks, membership_proof) = shared_basic::calculate_new_peaks_from_append::<H>(
+            self.leaf_count,
+            self.peaks.clone(),
+            new_leaf,
+        )
+        .unwrap();
         self.peaks = new_peaks;
         self.leaf_count += 1;
 
@@ -95,7 +96,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
     /// membership proof is valid. If the membership proof is wrong, the MMR
     /// will end up in a broken state.
     fn mutate_leaf(&mut self, old_membership_proof: &MmrMembershipProof<H>, new_leaf: &Digest) {
-        self.peaks = calculate_new_peaks_from_leaf_mutation(
+        self.peaks = shared_basic::calculate_new_peaks_from_leaf_mutation(
             &self.peaks,
             new_leaf,
             self.leaf_count,
@@ -148,7 +149,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             // TODO: Should we verify the membership proof here?
 
             // Calculate the new peaks after mutating a leaf
-            let running_peaks_res = calculate_new_peaks_from_leaf_mutation(
+            let running_peaks_res = shared_basic::calculate_new_peaks_from_leaf_mutation(
                 &running_peaks,
                 &new_leaf_value,
                 self.leaf_count,
@@ -178,7 +179,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         // Apply all leaf appends and
         let mut running_leaf_count = self.leaf_count;
         while let Some(new_leaf_for_append) = new_leafs_cloned.pop() {
-            let append_res = calculate_new_peaks_from_append::<H>(
+            let append_res = shared_basic::calculate_new_peaks_from_append::<H>(
                 running_leaf_count,
                 running_peaks,
                 new_leaf_for_append,
@@ -208,7 +209,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         // throughout the updating as their neighbor leaf digests change values.
         // The hash map `new_ap_digests` takes care of that.
         while let Some((ap, new_leaf)) = mutation_data.pop() {
-            let mut node_index = leaf_index_to_node_index(ap.leaf_index);
+            let mut node_index = shared_basic::leaf_index_to_node_index(ap.leaf_index);
             let former_value = new_ap_digests.insert(node_index, new_leaf);
             assert!(
                 former_value.is_none(),
@@ -220,10 +221,10 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
                 // If sibling node is something that has already been calculated, we use that
                 // hash digest. Otherwise we use the one in our authentication path.
                 let (right_ancestor_count, height) =
-                    right_lineage_length_and_own_height(node_index);
+                    shared_advanced::right_lineage_length_and_own_height(node_index);
                 let is_right_child = right_ancestor_count != 0;
                 if is_right_child {
-                    let left_sibling_index = left_sibling(node_index, height);
+                    let left_sibling_index = shared_advanced::left_sibling(node_index, height);
                     let sibling_hash: &Digest = match new_ap_digests.get(&left_sibling_index) {
                         Some(h) => h,
                         None => hash,
@@ -233,7 +234,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
                     // Find parent node index
                     node_index += 1;
                 } else {
-                    let right_sibling_index = right_sibling(node_index, height);
+                    let right_sibling_index = shared_advanced::right_sibling(node_index, height);
                     let sibling_hash: &Digest = match new_ap_digests.get(&right_sibling_index) {
                         Some(h) => h,
                         None => hash,
@@ -253,8 +254,10 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             }
 
             // Update the peak
-            let (_, peak_index) =
-                leaf_index_to_mt_index_and_peak_index(ap.leaf_index, self.count_leaves());
+            let (_, peak_index) = shared_basic::leaf_index_to_mt_index_and_peak_index(
+                ap.leaf_index,
+                self.count_leaves(),
+            );
             self.peaks[peak_index as usize] = acc_hash;
         }
 

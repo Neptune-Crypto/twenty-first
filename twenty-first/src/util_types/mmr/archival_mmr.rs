@@ -3,10 +3,7 @@ use std::marker::PhantomData;
 use super::mmr_accumulator::MmrAccumulator;
 use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
-use super::shared::{
-    leaf_index_to_node_index, left_child, left_sibling, leftmost_ancestor,
-    node_index_to_leaf_index, parent, right_lineage_length_and_own_height, right_sibling,
-};
+use super::{shared_advanced, shared_basic};
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::database_vector::DatabaseVector;
@@ -60,7 +57,7 @@ where
     /// this interface.
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof<H> {
         let node_index = self.digests.len();
-        let leaf_index = node_index_to_leaf_index(node_index).unwrap();
+        let leaf_index = shared_advanced::node_index_to_leaf_index(node_index).unwrap();
         self.append_raw(new_leaf);
         self.prove_membership(leaf_index).0
     }
@@ -149,39 +146,44 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
 
     /// Get a leaf from the MMR, will panic if index is out of range
     pub fn get_leaf(&mut self, leaf_index: u64) -> Digest {
-        let node_index = leaf_index_to_node_index(leaf_index);
+        let node_index = shared_basic::leaf_index_to_node_index(leaf_index);
         self.digests.get(node_index)
     }
 
     /// Update a hash in the existing archival MMR
     pub fn mutate_leaf_raw(&mut self, leaf_index: u64, new_leaf: Digest) {
         // 1. change the leaf value
-        let mut node_index = leaf_index_to_node_index(leaf_index);
+        let mut node_index = shared_basic::leaf_index_to_node_index(leaf_index);
         self.digests.set(node_index, new_leaf);
 
         // 2. Calculate hash changes for all parents
-        let mut parent_index = parent(node_index);
+        let mut parent_index = shared_advanced::parent(node_index);
         let mut acc_hash = new_leaf;
 
         // While parent exists in MMR, update parent
         while parent_index < self.digests.len() {
-            let (right_lineage_count, height) = right_lineage_length_and_own_height(node_index);
+            let (right_lineage_count, height) =
+                shared_advanced::right_lineage_length_and_own_height(node_index);
             acc_hash = if right_lineage_count != 0 {
                 // node is right child
                 H::hash_pair(
-                    &self.digests.get(left_sibling(node_index, height)),
+                    &self
+                        .digests
+                        .get(shared_advanced::left_sibling(node_index, height)),
                     &acc_hash,
                 )
             } else {
                 // node is left child
                 H::hash_pair(
                     &acc_hash,
-                    &self.digests.get(right_sibling(node_index, height)),
+                    &self
+                        .digests
+                        .get(shared_advanced::right_sibling(node_index, height)),
                 )
             };
             self.digests.set(parent_index, acc_hash);
             node_index = parent_index;
-            parent_index = parent(parent_index);
+            parent_index = shared_advanced::parent(parent_index);
         }
     }
 
@@ -195,11 +197,11 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         );
 
         // Find out how long the authentication path is
-        let node_index = leaf_index_to_node_index(leaf_index);
+        let node_index = shared_basic::leaf_index_to_node_index(leaf_index);
         let mut top_height: i32 = -1;
         let mut parent_index = node_index;
         while parent_index < self.digests.len() {
-            parent_index = parent(parent_index);
+            parent_index = shared_advanced::parent(parent_index);
             top_height += 1;
         }
 
@@ -207,24 +209,24 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         let mut authentication_path: Vec<Digest> = vec![];
         let mut index = node_index;
         let (mut right_ancestor_count, mut index_height): (u32, u32) =
-            right_lineage_length_and_own_height(index);
+            shared_advanced::right_lineage_length_and_own_height(index);
         while index_height < top_height as u32 {
             if right_ancestor_count != 0 {
                 // index is right child
-                let left_sibling_index = left_sibling(index, index_height);
+                let left_sibling_index = shared_advanced::left_sibling(index, index_height);
                 authentication_path.push(self.digests.get(left_sibling_index));
 
                 // parent of right child is index + 1
                 index += 1;
             } else {
                 // index is left child
-                let right_sibling_index = right_sibling(index, index_height);
+                let right_sibling_index = shared_advanced::right_sibling(index, index_height);
                 authentication_path.push(self.digests.get(right_sibling_index));
 
                 // parent of left child:
                 index += 1 << (index_height + 1);
             }
-            let next_index_info = right_lineage_length_and_own_height(index);
+            let next_index_info = shared_advanced::right_lineage_length_and_own_height(index);
             right_ancestor_count = next_index_info.0;
             index_height = next_index_info.1;
         }
@@ -248,22 +250,23 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         // 4. Once new node is found, jump to right sibling (will not be included)
         // 5. Take left child of sibling, continue until a node in tree is found
         let mut peaks_and_heights: Vec<(Digest, u32)> = vec![];
-        let (mut top_peak, mut top_height) = leftmost_ancestor(self.digests.len() - 1);
+        let (mut top_peak, mut top_height) =
+            shared_advanced::leftmost_ancestor(self.digests.len() - 1);
         if top_peak > self.digests.len() - 1 {
-            top_peak = left_child(top_peak, top_height);
+            top_peak = shared_basic::left_child(top_peak, top_height);
             top_height -= 1;
         }
 
         peaks_and_heights.push((self.digests.get(top_peak), top_height));
         let mut height = top_height;
-        let mut candidate = right_sibling(top_peak, height);
+        let mut candidate = shared_advanced::right_sibling(top_peak, height);
         'outer: while height > 0 {
             '_inner: while candidate > self.digests.len() && height > 0 {
-                candidate = left_child(candidate, height);
+                candidate = shared_basic::left_child(candidate, height);
                 height -= 1;
                 if candidate < self.digests.len() {
                     peaks_and_heights.push((self.digests.get(candidate), height));
-                    candidate = right_sibling(candidate, height);
+                    candidate = shared_advanced::right_sibling(candidate, height);
                     continue 'outer;
                 }
             }
@@ -276,11 +279,14 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
     pub fn append_raw(&mut self, new_leaf: Digest) {
         let node_index = self.digests.len();
         self.digests.push(new_leaf);
-        let (right_parent_count, own_height) = right_lineage_length_and_own_height(node_index);
+        let (right_parent_count, own_height) =
+            shared_advanced::right_lineage_length_and_own_height(node_index);
 
         // This function could be rewritten with a while-loop instead of being recursive.
         if right_parent_count != 0 {
-            let left_sibling_hash = self.digests.get(left_sibling(node_index, own_height));
+            let left_sibling_hash = self
+                .digests
+                .get(shared_advanced::left_sibling(node_index, own_height));
             let parent_hash: Digest = H::hash_pair(&left_sibling_hash, &new_leaf);
             self.append_raw(parent_hash);
         }
@@ -294,7 +300,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
 
         let node_index = self.digests.len() - 1;
         let mut ret = self.digests.pop().unwrap();
-        let (_, mut height) = right_lineage_length_and_own_height(node_index);
+        let (_, mut height) = shared_advanced::right_lineage_length_and_own_height(node_index);
         while height > 0 {
             ret = self.digests.pop().unwrap();
             height -= 1;
@@ -315,7 +321,7 @@ mod mmr_test {
         shared_math::b_field_element::BFieldElement,
         util_types::mmr::{
             archival_mmr::ArchivalMmr, mmr_accumulator::MmrAccumulator,
-            shared::get_peak_heights_and_peak_node_indices,
+            shared_advanced::get_peak_heights_and_peak_node_indices,
         },
     };
     use itertools::izip;
