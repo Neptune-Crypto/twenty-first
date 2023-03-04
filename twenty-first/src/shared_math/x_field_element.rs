@@ -201,6 +201,10 @@ impl Emojihash for XFieldElement {
 impl Inverse for XFieldElement {
     #[must_use]
     fn inverse(&self) -> Self {
+        assert!(
+            !self.is_zero(),
+            "Cannot invert the zero element in the extension field."
+        );
         let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
         let (_, a, _) = Polynomial::<BFieldElement>::xgcd(self_as_poly, Self::shah_polynomial());
         a.into()
@@ -1160,5 +1164,12 @@ mod x_field_element_test {
             bfes.emojihash().replace(['[', ']', '|'], ""),
             xfes.emojihash().replace(['[', ']', '|'], ""),
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot invert the zero element in the extension field.")]
+    fn multiplicative_inverse_of_zero() {
+        let zero = XFieldElement::zero();
+        zero.inverse();
     }
 }
