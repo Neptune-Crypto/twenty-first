@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::iter;
 
 use itertools::Itertools;
@@ -29,7 +30,7 @@ pub enum Domain {
 
 pub trait SpongeHasher: Clone + Send + Sync {
     const RATE: usize;
-    type SpongeState: Clone;
+    type SpongeState: Clone + Debug;
 
     /// Initialize a sponge state
     fn init() -> Self::SpongeState;
