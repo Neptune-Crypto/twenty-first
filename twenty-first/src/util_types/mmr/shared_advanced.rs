@@ -14,8 +14,7 @@ pub fn leftmost_ancestor(node_index: u64) -> (u64, u32) {
 }
 
 /// Traversing from this node upwards, count how many of the ancestor (including itself)
-/// is a right child. This number is used to determine how many nodes to insert when a
-/// new leaf is added.
+/// is a right child. Also returns node's height.
 pub fn right_lineage_length_and_own_height(node_index: u64) -> (u32, u32) {
     let (mut candidate, mut candidate_height) = leftmost_ancestor(node_index);
 
@@ -38,6 +37,19 @@ pub fn right_lineage_length_and_own_height(node_index: u64) -> (u32, u32) {
         };
 
         candidate_height -= 1;
+    }
+}
+
+pub fn right_lineage_length_from_node_index(node_index: u64) -> u32 {
+    let bit_width = u64::BITS - node_index.leading_zeros();
+    let npo2 = 1 << bit_width;
+
+    let dist = npo2 - node_index;
+
+    if (bit_width as u64) < dist {
+        right_lineage_length_from_node_index(node_index - (npo2 >> 1) + 1)
+    } else {
+        (dist - 1) as u32
     }
 }
 
@@ -79,7 +91,7 @@ pub fn leaf_count_to_node_count(leaf_count: u64) -> u64 {
 
     let mut non_leaf_nodes_after = 0u64;
     let mut node_index = node_index_of_rightmost_leaf;
-    let mut right_count = right_lineage_length(node_index);
+    let mut right_count = right_lineage_length_from_node_index(node_index);
     while right_count != 0 {
         non_leaf_nodes_after += 1;
         // go to parent (parent of right child has node index plus 1)
@@ -96,7 +108,7 @@ pub fn leaf_count_to_node_count(leaf_count: u64) -> u64 {
 pub fn node_indices_added_by_append(old_leaf_count: u64) -> Vec<u64> {
     let mut node_index = leaf_index_to_node_index(old_leaf_count);
     let mut added_node_indices = vec![node_index];
-    let mut right_count = right_lineage_length(node_index);
+    let mut right_count = right_lineage_length_from_node_index(node_index);
     while right_count != 0 {
         // a right child's parent is found by adding 1 to the node index
         node_index += 1;
@@ -211,8 +223,6 @@ pub fn node_index_to_leaf_index(node_index: u64) -> Option<u64> {
 
 #[cfg(test)]
 mod mmr_test {
-    use std::time::Instant;
-
     use rand::RngCore;
 
     use super::*;
@@ -339,10 +349,11 @@ mod mmr_test {
     fn right_lineage_length_pbt() {
         let mut rng = rand::thread_rng();
         for _ in 0..10000 {
-            let rand = rng.next_u64() / 2;
-            println!("{rand}");
-            let rll = right_lineage_length(rand);
-            let rac = right_lineage_length_and_own_height(rand).0;
+            let rand_leaf_index = rng.next_u64() / 4;
+            println!("{rand_leaf_index}");
+            let rll = right_lineage_length_from_leaf_index(rand_leaf_index);
+            let rac =
+                right_lineage_length_and_own_height(leaf_index_to_node_index(rand_leaf_index)).0;
             assert_eq!(rac, rll);
         }
     }
@@ -473,26 +484,6 @@ mod mmr_test {
             assert_eq!(
                 expected,
                 get_authentication_path_node_indices(start, end, node_count)
-            );
-        }
-    }
-
-    #[test]
-    fn test_rll_rac() {
-        for n in 1..(1 << 20) {
-            let tick = Instant::now();
-            let rac = right_lineage_length_and_own_height(n).0;
-            let tock = Instant::now();
-            let rll = right_lineage_length(n);
-            let tuck = Instant::now();
-
-            assert_eq!(rac, rll);
-
-            let rac_time = tock - tick;
-            let rll_time = tuck - tock;
-            let relation = rac_time.as_secs_f64() / rll_time.as_secs_f64();
-            println!(
-                "{n}. ({rll}) RAC: {rac_time:#?} / RLL: {rll_time:#?} / speed up: {relation}x"
             );
         }
     }

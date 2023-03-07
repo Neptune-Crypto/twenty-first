@@ -69,24 +69,21 @@ pub fn non_leaf_nodes_left(leaf_index: u64) -> u64 {
     ret
 }
 
+#[inline]
+/// Return the number of parents that need to be added when a new leaf is inserted
+pub fn right_lineage_length_from_leaf_index(leaf_index: u64) -> u32 {
+    // Identify the last (least significant) nonzero bit
+    let pow2 = (leaf_index + 1) & !leaf_index;
+
+    // Get the index of that bit, counting from least significant bit
+    u64::BITS - pow2.leading_zeros() - 1
+}
+
 /// Convert from leaf index to node index
 pub fn leaf_index_to_node_index(leaf_index: u64) -> u64 {
     let diff = non_leaf_nodes_left(leaf_index);
 
     leaf_index + diff + 1
-}
-
-pub fn right_lineage_length(node_index: u64) -> u32 {
-    let bit_width = u64::BITS - node_index.leading_zeros();
-    let npo2 = 1 << bit_width;
-
-    let dist = npo2 - node_index;
-
-    if (bit_width as u64) < dist {
-        right_lineage_length(node_index - (npo2 >> 1) + 1)
-    } else {
-        (dist - 1) as u32
-    }
 }
 
 /// Return the new peaks of the MMR after adding `new_leaf` as well as the membership
@@ -99,8 +96,7 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
 ) -> Option<(Vec<Digest>, MmrMembershipProof<H>)> {
     let mut peaks = old_peaks;
     peaks.push(new_leaf);
-    let mut new_node_index = leaf_index_to_node_index(old_leaf_count);
-    let mut right_lineage_count = right_lineage_length(new_node_index);
+    let mut right_lineage_count = right_lineage_length_from_leaf_index(old_leaf_count);
     let mut membership_proof = MmrMembershipProof::<H>::new(old_leaf_count, vec![]);
     while right_lineage_count != 0 {
         let new_hash = peaks.pop().unwrap();
@@ -111,7 +107,6 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
         };
         membership_proof.authentication_path.push(previous_peak);
         peaks.push(H::hash_pair(&previous_peak, &new_hash));
-        new_node_index += 1;
         right_lineage_count -= 1;
     }
 
@@ -171,6 +166,23 @@ mod mmr_test {
         assert_eq!(20, leaf_index_to_node_index(11));
         assert_eq!(23, leaf_index_to_node_index(12));
         assert_eq!(24, leaf_index_to_node_index(13));
+    }
+
+    #[test]
+    fn right_lineage_length_from_leaf_index_test() {
+        assert_eq!(0, right_lineage_length_from_leaf_index(0));
+        assert_eq!(1, right_lineage_length_from_leaf_index(1));
+        assert_eq!(0, right_lineage_length_from_leaf_index(2));
+        assert_eq!(2, right_lineage_length_from_leaf_index(3));
+        assert_eq!(0, right_lineage_length_from_leaf_index(4));
+        assert_eq!(1, right_lineage_length_from_leaf_index(5));
+        assert_eq!(0, right_lineage_length_from_leaf_index(6));
+        assert_eq!(3, right_lineage_length_from_leaf_index(7));
+        assert_eq!(0, right_lineage_length_from_leaf_index(8));
+        assert_eq!(1, right_lineage_length_from_leaf_index(9));
+        assert_eq!(0, right_lineage_length_from_leaf_index(10));
+        assert_eq!(32, right_lineage_length_from_leaf_index((1 << 32) - 1));
+        assert_eq!(63, right_lineage_length_from_leaf_index((1 << 63) - 1));
     }
 
     #[test]
