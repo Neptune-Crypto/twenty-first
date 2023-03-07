@@ -150,3 +150,191 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
 
     Some(calculated_peaks)
 }
+
+#[cfg(test)]
+mod mmr_test {
+    use super::*;
+
+    #[test]
+    fn leaf_index_to_node_index_test() {
+        assert_eq!(1, leaf_index_to_node_index(0));
+        assert_eq!(2, leaf_index_to_node_index(1));
+        assert_eq!(4, leaf_index_to_node_index(2));
+        assert_eq!(5, leaf_index_to_node_index(3));
+        assert_eq!(8, leaf_index_to_node_index(4));
+        assert_eq!(9, leaf_index_to_node_index(5));
+        assert_eq!(11, leaf_index_to_node_index(6));
+        assert_eq!(12, leaf_index_to_node_index(7));
+        assert_eq!(16, leaf_index_to_node_index(8));
+        assert_eq!(17, leaf_index_to_node_index(9));
+        assert_eq!(19, leaf_index_to_node_index(10));
+        assert_eq!(20, leaf_index_to_node_index(11));
+        assert_eq!(23, leaf_index_to_node_index(12));
+        assert_eq!(24, leaf_index_to_node_index(13));
+    }
+
+    #[test]
+    fn leaf_index_to_mt_index_test() {
+        // Leaf count = 1
+        assert_eq!((1, 0), leaf_index_to_mt_index_and_peak_index(0, 1));
+
+        // Leaf count = 2
+        assert_eq!((2, 0), leaf_index_to_mt_index_and_peak_index(0, 2));
+        assert_eq!((3, 0), leaf_index_to_mt_index_and_peak_index(1, 2));
+
+        // Leaf count = 3
+        assert_eq!((2, 0), leaf_index_to_mt_index_and_peak_index(0, 3));
+        assert_eq!((3, 0), leaf_index_to_mt_index_and_peak_index(1, 3));
+        assert_eq!((1, 1), leaf_index_to_mt_index_and_peak_index(2, 3));
+
+        // Leaf count = 4
+        assert_eq!((4, 0), leaf_index_to_mt_index_and_peak_index(0, 4));
+        assert_eq!((5, 0), leaf_index_to_mt_index_and_peak_index(1, 4));
+        assert_eq!((6, 0), leaf_index_to_mt_index_and_peak_index(2, 4));
+        assert_eq!((7, 0), leaf_index_to_mt_index_and_peak_index(3, 4));
+
+        // Leaf count = 14
+        assert_eq!((8, 0), leaf_index_to_mt_index_and_peak_index(0, 14));
+        assert_eq!((9, 0), leaf_index_to_mt_index_and_peak_index(1, 14));
+        assert_eq!((10, 0), leaf_index_to_mt_index_and_peak_index(2, 14));
+        assert_eq!((11, 0), leaf_index_to_mt_index_and_peak_index(3, 14));
+        assert_eq!((12, 0), leaf_index_to_mt_index_and_peak_index(4, 14));
+        assert_eq!((13, 0), leaf_index_to_mt_index_and_peak_index(5, 14));
+        assert_eq!((14, 0), leaf_index_to_mt_index_and_peak_index(6, 14));
+        assert_eq!((15, 0), leaf_index_to_mt_index_and_peak_index(7, 14));
+        assert_eq!((4, 1), leaf_index_to_mt_index_and_peak_index(8, 14));
+        assert_eq!((5, 1), leaf_index_to_mt_index_and_peak_index(9, 14));
+        assert_eq!((6, 1), leaf_index_to_mt_index_and_peak_index(10, 14));
+        assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(11, 14));
+        assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(11, 14));
+
+        // Leaf count = 32
+        for i in 0..32 {
+            assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 32));
+        }
+
+        // Leaf count = 33
+        for i in 0..32 {
+            assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 33));
+        }
+        assert_eq!((1, 1), leaf_index_to_mt_index_and_peak_index(32, 33));
+
+        // Leaf count = 34
+        for i in 0..32 {
+            assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 34));
+        }
+        assert_eq!((2, 1), leaf_index_to_mt_index_and_peak_index(32, 34));
+        assert_eq!((3, 1), leaf_index_to_mt_index_and_peak_index(33, 34));
+
+        // Leaf count = 35
+        for i in 0..32 {
+            assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 35));
+        }
+        assert_eq!((2, 1), leaf_index_to_mt_index_and_peak_index(32, 35));
+        assert_eq!((3, 1), leaf_index_to_mt_index_and_peak_index(33, 35));
+        assert_eq!((1, 2), leaf_index_to_mt_index_and_peak_index(34, 35));
+
+        // Leaf count = 36
+        for i in 0..32 {
+            assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 36));
+        }
+        assert_eq!((4, 1), leaf_index_to_mt_index_and_peak_index(32, 36));
+        assert_eq!((5, 1), leaf_index_to_mt_index_and_peak_index(33, 36));
+        assert_eq!((6, 1), leaf_index_to_mt_index_and_peak_index(34, 36));
+        assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(35, 36));
+
+        // Leaf count = 37
+        for i in 0..32 {
+            assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 37));
+        }
+        assert_eq!((4, 1), leaf_index_to_mt_index_and_peak_index(32, 37));
+        assert_eq!((5, 1), leaf_index_to_mt_index_and_peak_index(33, 37));
+        assert_eq!((6, 1), leaf_index_to_mt_index_and_peak_index(34, 37));
+        assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(35, 37));
+        assert_eq!((1, 2), leaf_index_to_mt_index_and_peak_index(36, 37));
+
+        for i in 10..20 {
+            assert_eq!(
+                (14 + (1 << i), 0),
+                leaf_index_to_mt_index_and_peak_index(14, 1 << i)
+            );
+            assert_eq!(
+                (3, 2),
+                leaf_index_to_mt_index_and_peak_index((1 << i) + 9, (1 << i) + 11)
+            );
+            assert_eq!(
+                (1, 3),
+                leaf_index_to_mt_index_and_peak_index((1 << i) + 10, (1 << i) + 11)
+            );
+        }
+    }
+
+    #[test]
+    fn non_leaf_nodes_left_test() {
+        assert_eq!(0, non_leaf_nodes_left(0));
+        assert_eq!(0, non_leaf_nodes_left(1));
+        assert_eq!(1, non_leaf_nodes_left(2));
+        assert_eq!(1, non_leaf_nodes_left(3));
+        assert_eq!(3, non_leaf_nodes_left(4));
+        assert_eq!(3, non_leaf_nodes_left(5));
+        assert_eq!(4, non_leaf_nodes_left(6));
+        assert_eq!(4, non_leaf_nodes_left(7));
+        assert_eq!(7, non_leaf_nodes_left(8));
+        assert_eq!(7, non_leaf_nodes_left(9));
+
+        assert_eq!(8, non_leaf_nodes_left(10));
+        assert_eq!(8, non_leaf_nodes_left(11));
+        assert_eq!(10, non_leaf_nodes_left(12));
+        assert_eq!(10, non_leaf_nodes_left(13));
+        assert_eq!(11, non_leaf_nodes_left(14));
+        assert_eq!(11, non_leaf_nodes_left(15));
+        assert_eq!(15, non_leaf_nodes_left(16));
+        assert_eq!(15, non_leaf_nodes_left(17));
+        assert_eq!(16, non_leaf_nodes_left(18));
+    }
+
+    #[test]
+    fn peak_index_test() {
+        // Verify that the function to find the Merkle tree index returns the correct peak index
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(0, 1).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(0, 2).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(1, 2).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(0, 3).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(1, 3).1);
+        assert_eq!(1, leaf_index_to_mt_index_and_peak_index(2, 3).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(0, 4).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(1, 4).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(2, 4).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(3, 4).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(0, 5).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(1, 5).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(2, 5).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(3, 5).1);
+        assert_eq!(1, leaf_index_to_mt_index_and_peak_index(4, 5).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(0, 7).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(1, 7).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(2, 7).1);
+        assert_eq!(0, leaf_index_to_mt_index_and_peak_index(3, 7).1);
+        assert_eq!(1, leaf_index_to_mt_index_and_peak_index(4, 7).1);
+        assert_eq!(1, leaf_index_to_mt_index_and_peak_index(5, 7).1);
+        assert_eq!(2, leaf_index_to_mt_index_and_peak_index(6, 7).1);
+        assert!(leaf_index_to_mt_index_and_peak_index(0, (1 << 32) - 1).1 == 0);
+        assert!(leaf_index_to_mt_index_and_peak_index(1, (1 << 32) - 1).1 == 0);
+        assert!(leaf_index_to_mt_index_and_peak_index((1 << 31) - 1, (1 << 32) - 1).1 == 0);
+        assert!(
+            leaf_index_to_mt_index_and_peak_index((1 << 31) + (1 << 30) - 1, (1 << 32) - 1).1 == 1
+        );
+        assert!(
+            leaf_index_to_mt_index_and_peak_index((1 << 31) + (1 << 29) - 1, (1 << 32) - 1).1 == 1
+        );
+        assert!(leaf_index_to_mt_index_and_peak_index(1 << 31, (1 << 32) - 1).1 == 1);
+        assert!(
+            leaf_index_to_mt_index_and_peak_index(
+                (1 << 31) + (1 << 30) + (1 << 29) - 1,
+                (1 << 32) - 1
+            )
+            .1 == 2
+        );
+        assert!(leaf_index_to_mt_index_and_peak_index((1 << 31) + (1 << 30), (1 << 32) - 1).1 == 2);
+    }
+}
