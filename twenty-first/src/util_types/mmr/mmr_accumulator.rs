@@ -84,8 +84,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             self.leaf_count,
             self.peaks.clone(),
             new_leaf,
-        )
-        .unwrap();
+        );
         self.peaks = new_peaks;
         self.leaf_count += 1;
 
@@ -102,11 +101,10 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             self.leaf_count,
             old_membership_proof,
         )
-        .unwrap();
     }
 
-    /// Returns true of the `new_peaks` input matches the calculated new MMR peaks resulting from the
-    /// provided appends and mutations.
+    /// Returns true if the `new_peaks` input matches the calculated new MMR peaks resulting from the
+    /// provided appends and mutations. Can panic if initial state is not a valid MMR.
     fn verify_batch_update(
         &mut self,
         new_peaks: &[Digest],
@@ -149,16 +147,12 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             // TODO: Should we verify the membership proof here?
 
             // Calculate the new peaks after mutating a leaf
-            let running_peaks_res = shared_basic::calculate_new_peaks_from_leaf_mutation(
+            running_peaks = shared_basic::calculate_new_peaks_from_leaf_mutation(
                 &running_peaks,
                 &new_leaf_value,
                 self.leaf_count,
                 &membership_proof,
             );
-            running_peaks = match running_peaks_res {
-                None => return false,
-                Some(peaks) => peaks,
-            };
 
             // TODO: Replace this with the new batch updater
             // Update all remaining membership proofs with this leaf mutation
@@ -176,18 +170,15 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         // using pop
         new_leafs_cloned.reverse();
 
-        // Apply all leaf appends and
+        // Apply all leaf appends
         let mut running_leaf_count = self.leaf_count;
         while let Some(new_leaf_for_append) = new_leafs_cloned.pop() {
-            let append_res = shared_basic::calculate_new_peaks_from_append::<H>(
-                running_leaf_count,
-                running_peaks,
-                new_leaf_for_append,
-            );
-            let (calculated_new_peaks, _new_membership_proof) = match append_res {
-                None => return false,
-                Some((peaks, mp)) => (peaks, mp),
-            };
+            let (calculated_new_peaks, _new_membership_proof) =
+                shared_basic::calculate_new_peaks_from_append::<H>(
+                    running_leaf_count,
+                    running_peaks,
+                    new_leaf_for_append,
+                );
             running_peaks = calculated_new_peaks;
             running_leaf_count += 1;
         }

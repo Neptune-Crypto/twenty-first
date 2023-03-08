@@ -81,29 +81,24 @@ pub fn right_lineage_length_from_leaf_index(leaf_index: u64) -> u32 {
 
 /// Return the new peaks of the MMR after adding `new_leaf` as well as the membership
 /// proof for the added leaf.
-/// Returns None if configuration is impossible (too small `old_peaks` input vector)
 pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
     old_leaf_count: u64,
     old_peaks: Vec<Digest>,
     new_leaf: Digest,
-) -> Option<(Vec<Digest>, MmrMembershipProof<H>)> {
+) -> (Vec<Digest>, MmrMembershipProof<H>) {
     let mut peaks = old_peaks;
     peaks.push(new_leaf);
     let mut right_lineage_count = right_lineage_length_from_leaf_index(old_leaf_count);
     let mut membership_proof = MmrMembershipProof::<H>::new(old_leaf_count, vec![]);
     while right_lineage_count != 0 {
         let new_hash = peaks.pop().unwrap();
-        let previous_peak_res = peaks.pop();
-        let previous_peak = match previous_peak_res {
-            None => return None,
-            Some(peak) => peak,
-        };
+        let previous_peak = peaks.pop().unwrap();
         membership_proof.authentication_path.push(previous_peak);
         peaks.push(H::hash_pair(&previous_peak, &new_hash));
         right_lineage_count -= 1;
     }
 
-    Some((peaks, membership_proof))
+    (peaks, membership_proof)
 }
 
 /// Calculate a new peak list given the mutation of a leaf
@@ -114,7 +109,7 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
     new_leaf: &Digest,
     leaf_count: u64,
     membership_proof: &MmrMembershipProof<H>,
-) -> Option<Vec<Digest>> {
+) -> Vec<Digest> {
     let (mut acc_mt_index, peak_index) =
         leaf_index_to_mt_index_and_peak_index(membership_proof.leaf_index, leaf_count);
     let mut acc_hash: Digest = new_leaf.to_owned();
@@ -136,7 +131,7 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
     let mut calculated_peaks: Vec<Digest> = old_peaks.to_vec();
     calculated_peaks[peak_index as usize] = acc_hash;
 
-    Some(calculated_peaks)
+    calculated_peaks
 }
 
 #[cfg(test)]
