@@ -1,4 +1,5 @@
 use super::mmr_membership_proof::MmrMembershipProof;
+use crate::shared_math::other::log_2_floor;
 use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
@@ -12,35 +13,42 @@ pub fn right_child(node_index: u64) -> u64 {
     node_index - 1
 }
 
-/// Convert the leaf index into a Merkle tree index where the index refers to the tree that the leaf
-/// is located in as if it were a Merkle tree. Also returns a peak index which points to which Merkle
-/// tree this leaf is contained in.
+#[inline]
 pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, leaf_count: u64) -> (u64, u32) {
-    // This assert also guarantees that leaf_count is never zero
+    // This algorithm works by a) first identifying how high the local Merkle tree is. This is
+    // the Merkle tree that the leaf with `leaf_index` is part of. Then b) it finds the peak
+    // index which identifies which of the N Merkle trees the leaf is part of.
+    //
+    // a) Height of local tree is the lowest index (from least significant) of the bits where
+    // there is a discrepancy between `leaf_index` and `leaf_count`. The discrepant bits can
+    // be identified with a xor.
+    //
+    // b) The bit-decomposition of `leaf_count` shows the height of the involved Merkle trees.
+    // The number of ones in this bit-decomposition is the number of Merkle trees in the MMR;
+    // the index of each one (counting from least significant bit) is the height of that
+    // Merkle tree. So counting the ones before and after the discrepancy bit reveals which
+    // Merkle tree the leaf is in. This value is called "peak index" since we have a list
+    // of digests that are the peaks of the MMR, and the peak index shows which element of
+    // that list is the Merkle root that its authentication path refers to.
     assert!(
         leaf_index < leaf_count,
         "Leaf index must be stricly smaller than leaf count"
     );
 
-    let max_tree_height = u64::BITS - leaf_count.leading_zeros() - 1;
-    let mut h = max_tree_height;
-    let mut ret = leaf_index;
-    let mut maybe_pow;
-    let mut peak_index: u32 = 0;
-    loop {
-        let pow = 1 << h;
-        maybe_pow = pow & leaf_count;
-        if h == 0 || (ret < maybe_pow) {
-            break;
-        }
-        ret -= maybe_pow;
-        peak_index += (maybe_pow != 0) as u32;
-        h -= 1;
-    }
+    // a) Get the index as if this was a Merkle tree
+    let discrepancies = leaf_index ^ leaf_count;
+    let local_mt_height = log_2_floor(discrepancies as u128);
+    let local_mt_leaf_count = 2u64.pow(local_mt_height as u32);
+    let remainder_bitmask = local_mt_leaf_count - 1;
+    let local_leaf_index = remainder_bitmask & leaf_index;
+    let mt_index = local_leaf_index + local_mt_leaf_count;
 
-    ret += maybe_pow;
+    // b) Find the peak_index
+    let all_the_ones = leaf_count.count_ones();
+    let ones_to_subtract = (leaf_count & remainder_bitmask).count_ones();
+    let peak_index = all_the_ones - ones_to_subtract - 1;
 
-    (ret, peak_index)
+    (mt_index, peak_index)
 }
 
 /// Count the number of non-leaf nodes that were inserted *prior* to
@@ -190,6 +198,21 @@ mod mmr_test {
         assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(11, 14));
         assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(11, 14));
 
+        // Leaf count = 22
+        assert_eq!((16, 0), leaf_index_to_mt_index_and_peak_index(0, 23));
+        assert_eq!((17, 0), leaf_index_to_mt_index_and_peak_index(1, 23));
+        assert_eq!((18, 0), leaf_index_to_mt_index_and_peak_index(2, 23));
+        assert_eq!((19, 0), leaf_index_to_mt_index_and_peak_index(3, 23));
+        assert_eq!((30, 0), leaf_index_to_mt_index_and_peak_index(14, 23));
+        assert_eq!((31, 0), leaf_index_to_mt_index_and_peak_index(15, 23));
+        assert_eq!((4, 1), leaf_index_to_mt_index_and_peak_index(16, 23));
+        assert_eq!((5, 1), leaf_index_to_mt_index_and_peak_index(17, 23));
+        assert_eq!((6, 1), leaf_index_to_mt_index_and_peak_index(18, 23));
+        assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(19, 23));
+        assert_eq!((2, 2), leaf_index_to_mt_index_and_peak_index(20, 23));
+        assert_eq!((3, 2), leaf_index_to_mt_index_and_peak_index(21, 23));
+        assert_eq!((1, 3), leaf_index_to_mt_index_and_peak_index(22, 23));
+
         // Leaf count = 32
         for i in 0..32 {
             assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 32));
@@ -235,7 +258,7 @@ mod mmr_test {
         assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(35, 37));
         assert_eq!((1, 2), leaf_index_to_mt_index_and_peak_index(36, 37));
 
-        for i in 10..20 {
+        for i in 10..63 {
             assert_eq!(
                 (14 + (1 << i), 0),
                 leaf_index_to_mt_index_and_peak_index(14, 1 << i)
