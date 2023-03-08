@@ -146,14 +146,14 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
 
     /// Get a leaf from the MMR, will panic if index is out of range
     pub fn get_leaf(&mut self, leaf_index: u64) -> Digest {
-        let node_index = shared_basic::leaf_index_to_node_index(leaf_index);
+        let node_index = shared_advanced::leaf_index_to_node_index(leaf_index);
         self.digests.get(node_index)
     }
 
     /// Update a hash in the existing archival MMR
     pub fn mutate_leaf_raw(&mut self, leaf_index: u64, new_leaf: Digest) {
         // 1. change the leaf value
-        let mut node_index = shared_basic::leaf_index_to_node_index(leaf_index);
+        let mut node_index = shared_advanced::leaf_index_to_node_index(leaf_index);
         self.digests.set(node_index, new_leaf);
 
         // 2. Calculate hash changes for all parents
@@ -197,7 +197,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H> {
         );
 
         // Find out how long the authentication path is
-        let node_index = shared_basic::leaf_index_to_node_index(leaf_index);
+        let node_index = shared_advanced::leaf_index_to_node_index(leaf_index);
         let mut top_height: i32 = -1;
         let mut parent_index = node_index;
         while parent_index < self.digests.len() {

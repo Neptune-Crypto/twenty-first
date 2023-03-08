@@ -79,13 +79,6 @@ pub fn right_lineage_length_from_leaf_index(leaf_index: u64) -> u32 {
     u64::BITS - pow2.leading_zeros() - 1
 }
 
-/// Convert from leaf index to node index
-pub fn leaf_index_to_node_index(leaf_index: u64) -> u64 {
-    let diff = non_leaf_nodes_left(leaf_index);
-
-    leaf_index + diff + 1
-}
-
 /// Return the new peaks of the MMR after adding `new_leaf` as well as the membership
 /// proof for the added leaf.
 /// Returns None if configuration is impossible (too small `old_peaks` input vector)
@@ -149,24 +142,6 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
 #[cfg(test)]
 mod mmr_test {
     use super::*;
-
-    #[test]
-    fn leaf_index_to_node_index_test() {
-        assert_eq!(1, leaf_index_to_node_index(0));
-        assert_eq!(2, leaf_index_to_node_index(1));
-        assert_eq!(4, leaf_index_to_node_index(2));
-        assert_eq!(5, leaf_index_to_node_index(3));
-        assert_eq!(8, leaf_index_to_node_index(4));
-        assert_eq!(9, leaf_index_to_node_index(5));
-        assert_eq!(11, leaf_index_to_node_index(6));
-        assert_eq!(12, leaf_index_to_node_index(7));
-        assert_eq!(16, leaf_index_to_node_index(8));
-        assert_eq!(17, leaf_index_to_node_index(9));
-        assert_eq!(19, leaf_index_to_node_index(10));
-        assert_eq!(20, leaf_index_to_node_index(11));
-        assert_eq!(23, leaf_index_to_node_index(12));
-        assert_eq!(24, leaf_index_to_node_index(13));
-    }
 
     #[test]
     fn right_lineage_length_from_leaf_index_test() {

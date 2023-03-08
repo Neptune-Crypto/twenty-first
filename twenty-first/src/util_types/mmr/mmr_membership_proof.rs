@@ -106,7 +106,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
     /// Return the node indices for the authentication path in this membership proof
     pub fn get_node_indices(&self) -> Vec<u64> {
-        let mut node_index = shared_basic::leaf_index_to_node_index(self.leaf_index);
+        let mut node_index = shared_advanced::leaf_index_to_node_index(self.leaf_index);
         let mut node_indices = vec![];
         for _ in 0..self.authentication_path.len() {
             let (right_ancestor_count, height) =
@@ -130,7 +130,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
     /// Return the node indices for the hash values that can be derived from this proof
     fn get_direct_path_indices(&self) -> Vec<u64> {
-        let mut node_index = shared_basic::leaf_index_to_node_index(self.leaf_index);
+        let mut node_index = shared_advanced::leaf_index_to_node_index(self.leaf_index);
         let mut node_indices = vec![node_index];
         for _ in 0..self.authentication_path.len() {
             node_index = shared_advanced::parent(node_index);
@@ -360,7 +360,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // `membership_proof` until we meet the intersecting node.
         let mut deducible_hashes: HashMap<u64, Digest> = HashMap::new();
         let mut node_index =
-            shared_basic::leaf_index_to_node_index(leaf_mutation_membership_proof.leaf_index);
+            shared_advanced::leaf_index_to_node_index(leaf_mutation_membership_proof.leaf_index);
         deducible_hashes.insert(node_index, *new_leaf);
         let mut acc_hash: Digest = new_leaf.to_owned();
 
@@ -426,7 +426,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
         let mut deducible_hashes: HashMap<u64, Digest> = HashMap::new();
         let mut node_index =
-            shared_basic::leaf_index_to_node_index(leaf_mutation_membership_proof.leaf_index);
+            shared_advanced::leaf_index_to_node_index(leaf_mutation_membership_proof.leaf_index);
         deducible_hashes.insert(node_index, *new_leaf);
         let mut acc_hash: Digest = new_leaf.to_owned();
 
@@ -518,7 +518,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         // throughout the updating as their neighbor leaf digests change values.
         // The hash map `new_ap_digests` takes care of that.
         while let Some((ap, new_leaf)) = authentication_paths_and_leafs.pop() {
-            let mut node_index = shared_basic::leaf_index_to_node_index(ap.leaf_index);
+            let mut node_index = shared_advanced::leaf_index_to_node_index(ap.leaf_index);
             let former_value = new_ap_digests.insert(node_index, new_leaf);
             assert!(
                 former_value.is_none(),

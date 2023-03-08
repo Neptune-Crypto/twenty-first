@@ -209,7 +209,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         // throughout the updating as their neighbor leaf digests change values.
         // The hash map `new_ap_digests` takes care of that.
         while let Some((ap, new_leaf)) = mutation_data.pop() {
-            let mut node_index = shared_basic::leaf_index_to_node_index(ap.leaf_index);
+            let mut node_index = shared_advanced::leaf_index_to_node_index(ap.leaf_index);
             let former_value = new_ap_digests.insert(node_index, new_leaf);
             assert!(
                 former_value.is_none(),
