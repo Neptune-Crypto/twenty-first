@@ -43,10 +43,19 @@ pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, leaf_count: u64) -
     let local_leaf_index = remainder_bitmask & leaf_index;
     let mt_index = local_leaf_index + local_mt_leaf_count;
 
-    // b) Find the peak_index
+    // b) Find the peak_index (in constant time)
     let all_the_ones = leaf_count.count_ones();
     let ones_to_subtract = (leaf_count & remainder_bitmask).count_ones();
     let peak_index = all_the_ones - ones_to_subtract - 1;
+
+    // Non-constant time version if you don't have a popcount instruction
+    // let mut peak_index = 0;
+    // let cutoff = 2u64.pow(log_2_floor(leaf_count as u128) as u32);
+    // let mut search = local_mt_leaf_count;
+    // while search != cutoff {
+    //     peak_index += (search & leaf_count != 0) as u32;
+    //     search <<= 1;
+    // }
 
     (mt_index, peak_index)
 }
