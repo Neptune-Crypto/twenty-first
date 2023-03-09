@@ -79,7 +79,7 @@ where
         // Note that this function *does* allow the calculation of a MT root from an empty list of digests
         // since the number of removal records in a block can be zero.
 
-        let heights = bit_representation(digests.len() as u128);
+        let heights = bit_representation(digests.len() as u64);
         let mut trees: Vec<MerkleTree<H, M>> = vec![];
         let mut acc_counter = 0;
         for height in heights {

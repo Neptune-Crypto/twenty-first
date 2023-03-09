@@ -7,9 +7,8 @@ use std::marker::PhantomData;
 /// of the vector. Cf. https://github.com/dermesser/leveldb-rs/issues/16
 /// This is OK to do as long as collide with a key. Since the keys for indices
 /// are all 16 bytes long when using 128s, then its OK to use a 1-byte key here.
-// const LENGTH_KEY: Vec<u8> = vec![];
 const LENGTH_KEY: [u8; 1] = [0];
-type IndexType = u128;
+type IndexType = u64;
 const INDEX_ZERO: IndexType = 0;
 
 pub struct DatabaseVector<T: Serialize + DeserializeOwned> {

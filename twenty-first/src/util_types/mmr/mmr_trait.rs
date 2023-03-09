@@ -23,7 +23,7 @@ pub trait Mmr<H: AlgebraicHasher> {
     fn is_empty(&mut self) -> bool;
 
     /// Returns the number of leaves in the MMR
-    fn count_leaves(&mut self) -> u128;
+    fn count_leaves(&mut self) -> u64;
 
     /// Append a hash digest to the MMR
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof<H>;
