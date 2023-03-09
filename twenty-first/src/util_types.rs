@@ -1,6 +1,7 @@
 pub mod algebraic_hasher;
 pub mod blake3_wrapper;
 pub mod database_array;
+pub mod database_table_interface;
 pub mod database_vector;
 pub mod emojihash_trait;
 pub mod merkle_tree;
