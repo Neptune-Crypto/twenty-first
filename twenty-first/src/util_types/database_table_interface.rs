@@ -1,6 +1,9 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, VecDeque},
+    collections::{
+        hash_map::{self},
+        HashMap, VecDeque,
+    },
     rc::Rc,
 };
 
@@ -22,8 +25,6 @@ pub enum WriteElement<T: Serialize + DeserializeOwned> {
     OverWrite((IndexType, T)),
     Push(T),
     Pop,
-    // NewWrite((IndexType, T)),
-    // Delete(IndexType),
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
@@ -36,6 +37,14 @@ impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
     }
 
     fn get(&mut self, index: IndexType) -> T {
+        // Disallow getting values out-of-bounds
+        assert!(
+            index < self.len(),
+            "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
+            self.length,
+            self.name
+        );
+
         // try cache first
         if self.cache.contains_key(&index) {
             return match &self.cache[&index] {
@@ -46,15 +55,24 @@ impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
 
         // then try persistent storage
         let db_key = self.get_index_key(index);
-        let db_val = self
-            .db
-            .borrow_mut()
-            .get(&db_key)
-            .expect("Element with index {index} does not exist in ");
+        let db_val = self.db.borrow_mut().get(&db_key).unwrap_or_else(|| {
+            panic!(
+                "Element with index {index} does not exist in {}. This should not happen",
+                self.name
+            )
+        });
         bincode::deserialize(&db_val).unwrap()
     }
 
     fn set(&mut self, index: IndexType, value: T) {
+        // Disallow setting values out-of-bounds
+        assert!(
+            index < self.len(),
+            "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
+            self.length,
+            self.name
+        );
+
         let _old_value = self.cache.insert(index, Some(value.clone()));
 
         // TODO: If `old_value` is Some(*) use it to remove the corresponding
@@ -68,21 +86,27 @@ impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
         // add to write queue
         self.write_queue.push_back(WriteElement::Pop);
 
-        // update length
+        // If vector is empty, return None
+        if self.length == 0 {
+            return None;
+        }
+
+        // Update length
         self.length -= 1;
 
         // try cache first
-        if self.cache.contains_key(&self.length) {
-            self.cache.insert(self.length, None).unwrap()
-        }
-        // then try persistent storage
-        else {
+        let ret = if let hash_map::Entry::Occupied(mut e) = self.cache.entry(self.length) {
+            Some(e.insert(None)).unwrap()
+        } else {
+            // then try persistent storage
             let db_key = self.get_index_key(self.length);
             self.db
                 .borrow_mut()
                 .get(&db_key)
                 .map(|bytes| bincode::deserialize(&bytes).unwrap())
-        }
+        };
+
+        ret
     }
 
     fn push(&mut self, value: T) {
@@ -107,16 +131,18 @@ pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
     write_queue: VecDeque<WriteElement<T>>,
     length: IndexType,
     cache: HashMap<IndexType, Option<T>>,
-    pub name: String,
+    name: String,
 }
 
 impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
+    // Return the key used to store the length of the persisted vector
     fn get_length_key(key_prefix: u8) -> [u8; 2] {
         const LENGTH_KEY: u8 = 0u8;
         [key_prefix, LENGTH_KEY]
     }
 
-    fn get_persisted_length(&self) -> IndexType {
+    /// Return the length at the last write to disk
+    fn persisted_length(&self) -> IndexType {
         let key = Self::get_length_key(self.key_prefix);
         match self.db.borrow_mut().get(&key) {
             Some(value) => bincode::deserialize(&value).unwrap(),
@@ -124,7 +150,8 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
         }
     }
 
-    fn get_index_key(&self, index: IndexType) -> [u8; 7] {
+    /// Return the level-DB key used to store the element at an index
+    fn get_index_key(&self, index: IndexType) -> [u8; 9] {
         vec![vec![self.key_prefix], bincode::serialize(&index).unwrap()]
             .concat()
             .try_into()
@@ -148,8 +175,9 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
         }
     }
 
+    /// Collect all added elements that have not yet bit persisted
     pub fn pull_queue(&mut self, batch_write: &mut WriteBatch) {
-        let original_length = self.get_persisted_length();
+        let original_length = self.persisted_length();
         let mut length = original_length;
         while let Some(write_element) = self.write_queue.pop_front() {
             match write_element {
@@ -183,5 +211,216 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
         }
 
         self.cache.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::{Rng, RngCore};
+    use rusty_leveldb::DB;
+
+    fn get_test_db() -> Rc<RefCell<DB>> {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("mydatabase", opt).unwrap();
+        Rc::new(RefCell::new(db))
+    }
+
+    /// Return a persisted vector and a regular in-memory vector with the same elements
+    fn get_persisted_vec_with_length(
+        length: IndexType,
+        name: &str,
+    ) -> (RustyLevelDbVec<u64>, Vec<u64>, Rc<RefCell<DB>>) {
+        let db = get_test_db();
+        let mut persisted_vec = RustyLevelDbVec::new(db.clone(), 0, name);
+        let mut regular_vec = vec![];
+
+        let mut rng = rand::thread_rng();
+        for _ in 0..length {
+            let value = rng.next_u64();
+            persisted_vec.push(value);
+            regular_vec.push(value);
+        }
+
+        let mut write_batch = WriteBatch::new();
+        persisted_vec.pull_queue(&mut write_batch);
+        assert!(db.borrow_mut().write(write_batch, true).is_ok());
+
+        // Sanity checks
+        assert!(persisted_vec.cache.is_empty());
+        assert_eq!(persisted_vec.len(), regular_vec.len() as u64);
+
+        (persisted_vec, regular_vec, db)
+    }
+
+    #[test]
+    fn simple_init_test_push_pop_get_set() {
+        let db = get_test_db();
+        let mut delegated_db_vec: RustyLevelDbVec<[u8; 13]> =
+            RustyLevelDbVec::new(db, 0, "unit test vec 0");
+        assert_eq!(
+            0,
+            delegated_db_vec.len(),
+            "Length must be zero at initialization"
+        );
+        assert!(
+            delegated_db_vec.is_empty(),
+            "Vector must be empty at initialization"
+        );
+
+        // push two values, check length.
+        delegated_db_vec.push([42; 13]);
+        delegated_db_vec.push([44; 13]);
+        assert_eq!(2, delegated_db_vec.len());
+        assert!(!delegated_db_vec.is_empty());
+
+        // Check `get` and `set`
+        assert_eq!([44; 13], delegated_db_vec.get(1));
+        assert_eq!([42; 13], delegated_db_vec.get(0));
+
+        delegated_db_vec.set(0, [101; 13]);
+        delegated_db_vec.set(1, [200; 13]);
+
+        // Pop two values, check length and return value of further pops
+        assert_eq!([200; 13], delegated_db_vec.pop().unwrap());
+        assert_eq!(1, delegated_db_vec.len());
+        assert_eq!([101; 13], delegated_db_vec.pop().unwrap());
+        assert!(delegated_db_vec.pop().is_none());
+        assert_eq!(0, delegated_db_vec.len());
+        assert!(delegated_db_vec.pop().is_none());
+    }
+
+    #[test]
+    fn multiple_vectors_in_one_db() {
+        let db = get_test_db();
+        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
+            RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
+        let mut delegated_db_vec_b: RustyLevelDbVec<u128> =
+            RustyLevelDbVec::new(db.clone(), 1, "unit test vec b");
+
+        // push values to vec_a, verify vec_b is not affected
+        delegated_db_vec_a.push(1000);
+        delegated_db_vec_a.push(2000);
+        delegated_db_vec_a.push(3000);
+
+        assert_eq!(3, delegated_db_vec_a.len());
+        assert_eq!(0, delegated_db_vec_b.len());
+        assert_eq!(3, delegated_db_vec_a.cache.len());
+        assert!(delegated_db_vec_b.cache.is_empty());
+
+        // Get all entries to write to database. Write all entries.
+        assert_eq!(0, delegated_db_vec_a.persisted_length());
+        assert_eq!(0, delegated_db_vec_b.persisted_length());
+        assert_eq!(3, delegated_db_vec_a.len());
+        assert_eq!(0, delegated_db_vec_b.len());
+        let mut write_batch = WriteBatch::new();
+        delegated_db_vec_a.pull_queue(&mut write_batch);
+        delegated_db_vec_b.pull_queue(&mut write_batch);
+        assert_eq!(0, delegated_db_vec_a.persisted_length());
+        assert_eq!(0, delegated_db_vec_b.persisted_length());
+        assert_eq!(3, delegated_db_vec_a.len());
+        assert_eq!(0, delegated_db_vec_b.len());
+
+        assert!(
+            db.borrow_mut().write(write_batch, true).is_ok(),
+            "DB write must succeed"
+        );
+        assert_eq!(3, delegated_db_vec_a.persisted_length());
+        assert_eq!(0, delegated_db_vec_b.persisted_length());
+        assert_eq!(3, delegated_db_vec_a.len());
+        assert_eq!(0, delegated_db_vec_b.len());
+        assert!(delegated_db_vec_a.cache.is_empty());
+        assert!(delegated_db_vec_b.cache.is_empty());
+    }
+
+    #[test]
+    fn delegated_vec_pbt() {
+        let (mut persisted_vector, mut normal_vector, db) =
+            get_persisted_vec_with_length(10000, "vec 1");
+
+        let mut rng = rand::thread_rng();
+        for _ in 0..10000 {
+            match rng.gen_range(0..4) {
+                0 => {
+                    let push_val = rng.next_u64();
+                    persisted_vector.push(push_val);
+                    normal_vector.push(push_val);
+                }
+                1 => {
+                    let persisted_pop_val = persisted_vector.pop().unwrap();
+                    let normal_pop_val = normal_vector.pop().unwrap();
+                    assert_eq!(persisted_pop_val, normal_pop_val);
+                }
+                2 => {
+                    let index = rng.gen_range(0..normal_vector.len());
+                    assert_eq!(normal_vector[index], persisted_vector.get(index as u64));
+                }
+                3 => {
+                    let value = rng.next_u64();
+                    let index = rng.gen_range(0..normal_vector.len());
+                    normal_vector[index] = value;
+                    persisted_vector.set(index as u64, value);
+                }
+                _ => panic!("Bad range"),
+            }
+        }
+
+        // Check equality after above loop
+        assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
+        for i in 0..normal_vector.len() {
+            assert_eq!(normal_vector[i], persisted_vector.get(i as u64));
+        }
+
+        // Check equality after persisting updates
+        let mut write_batch = WriteBatch::new();
+        persisted_vector.pull_queue(&mut write_batch);
+        db.borrow_mut().write(write_batch, true).unwrap();
+
+        assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
+        assert_eq!(
+            normal_vector.len(),
+            persisted_vector.persisted_length() as usize
+        );
+        for i in 0..normal_vector.len() {
+            assert_eq!(normal_vector[i], persisted_vector.get(i as u64));
+        }
+    }
+
+    #[should_panic(
+        expected = "Out-of-bounds. Got 3 but length was 1. persisted vector name: unit test vec 0"
+    )]
+    #[test]
+    fn panic_on_out_of_bounds_get() {
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        delegated_db_vec.get(3);
+    }
+
+    #[should_panic(
+        expected = "Out-of-bounds. Got 1 but length was 1. persisted vector name: unit test vec 0"
+    )]
+    #[test]
+    fn panic_on_out_of_bounds_set() {
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        delegated_db_vec.set(1, 3000);
+    }
+
+    #[should_panic(
+        expected = "Out-of-bounds. Got 11 but length was 11. persisted vector name: unit test vec 0"
+    )]
+    #[test]
+    fn panic_on_out_of_bounds_get_even_though_value_exists_in_persistent_memory() {
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
+        delegated_db_vec.pop();
+        delegated_db_vec.get(11);
+    }
+
+    #[should_panic(
+        expected = "Out-of-bounds. Got 11 but length was 11. persisted vector name: unit test vec 0"
+    )]
+    #[test]
+    fn panic_on_out_of_bounds_set_even_though_value_exists_in_persistent_memory() {
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
+        delegated_db_vec.pop();
+        delegated_db_vec.set(11, 5000);
     }
 }
