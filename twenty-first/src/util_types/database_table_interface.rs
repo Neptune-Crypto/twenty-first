@@ -1,9 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{
-        hash_map::{self},
-        HashMap, VecDeque,
-    },
+    collections::{HashMap, VecDeque},
     rc::Rc,
 };
 
@@ -47,10 +44,7 @@ impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
 
         // try cache first
         if self.cache.contains_key(&index) {
-            return match &self.cache[&index] {
-                Some(value) => value.clone(),
-                None => panic!("Element with index {index} was marked for deletion in cache."),
-            };
+            return self.cache[&index].clone();
         }
 
         // then try persistent storage
@@ -73,7 +67,7 @@ impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
             self.name
         );
 
-        let _old_value = self.cache.insert(index, Some(value.clone()));
+        let _old_value = self.cache.insert(index, value.clone());
 
         // TODO: If `old_value` is Some(*) use it to remove the corresponding
         // element in the `write_queue` to reduce disk IO.
@@ -95,8 +89,8 @@ impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
         self.length -= 1;
 
         // try cache first
-        let ret = if let hash_map::Entry::Occupied(mut e) = self.cache.entry(self.length) {
-            Some(e.insert(None)).unwrap()
+        if self.cache.contains_key(&self.length) {
+            self.cache.remove(&self.length)
         } else {
             // then try persistent storage
             let db_key = self.get_index_key(self.length);
@@ -104,9 +98,7 @@ impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
                 .borrow_mut()
                 .get(&db_key)
                 .map(|bytes| bincode::deserialize(&bytes).unwrap())
-        };
-
-        ret
+        }
     }
 
     fn push(&mut self, value: T) {
@@ -115,7 +107,7 @@ impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
             .push_back(WriteElement::Push(value.clone()));
 
         // record in cache
-        let _old_value = self.cache.insert(self.length, Some(value));
+        let _old_value = self.cache.insert(self.length, value);
 
         // TODO: if `old_value` is Some(_) then use it to remove the corresponding
         // element from the `write_queue` to reduce disk operations
@@ -130,7 +122,7 @@ pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
     db: Rc<RefCell<DB>>,
     write_queue: VecDeque<WriteElement<T>>,
     length: IndexType,
-    cache: HashMap<IndexType, Option<T>>,
+    cache: HashMap<IndexType, T>,
     name: String,
 }
 
