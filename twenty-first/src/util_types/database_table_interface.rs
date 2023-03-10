@@ -10,9 +10,9 @@ use serde::{de::DeserializeOwned, Serialize};
 type IndexType = u64;
 
 pub trait DbtVec<T> {
-    fn is_empty(&mut self) -> bool;
-    fn len(&mut self) -> IndexType;
-    fn get(&mut self, index: IndexType) -> T;
+    fn is_empty(&self) -> bool;
+    fn len(&self) -> IndexType;
+    fn get(&self, index: IndexType) -> T;
     fn set(&mut self, index: IndexType, value: T);
     fn pop(&mut self) -> Option<T>;
     fn push(&mut self, value: T);
@@ -25,15 +25,15 @@ pub enum WriteElement<T: Serialize + DeserializeOwned> {
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
-    fn is_empty(&mut self) -> bool {
+    fn is_empty(&self) -> bool {
         self.length == 0
     }
 
-    fn len(&mut self) -> IndexType {
+    fn len(&self) -> IndexType {
         self.length
     }
 
-    fn get(&mut self, index: IndexType) -> T {
+    fn get(&self, index: IndexType) -> T {
         // Disallow getting values out-of-bounds
         assert!(
             index < self.len(),
@@ -168,7 +168,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     }
 
     /// Collect all added elements that have not yet bit persisted
-    pub fn pull_queue(&mut self, batch_write: &mut WriteBatch) {
+    pub fn pull_queue(&mut self, write_batch: &mut WriteBatch) {
         let original_length = self.persisted_length();
         let mut length = original_length;
         while let Some(write_element) = self.write_queue.pop_front() {
@@ -176,14 +176,14 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
                 WriteElement::OverWrite((i, t)) => {
                     let key = self.get_index_key(i);
                     let value = bincode::serialize(&t).unwrap();
-                    batch_write.put(&key, &value);
+                    write_batch.put(&key, &value);
                 }
                 WriteElement::Push(t) => {
                     let key =
                         vec![vec![self.key_prefix], bincode::serialize(&length).unwrap()].concat();
                     length += 1;
                     let value = bincode::serialize(&t).unwrap();
-                    batch_write.put(&key, &value);
+                    write_batch.put(&key, &value);
                 }
                 WriteElement::Pop => {
                     let key = vec![
@@ -192,14 +192,14 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
                     ]
                     .concat();
                     length -= 1;
-                    batch_write.delete(&key);
+                    write_batch.delete(&key);
                 }
             };
         }
 
         if original_length != length {
             let key = Self::get_length_key(self.key_prefix);
-            batch_write.put(&key, &bincode::serialize(&self.length).unwrap());
+            write_batch.put(&key, &bincode::serialize(&self.length).unwrap());
         }
 
         self.cache.clear();
@@ -383,7 +383,7 @@ mod tests {
     )]
     #[test]
     fn panic_on_out_of_bounds_get() {
-        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
         delegated_db_vec.get(3);
     }
 
