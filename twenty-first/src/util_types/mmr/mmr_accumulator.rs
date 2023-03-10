@@ -10,10 +10,25 @@ use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::mmr::shared_advanced;
 use crate::util_types::shared::bag_peaks;
+use crate::util_types::storage_vec::StorageVec;
 use crate::utils::has_unique_elements;
 
-impl<H: AlgebraicHasher> From<ArchivalMmr<H>> for MmrAccumulator<H> {
-    fn from(mut ammr: ArchivalMmr<H>) -> Self {
+impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> From<ArchivalMmr<H, Storage>>
+    for MmrAccumulator<H>
+{
+    fn from(ammr: ArchivalMmr<H, Storage>) -> Self {
+        MmrAccumulator {
+            leaf_count: ammr.count_leaves(),
+            peaks: ammr.get_peaks(),
+            _hasher: PhantomData,
+        }
+    }
+}
+
+impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> From<&ArchivalMmr<H, Storage>>
+    for MmrAccumulator<H>
+{
+    fn from(ammr: &ArchivalMmr<H, Storage>) -> Self {
         MmrAccumulator {
             leaf_count: ammr.count_leaves(),
             peaks: ammr.get_peaks(),
@@ -27,16 +42,6 @@ pub struct MmrAccumulator<H: AlgebraicHasher> {
     leaf_count: u64,
     peaks: Vec<Digest>,
     _hasher: PhantomData<H>,
-}
-
-impl<H: AlgebraicHasher> From<&mut ArchivalMmr<H>> for MmrAccumulator<H> {
-    fn from(archive: &mut ArchivalMmr<H>) -> Self {
-        Self {
-            leaf_count: archive.count_leaves(),
-            peaks: archive.get_peaks(),
-            _hasher: PhantomData,
-        }
-    }
 }
 
 impl<H: AlgebraicHasher> MmrAccumulator<H> {
@@ -63,19 +68,19 @@ impl<H: AlgebraicHasher> MmrAccumulator<H> {
 }
 
 impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
-    fn bag_peaks(&mut self) -> Digest {
+    fn bag_peaks(&self) -> Digest {
         bag_peaks::<H>(&self.peaks)
     }
 
-    fn get_peaks(&mut self) -> Vec<Digest> {
+    fn get_peaks(&self) -> Vec<Digest> {
         self.peaks.clone()
     }
 
-    fn is_empty(&mut self) -> bool {
+    fn is_empty(&self) -> bool {
         self.leaf_count == 0
     }
 
-    fn count_leaves(&mut self) -> u64 {
+    fn count_leaves(&self) -> u64 {
         self.leaf_count
     }
 
@@ -106,7 +111,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
     /// Returns true if the `new_peaks` input matches the calculated new MMR peaks resulting from the
     /// provided appends and mutations. Can panic if initial state is not a valid MMR.
     fn verify_batch_update(
-        &mut self,
+        &self,
         new_peaks: &[Digest],
         appended_leafs: &[Digest],
         leaf_mutations: &[(Digest, MmrMembershipProof<H>)],
@@ -284,7 +289,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         modified_membership_proof_indices
     }
 
-    fn to_accumulator(&mut self) -> MmrAccumulator<H> {
+    fn to_accumulator(&self) -> MmrAccumulator<H> {
         self.to_owned()
     }
 }
@@ -300,7 +305,8 @@ mod accumulator_mmr_tests {
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::{random_elements, random_elements_range};
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
-    use crate::test_shared::mmr::get_archival_mmr_from_digests;
+    use crate::test_shared::mmr::get_rustyleveldb_ammr_from_digests;
+    use crate::util_types::storage_vec::RustyLevelDbVec;
 
     use super::*;
 
@@ -309,8 +315,9 @@ mod accumulator_mmr_tests {
         type H = blake3::Hasher;
 
         let leaf_hashes: Vec<Digest> = random_elements(3);
-        let mut archival_mmr: ArchivalMmr<H> = get_archival_mmr_from_digests(leaf_hashes);
-        let mut accumulator_mmr: MmrAccumulator<H> = (&mut archival_mmr).into();
+        let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+            get_rustyleveldb_ammr_from_digests(leaf_hashes);
+        let accumulator_mmr: MmrAccumulator<H> = (&archival_mmr).into();
 
         assert_eq!(archival_mmr.get_peaks(), accumulator_mmr.get_peaks());
         assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
@@ -330,8 +337,8 @@ mod accumulator_mmr_tests {
         let mut leaf_hashes_end: Vec<Digest> = leaf_hashes_start.clone();
         leaf_hashes_end.push(appended_leaf);
 
-        let mut accumulator_mmr_start: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_start);
-        let mut accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
+        let accumulator_mmr_start: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_start);
+        let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 
         let leaves_were_appended = accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.get_peaks(),
@@ -350,12 +357,12 @@ mod accumulator_mmr_tests {
 
         let leaf_hashes_end: Vec<Digest> = [14, 15, 16, 17].iter().map(H::hash::<u128>).collect();
 
-        let mut accumulator_mmr_start: MmrAccumulator<H> =
+        let accumulator_mmr_start: MmrAccumulator<H> =
             MmrAccumulator::new(leaf_hashes_start.clone());
-        let mut archive_mmr_start: ArchivalMmr<H> =
-            get_archival_mmr_from_digests(leaf_hashes_start);
+        let mut archive_mmr_start: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+            get_rustyleveldb_ammr_from_digests(leaf_hashes_start);
         let membership_proof = archive_mmr_start.prove_membership(3).0;
-        let mut accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
+        let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 
         {
             let appended_leafs = [];
@@ -389,8 +396,8 @@ mod accumulator_mmr_tests {
         let appended_leafs: Vec<Digest> = random_elements(2);
         let leaf_hashes_end: Vec<Digest> =
             vec![leaf_hashes_start.clone(), appended_leafs.clone()].concat();
-        let mut accumulator_mmr_start: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_start);
-        let mut accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
+        let accumulator_mmr_start: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_start);
+        let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 
         let leaves_were_appended = accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.get_peaks(),
@@ -408,13 +415,13 @@ mod accumulator_mmr_tests {
         let new_leafs: Vec<Digest> = [20, 21].iter().map(H::hash::<u128>).collect();
         let leaf_hashes_end: Vec<Digest> = [14, 20, 16, 21].iter().map(H::hash::<u128>).collect();
 
-        let mut accumulator_mmr_start: MmrAccumulator<H> =
+        let accumulator_mmr_start: MmrAccumulator<H> =
             MmrAccumulator::<H>::new(leaf_hashes_start.clone());
-        let mut archive_mmr_start: ArchivalMmr<H> =
-            get_archival_mmr_from_digests(leaf_hashes_start);
+        let mut archive_mmr_start: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+            get_rustyleveldb_ammr_from_digests(leaf_hashes_start);
         let membership_proof1 = archive_mmr_start.prove_membership(1).0;
         let membership_proof3 = archive_mmr_start.prove_membership(3).0;
-        let mut accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
+        let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
         assert!(accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.get_peaks(),
             &[],
@@ -434,10 +441,10 @@ mod accumulator_mmr_tests {
             let initial_leaf_digests: Vec<Digest> = random_elements(mmr_leaf_count);
 
             let mut mmra: MmrAccumulator<H> = MmrAccumulator::new(initial_leaf_digests.clone());
-            let mut ammr: ArchivalMmr<H> =
-                get_archival_mmr_from_digests(initial_leaf_digests.clone());
-            let mut ammr_copy: ArchivalMmr<H> =
-                get_archival_mmr_from_digests(initial_leaf_digests.clone());
+            let mut ammr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+                get_rustyleveldb_ammr_from_digests(initial_leaf_digests.clone());
+            let mut ammr_copy: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+                get_rustyleveldb_ammr_from_digests(initial_leaf_digests.clone());
 
             let mutated_leaf_count = rng.gen_range(0..mmr_leaf_count);
             let all_indices: Vec<u64> = (0..mmr_leaf_count as u64).collect();
@@ -540,13 +547,14 @@ mod accumulator_mmr_tests {
                 .map(|x| H::hash(&(x as u128)))
                 .collect();
 
-            let mut bad_mmr: ArchivalMmr<H> = get_archival_mmr_from_digests(bad_digests.clone());
+            let mut bad_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+                get_rustyleveldb_ammr_from_digests(bad_digests.clone());
             let bad_membership_proof: MmrMembershipProof<H> = bad_mmr.prove_membership(0).0;
             let bad_membership_proof_digest = bad_digests[0];
             let bad_leaf: Digest = H::hash(&8765432165123u128);
-            let mut archival_mmr_init: ArchivalMmr<H> =
-                get_archival_mmr_from_digests(leaf_hashes_start.clone());
-            let mut accumulator_mmr = MmrAccumulator::<H>::new(leaf_hashes_start.clone());
+            let mut archival_mmr_init: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+                get_rustyleveldb_ammr_from_digests(leaf_hashes_start.clone());
+            let accumulator_mmr = MmrAccumulator::<H>::new(leaf_hashes_start.clone());
 
             for append_size in 0..18 {
                 let appends: Vec<Digest> =
@@ -578,9 +586,9 @@ mod accumulator_mmr_tests {
 
                     // let mutated_archival_mmr =
                     //     ArchivalMmr::<Hasher>::new(leaf_hashes_mutated.clone());
-                    let mut mutated_archival_mmr: ArchivalMmr<H> =
-                        get_archival_mmr_from_digests(leaf_hashes_mutated.clone());
-                    let mut mutated_accumulator_mmr = MmrAccumulator::<H>::new(leaf_hashes_mutated);
+                    let mutated_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+                        get_rustyleveldb_ammr_from_digests(leaf_hashes_mutated.clone());
+                    let mutated_accumulator_mmr = MmrAccumulator::<H>::new(leaf_hashes_mutated);
                     let expected_new_peaks_from_archival = mutated_archival_mmr.get_peaks();
                     let expected_new_peaks_from_accumulator = mutated_accumulator_mmr.get_peaks();
                     assert_eq!(
@@ -652,7 +660,7 @@ mod accumulator_mmr_tests {
         mmra.append(H::hash(&BFieldElement::zero()));
 
         let json = serde_json::to_string(&mmra).unwrap();
-        let mut s_back = serde_json::from_str::<Mmr>(&json).unwrap();
+        let s_back = serde_json::from_str::<Mmr>(&json).unwrap();
         assert!(mmra.bag_peaks() == s_back.bag_peaks());
         assert_eq!(1, mmra.count_leaves());
     }

@@ -9,7 +9,7 @@ use serde::{de::DeserializeOwned, Serialize};
 
 type IndexType = u64;
 
-pub trait DbtVec<T> {
+pub trait StorageVec<T> {
     fn is_empty(&self) -> bool;
     fn len(&self) -> IndexType;
     fn get(&self, index: IndexType) -> T;
@@ -24,7 +24,7 @@ pub enum WriteElement<T: Serialize + DeserializeOwned> {
     Pop,
 }
 
-impl<T: Serialize + DeserializeOwned + Clone> DbtVec<T> for RustyLevelDbVec<T> {
+impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {
     fn is_empty(&self) -> bool {
         self.length == 0
     }
@@ -206,6 +206,34 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     }
 }
 
+pub struct OrdinaryVec<T>(Vec<T>);
+
+impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn len(&self) -> IndexType {
+        self.0.len() as IndexType
+    }
+
+    fn get(&self, index: IndexType) -> T {
+        self.0[index as usize].clone()
+    }
+
+    fn set(&mut self, index: IndexType, value: T) {
+        self.0[index as usize] = value;
+    }
+
+    fn pop(&mut self) -> Option<T> {
+        self.0.pop()
+    }
+
+    fn push(&mut self, value: T) {
+        self.0.push(value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,11 +273,7 @@ mod tests {
         (persisted_vec, regular_vec, db)
     }
 
-    #[test]
-    fn simple_init_test_push_pop_get_set() {
-        let db = get_test_db();
-        let mut delegated_db_vec: RustyLevelDbVec<[u8; 13]> =
-            RustyLevelDbVec::new(db, 0, "unit test vec 0");
+    fn simple_prop<Storage: StorageVec<[u8; 13]>>(mut delegated_db_vec: Storage) {
         assert_eq!(
             0,
             delegated_db_vec.len(),
@@ -280,6 +304,17 @@ mod tests {
         assert!(delegated_db_vec.pop().is_none());
         assert_eq!(0, delegated_db_vec.len());
         assert!(delegated_db_vec.pop().is_none());
+    }
+
+    #[test]
+    fn test_simple_prop() {
+        let db = get_test_db();
+        let delegated_db_vec: RustyLevelDbVec<[u8; 13]> =
+            RustyLevelDbVec::new(db, 0, "unit test vec 0");
+        simple_prop(delegated_db_vec);
+
+        let ordinary_vec = OrdinaryVec::<[u8; 13]>(vec![]);
+        simple_prop(ordinary_vec);
     }
 
     #[test]
