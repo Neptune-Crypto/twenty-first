@@ -74,7 +74,6 @@ impl Display for TimingReport {
             .step_durations
             .iter()
             .map(|(label, duration)| (label.len(), format!("{} ms", duration.as_millis()).len()))
-            .into_iter()
             .unzip();
         let max_label_width = label_widths.into_iter().max().unwrap_or(0);
         let max_duration_width = duration_widths.into_iter().max().unwrap_or(0);

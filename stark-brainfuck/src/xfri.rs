@@ -339,7 +339,7 @@ impl<H: AlgebraicHasher> Fri<H> {
 
             indices = indices
                 .into_iter()
-                .zip((counter..counter + self.colinearity_checks_count).into_iter())
+                .zip(counter..counter + self.colinearity_checks_count)
                 .map(|(index, count)| {
                     let digest = H::hash_slice(&[seed, &count.to_sequence()].concat());
                     let reduce_modulo: bool = H::sample_index(&digest, 2) == 0;

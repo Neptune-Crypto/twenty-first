@@ -203,7 +203,6 @@ impl CyclotomicRingElement {
         CyclotomicRingElement {
             coefficients: randomness
                 .chunks(8)
-                .into_iter()
                 .map(|r| TryInto::<[u8; 8]>::try_into(r).unwrap())
                 .map(|r| sample_short_bfield_element(&r))
                 .collect_vec()
@@ -241,7 +240,6 @@ impl Add for CyclotomicRingElement {
     fn add(self, rhs: Self) -> Self::Output {
         CyclotomicRingElement {
             coefficients: (0..64)
-                .into_iter()
                 .map(|i| self.coefficients[i] + rhs.coefficients[i])
                 .collect_vec()
                 .try_into()
@@ -265,7 +263,6 @@ impl Sub for CyclotomicRingElement {
     fn sub(self, rhs: Self) -> Self::Output {
         CyclotomicRingElement {
             coefficients: (0..64)
-                .into_iter()
                 .map(|i| self.coefficients[i] - rhs.coefficients[i])
                 .collect_vec()
                 .try_into()
@@ -421,7 +418,6 @@ impl<const N: usize> ModuleElement<N> {
         debug_assert!(randomness.len() >= N * 9 * 64);
         ModuleElement {
             elements: (0..N)
-                .into_iter()
                 .map(|i| {
                     CyclotomicRingElement::sample_uniform(&randomness[i * 9 * 64..(i + 1) * 9 * 64])
                 })
