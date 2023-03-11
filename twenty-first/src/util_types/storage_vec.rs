@@ -1,7 +1,6 @@
 use std::{
-    cell::RefCell,
     collections::{HashMap, VecDeque},
-    rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 use rusty_leveldb::{WriteBatch, DB};
@@ -22,6 +21,15 @@ pub enum WriteElement<T: Serialize + DeserializeOwned> {
     OverWrite((IndexType, T)),
     Push(T),
     Pop,
+}
+
+pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
+    key_prefix: u8,
+    db: Arc<Mutex<DB>>,
+    write_queue: VecDeque<WriteElement<T>>,
+    length: IndexType,
+    cache: HashMap<IndexType, T>,
+    name: String,
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {
@@ -49,7 +57,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
 
         // then try persistent storage
         let db_key = self.get_index_key(index);
-        let db_val = self.db.borrow_mut().get(&db_key).unwrap_or_else(|| {
+        let db_val = self.db.lock().unwrap().get(&db_key).unwrap_or_else(|| {
             panic!(
                 "Element with index {index} does not exist in {}. This should not happen",
                 self.name
@@ -95,7 +103,8 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
             // then try persistent storage
             let db_key = self.get_index_key(self.length);
             self.db
-                .borrow_mut()
+                .lock()
+                .unwrap()
                 .get(&db_key)
                 .map(|bytes| bincode::deserialize(&bytes).unwrap())
         }
@@ -117,15 +126,6 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     }
 }
 
-pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
-    key_prefix: u8,
-    db: Rc<RefCell<DB>>,
-    write_queue: VecDeque<WriteElement<T>>,
-    length: IndexType,
-    cache: HashMap<IndexType, T>,
-    name: String,
-}
-
 impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     // Return the key used to store the length of the persisted vector
     fn get_length_key(key_prefix: u8) -> [u8; 2] {
@@ -136,7 +136,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     /// Return the length at the last write to disk
     fn persisted_length(&self) -> IndexType {
         let key = Self::get_length_key(self.key_prefix);
-        match self.db.borrow_mut().get(&key) {
+        match self.db.lock().unwrap().get(&key) {
             Some(value) => bincode::deserialize(&value).unwrap(),
             None => 0,
         }
@@ -150,9 +150,9 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
             .unwrap()
     }
 
-    pub fn new(db: Rc<RefCell<DB>>, key_prefix: u8, name: &str) -> Self {
+    pub fn new(db: Arc<Mutex<DB>>, key_prefix: u8, name: &str) -> Self {
         let length_key = Self::get_length_key(key_prefix);
-        let length = match db.borrow_mut().get(&length_key) {
+        let length = match db.lock().unwrap().get(&length_key) {
             Some(length_bytes) => bincode::deserialize(&length_bytes).unwrap(),
             None => 0,
         };
@@ -240,17 +240,17 @@ mod tests {
     use rand::{Rng, RngCore};
     use rusty_leveldb::DB;
 
-    fn get_test_db() -> Rc<RefCell<DB>> {
+    fn get_test_db() -> Arc<Mutex<DB>> {
         let opt = rusty_leveldb::in_memory();
         let db = DB::open("mydatabase", opt).unwrap();
-        Rc::new(RefCell::new(db))
+        Arc::new(Mutex::new(db))
     }
 
     /// Return a persisted vector and a regular in-memory vector with the same elements
     fn get_persisted_vec_with_length(
         length: IndexType,
         name: &str,
-    ) -> (RustyLevelDbVec<u64>, Vec<u64>, Rc<RefCell<DB>>) {
+    ) -> (RustyLevelDbVec<u64>, Vec<u64>, Arc<Mutex<DB>>) {
         let db = get_test_db();
         let mut persisted_vec = RustyLevelDbVec::new(db.clone(), 0, name);
         let mut regular_vec = vec![];
@@ -264,7 +264,7 @@ mod tests {
 
         let mut write_batch = WriteBatch::new();
         persisted_vec.pull_queue(&mut write_batch);
-        assert!(db.borrow_mut().write(write_batch, true).is_ok());
+        assert!(db.lock().unwrap().write(write_batch, true).is_ok());
 
         // Sanity checks
         assert!(persisted_vec.cache.is_empty());
@@ -349,7 +349,7 @@ mod tests {
         assert_eq!(0, delegated_db_vec_b.len());
 
         assert!(
-            db.borrow_mut().write(write_batch, true).is_ok(),
+            db.lock().unwrap().write(write_batch, true).is_ok(),
             "DB write must succeed"
         );
         assert_eq!(3, delegated_db_vec_a.persisted_length());
@@ -401,7 +401,7 @@ mod tests {
         // Check equality after persisting updates
         let mut write_batch = WriteBatch::new();
         persisted_vector.pull_queue(&mut write_batch);
-        db.borrow_mut().write(write_batch, true).unwrap();
+        db.lock().unwrap().write(write_batch, true).unwrap();
 
         assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
         assert_eq!(
