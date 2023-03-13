@@ -6,7 +6,7 @@ use std::{
 use rusty_leveldb::{WriteBatch, DB};
 use serde::{de::DeserializeOwned, Serialize};
 
-type IndexType = u64;
+pub type IndexType = u64;
 
 pub trait StorageVec<T> {
     fn is_empty(&self) -> bool;
