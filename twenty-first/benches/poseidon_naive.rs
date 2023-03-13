@@ -20,7 +20,6 @@ fn bench_10(c: &mut Criterion) {
 
     let mut rng = rand::thread_rng();
     let single_element: [BFieldElement; STATE_SIZE] = (0..STATE_SIZE)
-        .into_iter()
         .map(|_| BFieldElement::new(rng.next_u64()))
         .collect_vec()
         .try_into()

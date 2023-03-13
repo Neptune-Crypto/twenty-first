@@ -394,8 +394,8 @@ mod tests {
 
         // Check equality after above loop
         assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
-        for i in 0..normal_vector.len() {
-            assert_eq!(normal_vector[i], persisted_vector.get(i as u64));
+        for (i, nvi) in normal_vector.iter().enumerate() {
+            assert_eq!(*nvi, persisted_vector.get(i as u64));
         }
 
         // Check equality after persisting updates
@@ -408,8 +408,11 @@ mod tests {
             normal_vector.len(),
             persisted_vector.persisted_length() as usize
         );
-        for i in 0..normal_vector.len() {
-            assert_eq!(normal_vector[i], persisted_vector.get(i as u64));
+
+        // Check equality after write
+        assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
+        for (i, nvi) in normal_vector.iter().enumerate() {
+            assert_eq!(*nvi, persisted_vector.get(i as u64));
         }
     }
 

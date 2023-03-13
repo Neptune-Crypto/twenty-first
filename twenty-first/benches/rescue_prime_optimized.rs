@@ -15,7 +15,6 @@ fn bench_10(c: &mut Criterion) {
 
     let mut rng = rand::thread_rng();
     let single_element: [BFieldElement; 10] = (0..10)
-        .into_iter()
         .map(|_| BFieldElement::new(rng.next_u64()))
         .collect_vec()
         .try_into()
