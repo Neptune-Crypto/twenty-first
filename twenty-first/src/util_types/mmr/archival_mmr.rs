@@ -1044,19 +1044,19 @@ mod mmr_test {
         ammr0.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let mut db_iter = db.lock().unwrap().new_iter().unwrap();
+        db_iter = db.lock().unwrap().new_iter().unwrap();
         assert!(db_iter.next().is_none());
 
         ammr1.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let mut db_iter = db.lock().unwrap().new_iter().unwrap();
+        db_iter = db.lock().unwrap().new_iter().unwrap();
         assert!(db_iter.next().is_none());
 
         db.lock().unwrap().write(write_batch, true).unwrap();
 
         // Verify that DB is not empty
-        let mut db_iter = db.lock().unwrap().new_iter().unwrap();
+        db_iter = db.lock().unwrap().new_iter().unwrap();
         assert!(db_iter.next().is_some());
 
         assert_eq!(digest0, ammr0.get_leaf(0));
