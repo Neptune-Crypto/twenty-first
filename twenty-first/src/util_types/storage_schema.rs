@@ -642,4 +642,79 @@ mod tests {
         assert_eq!(new_vector.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
         assert_eq!(new_vector.as_ref().borrow_mut().len(), 4);
     }
+
+    #[test]
+    fn test_two_vectors_and_singleton() {
+        let singleton_value = S([3u8, 3u8, 3u8, 1u8].to_vec());
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let vector1 = rusty_storage.schema.new_vec::<u64, S>("test-vector1");
+        let vector2 = rusty_storage.schema.new_vec::<u64, S>("test-vector2");
+        let singleton = rusty_storage
+            .schema
+            .new_singleton::<S>(RustyKey([1u8; 1].to_vec()));
+
+        // initialize
+        rusty_storage.restore_or_new();
+
+        // populate 1
+        vector1.as_ref().borrow_mut().push(S([1u8].to_vec()));
+        vector1.as_ref().borrow_mut().push(S([3u8].to_vec()));
+        vector1.as_ref().borrow_mut().push(S([4u8].to_vec()));
+        vector1.as_ref().borrow_mut().push(S([7u8].to_vec()));
+        vector1.as_ref().borrow_mut().push(S([8u8].to_vec()));
+
+        // populate 2
+        vector2.as_ref().borrow_mut().push(S([1u8].to_vec()));
+        vector2.as_ref().borrow_mut().push(S([3u8].to_vec()));
+        vector2.as_ref().borrow_mut().push(S([3u8].to_vec()));
+        vector2.as_ref().borrow_mut().push(S([7u8].to_vec()));
+
+        // set singleton
+        singleton.as_ref().borrow_mut().set(singleton_value.clone());
+
+        // modify 1
+        vector1.as_ref().borrow_mut().set(0, S([8u8].to_vec()));
+
+        // test
+        assert_eq!(vector1.as_ref().borrow_mut().get(0), S([8u8].to_vec()));
+        assert_eq!(vector1.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
+        assert_eq!(vector1.as_ref().borrow_mut().get(2), S([4u8].to_vec()));
+        assert_eq!(vector1.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
+        assert_eq!(vector1.as_ref().borrow_mut().get(4), S([8u8].to_vec()));
+        assert_eq!(vector1.as_ref().borrow_mut().len(), 5);
+        assert_eq!(vector2.as_ref().borrow_mut().get(0), S([1u8].to_vec()));
+        assert_eq!(vector2.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
+        assert_eq!(vector2.as_ref().borrow_mut().get(2), S([3u8].to_vec()));
+        assert_eq!(vector2.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
+        assert_eq!(vector2.as_ref().borrow_mut().len(), 4);
+        assert_eq!(singleton.as_ref().borrow_mut().get(), singleton_value);
+
+        // persist and drop
+        rusty_storage.persist();
+        rusty_storage.close();
+
+        // restore from disk
+        let new_db = DB::open("test-database", opt).unwrap();
+        let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
+        let new_vector1 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector1");
+        let new_vector2 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector2");
+        new_rusty_storage.restore_or_new();
+
+        // test again
+        assert_eq!(new_vector1.as_ref().borrow_mut().get(0), S([8u8].to_vec()));
+        assert_eq!(new_vector1.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
+        assert_eq!(new_vector1.as_ref().borrow_mut().get(2), S([4u8].to_vec()));
+        assert_eq!(new_vector1.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
+        assert_eq!(new_vector1.as_ref().borrow_mut().get(4), S([8u8].to_vec()));
+        assert_eq!(new_vector1.as_ref().borrow_mut().len(), 5);
+        assert_eq!(new_vector2.as_ref().borrow_mut().get(0), S([1u8].to_vec()));
+        assert_eq!(new_vector2.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
+        assert_eq!(new_vector2.as_ref().borrow_mut().get(2), S([3u8].to_vec()));
+        assert_eq!(new_vector2.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
+        assert_eq!(new_vector2.as_ref().borrow_mut().len(), 4);
+        assert_eq!(singleton.as_ref().borrow_mut().get(), singleton_value);
+    }
 }
