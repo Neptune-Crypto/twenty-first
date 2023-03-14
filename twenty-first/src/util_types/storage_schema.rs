@@ -90,11 +90,10 @@ impl<ParentKey, ParentValue, T> StorageVec<T> for DbtVec<ParentKey, ParentValue,
 where
     ParentKey: From<IndexType>,
     ParentValue: From<T>,
-    T: Clone,
-    T: From<ParentValue>,
+    T: Clone + From<ParentValue> + Debug,
     ParentKey: From<(ParentKey, ParentKey)>,
     ParentKey: From<u8>,
-    IndexType: From<ParentValue>,
+    IndexType: From<ParentValue> + From<u64>,
 {
     fn is_empty(&self) -> bool {
         self.current_length == 0
@@ -408,8 +407,26 @@ impl From<(RustyKey, RustyKey)> for RustyKey {
         RustyKey([v0, v1].concat())
     }
 }
+impl From<u64> for RustyKey {
+    fn from(value: u64) -> Self {
+        RustyKey(value.to_be_bytes().to_vec())
+    }
+}
+
 #[derive(Debug)]
 struct RustyValue(Vec<u8>);
+
+impl From<RustyValue> for u64 {
+    fn from(value: RustyValue) -> Self {
+        u64::from_be_bytes(value.0.try_into().unwrap())
+    }
+}
+
+impl From<u64> for RustyValue {
+    fn from(value: u64) -> Self {
+        RustyValue(value.to_be_bytes().to_vec())
+    }
+}
 
 /// Database schema and tables logic for RustyLevelDB. You probably
 /// want to implement your own storage class after this example so
@@ -517,6 +534,11 @@ mod tests {
             Self(value.0)
         }
     }
+    impl From<S> for u64 {
+        fn from(value: S) -> Self {
+            u64::from_be_bytes(value.0.try_into().unwrap())
+        }
+    }
 
     #[test]
     fn test_simple_singleton() {
@@ -561,5 +583,63 @@ mod tests {
 
         // test
         assert_eq!(new_singleton.as_ref().borrow_mut().get(), singleton_value);
+    }
+
+    #[test]
+    fn test_simple_vector() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
+
+        // initialize
+        rusty_storage.restore_or_new();
+
+        // populate
+        vector.as_ref().borrow_mut().push(S([1u8].to_vec()));
+        vector.as_ref().borrow_mut().push(S([3u8].to_vec()));
+        vector.as_ref().borrow_mut().push(S([4u8].to_vec()));
+        vector.as_ref().borrow_mut().push(S([7u8].to_vec()));
+        vector.as_ref().borrow_mut().push(S([8u8].to_vec()));
+
+        // test
+        assert_eq!(vector.as_ref().borrow_mut().get(0), S([1u8].to_vec()));
+        assert_eq!(vector.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
+        assert_eq!(vector.as_ref().borrow_mut().get(2), S([4u8].to_vec()));
+        assert_eq!(vector.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
+        assert_eq!(vector.as_ref().borrow_mut().get(4), S([8u8].to_vec()));
+        assert_eq!(vector.as_ref().borrow_mut().len(), 5);
+
+        // persist
+        rusty_storage.persist();
+
+        // modify
+        let last = vector.as_ref().borrow_mut().pop().unwrap();
+
+        // test
+        assert_eq!(last, S([8u8].to_vec()));
+
+        // drop without persisting
+        rusty_storage.close();
+
+        // create new database
+        let new_db = DB::open("test-database", opt).unwrap();
+        let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
+        let new_vector = new_rusty_storage.schema.new_vec::<u64, S>("test-vector");
+
+        // initialize
+        new_rusty_storage.restore_or_new();
+
+        // modify
+        new_vector.as_ref().borrow_mut().set(2, S([3u8].to_vec()));
+        new_vector.as_ref().borrow_mut().pop();
+
+        // test
+        assert_eq!(new_vector.as_ref().borrow_mut().get(0), S([1u8].to_vec()));
+        assert_eq!(new_vector.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
+        assert_eq!(new_vector.as_ref().borrow_mut().get(2), S([3u8].to_vec()));
+        assert_eq!(new_vector.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
+        assert_eq!(new_vector.as_ref().borrow_mut().len(), 4);
     }
 }
