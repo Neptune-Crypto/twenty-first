@@ -37,6 +37,9 @@ where
         peaks_and_heights.into_iter().map(|x| x.0).collect()
     }
 
+    /// Whether the MMR is empty. Note that since indexing starts at
+    /// 1, the `digests` contain must always contain at least one
+    /// element: a dummy digest.
     fn is_empty(&self) -> bool {
         self.digests.len() == 1
     }
@@ -122,15 +125,24 @@ where
 
 impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
     /// Create a new archival MMR, or restore one from a database.
-    pub fn new(mut pv: Storage) -> Self {
-        if pv.is_empty() {
-            let dummy_digest = H::hash(&0u64);
-            pv.push(dummy_digest);
-        }
-
-        Self {
+    pub fn new(pv: Storage) -> Self {
+        let mut ret = Self {
             digests: pv,
             _hasher: PhantomData,
+        };
+        ret.fix_dummy();
+        ret
+    }
+
+    /// Inserts a dummy digest into the `digests` container. Due to
+    /// 1-indexation, this structure must always contain one element
+    /// (even if it is never used). Due to the persistence layer,
+    /// this data structure can be set to the default vector, which
+    /// is the empty vector. This method fixes that.
+    pub fn fix_dummy(&mut self) {
+        if self.digests.len() == 0 {
+            println!("Inserting dummy");
+            self.digests.push(Digest::default());
         }
     }
 
