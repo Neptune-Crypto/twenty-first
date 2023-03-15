@@ -7,7 +7,9 @@ use std::{
 
 use rusty_leveldb::{WriteBatch, DB};
 
-use super::storage_vec::{IndexType, StorageVec};
+use crate::shared_math::b_field_element::BFieldElement;
+
+use super::storage_vec::{Index, StorageVec};
 
 pub enum WriteOperation<ParentKey, ParentValue> {
     Write(ParentKey, ParentValue),
@@ -31,7 +33,7 @@ pub enum VecWriteOperation<Index, T> {
 
 pub struct DbtVec<ParentKey, ParentValue, Index, T> {
     reader: Arc<RefCell<dyn StorageReader<ParentKey, ParentValue>>>,
-    current_length: Index,
+    current_length: Option<Index>,
     key_prefix: u8,
     write_queue: VecDeque<VecWriteOperation<Index, T>>,
     cache: HashMap<Index, T>,
@@ -73,7 +75,7 @@ where
         key_prefix: u8,
         name: &str,
     ) -> Self {
-        let length: Index = 0.into();
+        let length = None;
         let cache = HashMap::new();
         Self {
             key_prefix,
@@ -86,40 +88,58 @@ where
     }
 }
 
-impl<ParentKey, ParentValue, T> StorageVec<T> for DbtVec<ParentKey, ParentValue, IndexType, T>
+impl<ParentKey, ParentValue, T> StorageVec<T>
+    for Arc<RefCell<DbtVec<ParentKey, ParentValue, Index, T>>>
 where
-    ParentKey: From<IndexType>,
+    ParentKey: From<Index>,
     ParentValue: From<T>,
     T: Clone + From<ParentValue> + Debug,
     ParentKey: From<(ParentKey, ParentKey)>,
     ParentKey: From<u8>,
-    IndexType: From<ParentValue> + From<u64>,
+    Index: From<ParentValue> + From<u64>,
 {
     fn is_empty(&self) -> bool {
-        self.current_length == 0
+        self.len() == 0
     }
 
-    fn len(&self) -> IndexType {
-        self.current_length
+    fn len(&self) -> Index {
+        let current_length = self.as_ref().borrow_mut().current_length;
+        if let Some(length) = current_length {
+            return length;
+        }
+        let persisted_length = self.as_ref().borrow_mut().persisted_length();
+        if let Some(length) = persisted_length {
+            length
+        } else {
+            0
+        }
     }
 
-    fn get(&self, index: IndexType) -> T {
+    fn get(&self, index: Index) -> T {
         // Disallow getting values out-of-bounds
         assert!(
             index < self.len(),
             "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-            self.current_length,
-            self.name
+            self.len(),
+            self.as_ref().borrow_mut().name
         );
 
         // try cache first
-        if self.cache.contains_key(&index) {
-            return self.cache.get(&index).unwrap().clone();
+        if self.as_ref().borrow_mut().cache.contains_key(&index) {
+            return self
+                .as_ref()
+                .borrow_mut()
+                .cache
+                .get(&index)
+                .unwrap()
+                .clone();
         }
 
         // then try persistent storage
-        let key: ParentKey = self.get_index_key(index);
+        let key: ParentKey = self.as_ref().borrow_mut().get_index_key(index);
         let val = self
+            .as_ref()
+            .borrow_mut()
             .reader
             .as_ref()
             .borrow_mut()
@@ -127,49 +147,66 @@ where
             .unwrap_or_else(|| {
                 panic!(
                     "Element with index {index} does not exist in {}. This should not happen",
-                    self.name
+                    self.as_ref().borrow_mut().name
                 )
             });
         val.into()
     }
 
-    fn set(&mut self, index: IndexType, value: T) {
+    fn set(&mut self, index: Index, value: T) {
         // Disallow setting values out-of-bounds
         assert!(
             index < self.len(),
             "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-            self.current_length,
-            self.name
+            self.len(),
+            self.as_ref().borrow_mut().name
         );
 
-        let _old_value = self.cache.insert(index, value.clone());
+        let _old_value = self
+            .as_ref()
+            .borrow_mut()
+            .cache
+            .insert(index, value.clone());
 
         // TODO: If `old_value` is Some(*) use it to remove the corresponding
         // element in the `write_queue` to reduce disk IO.
 
-        self.write_queue
+        self.as_ref()
+            .borrow_mut()
+            .write_queue
             .push_back(VecWriteOperation::OverWrite((index, value)));
     }
 
     fn pop(&mut self) -> Option<T> {
         // add to write queue
-        self.write_queue.push_back(VecWriteOperation::Pop);
+        self.as_ref()
+            .borrow_mut()
+            .write_queue
+            .push_back(VecWriteOperation::Pop);
 
         // If vector is empty, return None
-        if self.current_length == 0 {
+        if self.len() == 0 {
             return None;
         }
 
         // Update length
-        self.current_length -= 1;
+        *self.as_ref().borrow_mut().current_length.as_mut().unwrap() -= 1;
 
         // try cache first
-        if self.cache.contains_key(&self.current_length) {
-            self.cache.remove(&self.current_length)
+        let current_length = self.len();
+        if self
+            .as_ref()
+            .borrow_mut()
+            .cache
+            .contains_key(&current_length)
+        {
+            self.as_ref().borrow_mut().cache.remove(&current_length)
         } else {
             // then try persistent storage
-            let key = self.get_index_key(self.current_length);
-            self.reader
+            let key = self.as_ref().borrow_mut().get_index_key(current_length);
+            self.as_ref()
+                .borrow_mut()
+                .reader
                 .as_ref()
                 .borrow_mut()
                 .get(key)
@@ -179,31 +216,38 @@ where
 
     fn push(&mut self, value: T) {
         // add to write queue
-        self.write_queue
+        self.as_ref()
+            .borrow_mut()
+            .write_queue
             .push_back(VecWriteOperation::Push(value.clone()));
 
         // record in cache
-        let _old_value = self.cache.insert(self.current_length, value);
+        let current_length = self.len();
+        let _old_value = self
+            .as_ref()
+            .borrow_mut()
+            .cache
+            .insert(current_length, value);
 
         // TODO: if `old_value` is Some(_) then use it to remove the corresponding
         // element from the `write_queue` to reduce disk operations
 
         // update length
-        self.current_length += 1;
+        self.as_ref().borrow_mut().current_length = Some(current_length + 1);
     }
 }
 
 impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
-    for DbtVec<ParentKey, ParentValue, IndexType, T>
+    for DbtVec<ParentKey, ParentValue, Index, T>
 where
-    ParentKey: From<IndexType>,
+    ParentKey: From<Index>,
     ParentValue: From<T>,
     T: Clone,
     T: From<ParentValue>,
     ParentKey: From<(ParentKey, ParentKey)>,
     ParentKey: From<u8>,
-    IndexType: From<ParentValue>,
-    ParentValue: From<IndexType>,
+    Index: From<ParentValue>,
+    ParentValue: From<Index>,
 {
     /// Collect all added elements that have not yet bit persisted
     fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
@@ -256,16 +300,18 @@ where
             .borrow_mut()
             .get(Self::get_length_key(self.key_prefix))
         {
-            self.current_length = length.into();
+            self.current_length = Some(length.into());
         } else {
-            self.current_length = 0;
+            self.current_length = Some(0);
         }
+        self.cache.clear();
+        self.write_queue.clear();
     }
 }
 
 // possible future extension
 // pub struct DbtHashMap<Key, Value, K, V> {
-//     parent: Arc<Mutex<DbtSchema<Key, Value>>>,
+//     parent: Arc<RefCell<DbtSchema<Key, Value>>>,
 // }
 
 pub trait StorageSingleton<T>
@@ -283,16 +329,17 @@ pub struct DbtSingleton<ParentKey, ParentValue, T> {
     reader: Arc<RefCell<dyn StorageReader<ParentKey, ParentValue>>>,
 }
 
-impl<ParentKey, ParentValue, T> StorageSingleton<T> for DbtSingleton<ParentKey, ParentValue, T>
+impl<ParentKey, ParentValue, T> StorageSingleton<T>
+    for Arc<RefCell<DbtSingleton<ParentKey, ParentValue, T>>>
 where
     T: Clone + From<ParentValue>,
 {
     fn get(&self) -> T {
-        self.current_value.clone()
+        self.as_ref().borrow().current_value.clone()
     }
 
     fn set(&mut self, t: T) {
-        self.current_value = t;
+        self.as_ref().borrow_mut().current_value = t;
     }
 }
 
@@ -324,8 +371,8 @@ where
 }
 
 pub struct DbtSchema<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue>> {
-    tables: Vec<Arc<RefCell<dyn DbTable<ParentKey, ParentValue>>>>,
-    reader: Arc<RefCell<Reader>>,
+    pub tables: Vec<Arc<RefCell<dyn DbTable<ParentKey, ParentValue>>>>,
+    pub reader: Arc<RefCell<Reader>>,
 }
 
 impl<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue> + 'static>
@@ -336,13 +383,13 @@ impl<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue> + 'st
         name: &str,
     ) -> Arc<RefCell<DbtVec<ParentKey, ParentValue, Index, T>>>
     where
-        ParentKey: From<IndexType> + 'static,
+        ParentKey: From<Index> + 'static,
         ParentValue: From<T> + 'static,
         T: Clone + From<ParentValue> + 'static,
         ParentKey: From<(ParentKey, ParentKey)>,
         ParentKey: From<u8>,
         Index: From<ParentValue>,
-        ParentValue: From<IndexType>,
+        ParentValue: From<Index>,
         Index: From<u64> + 'static,
         DbtVec<ParentKey, ParentValue, Index, T>: DbTable<ParentKey, ParentValue>,
     {
@@ -350,7 +397,7 @@ impl<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue> + 'st
         let reader = self.reader.clone();
         let vector = DbtVec::<ParentKey, ParentValue, Index, T> {
             reader,
-            current_length: 0.into(),
+            current_length: None,
             key_prefix: self.tables.len() as u8,
             write_queue: VecDeque::new(),
             cache: HashMap::new(),
@@ -394,7 +441,7 @@ pub trait StorageWriter<ParentKey, ParentValue> {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-struct RustyKey(Vec<u8>);
+pub struct RustyKey(pub Vec<u8>);
 impl From<u8> for RustyKey {
     fn from(value: u8) -> Self {
         Self([value].to_vec())
@@ -414,17 +461,42 @@ impl From<u64> for RustyKey {
 }
 
 #[derive(Debug)]
-struct RustyValue(Vec<u8>);
+pub struct RustyValue(Vec<u8>);
 
 impl From<RustyValue> for u64 {
     fn from(value: RustyValue) -> Self {
         u64::from_be_bytes(value.0.try_into().unwrap())
     }
 }
-
 impl From<u64> for RustyValue {
     fn from(value: u64) -> Self {
         RustyValue(value.to_be_bytes().to_vec())
+    }
+}
+impl From<RustyValue> for crate::shared_math::tip5::Digest {
+    fn from(value: RustyValue) -> Self {
+        crate::shared_math::tip5::Digest::new(
+            value
+                .0
+                .chunks(8)
+                .map(|ch| {
+                    u64::from_be_bytes(ch.try_into().expect("Cannot cast RustyValue into Digest"))
+                })
+                .map(BFieldElement::new)
+                .collect::<Vec<_>>()
+                .try_into().expect("Can cast RustyValue into BFieldElements but number does not match that of Digest."),
+        )
+    }
+}
+impl From<crate::shared_math::tip5::Digest> for RustyValue {
+    fn from(value: crate::shared_math::tip5::Digest) -> Self {
+        RustyValue(
+            value
+                .values()
+                .map(|b| b.value())
+                .map(u64::to_be_bytes)
+                .concat(),
+        )
     }
 }
 
@@ -548,7 +620,7 @@ mod tests {
         let db = DB::open("test-database", opt.clone()).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let singleton = rusty_storage
+        let mut singleton = rusty_storage
             .schema
             .new_singleton::<S>(RustyKey([1u8; 1].to_vec()));
 
@@ -556,19 +628,19 @@ mod tests {
         rusty_storage.restore_or_new();
 
         // test
-        assert_eq!(singleton.as_ref().borrow_mut().get(), S([].to_vec()));
+        assert_eq!(singleton.get(), S([].to_vec()));
 
         // set
-        singleton.as_ref().borrow_mut().set(singleton_value.clone());
+        singleton.set(singleton_value.clone());
 
         // test
-        assert_eq!(singleton.as_ref().borrow_mut().get(), singleton_value);
+        assert_eq!(singleton.get(), singleton_value);
 
         // persist
         rusty_storage.persist();
 
         // test
-        assert_eq!(singleton.as_ref().borrow_mut().get(), singleton_value);
+        assert_eq!(singleton.get(), singleton_value);
 
         // drop
         rusty_storage.close();
@@ -582,7 +654,7 @@ mod tests {
         new_rusty_storage.restore_or_new();
 
         // test
-        assert_eq!(new_singleton.as_ref().borrow_mut().get(), singleton_value);
+        assert_eq!(new_singleton.get(), singleton_value);
     }
 
     #[test]
@@ -591,31 +663,31 @@ mod tests {
         let db = DB::open("test-database", opt.clone()).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
 
         // populate
-        vector.as_ref().borrow_mut().push(S([1u8].to_vec()));
-        vector.as_ref().borrow_mut().push(S([3u8].to_vec()));
-        vector.as_ref().borrow_mut().push(S([4u8].to_vec()));
-        vector.as_ref().borrow_mut().push(S([7u8].to_vec()));
-        vector.as_ref().borrow_mut().push(S([8u8].to_vec()));
+        vector.push(S([1u8].to_vec()));
+        vector.push(S([3u8].to_vec()));
+        vector.push(S([4u8].to_vec()));
+        vector.push(S([7u8].to_vec()));
+        vector.push(S([8u8].to_vec()));
 
         // test
-        assert_eq!(vector.as_ref().borrow_mut().get(0), S([1u8].to_vec()));
-        assert_eq!(vector.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
-        assert_eq!(vector.as_ref().borrow_mut().get(2), S([4u8].to_vec()));
-        assert_eq!(vector.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
-        assert_eq!(vector.as_ref().borrow_mut().get(4), S([8u8].to_vec()));
-        assert_eq!(vector.as_ref().borrow_mut().len(), 5);
+        assert_eq!(vector.get(0), S([1u8].to_vec()));
+        assert_eq!(vector.get(1), S([3u8].to_vec()));
+        assert_eq!(vector.get(2), S([4u8].to_vec()));
+        assert_eq!(vector.get(3), S([7u8].to_vec()));
+        assert_eq!(vector.get(4), S([8u8].to_vec()));
+        assert_eq!(vector.len(), 5);
 
         // persist
         rusty_storage.persist();
 
         // modify
-        let last = vector.as_ref().borrow_mut().pop().unwrap();
+        let last = vector.pop().unwrap();
 
         // test
         assert_eq!(last, S([8u8].to_vec()));
@@ -626,21 +698,21 @@ mod tests {
         // create new database
         let new_db = DB::open("test-database", opt).unwrap();
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
-        let new_vector = new_rusty_storage.schema.new_vec::<u64, S>("test-vector");
+        let mut new_vector = new_rusty_storage.schema.new_vec::<u64, S>("test-vector");
 
         // initialize
         new_rusty_storage.restore_or_new();
 
         // modify
-        new_vector.as_ref().borrow_mut().set(2, S([3u8].to_vec()));
-        new_vector.as_ref().borrow_mut().pop();
+        new_vector.set(2, S([3u8].to_vec()));
+        new_vector.pop();
 
         // test
-        assert_eq!(new_vector.as_ref().borrow_mut().get(0), S([1u8].to_vec()));
-        assert_eq!(new_vector.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
-        assert_eq!(new_vector.as_ref().borrow_mut().get(2), S([3u8].to_vec()));
-        assert_eq!(new_vector.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
-        assert_eq!(new_vector.as_ref().borrow_mut().len(), 4);
+        assert_eq!(new_vector.get(0), S([1u8].to_vec()));
+        assert_eq!(new_vector.get(1), S([3u8].to_vec()));
+        assert_eq!(new_vector.get(2), S([3u8].to_vec()));
+        assert_eq!(new_vector.get(3), S([7u8].to_vec()));
+        assert_eq!(new_vector.len(), 4);
     }
 
     #[test]
@@ -650,9 +722,9 @@ mod tests {
         let db = DB::open("test-database", opt.clone()).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector1 = rusty_storage.schema.new_vec::<u64, S>("test-vector1");
-        let vector2 = rusty_storage.schema.new_vec::<u64, S>("test-vector2");
-        let singleton = rusty_storage
+        let mut vector1 = rusty_storage.schema.new_vec::<u64, S>("test-vector1");
+        let mut vector2 = rusty_storage.schema.new_vec::<u64, S>("test-vector2");
+        let mut singleton = rusty_storage
             .schema
             .new_singleton::<S>(RustyKey([1u8; 1].to_vec()));
 
@@ -660,37 +732,37 @@ mod tests {
         rusty_storage.restore_or_new();
 
         // populate 1
-        vector1.as_ref().borrow_mut().push(S([1u8].to_vec()));
-        vector1.as_ref().borrow_mut().push(S([3u8].to_vec()));
-        vector1.as_ref().borrow_mut().push(S([4u8].to_vec()));
-        vector1.as_ref().borrow_mut().push(S([7u8].to_vec()));
-        vector1.as_ref().borrow_mut().push(S([8u8].to_vec()));
+        vector1.push(S([1u8].to_vec()));
+        vector1.push(S([3u8].to_vec()));
+        vector1.push(S([4u8].to_vec()));
+        vector1.push(S([7u8].to_vec()));
+        vector1.push(S([8u8].to_vec()));
 
         // populate 2
-        vector2.as_ref().borrow_mut().push(S([1u8].to_vec()));
-        vector2.as_ref().borrow_mut().push(S([3u8].to_vec()));
-        vector2.as_ref().borrow_mut().push(S([3u8].to_vec()));
-        vector2.as_ref().borrow_mut().push(S([7u8].to_vec()));
+        vector2.push(S([1u8].to_vec()));
+        vector2.push(S([3u8].to_vec()));
+        vector2.push(S([3u8].to_vec()));
+        vector2.push(S([7u8].to_vec()));
 
         // set singleton
-        singleton.as_ref().borrow_mut().set(singleton_value.clone());
+        singleton.set(singleton_value.clone());
 
         // modify 1
-        vector1.as_ref().borrow_mut().set(0, S([8u8].to_vec()));
+        vector1.set(0, S([8u8].to_vec()));
 
         // test
-        assert_eq!(vector1.as_ref().borrow_mut().get(0), S([8u8].to_vec()));
-        assert_eq!(vector1.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
-        assert_eq!(vector1.as_ref().borrow_mut().get(2), S([4u8].to_vec()));
-        assert_eq!(vector1.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
-        assert_eq!(vector1.as_ref().borrow_mut().get(4), S([8u8].to_vec()));
-        assert_eq!(vector1.as_ref().borrow_mut().len(), 5);
-        assert_eq!(vector2.as_ref().borrow_mut().get(0), S([1u8].to_vec()));
-        assert_eq!(vector2.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
-        assert_eq!(vector2.as_ref().borrow_mut().get(2), S([3u8].to_vec()));
-        assert_eq!(vector2.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
-        assert_eq!(vector2.as_ref().borrow_mut().len(), 4);
-        assert_eq!(singleton.as_ref().borrow_mut().get(), singleton_value);
+        assert_eq!(vector1.get(0), S([8u8].to_vec()));
+        assert_eq!(vector1.get(1), S([3u8].to_vec()));
+        assert_eq!(vector1.get(2), S([4u8].to_vec()));
+        assert_eq!(vector1.get(3), S([7u8].to_vec()));
+        assert_eq!(vector1.get(4), S([8u8].to_vec()));
+        assert_eq!(vector1.len(), 5);
+        assert_eq!(vector2.get(0), S([1u8].to_vec()));
+        assert_eq!(vector2.get(1), S([3u8].to_vec()));
+        assert_eq!(vector2.get(2), S([3u8].to_vec()));
+        assert_eq!(vector2.get(3), S([7u8].to_vec()));
+        assert_eq!(vector2.len(), 4);
+        assert_eq!(singleton.get(), singleton_value);
 
         // persist and drop
         rusty_storage.persist();
@@ -704,17 +776,17 @@ mod tests {
         new_rusty_storage.restore_or_new();
 
         // test again
-        assert_eq!(new_vector1.as_ref().borrow_mut().get(0), S([8u8].to_vec()));
-        assert_eq!(new_vector1.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
-        assert_eq!(new_vector1.as_ref().borrow_mut().get(2), S([4u8].to_vec()));
-        assert_eq!(new_vector1.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
-        assert_eq!(new_vector1.as_ref().borrow_mut().get(4), S([8u8].to_vec()));
-        assert_eq!(new_vector1.as_ref().borrow_mut().len(), 5);
-        assert_eq!(new_vector2.as_ref().borrow_mut().get(0), S([1u8].to_vec()));
-        assert_eq!(new_vector2.as_ref().borrow_mut().get(1), S([3u8].to_vec()));
-        assert_eq!(new_vector2.as_ref().borrow_mut().get(2), S([3u8].to_vec()));
-        assert_eq!(new_vector2.as_ref().borrow_mut().get(3), S([7u8].to_vec()));
-        assert_eq!(new_vector2.as_ref().borrow_mut().len(), 4);
-        assert_eq!(singleton.as_ref().borrow_mut().get(), singleton_value);
+        assert_eq!(new_vector1.get(0), S([8u8].to_vec()));
+        assert_eq!(new_vector1.get(1), S([3u8].to_vec()));
+        assert_eq!(new_vector1.get(2), S([4u8].to_vec()));
+        assert_eq!(new_vector1.get(3), S([7u8].to_vec()));
+        assert_eq!(new_vector1.get(4), S([8u8].to_vec()));
+        assert_eq!(new_vector1.len(), 5);
+        assert_eq!(new_vector2.get(0), S([1u8].to_vec()));
+        assert_eq!(new_vector2.get(1), S([3u8].to_vec()));
+        assert_eq!(new_vector2.get(2), S([3u8].to_vec()));
+        assert_eq!(new_vector2.get(3), S([7u8].to_vec()));
+        assert_eq!(new_vector2.len(), 4);
+        assert_eq!(singleton.get(), singleton_value);
     }
 }

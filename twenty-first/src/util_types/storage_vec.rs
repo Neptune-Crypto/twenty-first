@@ -6,19 +6,19 @@ use std::{
 use rusty_leveldb::{WriteBatch, DB};
 use serde::{de::DeserializeOwned, Serialize};
 
-pub type IndexType = u64;
+pub type Index = u64;
 
 pub trait StorageVec<T> {
     fn is_empty(&self) -> bool;
-    fn len(&self) -> IndexType;
-    fn get(&self, index: IndexType) -> T;
-    fn set(&mut self, index: IndexType, value: T);
+    fn len(&self) -> Index;
+    fn get(&self, index: Index) -> T;
+    fn set(&mut self, index: Index, value: T);
     fn pop(&mut self) -> Option<T>;
     fn push(&mut self, value: T);
 }
 
 pub enum WriteElement<T: Serialize + DeserializeOwned> {
-    OverWrite((IndexType, T)),
+    OverWrite((Index, T)),
     Push(T),
     Pop,
 }
@@ -27,8 +27,8 @@ pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
     key_prefix: u8,
     db: Arc<Mutex<DB>>,
     write_queue: VecDeque<WriteElement<T>>,
-    length: IndexType,
-    cache: HashMap<IndexType, T>,
+    length: Index,
+    cache: HashMap<Index, T>,
     name: String,
 }
 
@@ -37,11 +37,11 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         self.length == 0
     }
 
-    fn len(&self) -> IndexType {
+    fn len(&self) -> Index {
         self.length
     }
 
-    fn get(&self, index: IndexType) -> T {
+    fn get(&self, index: Index) -> T {
         // Disallow getting values out-of-bounds
         assert!(
             index < self.len(),
@@ -66,7 +66,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         bincode::deserialize(&db_val).unwrap()
     }
 
-    fn set(&mut self, index: IndexType, value: T) {
+    fn set(&mut self, index: Index, value: T) {
         // Disallow setting values out-of-bounds
         assert!(
             index < self.len(),
@@ -134,7 +134,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     }
 
     /// Return the length at the last write to disk
-    fn persisted_length(&self) -> IndexType {
+    fn persisted_length(&self) -> Index {
         let key = Self::get_length_key(self.key_prefix);
         match self.db.lock().unwrap().get(&key) {
             Some(value) => bincode::deserialize(&value).unwrap(),
@@ -143,7 +143,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     }
 
     /// Return the level-DB key used to store the element at an index
-    fn get_index_key(&self, index: IndexType) -> [u8; 9] {
+    fn get_index_key(&self, index: Index) -> [u8; 9] {
         vec![vec![self.key_prefix], bincode::serialize(&index).unwrap()]
             .concat()
             .try_into()
@@ -213,15 +213,15 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
         self.0.is_empty()
     }
 
-    fn len(&self) -> IndexType {
-        self.0.len() as IndexType
+    fn len(&self) -> Index {
+        self.0.len() as Index
     }
 
-    fn get(&self, index: IndexType) -> T {
+    fn get(&self, index: Index) -> T {
         self.0[index as usize].clone()
     }
 
-    fn set(&mut self, index: IndexType, value: T) {
+    fn set(&mut self, index: Index, value: T) {
         self.0[index as usize] = value;
     }
 
@@ -248,7 +248,7 @@ mod tests {
 
     /// Return a persisted vector and a regular in-memory vector with the same elements
     fn get_persisted_vec_with_length(
-        length: IndexType,
+        length: Index,
         name: &str,
     ) -> (RustyLevelDbVec<u64>, Vec<u64>, Arc<Mutex<DB>>) {
         let db = get_test_db();
