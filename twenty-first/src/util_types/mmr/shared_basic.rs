@@ -60,32 +60,6 @@ pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, leaf_count: u64) -
     (mt_index, peak_index)
 }
 
-/// Count the number of non-leaf nodes that were inserted *prior* to
-/// the insertion of this leaf.
-pub fn non_leaf_nodes_left(leaf_index: u64) -> u64 {
-    // This formula is derived as follows:
-    // To get the heights of peaks before this leaf index was inserted, bit-decompose
-    // the number of leaves before it was inserted.
-    // Number of leaves in tree of height h = 2^h
-    // Number of nodes in tree of height h = 2^(h + 1) - 1
-    // Number of non-leaves is `#(nodes) - #(leaves)`.
-    // Thus: f(x) = sum_{h}(2^h - 1)
-
-    // An upper limit for the loop iterator is the log_2_floor(leaf_index)
-    let log_2_floor_plus_one = u64::BITS - leaf_index.leading_zeros();
-    let mut h = 0;
-    let mut ret = 0;
-    while h != log_2_floor_plus_one {
-        let pow = (1 << h) & leaf_index;
-        if pow != 0 {
-            ret += pow - 1;
-        }
-        h += 1;
-    }
-
-    ret
-}
-
 #[inline]
 /// Return the number of parents that need to be added when a new leaf is inserted
 pub fn right_lineage_length_from_leaf_index(leaf_index: u64) -> u32 {
@@ -281,30 +255,6 @@ mod mmr_test {
                 leaf_index_to_mt_index_and_peak_index((1 << i) + 10, (1 << i) + 11)
             );
         }
-    }
-
-    #[test]
-    fn non_leaf_nodes_left_test() {
-        assert_eq!(0, non_leaf_nodes_left(0));
-        assert_eq!(0, non_leaf_nodes_left(1));
-        assert_eq!(1, non_leaf_nodes_left(2));
-        assert_eq!(1, non_leaf_nodes_left(3));
-        assert_eq!(3, non_leaf_nodes_left(4));
-        assert_eq!(3, non_leaf_nodes_left(5));
-        assert_eq!(4, non_leaf_nodes_left(6));
-        assert_eq!(4, non_leaf_nodes_left(7));
-        assert_eq!(7, non_leaf_nodes_left(8));
-        assert_eq!(7, non_leaf_nodes_left(9));
-
-        assert_eq!(8, non_leaf_nodes_left(10));
-        assert_eq!(8, non_leaf_nodes_left(11));
-        assert_eq!(10, non_leaf_nodes_left(12));
-        assert_eq!(10, non_leaf_nodes_left(13));
-        assert_eq!(11, non_leaf_nodes_left(14));
-        assert_eq!(11, non_leaf_nodes_left(15));
-        assert_eq!(15, non_leaf_nodes_left(16));
-        assert_eq!(15, non_leaf_nodes_left(17));
-        assert_eq!(16, non_leaf_nodes_left(18));
     }
 
     #[test]

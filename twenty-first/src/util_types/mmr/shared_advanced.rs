@@ -55,9 +55,8 @@ pub fn right_lineage_length_from_node_index(node_index: u64) -> u32 {
 
 /// Convert from leaf index to node index
 pub fn leaf_index_to_node_index(leaf_index: u64) -> u64 {
-    let diff = non_leaf_nodes_left(leaf_index);
-
-    leaf_index + diff + 1
+    let hamming_weight = leaf_index.count_ones() as u64;
+    2 * leaf_index - hamming_weight + 1
 }
 
 /// Get the node_index of the parent
@@ -87,27 +86,10 @@ pub fn get_height_from_leaf_index(leaf_index: u64) -> u32 {
     log_2_floor(leaf_index as u128 + 1) as u32
 }
 
+/// The number of nodes in an MMR with `leaf_count` leaves.
 pub fn leaf_count_to_node_count(leaf_count: u64) -> u64 {
-    if leaf_count == 0 {
-        return 0;
-    }
-
-    let rightmost_leaf_leaf_index = leaf_count - 1;
-    let non_leaf_nodes_left = non_leaf_nodes_left(rightmost_leaf_leaf_index);
-    let node_index_of_rightmost_leaf = leaf_index_to_node_index(rightmost_leaf_leaf_index);
-
-    let mut non_leaf_nodes_after = 0u64;
-    let mut node_index = node_index_of_rightmost_leaf;
-    let mut right_count = right_lineage_length_from_node_index(node_index);
-    while right_count != 0 {
-        non_leaf_nodes_after += 1;
-        // go to parent (parent of right child has node index plus 1)
-        node_index += 1;
-        right_count -= 1;
-    }
-
-    // Number of nodes is: non-leafs after, non-leafs before, and leaf count
-    non_leaf_nodes_after + non_leaf_nodes_left + leaf_count
+    let hamming_weight = leaf_count.count_ones() as u64;
+    2 * leaf_count - hamming_weight
 }
 
 /// Return the indices of the nodes added by an append, including the
@@ -263,6 +245,14 @@ mod mmr_test {
         assert_eq!(20, leaf_index_to_node_index(11));
         assert_eq!(23, leaf_index_to_node_index(12));
         assert_eq!(24, leaf_index_to_node_index(13));
+        assert_eq!(26, leaf_index_to_node_index(14));
+        assert_eq!(27, leaf_index_to_node_index(15));
+        assert_eq!(32, leaf_index_to_node_index(16));
+        assert_eq!(33, leaf_index_to_node_index(17));
+        assert_eq!(35, leaf_index_to_node_index(18));
+        assert_eq!(36, leaf_index_to_node_index(19));
+        assert_eq!(39, leaf_index_to_node_index(20));
+        assert_eq!(40, leaf_index_to_node_index(21));
     }
 
     #[test]
