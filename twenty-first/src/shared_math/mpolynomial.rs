@@ -1968,18 +1968,8 @@ mod test_mpolynomials {
         let mut exponents: Vec<Vec<u8>> =
             MPolynomial::extract_exponents_list(&[a.clone(), b.clone()]).unwrap();
         exponents.sort();
-        let exponents_a: Vec<Vec<u8>> = a
-            .coefficients
-            .keys()
-            .into_iter()
-            .map(|x| x.to_owned())
-            .collect();
-        let exponents_b: Vec<Vec<u8>> = b
-            .coefficients
-            .keys()
-            .into_iter()
-            .map(|x| x.to_owned())
-            .collect();
+        let exponents_a: Vec<Vec<u8>> = a.coefficients.keys().map(|x| x.to_owned()).collect();
+        let exponents_b: Vec<Vec<u8>> = b.coefficients.keys().map(|x| x.to_owned()).collect();
         let mut expected_exponents_set: HashSet<Vec<u8>> = [exponents_a, exponents_b]
             .iter()
             .flat_map(|mpol| mpol.iter().map(|x| x.to_owned()))

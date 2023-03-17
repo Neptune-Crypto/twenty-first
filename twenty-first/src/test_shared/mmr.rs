@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use rusty_leveldb::DB;
 
@@ -15,7 +14,7 @@ pub fn get_empty_rustyleveldb_ammr<H: AlgebraicHasher>() -> ArchivalMmr<H, Rusty
 {
     let opt = rusty_leveldb::in_memory();
     let db = DB::open("mydatabase", opt).unwrap();
-    let db = Rc::new(RefCell::new(db));
+    let db = Arc::new(Mutex::new(db));
     let pv = RustyLevelDbVec::new(db, 0, "in-memory AMMR for unit tests");
     ArchivalMmr::new(pv)
 }

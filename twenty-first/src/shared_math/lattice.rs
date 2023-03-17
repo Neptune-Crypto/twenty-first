@@ -736,7 +736,6 @@ mod lattice_test {
     fn test_embedding() {
         let mut rng = thread_rng();
         let msg: [u8; 32] = (0..32)
-            .into_iter()
             .map(|_| (rng.next_u32() % 256) as u8)
             .collect_vec()
             .try_into()
@@ -751,7 +750,6 @@ mod lattice_test {
     fn test_module_distributivity() {
         let mut rng = thread_rng();
         let randomness = (0..(2 * 3 + 2 * 3 + 3) * 64 * 9)
-            .into_iter()
             .map(|_| (rng.next_u32() % 256) as u8)
             .collect_vec();
         let mut start = 0;
@@ -775,7 +773,6 @@ mod lattice_test {
     fn test_module_multiply() {
         let mut rng = thread_rng();
         let randomness = (0..(2 * 3 + 2 * 3 + 3) * 64 * 9)
-            .into_iter()
             .map(|_| (rng.next_u32() % 256) as u8)
             .collect_vec();
         let mut start = 0;

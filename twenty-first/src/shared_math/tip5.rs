@@ -725,7 +725,6 @@ mod tip5_tests {
             .into_par_iter()
             .map(|a| {
                 (1..256)
-                    .into_iter()
                     .map(|b| count_satisfiers_fermat(a, b))
                     .max()
                     .unwrap()
@@ -757,7 +756,6 @@ mod tip5_tests {
             .into_par_iter()
             .map(|a| {
                 (1..256)
-                    .into_iter()
                     .map(|b| count_satisfiers_fermat_bitwise(a, b))
                     .max()
                     .unwrap()
@@ -825,7 +823,7 @@ mod tip5_tests {
     fn hash_varlen_test_vectors() {
         let mut digest_sum = [BFieldElement::zero(); DIGEST_LENGTH];
         for i in 0..20 {
-            let preimage = (0..i).into_iter().map(BFieldElement::new).collect_vec();
+            let preimage = (0..i).map(BFieldElement::new).collect_vec();
             let digest = Tip5::hash_varlen(&preimage);
             println!(
                 "{:?} -> {:?}",

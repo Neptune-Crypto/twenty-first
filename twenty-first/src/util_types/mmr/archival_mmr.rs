@@ -37,6 +37,9 @@ where
         peaks_and_heights.into_iter().map(|x| x.0).collect()
     }
 
+    /// Whether the MMR is empty. Note that since indexing starts at
+    /// 1, the `digests` contain must always contain at least one
+    /// element: a dummy digest.
     fn is_empty(&self) -> bool {
         self.digests.len() == 1
     }
@@ -122,15 +125,23 @@ where
 
 impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
     /// Create a new archival MMR, or restore one from a database.
-    pub fn new(mut pv: Storage) -> Self {
-        if pv.is_empty() {
-            let dummy_digest = H::hash(&0u64);
-            pv.push(dummy_digest);
-        }
-
-        Self {
+    pub fn new(pv: Storage) -> Self {
+        let mut ret = Self {
             digests: pv,
             _hasher: PhantomData,
+        };
+        ret.fix_dummy();
+        ret
+    }
+
+    /// Inserts a dummy digest into the `digests` container. Due to
+    /// 1-indexation, this structure must always contain one element
+    /// (even if it is never used). Due to the persistence layer,
+    /// this data structure can be set to the default vector, which
+    /// is the empty vector. This method fixes that.
+    pub fn fix_dummy(&mut self) {
+        if self.digests.len() == 0 {
+            self.digests.push(Digest::default());
         }
     }
 
@@ -309,8 +320,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H, RustyLevelDbVec<Digest>> {
 
 #[cfg(test)]
 mod mmr_test {
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
 
     use super::*;
     use crate::shared_math::other::random_elements;
@@ -1024,7 +1034,7 @@ mod mmr_test {
 
         let opt = rusty_leveldb::in_memory();
         let db = DB::open("mydatabase", opt).unwrap();
-        let db = Rc::new(RefCell::new(db));
+        let db = Arc::new(Mutex::new(db));
         let persistent_vec_0 = RustyLevelDbVec::new(db.clone(), 0, "archival MMR for unit tests");
         let mut ammr0: ArchivalMmr<H, RustyLevelDbVec<Digest>> = ArchivalMmr::new(persistent_vec_0);
 
@@ -1038,26 +1048,26 @@ mod mmr_test {
         ammr1.append(digest1);
 
         // Verify that DB is still empty
-        let mut db_iter = db.borrow_mut().new_iter().unwrap();
+        let mut db_iter = db.lock().unwrap().new_iter().unwrap();
         assert!(db_iter.next().is_none());
 
         let mut write_batch = WriteBatch::new();
         ammr0.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let mut db_iter = db.borrow_mut().new_iter().unwrap();
+        db_iter = db.lock().unwrap().new_iter().unwrap();
         assert!(db_iter.next().is_none());
 
         ammr1.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let mut db_iter = db.borrow_mut().new_iter().unwrap();
+        db_iter = db.lock().unwrap().new_iter().unwrap();
         assert!(db_iter.next().is_none());
 
-        db.borrow_mut().write(write_batch, true).unwrap();
+        db.lock().unwrap().write(write_batch, true).unwrap();
 
         // Verify that DB is not empty
-        let mut db_iter = db.borrow_mut().new_iter().unwrap();
+        db_iter = db.lock().unwrap().new_iter().unwrap();
         assert!(db_iter.next().is_some());
 
         assert_eq!(digest0, ammr0.get_leaf(0));
