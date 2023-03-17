@@ -2,7 +2,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
     fmt::Debug,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use rusty_leveldb::{WriteBatch, DB};
@@ -506,7 +506,7 @@ impl From<crate::shared_math::tip5::Digest> for RustyValue {
 /// possible to use this struct and add to the scheme after calling
 /// new() (that's what the tests do).
 pub struct SimpleRustyStorage {
-    db: Arc<RefCell<DB>>,
+    db: Arc<Mutex<DB>>,
     schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
 }
 
@@ -524,8 +524,8 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
         }
 
         self.db
-            .as_ref()
-            .borrow_mut()
+            .lock()
+            .expect("Persist: could not get lock on database.")
             .write(write_batch, true)
             .expect("Could not persist to database.");
     }
@@ -539,7 +539,7 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
 
 impl SimpleRustyStorage {
     pub fn new(db: DB) -> Self {
-        let db_pointer = Arc::new(RefCell::new(db));
+        let db_pointer = Arc::new(Mutex::new(db));
         let reader = SimpleRustyReader {
             db: db_pointer.clone(),
         };
@@ -555,20 +555,24 @@ impl SimpleRustyStorage {
 
     pub fn close(&mut self) {
         self.db
-            .as_ref()
-            .borrow_mut()
+            .lock()
+            .expect("SimpleRustyStorage::close: could not get lock on database.")
             .close()
             .expect("Could not close database.");
     }
 }
 
 struct SimpleRustyReader {
-    db: Arc<RefCell<DB>>,
+    db: Arc<Mutex<DB>>,
 }
 
 impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
     fn get(&mut self, key: RustyKey) -> Option<RustyValue> {
-        self.db.as_ref().borrow_mut().get(&key.0).map(RustyValue)
+        self.db
+            .lock()
+            .expect("singleton::get: could not get lock on database (for reading)")
+            .get(&key.0)
+            .map(RustyValue)
     }
 }
 
