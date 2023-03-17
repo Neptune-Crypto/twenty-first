@@ -15,12 +15,12 @@ pub enum WriteOperation<ParentKey, ParentValue> {
     Delete(ParentKey),
 }
 
-pub trait DbTable<ParentKey, ParentValue> {
+pub trait DbTable<ParentKey, ParentValue>: Send + Sync {
     fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>>;
     fn restore_or_new(&mut self);
 }
 
-pub trait StorageReader<ParentKey, ParentValue> {
+pub trait StorageReader<ParentKey, ParentValue>: Send + Sync {
     fn get(&mut self, key: ParentKey) -> Option<ParentValue>;
 }
 
@@ -31,7 +31,7 @@ pub enum VecWriteOperation<Index, T> {
 }
 
 pub struct DbtVec<ParentKey, ParentValue, Index, T> {
-    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>>,
+    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue>>>,
     current_length: Option<Index>,
     key_prefix: u8,
     write_queue: VecDeque<VecWriteOperation<Index, T>>,
@@ -70,7 +70,7 @@ where
     }
 
     pub fn new(
-        reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>>,
+        reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue>>>,
         key_prefix: u8,
         name: &str,
     ) -> Self {
@@ -274,7 +274,7 @@ impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
 where
     ParentKey: From<Index>,
     ParentValue: From<T>,
-    T: Clone,
+    T: Clone + Sync + Send,
     T: From<ParentValue>,
     ParentKey: From<(ParentKey, ParentKey)>,
     ParentKey: From<u8>,
@@ -383,9 +383,9 @@ where
 impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
     for DbtSingleton<ParentKey, ParentValue, T>
 where
-    T: Eq + Clone + Default + From<ParentValue>,
+    T: Eq + Clone + Default + From<ParentValue> + Sync + Send,
     ParentValue: From<T> + Debug,
-    ParentKey: Clone,
+    ParentKey: Clone + Sync + Send,
 {
     fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
         if self.current_value == self.old_value {
@@ -413,7 +413,7 @@ where
 }
 
 pub struct DbtSchema<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue>> {
-    pub tables: Vec<Arc<Mutex<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>>,
+    pub tables: Vec<Arc<Mutex<dyn DbTable<ParentKey, ParentValue>>>>,
     pub reader: Arc<Mutex<Reader>>,
 }
 
@@ -436,7 +436,7 @@ impl<
         Index: From<ParentValue>,
         ParentValue: From<Index>,
         Index: From<u64> + 'static,
-        DbtVec<ParentKey, ParentValue, Index, T>: DbTable<ParentKey, ParentValue> + Send + Sync,
+        DbtVec<ParentKey, ParentValue, Index, T>: DbTable<ParentKey, ParentValue>,
     {
         assert!(self.tables.len() < 255);
         let reader = self.reader.clone();
@@ -465,7 +465,7 @@ impl<
         ParentKey: 'static,
         ParentValue: From<S> + 'static,
         ParentKey: From<(ParentKey, ParentKey)> + From<u8>,
-        DbtSingleton<ParentKey, ParentValue, S>: DbTable<ParentKey, ParentValue> + Send + Sync,
+        DbtSingleton<ParentKey, ParentValue, S>: DbTable<ParentKey, ParentValue>,
     {
         let reader = self.reader.clone();
         let singleton = DbtSingleton::<ParentKey, ParentValue, S> {
