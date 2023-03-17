@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
+    marker::PhantomData,
     sync::{Arc, Mutex},
 };
 
@@ -30,16 +31,19 @@ pub enum VecWriteOperation<Index, T> {
     Pop,
 }
 
-pub struct DbtVec<ParentKey, ParentValue, Index, T> {
-    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue>>>,
+pub struct DbtVec<ParentKey, ParentValue, Index, T, SR: StorageReader<ParentKey, ParentValue>> {
+    reader: Arc<Mutex<SR>>,
     current_length: Option<Index>,
     key_prefix: u8,
     write_queue: VecDeque<VecWriteOperation<Index, T>>,
     cache: HashMap<Index, T>,
     name: String,
+    _phantom_key: PhantomData<ParentKey>,
+    _phantom_value: PhantomData<ParentValue>,
 }
 
-impl<ParentKey, ParentValue, Index, T> DbtVec<ParentKey, ParentValue, Index, T>
+impl<ParentKey, ParentValue, Index, T, SR: StorageReader<ParentKey, ParentValue>>
+    DbtVec<ParentKey, ParentValue, Index, T, SR>
 where
     ParentKey: From<(ParentKey, ParentKey)>,
     ParentKey: From<u8>,
@@ -69,11 +73,7 @@ where
         (key_prefix_key, index_key).into()
     }
 
-    pub fn new(
-        reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue>>>,
-        key_prefix: u8,
-        name: &str,
-    ) -> Self {
+    pub fn new(reader: Arc<Mutex<SR>>, key_prefix: u8, name: String) -> Self {
         let length = None;
         let cache = HashMap::new();
         Self {
@@ -82,13 +82,15 @@ where
             write_queue: VecDeque::default(),
             current_length: length,
             cache,
-            name: name.to_string(),
+            name,
+            _phantom_key: PhantomData,
+            _phantom_value: PhantomData,
         }
     }
 }
 
-impl<ParentKey, ParentValue, T> StorageVec<T>
-    for Arc<Mutex<DbtVec<ParentKey, ParentValue, Index, T>>>
+impl<ParentKey, ParentValue, T, SR: StorageReader<ParentKey, ParentValue>> StorageVec<T>
+    for Arc<Mutex<DbtVec<ParentKey, ParentValue, Index, T, SR>>>
 where
     ParentKey: From<Index>,
     ParentValue: From<T>,
@@ -269,8 +271,12 @@ where
     }
 }
 
-impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
-    for DbtVec<ParentKey, ParentValue, Index, T>
+impl<
+        ParentKey: Send + Sync,
+        ParentValue: Send + Sync,
+        T,
+        SR: StorageReader<ParentKey, ParentValue>,
+    > DbTable<ParentKey, ParentValue> for DbtVec<ParentKey, ParentValue, Index, T, SR>
 where
     ParentKey: From<Index>,
     ParentValue: From<T>,
@@ -354,15 +360,16 @@ where
     fn set(&mut self, t: T);
 }
 
-pub struct DbtSingleton<ParentKey, ParentValue, T> {
+pub struct DbtSingleton<ParentKey, ParentValue, T, SR: StorageReader<ParentKey, ParentValue>> {
     current_value: T,
     old_value: T,
     key: ParentKey,
-    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue> + Sync + Send>>,
+    reader: Arc<Mutex<SR>>,
+    _phantom_value: PhantomData<ParentValue>,
 }
 
-impl<ParentKey, ParentValue, T> StorageSingleton<T>
-    for Arc<Mutex<DbtSingleton<ParentKey, ParentValue, T>>>
+impl<ParentKey, ParentValue, T, SR: StorageReader<ParentKey, ParentValue>> StorageSingleton<T>
+    for Arc<Mutex<DbtSingleton<ParentKey, ParentValue, T, SR>>>
 where
     T: Clone + From<ParentValue>,
 {
@@ -380,8 +387,8 @@ where
     }
 }
 
-impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
-    for DbtSingleton<ParentKey, ParentValue, T>
+impl<ParentKey, ParentValue: Send + Sync, T, SR: StorageReader<ParentKey, ParentValue>>
+    DbTable<ParentKey, ParentValue> for DbtSingleton<ParentKey, ParentValue, T, SR>
 where
     T: Eq + Clone + Default + From<ParentValue> + Sync + Send,
     ParentValue: From<T> + Debug,
@@ -417,16 +424,14 @@ pub struct DbtSchema<ParentKey, ParentValue, Reader: StorageReader<ParentKey, Pa
     pub reader: Arc<Mutex<Reader>>,
 }
 
-impl<
-        ParentKey,
-        ParentValue,
-        Reader: StorageReader<ParentKey, ParentValue> + 'static + Sync + Send,
-    > DbtSchema<ParentKey, ParentValue, Reader>
+impl<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue> + 'static>
+    DbtSchema<ParentKey, ParentValue, Reader>
 {
+    #[allow(clippy::type_complexity)]
     pub fn new_vec<Index, T>(
         &mut self,
         name: &str,
-    ) -> Arc<Mutex<DbtVec<ParentKey, ParentValue, Index, T>>>
+    ) -> Arc<Mutex<DbtVec<ParentKey, ParentValue, Index, T, Reader>>>
     where
         ParentKey: From<Index> + 'static,
         ParentValue: From<T> + 'static,
@@ -436,17 +441,19 @@ impl<
         Index: From<ParentValue>,
         ParentValue: From<Index>,
         Index: From<u64> + 'static,
-        DbtVec<ParentKey, ParentValue, Index, T>: DbTable<ParentKey, ParentValue>,
+        DbtVec<ParentKey, ParentValue, Index, T, Reader>: DbTable<ParentKey, ParentValue>,
     {
         assert!(self.tables.len() < 255);
         let reader = self.reader.clone();
-        let vector = DbtVec::<ParentKey, ParentValue, Index, T> {
+        let vector = DbtVec::<ParentKey, ParentValue, Index, T, Reader> {
             reader,
             current_length: None,
             key_prefix: self.tables.len() as u8,
             write_queue: VecDeque::new(),
             cache: HashMap::new(),
             name: name.to_string(),
+            _phantom_key: PhantomData,
+            _phantom_value: PhantomData,
         };
         let arc_mutex_vector = Arc::new(Mutex::new(vector));
         self.tables.push(arc_mutex_vector.clone());
@@ -459,20 +466,21 @@ impl<
     pub fn new_singleton<S>(
         &mut self,
         key: ParentKey,
-    ) -> Arc<Mutex<DbtSingleton<ParentKey, ParentValue, S>>>
+    ) -> Arc<Mutex<DbtSingleton<ParentKey, ParentValue, S, Reader>>>
     where
         S: Default + Eq + Clone + 'static,
         ParentKey: 'static,
         ParentValue: From<S> + 'static,
         ParentKey: From<(ParentKey, ParentKey)> + From<u8>,
-        DbtSingleton<ParentKey, ParentValue, S>: DbTable<ParentKey, ParentValue>,
+        DbtSingleton<ParentKey, ParentValue, S, Reader>: DbTable<ParentKey, ParentValue>,
     {
         let reader = self.reader.clone();
-        let singleton = DbtSingleton::<ParentKey, ParentValue, S> {
+        let singleton = DbtSingleton::<ParentKey, ParentValue, S, Reader> {
             current_value: S::default(),
             old_value: S::default(),
             key,
             reader,
+            _phantom_value: PhantomData,
         };
         let arc_mutex_singleton = Arc::new(Mutex::new(singleton));
         self.tables.push(arc_mutex_singleton.clone());
