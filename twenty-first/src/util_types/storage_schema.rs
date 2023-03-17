@@ -31,7 +31,7 @@ pub enum VecWriteOperation<Index, T> {
 }
 
 pub struct DbtVec<ParentKey, ParentValue, Index, T> {
-    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue>>>,
+    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>>,
     current_length: Option<Index>,
     key_prefix: u8,
     write_queue: VecDeque<VecWriteOperation<Index, T>>,
@@ -70,7 +70,7 @@ where
     }
 
     pub fn new(
-        reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue>>>,
+        reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>>,
         key_prefix: u8,
         name: &str,
     ) -> Self {
@@ -358,7 +358,7 @@ pub struct DbtSingleton<ParentKey, ParentValue, T> {
     current_value: T,
     old_value: T,
     key: ParentKey,
-    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue>>>,
+    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue> + Sync + Send>>,
 }
 
 impl<ParentKey, ParentValue, T> StorageSingleton<T>
@@ -413,12 +413,15 @@ where
 }
 
 pub struct DbtSchema<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue>> {
-    pub tables: Vec<Arc<Mutex<dyn DbTable<ParentKey, ParentValue>>>>,
+    pub tables: Vec<Arc<Mutex<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>>,
     pub reader: Arc<Mutex<Reader>>,
 }
 
-impl<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue> + 'static>
-    DbtSchema<ParentKey, ParentValue, Reader>
+impl<
+        ParentKey,
+        ParentValue,
+        Reader: StorageReader<ParentKey, ParentValue> + 'static + Sync + Send,
+    > DbtSchema<ParentKey, ParentValue, Reader>
 {
     pub fn new_vec<Index, T>(
         &mut self,
@@ -433,7 +436,7 @@ impl<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue> + 'st
         Index: From<ParentValue>,
         ParentValue: From<Index>,
         Index: From<u64> + 'static,
-        DbtVec<ParentKey, ParentValue, Index, T>: DbTable<ParentKey, ParentValue>,
+        DbtVec<ParentKey, ParentValue, Index, T>: DbTable<ParentKey, ParentValue> + Send + Sync,
     {
         assert!(self.tables.len() < 255);
         let reader = self.reader.clone();
@@ -462,7 +465,7 @@ impl<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue> + 'st
         ParentKey: 'static,
         ParentValue: From<S> + 'static,
         ParentKey: From<(ParentKey, ParentKey)> + From<u8>,
-        DbtSingleton<ParentKey, ParentValue, S>: DbTable<ParentKey, ParentValue>,
+        DbtSingleton<ParentKey, ParentValue, S>: DbTable<ParentKey, ParentValue> + Send + Sync,
     {
         let reader = self.reader.clone();
         let singleton = DbtSingleton::<ParentKey, ParentValue, S> {
