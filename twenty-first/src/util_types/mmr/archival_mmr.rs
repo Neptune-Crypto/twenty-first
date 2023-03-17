@@ -141,7 +141,6 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
     /// is the empty vector. This method fixes that.
     pub fn fix_dummy(&mut self) {
         if self.digests.len() == 0 {
-            println!("Inserting dummy");
             self.digests.push(Digest::default());
         }
     }
