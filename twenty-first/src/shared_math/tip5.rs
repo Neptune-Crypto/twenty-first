@@ -149,13 +149,29 @@ pub const ROUND_CONSTANTS: [BFieldElement; NUM_ROUNDS * STATE_SIZE] = [
     BFieldElement::new(6024642864597845108),
 ];
 
-/// The defining, first column of the (circulant) MDS matrix.
+/// The defining first column of the (circulant) MDS matrix.
 /// Derived from the SHA-256 hash of the ASCII string “Tip5” by dividing the digest into 16-bit
 /// chunks.
-pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] = [
-    61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901, 12021, 59689,
-    26798, 17845,
-];
+// pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] = [
+//     61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951, 27521, 41351, 40901, 12021, 59689,
+//     26798, 17845,
+// ];
+// const MDS_FREQ_BLOCK_ONE: [i64; 4] = [34457, 32890, 37691, 26150];
+// const MDS_FREQ_BLOCK_TWO: [(i64, i64); 4] = [
+//     (2225, -2283),
+//     (-13206, -8222),
+//     (-6300, 13533),
+//     (-3539, -2905),
+// ];
+// const MDS_FREQ_BLOCK_THREE: [i64; 4] = [24719, -18576, -2640, 11211];
+
+// alternative MDS candidates
+// candidate A
+pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] =
+    [38, 5, 39, 52, 50, 2, 19, 27, 22, 7, 49, 20, 18, 18, 49, 29];
+pub const MDS_FREQ_BLOCK_ONE: [i64; 4] = [32, 8, 39, 32];
+pub const MDS_FREQ_BLOCK_TWO: [(i64, i64); 4] = [(8, 16), (-1, -8), (-5, -15), (16, -1)];
+pub const MDS_FREQ_BLOCK_THREE: [i64; 4] = [-2, -2, 5, 4];
 
 impl Tip5 {
     #[inline]
@@ -177,6 +193,177 @@ impl Tip5 {
         }
 
         *element = BFieldElement::from_raw_bytes(&bytes);
+    }
+
+    #[inline(always)]
+    #[allow(clippy::shadow_unrelated)]
+    pub(crate) fn mds_al_kindi(state: [i64; 16]) -> [i64; 16] {
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15] = state;
+
+        let (u0, u1, u2) = Self::fft4_real([s0, s4, s8, s12]);
+        let (u4, u5, u6) = Self::fft4_real([s1, s5, s9, s13]);
+        let (u8, u9, u10) = Self::fft4_real([s2, s6, s10, s14]);
+        let (u12, u13, u14) = Self::fft4_real([s3, s7, s11, s15]);
+
+        let [v0, v4, v8, v12] = Self::block1([u0, u4, u8, u12], MDS_FREQ_BLOCK_ONE);
+        let [v1, v5, v9, v13] = Self::block2([u1, u5, u9, u13], MDS_FREQ_BLOCK_TWO);
+        let [v2, v6, v10, v14] = Self::block3([u2, u6, u10, u14], MDS_FREQ_BLOCK_THREE);
+        // The 4th block is not computed as it is similar to the 2nd one, up to complex conjugation,
+        // and is, due to the use of the real FFT and iFFT, redundant.
+
+        let [s0, s4, s8, s12] = Self::ifft4_real((v0, v1, v2));
+        let [s1, s5, s9, s13] = Self::ifft4_real((v4, v5, v6));
+        let [s2, s6, s10, s14] = Self::ifft4_real((v8, v9, v10));
+        let [s3, s7, s11, s15] = Self::ifft4_real((v12, v13, v14));
+
+        [
+            s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15,
+        ]
+    }
+
+    pub fn mds_direct_multiplication(
+        circulant_matrix_entries: [i64; 16],
+        column_matrix_entries: [i64; 16],
+    ) -> [i64; 16] {
+        let mut z: [i64; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        for i in 0..16 {
+            let mut sum: i64 = 0;
+            for j in 0..16 {
+                let mut index: usize = j + 16 - i;
+                if index >= 16 {
+                    index -= 16;
+                }
+                sum += circulant_matrix_entries[index] * column_matrix_entries[j];
+            }
+            z[i] = sum;
+        }
+        z
+    }
+
+    // We use the real FFT to avoid redundant computations. See https://www.mdpi.com/2076-3417/12/9/4700
+    #[inline(always)]
+    fn fft2_real(x: [i64; 2]) -> [i64; 2] {
+        [(x[0] + x[1]), (x[0] - x[1])]
+    }
+
+    #[inline(always)]
+    fn ifft2_real(y: [i64; 2]) -> [i64; 2] {
+        // We avoid divisions by 2 by appropriately scaling the MDS matrix constants.
+        [(y[0] + y[1]), (y[0] - y[1])]
+    }
+
+    #[inline(always)]
+    fn fft4_real(x: [i64; 4]) -> (i64, (i64, i64), i64) {
+        let [z0, z2] = Self::fft2_real([x[0], x[2]]);
+        let [z1, z3] = Self::fft2_real([x[1], x[3]]);
+        let y0 = z0 + z1;
+        let y1 = (z2, -z3);
+        let y2 = z0 - z1;
+        (y0, y1, y2)
+    }
+
+    #[inline(always)]
+    fn ifft4_real(y: (i64, (i64, i64), i64)) -> [i64; 4] {
+        // In calculating 'z0' and 'z1', division by 2 is avoided by appropriately scaling
+        // the MDS matrix constants.
+        let z0 = y.0 + y.2;
+        let z1 = y.0 - y.2;
+        let z2 = y.1 .0;
+        let z3 = -y.1 .1;
+
+        let [x0, x2] = Self::ifft2_real([z0, z2]);
+        let [x1, x3] = Self::ifft2_real([z1, z3]);
+
+        [x0, x1, x2, x3]
+    }
+
+    #[inline(always)]
+    fn block1(x: [i64; 4], y: [i64; 4]) -> [i64; 4] {
+        let [x0, x1, x2, x3] = x;
+        let [y0, y1, y2, y3] = y;
+        let z0 = x0 * y0 + x1 * y1 + x2 * y2 + x3 * y3;
+        let z1 = x0 * y3 + x1 * y0 + x2 * y1 + x3 * y2;
+        let z2 = x0 * y2 + x1 * y3 + x2 * y0 + x3 * y1;
+        let z3 = x0 * y1 + x1 * y2 + x2 * y3 + x3 * y0;
+
+        [z0, z1, z2, z3]
+    }
+
+    #[inline(always)]
+    #[allow(clippy::shadow_unrelated)]
+    fn block2(x: [(i64, i64); 4], y: [(i64, i64); 4]) -> [(i64, i64); 4] {
+        let [(x0r, x0i), (x1r, x1i), (x2r, x2i), (x3r, x3i)] = x;
+        let [(y0r, y0i), (y1r, y1i), (y2r, y2i), (y3r, y3i)] = y;
+        let x0s = x0r + x0i;
+        let x1s = x1r + x1i;
+        let x2s = x2r + x2i;
+        let x3s = x3r + x3i;
+        let y0s = y0r + y0i;
+        let y1s = y1r + y1i;
+        let y2s = y2r + y2i;
+        let y3s = y3r + y3i;
+
+        // Compute x0​y0​+x1​y1​+x2​y2​+x3​y3​ using Karatsuba
+        let m0 = (x0r * y0r, x0i * y0i);
+        let m1 = (x1r * y1r, x1i * y1i);
+        let m2 = (x2r * y2r, x2i * y2i);
+        let m3 = (x3r * y3r, x3i * y3i);
+        let z0r = (m0.0 - m0.1) + (m1.0 - m1.1) + (m2.0 - m2.1) + (m3.0 - m3.1);
+        let z0i = (x0s * y0s - m0.0 - m0.1)
+            + (x1s * y1s - m1.0 - m1.1)
+            + (x2s * y2s - m2.0 - m2.1)
+            + (x3s * y3s - m3.0 - m3.1);
+        let z0 = (z0r, z0i);
+
+        // Compute ix0​y3​+x1​y0​+x2​y1​+x3​y2​ using Karatsuba
+        let m0 = (x0r * y3r, x0i * y3i);
+        let m1 = (x1r * y0r, x1i * y0i);
+        let m2 = (x2r * y1r, x2i * y1i);
+        let m3 = (x3r * y2r, x3i * y2i);
+        let z1r = (m0.0 + m0.1 - x0s * y3s) + (m1.0 - m1.1) + (m2.0 - m2.1) + (m3.0 - m3.1);
+        let z1i = (m0.0 - m0.1)
+            + (x1s * y0s - m1.0 - m1.1)
+            + (x2s * y1s - m2.0 - m2.1)
+            + (x3s * y2s - m3.0 - m3.1);
+        let z1 = (z1r, z1i);
+
+        // Compute ix0​y2​+ix1​y3​+x2​y0​+x3​y1​​ using Karatsuba
+        let m0 = (x0r * y2r, x0i * y2i);
+        let m1 = (x1r * y3r, x1i * y3i);
+        let m2 = (x2r * y0r, x2i * y0i);
+        let m3 = (x3r * y1r, x3i * y1i);
+        let z2r =
+            (m0.0 + m0.1 - x0s * y2s) + (m1.0 + m1.1 - x1s * y3s) + (m2.0 - m2.1) + (m3.0 - m3.1);
+        let z2i =
+            (m0.0 - m0.1) + (m1.0 - m1.1) + (x2s * y0s - m2.0 - m2.1) + (x3s * y1s - m3.0 - m3.1);
+        let z2 = (z2r, z2i);
+
+        // Compute ix0​y1​+ix1​y2​+ix2​y3​+x3​y0​​​ using Karatsuba
+        let m0 = (x0r * y1r, x0i * y1i);
+        let m1 = (x1r * y2r, x1i * y2i);
+        let m2 = (x2r * y3r, x2i * y3i);
+        let m3 = (x3r * y0r, x3i * y0i);
+        let z3r = (m0.0 + m0.1 - x0s * y1s)
+            + (m1.0 + m1.1 - x1s * y2s)
+            + (m2.0 + m2.1 - x2s * y3s)
+            + (m3.0 - m3.1);
+        let z3i = (m0.0 - m0.1) + (m1.0 - m1.1) + (m2.0 - m2.1) + (x3s * y0s - m3.0 - m3.1);
+        let z3 = (z3r, z3i);
+
+        [z0, z1, z2, z3]
+    }
+
+    #[inline(always)]
+    fn block3(x: [i64; 4], y: [i64; 4]) -> [i64; 4] {
+        let [x0, x1, x2, x3] = x;
+        let [y0, y1, y2, y3] = y;
+
+        let z0 = x0 * y0 + x1 * y1 + x2 * y2 + x3 * y3;
+        let z1 = -x0 * y3 + x1 * y0 + x2 * y1 + x3 * y2;
+        let z2 = -x0 * y2 - x1 * y3 + x2 * y0 + x3 * y1;
+        let z3 = -x0 * y1 - x1 * y2 - x2 * y3 + x3 * y0;
+
+        [z0, z1, z2, z3]
     }
 
     #[inline(always)]
@@ -467,8 +654,10 @@ impl Tip5 {
             lo[i] = (b.raw_u64() as u32) as i64;
         }
 
-        lo = Self::fast_cyclomul16(lo, MDS_MATRIX_FIRST_COLUMN);
-        hi = Self::fast_cyclomul16(hi, MDS_MATRIX_FIRST_COLUMN);
+        // lo = Self::fast_cyclomul16(lo, MDS_MATRIX_FIRST_COLUMN);
+        // hi = Self::fast_cyclomul16(hi, MDS_MATRIX_FIRST_COLUMN);
+        lo = Self::mds_al_kindi(lo);
+        hi = Self::mds_al_kindi(hi);
 
         for r in 0..STATE_SIZE {
             let s = lo[r] as u128 + ((hi[r] as u128) << 32);
@@ -628,6 +817,9 @@ mod tip5_tests {
     use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::tip5::LOOKUP_TABLE;
+    use crate::shared_math::tip5::MDS_FREQ_BLOCK_ONE;
+    use crate::shared_math::tip5::MDS_FREQ_BLOCK_THREE;
+    use crate::shared_math::tip5::MDS_FREQ_BLOCK_TWO;
     use crate::shared_math::tip5::NUM_ROUNDS;
     use crate::shared_math::tip5::ROUND_CONSTANTS;
     use crate::shared_math::tip5::STATE_SIZE;
@@ -637,6 +829,7 @@ mod tip5_tests {
     use std::ops::Mul;
 
     use super::Tip5State;
+    use super::MDS_MATRIX_FIRST_COLUMN;
     use super::RATE;
 
     #[test]
@@ -980,5 +1173,41 @@ mod tip5_tests {
                 .fold(XFieldElement::one(), XFieldElement::mul);
         }
         assert_ne!(product, XFieldElement::zero()); // false failure with prob ~2^{-192}
+    }
+
+    #[test]
+    pub fn assert_mds_constants_blocks() {
+        let circulant_matrix_entries = MDS_MATRIX_FIRST_COLUMN;
+        let [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15] =
+            circulant_matrix_entries;
+        let block1 = [
+            (c0 + c4 + c8 + c12) / 4,
+            (c1 + c5 + c9 + c13) / 4,
+            (c2 + c6 + c10 + c14) / 4,
+            (c3 + c7 + c11 + c15) / 4,
+        ];
+        println!("pub const MDS_FREQ_BLOCK_ONE : [i64;4] = {:?};", block1);
+        assert_eq!(MDS_FREQ_BLOCK_ONE, block1);
+
+        let block2 = [
+            ((c0 - c8) / 2, (c4 - c12) / 2),
+            ((c1 - c9) / 2, (c5 - c13) / 2),
+            ((c2 - c10) / 2, (c6 - c14) / 2),
+            ((c3 - c11) / 2, (c7 - c15) / 2),
+        ];
+        println!(
+            "pub const MDS_FREQ_BLOCK_TWO : [(i64,i64);4] = {:?};",
+            block2
+        );
+        assert_eq!(MDS_FREQ_BLOCK_TWO, block2);
+
+        let block3 = [
+            (c0 - c4 + c8 - c12) / 4,
+            (c1 - c5 + c9 - c13) / 4,
+            (c2 - c6 + c10 - c14) / 4,
+            (c3 - c7 + c11 - c15) / 4,
+        ];
+        println!("pub const MDS_FREQ_BLOCK_THREE : [i64;4] = {:?};", block3);
+        assert_eq!(MDS_FREQ_BLOCK_THREE, block3);
     }
 }
