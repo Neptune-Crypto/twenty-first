@@ -165,10 +165,22 @@ pub const ROUND_CONSTANTS: [BFieldElement; NUM_ROUNDS * STATE_SIZE] = [
 // ];
 // const MDS_FREQ_BLOCK_THREE: [i64; 4] = [24719, -18576, -2640, 11211];
 
+const fn flip_row_column(inp: [i64; STATE_SIZE]) -> [i64; STATE_SIZE] {
+    let mut out = [0i64; STATE_SIZE];
+    out[0] = inp[0];
+    let mut i = 1;
+    while i < STATE_SIZE {
+        out[i] = inp[STATE_SIZE - i];
+        i += 1;
+    }
+    out
+}
+
 // alternative MDS candidates
 // candidate A
-pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] =
+pub const MDS_MATRIX_FIRST_ROW: [i64; STATE_SIZE] =
     [38, 5, 39, 52, 50, 2, 19, 27, 22, 7, 49, 20, 18, 18, 49, 29];
+pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] = flip_row_column(MDS_MATRIX_FIRST_ROW);
 pub const MDS_FREQ_BLOCK_ONE: [i64; 4] = [32, 8, 39, 32];
 pub const MDS_FREQ_BLOCK_TWO: [(i64, i64); 4] = [(8, 16), (-1, -8), (-5, -15), (16, -1)];
 pub const MDS_FREQ_BLOCK_THREE: [i64; 4] = [-2, -2, 5, 4];
@@ -197,7 +209,7 @@ impl Tip5 {
 
     #[inline(always)]
     #[allow(clippy::shadow_unrelated)]
-    pub(crate) fn mds_al_kindi(state: [i64; 16]) -> [i64; 16] {
+    pub(crate) fn mds_al_kindi16(state: [i64; 16]) -> [i64; 16] {
         let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15] = state;
 
         let (u0, u1, u2) = Self::fft4_real([s0, s4, s8, s12]);
@@ -654,10 +666,36 @@ impl Tip5 {
             lo[i] = (b.raw_u64() as u32) as i64;
         }
 
-        // lo = Self::fast_cyclomul16(lo, MDS_MATRIX_FIRST_COLUMN);
-        // hi = Self::fast_cyclomul16(hi, MDS_MATRIX_FIRST_COLUMN);
-        lo = Self::mds_al_kindi(lo);
-        hi = Self::mds_al_kindi(hi);
+        lo = Self::fast_cyclomul16(lo, MDS_MATRIX_FIRST_COLUMN);
+        hi = Self::fast_cyclomul16(hi, MDS_MATRIX_FIRST_COLUMN);
+
+        for r in 0..STATE_SIZE {
+            let s = lo[r] as u128 + ((hi[r] as u128) << 32);
+            let s_hi = (s >> 64) as u64;
+            let s_lo = s as u64;
+            let z = (s_hi << 32) - s_hi;
+            let (res, over) = s_lo.overflowing_add(z);
+
+            result[r] = BFieldElement::from_raw_u64(
+                res.wrapping_add(0u32.wrapping_sub(over as u32) as u64),
+            );
+        }
+        *state = result;
+    }
+
+    #[inline(always)]
+    fn mds_al_kindi(state: &mut [BFieldElement; STATE_SIZE]) {
+        let mut result = [BFieldElement::zero(); STATE_SIZE];
+
+        let mut lo: [i64; STATE_SIZE] = [0; STATE_SIZE];
+        let mut hi: [i64; STATE_SIZE] = [0; STATE_SIZE];
+        for (i, b) in state.iter().enumerate() {
+            hi[i] = (b.raw_u64() >> 32) as i64;
+            lo[i] = (b.raw_u64() as u32) as i64;
+        }
+
+        lo = Self::mds_al_kindi16(lo);
+        hi = Self::mds_al_kindi16(hi);
 
         for r in 0..STATE_SIZE {
             let s = lo[r] as u128 + ((hi[r] as u128) << 32);
@@ -693,6 +731,7 @@ impl Tip5 {
         Self::sbox_layer(&mut sponge.state);
 
         Self::mds_cyclomul(&mut sponge.state);
+        // Self::mds_al_kindi(&mut sponge.state);
 
         for i in 0..STATE_SIZE {
             sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
@@ -829,7 +868,7 @@ mod tip5_tests {
     use std::ops::Mul;
 
     use super::Tip5State;
-    use super::MDS_MATRIX_FIRST_COLUMN;
+    use super::MDS_MATRIX_FIRST_ROW;
     use super::RATE;
 
     #[test]
@@ -1088,7 +1127,8 @@ mod tip5_tests {
 
         // let mds_procedure = Tip5::mds_split;
         // let mds_procedure = Tip5::mds_noswap;
-        let mds_procedure = Tip5::mds_cyclomul;
+        // let mds_procedure = Tip5::mds_cyclomul;
+        let mds_procedure = Tip5::mds_al_kindi;
 
         mds_procedure(&mut e1);
 
@@ -1177,7 +1217,7 @@ mod tip5_tests {
 
     #[test]
     pub fn assert_mds_constants_blocks() {
-        let circulant_matrix_entries = MDS_MATRIX_FIRST_COLUMN;
+        let circulant_matrix_entries = MDS_MATRIX_FIRST_ROW;
         let [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15] =
             circulant_matrix_entries;
         let block1 = [
@@ -1209,5 +1249,45 @@ mod tip5_tests {
         ];
         println!("pub const MDS_FREQ_BLOCK_THREE : [i64;4] = {:?};", block3);
         assert_eq!(MDS_FREQ_BLOCK_THREE, block3);
+    }
+
+    fn matrix_mul(vector: &mut [BFieldElement; 16]) {
+        let mut output = [BFieldElement::zero(); 16];
+        for i in 0..16 {
+            for j in 0..16 {
+                output[i] += BFieldElement::new(
+                    (MDS_MATRIX_FIRST_ROW[(STATE_SIZE - i + j) % STATE_SIZE])
+                        .try_into()
+                        .unwrap(),
+                ) * vector[j];
+            }
+        }
+        *vector = output;
+    }
+
+    #[test]
+    fn test_mds_agree() {
+        let mut rng = thread_rng();
+        // let vector: [i64; 16] = (0..16)
+        //     .map(|_| (rng.next_u64() & 0xffffffff) as i64)
+        //     .collect_vec()
+        //     .try_into()
+        //     .unwrap();
+        let vector: [BFieldElement; 16] = (0..16)
+            .map(|_| BFieldElement::new(rng.next_u64()))
+            .collect_vec()
+            .try_into()
+            .unwrap();
+
+        let mut matrix = vector.clone();
+        matrix_mul(&mut matrix);
+        let mut cyclomul = vector.clone();
+        Tip5::mds_cyclomul(&mut cyclomul);
+        let mut al_kindi = vector.clone();
+        Tip5::mds_al_kindi(&mut al_kindi);
+
+        assert_eq!(matrix, al_kindi, "matrix =/= al kindi");
+        assert_eq!(matrix, cyclomul, "matrix =/= cyclomul");
+        assert_eq!(cyclomul, al_kindi, "cyclomul =/= al kindi");
     }
 }
