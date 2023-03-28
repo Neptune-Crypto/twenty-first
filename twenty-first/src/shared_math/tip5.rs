@@ -730,8 +730,8 @@ impl Tip5 {
     fn round(sponge: &mut Tip5State, round_index: usize) {
         Self::sbox_layer(&mut sponge.state);
 
-        Self::mds_cyclomul(&mut sponge.state);
-        // Self::mds_al_kindi(&mut sponge.state);
+        // Self::mds_cyclomul(&mut sponge.state);
+        Self::mds_al_kindi(&mut sponge.state);
 
         for i in 0..STATE_SIZE {
             sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
