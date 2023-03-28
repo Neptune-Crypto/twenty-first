@@ -90,8 +90,26 @@ def test_negacyclic_mul8():
 
     assert(c_ == c)
 
-def shift_left_reduce(a, shamt):
-    return (a << shamt) % p
+def sl32(aa):
+    ofl = aa >> 32
+    return ((aa << 32) & 0xffffffffffffffff) + (ofl << 32) - ofl
+
+def shift_left_reduce(aa, shamt):
+    assert(aa>=0), "shift_left_reduce only works for positive integers"
+    assert(aa<2^64), "shift_left_reduce only works for integers < 2^64"
+    assert(0<=shamt and shamt < 128), "shift_left_reduce only works for 0 <= shamt < 128"
+    if shamt >= 64:
+        a = sl32(aa) - aa
+        sh = shamt - 64
+    else:
+        a = aa
+        sh = shamt
+    ofl = a >> (64 - sh)
+    b = ((a << sh) & 0xffffffffffffffff) + sl32(ofl) - ofl
+    if b > 2^64:
+        return b - p
+    else:
+        return b
 
 def smart_cyclomul16(a, b):
     n = 16
