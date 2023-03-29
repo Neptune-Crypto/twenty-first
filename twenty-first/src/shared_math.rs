@@ -2,6 +2,7 @@ pub mod b_field_element;
 pub mod fips202;
 pub mod i64_circuit;
 pub mod lattice;
+pub mod mds;
 pub mod mpolynomial;
 pub mod ntt;
 pub mod other;
