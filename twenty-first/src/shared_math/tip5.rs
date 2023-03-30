@@ -7,7 +7,10 @@ pub use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
-use super::x_field_element::{XFieldElement, EXTENSION_DEGREE};
+use super::{
+    mds::generated_function,
+    x_field_element::{XFieldElement, EXTENSION_DEGREE},
+};
 
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
@@ -485,6 +488,34 @@ impl Tip5 {
     }
 
     #[inline(always)]
+    fn mds_generated(state: &mut [BFieldElement; STATE_SIZE]) {
+        let mut result = [BFieldElement::zero(); STATE_SIZE];
+
+        let mut lo: [i64; STATE_SIZE] = [0; STATE_SIZE];
+        let mut hi: [i64; STATE_SIZE] = [0; STATE_SIZE];
+        for (i, b) in state.iter().enumerate() {
+            hi[i] = (b.raw_u64() >> 32) as i64;
+            lo[i] = (b.raw_u64() as u32) as i64;
+        }
+
+        lo = generated_function(&lo);
+        hi = generated_function(&hi);
+
+        for r in 0..STATE_SIZE {
+            let s = lo[r] as u128 + ((hi[r] as u128) << 32);
+            let s_hi = (s >> 64) as u64;
+            let s_lo = s as u64;
+            let z = (s_hi << 32) - s_hi;
+            let (res, over) = s_lo.overflowing_add(z);
+
+            result[r] = BFieldElement::from_raw_u64(
+                res.wrapping_add(0u32.wrapping_sub(over as u32) as u64),
+            );
+        }
+        *state = result;
+    }
+
+    #[inline(always)]
     fn sbox_layer(state: &mut [BFieldElement; STATE_SIZE]) {
         // lookup
         state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
@@ -503,7 +534,8 @@ impl Tip5 {
     fn round(sponge: &mut Tip5State, round_index: usize) {
         Self::sbox_layer(&mut sponge.state);
 
-        Self::mds_cyclomul(&mut sponge.state);
+        // Self::mds_cyclomul(&mut sponge.state);
+        Self::mds_generated(&mut sponge.state);
 
         for i in 0..STATE_SIZE {
             sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
@@ -893,9 +925,9 @@ mod tip5_tests {
         let mut e1 = [BFieldElement::zero(); STATE_SIZE];
         e1[0] = BFieldElement::one();
 
-        // let mds_procedure = Tip5::mds_split;
-        // let mds_procedure = Tip5::mds_noswap;
-        let mds_procedure = Tip5::mds_cyclomul;
+        // let mds_procedure = Tip5::mds_al_kindi;
+        // let mds_procedure = Tip5::mds_cyclomul;
+        let mds_procedure = Tip5::mds_generated;
 
         mds_procedure(&mut e1);
 

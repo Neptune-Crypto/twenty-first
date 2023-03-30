@@ -1,6 +1,6 @@
 pub mod b_field_element;
+pub mod circuit;
 pub mod fips202;
-pub mod i64_circuit;
 pub mod lattice;
 pub mod mds;
 pub mod mpolynomial;
