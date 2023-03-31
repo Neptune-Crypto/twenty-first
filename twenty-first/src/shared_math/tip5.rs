@@ -490,13 +490,12 @@ impl Tip5 {
 
     #[inline(always)]
     fn mds_generated(state: &mut [BFieldElement; STATE_SIZE]) {
-        let mut result = [BFieldElement::zero(); STATE_SIZE];
-
         let mut lo: [u64; STATE_SIZE] = [0; STATE_SIZE];
         let mut hi: [u64; STATE_SIZE] = [0; STATE_SIZE];
-        for (i, b) in state.iter().enumerate() {
-            hi[i] = b.raw_u64() >> 32;
-            lo[i] = (b.raw_u64() as u32) as u64;
+        for i in 0..STATE_SIZE {
+            let b = state[i].raw_u64();
+            hi[i] = b >> 32;
+            lo[i] = b & 0xffffffffu64;
         }
 
         lo = generated_function(&lo);
@@ -509,11 +508,10 @@ impl Tip5 {
             let z = (s_hi << 32) - s_hi;
             let (res, over) = s_lo.overflowing_add(z);
 
-            result[r] = BFieldElement::from_raw_u64(
+            state[r] = BFieldElement::from_raw_u64(
                 res.wrapping_add(0u32.wrapping_sub(over as u32) as u64),
             );
         }
-        *state = result;
     }
 
     #[inline(always)]
