@@ -502,15 +502,14 @@ impl Tip5 {
         hi = generated_function(&hi);
 
         for r in 0..STATE_SIZE {
-            let s = lo[r] as u128 + ((hi[r] as u128) << 32);
+            let s = (lo[r] >> 4) as u128 + ((hi[r] as u128) << 28);
+
             let s_hi = (s >> 64) as u64;
             let s_lo = s as u64;
-            let z = (s_hi << 32) - s_hi;
-            let (res, over) = s_lo.overflowing_add(z);
 
-            state[r] = BFieldElement::from_raw_u64(
-                res.wrapping_add(0u32.wrapping_sub(over as u32) as u64),
-            );
+            let (res, over) = s_lo.overflowing_add(s_hi * 0xffffffffu64);
+
+            state[r] = BFieldElement::from_raw_u64(if over { res + 0xffffffffu64 } else { res });
         }
     }
 
@@ -1011,5 +1010,35 @@ mod tip5_tests {
                 .fold(XFieldElement::one(), XFieldElement::mul);
         }
         assert_ne!(product, XFieldElement::zero()); // false failure with prob ~2^{-192}
+    }
+
+    #[test]
+    fn test_mds_agree() {
+        let mut rng = thread_rng();
+        // let vector: [i64; 16] = (0..16)
+        //     .map(|_| (rng.next_u64() & 0xffffffff) as i64)
+        //     .collect_vec()
+        //     .try_into()
+        //     .unwrap();
+        let vector: [BFieldElement; 16] = (0..16)
+            .map(|_| BFieldElement::new(rng.next_u64() % 10))
+            .collect_vec()
+            .try_into()
+            .unwrap();
+        // let mut vector = [BFieldElement::zero(); 16];
+        // vector[0] = BFieldElement::one();
+
+        let mut cyclomul = vector;
+        Tip5::mds_cyclomul(&mut cyclomul);
+        let mut generated = vector;
+        Tip5::mds_generated(&mut generated);
+
+        assert_eq!(
+            cyclomul,
+            generated,
+            "cyclomul =/= generated\n{}\n{}",
+            cyclomul.map(|c| c.to_string()).join(","),
+            generated.map(|c| c.to_string()).join(",")
+        );
     }
 }
