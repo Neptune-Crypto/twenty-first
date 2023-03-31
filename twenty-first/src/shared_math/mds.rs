@@ -92,6 +92,7 @@ fn karatsuba_negacyclic_mul<
     res
 }
 
+#[allow(dead_code)]
 fn quadratic_negacyclic_mul<
     T: Clone + Debug + Sub<Output = T> + Add<Output = T> + Mul<Output = T>,
 >(
@@ -148,6 +149,7 @@ fn quadratic_cyclic_mul<T: Clone + Debug + Sub<Output = T> + Add<Output = T> + M
     res
 }
 
+#[allow(dead_code)]
 fn karatsuba_cyclic_mul<T: Clone + Sub<Output = T> + Add<Output = T> + Mul<Output = T>>(
     a: &[T],
     b: &[T],
@@ -233,6 +235,7 @@ pub fn recursive_cyclic_mul<
     res
 }
 
+#[allow(dead_code)]
 fn build_recursive_cyclic_mul_circuit() -> [Circuit<u64>; 16] {
     const STATE_SIZE: usize = 16;
     const MDS_MATRIX_FIRST_COLUMN: [u64; STATE_SIZE] = [
@@ -240,7 +243,7 @@ fn build_recursive_cyclic_mul_circuit() -> [Circuit<u64>; 16] {
         59689, 26798, 17845,
     ];
     type T = u64;
-    let mut builder = CircuitBuilder::<T>::new();
+    let builder = CircuitBuilder::<T>::new();
 
     let inputs: [CircuitMonad<T>; STATE_SIZE] = (0..STATE_SIZE)
         .map(|i| builder.input(i))
@@ -262,20 +265,17 @@ fn build_recursive_cyclic_mul_circuit() -> [Circuit<u64>; 16] {
     CircuitMonad::move_coefficients_right(&mut outputs);
     CircuitMonad::fold_uncles(&mut outputs);
 
-    let res = outputs
+    outputs
         .into_iter()
         .map(|o| o.consume())
         .collect_vec()
         .try_into()
-        .unwrap();
-
-    // Circuit::assert_all_evaluate_different(&res, input)
-
-    res
+        .unwrap()
 }
 
 /// Return a variable name for the node. Returns `point[n]` if node is just
 /// a value from the codewords. Otherwise returns the ID of the circuit.
+#[allow(dead_code)]
 fn get_binding_name<T>(circuit: &Circuit<T>) -> String
 where
     T: Clone
@@ -298,6 +298,7 @@ where
 
 /// Return (1) the code for evaluating a single node and (2) a list of symbols that this evaluation
 /// depends on.
+#[allow(dead_code)]
 fn evaluate_single_node<T>(
     requested_visited_count: usize,
     circuit: &Circuit<T>,
@@ -353,6 +354,7 @@ where
     (output, dependent_symbols)
 }
 
+#[allow(dead_code)]
 fn declare_single_node_with_visit_count<T>(
     requested_visited_count: usize,
     circuit: &Circuit<T>,
@@ -423,6 +425,7 @@ fn declare_single_node_with_visit_count<T>(
 /// Produce the code to evaluate code for all nodes that share a value number of
 /// times visited. A value for all nodes with a higher count than the provided are assumed
 /// to be in scope.
+#[allow(dead_code)]
 fn declare_nodes_with_visit_count<T>(
     requested_visited_count: usize,
     circuits: &[Circuit<T>],
@@ -454,6 +457,7 @@ where
     output
 }
 
+#[allow(dead_code)]
 fn turn_circuits_into_string<T>(circuits: &mut [Circuit<T>]) -> String
 where
     T: Clone
@@ -662,7 +666,7 @@ pub fn generated_function(input: &[u64]) -> [u64; 16] {
         - ((((node_2026) + (node_2029)) - ((node_1994) + (node_1997)))
             - ((node_1988) + (node_1991)));
 
-    let res = [
+    [
         (node_152) + (node_412),
         (node_154) + (node_717),
         (node_156) + (node_906),
@@ -679,9 +683,7 @@ pub fn generated_function(input: &[u64]) -> [u64; 16] {
         (node_155) - (node_1375),
         (node_157) - (node_1492),
         (node_159) - (node_1657),
-    ];
-
-    res
+    ]
 }
 
 #[cfg(test)]

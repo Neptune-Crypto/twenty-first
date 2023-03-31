@@ -460,6 +460,7 @@ impl Tip5 {
     }
 
     #[inline(always)]
+    #[allow(dead_code)]
     fn mds_cyclomul(state: &mut [BFieldElement; STATE_SIZE]) {
         let mut result = [BFieldElement::zero(); STATE_SIZE];
 
@@ -494,7 +495,7 @@ impl Tip5 {
         let mut lo: [u64; STATE_SIZE] = [0; STATE_SIZE];
         let mut hi: [u64; STATE_SIZE] = [0; STATE_SIZE];
         for (i, b) in state.iter().enumerate() {
-            hi[i] = (b.raw_u64() >> 32);
+            hi[i] = b.raw_u64() >> 32;
             lo[i] = (b.raw_u64() as u32) as u64;
         }
 
