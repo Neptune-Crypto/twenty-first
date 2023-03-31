@@ -514,17 +514,26 @@ impl Tip5 {
     }
 
     #[inline(always)]
+    #[allow(clippy::needless_range_loop)]
     fn sbox_layer(state: &mut [BFieldElement; STATE_SIZE]) {
         // lookup
-        state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
-            Self::split_and_lookup(s);
-        });
+        // state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
+        //     Self::split_and_lookup(s);
+        // });
+        for i in 0..NUM_SPLIT_AND_LOOKUP {
+            Self::split_and_lookup(&mut state[i]);
+        }
 
         // power
-        for st in state.iter_mut().skip(NUM_SPLIT_AND_LOOKUP) {
-            let sq = *st * *st;
+        // for st in state.iter_mut().skip(NUM_SPLIT_AND_LOOKUP) {
+        //     let sq = *st * *st;
+        //     let qu = sq * sq;
+        //     *st *= sq * qu;
+        // }
+        for i in NUM_SPLIT_AND_LOOKUP..STATE_SIZE {
+            let sq = state[i] * state[i];
             let qu = sq * sq;
-            *st *= sq * qu;
+            state[i] *= sq * qu;
         }
     }
 
