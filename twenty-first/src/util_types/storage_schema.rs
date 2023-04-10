@@ -506,7 +506,7 @@ impl From<u64> for RustyKey {
 }
 
 #[derive(Debug)]
-pub struct RustyValue(Vec<u8>);
+pub struct RustyValue(pub Vec<u8>);
 
 impl From<RustyValue> for u64 {
     fn from(value: RustyValue) -> Self {
@@ -542,6 +542,20 @@ impl From<crate::shared_math::tip5::Digest> for RustyValue {
                 .map(u64::to_be_bytes)
                 .concat(),
         )
+    }
+}
+
+struct RustyReader {
+    db: Arc<Mutex<DB>>,
+}
+
+impl StorageReader<RustyKey, RustyValue> for RustyReader {
+    fn get(&mut self, key: RustyKey) -> Option<RustyValue> {
+        self.db
+            .lock()
+            .expect("StorageReader for RustyWallet: could not get database lock for reading (get)")
+            .get(&key.0)
+            .map(RustyValue)
     }
 }
 
