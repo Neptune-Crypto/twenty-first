@@ -1738,31 +1738,4 @@ mod constraint_circuit_tests {
             );
         }
     }
-
-    // fn table_constraints_prop(mut constraints: Vec<Circuit<T>>) {
-    //     Circuit::assert_has_unique_ids(&mut constraints);
-
-    //     // Verify that all nodes evaluate to a unique value when given a randomized input.
-    //     let input_count = 16;
-    //     let input: Vec<T> = random_elements(input_count);
-    //     Circuit::assert_all_evaluate_different(&constraints, input);
-
-    //     println!(
-    //         "nodes in tested circuit: {}",
-    //         node_counter(&mut constraints)
-    //     );
-    // }
-
-    // #[test]
-    // fn constant_folding_u32_table_test() {
-    //     let challenges = Challenges::placeholder(&[], &[]);
-    //     let constraint_circuits = ExtU32Table::ext_initial_constraints_as_circuits();
-    //     table_constraints_prop(constraint_circuits, &challenges, "u32 initial");
-    //     let constraint_circuits = ExtU32Table::ext_consistency_constraints_as_circuits();
-    //     table_constraints_prop(constraint_circuits, &challenges, "u32 consistency");
-    //     let constraint_circuits = ExtU32Table::ext_transition_constraints_as_circuits();
-    //     table_constraints_prop(constraint_circuits, &challenges, "u32 transition");
-    //     let constraint_circuits = ExtU32Table::ext_terminal_constraints_as_circuits();
-    //     table_constraints_prop(constraint_circuits, &challenges, "u32 terminal");
-    // }
 }
