@@ -7,7 +7,10 @@ pub use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
-use super::x_field_element::{XFieldElement, EXTENSION_DEGREE};
+use super::{
+    mds::generated_function,
+    x_field_element::{XFieldElement, EXTENSION_DEGREE},
+};
 
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
@@ -457,6 +460,7 @@ impl Tip5 {
     }
 
     #[inline(always)]
+    #[allow(dead_code)]
     fn mds_cyclomul(state: &mut [BFieldElement; STATE_SIZE]) {
         let mut result = [BFieldElement::zero(); STATE_SIZE];
 
@@ -485,17 +489,51 @@ impl Tip5 {
     }
 
     #[inline(always)]
+    fn mds_generated(state: &mut [BFieldElement; STATE_SIZE]) {
+        let mut lo: [u64; STATE_SIZE] = [0; STATE_SIZE];
+        let mut hi: [u64; STATE_SIZE] = [0; STATE_SIZE];
+        for i in 0..STATE_SIZE {
+            let b = state[i].raw_u64();
+            hi[i] = b >> 32;
+            lo[i] = b & 0xffffffffu64;
+        }
+
+        lo = generated_function(&lo);
+        hi = generated_function(&hi);
+
+        for r in 0..STATE_SIZE {
+            let s = (lo[r] >> 4) as u128 + ((hi[r] as u128) << 28);
+
+            let s_hi = (s >> 64) as u64;
+            let s_lo = s as u64;
+
+            let (res, over) = s_lo.overflowing_add(s_hi * 0xffffffffu64);
+
+            state[r] = BFieldElement::from_raw_u64(if over { res + 0xffffffffu64 } else { res });
+        }
+    }
+
+    #[inline(always)]
+    #[allow(clippy::needless_range_loop)]
     fn sbox_layer(state: &mut [BFieldElement; STATE_SIZE]) {
         // lookup
-        state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
-            Self::split_and_lookup(s);
-        });
+        // state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
+        //     Self::split_and_lookup(s);
+        // });
+        for i in 0..NUM_SPLIT_AND_LOOKUP {
+            Self::split_and_lookup(&mut state[i]);
+        }
 
         // power
-        for st in state.iter_mut().skip(NUM_SPLIT_AND_LOOKUP) {
-            let sq = *st * *st;
+        // for st in state.iter_mut().skip(NUM_SPLIT_AND_LOOKUP) {
+        //     let sq = *st * *st;
+        //     let qu = sq * sq;
+        //     *st *= sq * qu;
+        // }
+        for i in NUM_SPLIT_AND_LOOKUP..STATE_SIZE {
+            let sq = state[i] * state[i];
             let qu = sq * sq;
-            *st *= sq * qu;
+            state[i] *= sq * qu;
         }
     }
 
@@ -503,7 +541,8 @@ impl Tip5 {
     fn round(sponge: &mut Tip5State, round_index: usize) {
         Self::sbox_layer(&mut sponge.state);
 
-        Self::mds_cyclomul(&mut sponge.state);
+        // Self::mds_cyclomul(&mut sponge.state);
+        Self::mds_generated(&mut sponge.state);
 
         for i in 0..STATE_SIZE {
             sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
@@ -893,9 +932,9 @@ mod tip5_tests {
         let mut e1 = [BFieldElement::zero(); STATE_SIZE];
         e1[0] = BFieldElement::one();
 
-        // let mds_procedure = Tip5::mds_split;
-        // let mds_procedure = Tip5::mds_noswap;
-        let mds_procedure = Tip5::mds_cyclomul;
+        // let mds_procedure = Tip5::mds_al_kindi;
+        // let mds_procedure = Tip5::mds_cyclomul;
+        let mds_procedure = Tip5::mds_generated;
 
         mds_procedure(&mut e1);
 
@@ -980,5 +1019,35 @@ mod tip5_tests {
                 .fold(XFieldElement::one(), XFieldElement::mul);
         }
         assert_ne!(product, XFieldElement::zero()); // false failure with prob ~2^{-192}
+    }
+
+    #[test]
+    fn test_mds_agree() {
+        let mut rng = thread_rng();
+        // let vector: [i64; 16] = (0..16)
+        //     .map(|_| (rng.next_u64() & 0xffffffff) as i64)
+        //     .collect_vec()
+        //     .try_into()
+        //     .unwrap();
+        let vector: [BFieldElement; 16] = (0..16)
+            .map(|_| BFieldElement::new(rng.next_u64() % 10))
+            .collect_vec()
+            .try_into()
+            .unwrap();
+        // let mut vector = [BFieldElement::zero(); 16];
+        // vector[0] = BFieldElement::one();
+
+        let mut cyclomul = vector;
+        Tip5::mds_cyclomul(&mut cyclomul);
+        let mut generated = vector;
+        Tip5::mds_generated(&mut generated);
+
+        assert_eq!(
+            cyclomul,
+            generated,
+            "cyclomul =/= generated\n{}\n{}",
+            cyclomul.map(|c| c.to_string()).join(","),
+            generated.map(|c| c.to_string()).join(",")
+        );
     }
 }
