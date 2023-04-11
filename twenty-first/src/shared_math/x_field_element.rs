@@ -1035,13 +1035,46 @@ mod x_field_element_test {
             a_mul_b *= b;
             assert_eq!(a * b, a_mul_b);
 
-            // Test the add/sub/mul assign operators, when the higher coefficients are zero
+            // Test the add/sub/mul assign operators, when the higher coefficients are zero.
+            // Also tests add/sub/mul operators and add/sub/mul assign operators when RHS has
+            // the type of B field element. And add/sub/mul operators when LHS is a B-field
+            // element and RHS is an X-field element.
+            // mul-assign `*=`
             let b_field_b = XFieldElement::new_const(b.coefficients[0]);
-            let mut a_mul_b_field_b = a;
-            a_mul_b_field_b *= b_field_b;
-            assert_eq!(a * b_field_b, a_mul_b_field_b);
-            assert_eq!(a, a_mul_b_field_b / b_field_b);
-            assert_eq!(b_field_b, a_mul_b_field_b / a);
+            let mut a_mul_b_field_b_as_x = a;
+            a_mul_b_field_b_as_x *= b_field_b;
+            assert_eq!(a * b_field_b, a_mul_b_field_b_as_x);
+            assert_eq!(a, a_mul_b_field_b_as_x / b_field_b);
+            assert_eq!(b_field_b, a_mul_b_field_b_as_x / a);
+            assert_eq!(a_mul_b_field_b_as_x, a * b.coefficients[0]);
+            assert_eq!(a_mul_b_field_b_as_x, b.coefficients[0] * a);
+            let mut a_mul_b_field_b_as_b = a;
+            a_mul_b_field_b_as_b *= b.coefficients[0];
+            assert_eq!(a_mul_b_field_b_as_b, a_mul_b_field_b_as_x);
+
+            // `+=`
+            let mut a_plus_b_field_b_as_x = a;
+            a_plus_b_field_b_as_x += b_field_b;
+            assert_eq!(a + b_field_b, a_plus_b_field_b_as_x);
+            assert_eq!(a, a_plus_b_field_b_as_x - b_field_b);
+            assert_eq!(b_field_b, a_plus_b_field_b_as_x - a);
+            assert_eq!(a_plus_b_field_b_as_x, a + b.coefficients[0]);
+            assert_eq!(a_plus_b_field_b_as_x, b.coefficients[0] + a);
+            let mut a_plus_b_field_b_as_b = a;
+            a_plus_b_field_b_as_b += b.coefficients[0];
+            assert_eq!(a_plus_b_field_b_as_b, a_plus_b_field_b_as_x);
+
+            // `-=`
+            let mut a_minus_b_field_b_as_x = a;
+            a_minus_b_field_b_as_x -= b_field_b;
+            assert_eq!(a - b_field_b, a_minus_b_field_b_as_x);
+            assert_eq!(a, a_minus_b_field_b_as_x + b_field_b);
+            assert_eq!(-b_field_b, a_minus_b_field_b_as_x - a);
+            assert_eq!(a_minus_b_field_b_as_x, a - b.coefficients[0]);
+            assert_eq!(-a_minus_b_field_b_as_x, b.coefficients[0] - a);
+            let mut a_minus_b_field_b_as_b = a;
+            a_minus_b_field_b_as_b -= b.coefficients[0];
+            assert_eq!(a_minus_b_field_b_as_b, a_minus_b_field_b_as_x);
         }
     }
 
