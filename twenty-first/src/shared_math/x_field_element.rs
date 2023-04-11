@@ -7,7 +7,7 @@ use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use super::rescue_prime_digest::Digest;
-use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use crate::shared_math::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
@@ -18,6 +18,37 @@ pub const EXTENSION_DEGREE: usize = 3;
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct XFieldElement {
     pub coefficients: [BFieldElement; EXTENSION_DEGREE],
+}
+
+impl From<XFieldElement> for Digest {
+    /// Interpret the `XFieldElement` as a [`Digest`]. No hashing is performed. This
+    /// interpretation can be useful for the
+    /// [`AlgebraicHasher`](crate::util_types::algebraic_hasher::AlgebraicHasher) trait and,
+    /// by extension, allows building
+    /// [`MerkleTree`](crate::util_types::merkle_tree::MerkleTree)s directly from `XFieldElement`s.
+    fn from(xfe: XFieldElement) -> Self {
+        Digest::new([
+            xfe.coefficients[0],
+            xfe.coefficients[1],
+            xfe.coefficients[2],
+            BFIELD_ZERO,
+            BFIELD_ZERO,
+        ])
+    }
+}
+
+impl TryFrom<Digest> for XFieldElement {
+    type Error = &'static str;
+
+    fn try_from(digest: Digest) -> Result<Self, Self::Error> {
+        let digest_values = digest.values();
+        let coefficients = digest_values[..EXTENSION_DEGREE].try_into().unwrap();
+        let xfe = Self { coefficients };
+        match digest_values[3] == BFIELD_ZERO && digest_values[4] == BFIELD_ZERO {
+            true => Ok(xfe),
+            false => Err("Digest is not an XFieldElement."),
+        }
+    }
 }
 
 impl Sum for XFieldElement {
@@ -1204,5 +1235,19 @@ mod x_field_element_test {
     fn multiplicative_inverse_of_zero() {
         let zero = XFieldElement::zero();
         zero.inverse();
+    }
+
+    #[test]
+    fn xfe_to_digest_to_xfe() {
+        let xfe: XFieldElement = rand::thread_rng().gen();
+        let digest: Digest = xfe.into();
+        let xfe2: XFieldElement = digest.try_into().unwrap();
+        assert_eq!(xfe, xfe2);
+
+        let digest2: Digest = rand::thread_rng().gen();
+        match XFieldElement::try_from(digest2) {
+            Ok(_) => panic!("Should not be able to convert a random digest to an XFieldElement."),
+            Err(_) => println!("Conversion of random digest to XFieldElement failed as expected."),
+        }
     }
 }

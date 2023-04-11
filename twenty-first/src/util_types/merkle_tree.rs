@@ -717,9 +717,13 @@ mod merkle_tree_test {
         random_elements, random_elements_distinct_range, random_elements_range,
     };
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
+    use crate::shared_math::tip5::Tip5;
+    use crate::shared_math::x_field_element::XFieldElement;
     use crate::test_shared::corrupt_digest;
     use itertools::Itertools;
-    use rand::{Rng, RngCore};
+    use rand::thread_rng;
+    use rand::Rng;
+    use rand::RngCore;
     use std::iter::zip;
 
     /// Count the number of hashes present in all partial authentication paths
@@ -1640,5 +1644,19 @@ mod merkle_tree_test {
         type MT = MerkleTree<H, M>;
 
         MT::root_from_arbitrary_number_of_digests(&[]);
+    }
+
+    #[test]
+    fn merkle_tree_with_xfes_as_leafs() {
+        type MT = MerkleTree<Tip5, CpuParallel>;
+
+        let num_leaves = 128;
+        let leafs: Vec<XFieldElement> = random_elements(num_leaves);
+        let mt: MT = CpuParallel::from_digests(&leafs.iter().map(|&x| x.into()).collect_vec());
+
+        let leaf_index: usize = thread_rng().gen_range(0..num_leaves);
+        let path = mt.get_authentication_path(leaf_index);
+        let sibling = leafs[leaf_index ^ 1];
+        assert_eq!(path[0], sibling.into());
     }
 }
