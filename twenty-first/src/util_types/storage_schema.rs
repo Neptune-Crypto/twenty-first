@@ -545,8 +545,8 @@ impl From<crate::shared_math::tip5::Digest> for RustyValue {
     }
 }
 
-struct RustyReader {
-    db: Arc<Mutex<DB>>,
+pub struct RustyReader {
+    pub db: Arc<Mutex<DB>>,
 }
 
 impl StorageReader<RustyKey, RustyValue> for RustyReader {
