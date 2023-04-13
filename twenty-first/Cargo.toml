@@ -1,6 +1,6 @@
 [package]
 name = "twenty-first"
-version = "0.19.2"
+version = "0.19.3"
 authors = ["Triton Software AG"]
 edition = "2021"
 
@@ -16,7 +16,7 @@ keywords = [
     "merkle-tree",
     "post-quantum",
     "algebra",
-    "rescue-prime",
+    "tip5",
 ]
 categories = ["cryptography", "mathematics"]
 
