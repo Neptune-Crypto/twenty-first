@@ -592,7 +592,6 @@ impl<const N: usize> Sub for ModuleElement<N> {
 }
 
 pub mod kem {
-    use rand::{thread_rng, RngCore};
 
     use super::{embed_msg, extract_msg, ModuleElement};
     use crate::shared_math::fips202::{sha3_256, shake256};
@@ -630,13 +629,18 @@ pub mod kem {
     }
 
     /// Generate a public-secret key pair for key encapsulation.
-    pub fn keygen() -> (SecretKey, PublicKey) {
-        let mut rng = thread_rng();
-        let mut seed: [u8; 32] = [0u8; 32];
-        rng.fill_bytes(&mut seed);
+    pub fn keygen(randomness: [u8; 32]) -> (SecretKey, PublicKey) {
+        const OUTPUT_LENGTH: usize = 32;
+        let seed: [u8; OUTPUT_LENGTH] =
+            shake256(&[randomness.to_vec(), vec![0u8]].concat(), OUTPUT_LENGTH)
+                .try_into()
+                .unwrap();
 
-        let mut key: [u8; 32] = [0u8; 32];
-        rng.fill_bytes(&mut key);
+        let key: [u8; OUTPUT_LENGTH] =
+            shake256(&[randomness.to_vec(), vec![1u8]].concat(), OUTPUT_LENGTH)
+                .try_into()
+                .unwrap();
+
         let sk = SecretKey { key, seed };
 
         let pk = derive_public_key(&key, &seed);
@@ -669,10 +673,9 @@ pub mod kem {
 
     /// Encapsulate: generate a ciphertext and an associated shared
     /// symmetric key.
-    pub fn enc(pk: PublicKey) -> ([u8; 32], Ciphertext) {
-        let mut rng = thread_rng();
-        let mut payload = [0u8; 32];
-        rng.fill_bytes(&mut payload);
+    pub fn enc(pk: PublicKey, randomness: [u8; 32]) -> ([u8; 32], Ciphertext) {
+        const OUTPUT_LENGTH: usize = 32;
+        let payload: [u8; OUTPUT_LENGTH] = shake256(&randomness, OUTPUT_LENGTH).try_into().unwrap();
         let ciphertext = generate_ciphertext_derandomized(pk, payload);
         let shared_key: [u8; 32] = sha3_256(&payload);
 
@@ -790,9 +793,14 @@ mod lattice_test {
 
     #[test]
     fn test_kem() {
+        let mut rng = thread_rng();
+        let mut key_randomness: [u8; 32] = [0u8; 32];
+        rng.fill_bytes(&mut key_randomness);
+        let mut ctxt_randomness: [u8; 32] = [0u8; 32];
+        rng.fill_bytes(&mut ctxt_randomness);
         // correctness
-        let (sk, pk) = kem::keygen();
-        let (alice_key, ctxt) = kem::enc(pk);
+        let (sk, pk) = kem::keygen(key_randomness);
+        let (alice_key, ctxt) = kem::enc(pk, ctxt_randomness);
         if let Some(bob_key) = kem::dec(sk, ctxt.clone()) {
             assert_eq!(alice_key, bob_key);
         } else {
@@ -800,7 +808,8 @@ mod lattice_test {
         }
 
         // sanity
-        let (other_sk, _) = kem::keygen();
+        rng.fill_bytes(&mut key_randomness);
+        let (other_sk, _) = kem::keygen(key_randomness);
         assert!(kem::dec(other_sk, ctxt).is_none());
     }
 }
