@@ -192,9 +192,25 @@ pub fn coset_ntt_noswap_64(array: &mut [BFieldElement; 64]) {
     }
 }
 
+pub const CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES: usize = 64;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CyclotomicRingElement {
-    coefficients: [BFieldElement; 64],
+    coefficients: [BFieldElement; CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES],
+}
+
+impl From<[BFieldElement; CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES]> for CyclotomicRingElement {
+    fn from(value: [BFieldElement; CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES]) -> Self {
+        Self {
+            coefficients: value,
+        }
+    }
+}
+
+impl From<CyclotomicRingElement> for [BFieldElement; CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES] {
+    fn from(value: CyclotomicRingElement) -> Self {
+        value.coefficients
+    }
 }
 
 impl CyclotomicRingElement {
@@ -593,8 +609,16 @@ impl<const N: usize> Sub for ModuleElement<N> {
 
 pub mod kem {
 
-    use super::{embed_msg, extract_msg, ModuleElement};
-    use crate::shared_math::fips202::{sha3_256, shake256};
+    use itertools::Itertools;
+
+    use super::{
+        embed_msg, extract_msg, CyclotomicRingElement, ModuleElement,
+        CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES,
+    };
+    use crate::shared_math::{
+        b_field_element::BFieldElement,
+        fips202::{sha3_256, shake256},
+    };
 
     #[derive(PartialEq, Eq, Clone)]
     pub struct SecretKey {
@@ -608,10 +632,65 @@ pub mod kem {
         ga: ModuleElement<4>,
     }
 
-    #[derive(PartialEq, Eq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Ciphertext {
         bg: ModuleElement<4>,
         bga_m: ModuleElement<1>,
+    }
+
+    pub const CIPHERTEXT_SIZE_IN_BFES: usize = CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES * 5;
+
+    impl From<[BFieldElement; CIPHERTEXT_SIZE_IN_BFES]> for Ciphertext {
+        fn from(value: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES]) -> Self {
+            let (bg_slice, bga_m_slice) = value.split_at(4 * CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES);
+
+            let bg_array: [BFieldElement; 4 * CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES] =
+                bg_slice.try_into().unwrap();
+            let bga_m_array: [BFieldElement; CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES] =
+                bga_m_slice.try_into().unwrap();
+
+            let bg_module = ModuleElement {
+                elements: bg_array
+                    .chunks(CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES)
+                    .map(|sl| {
+                        CyclotomicRingElement::from(
+                            std::convert::TryInto::<
+                                [BFieldElement; CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES],
+                            >::try_into(sl)
+                            .unwrap(),
+                        )
+                    })
+                    .collect_vec()
+                    .try_into()
+                    .unwrap(),
+            };
+            let bga_m_module = ModuleElement {
+                elements: [CyclotomicRingElement::from(bga_m_array); 1],
+            };
+
+            Self {
+                bg: bg_module,
+                bga_m: bga_m_module,
+            }
+        }
+    }
+
+    impl From<Ciphertext> for [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] {
+        fn from(value: Ciphertext) -> Self {
+            let bg_slice = value
+                .bg
+                .elements
+                .iter()
+                .flat_map(|e| e.coefficients)
+                .collect_vec();
+            let bga_m_slice = value
+                .bga_m
+                .elements
+                .iter()
+                .flat_map(|e| e.coefficients)
+                .collect_vec();
+            [bg_slice, bga_m_slice].concat().try_into().unwrap()
+        }
     }
 
     fn derive_public_matrix(seed: &[u8; 32]) -> ModuleElement<16> {
@@ -709,8 +788,11 @@ mod lattice_test {
     use rand::{thread_rng, RngCore};
 
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::lattice::kem::Ciphertext;
     use crate::shared_math::lattice::*;
-    use crate::shared_math::other::random_elements_array;
+    use crate::shared_math::other::{random_elements, random_elements_array};
+
+    use super::kem::CIPHERTEXT_SIZE_IN_BFES;
 
     #[test]
     fn test_fast_mul() {
@@ -811,5 +893,17 @@ mod lattice_test {
         rng.fill_bytes(&mut key_randomness);
         let (other_sk, _) = kem::keygen(key_randomness);
         assert!(kem::dec(other_sk, ctxt).is_none());
+    }
+
+    #[test]
+    fn test_ciphertext_conversion() {
+        let bfes: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] =
+            random_elements(CIPHERTEXT_SIZE_IN_BFES).try_into().unwrap();
+        let ciphertext: Ciphertext = bfes.into();
+        let bfes_again: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] = ciphertext.clone().into();
+        let ciphertext_again: Ciphertext = bfes_again.into();
+
+        assert_eq!(bfes, bfes_again);
+        assert_eq!(ciphertext, ciphertext_again);
     }
 }
