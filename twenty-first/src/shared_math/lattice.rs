@@ -607,6 +607,18 @@ impl<const N: usize> Sub for ModuleElement<N> {
     }
 }
 
+impl<const N: usize> Zero for ModuleElement<N> {
+    fn zero() -> Self {
+        Self {
+            elements: [CyclotomicRingElement::zero(); N],
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        *self == Self::zero()
+    }
+}
+
 pub mod kem {
 
     use itertools::Itertools;
@@ -784,7 +796,7 @@ pub mod kem {
 #[cfg(test)]
 mod lattice_test {
     use itertools::Itertools;
-    use num_traits::Zero;
+    use num_traits::{One, Zero};
     use rand::{thread_rng, RngCore};
 
     use crate::shared_math::b_field_element::BFieldElement;
@@ -905,5 +917,17 @@ mod lattice_test {
 
         assert_eq!(bfes, bfes_again);
         assert_eq!(ciphertext, ciphertext_again);
+    }
+
+    #[test]
+    fn zero_test() {
+        let zero_me = ModuleElement::<4>::zero();
+        assert!(zero_me.is_zero(), "zero must be zero");
+        let not_zero = ModuleElement {
+            elements: [CyclotomicRingElement {
+                coefficients: [BFieldElement::one(); 64],
+            }; 4],
+        };
+        assert!(!not_zero.is_zero(), "not-zero must be not be zero");
     }
 }
