@@ -101,3 +101,7 @@ harness = false
 [[bench]]
 name = "merkle_tree"
 harness = false
+
+[[bench]]
+name = "merkle_tree_authenticate"
+harness = false
