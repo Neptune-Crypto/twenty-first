@@ -190,63 +190,83 @@ where
     // Compact Merkle Authentication Structure Generation
     pub fn get_authentication_structure(
         &self,
-        indices: &[usize],
+        leaf_indices: &[usize],
     ) -> Vec<PartialAuthenticationPath<Digest>> {
+        let num_leaves = self.nodes.len() / 2;
         let mut calculable_indices: HashSet<usize> = HashSet::new();
-        let mut output: Vec<PartialAuthenticationPath<Digest>> = Vec::with_capacity(indices.len());
-        for i in indices.iter() {
-            let new_branch = PartialAuthenticationPath(
-                self.get_authentication_path(*i)
+        let mut partial_authentication_paths: Vec<PartialAuthenticationPath<Digest>> =
+            Vec::with_capacity(leaf_indices.len());
+        for leaf_index in leaf_indices.iter() {
+            let authentication_path = PartialAuthenticationPath(
+                self.get_authentication_path(*leaf_index)
                     .into_iter()
                     .map(Some)
                     .collect(),
             );
-            let mut index = self.nodes.len() / 2 + i;
-            calculable_indices.insert(index);
-            for _ in 1..new_branch.0.len() {
-                calculable_indices.insert(index ^ 1);
-                index /= 2;
+            let mut node_index = num_leaves + leaf_index;
+            calculable_indices.insert(node_index);
+            for _ in 1..authentication_path.0.len() {
+                let sibling_node_index = node_index ^ 1;
+                calculable_indices.insert(sibling_node_index);
+                node_index /= 2;
             }
-            output.push(new_branch);
+            partial_authentication_paths.push(authentication_path);
         }
 
         let mut complete = false;
         while !complete {
             complete = true;
-            let mut keys: Vec<usize> = calculable_indices.iter().copied().map(|x| x / 2).collect();
-            // reverse sort, from big to small, This should be the fastest way to reverse sort.
-            // cf. https://stackoverflow.com/a/60916195/2574407
-            keys.sort_by_key(|w| Reverse(*w));
-            for key in keys.iter() {
-                if calculable_indices.contains(&(key * 2))
-                    && calculable_indices.contains(&(key * 2 + 1))
-                    && !calculable_indices.contains(key)
+            let parent_node_indices: Vec<usize> =
+                calculable_indices.iter().map(|&x| x / 2).collect();
+
+            for parent_node_index in parent_node_indices.into_iter() {
+                let left_child_node_index = parent_node_index * 2;
+                let right_child_node_index = left_child_node_index + 1;
+                if calculable_indices.contains(&left_child_node_index)
+                    && calculable_indices.contains(&right_child_node_index)
+                    && !calculable_indices.contains(&parent_node_index)
                 {
-                    calculable_indices.insert(*key);
+                    calculable_indices.insert(parent_node_index);
                     complete = false;
                 }
             }
         }
 
         let mut scanned: HashSet<usize> = HashSet::new();
-        for (i, b) in indices.iter().zip(output.iter_mut()) {
-            let mut index: usize = self.nodes.len() / 2 + i;
-            scanned.insert(index);
-            for elem in b.0.iter_mut() {
-                if calculable_indices.contains(&((index ^ 1) * 2))
-                    && calculable_indices.contains(&((index ^ 1) * 2 + 1))
-                    || (index ^ 1) as i64 - self.nodes.len() as i64 / 2 > 0 // TODO: Maybe > 1 here?
-                        && indices.contains(&((index ^ 1) - self.nodes.len() / 2))
-                    || scanned.contains(&(index ^ 1))
-                {
-                    *elem = None;
+        for (leaf_index, partial_authentication_path) in leaf_indices
+            .iter()
+            .zip(partial_authentication_paths.iter_mut())
+        {
+            let mut node_index: usize = num_leaves + leaf_index;
+            scanned.insert(node_index);
+            for authentication_path_element in partial_authentication_path.0.iter_mut() {
+                // Note that the authentication path contains the siblings to the nodes given by
+                // the list (node_index, node_index / 2, node_index / 4, …). Hence, all the tests
+                // performed here exclusively deal with the current node_index's sibling.
+                let sibling_node_index = node_index ^ 1;
+                let siblings_calculability_is_known = scanned.contains(&sibling_node_index);
+
+                let siblings_left_child_node_index = sibling_node_index * 2;
+                let siblings_right_child_node_index = siblings_left_child_node_index + 1;
+                let both_sibling_children_can_be_calculated = calculable_indices
+                    .contains(&siblings_left_child_node_index)
+                    && calculable_indices.contains(&siblings_right_child_node_index);
+
+                let sibling_leaf_index = sibling_node_index - num_leaves;
+                let sibling_is_explicitly_requested = leaf_indices.contains(&sibling_leaf_index);
+
+                let authentication_path_element_is_redundant = siblings_calculability_is_known
+                    || both_sibling_children_can_be_calculated
+                    || sibling_is_explicitly_requested;
+                if authentication_path_element_is_redundant {
+                    *authentication_path_element = None;
                 }
-                scanned.insert(index ^ 1);
-                index /= 2;
+                scanned.insert(sibling_node_index);
+                node_index /= 2;
             }
         }
 
-        output
+        partial_authentication_paths
     }
 
     /// Verifies a list of leaf_indices and corresponding
@@ -1308,7 +1328,7 @@ mod merkle_tree_test {
                 make_salted_merkle_tree_test(&leaf_indices, &leaves_c, &tree_c, tree_c.get_root());
             assert!(salted_merkle_tree_verifies);
 
-            let expected_hashes = 3;
+            let expected_hashes = 2;
             assert_eq!(expected_hashes, count_hashes(&auth_path_and_salts));
         }
 
