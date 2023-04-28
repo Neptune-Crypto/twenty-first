@@ -91,17 +91,16 @@ where
     /// return the hashes, not the tree nodes (and potential leaf values), and instead
     /// of referring to this as a `proof', we call it the `authentication path'.
     ///
+    /// ```markdown
     ///              root
     ///             /    \
     /// H(H(a)+H(b))      H(H(c)+H(d))
     ///   /      \        /      \
     /// H(a)    H(b)    H(c)    H(d)
+    /// ```
     ///
-    /// The authentication path for `c' (index: 2) would be
-    ///
-    ///   vec![ H(d), H(H(a)+H(b)) ]
-    ///
-    /// ... so a criss-cross of siblings upwards.
+    /// The authentication path for `c` (index: 2) would be `vec![ H(d), H(H(a)+H(b)) ]`, i.e.,
+    /// a criss-cross of siblings upwards.
     pub fn get_authentication_path(&self, leaf_index: usize) -> Vec<Digest> {
         let height = self.get_height();
         let mut auth_path: Vec<Digest> = Vec::with_capacity(height);
