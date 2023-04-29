@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::marker::{PhantomData, Send, Sync};
+use std::ops::Deref;
+use std::ops::DerefMut;
 
 use crate::shared_math::other::{bit_representation, is_power_of_two, log_2_floor};
 use crate::shared_math::rescue_prime_digest::Digest;
@@ -48,6 +50,20 @@ where
 /// is more space efficient.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct PartialAuthenticationPath<Digest>(pub Vec<Option<Digest>>);
+
+impl Deref for PartialAuthenticationPath<Digest> {
+    type Target = Vec<Option<Digest>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for PartialAuthenticationPath<Digest> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 /// # Design
 /// Static methods are called from the verifier, who does not have
@@ -162,7 +178,7 @@ where
             );
             let mut node_index = num_leaves + leaf_index;
             calculable_indices.insert(node_index);
-            for _ in 1..authentication_path.0.len() {
+            for _ in 1..authentication_path.len() {
                 let sibling_node_index = node_index ^ 1;
                 calculable_indices.insert(sibling_node_index);
                 node_index /= 2;
@@ -196,7 +212,7 @@ where
         {
             let mut node_index: usize = num_leaves + leaf_index;
             scanned.insert(node_index);
-            for authentication_path_element in partial_authentication_path.0.iter_mut() {
+            for authentication_path_element in partial_authentication_path.iter_mut() {
                 // Note that the authentication path contains the siblings to the nodes given by
                 // the list (node_index, node_index / 2, node_index / 4, …). Hence, all the tests
                 // performed here exclusively deal with the current node_index's sibling.
@@ -254,7 +270,7 @@ where
 
         // The height of the tree is determined by the length of the first partial authentication
         // path. If the length of any subsequent paths differs, this will be caught later.
-        let tree_height = partial_auth_paths[0].0.len() + 1;
+        let tree_height = partial_auth_paths[0].len() + 1;
         let num_nodes = 2_usize.pow(tree_height as u32);
         let num_leaves = num_nodes / 2;
 
@@ -284,7 +300,7 @@ where
             }
             partial_merkle_tree[current_node_index] = Some(leaf_digest);
 
-            for &sibling in partial_authentication_path.0.iter() {
+            for &sibling in partial_authentication_path.iter() {
                 if let Some(sibling) = sibling {
                     // Check that the partial tree does not already have an entry at the current
                     // sibling node index. This would indicate that the partial authentication
@@ -660,10 +676,7 @@ mod merkle_tree_test {
     fn count_hashes<Digest: Clone>(proof: &SaltedAuthenticationStructure<Digest>) -> usize {
         proof
             .iter()
-            .map(|(partial_auth_path, _)| {
-                let optional_digests = partial_auth_path.0.clone();
-                optional_digests.iter().flatten().count()
-            })
+            .map(|(partial_auth_path, _)| partial_auth_path.0.iter().flatten().count())
             .sum()
     }
 
@@ -785,7 +798,7 @@ mod merkle_tree_test {
         for (partial_auth_path, _digest) in auth_pairs.clone() {
             assert_eq!(
                   expected_path_length,
-                  partial_auth_path.0.len(),
+                  partial_auth_path.len(),
                   "A generated authentication path must have length the height of the tree (not counting the root)"
               );
         }
@@ -842,7 +855,7 @@ mod merkle_tree_test {
                 let selected_auth_paths = tree.get_authentication_structure(&selected_indices);
 
                 for auth_path in selected_auth_paths.iter() {
-                    assert_eq!(expected_path_length, auth_path.0.len());
+                    assert_eq!(expected_path_length, auth_path.len());
                 }
 
                 let auth_pairs: Vec<(PartialAuthenticationPath<Digest>, Digest)> =
@@ -1306,7 +1319,7 @@ mod merkle_tree_test {
                     tree.get_authentication_structure_and_salt(&indices);
 
                 for path in proof.iter() {
-                    assert_eq!(*expected_path_length, path.0 .0.len());
+                    assert_eq!(*expected_path_length, path.0.len());
                 }
 
                 assert!(SaltedMerkleTree::<H>::verify_authentication_structure(
