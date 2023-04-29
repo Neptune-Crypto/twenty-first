@@ -19,7 +19,7 @@ fn merkle_tree_authenticate(c: &mut Criterion) {
     let log_2_size = 16;
     let size = usize::pow(2, log_2_size);
     let leaves = (0..size).map(|_| rng.next_u64()).collect::<Vec<_>>();
-    let leaf_digests = leaves.iter().map(|x| Tip5::hash(x)).collect::<Vec<_>>();
+    let leaf_digests = leaves.iter().map(Tip5::hash).collect::<Vec<_>>();
     let mt: MerkleTree<Tip5, _> = CpuParallel::from_digests(&leaf_digests);
     let mt_root = mt.get_root();
 
