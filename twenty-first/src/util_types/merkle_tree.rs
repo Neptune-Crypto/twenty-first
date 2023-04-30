@@ -303,8 +303,9 @@ where
             for &sibling in partial_authentication_path.iter() {
                 if let Some(sibling) = sibling {
                     // Check that the partial tree does not already have an entry at the current
-                    // sibling node index. This would indicate that the partial authentication
-                    // paths are inconsistent, potentially maliciously so.
+                    // sibling node index. This would indicate that the authentication paths are
+                    // not fully de-duplicated. Whether due to benign or malicious reasons, this
+                    // is not allowed.
                     let sibling_node_index = current_node_index ^ 1;
                     if partial_merkle_tree[sibling_node_index].is_some() {
                         return false;
@@ -321,6 +322,12 @@ where
             }
         }
 
+        // In order to perform the minimal number of hash operations, we only hash the nodes that
+        // are required to calculate the root. This is done by starting at the leaves and
+        // calculating the parent nodes. The parent nodes are then used to calculate their parent
+        // nodes, and so on, until the root is reached.
+        // The parent nodes indices are deduplicated to avoid hashing the same nodes twice.
+        // This happens when the set of leaf indices contains neighboring leaves.
         let mut parent_node_indices = leaf_indices
             .iter()
             .map(|&i| (i + num_leaves) / 2)
@@ -334,10 +341,18 @@ where
             for &parent_node_index in parent_node_indices.iter() {
                 let left_node_index = parent_node_index * 2;
                 let right_node_index = left_node_index ^ 1;
-                // Check that the parent node does not already have a value. This would indicate
-                // that the partial authentication paths are inconsistent, potentially malicious.
-                if partial_merkle_tree[parent_node_index].is_some()
-                    || partial_merkle_tree[left_node_index].is_none()
+
+                // Check that the parent node does not already exist. This would indicate that the
+                // partial authentication paths are not fully de-duplicated.
+                // This, in turn, might point to inconsistency or maliciousness, both of which
+                // should be rejected.
+                if partial_merkle_tree[parent_node_index].is_some() {
+                    return false;
+                }
+
+                // Similarly, check that the children nodes do exist. If they don't, the partial
+                // authentication paths are incomplete, making verification impossible.
+                if partial_merkle_tree[left_node_index].is_none()
                     || partial_merkle_tree[right_node_index].is_none()
                 {
                     return false;
@@ -348,7 +363,9 @@ where
                 );
                 partial_merkle_tree[parent_node_index] = Some(parent_digest);
             }
-            // Move the indices for the parent nodes one layer up.
+
+            // Move the indices for the parent nodes one layer up, deduplicate to guarantee the
+            // minimal number of hash operations.
             parent_node_indices.iter_mut().for_each(|i| *i /= 2);
             parent_node_indices.dedup();
         }
