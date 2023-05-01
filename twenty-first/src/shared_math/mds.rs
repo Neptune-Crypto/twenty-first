@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::ops::{Add, Mul, Sub};
 
 use itertools::Itertools;
-use num_traits::{One, Zero};
+use num_traits::{One, WrappingAdd, WrappingMul, WrappingSub, Zero};
 
 use crate::shared_math::circuit::{CircuitBuilder, CircuitMonad};
 use std::hash::Hash;
@@ -13,7 +12,7 @@ use super::circuit::{BinOp, Circuit, CircuitExpression};
 const KARATSUBA_CUTOFF: usize = 2;
 const RCM_CUTOFF: usize = 1;
 
-fn schoolbook<T: Clone + Add<Output = T> + Mul<Output = T>>(
+fn schoolbook<T: Clone + WrappingAdd<Output = T> + WrappingMul<Output = T>>(
     a: &[T],
     b: &[T],
     n: usize,
@@ -22,13 +21,15 @@ fn schoolbook<T: Clone + Add<Output = T> + Mul<Output = T>>(
     let mut res = vec![zero; 2 * n - 1];
     for i in 0..n {
         for j in 0..n {
-            res[i + j] = res[i + j].clone() + a[i].clone() * b[j].clone();
+            res[i + j] = res[i + j].wrapping_add(&a[i].wrapping_mul(&b[j]));
         }
     }
     res
 }
 
-fn karatsuba<T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>>(
+fn karatsuba<
+    T: Clone + WrappingAdd<Output = T> + WrappingSub<Output = T> + WrappingMul<Output = T>,
+>(
     a: &[T],
     b: &[T],
     n: usize,
@@ -46,7 +47,7 @@ fn karatsuba<T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>>(
     let asu = alo
         .iter()
         .zip(ahi.iter())
-        .map(|(l, r)| l.to_owned() + r.to_owned())
+        .map(|(l, r)| l.wrapping_add(r))
         .collect_vec();
 
     let blo = &b[0..half];
@@ -54,7 +55,7 @@ fn karatsuba<T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>>(
     let bsu = blo
         .iter()
         .zip(bhi.iter())
-        .map(|(l, r)| l.to_owned() + r.to_owned())
+        .map(|(l, r)| l.wrapping_add(r))
         .collect_vec();
 
     let los = karatsuba(alo, blo, half, zero.clone());
@@ -63,20 +64,23 @@ fn karatsuba<T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>>(
 
     let mut c = vec![zero; 2 * n - 1];
     for i in 0..los.len() {
-        c[i] = c[i].clone() + los[i].clone();
+        c[i] = c[i].wrapping_add(&los[i]);
     }
     for i in 0..sus.len() {
-        c[half + i] = c[half + i].clone() + sus[i].clone() - los[i].clone() - his[i].clone();
+        c[half + i] = c[half + i]
+            .wrapping_add(&sus[i])
+            .wrapping_sub(&los[i])
+            .wrapping_sub(&his[i]);
     }
     for i in 0..his.len() {
-        c[n + i] = c[n + i].clone() + his[i].clone();
+        c[n + i] = c[n + i].wrapping_add(&his[i]);
     }
 
     c
 }
 
 fn karatsuba_negacyclic_mul<
-    T: Clone + Debug + Sub<Output = T> + Add<Output = T> + Mul<Output = T>,
+    T: Clone + Debug + WrappingSub<Output = T> + WrappingAdd<Output = T> + WrappingMul<Output = T>,
 >(
     a: &[T],
     b: &[T],
@@ -86,7 +90,7 @@ fn karatsuba_negacyclic_mul<
     let prod = karatsuba(a, b, n, zero.clone());
     let mut res = vec![zero; n];
     for i in 0..n - 1 {
-        res[i] = prod[i].clone() - prod[n + i].clone();
+        res[i] = prod[i].wrapping_sub(&prod[n + i]);
     }
     res[n - 1] = prod[n - 1].clone();
     res
@@ -94,7 +98,7 @@ fn karatsuba_negacyclic_mul<
 
 #[allow(dead_code)]
 fn quadratic_negacyclic_mul<
-    T: Clone + Debug + Sub<Output = T> + Add<Output = T> + Mul<Output = T>,
+    T: Clone + Debug + WrappingSub<Output = T> + WrappingAdd<Output = T> + WrappingMul<Output = T>,
 >(
     a: &[T],
     b: &[T],
@@ -104,7 +108,7 @@ fn quadratic_negacyclic_mul<
     debug_assert_eq!(a.len(), n);
     debug_assert_eq!(b.len(), n);
     if n == 1 {
-        return vec![a[0].clone() * b[0].clone()];
+        return vec![a[0].wrapping_mul(&b[0])];
     }
     let mut res = vec![zero; n];
     let mut a_row: Vec<T> = a.to_vec();
@@ -113,18 +117,20 @@ fn quadratic_negacyclic_mul<
     }
     for i in 0..n {
         for j in 0..n {
-            let product = b[j].clone() * a_row[(n - i + j) % n].clone();
+            let product = b[j].wrapping_mul(&a_row[(n - i + j) % n]);
             if i < j {
-                res[i] = res[i].clone() - product;
+                res[i] = res[i].wrapping_sub(&product);
             } else {
-                res[i] = res[i].clone() + product;
+                res[i] = res[i].wrapping_add(&product);
             }
         }
     }
     res
 }
 
-fn quadratic_cyclic_mul<T: Clone + Debug + Sub<Output = T> + Add<Output = T> + Mul<Output = T>>(
+fn quadratic_cyclic_mul<
+    T: Clone + Debug + WrappingSub<Output = T> + WrappingAdd<Output = T> + WrappingMul<Output = T>,
+>(
     a: &[T],
     b: &[T],
     n: usize,
@@ -133,7 +139,7 @@ fn quadratic_cyclic_mul<T: Clone + Debug + Sub<Output = T> + Add<Output = T> + M
     debug_assert_eq!(a.len(), n);
     debug_assert_eq!(b.len(), n);
     if n == 1 {
-        return vec![a[0].clone() * b[0].clone()];
+        return vec![a[0].wrapping_mul(&b[0])];
     }
     let mut a_row: Vec<T> = a.to_vec();
     for i in 1..n {
@@ -142,15 +148,17 @@ fn quadratic_cyclic_mul<T: Clone + Debug + Sub<Output = T> + Add<Output = T> + M
     let mut res = vec![zero; n];
     for i in 0..n {
         for j in 0..n {
-            let product = b[j].clone() * a_row[(n - i + j) % n].clone();
-            res[i] = res[i].clone() + product;
+            let product = b[j].wrapping_mul(&a_row[(n - i + j) % n]);
+            res[i] = res[i].wrapping_add(&product);
         }
     }
     res
 }
 
 #[allow(dead_code)]
-fn karatsuba_cyclic_mul<T: Clone + Sub<Output = T> + Add<Output = T> + Mul<Output = T>>(
+fn karatsuba_cyclic_mul<
+    T: Clone + WrappingSub<Output = T> + WrappingAdd<Output = T> + WrappingMul<Output = T>,
+>(
     a: &[T],
     b: &[T],
     n: usize,
@@ -159,14 +167,14 @@ fn karatsuba_cyclic_mul<T: Clone + Sub<Output = T> + Add<Output = T> + Mul<Outpu
     let prod = karatsuba(a, b, n, zero.clone());
     let mut res = vec![zero; n];
     for i in 0..n - 1 {
-        res[i] = prod[i].clone() + prod[n + i].clone();
+        res[i] = prod[i].wrapping_add(&prod[n + i]);
     }
     res[n - 1] = prod[n - 1].clone();
     res
 }
 
 pub fn recursive_cyclic_mul<
-    T: Clone + Debug + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    T: Clone + Debug + WrappingAdd<Output = T> + WrappingMul<Output = T> + WrappingSub<Output = T>,
 >(
     a: &[T],
     b: &[T],
@@ -210,26 +218,29 @@ pub fn recursive_cyclic_mul<
     let adiff = alo
         .iter()
         .zip(ahi.iter())
-        .map(|(l, r)| l.to_owned() - r.to_owned())
+        .map(|(l, r)| l.wrapping_sub(r))
         .collect_vec();
 
     let bdiff = blo
         .iter()
         .zip(bhi.iter())
-        .map(|(l, r)| l.to_owned() - r.to_owned())
+        .map(|(l, r)| l.wrapping_sub(r))
         .collect_vec();
 
     let mut diffs = karatsuba_negacyclic_mul(&adiff, &bdiff, half, zero.clone());
     let mut nnn = half;
     while nnn > 1 {
-        diffs = diffs.into_iter().map(|i| i * two.clone()).collect_vec();
+        diffs = diffs
+            .into_iter()
+            .map(|i| i.wrapping_mul(&two))
+            .collect_vec();
         nnn >>= 1;
     }
 
     let mut res = vec![zero; n];
     for i in 0..half {
-        res[i] = sums[i].clone() + diffs[i].clone();
-        res[i + half] = sums[i].clone() - diffs[i].clone();
+        res[i] = sums[i].wrapping_add(&diffs[i]);
+        res[i + half] = sums[i].wrapping_sub(&diffs[i]);
     }
 
     res
@@ -280,9 +291,9 @@ fn get_binding_name<T>(circuit: &Circuit<T>) -> String
 where
     T: Clone
         + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
+        + WrappingAdd<Output = T>
+        + WrappingMul<Output = T>
+        + WrappingSub<Output = T>
         + Zero
         + One
         + Hash
@@ -307,9 +318,9 @@ fn evaluate_single_node<T>(
 where
     T: Clone
         + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
+        + WrappingAdd<Output = T>
+        + WrappingMul<Output = T>
+        + WrappingSub<Output = T>
         + Zero
         + One
         + Hash
@@ -368,9 +379,9 @@ fn declare_single_node_with_visit_count<T>(
 ) where
     T: Clone
         + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
+        + WrappingAdd<Output = T>
+        + WrappingMul<Output = T>
+        + WrappingSub<Output = T>
         + Zero
         + One
         + Hash
@@ -438,9 +449,9 @@ fn declare_nodes_with_visit_count<T>(
 where
     T: Clone
         + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
+        + WrappingAdd<Output = T>
+        + WrappingMul<Output = T>
+        + WrappingSub<Output = T>
         + Zero
         + One
         + Hash
@@ -467,9 +478,9 @@ fn turn_circuits_into_string<T>(circuits: &mut [Circuit<T>]) -> String
 where
     T: Clone
         + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
+        + WrappingAdd<Output = T>
+        + WrappingMul<Output = T>
+        + WrappingSub<Output = T>
         + Zero
         + One
         + Hash

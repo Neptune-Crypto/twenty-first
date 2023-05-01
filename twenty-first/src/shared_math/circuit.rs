@@ -20,17 +20,19 @@ use std::ops::Sub;
 use std::rc::Rc;
 
 use num_traits::One;
+use num_traits::WrappingAdd;
+use num_traits::WrappingMul;
+use num_traits::WrappingSub;
 use num_traits::Zero;
+
 use CircuitExpression::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 pub enum BinOp {
     Add,
     Sub,
     Mul,
 }
-
-impl Eq for BinOp {}
 
 impl Display for BinOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -57,16 +59,7 @@ impl Display for BinOp {
 /// bookkeeping information.
 #[derive(Debug, Clone)]
 pub enum CircuitExpression<
-    T: Clone
-        + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
-        + Zero
-        + One
-        + Hash
-        + PartialEq
-        + Eq,
+    T: Clone + Debug + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Zero + One + Hash + Eq,
 > {
     Constant(T),
     Input(usize),
@@ -82,7 +75,6 @@ impl<
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Hash for CircuitExpression<T>
 {
@@ -115,7 +107,6 @@ impl<
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > PartialEq for CircuitExpression<T>
 {
@@ -154,7 +145,6 @@ impl<
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Hash for Circuit<T>
 {
@@ -166,13 +156,12 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Hash for CircuitMonad<T>
 {
@@ -184,16 +173,7 @@ impl<
 /// A wrapper around a [`CircuitExpression`] that manages additional bookkeeping information.
 #[derive(Clone, Debug)]
 pub struct Circuit<
-    T: Clone
-        + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
-        + Zero
-        + One
-        + Hash
-        + PartialEq
-        + Eq,
+    T: Clone + Debug + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Zero + One + Hash + Eq,
 > {
     pub id: usize,
     pub visited_counter: usize,
@@ -209,7 +189,6 @@ impl<
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Eq for Circuit<T>
 {
@@ -224,7 +203,6 @@ impl<
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > PartialEq for Circuit<T>
 {
@@ -245,7 +223,6 @@ impl<
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Display for Circuit<T>
 {
@@ -271,13 +248,12 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Circuit<T>
 {
@@ -450,9 +426,9 @@ impl<
                 let lhs_value = lhs.as_ref().borrow().evaluate(inputs);
                 let rhs_value = rhs.as_ref().borrow().evaluate(inputs);
                 match binop {
-                    BinOp::Add => lhs_value + rhs_value,
-                    BinOp::Sub => lhs_value - rhs_value,
-                    BinOp::Mul => lhs_value * rhs_value,
+                    BinOp::Add => lhs_value.wrapping_add(&rhs_value),
+                    BinOp::Sub => lhs_value.wrapping_sub(&rhs_value),
+                    BinOp::Mul => lhs_value.wrapping_mul(&rhs_value),
                 }
             }
         }
@@ -465,13 +441,12 @@ impl<
 pub struct CircuitMonad<
     T: Clone
         + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
+        + WrappingAdd<Output = T>
+        + WrappingMul<Output = T>
+        + WrappingSub<Output = T>
         + Zero
         + One
         + Hash
-        + PartialEq
         + Eq,
 > {
     pub circuit: Rc<RefCell<Circuit<T>>>,
@@ -481,13 +456,12 @@ pub struct CircuitMonad<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Debug for CircuitMonad<T>
 {
@@ -511,13 +485,12 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Display for CircuitMonad<T>
 {
@@ -529,13 +502,12 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > PartialEq for CircuitMonad<T>
 {
@@ -549,16 +521,66 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Eq for CircuitMonad<T>
 {
+}
+
+impl<
+        T: Clone
+            + Debug
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
+            + Zero
+            + One
+            + Hash
+            + Eq,
+    > WrappingAdd for CircuitMonad<T>
+{
+    fn wrapping_add(&self, v: &Self) -> Self {
+        binop(BinOp::Add, self.clone(), v.clone())
+    }
+}
+
+impl<
+        T: Clone
+            + Debug
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
+            + Zero
+            + One
+            + Hash
+            + Eq,
+    > WrappingMul for CircuitMonad<T>
+{
+    fn wrapping_mul(&self, v: &Self) -> Self {
+        binop(BinOp::Mul, self.clone(), v.clone())
+    }
+}
+
+impl<
+        T: Clone
+            + Debug
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
+            + Zero
+            + One
+            + Hash
+            + Eq,
+    > WrappingSub for CircuitMonad<T>
+{
+    fn wrapping_sub(&self, v: &Self) -> Self {
+        binop(BinOp::Sub, self.clone(), v.clone())
+    }
 }
 
 /// Helper function for binary operations that are used to generate new parent nodes in the
@@ -567,13 +589,12 @@ impl<
 fn binop<
     T: Clone
         + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
+        + WrappingAdd<Output = T>
+        + WrappingMul<Output = T>
+        + WrappingSub<Output = T>
         + Zero
         + One
         + Hash
-        + PartialEq
         + Eq,
 >(
     binop: BinOp,
@@ -671,13 +692,12 @@ fn binop<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Add for CircuitMonad<T>
 {
@@ -691,13 +711,12 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Sub for CircuitMonad<T>
 {
@@ -711,13 +730,12 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Mul for CircuitMonad<T>
 {
@@ -733,13 +751,12 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Sum for CircuitMonad<T>
 {
@@ -752,13 +769,12 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > CircuitMonad<T>
 {
@@ -841,13 +857,19 @@ impl<
                 if let Constant(rhs_i) = rhs.borrow().expression.clone() {
                     return match binop {
                         BinOp::Add => Some(Rc::new(RefCell::new(
-                            self.builder.make_leaf(Constant(lhs_i + rhs_i)).consume(),
+                            self.builder
+                                .make_leaf(Constant(lhs_i.wrapping_add(&rhs_i)))
+                                .consume(),
                         ))),
                         BinOp::Sub => Some(Rc::new(RefCell::new(
-                            self.builder.make_leaf(Constant(lhs_i - rhs_i)).consume(),
+                            self.builder
+                                .make_leaf(Constant(lhs_i.wrapping_sub(&rhs_i)))
+                                .consume(),
                         ))),
                         BinOp::Mul => Some(Rc::new(RefCell::new(
-                            self.builder.make_leaf(Constant(lhs_i * rhs_i)).consume(),
+                            self.builder
+                                .make_leaf(Constant(lhs_i.wrapping_mul(&rhs_i)))
+                                .consume(),
                         ))),
                     };
                 }
@@ -914,7 +936,7 @@ impl<
                                 let new_circuit_monad = inner_lhs_monad
                                     * self
                                         .builder
-                                        .constant(inner_constant.clone() * outer_constant.clone());
+                                        .constant(inner_constant.wrapping_mul(outer_constant));
 
                                 update = Some((
                                     self.circuit.borrow().id,
@@ -1186,13 +1208,12 @@ impl<
 pub struct CircuitBuilder<
     T: Clone
         + Debug
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
+        + WrappingAdd<Output = T>
+        + WrappingMul<Output = T>
+        + WrappingSub<Output = T>
         + Zero
         + One
         + Hash
-        + PartialEq
         + Eq,
 > {
     id_counter: Rc<RefCell<usize>>,
@@ -1202,13 +1223,12 @@ pub struct CircuitBuilder<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > Default for CircuitBuilder<T>
 {
@@ -1220,13 +1240,12 @@ impl<
 impl<
         T: Clone
             + Debug
-            + Add<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
+            + WrappingAdd<Output = T>
+            + WrappingMul<Output = T>
+            + WrappingSub<Output = T>
             + Zero
             + One
             + Hash
-            + PartialEq
             + Eq,
     > CircuitBuilder<T>
 {

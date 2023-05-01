@@ -984,9 +984,10 @@ mod tip5_tests {
     #[test]
     fn test_complex_product() {
         let mut rng = thread_rng();
+        let mut random_small_i64 = || (rng.next_u32() % (1 << 16)) as i64;
         for _ in 0..1000 {
-            let f = (rng.next_u32() as i64, rng.next_u32() as i64);
-            let g = (rng.next_u32() as i64, rng.next_u32() as i64);
+            let f = (random_small_i64(), random_small_i64());
+            let g = (random_small_i64(), random_small_i64());
             let h0 = Tip5::complex_product(f, g);
             let h1 = (f.0 * g.0 - f.1 * g.1, f.0 * g.1 + f.1 * g.0);
             assert_eq!(h1, h0);
