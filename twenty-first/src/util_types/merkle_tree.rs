@@ -219,7 +219,7 @@ where
                 // the list (node_index, node_index / 2, node_index / 4, …). Hence, all the tests
                 // performed here exclusively deal with the current node_index's sibling.
                 let sibling_node_index = node_index ^ 1;
-                let siblings_calculability_is_known = scanned.contains(&sibling_node_index);
+                let sibling_already_covered = scanned.contains(&sibling_node_index);
 
                 let siblings_left_child_node_index = sibling_node_index * 2;
                 let siblings_right_child_node_index = siblings_left_child_node_index + 1;
@@ -227,10 +227,13 @@ where
                     .contains(&siblings_left_child_node_index)
                     && calculable_indices.contains(&siblings_right_child_node_index);
 
-                let sibling_leaf_index = sibling_node_index - num_leaves;
-                let sibling_is_explicitly_requested = leaf_indices.contains(&sibling_leaf_index);
+                // In the leaf layer, check if sibling is explicitly provided
+                let potential_sibling_leaf_index = sibling_node_index as i128 - num_leaves as i128;
+                let sibling_is_in_leaf_layer = potential_sibling_leaf_index >= 0;
+                let sibling_is_explicitly_requested = sibling_is_in_leaf_layer
+                    && leaf_indices.contains(&(potential_sibling_leaf_index as usize));
 
-                let authentication_path_element_is_redundant = siblings_calculability_is_known
+                let authentication_path_element_is_redundant = sibling_already_covered
                     || both_sibling_children_can_be_calculated
                     || sibling_is_explicitly_requested;
                 if authentication_path_element_is_redundant {
