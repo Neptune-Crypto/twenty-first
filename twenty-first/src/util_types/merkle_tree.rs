@@ -950,6 +950,66 @@ mod merkle_tree_test {
     }
 
     #[test]
+    fn fail_on_bad_specified_length_test() {
+        type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H, M>;
+        let tree_height = 5;
+        let num_leaves = 1 << tree_height;
+        let leaf_digests: Vec<Digest> = random_elements(num_leaves);
+        let tree: MT = M::from_digests(&leaf_digests);
+
+        let leaf_indices = [0, 3, 5];
+        let opened_leaves = leaf_indices.iter().map(|&i| leaf_digests[i]).collect_vec();
+        let mut authentication_structure = tree.get_authentication_structure(&leaf_indices);
+        assert!(
+            !MT::verify_authentication_structure_from_leaves(
+                tree.get_root(),
+                tree_height - 1,
+                &leaf_indices,
+                &opened_leaves,
+                &authentication_structure
+            ),
+            "Must return false when called with wrong height, minus one"
+        );
+
+        assert!(
+            !MT::verify_authentication_structure_from_leaves(
+                tree.get_root(),
+                tree_height + 1,
+                &leaf_indices,
+                &opened_leaves,
+                &authentication_structure
+            ),
+            "Must return false when called with wrong height, plus one"
+        );
+
+        assert!(
+            MT::verify_authentication_structure_from_leaves(
+                tree.get_root(),
+                tree_height,
+                &leaf_indices,
+                &opened_leaves,
+                &authentication_structure
+            ),
+            "Must return true when called with correct height"
+        );
+
+        // Modify length of *one* authentication path. Verify failure.
+        authentication_structure[1].pop();
+        assert!(
+            !MT::verify_authentication_structure_from_leaves(
+                tree.get_root(),
+                tree_height,
+                &leaf_indices,
+                &opened_leaves,
+                &authentication_structure
+            ),
+            "Must return false when called with too short an auth path"
+        );
+    }
+
+    #[test]
     fn merkle_tree_get_authentication_path_test() {
         type H = blake3::Hasher;
         type M = CpuParallel;
