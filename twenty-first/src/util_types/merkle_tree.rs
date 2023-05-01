@@ -118,10 +118,11 @@ where
     /// The authentication path for `c` (index: 2) would be `vec![ H(d), H(H(a)+H(b)) ]`, i.e.,
     /// a criss-cross of siblings upwards.
     pub fn get_authentication_path(&self, leaf_index: usize) -> Vec<Digest> {
-        let height = self.get_height();
-        let mut auth_path: Vec<Digest> = Vec::with_capacity(height);
+        let auth_path_len = self.get_height();
+        let mut auth_path: Vec<Digest> = Vec::with_capacity(auth_path_len);
 
-        let mut node_index = leaf_index + self.nodes.len() / 2;
+        let num_leaves = self.nodes.len() / 2;
+        let mut node_index = leaf_index + num_leaves;
         while node_index > 1 {
             // We get the sibling node by XOR'ing with 1.
             let sibling_i = node_index ^ 1;
@@ -131,6 +132,7 @@ where
 
         // We don't include the root hash in the authentication path
         // because it's implied in the context of use.
+        debug_assert_eq!(auth_path_len, auth_path.len());
         auth_path
     }
 
@@ -248,11 +250,13 @@ where
     /// # Arguments
     ///
     /// * `root` - The Merkle root
+    /// * `tree_height` - The height of the Merkle tree
     /// * `leaf_indices` - List of identifiers of the leaves to verify
     /// * `leaf_digests` - List of the leaves' values (i.e. digests) to verify
     /// * `auth_paths` - List of paths corresponding to the leaves.
     pub fn verify_authentication_structure_from_leaves(
         root: Digest,
+        tree_height: usize,
         leaf_indices: &[usize],
         leaf_digests: &[Digest],
         partial_auth_paths: &[PartialAuthenticationPath<Digest>],
@@ -268,11 +272,8 @@ where
             return true;
         }
 
-        // The height of the tree is determined by the length of the first partial authentication
-        // path. If the length of any subsequent paths differs, this will be caught later.
-        let tree_height = partial_auth_paths[0].len() + 1;
-        let num_nodes = 2_usize.pow(tree_height as u32);
-        let num_leaves = num_nodes / 2;
+        let num_leaves = 1 << tree_height;
+        let num_nodes = num_leaves * 2;
 
         // The partial merkle tree is represented as a vector of Option<Digest> where the
         // Option is None if the node is not in the partial tree.
@@ -336,8 +337,7 @@ where
         parent_node_indices.dedup();
 
         // Hash the partial tree from the bottom up.
-        // No parent nodes exist on level 0, so start at level 1.
-        for _ in 1..tree_height {
+        for _ in 0..tree_height {
             for &parent_node_index in parent_node_indices.iter() {
                 let left_node_index = parent_node_index * 2;
                 let right_node_index = left_node_index ^ 1;
@@ -379,10 +379,11 @@ where
     }
 
     /// Verifies a list of `leaf_indices` and corresponding authentication pairs `auth_pairs`,
-    /// consisting of authentication patchs `auth_path` and leaf digests `leaf_digest`,
-    /// against a Merkle root.
+    /// consisting of authentication paths `auth_path` and leaf digests `leaf_digest`,
+    /// against a Merkle root `root` for a Merkle tree of expected height `tree_height`.
     pub fn verify_authentication_structure(
-        root_hash: Digest,
+        root: Digest,
+        tree_height: usize,
         leaf_indices: &[usize],
         auth_pairs: &[(PartialAuthenticationPath<Digest>, Digest)],
     ) -> bool {
@@ -395,7 +396,8 @@ where
 
         let (auth_paths, leaves): (Vec<_>, Vec<_>) = auth_pairs.iter().cloned().unzip();
         Self::verify_authentication_structure_from_leaves(
-            root_hash,
+            root,
+            tree_height,
             leaf_indices,
             &leaves,
             &auth_paths,
@@ -595,7 +597,8 @@ where
 
     /// To use this function the user must provide the corresponding *UNSALTED* `leaves`.
     pub fn verify_authentication_structure(
-        root_hash: Digest,
+        root: Digest,
+        tree_height: usize,
         indices: &[usize],
         unsalted_leaves: &[Digest],
         proof: &SaltedAuthenticationStructure<Digest>,
@@ -621,7 +624,8 @@ where
             proof.iter().map(|x| x.0.clone()).collect();
 
         MerkleTree::<H, SaltedMaker>::verify_authentication_structure_from_leaves(
-            root_hash,
+            root,
+            tree_height,
             indices,
             &leaf_hashes,
             &saltless_proof,
@@ -703,7 +707,8 @@ mod merkle_tree_test {
         type M = CpuParallel;
         type MT = MerkleTree<H, M>;
 
-        let num_leaves = 32;
+        let tree_height = 5;
+        let num_leaves = 1 << tree_height;
         let leaves: Vec<Digest> = random_elements(num_leaves);
         let tree: MT = M::from_digests(&leaves);
 
@@ -727,8 +732,12 @@ mod merkle_tree_test {
                 zip(partial_auth_paths, selected_leaves.clone()).collect();
 
             // Assert membership of randomly chosen leaves
-            let random_leaves_are_members =
-                MT::verify_authentication_structure(tree.get_root(), &random_indices, &proof);
+            let random_leaves_are_members = MT::verify_authentication_structure(
+                tree.get_root(),
+                tree_height,
+                &random_indices,
+                &proof,
+            );
             assert!(random_leaves_are_members);
 
             // Assert completeness of proof
@@ -740,8 +749,12 @@ mod merkle_tree_test {
 
             // Negative: Verify bad Merkle root
             let bad_root_digest = corrupt_digest(&tree.get_root());
-            let bad_root_verifies =
-                MT::verify_authentication_structure(bad_root_digest, &random_indices, &proof);
+            let bad_root_verifies = MT::verify_authentication_structure(
+                bad_root_digest,
+                tree_height,
+                &random_indices,
+                &proof,
+            );
             assert!(!bad_root_verifies);
 
             // Negative: Make random indices not match proof length (too long)
@@ -750,8 +763,12 @@ mod merkle_tree_test {
                 tmp.push(tmp[0]);
                 tmp
             };
-            let too_many_indices_verifies =
-                MT::verify_authentication_structure(tree.get_root(), &bad_random_indices_1, &proof);
+            let too_many_indices_verifies = MT::verify_authentication_structure(
+                tree.get_root(),
+                tree_height,
+                &bad_random_indices_1,
+                &proof,
+            );
             assert!(!too_many_indices_verifies);
 
             // Negative: Make random indices not match proof length (too short)
@@ -760,8 +777,12 @@ mod merkle_tree_test {
                 tmp.remove(0);
                 tmp
             };
-            let too_few_indices_verifies =
-                MT::verify_authentication_structure(tree.get_root(), &bad_random_indices_2, &proof);
+            let too_few_indices_verifies = MT::verify_authentication_structure(
+                tree.get_root(),
+                tree_height,
+                &bad_random_indices_2,
+                &proof,
+            );
             assert!(!too_few_indices_verifies);
 
             // Negative: Request non-existent index
@@ -770,8 +791,12 @@ mod merkle_tree_test {
                 tmp[0] = bad_index;
                 tmp
             };
-            let non_existent_index_verifies =
-                MT::verify_authentication_structure(tree.get_root(), &bad_random_indices_3, &proof);
+            let non_existent_index_verifies = MT::verify_authentication_structure(
+                tree.get_root(),
+                tree_height,
+                &bad_random_indices_3,
+                &proof,
+            );
             assert!(!non_existent_index_verifies);
         }
     }
@@ -782,14 +807,15 @@ mod merkle_tree_test {
         type M = CpuParallel;
         type MT = MerkleTree<H, M>;
 
-        let num_leaves = 32;
+        let tree_height = 5;
+        let num_leaves = 1 << tree_height;
         let leaves: Vec<Digest> = random_elements(num_leaves);
         let tree: MT = M::from_digests(&leaves);
 
         let empty_proof = tree.get_authentication_structure(&[]);
         let auth_pairs = zip(empty_proof, leaves).collect_vec();
         let empty_proof_verifies =
-            MT::verify_authentication_structure(tree.get_root(), &[], &auth_pairs);
+            MT::verify_authentication_structure(tree.get_root(), tree_height, &[], &auth_pairs);
         assert!(empty_proof_verifies);
     }
 
@@ -799,13 +825,12 @@ mod merkle_tree_test {
         type M = CpuParallel;
         type MT = MerkleTree<H, M>;
 
-        // This test asserts that regular merkle trees and salted merkle trees with 0 salts work equivalently.
+        // Check that regular merkle trees and salted merkle trees with 0 salts work equivalently.
 
-        let num_leaves = 8;
+        let tree_height = 4;
+        let num_leaves = 1 << tree_height;
         let leaves: Vec<Digest> = random_elements(num_leaves);
         let regular_tree: MT = M::from_digests(&leaves);
-
-        let expected_path_length = 3;
 
         let selected_indices: Vec<usize> = vec![0, 1];
         let selected_leaves = regular_tree.get_leaves_by_indices(&selected_indices);
@@ -814,14 +839,15 @@ mod merkle_tree_test {
 
         for (partial_auth_path, _digest) in auth_pairs.clone() {
             assert_eq!(
-                  expected_path_length,
-                  partial_auth_path.len(),
-                  "A generated authentication path must have length the height of the tree (not counting the root)"
-              );
+                tree_height,
+                partial_auth_path.len(),
+                "The length of an authentication path must be equal to the height of the tree."
+            );
         }
 
         let regular_verify = MT::verify_authentication_structure(
             regular_tree.get_root(),
+            tree_height,
             &selected_indices,
             &auth_pairs,
         );
@@ -835,6 +861,7 @@ mod merkle_tree_test {
 
         let unsalted_salted_verify = SaltedMerkleTree::<H>::verify_authentication_structure(
             unsalted_salted_tree.get_root(),
+            unsalted_salted_tree.get_height(),
             &selected_indices,
             &selected_leaves,
             &salted_proof,
@@ -848,14 +875,13 @@ mod merkle_tree_test {
         type H = blake3::Hasher;
         type M = CpuParallel;
         type MT = MerkleTree<H, M>;
+        let mut rng = rand::thread_rng();
 
-        let num_leaves_cases = [2, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192];
-        let expected_path_lengths = [1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13]; // log2(128), root node not included
-        for (num_leaves, expected_path_length) in izip!(num_leaves_cases, expected_path_lengths) {
+        for tree_height in 2..=13 {
+            let num_leaves = 1 << tree_height;
             let leaves: Vec<Digest> = random_elements(num_leaves);
             let tree: MT = M::from_digests(&leaves);
 
-            let mut rng = rand::thread_rng();
             for _ in 0..3 {
                 // Generate an arbitrary, positive amount of indices less than the total
                 let num_indices = (rng.next_u64() % num_leaves as u64 / 2) as usize + 1;
@@ -872,7 +898,7 @@ mod merkle_tree_test {
                 let selected_auth_paths = tree.get_authentication_structure(&selected_indices);
 
                 for auth_path in selected_auth_paths.iter() {
-                    assert_eq!(expected_path_length, auth_path.len());
+                    assert_eq!(tree_height, auth_path.len());
                 }
 
                 let auth_pairs: Vec<(PartialAuthenticationPath<Digest>, Digest)> =
@@ -880,6 +906,7 @@ mod merkle_tree_test {
 
                 let good_tree = MT::verify_authentication_structure(
                     tree.get_root(),
+                    tree_height,
                     &selected_indices,
                     &auth_pairs,
                 );
@@ -893,6 +920,7 @@ mod merkle_tree_test {
 
                 let verified = MT::verify_authentication_structure(
                     bad_root_hash,
+                    tree_height,
                     &selected_indices,
                     &auth_pairs,
                 );
@@ -909,6 +937,7 @@ mod merkle_tree_test {
 
                 let corrupted_proof_verifies = MT::verify_authentication_structure(
                     tree.get_root(),
+                    tree_height,
                     &selected_indices,
                     &bad_proof,
                 );
@@ -1147,6 +1176,7 @@ mod merkle_tree_test {
 
         let salted_merkle_tree_verifies = SaltedMerkleTree::<H>::verify_authentication_structure(
             tree_root,
+            tree.get_height(),
             leaf_indices,
             &selected_leaves,
             &auth_path_and_salts,
@@ -1164,6 +1194,7 @@ mod merkle_tree_test {
 
         let (leaves_c, _salts_c, tree_c) = make_salted_merkle_tree::<H>(num_leaves, salts_per_leaf);
         let root_hash_c = tree_c.get_root();
+        let tree_height_c = tree_c.get_height();
 
         // 9: Verify that simple multipath authentication paths work
         {
@@ -1229,6 +1260,7 @@ mod merkle_tree_test {
             auth_path_and_salts[1].1 = corrupt_digest(&orig_digest);
             assert!(!SaltedMerkleTree::<H>::verify_authentication_structure(
                 root_hash_c,
+                tree_height_c,
                 &leaf_indices,
                 &selected_leaves,
                 &auth_path_and_salts
@@ -1237,6 +1269,7 @@ mod merkle_tree_test {
             auth_path_and_salts[1].1 = orig_digest;
             assert!(SaltedMerkleTree::<H>::verify_authentication_structure(
                 root_hash_c,
+                tree_height_c,
                 &leaf_indices,
                 &selected_leaves,
                 &auth_path_and_salts
@@ -1246,6 +1279,7 @@ mod merkle_tree_test {
             let another_bad_root_hash_c = corrupt_digest(&root_hash_c);
             assert!(!SaltedMerkleTree::<H>::verify_authentication_structure(
                 another_bad_root_hash_c,
+                tree_height_c,
                 &leaf_indices,
                 &selected_leaves,
                 &auth_path_and_salts,
@@ -1282,6 +1316,7 @@ mod merkle_tree_test {
 
         let proof_verifies_1 = SaltedMerkleTree::<H>::verify_authentication_structure(
             tree_reg0.get_root(),
+            tree_reg0.get_height(),
             &selected_leaf_indices_reg0,
             &[selected_leaves_reg0],
             &proof_reg0,
@@ -1295,6 +1330,7 @@ mod merkle_tree_test {
 
         let proof_verifies_2 = SaltedMerkleTree::<H>::verify_authentication_structure(
             tree_reg0.get_root(),
+            tree_reg0.get_height(),
             &selected_leaf_indices_reg1,
             &[selected_leaves_reg1],
             &proof_reg1,
@@ -1341,6 +1377,7 @@ mod merkle_tree_test {
 
                 assert!(SaltedMerkleTree::<H>::verify_authentication_structure(
                     tree.get_root(),
+                    tree.get_height(),
                     &indices,
                     &selected_leaves,
                     &proof,
@@ -1349,6 +1386,7 @@ mod merkle_tree_test {
 
                 assert!(!SaltedMerkleTree::<H>::verify_authentication_structure(
                     bad_root_hash,
+                    tree.get_height(),
                     &indices,
                     &selected_leaves,
                     &proof,
@@ -1363,6 +1401,7 @@ mod merkle_tree_test {
                 corrupted_leaves[rnd_leaf_idx] = corrupt_digest(&rnd_leaf);
                 assert!(!SaltedMerkleTree::<H>::verify_authentication_structure(
                     tree.get_root(),
+                    tree.get_height(),
                     &indices,
                     &corrupted_leaves,
                     &proof,
@@ -1371,6 +1410,7 @@ mod merkle_tree_test {
                 corrupted_leaves[rnd_leaf_idx] = rnd_leaf;
                 assert!(SaltedMerkleTree::<H>::verify_authentication_structure(
                     tree.get_root(),
+                    tree.get_height(),
                     &indices,
                     &corrupted_leaves,
                     &proof,
@@ -1384,6 +1424,7 @@ mod merkle_tree_test {
                 more_corrupted_leaves[rnd_leaf_idx] = corrupt_digest(&rnd_leaf);
                 assert!(!SaltedMerkleTree::<H>::verify_authentication_structure(
                     tree.get_root(),
+                    tree.get_height(),
                     &indices,
                     &selected_leaves,
                     &proof,
