@@ -21,7 +21,7 @@ fn merkle_tree_authenticate(c: &mut Criterion) {
     let num_leaves = 1 << tree_height;
     let leaves = (0..num_leaves).map(|_| rng.next_u64()).collect_vec();
     let leaf_digests = leaves.iter().map(Tip5::hash).collect_vec();
-    let mt: MerkleTree<Tip5, _> = CpuParallel::from_digests(&leaf_digests);
+    let mt: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests);
     let mt_root = mt.get_root();
 
     let num_opened_indices = num_leaves / 4;
@@ -39,7 +39,7 @@ fn merkle_tree_authenticate(c: &mut Criterion) {
         BenchmarkId::new("merkle_tree_authenticate", num_leaves),
         |bencher| {
             bencher.iter(|| {
-                MerkleTree::<Tip5, CpuParallel>::verify_authentication_structure_from_leaves(
+                MerkleTree::<Tip5>::verify_authentication_structure_from_leaves(
                     mt_root,
                     tree_height,
                     &opened_indices,
