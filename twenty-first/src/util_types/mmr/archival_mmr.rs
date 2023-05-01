@@ -328,7 +328,7 @@ mod mmr_test {
     use crate::test_shared::mmr::{
         get_empty_rustyleveldb_ammr, get_rustyleveldb_ammr_from_digests,
     };
-    use crate::util_types::merkle_tree::{CpuParallel, MerkleTree};
+    use crate::util_types::merkle_tree::MerkleTree;
     use crate::{
         shared_math::b_field_element::BFieldElement,
         util_types::mmr::{
@@ -350,8 +350,7 @@ mod mmr_test {
     #[test]
     fn empty_mmr_behavior_test() {
         type H = blake3::Hasher;
-        type M = CpuParallel;
-        type MT = MerkleTree<H, M>;
+        type MT = MerkleTree<H>;
         type Storage = RustyLevelDbVec<Digest>;
 
         let mut archival_mmr: ArchivalMmr<H, Storage> = get_empty_rustyleveldb_ammr();
@@ -820,8 +819,7 @@ mod mmr_test {
     #[test]
     fn variable_size_rescue_prime_mmr_test() {
         type H = RescuePrimeRegular;
-        type M = CpuParallel;
-        type MT = MerkleTree<H, M>;
+        type MT = MerkleTree<H>;
 
         let leaf_counts: Vec<u64> = (1..34).collect();
         let node_counts: Vec<u64> = vec![
@@ -950,8 +948,7 @@ mod mmr_test {
     #[test]
     fn variable_size_blake3_mmr_test() {
         type H = blake3::Hasher;
-        type M = CpuParallel;
-        type MT = MerkleTree<H, M>;
+        type MT = MerkleTree<H>;
 
         let node_counts: Vec<u64> = vec![
             1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41, 42,
