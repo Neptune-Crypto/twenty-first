@@ -277,8 +277,7 @@ where
         let num_leaves = 1 << tree_height;
         let num_nodes = num_leaves * 2;
 
-        // All indices must be valid, unique leaf indices. Uniqueness is checked below, when
-        // inserting the leaf digests into the partial tree.
+        // All leaf indices must be valid. Uniqueness is not required.
         if leaf_indices.iter().any(|&i| i >= num_leaves) {
             return false;
         }
@@ -294,12 +293,12 @@ where
         {
             let mut current_node_index = leaf_index + num_leaves;
 
-            // Check that the partial tree does not already have an entry at the current leaf,
-            // i.e., that the leaf indices are unique.
-            if partial_merkle_tree[current_node_index].is_some() {
+            if partial_merkle_tree[current_node_index].is_none() {
+                partial_merkle_tree[current_node_index] = Some(leaf_digest);
+            } else if partial_merkle_tree[current_node_index] != Some(leaf_digest) {
+                // In case of repeated leaf indices, the leaf digests must be identical.
                 return false;
             }
-            partial_merkle_tree[current_node_index] = Some(leaf_digest);
 
             for &sibling in partial_authentication_path.iter() {
                 if let Some(sibling) = sibling {
@@ -768,6 +767,47 @@ mod merkle_tree_test {
                 &authentication_structure
             ),
             "Must return false when called with too short an auth path"
+        );
+    }
+
+    #[test]
+    fn verify_merkle_tree_with_duplicated_indices() {
+        type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H>;
+        let tree_height = 5;
+        let num_leaves = 1 << tree_height;
+        let leaf_digests: Vec<Digest> = random_elements(num_leaves);
+        let tree: MT = M::from_digests(&leaf_digests);
+
+        let leaf_indices = [0, 5, 3, 5];
+        let opened_leaves = leaf_indices.iter().map(|&i| leaf_digests[i]).collect_vec();
+        let authentication_structure = tree.get_authentication_structure(&leaf_indices);
+        let verdict = MT::verify_authentication_structure_from_leaves(
+            tree.get_root(),
+            tree_height,
+            &leaf_indices,
+            &opened_leaves,
+            &authentication_structure,
+        );
+        assert!(verdict, "Repeated indices must be tolerated.");
+
+        let incorrectly_opened_leaves = [
+            opened_leaves[0],
+            opened_leaves[1],
+            opened_leaves[2],
+            opened_leaves[0],
+        ];
+        let verdict_for_incorrect_statement = MT::verify_authentication_structure_from_leaves(
+            tree.get_root(),
+            tree_height,
+            &leaf_indices,
+            &incorrectly_opened_leaves,
+            &authentication_structure,
+        );
+        assert!(
+            !verdict_for_incorrect_statement,
+            "Repeated indices with different leaves must be rejected."
         );
     }
 
