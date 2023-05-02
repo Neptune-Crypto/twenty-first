@@ -213,7 +213,7 @@ where
             for authentication_path_element in partial_authentication_path.iter_mut() {
                 // Note that the authentication path contains the siblings to the nodes given by
                 // the list (node_index, node_index / 2, node_index / 4, …). Hence, all the tests
-                // performed here exclusively deal with the current node_index's sibling.
+                // performed here exclusively deal with the current node's sibling.
                 let sibling_node_index = node_index ^ 1;
                 let sibling_already_covered = scanned.contains(&sibling_node_index);
 
@@ -223,11 +223,14 @@ where
                     .contains(&siblings_left_child_node_index)
                     && calculable_indices.contains(&siblings_right_child_node_index);
 
-                // In the leaf layer, check if sibling is explicitly provided
-                let potential_sibling_leaf_index = sibling_node_index as i128 - num_leaves as i128;
-                let sibling_is_in_leaf_layer = potential_sibling_leaf_index >= 0;
-                let sibling_is_explicitly_requested = sibling_is_in_leaf_layer
-                    && leaf_indices.contains(&(potential_sibling_leaf_index as usize));
+                let sibling_is_in_leaf_layer = sibling_node_index >= num_leaves;
+                let sibling_is_explicitly_requested = if sibling_is_in_leaf_layer {
+                    let sibling_leaf_index = sibling_node_index - num_leaves;
+                    leaf_indices.contains(&sibling_leaf_index)
+                } else {
+                    // Only leaves can be explicitly requested.
+                    false
+                };
 
                 let authentication_path_element_is_redundant = sibling_already_covered
                     || both_sibling_children_can_be_calculated
@@ -274,22 +277,20 @@ where
         let num_leaves = 1 << tree_height;
         let num_nodes = num_leaves * 2;
 
-        // The partial merkle tree is represented as a vector of Option<Digest> where the
-        // Option is None if the node is not in the partial tree.
-        // The indexing works identical as in the general Merkle tree.
-        let mut partial_merkle_tree = vec![None; num_nodes];
-
         // All indices must be valid, unique leaf indices. Uniqueness is checked below, when
         // inserting the leaf digests into the partial tree.
         if leaf_indices.iter().any(|&i| i >= num_leaves) {
             return false;
         }
 
+        // The partial merkle tree is represented as a vector of Option<Digest> where the
+        // Option is None if the node is not in the partial tree.
+        // The indexing works identical as in the general Merkle tree.
+        let mut partial_merkle_tree = vec![None; num_nodes];
+
         // Translate partial authentication paths into partial merkle tree.
-        for ((&leaf_index, &leaf_digest), partial_authentication_path) in leaf_indices
-            .iter()
-            .zip_eq(leaf_digests.iter())
-            .zip_eq(partial_auth_paths.iter())
+        for (&leaf_index, &leaf_digest, partial_authentication_path) in
+            izip!(leaf_indices, leaf_digests, partial_auth_paths)
         {
             let mut current_node_index = leaf_index + num_leaves;
 
@@ -326,11 +327,11 @@ where
         // are required to calculate the root. This is done by starting at the leaves and
         // calculating the parent nodes. The parent nodes are then used to calculate their parent
         // nodes, and so on, until the root is reached.
-        // The parent nodes indices are deduplicated to avoid hashing the same nodes twice.
-        // This happens when the set of leaf indices contains neighboring leaves.
+        // The parent nodes' indices are deduplicated to avoid hashing the same nodes twice,
+        // which would happen whenever two leaves are siblings.
         let mut parent_node_indices = leaf_indices
             .iter()
-            .map(|&i| (i + num_leaves) / 2)
+            .map(|&leaf_index| (leaf_index + num_leaves) / 2)
             .collect_vec();
         parent_node_indices.sort();
         parent_node_indices.dedup();
