@@ -3,6 +3,8 @@ use std::ops::{Add, AddAssign, Mul, Sub};
 use itertools::Itertools;
 use num_traits::Zero;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use serde_big_array::BigArray;
+use serde_derive::{Deserialize, Serialize};
 
 use super::b_field_element::BFieldElement;
 
@@ -194,8 +196,9 @@ pub fn coset_ntt_noswap_64(array: &mut [BFieldElement; 64]) {
 
 pub const CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES: usize = 64;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CyclotomicRingElement {
+    #[serde(with = "BigArray")]
     coefficients: [BFieldElement; CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES],
 }
 
@@ -414,8 +417,9 @@ pub fn sample_short_bfield_element(randomness: &[u8; 8]) -> BFieldElement {
 /// The Module is a matrix over the cyclotomic ring (i.e., the ring
 /// of residue classes of polynomials modulo X^64+1). The matrix
 /// contains N cyclotomic ring elements in total.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModuleElement<const N: usize> {
+    #[serde(with = "BigArray")]
     elements: [CyclotomicRingElement; N],
 }
 
@@ -622,6 +626,7 @@ impl<const N: usize> Zero for ModuleElement<N> {
 pub mod kem {
 
     use itertools::Itertools;
+    use serde_derive::{Deserialize, Serialize};
 
     use super::{
         embed_msg, extract_msg, CyclotomicRingElement, ModuleElement,
@@ -632,19 +637,19 @@ pub mod kem {
         fips202::{sha3_256, shake256},
     };
 
-    #[derive(PartialEq, Eq, Clone)]
+    #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
     pub struct SecretKey {
         key: [u8; 32],
         seed: [u8; 32],
     }
 
-    #[derive(PartialEq, Eq, Clone)]
+    #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
     pub struct PublicKey {
         seed: [u8; 32],
         ga: ModuleElement<4>,
     }
 
-    #[derive(Debug, PartialEq, Eq, Clone)]
+    #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
     pub struct Ciphertext {
         bg: ModuleElement<4>,
         bga_m: ModuleElement<1>,
@@ -800,11 +805,11 @@ mod lattice_test {
     use rand::{thread_rng, RngCore};
 
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::lattice::kem::Ciphertext;
+    use crate::shared_math::lattice::kem::{Ciphertext, PublicKey};
     use crate::shared_math::lattice::*;
     use crate::shared_math::other::{random_elements, random_elements_array};
 
-    use super::kem::CIPHERTEXT_SIZE_IN_BFES;
+    use super::kem::{SecretKey, CIPHERTEXT_SIZE_IN_BFES};
 
     #[test]
     fn test_fast_mul() {
@@ -929,5 +934,34 @@ mod lattice_test {
             }; 4],
         };
         assert!(!not_zero.is_zero(), "not-zero must be not be zero");
+    }
+
+    #[test]
+    fn serialization_deserialization_test() {
+        // This is tested here since the serialization for these objects is a bit more complicated
+        // than the standard serde stuff. So to be sure that it works, we just run this test here.
+        let mut rng = thread_rng();
+        let mut key_randomness: [u8; 32] = [0u8; 32];
+        rng.fill_bytes(&mut key_randomness);
+        let mut ctxt_randomness: [u8; 32] = [0u8; 32];
+        rng.fill_bytes(&mut ctxt_randomness);
+        let (sk, pk) = kem::keygen(key_randomness);
+        let (alice_key, ctxt) = kem::enc(pk.clone(), ctxt_randomness);
+
+        let sk_as_json: String = serde_json::to_string(&sk).unwrap();
+        let sk_again = serde_json::from_str::<SecretKey>(&sk_as_json).unwrap();
+        assert_eq!(sk, sk_again);
+
+        let pk_as_json: String = serde_json::to_string(&pk).unwrap();
+        let pk_again = serde_json::from_str::<PublicKey>(&pk_as_json).unwrap();
+        assert_eq!(pk, pk_again);
+
+        let ctxt_as_json: String = serde_json::to_string(&ctxt).unwrap();
+        let ctxt_again = serde_json::from_str::<Ciphertext>(&ctxt_as_json).unwrap();
+        assert_eq!(ctxt, ctxt_again);
+
+        let alice_key_as_json: String = serde_json::to_string(&alice_key).unwrap();
+        let alice_key_again = serde_json::from_str::<[u8; 32]>(&alice_key_as_json).unwrap();
+        assert_eq!(alice_key, alice_key_again);
     }
 }
