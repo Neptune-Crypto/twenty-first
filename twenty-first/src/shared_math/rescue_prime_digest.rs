@@ -38,7 +38,7 @@ impl Digest {
         self.0
     }
 
-    pub fn new(digest: [BFieldElement; DIGEST_LENGTH]) -> Self {
+    pub const fn new(digest: [BFieldElement; DIGEST_LENGTH]) -> Self {
         Self(digest)
     }
 }
