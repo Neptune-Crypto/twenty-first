@@ -3,8 +3,8 @@ use itertools::Itertools;
 use rand::RngCore;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use twenty_first::shared_math::b_field_element::BFieldElement;
+use twenty_first::shared_math::digest::DIGEST_LENGTH;
 use twenty_first::shared_math::other::random_elements;
-use twenty_first::shared_math::rescue_prime_digest::DIGEST_LENGTH;
 use twenty_first::shared_math::tip5::Tip5;
 use twenty_first::util_types::algebraic_hasher::AlgebraicHasher;
 

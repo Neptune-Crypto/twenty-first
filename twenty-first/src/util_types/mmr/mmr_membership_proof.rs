@@ -8,8 +8,8 @@ use std::{fmt::Debug, iter::FromIterator};
 
 use super::{shared_advanced, shared_basic};
 use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::digest::Digest;
 use crate::shared_math::other::log_2_floor;
-use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -601,8 +601,8 @@ mod mmr_membership_proof_test {
     use rand::Rng;
 
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::digest::Digest;
     use crate::shared_math::other::random_elements;
-    use crate::shared_math::rescue_prime_digest::Digest;
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::test_shared::mmr::get_rustyleveldb_ammr_from_digests;
     use crate::util_types::mmr::archival_mmr::ArchivalMmr;

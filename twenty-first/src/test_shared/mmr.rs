@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use rusty_leveldb::DB;
 
-use crate::shared_math::rescue_prime_digest::Digest;
+use crate::shared_math::digest::Digest;
 use crate::util_types::storage_vec::RustyLevelDbVec;
 use crate::util_types::{algebraic_hasher::AlgebraicHasher, mmr::archival_mmr::ArchivalMmr};
 

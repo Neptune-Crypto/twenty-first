@@ -2,7 +2,7 @@ use blake3::OUT_LEN;
 use num_traits::Zero;
 
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::rescue_prime_digest::Digest;
+use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, SpongeHasher, RATE};
 
 use super::algebraic_hasher;

@@ -3,8 +3,8 @@ use std::iter;
 use itertools::Itertools;
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
+use crate::shared_math::digest::{Digest, DIGEST_LENGTH};
 use crate::shared_math::other::{is_power_of_two, roundup_nearest_multiple};
-use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
 use crate::shared_math::x_field_element::{XFieldElement, EXTENSION_DEGREE};
 
 pub const RATE: usize = 10;
@@ -206,7 +206,7 @@ mod algebraic_hasher_tests {
     use rand::{thread_rng, Rng, RngCore};
     use rand_distr::{Distribution, Standard};
 
-    use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
+    use crate::shared_math::digest::DIGEST_LENGTH;
     use crate::shared_math::tip5::{Tip5, Tip5State};
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 

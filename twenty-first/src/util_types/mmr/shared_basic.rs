@@ -1,6 +1,6 @@
 use super::mmr_membership_proof::MmrMembershipProof;
+use crate::shared_math::digest::Digest;
 use crate::shared_math::other::log_2_floor;
-use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[inline]

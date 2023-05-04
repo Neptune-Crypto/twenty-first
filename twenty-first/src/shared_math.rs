@@ -1,5 +1,6 @@
 pub mod b_field_element;
 pub mod circuit;
+pub mod digest;
 pub mod fips202;
 pub mod lattice;
 pub mod mds;
@@ -8,7 +9,6 @@ pub mod ntt;
 pub mod other;
 pub mod polynomial;
 pub mod poseidon;
-pub mod rescue_prime_digest;
 pub mod rescue_prime_optimized;
 pub mod rescue_prime_regular;
 pub mod tip5;
