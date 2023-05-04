@@ -812,6 +812,49 @@ mod merkle_tree_test {
     }
 
     #[test]
+    fn verify_merkle_tree_where_every_leaf_is_revealed() {
+        type H = blake3::Hasher;
+        type M = CpuParallel;
+        type MT = MerkleTree<H>;
+
+        let tree_height = 5;
+        let num_leaves = 1 << tree_height;
+        let leaf_digests: Vec<Digest> = random_elements(num_leaves);
+        let tree: MT = M::from_digests(&leaf_digests);
+
+        let leaf_indices = (0..num_leaves).collect_vec();
+        let opened_leaves = leaf_indices.iter().map(|&i| leaf_digests[i]).collect_vec();
+        let authentication_structure = tree.get_authentication_structure(&leaf_indices);
+        let verdict = MT::verify_authentication_structure_from_leaves(
+            tree.get_root(),
+            tree_height,
+            &leaf_indices,
+            &opened_leaves,
+            &authentication_structure,
+        );
+        assert!(verdict, "Revealing all leaves must be tolerated.");
+
+        let leaf_indices_x2 = leaf_indices
+            .iter()
+            .chain(leaf_indices.iter())
+            .copied()
+            .collect_vec();
+        let opened_leaves_x2 = leaf_indices_x2
+            .iter()
+            .map(|&i| leaf_digests[i])
+            .collect_vec();
+        let authentication_structure_x2 = tree.get_authentication_structure(&leaf_indices_x2);
+        let verdict_x2 = MT::verify_authentication_structure_from_leaves(
+            tree.get_root(),
+            tree_height,
+            &leaf_indices_x2,
+            &opened_leaves_x2,
+            &authentication_structure_x2,
+        );
+        assert!(verdict_x2, "Revealing all leaves twice must be tolerated.");
+    }
+
+    #[test]
     fn merkle_tree_get_authentication_path_test() {
         type H = blake3::Hasher;
         type M = CpuParallel;
