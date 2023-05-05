@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
 use crate::shared_math::traits::FromVecu8;
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::emojihash_trait::Emojihash;
 
 pub const DIGEST_LENGTH: usize = 5;
@@ -144,6 +145,20 @@ impl From<[u8; Digest::BYTES]> for Digest {
         }
 
         Self(bfes)
+    }
+}
+
+impl Digest {
+    /// Simulates the VM as it hashes a digest. Note that the result of
+    /// this function disagrees with hash(self), which is implemented
+    /// for any type (including Digest) that satisfies Hashable; under
+    /// the hood, that method converts the digest to a sequence of
+    /// BFieldElements and then calls hash_varlen. By contrast, this
+    /// method invokes hash_pair with the right operand being the zero
+    /// digest, agreeing with the standard way to hash a digest in the
+    /// virtual machine.
+    pub fn vmhash<H: AlgebraicHasher>(&self) -> Digest {
+        H::hash_pair(self, &Digest::new([BFieldElement::zero(); DIGEST_LENGTH]))
     }
 }
 
