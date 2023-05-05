@@ -3,7 +3,7 @@ use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
-pub use crate::shared_math::rescue_prime_digest::{Digest, DIGEST_LENGTH};
+pub use crate::shared_math::digest::{Digest, DIGEST_LENGTH};
 
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
@@ -663,8 +663,8 @@ mod tip5_tests {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::digest::DIGEST_LENGTH;
     use crate::shared_math::other::random_elements;
-    use crate::shared_math::rescue_prime_digest::DIGEST_LENGTH;
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::tip5::LOOKUP_TABLE;
     use crate::shared_math::tip5::NUM_ROUNDS;

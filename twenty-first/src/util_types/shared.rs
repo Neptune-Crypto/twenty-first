@@ -1,6 +1,6 @@
 use std::marker::{Send, Sync};
 
-use crate::shared_math::rescue_prime_digest::Digest;
+use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 /// Get a root commitment to the entire MMR/list of Merkle trees

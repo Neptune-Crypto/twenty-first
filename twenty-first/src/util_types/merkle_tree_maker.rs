@@ -1,4 +1,4 @@
-use crate::shared_math::rescue_prime_digest::Digest;
+use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree::MerkleTree;
 

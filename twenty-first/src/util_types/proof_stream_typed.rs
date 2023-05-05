@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::marker::PhantomData;
 
-use crate::shared_math::{b_field_element::BFieldElement, rescue_prime_digest::Digest};
+use crate::shared_math::{b_field_element::BFieldElement, digest::Digest};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[derive(Debug, PartialEq, Eq)]

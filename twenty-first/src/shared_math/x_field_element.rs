@@ -6,7 +6,7 @@ use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use super::rescue_prime_digest::Digest;
+use super::digest::Digest;
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};

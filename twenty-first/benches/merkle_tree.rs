@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::time::Duration;
+use twenty_first::shared_math::digest::Digest;
 use twenty_first::shared_math::other::random_elements;
-use twenty_first::shared_math::rescue_prime_digest::Digest;
 use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
 use twenty_first::util_types::merkle_tree::{CpuParallel, MerkleTree};
 use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;

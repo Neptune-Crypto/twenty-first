@@ -1,4 +1,4 @@
-use crate::shared_math::rescue_prime_digest::Digest;
+use crate::shared_math::digest::Digest;
 
 pub mod mmr;
 

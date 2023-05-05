@@ -8,8 +8,8 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+use crate::shared_math::digest::Digest;
 use crate::shared_math::other::{bit_representation, is_power_of_two, log_2_floor};
-use crate::shared_math::rescue_prime_digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 use crate::util_types::shared::bag_peaks;
