@@ -1,3 +1,4 @@
+use get_size::GetSize;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::RandomState;
@@ -12,21 +13,11 @@ use crate::shared_math::digest::Digest;
 use crate::shared_math::other::log_2_floor;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, GetSize)]
 pub struct MmrMembershipProof<H: AlgebraicHasher + Sized> {
     pub leaf_index: u64,
     pub authentication_path: Vec<Digest>,
     pub _hasher: PhantomData<H>,
-}
-
-impl<H: AlgebraicHasher> Clone for MmrMembershipProof<H> {
-    fn clone(&self) -> Self {
-        Self {
-            leaf_index: self.leaf_index,
-            authentication_path: self.authentication_path.clone(),
-            _hasher: PhantomData,
-        }
-    }
 }
 
 impl<H: AlgebraicHasher> PartialEq for MmrMembershipProof<H> {
