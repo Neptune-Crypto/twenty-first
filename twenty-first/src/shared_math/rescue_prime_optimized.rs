@@ -1,3 +1,4 @@
+use get_size::GetSize;
 use itertools::Itertools;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
@@ -289,7 +290,7 @@ impl RescuePrimeOptimizedState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize)]
 pub struct RescuePrimeOptimized {}
 
 impl RescuePrimeOptimized {

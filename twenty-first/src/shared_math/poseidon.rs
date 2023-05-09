@@ -5,6 +5,7 @@
 //!
 //! Adapted from Plonky2: <https://github.com/mir-protocol/plonky2/tree/main/plonky2/src/hash>
 
+use get_size::GetSize;
 use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
@@ -25,7 +26,7 @@ pub const N_FULL_ROUNDS_TOTAL: usize = 2 * HALF_N_FULL_ROUNDS;
 pub const N_PARTIAL_ROUNDS: usize = 22;
 pub const N_ROUNDS: usize = N_FULL_ROUNDS_TOTAL + N_PARTIAL_ROUNDS;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize)]
 pub struct Poseidon {}
 
 impl Poseidon {

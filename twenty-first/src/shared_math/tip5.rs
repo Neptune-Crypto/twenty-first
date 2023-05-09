@@ -1,3 +1,4 @@
+use get_size::GetSize;
 use itertools::Itertools;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
@@ -46,7 +47,7 @@ impl Tip5State {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize)]
 pub struct Tip5 {}
 
 /// The lookup table with a high algebraic degree used in the TIP-5 permutation. To verify its
@@ -655,6 +656,7 @@ impl SpongeHasher for Tip5 {
 #[cfg(test)]
 mod tip5_tests {
 
+    use get_size::GetSize;
     use itertools::Itertools;
     use num_traits::One;
     use num_traits::Zero;
@@ -677,6 +679,11 @@ mod tip5_tests {
 
     use super::Tip5State;
     use super::RATE;
+
+    #[test]
+    fn get_size_test() {
+        assert!(Tip5 {}.get_size().is_zero());
+    }
 
     #[test]
     fn lookup_table_is_correct() {

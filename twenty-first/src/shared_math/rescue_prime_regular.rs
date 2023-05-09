@@ -1,3 +1,4 @@
+use get_size::GetSize;
 use itertools::Itertools;
 use num_traits::One;
 use serde::{Deserialize, Serialize};
@@ -814,7 +815,7 @@ impl RescuePrimeRegularState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize)]
 pub struct RescuePrimeRegular {}
 
 impl RescuePrimeRegular {
