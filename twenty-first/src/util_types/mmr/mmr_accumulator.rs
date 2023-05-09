@@ -1,3 +1,4 @@
+use get_size::GetSize;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::{collections::HashMap, fmt::Debug};
@@ -37,7 +38,7 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> From<&ArchivalMmr<H, Stora
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize)]
 pub struct MmrAccumulator<H: AlgebraicHasher> {
     leaf_count: u64,
     peaks: Vec<Digest>,
@@ -663,5 +664,21 @@ mod accumulator_mmr_tests {
         let s_back = serde_json::from_str::<Mmr>(&json).unwrap();
         assert!(mmra.bag_peaks() == s_back.bag_peaks());
         assert_eq!(1, mmra.count_leaves());
+    }
+
+    #[test]
+    fn get_size_test() {
+        type H = RescuePrimeRegular;
+        type Mmr = MmrAccumulator<H>;
+
+        // 10 digests produces an MMRA with two peaks
+        let digests: Vec<Digest> = random_elements(10);
+        let mmra: Mmr = MmrAccumulator::new(digests);
+
+        println!("mmra.get_size() =  {}", mmra.get_size());
+
+        // Sanity check of measured size in RAM
+        assert!(mmra.get_size() > 2 * std::mem::size_of::<Digest>());
+        assert!(mmra.get_size() < 4 * std::mem::size_of::<Digest>());
     }
 }
