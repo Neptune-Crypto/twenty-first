@@ -329,7 +329,7 @@ impl Inverse for BFieldElement {
             let mut res = base;
             let mut i = 0;
             while i < exponent {
-                res = Self(BFieldElement::montyred(res.0 as u128 * res.0 as u128));
+                res = BFieldElement(BFieldElement::montyred(res.0 as u128 * res.0 as u128));
                 i += 1;
             }
             res
