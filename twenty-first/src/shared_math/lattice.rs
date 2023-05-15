@@ -637,19 +637,19 @@ pub mod kem {
         fips202::{sha3_256, shake256},
     };
 
-    #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+    #[derive(PartialEq, Eq, Copy, Clone, Debug, Serialize, Deserialize)]
     pub struct SecretKey {
         key: [u8; 32],
         seed: [u8; 32],
     }
 
-    #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+    #[derive(PartialEq, Eq, Copy, Clone, Debug, Serialize, Deserialize)]
     pub struct PublicKey {
         seed: [u8; 32],
         ga: ModuleElement<4>,
     }
 
-    #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+    #[derive(PartialEq, Eq, Copy, Clone, Debug, Serialize, Deserialize)]
     pub struct Ciphertext {
         bg: ModuleElement<4>,
         bga_m: ModuleElement<1>,

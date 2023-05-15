@@ -39,7 +39,10 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> From<&ArchivalMmr<H, Stora
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize)]
-pub struct MmrAccumulator<H: AlgebraicHasher> {
+pub struct MmrAccumulator<H>
+where
+    H: AlgebraicHasher,
+{
     leaf_count: u64,
     peaks: Vec<Digest>,
     _hasher: PhantomData<H>,

@@ -14,7 +14,10 @@ use crate::shared_math::other::log_2_floor;
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
 
 #[derive(Debug, Clone, Serialize, Deserialize, GetSize)]
-pub struct MmrMembershipProof<H: AlgebraicHasher + Sized> {
+pub struct MmrMembershipProof<H>
+where
+    H: AlgebraicHasher + Sized,
+{
     pub leaf_index: u64,
     pub authentication_path: Vec<Digest>,
     pub _hasher: PhantomData<H>,
