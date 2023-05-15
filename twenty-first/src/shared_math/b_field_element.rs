@@ -2,6 +2,7 @@ use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
 use super::x_field_element::XFieldElement;
 use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
 use crate::util_types::emojihash_trait::{Emojihash, EMOJI_PER_ELEMENT};
+use get_size::GetSize;
 use num_traits::{One, Zero};
 use rand_distr::{Distribution, Standard};
 use std::hash::Hash;
@@ -58,6 +59,20 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 // and https://github.com/novifinancial/winterfell/pull/101/files
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
 pub struct BFieldElement(u64);
+
+impl GetSize for BFieldElement {
+    fn get_stack_size() -> usize {
+        std::mem::size_of::<Self>()
+    }
+
+    fn get_heap_size(&self) -> usize {
+        0
+    }
+
+    fn get_size(&self) -> usize {
+        Self::get_stack_size() + GetSize::get_heap_size(self)
+    }
+}
 
 pub const BFIELD_ZERO: BFieldElement = BFieldElement::new(0);
 pub const BFIELD_ONE: BFieldElement = BFieldElement::new(1);
@@ -551,7 +566,13 @@ mod b_prime_field_element_test {
     use crate::shared_math::polynomial::Polynomial;
     use itertools::izip;
     use proptest::prelude::*;
-    use rand::thread_rng;
+    use rand::{random, thread_rng};
+
+    #[test]
+    fn get_size_test() {
+        let bfe: BFieldElement = random();
+        assert_eq!(8, bfe.get_size());
+    }
 
     #[test]
     fn display_test() {

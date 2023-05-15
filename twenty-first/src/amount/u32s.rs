@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Rem, Sub};
 
+use get_size::GetSize;
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use rand::Rng;
@@ -14,7 +15,7 @@ use serde_derive::{Deserialize, Serialize};
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::util_types::algebraic_hasher::Hashable;
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, GetSize)]
 pub struct U32s<const N: usize> {
     #[serde(with = "BigArray")]
     values: [u32; N],
@@ -342,6 +343,20 @@ mod u32s_tests {
     use crate::shared_math::other::random_elements;
 
     use super::*;
+
+    #[test]
+    fn get_size_test() {
+        let val_0 = U32s::new([]);
+        assert_eq!(0, val_0.get_size());
+        let val_1 = U32s::new([1 << 31]);
+        assert_eq!(4, val_1.get_size());
+        let val_2 = U32s::new([0, 0]);
+        assert_eq!(4 * 2, val_2.get_size());
+        let val_4: U32s<4> = 9999485u32.into();
+        assert_eq!(4 * 4, val_4.get_size());
+        let val_5 = U32s::new([(1 << 31) + 2001, 200, 400, 9999, 123456]);
+        assert_eq!(4 * 5, val_5.get_size());
+    }
 
     #[test]
     fn u32_conversion_test() {

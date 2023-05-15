@@ -900,7 +900,7 @@ mod lattice_test {
         // correctness
         let (sk, pk) = kem::keygen(key_randomness);
         let (alice_key, ctxt) = kem::enc(pk, ctxt_randomness);
-        if let Some(bob_key) = kem::dec(sk, ctxt.clone()) {
+        if let Some(bob_key) = kem::dec(sk, ctxt) {
             assert_eq!(alice_key, bob_key);
         } else {
             panic!()
@@ -917,7 +917,7 @@ mod lattice_test {
         let bfes: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] =
             random_elements(CIPHERTEXT_SIZE_IN_BFES).try_into().unwrap();
         let ciphertext: Ciphertext = bfes.into();
-        let bfes_again: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] = ciphertext.clone().into();
+        let bfes_again: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] = ciphertext.into();
         let ciphertext_again: Ciphertext = bfes_again.into();
 
         assert_eq!(bfes, bfes_again);
@@ -946,7 +946,7 @@ mod lattice_test {
         let mut ctxt_randomness: [u8; 32] = [0u8; 32];
         rng.fill_bytes(&mut ctxt_randomness);
         let (sk, pk) = kem::keygen(key_randomness);
-        let (alice_key, ctxt) = kem::enc(pk.clone(), ctxt_randomness);
+        let (alice_key, ctxt) = kem::enc(pk, ctxt_randomness);
 
         let sk_as_json: String = serde_json::to_string(&sk).unwrap();
         let sk_again = serde_json::from_str::<SecretKey>(&sk_as_json).unwrap();
