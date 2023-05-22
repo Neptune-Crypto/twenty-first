@@ -42,6 +42,12 @@ impl Digest {
     pub const fn new(digest: [BFieldElement; DIGEST_LENGTH]) -> Self {
         Self(digest)
     }
+
+    /// Returns a new digest but whose elements are reversed relative to self.
+    /// This function is an involutive endomorphism.
+    pub const fn reversed(self) -> Digest {
+        Digest([self.0[4], self.0[3], self.0[2], self.0[1], self.0[0]])
+    }
 }
 
 impl Emojihash for Digest {
@@ -149,21 +155,19 @@ impl From<[u8; Digest::BYTES]> for Digest {
 }
 
 impl Digest {
-    /// Simulates the VM as it hashes a digest. Note that the result of
-    /// this function disagrees with hash(self), which is implemented
-    /// for any type (including Digest) that satisfies Hashable; under
-    /// the hood, that method converts the digest to a sequence of
-    /// BFieldElements and then calls hash_varlen. By contrast, this
+    /// Simulates the VM as it hashes a digest. This
     /// method invokes hash_pair with the right operand being the zero
     /// digest, agreeing with the standard way to hash a digest in the
     /// virtual machine.
-    pub fn vmhash<H: AlgebraicHasher>(&self) -> Digest {
+    pub fn hash<H: AlgebraicHasher>(&self) -> Digest {
         H::hash_pair(self, &Digest::new([BFieldElement::zero(); DIGEST_LENGTH]))
     }
 }
 
 #[cfg(test)]
 mod digest_tests {
+    use rand::thread_rng;
+
     use super::*;
 
     #[test]
@@ -204,5 +208,11 @@ mod digest_tests {
         let second_invalid_digest_string = "this_is_not_a_bfield_element,05168490802189810700";
         let second_invalid_digest = Digest::from_str(second_invalid_digest_string);
         assert!(second_invalid_digest.is_err());
+    }
+
+    #[test]
+    pub fn test_reversed_involution() {
+        let digest: Digest = thread_rng().gen();
+        assert_eq!(digest, digest.reversed().reversed())
     }
 }
