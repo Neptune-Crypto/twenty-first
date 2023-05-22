@@ -9,34 +9,28 @@ A collection of cryptography primitives written in Rust.
 
 This library contains primarily the following cryptographic primitives:
 
+- The Tip5 hash function
+  - [The Tip5 Hash Function for Recursive STARKs](https://eprint.iacr.org/2023/107)
 - The Rescue-Prime hash function
   - An arithmetization-oriented hash function with a compact description in terms of AIR
   - [Rescue-Prime: a Standard Specification (SoK)](https://eprint.iacr.org/2020/1143.pdf)
   - [Anatomy of a STARK, Part 5: A Rescue-Prime STARK](https://neptune.cash/learn/stark-anatomy/rescue-prime/)
-- The Tip5 hash function
-  - [The Tip5 Hash Function for Recursive STARKs](https://eprint.iacr.org/2023/107)
 - Lattice-crypto
   - arithmetic for the quotient ring $\mathbb{F}_ p[X] / \langle X^{64} + 1 \rangle$
   - arithmetic for modules over this quotient ring
   - a IND-CCA2-secure key encapsulation mechanism
   - [Lattice-Based Cryptography in Miden VM](https://eprint.iacr.org/2022/1041)
-- FRI
-  - Fast Reed-Solomon IOP of Proximity
-  - [Anatomy of a STARK, Part 3: FRI](https://neptune.cash/learn/stark-anatomy/fri/)
-- BFieldElement, XFieldElement
+- `BFieldElement`, `XFieldElement`
   - The prime-field type $\mathbb{F}_p$ where $p = 2^{64} - 2^{32} + 1$
   - The extension field $\mathbb{F}_p[x]/(x^3 - x + 1)$
+  - A codec trait for encoding and decoding structs as `Vec`s of `BFieldElement`
   - [An efficient prime for number-theoretic transforms](https://cp4space.hatsya.com/2021/09/01/an-efficient-prime-for-number-theoretic-transforms/)
 - NTT
   - Number Theoretic Transform (discrete Fast Fourier Transform)
   - [Anatomy of a STARK, Part 6: Speeding Things Up](https://neptune.cash/learn/stark-anatomy/faster/)
 - Univariate and multivariate polynomials
-- Merkle Trees, Merkle Mountain Ranges
-
-This library also contains some proof-of-concept STARK implementations:
-
-- [Rescue-Prime](https://neptune.cash/learn/stark-anatomy/) ([source code](./stark-rescue-prime))
-- [Brainfuck](https://aszepieniec.github.io/stark-brainfuck/) ([source code](./stark-brainfuck))
+- Merkle Trees
+- Merkle Mountain Ranges
 
 ## Release protocol
 
