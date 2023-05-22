@@ -748,4 +748,11 @@ mod u32s_tests {
     fn crash() {
         let _u32s = U32s::<0>::from(0u32);
     }
+
+    #[test]
+    fn conversion_test() {
+        let u32_max_actual = U32s::<5>::from(u32::MAX);
+        let u32_max_expected = U32s::<5>::new([u32::MAX, 0, 0, 0, 0]);
+        assert_eq!(u32_max_actual, u32_max_expected);
+    }
 }
