@@ -103,14 +103,3 @@ jobs:
           command: criterion
           args: ntt_forward
 
-      - name: Run Rescue Prime benchmark
-        uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1, 2019-09-15
-        with:
-          command: criterion
-          args: rescue_prime_regular
-
-      - name: Run brainfuck STARK benchmark
-        uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b # v1.0.1, 2019-09-15
-        with:
-          command: criterion
-          args: stark_bf

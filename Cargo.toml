@@ -1,5 +1,5 @@
 [workspace]
-members = ["twenty-first", "stark-brainfuck", "stark-rescue-prime"]
+members = ["twenty-first"]
 
 [profile.dev]
 opt-level = 0
