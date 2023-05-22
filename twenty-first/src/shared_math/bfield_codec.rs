@@ -416,6 +416,11 @@ pub fn decode_vec<T: BFieldCodec>(sequence: &[BFieldElement]) -> Result<Box<Vec<
 /// way that the matching `decode_vec` function recovers the original
 /// This function exists because it is not a good idea to implement
 /// `BFieldCodec` for `Vec<T>`.
+///
+/// This function should not be used when `Vec<T>` already implements
+/// `BFieldCodec`. In that case, just use `.encode()` instead.
+///
+/// Todo: investigate whether a smarter encoding makes sense
 pub fn encode_vec<T: BFieldCodec>(vector: &[T]) -> Vec<BFieldElement> {
     let mut sequence: Vec<BFieldElement> = vec![BFieldElement::zero()];
     for v in vector.iter() {
@@ -427,12 +432,116 @@ pub fn encode_vec<T: BFieldCodec>(vector: &[T]) -> Vec<BFieldElement> {
     sequence
 }
 
+impl BFieldCodec for u128 {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.len() != 4 {
+            bail!(
+                "Cannot decode sequence of length {} =/= 4 as u128.",
+                sequence.len()
+            );
+        }
+        if !sequence.iter().all(|s| s.value() <= u32::MAX as u64) {
+            bail!(
+                "Could not parse sequence of BFieldElements {:?} as u128.",
+                sequence
+            );
+        }
+        return Ok(Box::new(
+            sequence
+                .iter()
+                .enumerate()
+                .map(|(i, s)| (s.value() as u128) << (i * 32))
+                .sum(),
+        ));
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        (0..4)
+            .map(|i| (*self >> (i * 32)) as u64 & u32::MAX as u64)
+            .map(BFieldElement::new)
+            .collect_vec()
+    }
+}
+
+impl BFieldCodec for u64 {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.len() != 2 {
+            bail!(
+                "Cannot decode sequence of length {} =/= 2 as u64.",
+                sequence.len()
+            );
+        }
+        if !sequence.iter().all(|s| s.value() <= u32::MAX as u64) {
+            bail!(
+                "Could not parse sequence of BFieldElements {:?} as u64.",
+                sequence
+            );
+        }
+        return Ok(Box::new(
+            sequence
+                .iter()
+                .enumerate()
+                .map(|(i, s)| s.value() << (i * 32))
+                .sum(),
+        ));
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        (0..2)
+            .map(|i| (*self >> (i * 32)) & u32::MAX as u64)
+            .map(BFieldElement::new)
+            .collect_vec()
+    }
+}
+
+impl BFieldCodec for bool {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.len() != 1 {
+            bail!(
+                "Cannot decode sequence of {} =/= 1 BFieldElements as bool.",
+                sequence.len()
+            );
+        }
+        Ok(Box::new(match sequence[0].value() {
+            0 => false,
+            1 => true,
+            n => bail!("Failed to parse BFieldElement {n} as bool."),
+        }))
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        vec![BFieldElement::new(*self as u64)]
+    }
+}
+
+impl BFieldCodec for u32 {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.len() != 1 {
+            bail!(
+                "Cannot decode sequence of {} =/= 1 BFieldElements as bool.",
+                sequence.len()
+            );
+        }
+        let value = sequence[0].value();
+        if value > u32::MAX as u64 {
+            bail!("Cannot decode BFieldElement {value} as u32.");
+        }
+        Ok(Box::new(value as u32))
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        vec![BFieldElement::new(*self as u64)]
+    }
+}
+
 #[cfg(test)]
 mod bfield_codec_tests {
     use itertools::Itertools;
     use rand::thread_rng;
     use rand::Rng;
     use rand::RngCore;
+
+    use crate::amount::u32s::U32s;
 
     use super::*;
 
@@ -670,5 +779,104 @@ mod bfield_codec_tests {
         let decoded = *decode_vec(&encoded).unwrap();
 
         assert_eq!(vector, decoded);
+    }
+
+    #[test]
+    fn test_decode_u128() {
+        let mut rng = thread_rng();
+        for _ in 0..100 {
+            let num = (rng.next_u64() as u128) << 64 | rng.next_u64() as u128;
+            let encoded = num.encode();
+            let decoded = *u128::decode(&encoded).unwrap();
+            assert_eq!(num, decoded);
+
+            // Verify same encoding as U32<4>
+            let u32_4: U32s<4> = num.try_into().unwrap();
+            let u32_4_encoded = u32_4.encode();
+            assert_eq!(encoded, u32_4_encoded);
+        }
+
+        for v in [
+            0u64,
+            1u64,
+            u64::MAX - 1,
+            u64::MAX,
+            BFieldElement::MAX,
+            BFieldElement::P,
+        ] {
+            let encoded = v.encode();
+            assert_eq!(*u64::decode(&encoded).unwrap(), v);
+
+            // Verify same encoding as U32<2>
+            let u32_2: U32s<2> = v.try_into().unwrap();
+            let u32_2_encoded = u32_2.encode();
+            assert_eq!(encoded, u32_2_encoded);
+        }
+    }
+
+    #[test]
+    fn test_decode_u64() {
+        let mut rng = thread_rng();
+        for _ in 0..100 {
+            let num = rng.next_u64();
+            let encoded = num.encode();
+            let decoded = *u64::decode(&encoded).unwrap();
+            assert_eq!(num, decoded);
+
+            // Verify same encoding as U32<2>
+            let u32_2: U32s<2> = num.try_into().unwrap();
+            let u32_2_encoded = u32_2.encode();
+            assert_eq!(encoded, u32_2_encoded);
+        }
+
+        for v in [
+            0u64,
+            1u64,
+            u64::MAX - 1,
+            u64::MAX,
+            BFieldElement::MAX,
+            BFieldElement::P,
+        ] {
+            let encoded = v.encode();
+            assert_eq!(*u64::decode(&encoded).unwrap(), v);
+
+            // Verify same encoding as U32<2>
+            let u32_2: U32s<2> = v.try_into().unwrap();
+            let u32_2_encoded = u32_2.encode();
+            assert_eq!(encoded, u32_2_encoded);
+        }
+    }
+
+    #[test]
+    fn test_decode_u32() {
+        let mut rng = thread_rng();
+        for _ in 0..100 {
+            let num = rng.next_u32();
+            let encoded = num.encode();
+            let decoded = *u32::decode(&encoded).unwrap();
+            assert_eq!(num, decoded);
+
+            // Verify same encoding as U32<1>
+            let u32_1: U32s<1> = num.try_into().unwrap();
+            let u32_1_encoded = u32_1.encode();
+            assert_eq!(encoded, u32_1_encoded);
+        }
+
+        for v in [0u32, 1u32, u32::MAX - 1, u32::MAX] {
+            assert_eq!(*u32::decode(&v.encode()).unwrap(), v);
+        }
+    }
+
+    #[test]
+    fn test_decode_bool() {
+        let trew = true;
+        let true_encoded = trew.encode();
+        let true_decoded = *bool::decode(&true_encoded).unwrap();
+        assert_eq!(true_decoded, trew);
+
+        let fallse = false;
+        let false_encoded = fallse.encode();
+        let false_decoded = *bool::decode(&false_encoded).unwrap();
+        assert_eq!(false_decoded, fallse);
     }
 }

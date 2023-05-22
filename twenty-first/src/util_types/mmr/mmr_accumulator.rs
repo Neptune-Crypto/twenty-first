@@ -304,7 +304,7 @@ mod accumulator_mmr_tests {
 
     use itertools::{izip, Itertools};
     use num_traits::Zero;
-    use rand::Rng;
+    use rand::{random, Rng};
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::{random_elements, random_elements_range};
@@ -336,7 +336,7 @@ mod accumulator_mmr_tests {
         type H = blake3::Hasher;
 
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
-        let appended_leaf: Digest = H::hash(&17u128);
+        let appended_leaf: Digest = random();
 
         let mut leaf_hashes_end: Vec<Digest> = leaf_hashes_start.clone();
         leaf_hashes_end.push(appended_leaf);
@@ -356,34 +356,34 @@ mod accumulator_mmr_tests {
     fn verify_batch_update_single_mutate_test() {
         type H = blake3::Hasher;
 
-        let leaf_hashes_start: Vec<Digest> = [14, 15, 16, 18].iter().map(H::hash::<u128>).collect();
-        let new_leaf_value: Digest = H::hash(&17u128);
-
-        let leaf_hashes_end: Vec<Digest> = [14, 15, 16, 17].iter().map(H::hash::<u128>).collect();
+        let leaf0: Digest = random();
+        let leaf1: Digest = random();
+        let leaf2: Digest = random();
+        let leaf3: Digest = random();
+        let leaf4: Digest = random();
+        let leaf_hashes_start: Vec<Digest> = vec![leaf0, leaf1, leaf2, leaf4];
+        let leaf_hashes_end: Vec<Digest> = vec![leaf0, leaf1, leaf2, leaf3];
 
         let accumulator_mmr_start: MmrAccumulator<H> =
             MmrAccumulator::new(leaf_hashes_start.clone());
-        let mut archive_mmr_start: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+        let archive_mmr_start: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(leaf_hashes_start);
         let membership_proof = archive_mmr_start.prove_membership(3).0;
         let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 
         {
             let appended_leafs = [];
-            let leaf_mutations = [(new_leaf_value, membership_proof.clone())];
+            let leaf_mutations = [(leaf3, membership_proof.clone())];
             assert!(accumulator_mmr_start.verify_batch_update(
                 &accumulator_mmr_end.get_peaks(),
                 &appended_leafs,
                 &leaf_mutations,
             ));
         }
-        // Verify that repeated indices are disallowed
+        // Verify that repeated mutations are disallowed
         {
             let appended_leafs = [];
-            let leaf_mutations = [
-                (new_leaf_value, membership_proof.clone()),
-                (new_leaf_value, membership_proof),
-            ];
+            let leaf_mutations = [(leaf3, membership_proof.clone()), (leaf3, membership_proof)];
             assert!(!accumulator_mmr_start.verify_batch_update(
                 &accumulator_mmr_end.get_peaks(),
                 &appended_leafs,
@@ -415,13 +415,20 @@ mod accumulator_mmr_tests {
     fn verify_batch_update_two_mutate_test() {
         type H = blake3::Hasher;
 
-        let leaf_hashes_start: Vec<Digest> = [14, 15, 16, 17].iter().map(H::hash::<u128>).collect();
-        let new_leafs: Vec<Digest> = [20, 21].iter().map(H::hash::<u128>).collect();
-        let leaf_hashes_end: Vec<Digest> = [14, 20, 16, 21].iter().map(H::hash::<u128>).collect();
+        let leaf14: Digest = random();
+        let leaf15: Digest = random();
+        let leaf16: Digest = random();
+        let leaf17: Digest = random();
+        let leaf20: Digest = random();
+        let leaf21: Digest = random();
+
+        let leaf_hashes_start: Vec<Digest> = vec![leaf14, leaf15, leaf16, leaf17];
+        let new_leafs: Vec<Digest> = vec![leaf20, leaf21];
+        let leaf_hashes_end: Vec<Digest> = vec![leaf14, leaf20, leaf16, leaf21];
 
         let accumulator_mmr_start: MmrAccumulator<H> =
             MmrAccumulator::<H>::new(leaf_hashes_start.clone());
-        let mut archive_mmr_start: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+        let archive_mmr_start: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(leaf_hashes_start);
         let membership_proof1 = archive_mmr_start.prove_membership(1).0;
         let membership_proof3 = archive_mmr_start.prove_membership(3).0;
@@ -547,26 +554,27 @@ mod accumulator_mmr_tests {
         for start_size in 1..35 {
             let leaf_hashes_start: Vec<Digest> = random_elements(start_size);
 
+            let local_hash = |x: u128| H::hash_varlen(&[BFieldElement::new(x as u64)]);
+
             let bad_digests: Vec<Digest> = (12..12 + start_size)
-                .map(|x| H::hash(&(x as u128)))
+                .map(|x| local_hash(x as u128))
                 .collect();
 
-            let mut bad_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+            let bad_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
                 get_rustyleveldb_ammr_from_digests(bad_digests.clone());
             let bad_membership_proof: MmrMembershipProof<H> = bad_mmr.prove_membership(0).0;
             let bad_membership_proof_digest = bad_digests[0];
-            let bad_leaf: Digest = H::hash(&8765432165123u128);
-            let mut archival_mmr_init: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+            let bad_leaf: Digest = local_hash(8765432165123u128);
+            let archival_mmr_init: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
                 get_rustyleveldb_ammr_from_digests(leaf_hashes_start.clone());
             let accumulator_mmr = MmrAccumulator::<H>::new(leaf_hashes_start.clone());
 
             for append_size in 0..18 {
-                let appends: Vec<Digest> =
-                    (2000..2000 + append_size).map(|x| H::hash(&x)).collect();
+                let appends: Vec<Digest> = (2000..2000 + append_size).map(local_hash).collect();
                 let mutate_count = cmp::min(12, start_size);
                 for mutate_size in 0..mutate_count {
                     let new_leaf_values: Vec<Digest> = (13..13 + mutate_size)
-                        .map(|x| H::hash(&(x as u128)))
+                        .map(|x| local_hash(x as u128))
                         .collect();
 
                     // Ensure that indices are unique since batch updating cannot update
@@ -625,7 +633,7 @@ mod accumulator_mmr_tests {
                     let mut bad_appends = appends.clone();
                     if append_size > 0 && mutate_size > 0 {
                         // bad append vector
-                        bad_appends[(mutated_indices[0] % append_size) as usize] = bad_leaf;
+                        bad_appends[(mutated_indices[0] % append_size as u64) as usize] = bad_leaf;
                         assert!(!accumulator_mmr.verify_batch_update(
                             &expected_new_peaks_from_accumulator,
                             &bad_appends,

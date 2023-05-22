@@ -1,5 +1,5 @@
+use anyhow::bail;
 use get_size::GetSize;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::RandomState;
 use std::collections::hash_set::Intersection;
@@ -8,10 +8,10 @@ use std::marker::PhantomData;
 use std::{fmt::Debug, iter::FromIterator};
 
 use super::{shared_advanced, shared_basic};
-use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::bfield_codec::BFieldCodec;
 use crate::shared_math::digest::Digest;
 use crate::shared_math::other::log_2_floor;
-use crate::util_types::algebraic_hasher::{AlgebraicHasher, Hashable};
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[derive(Debug, Clone, Serialize, Deserialize, GetSize)]
 pub struct MmrMembershipProof<H>
@@ -33,16 +33,27 @@ impl<H: AlgebraicHasher> PartialEq for MmrMembershipProof<H> {
 
 impl<H: AlgebraicHasher> Eq for MmrMembershipProof<H> {}
 
-impl<H: AlgebraicHasher> Hashable for MmrMembershipProof<H> {
-    fn to_sequence(&self) -> Vec<BFieldElement> {
-        [
-            self.leaf_index.to_sequence(),
-            self.authentication_path
-                .iter()
-                .flat_map(|ap| ap.to_sequence())
-                .collect_vec(),
-        ]
-        .concat()
+impl<H: AlgebraicHasher> BFieldCodec for MmrMembershipProof<H> {
+    fn decode(
+        sequence: &[crate::shared_math::b_field_element::BFieldElement],
+    ) -> anyhow::Result<Box<Self>> {
+        if sequence.len() < 2 {
+            bail!("Length of sequence must be at least 2 in order to decode Vec of BFieldElements into MmrMembershipProof");
+        }
+
+        let leaf_index = *u64::decode(&sequence[0..2])?;
+
+        let path = *Vec::<Digest>::decode(&sequence[2..])?;
+
+        Ok(Box::new(Self {
+            leaf_index,
+            authentication_path: path,
+            _hasher: PhantomData,
+        }))
+    }
+
+    fn encode(&self) -> Vec<crate::shared_math::b_field_element::BFieldElement> {
+        [self.leaf_index.encode(), self.authentication_path.encode()].concat()
     }
 }
 
@@ -592,12 +603,14 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
 #[cfg(test)]
 mod mmr_membership_proof_test {
-    use rand::Rng;
+    use itertools::Itertools;
+    use rand::{random, thread_rng, Rng, RngCore};
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::Digest;
     use crate::shared_math::other::random_elements;
     use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
+    use crate::shared_math::tip5::Tip5;
     use crate::test_shared::mmr::get_rustyleveldb_ammr_from_digests;
     use crate::util_types::mmr::archival_mmr::ArchivalMmr;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
@@ -618,7 +631,7 @@ mod mmr_membership_proof_test {
         let mp0 = MmrMembershipProof::<H>::new(4, vec![]);
         let mp1 = MmrMembershipProof::<H>::new(4, vec![]);
         assert_eq!(mp0, mp1);
-        assert_eq!(H::hash(&mp0), H::hash(&mp1));
+        assert_eq!(H::hash(&mp0.encode()), H::hash(&mp1));
 
         let mp2 = MmrMembershipProof::<H>::new(4, vec![some_digest]);
         let mp3 = MmrMembershipProof::<H>::new(4, vec![some_digest]);
@@ -654,7 +667,7 @@ mod mmr_membership_proof_test {
         type H = blake3::Hasher;
 
         let leaf_hashes: Vec<Digest> = random_elements(8);
-        let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+        let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(leaf_hashes);
         let (membership_proof, _peaks): (MmrMembershipProof<H>, Vec<Digest>) =
             archival_mmr.prove_membership(4);
@@ -778,7 +791,7 @@ mod mmr_membership_proof_test {
 
         let total_leaf_count = 268;
         let leaf_hashes_init: Vec<Digest> = random_elements(total_leaf_count);
-        let mut archival_mmr_init: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+        let archival_mmr_init: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(leaf_hashes_init);
         let leaf_hashes_final: Vec<Digest> = random_elements(total_leaf_count);
         let archival_mmr_final: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
@@ -946,7 +959,7 @@ mod mmr_membership_proof_test {
         total_leaf_count: usize,
     ) -> (Vec<Digest>, Vec<MmrMembershipProof<H>>) {
         let leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
-        let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+        let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
         let mut membership_proofs: Vec<MmrMembershipProof<H>> = vec![];
         for i in 0..total_leaf_count {
@@ -1010,7 +1023,7 @@ mod mmr_membership_proof_test {
         assert_eq!(8, accumulator_mmr.count_leaves());
         let mut an_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
-        let mut original_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+        let original_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
         let (mut membership_proof, _peaks): (MmrMembershipProof<H>, Vec<Digest>) =
             an_archival_mmr.prove_membership(4);
@@ -1134,8 +1147,8 @@ mod mmr_membership_proof_test {
         // leaf update.
         for leaf_count in 0..=22 {
             let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
-            let new_leaf: Digest = H::hash(&133333333333333333333337u128);
-            let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+            let new_leaf: Digest = random();
+            let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
                 get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
 
             // Loop over all leaf indices that we want to modify in the MMR
@@ -1196,7 +1209,7 @@ mod mmr_membership_proof_test {
         let leaf_count = 7;
         let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
         let new_leaf: Digest = H::hash(&133337u64);
-        let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+        let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
 
         for i in 0..leaf_count {
@@ -1250,7 +1263,7 @@ mod mmr_membership_proof_test {
             // 1. Build an ArchivalMmr with a variable amount of leaves
             let leaf_digests: Vec<Digest> = random_elements(leaf_count as usize);
             let new_leaf_digest: Digest = rand::thread_rng().gen();
-            let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+            let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
                 get_rustyleveldb_ammr_from_digests(leaf_digests.clone());
 
             // For every valid data index
@@ -1364,7 +1377,7 @@ mod mmr_membership_proof_test {
         for leaf_count in 0..9 {
             let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
             // let archival_mmr = ArchivalMmr::<RescuePrimeRegular>::new(leaf_hashes.clone());
-            let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+            let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
                 get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
             let new_leaf = H::hash(&BFieldElement::new(13333337));
             for i in 0..leaf_count {
@@ -1416,18 +1429,34 @@ mod mmr_membership_proof_test {
         // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
         // to me so far.
-        type H = RescuePrimeRegular;
+        type H = Tip5;
 
         let leaf_hashes: Vec<Digest> = random_elements(3);
-        let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+        let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
-        let mp: MmrMembershipProof<RescuePrimeRegular> = archival_mmr.prove_membership(1).0;
+        let mp: MmrMembershipProof<H> = archival_mmr.prove_membership(1).0;
         let json = serde_json::to_string(&mp).unwrap();
-        let s_back = serde_json::from_str::<MmrMembershipProof<RescuePrimeRegular>>(&json).unwrap();
+        let s_back = serde_json::from_str::<MmrMembershipProof<H>>(&json).unwrap();
         assert!(
             s_back
                 .verify(&archival_mmr.get_peaks(), &leaf_hashes[1], 3)
                 .0
         );
+    }
+
+    #[test]
+    fn test_decode_mmr_membership_proof() {
+        let mut rng = thread_rng();
+        type H = Tip5;
+        for _ in 0..100 {
+            let num_leafs = 2 + (rng.next_u32() as usize % 1000);
+            let leaf_hashes = random_elements(num_leafs);
+            let archival_mmr = get_rustyleveldb_ammr_from_digests::<H>(leaf_hashes);
+            let leaf_index = (rng.next_u32() as usize % num_leafs) as u64;
+            let mp = archival_mmr.prove_membership(leaf_index).0;
+            let mp_encoded = mp.encode();
+            let mp_decoded = *MmrMembershipProof::decode(&mp_encoded).unwrap();
+            assert_eq!(mp, mp_decoded);
+        }
     }
 }

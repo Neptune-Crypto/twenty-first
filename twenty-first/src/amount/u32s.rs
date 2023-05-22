@@ -3,7 +3,9 @@ use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Rem, Sub};
 
+use anyhow::bail;
 use get_size::GetSize;
+use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use rand::Rng;
@@ -13,7 +15,7 @@ use serde_big_array::BigArray;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::util_types::algebraic_hasher::Hashable;
+use crate::shared_math::bfield_codec::BFieldCodec;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, GetSize)]
 pub struct U32s<const N: usize> {
@@ -324,21 +326,47 @@ impl<const N: usize> TryFrom<u64> for U32s<N> {
     }
 }
 
+impl<const N: usize> TryFrom<u128> for U32s<N> {
+    type Error = &'static str;
+
+    fn try_from(value: u128) -> Result<Self, Self::Error> {
+        if N < 4 {
+            return Err("U32s<{N}>, N<=3 may not be big enough to hold a u128");
+        }
+        Ok(U32s::<N>::from(BigUint::from(value)))
+    }
+}
+
 impl<const N: usize> Display for U32s<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", BigUint::from(*self))
     }
 }
 
-impl<const N: usize> Hashable for U32s<N> {
-    fn to_sequence(&self) -> Vec<BFieldElement> {
+impl<const N: usize> BFieldCodec for U32s<N> {
+    fn encode(&self) -> Vec<BFieldElement> {
         self.values.into_iter().map(BFieldElement::from).collect()
+    }
+
+    fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
+        match sequence
+            .iter()
+            .map(|b| b.value() as u32)
+            .collect_vec()
+            .try_into()
+        {
+            Ok(array) => Ok(Box::new(U32s::<N>::new(array))),
+            Err(e) => bail!(
+                "Cannot decode sequence of BFieldElements to U32s<{N}>: {:?}",
+                e
+            ),
+        }
     }
 }
 
 #[cfg(test)]
 mod u32s_tests {
-    use rand::Rng;
+    use rand::{thread_rng, Rng, RngCore};
 
     use crate::shared_math::other::random_elements;
 
@@ -364,6 +392,17 @@ mod u32s_tests {
         assert_eq!(9999485u32, a.values[0]);
         for i in 1..4 {
             assert!(a.values[i].is_zero());
+        }
+    }
+
+    #[test]
+    fn u128_conversion_test() {
+        let mut rng = thread_rng();
+        for _ in 0..100 {
+            let a_as_u128: u128 = (rng.next_u64() as u128) << 64 | rng.next_u64() as u128;
+            let a: U32s<4> = a_as_u128.try_into().unwrap();
+            let a_as_biguint: BigUint = a_as_u128.into();
+            assert_eq!(a, TryInto::<U32s<4>>::try_into(a_as_biguint).unwrap());
         }
     }
 

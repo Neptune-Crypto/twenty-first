@@ -189,7 +189,7 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
     }
 
     /// Return (membership_proof, peaks)
-    pub fn prove_membership(&mut self, leaf_index: u64) -> (MmrMembershipProof<H>, Vec<Digest>) {
+    pub fn prove_membership(&self, leaf_index: u64) -> (MmrMembershipProof<H>, Vec<Digest>) {
         // A proof consists of an authentication path
         // and a list of peaks
         assert!(
@@ -371,7 +371,7 @@ mod mmr_test {
         assert!(archival_mmr.is_empty());
 
         // Test behavior of appending to an empty MMR
-        let new_leaf = H::hash(&0xbeefu64);
+        let new_leaf = random();
 
         let mut archival_mmr_appended = get_empty_rustyleveldb_ammr();
         {
@@ -434,7 +434,7 @@ mod mmr_test {
         let leaf_hashes: Vec<Digest> = random_elements(3);
 
         // let archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
-        let mut archival_mmr = get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        let archival_mmr = get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
         let (mut membership_proof, peaks): (MmrMembershipProof<H>, Vec<Digest>) =
             archival_mmr.prove_membership(0);
 
@@ -573,7 +573,7 @@ mod mmr_test {
         // Verify that upating leafs in archival and in accumulator MMR results in the same peaks
         // and verify that updating all leafs in an MMR results in the expected MMR
         for size in 1..150 {
-            let new_leaf: Digest = H::hash(&314159265358979u64);
+            let new_leaf: Digest = random();
             let leaf_hashes_blake3: Vec<Digest> = random_elements(size);
 
             let mut acc = MmrAccumulator::<H>::new(leaf_hashes_blake3.clone());
@@ -600,8 +600,8 @@ mod mmr_test {
         type H = blake3::Hasher;
 
         for size in 1..150 {
-            let new_leaf: Digest = H::hash(&314159265358979u128);
-            let bad_leaf: Digest = H::hash(&27182818284590452353u128);
+            let new_leaf: Digest = random();
+            let bad_leaf: Digest = random();
             let leaf_hashes_blake3: Vec<Digest> = random_elements(size);
             let mut acc = MmrAccumulator::<H>::new(leaf_hashes_blake3.clone());
             let mut archival: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
@@ -708,7 +708,7 @@ mod mmr_test {
             get_rustyleveldb_ammr_from_digests(vec![input_hash]);
         let original_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(vec![input_hash]);
-        let mut mmr_after_append: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+        let mmr_after_append: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
             get_rustyleveldb_ammr_from_digests(vec![input_hash, new_input_hash]);
         assert_eq!(1, mmr.count_leaves());
         assert_eq!(1, mmr.count_nodes());
@@ -991,7 +991,7 @@ mod mmr_test {
                 assert!(valid_res.0);
                 assert!(valid_res.1.is_some());
 
-                let new_leaf: Digest = H::hash(&98723u128);
+                let new_leaf: Digest = random();
 
                 // The below verify_modify tests should only fail if `wrong_leaf_index` is
                 // different than `leaf_index`.
@@ -1019,7 +1019,7 @@ mod mmr_test {
             }
 
             // Make a new MMR where we append with a value and run the verify_append
-            let new_leaf_hash: Digest = H::hash(&519u128);
+            let new_leaf_hash: Digest = random();
             mmr.append(new_leaf_hash);
             assert!(mmr_original.verify_batch_update(&mmr.get_peaks(), &[new_leaf_hash], &[]));
         }
