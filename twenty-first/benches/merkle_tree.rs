@@ -2,11 +2,12 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::time::Duration;
 use twenty_first::shared_math::digest::Digest;
 use twenty_first::shared_math::other::random_elements;
-use twenty_first::shared_math::rescue_prime_regular::RescuePrimeRegular;
+use twenty_first::shared_math::tip5::Tip5;
 use twenty_first::util_types::merkle_tree::{CpuParallel, MerkleTree};
 use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
 
 fn merkle_tree(c: &mut Criterion) {
+    type H = Tip5;
     let mut group = c.benchmark_group("merkle_tree");
 
     let exponent = 16;
@@ -17,9 +18,7 @@ fn merkle_tree(c: &mut Criterion) {
     let elements: Vec<Digest> = random_elements(size);
 
     group.bench_function(BenchmarkId::new("merkle_tree", size), |bencher| {
-        bencher.iter(|| -> MerkleTree<RescuePrimeRegular> {
-            CpuParallel::from_digests(&elements[..])
-        });
+        bencher.iter(|| -> MerkleTree<H> { CpuParallel::from_digests(&elements[..]) });
     });
 }
 

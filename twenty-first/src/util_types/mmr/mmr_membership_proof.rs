@@ -609,7 +609,6 @@ mod mmr_membership_proof_test {
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::Digest;
     use crate::shared_math::other::random_elements;
-    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::shared_math::tip5::Tip5;
     use crate::test_shared::mmr::get_rustyleveldb_ammr_from_digests;
     use crate::util_types::mmr::archival_mmr::ArchivalMmr;
@@ -1368,25 +1367,22 @@ mod mmr_membership_proof_test {
     }
 
     #[test]
-    fn update_membership_proof_from_append_big_rescue_prime() {
-        type H = RescuePrimeRegular;
+    fn update_membership_proof_from_append_big_tip5() {
+        type H = Tip5;
 
         // Build MMR from leaf count 0 to 9, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an
         // append update.
         for leaf_count in 0..9 {
             let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
-            // let archival_mmr = ArchivalMmr::<RescuePrimeRegular>::new(leaf_hashes.clone());
             let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
                 get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
             let new_leaf = H::hash(&BFieldElement::new(13333337));
             for i in 0..leaf_count {
                 let leaf_index = i as u64;
                 let leaf_count_index = leaf_count as u64;
-                let (original_membership_proof, old_peaks): (
-                    MmrMembershipProof<RescuePrimeRegular>,
-                    Vec<Digest>,
-                ) = archival_mmr.prove_membership(leaf_index);
+                let (original_membership_proof, old_peaks): (MmrMembershipProof<H>, Vec<Digest>) =
+                    archival_mmr.prove_membership(leaf_index);
                 let mut appended_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
                     get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
                 appended_archival_mmr.append(new_leaf);

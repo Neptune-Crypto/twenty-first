@@ -308,7 +308,7 @@ mod accumulator_mmr_tests {
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::{random_elements, random_elements_range};
-    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
+    use crate::shared_math::tip5::Tip5;
     use crate::test_shared::mmr::get_rustyleveldb_ammr_from_digests;
     use crate::util_types::storage_vec::RustyLevelDbVec;
 
@@ -666,7 +666,7 @@ mod accumulator_mmr_tests {
         // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
         // to me so far.
-        type H = RescuePrimeRegular;
+        type H = Tip5;
         type Mmr = MmrAccumulator<H>;
         let mut mmra: Mmr = MmrAccumulator::new(vec![]);
         mmra.append(H::hash(&BFieldElement::zero()));
@@ -679,7 +679,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn get_size_test() {
-        type H = RescuePrimeRegular;
+        type H = Tip5;
         type Mmr = MmrAccumulator<H>;
 
         // 10 digests produces an MMRA with two peaks

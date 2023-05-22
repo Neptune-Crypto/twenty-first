@@ -110,7 +110,7 @@ mod proof_stream_typed_tests {
     use super::*;
     use crate::shared_math::{
         b_field_element::BFieldElement,
-        rescue_prime_regular::RescuePrimeRegular,
+        tip5::Tip5,
         x_field_element::{XFieldElement, EXTENSION_DEGREE},
     };
 
@@ -161,8 +161,9 @@ mod proof_stream_typed_tests {
 
     #[test]
     fn enqueue_dequeue_test() {
-        let mut proof_stream = ProofStream::<TestItem, RescuePrimeRegular>::default();
-        let ps: &mut ProofStream<TestItem, RescuePrimeRegular> = &mut proof_stream;
+        type H = Tip5;
+        let mut proof_stream = ProofStream::<TestItem, H>::default();
+        let ps: &mut ProofStream<TestItem, H> = &mut proof_stream;
 
         // Empty
 
@@ -213,7 +214,7 @@ mod proof_stream_typed_tests {
     // Property: prover_fiat_shamir() is equivalent to verifier_fiat_shamir() when the entire stream has been read.
     #[test]
     fn prover_verifier_fiat_shamir_test() {
-        type H = RescuePrimeRegular;
+        type H = Tip5;
         let mut proof_stream = ProofStream::<TestItem, H>::default();
         let ps: &mut ProofStream<TestItem, H> = &mut proof_stream;
 

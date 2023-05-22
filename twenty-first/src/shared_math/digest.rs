@@ -240,11 +240,11 @@ mod digest_tests {
             BFieldElement::new(48),
             BFieldElement::new(60),
         ];
-        let rescue_prime_digest_type_from_array: Digest = bfe_vec.try_into().unwrap();
+        let tip5_digest_type_from_array: Digest = bfe_vec.try_into().unwrap();
 
-        let heap = rescue_prime_digest_type_from_array.get_heap_size();
+        let heap = tip5_digest_type_from_array.get_heap_size();
 
-        let total = rescue_prime_digest_type_from_array.get_size();
+        let total = tip5_digest_type_from_array.get_size();
 
         println!("stack: {stack} + heap: {heap} = {total}");
 
