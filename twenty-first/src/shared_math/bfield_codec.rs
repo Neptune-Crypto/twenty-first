@@ -534,6 +534,22 @@ impl BFieldCodec for u32 {
     }
 }
 
+/// Decode a single field of a struct, assuming its length is prepended.
+/// Return the remaining sequence.
+pub fn decode_field_length_prepended<T: BFieldCodec>(
+    sequence: &[BFieldElement],
+) -> Result<(T, Vec<BFieldElement>)> {
+    if sequence.is_empty() {
+        bail!("Cannot decode field: sequence is empty.");
+    }
+    let len = sequence[0].value() as usize;
+    if sequence.len() < 1 + len {
+        bail!("Cannot decode field: sequence too short.");
+    }
+    let decoded = *T::decode(&sequence[1..1 + len])?;
+    Ok((decoded, sequence[1 + len..].to_vec()))
+}
+
 #[cfg(test)]
 mod bfield_codec_tests {
     use itertools::Itertools;
