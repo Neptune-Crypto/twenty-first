@@ -1,3 +1,4 @@
+use anyhow::bail;
 use get_size::GetSize;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
@@ -7,6 +8,8 @@ use super::archival_mmr::ArchivalMmr;
 use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::shared_basic;
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::bfield_codec::{decode_field_length_prepended, BFieldCodec};
 use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::mmr::shared_advanced;
@@ -298,13 +301,43 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
     }
 }
 
+impl<H: AlgebraicHasher> BFieldCodec for MmrAccumulator<H> {
+    fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
+        let (leaf_count, sequence) = decode_field_length_prepended(sequence)?;
+        let (peaks, sequence) = decode_field_length_prepended(&sequence)?;
+        if !sequence.is_empty() {
+            bail!("After decoding sequence of BFieldElements as MmrAccumulator, sequence should be empty!");
+        }
+
+        Ok(Box::new(MmrAccumulator {
+            leaf_count,
+            peaks,
+            _hasher: PhantomData,
+        }))
+    }
+
+    fn encode(&self) -> Vec<crate::shared_math::b_field_element::BFieldElement> {
+        let leaf_count_encoded = self.leaf_count.encode();
+        let leaf_count_len = BFieldElement::new(leaf_count_encoded.len() as u64);
+        let peaks_encoded = self.peaks.encode();
+        let peaks_len = BFieldElement::new(peaks_encoded.len() as u64);
+        [
+            vec![leaf_count_len],
+            leaf_count_encoded,
+            vec![peaks_len],
+            peaks_encoded,
+        ]
+        .concat()
+    }
+}
+
 #[cfg(test)]
 mod accumulator_mmr_tests {
     use std::cmp;
 
     use itertools::{izip, Itertools};
     use num_traits::Zero;
-    use rand::{random, Rng};
+    use rand::{random, thread_rng, Rng, RngCore};
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::{random_elements, random_elements_range};
@@ -696,5 +729,18 @@ mod accumulator_mmr_tests {
         // So the number was just increased to 100.
         // See: https://github.com/Neptune-Crypto/twenty-first/actions/runs/4928129170/jobs/8806086355
         assert!(mmra.get_size() < 100 * std::mem::size_of::<Digest>());
+    }
+
+    #[test]
+    fn test_mmr_accumulator_decode() {
+        type H = Tip5;
+        for _ in 0..100 {
+            let num_leafs = (thread_rng().next_u32() % 100) as usize;
+            let leafs: Vec<Digest> = random_elements(num_leafs);
+            let mmra = MmrAccumulator::<H>::new(leafs);
+            let encoded = mmra.encode();
+            let decoded = *MmrAccumulator::decode(&encoded).unwrap();
+            assert_eq!(mmra, decoded);
+        }
     }
 }
