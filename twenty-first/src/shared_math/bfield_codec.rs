@@ -565,6 +565,21 @@ pub fn decode_field_length_prepended<T: BFieldCodec>(
     Ok((decoded, sequence[1 + len..].to_vec()))
 }
 
+/// Decode a vector of some struct, assuming the length of the encoding is prepended. Return the remaining sequence.
+pub fn decode_vec_length_prepended<T: BFieldCodec>(
+    sequence: &[BFieldElement],
+) -> Result<(Vec<T>, Vec<BFieldElement>)> {
+    if sequence.is_empty() {
+        bail!("Cannot decode vec: sequence is empty.");
+    }
+    let len = sequence[0].value() as usize;
+    if sequence.len() < 1 + len {
+        bail!("Cannot decode vec: sequence too short.");
+    }
+    let decoded: Vec<T> = *decode_vec(&sequence[1..1 + len])?;
+    Ok((decoded, sequence[1 + len..].to_vec()))
+}
+
 #[cfg(test)]
 mod bfield_codec_tests {
     use itertools::Itertools;
