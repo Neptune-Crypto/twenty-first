@@ -26,5 +26,11 @@ pub mod tests {
         let encoded = ts.encode();
         let decoded = *TestStructA::decode(&encoded).unwrap();
         assert_eq!(ts, decoded);
+
+        let encoded_too_long = vec![encoded, vec![BFieldElement::new(5)]].concat();
+        assert!(TestStructA::decode(&encoded_too_long).is_err());
+
+        let encoded_too_short = encoded_too_long[..encoded_too_long.len() - 2].to_vec();
+        assert!(TestStructA::decode(&encoded_too_short).is_err());
     }
 }
