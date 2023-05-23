@@ -5,7 +5,6 @@ use std::ops::{Add, Div, Mul, Rem, Sub};
 
 use anyhow::bail;
 use get_size::GetSize;
-use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use rand::Rng;
@@ -345,28 +344,25 @@ impl<const N: usize> Display for U32s<N> {
 
 impl<const N: usize> BFieldCodec for U32s<N> {
     fn encode(&self) -> Vec<BFieldElement> {
-        self.values.into_iter().map(BFieldElement::from).collect()
+        self.values.into_iter().flat_map(|v| v.encode()).collect()
     }
 
     fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
-        match sequence
-            .iter()
-            .map(|b| b.value() as u32)
-            .collect_vec()
-            .try_into()
-        {
-            Ok(array) => Ok(Box::new(U32s::<N>::new(array))),
-            Err(e) => bail!(
-                "Cannot decode sequence of BFieldElements to U32s<{N}>: {:?}",
-                e
-            ),
+        if sequence.len() != N {
+            bail!("Failed to decode {sequence:?} into U32s<{N}>. Bad length.");
         }
+
+        let mut array: [u32; N] = [0u32; N];
+        for i in 0..N {
+            array[i] = *u32::decode(&sequence[i..i + 1])?;
+        }
+        Ok(Box::new(Self::new(array)))
     }
 }
 
 #[cfg(test)]
 mod u32s_tests {
-    use rand::{thread_rng, Rng, RngCore};
+    use rand::{random, thread_rng, Rng, RngCore};
 
     use crate::shared_math::other::random_elements;
 
@@ -793,5 +789,14 @@ mod u32s_tests {
         let u32_max_actual = U32s::<5>::from(u32::MAX);
         let u32_max_expected = U32s::<5>::new([u32::MAX, 0, 0, 0, 0]);
         assert_eq!(u32_max_actual, u32_max_expected);
+    }
+
+    #[test]
+    fn test_u32s_codec() {
+        let array: [u32; 5] = random();
+        let u32s = U32s::new(array);
+        let encoded = u32s.encode();
+        let decoded: U32s<5> = *U32s::decode(&encoded).unwrap();
+        assert_eq!(u32s, decoded);
     }
 }
