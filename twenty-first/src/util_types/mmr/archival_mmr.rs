@@ -324,7 +324,7 @@ mod mmr_test {
 
     use super::*;
     use crate::shared_math::other::random_elements;
-    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
+    use crate::shared_math::tip5::Tip5;
     use crate::test_shared::mmr::{
         get_empty_rustyleveldb_ammr, get_rustyleveldb_ammr_from_digests,
     };
@@ -470,7 +470,7 @@ mod mmr_test {
 
     #[test]
     fn mutate_leaf_archival_test() {
-        type H = RescuePrimeRegular;
+        type H = Tip5;
 
         // Create ArchivalMmr
 
@@ -563,7 +563,7 @@ mod mmr_test {
     #[test]
     fn bag_peaks_blake3_test() {
         bag_peaks_gen::<blake3::Hasher>();
-        bag_peaks_gen::<RescuePrimeRegular>();
+        bag_peaks_gen::<Tip5>();
     }
 
     #[test]
@@ -700,7 +700,7 @@ mod mmr_test {
 
     #[test]
     fn one_input_mmr_test() {
-        type H = RescuePrimeRegular;
+        type H = Tip5;
 
         let input_hash = H::hash(&BFieldElement::new(14));
         let new_input_hash = H::hash(&BFieldElement::new(201));
@@ -766,7 +766,7 @@ mod mmr_test {
 
     #[test]
     fn two_input_mmr_test() {
-        type H = RescuePrimeRegular;
+        type H = Tip5;
 
         let num_leaves: u64 = 3;
         let input_digests: Vec<Digest> = random_elements(num_leaves as usize);
@@ -817,8 +817,8 @@ mod mmr_test {
     }
 
     #[test]
-    fn variable_size_rescue_prime_mmr_test() {
-        type H = RescuePrimeRegular;
+    fn variable_size_tip5_mmr_test() {
+        type H = Tip5;
         type MT = MerkleTree<H>;
 
         let leaf_counts: Vec<u64> = (1..34).collect();

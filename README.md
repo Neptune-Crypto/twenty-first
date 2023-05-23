@@ -11,10 +11,6 @@ This library contains primarily the following cryptographic primitives:
 
 - The Tip5 hash function
   - [The Tip5 Hash Function for Recursive STARKs](https://eprint.iacr.org/2023/107)
-- The Rescue-Prime hash function
-  - An arithmetization-oriented hash function with a compact description in terms of AIR
-  - [Rescue-Prime: a Standard Specification (SoK)](https://eprint.iacr.org/2020/1143.pdf)
-  - [Anatomy of a STARK, Part 5: A Rescue-Prime STARK](https://neptune.cash/learn/stark-anatomy/rescue-prime/)
 - Lattice-crypto
   - arithmetic for the quotient ring $\mathbb{F}_ p[X] / \langle X^{64} + 1 \rangle$
   - arithmetic for modules over this quotient ring

@@ -402,11 +402,6 @@ impl New for BFieldElement {
 // This is used for: Convert a hash value to a BFieldElement. Consider making From<Blake3Hash> trait
 impl FromVecu8 for BFieldElement {
     fn from_vecu8(bytes: Vec<u8>) -> Self {
-        // TODO: Right now we only accept if 'bytes' has 8 bytes; while that is true in
-        // the single call site this is used, it also seems unnecessarily fragile (when we
-        // change from BLAKE3 to Rescue-Prime, the hash length will change and this will be
-        // be wrong). We should make this a From<Blake3Hash> to ensure that it has the right
-        // length.
         let (eight_bytes, _rest) = bytes.as_slice().split_at(std::mem::size_of::<u64>());
         let coerced: [u8; 8] = eight_bytes.try_into().unwrap();
         coerced.into()

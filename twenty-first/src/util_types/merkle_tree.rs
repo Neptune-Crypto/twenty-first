@@ -506,7 +506,6 @@ mod merkle_tree_test {
     use crate::shared_math::other::{
         random_elements, random_elements_distinct_range, random_elements_range,
     };
-    use crate::shared_math::rescue_prime_regular::RescuePrimeRegular;
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::test_shared::corrupt_digest;
@@ -918,7 +917,7 @@ mod merkle_tree_test {
         ```
         */
 
-        type H = RescuePrimeRegular;
+        type H = Tip5;
         type M = CpuParallel;
         type MT = MerkleTree<H>;
 
@@ -968,7 +967,7 @@ mod merkle_tree_test {
     fn verify_some_payload() {
         /// This tests that we do not confuse indices and payloads in the test `verify_all_leaves_individually`.
 
-        type H = RescuePrimeRegular;
+        type H = Tip5;
         type M = CpuParallel;
         type MT = MerkleTree<H>;
 
@@ -1024,7 +1023,7 @@ mod merkle_tree_test {
 
     #[test]
     fn root_from_odd_number_of_digests_test() {
-        type H = RescuePrimeRegular;
+        type H = Tip5;
         type M = CpuParallel;
         type MT = MerkleTree<H>;
 
@@ -1045,7 +1044,7 @@ mod merkle_tree_test {
         // This is needed since a block can contain an empty list of addition or
         // removal records.
 
-        type H = RescuePrimeRegular;
+        type H = Tip5;
         type MT = MerkleTree<H>;
 
         MT::root_from_arbitrary_number_of_digests(&[]);
