@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use anyhow::bail;
 use anyhow::Result;
 use itertools::Itertools;
@@ -430,6 +432,19 @@ pub fn encode_vec<T: BFieldCodec>(vector: &[T]) -> Vec<BFieldElement> {
     }
     sequence[0] = BFieldElement::new(sequence.len() as u64 - 1);
     sequence
+}
+
+impl<T> BFieldCodec for PhantomData<T> {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if !sequence.is_empty() {
+            bail!("Cannot decode non-empty BFE slice as phantom data")
+        }
+        Ok(Box::new(PhantomData))
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        vec![]
+    }
 }
 
 impl BFieldCodec for u128 {
