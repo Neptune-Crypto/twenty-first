@@ -69,9 +69,22 @@ fn impl_bfieldcodec_macro(ast: &syn::DeriveInput) -> TokenStream {
             .clone()
             .zip(&field_vars)
             .map(|(ty, var)| {
-                quote! {
-                    let (field_value, sequence) = decode_field_length_prepended::<#ty>(&sequence)?;
-                    let #var = field_value;
+                let is_vec = if let syn::Type::Path(type_path) = ty {
+                    type_path.path.segments.last().unwrap().ident == "Vec"
+                } else {
+                    false
+                };
+
+                if is_vec {
+                    quote! {
+                        let (field_value, sequence) = decode_vec_length_prepended::<#ty>(&sequence)?;
+                        let #var = field_value;
+                    }
+                } else {
+                    quote! {
+                        let (field_value, sequence) = decode_field_length_prepended::<#ty>(&sequence)?;
+                        let #var = field_value;
+                    }
                 }
             })
             .collect();

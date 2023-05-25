@@ -941,20 +941,25 @@ struct DeriveTestStructB(u128);
 #[derive(BFieldCodec, PartialEq, Eq, Debug)]
 struct DeriveTestStructC(u128, u64, u32);
 
+// Struct containing Vec<T> where T is BFieldCodec
+#[derive(BFieldCodec, PartialEq, Eq, Debug)]
+struct DeriveTestStructD(Vec<u128>);
+
 #[cfg(test)]
 pub mod derive_tests {
     // Since we cannot use the derive macro in the same crate where it is defined,
     // we test the macro here instead.
 
+    use rand::{random, thread_rng, Rng};
+
+    use crate::shared_math::other::random_elements;
+
     use super::*;
 
     fn prop<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(value: T) {
         let encoded = value.encode();
-        println!("encoded: {encoded:?}");
         let decoded = T::decode(&encoded);
-        println!("decode retuned: {:?}", decoded);
         let decoded = decoded.unwrap();
-        println!("after unwrapping: {:?}", decoded);
         assert_eq!(value, *decoded);
 
         let encoded_too_long = vec![encoded, vec![BFieldElement::new(5)]].concat();
@@ -981,5 +986,23 @@ pub mod derive_tests {
     #[test]
     fn simple_struct_with_unnamed_fields() {
         prop(DeriveTestStructC(127 << 100, 14, 1000));
+    }
+
+    #[test]
+    fn simple_struct_with_named_ved_fields() {
+        // prop(DeriveTestStructC(127 << 100, 14, 1000));
+        fn random_struct() -> DeriveTestStructD {
+            let mut rng = thread_rng();
+            let length_a: usize = rng.gen_range(0..10);
+            let length_c: usize = rng.gen_range(0..20);
+            DeriveTestStructD {
+                field_a: random_elements(length_a),
+                field_b: random(),
+                field_c: random_elements(length_c),
+            }
+        }
+        for _ in 0..10 {
+            prop(random_struct());
+        }
     }
 }
