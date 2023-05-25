@@ -23,7 +23,10 @@ fn struct_with_named_fields(
     quote::__private::TokenStream,
 ) {
     let fields: Vec<_> = fields.named.iter().collect();
-    let field_names: Vec<_> = fields.iter().map(|field| &field.ident).collect();
+    let field_names: Vec<_> = fields
+        .iter()
+        .map(|field| field.ident.as_ref().unwrap().to_owned())
+        .collect();
 
     let field_types = fields.iter().map(|field| &field.ty);
 
@@ -59,27 +62,7 @@ fn struct_with_named_fields(
     let decode_statements: Vec<_> = field_types
         .clone()
         .zip(&field_names)
-        .map(|(ftype, fname)| {
-            let vec_element_type = if let syn::Type::Path(type_path) = ftype {
-                get_vec_element_type(type_path)
-            } else {
-                None
-            };
-
-            match vec_element_type {
-                Some(element_type) => {
-                    quote! {
-                        let (field_value, sequence) = decode_vec_length_prepended::<#element_type>(&sequence)?;
-                        let #fname = field_value;
-                        }
-                },
-                None => {
-                    quote! {
-                        let (#fname, sequence) = decode_field_length_prepended::<#ftype>(&sequence)?;
-                    }
-                },
-            }
-        })
+        .map(|(ftype, fname)| generate_decode_statement(fname, ftype))
         .collect();
 
     let value_constructor = quote! { Self { #(#field_names,)* } };
@@ -108,6 +91,32 @@ fn get_vec_element_type(type_path: &TypePath) -> Option<Type> {
     }
 }
 
+fn generate_decode_statement(
+    field_name: &syn::Ident,
+    field_type: &syn::Type,
+) -> quote::__private::TokenStream {
+    let vec_element_type = if let syn::Type::Path(type_path) = field_type {
+        get_vec_element_type(type_path)
+    } else {
+        None
+    };
+
+    match vec_element_type {
+        Some(element_type) => {
+            quote! {
+            let (field_value, sequence) = decode_vec_length_prepended::<#element_type>(&sequence)?;
+            let #field_name = field_value;
+            }
+        }
+        None => {
+            quote! {
+                let (field_value, sequence) = decode_field_length_prepended::<#field_type>(&sequence)?;
+                let #field_name = field_value;
+            }
+        }
+    }
+}
+
 fn struct_with_unnamed_fields(
     fields: &syn::FieldsUnnamed,
 ) -> (
@@ -128,28 +137,7 @@ fn struct_with_unnamed_fields(
     let decode_statements: Vec<_> = field_types
         .clone()
         .zip(&field_names)
-        .map(|(ty, var)| {
-            let vec_element_type = if let syn::Type::Path(type_path) = ty {
-                get_vec_element_type(type_path)
-                } else {
-                    None
-                };
-
-            match vec_element_type {
-                Some(element_type) => {
-                    quote! {
-                    let (field_value, sequence) = decode_vec_length_prepended::<#element_type>(&sequence)?;
-                    let #var = field_value;
-                    }
-                },
-                None => {
-                        quote! {
-                    let (field_value, sequence) = decode_field_length_prepended::<#ty>(&sequence)?;
-                    let #var = field_value;
-                }
-                },
-            }
-        })
+        .map(|(ty, var)| generate_decode_statement(var, ty))
         .collect();
 
     let encode_statements: Vec<_> = field_types
