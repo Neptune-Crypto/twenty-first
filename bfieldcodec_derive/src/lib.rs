@@ -15,6 +15,44 @@ pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
     impl_bfieldcodec_macro(&ast)
 }
 
+fn impl_bfieldcodec_macro(ast: &syn::DeriveInput) -> TokenStream {
+    let (decode_statements, encode_statements, value_constructor) = match &ast.data {
+        syn::Data::Struct(syn::DataStruct {
+            fields: syn::Fields::Named(fields),
+            ..
+        }) => struct_with_named_fields(fields),
+        syn::Data::Struct(syn::DataStruct {
+            fields: syn::Fields::Unnamed(fields),
+            ..
+        }) => struct_with_unnamed_fields(fields),
+        _ => panic!("expected a struct with named fields"),
+    };
+
+    let name = &ast.ident;
+    let gen = quote! {
+        impl BFieldCodec for #name {
+            fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
+                let mut sequence = sequence.to_vec();
+                #(#decode_statements)*
+
+                if !sequence.is_empty() {
+                    anyhow::bail!("Failed to decode {}", stringify!(#name));
+                }
+
+                Ok(Box::new(#value_constructor))
+            }
+
+            fn encode(&self) -> Vec<BFieldElement> {
+                let mut elements = Vec::new();
+                #(#encode_statements)*
+                elements
+            }
+        }
+    };
+
+    gen.into()
+}
+
 fn struct_with_named_fields(
     fields: &syn::FieldsNamed,
 ) -> (
@@ -68,53 +106,6 @@ fn struct_with_named_fields(
     let value_constructor = quote! { Self { #(#field_names,)* } };
 
     (decode_statements, encode_statements, value_constructor)
-}
-
-fn get_vec_element_type(type_path: &TypePath) -> Option<Type> {
-    let is_vec = type_path.path.segments.last().unwrap().ident == "Vec";
-    if is_vec {
-        let path_args = type_path.path.segments[0].arguments.clone();
-        let element_type = match path_args {
-            syn::PathArguments::None => todo!(),
-            syn::PathArguments::AngleBracketed(ab) => {
-                assert_eq!(1, ab.args.len());
-                match &ab.args[0] {
-                    syn::GenericArgument::Type(ty) => ty.to_owned(),
-                    _ => todo!(),
-                }
-            }
-            syn::PathArguments::Parenthesized(_) => todo!(),
-        };
-        Some(element_type)
-    } else {
-        None
-    }
-}
-
-fn generate_decode_statement(
-    field_name: &syn::Ident,
-    field_type: &syn::Type,
-) -> quote::__private::TokenStream {
-    let vec_element_type = if let syn::Type::Path(type_path) = field_type {
-        get_vec_element_type(type_path)
-    } else {
-        None
-    };
-
-    match vec_element_type {
-        Some(element_type) => {
-            quote! {
-            let (field_value, sequence) = decode_vec_length_prepended::<#element_type>(&sequence)?;
-            let #field_name = field_value;
-            }
-        }
-        None => {
-            quote! {
-                let (field_value, sequence) = decode_field_length_prepended::<#field_type>(&sequence)?;
-                let #field_name = field_value;
-            }
-        }
-    }
 }
 
 fn struct_with_unnamed_fields(
@@ -172,40 +163,49 @@ fn struct_with_unnamed_fields(
     (decode_statements, encode_statements, value_constructor)
 }
 
-fn impl_bfieldcodec_macro(ast: &syn::DeriveInput) -> TokenStream {
-    let (decode_statements, encode_statements, value_constructor) = match &ast.data {
-        syn::Data::Struct(syn::DataStruct {
-            fields: syn::Fields::Named(fields),
-            ..
-        }) => struct_with_named_fields(fields),
-        syn::Data::Struct(syn::DataStruct {
-            fields: syn::Fields::Unnamed(fields),
-            ..
-        }) => struct_with_unnamed_fields(fields),
-        _ => panic!("expected a struct with named fields"),
+fn get_vec_element_type(type_path: &TypePath) -> Option<Type> {
+    let is_vec = type_path.path.segments.last().unwrap().ident == "Vec";
+    if is_vec {
+        let path_args = type_path.path.segments[0].arguments.clone();
+        let element_type = match path_args {
+            syn::PathArguments::None => todo!(),
+            syn::PathArguments::AngleBracketed(ab) => {
+                assert_eq!(1, ab.args.len());
+                match &ab.args[0] {
+                    syn::GenericArgument::Type(ty) => ty.to_owned(),
+                    _ => todo!(),
+                }
+            }
+            syn::PathArguments::Parenthesized(_) => todo!(),
+        };
+        Some(element_type)
+    } else {
+        None
+    }
+}
+
+fn generate_decode_statement(
+    field_name: &syn::Ident,
+    field_type: &syn::Type,
+) -> quote::__private::TokenStream {
+    let vec_element_type = if let syn::Type::Path(type_path) = field_type {
+        get_vec_element_type(type_path)
+    } else {
+        None
     };
 
-    let name = &ast.ident;
-    let gen = quote! {
-        impl BFieldCodec for #name {
-            fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
-                let mut sequence = sequence.to_vec();
-                #(#decode_statements)*
-
-                if !sequence.is_empty() {
-                    anyhow::bail!("Failed to decode {}", stringify!(#name));
-                }
-
-                Ok(Box::new(#value_constructor))
-            }
-
-            fn encode(&self) -> Vec<BFieldElement> {
-                let mut elements = Vec::new();
-                #(#encode_statements)*
-                elements
+    match vec_element_type {
+        Some(element_type) => {
+            quote! {
+            let (field_value, sequence) = decode_vec_length_prepended::<#element_type>(&sequence)?;
+            let #field_name = field_value;
             }
         }
-    };
-
-    gen.into()
+        None => {
+            quote! {
+                let (field_value, sequence) = decode_field_length_prepended::<#field_type>(&sequence)?;
+                let #field_name = field_value;
+            }
+        }
+    }
 }
