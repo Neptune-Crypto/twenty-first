@@ -2,6 +2,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::{Type, TypePath};
 
 #[proc_macro_derive(BFieldCodec)]
 pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
@@ -52,6 +53,27 @@ fn struct_with_named_fields(
     (decode_statements, encode_statements, value_constructor)
 }
 
+fn get_vec_element_type(type_path: &TypePath) -> Option<Type> {
+    let is_vec = type_path.path.segments.last().unwrap().ident == "Vec";
+    if is_vec {
+        let path_args = type_path.path.segments[0].arguments.clone();
+        let element_type = match path_args {
+            syn::PathArguments::None => todo!(),
+            syn::PathArguments::AngleBracketed(ab) => {
+                assert_eq!(1, ab.args.len());
+                match &ab.args[0] {
+                    syn::GenericArgument::Type(ty) => ty.to_owned(),
+                    _ => todo!(),
+                }
+            }
+            syn::PathArguments::Parenthesized(_) => todo!(),
+        };
+        Some(element_type)
+    } else {
+        None
+    }
+}
+
 fn struct_with_unnamed_fields(
     fields: &syn::FieldsUnnamed,
 ) -> (
@@ -73,34 +95,52 @@ fn struct_with_unnamed_fields(
         .clone()
         .zip(&field_names)
         .map(|(ty, var)| {
-            let is_vec = if let syn::Type::Path(type_path) = ty {
-                type_path.path.segments.last().unwrap().ident == "Vec"
-            } else {
-                false
-            };
+            let vec_element_type = if let syn::Type::Path(type_path) = ty {
+                get_vec_element_type(type_path)
+                } else {
+                    None
+                };
 
-            if is_vec {
-                quote! {
-                    let (field_value, sequence) = decode_vec_length_prepended::<#ty>(&sequence)?;
+            match vec_element_type {
+                Some(element_type) => {
+                    quote! {
+                    let (field_value, sequence) = decode_vec_length_prepended::<#element_type>(&sequence)?;
                     let #var = field_value;
-                }
-            } else {
-                quote! {
+                    }
+                },
+                None => {
+                        quote! {
                     let (field_value, sequence) = decode_field_length_prepended::<#ty>(&sequence)?;
                     let #var = field_value;
                 }
+                },
             }
         })
         .collect();
 
-    let encode_statements: Vec<_> = indices
+    let encode_statements: Vec<_> = field_types
         .clone()
-        .iter()
-        .map(|idx| {
-            quote! {
-                let mut field_value: Vec<BFieldElement> = self.#idx.encode();
-                elements.push(BFieldElement::new(field_value.len() as u64));
-                elements.append(&mut field_value);
+        .zip(&indices)
+        .map(|(ty, idx)| {
+            let vec_element_type = if let syn::Type::Path(type_path) = ty {
+                get_vec_element_type(type_path)
+            } else {
+                None
+            };
+
+            match vec_element_type {
+                Some(element_type) => {
+                        quote! {
+                    let mut field_value: Vec<BFieldElement> = encode_vec::<#element_type>(&self.#idx);
+                    elements.push(BFieldElement::new(field_value.len() as u64));
+                    elements.append(&mut field_value);
+                }
+                },
+                None => quote! {
+                    let mut field_value: Vec<BFieldElement> = self.#idx.encode();
+                    elements.push(BFieldElement::new(field_value.len() as u64));
+                    elements.append(&mut field_value);
+                },
             }
         })
         .collect();

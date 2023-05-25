@@ -945,6 +945,9 @@ struct DeriveTestStructC(u128, u64, u32);
 #[derive(BFieldCodec, PartialEq, Eq, Debug)]
 struct DeriveTestStructD(Vec<u128>);
 
+#[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+struct DeriveTestStructE(Vec<u128>, u128, u64, Vec<bool>, u32, Vec<u128>);
+
 #[cfg(test)]
 pub mod derive_tests {
     // Since we cannot use the derive macro in the same crate where it is defined,
@@ -989,20 +992,40 @@ pub mod derive_tests {
     }
 
     #[test]
-    fn simple_struct_with_named_ved_fields() {
-        // prop(DeriveTestStructC(127 << 100, 14, 1000));
-        fn random_struct() -> DeriveTestStructD {
+    fn struct_with_unnamed_vec_field() {
+        prop(DeriveTestStructD(vec![
+            1 << 99,
+            99,
+            1 << 120,
+            120,
+            u64::MAX as u128,
+        ]));
+
+        // Test the empty struct
+        prop(DeriveTestStructD(vec![]));
+    }
+
+    #[test]
+    fn struct_with_unnamed_vec_fields() {
+        fn random_struct() -> DeriveTestStructE {
             let mut rng = thread_rng();
-            let length_a: usize = rng.gen_range(0..10);
-            let length_c: usize = rng.gen_range(0..20);
-            DeriveTestStructD {
-                field_a: random_elements(length_a),
-                field_b: random(),
-                field_c: random_elements(length_c),
-            }
+            let length_0: usize = rng.gen_range(0..10);
+            let length_3: usize = rng.gen_range(0..20);
+            let length_5: usize = rng.gen_range(0..20);
+            DeriveTestStructE(
+                random_elements(length_0),
+                random(),
+                random(),
+                random_elements(length_3),
+                random(),
+                random_elements(length_5),
+            )
         }
-        for _ in 0..10 {
+        for _ in 0..20 {
             prop(random_struct());
         }
+
+        // Also test the Default/empty struct
+        prop(DeriveTestStructE::default());
     }
 }
