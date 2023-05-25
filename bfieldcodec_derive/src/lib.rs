@@ -23,27 +23,61 @@ fn struct_with_named_fields(
     quote::__private::TokenStream,
 ) {
     let fields: Vec<_> = fields.named.iter().collect();
-    let field_names = fields.iter().map(|field| &field.ident);
+    let field_names: Vec<_> = fields.iter().map(|field| &field.ident).collect();
 
     let field_types = fields.iter().map(|field| &field.ty);
 
-    let encode_statements: Vec<_> = field_names
+    let encode_statements: Vec<_> = field_types
         .clone()
-        .map(|fname| {
-            quote! {
-                let mut #fname: Vec<BFieldElement> = self.#fname.encode();
-                elements.push(BFieldElement::new(#fname.len() as u64));
-                elements.append(&mut #fname);
+        .zip(&field_names)
+        .map(|(ftype, fname)| {
+            let vec_element_type = if let syn::Type::Path(type_path) = ftype {
+                get_vec_element_type(type_path)
+            } else {
+                None
+            };
+
+            match vec_element_type {
+                Some(element_type) => {
+                    quote! {
+                        let mut field_value: Vec<BFieldElement> = encode_vec::<#element_type>(&self.#fname);
+                        elements.push(BFieldElement::new(field_value.len() as u64));
+                        elements.append(&mut field_value);
+                    }
+                },
+                None => {
+                    quote! {
+                        let mut #fname: Vec<BFieldElement> = self.#fname.encode();
+                        elements.push(BFieldElement::new(#fname.len() as u64));
+                        elements.append(&mut #fname);
+                    }
+                }
             }
         })
         .collect();
 
     let decode_statements: Vec<_> = field_types
         .clone()
-        .zip(field_names.clone())
+        .zip(&field_names)
         .map(|(ftype, fname)| {
-            quote! {
-                let (#fname, sequence) = decode_field_length_prepended::<#ftype>(&sequence)?;
+            let vec_element_type = if let syn::Type::Path(type_path) = ftype {
+                get_vec_element_type(type_path)
+            } else {
+                None
+            };
+
+            match vec_element_type {
+                Some(element_type) => {
+                    quote! {
+                        let (field_value, sequence) = decode_vec_length_prepended::<#element_type>(&sequence)?;
+                        let #fname = field_value;
+                        }
+                },
+                None => {
+                    quote! {
+                        let (#fname, sequence) = decode_field_length_prepended::<#ftype>(&sequence)?;
+                    }
+                },
             }
         })
         .collect();
