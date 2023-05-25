@@ -9,7 +9,6 @@ pub mod mpolynomial;
 pub mod ntt;
 pub mod other;
 pub mod polynomial;
-pub mod test_struct_for_derive;
 pub mod tip5;
 pub mod traits;
 pub mod x_field_element;

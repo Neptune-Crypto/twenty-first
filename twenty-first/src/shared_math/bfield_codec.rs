@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::bail;
 use anyhow::Result;
+use bfieldcodec_derive::BFieldCodec;
 use itertools::Itertools;
 use num_traits::One;
 use num_traits::Zero;
@@ -924,5 +925,61 @@ mod bfield_codec_tests {
         let false_encoded = fallse.encode();
         let false_decoded = *bool::decode(&false_encoded).unwrap();
         assert_eq!(false_decoded, fallse);
+    }
+}
+
+#[derive(BFieldCodec, PartialEq, Eq, Debug)]
+struct DeriveTestStructA {
+    field_a: u64,
+    field_b: u64,
+    field_c: u64,
+}
+
+#[derive(BFieldCodec, PartialEq, Eq, Debug)]
+struct DeriveTestStructB(u128);
+
+#[derive(BFieldCodec, PartialEq, Eq, Debug)]
+struct DeriveTestStructC(u128, u64, u32);
+
+#[cfg(test)]
+pub mod derive_tests {
+    // Since we cannot use the derive macro in the same crate where it is defined,
+    // we test the macro here instead.
+
+    use super::*;
+
+    fn prop<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(value: T) {
+        let encoded = value.encode();
+        println!("encoded: {encoded:?}");
+        let decoded = T::decode(&encoded);
+        println!("decode retuned: {:?}", decoded);
+        let decoded = decoded.unwrap();
+        println!("after unwrapping: {:?}", decoded);
+        assert_eq!(value, *decoded);
+
+        let encoded_too_long = vec![encoded, vec![BFieldElement::new(5)]].concat();
+        assert!(T::decode(&encoded_too_long).is_err());
+
+        let encoded_too_short = encoded_too_long[..encoded_too_long.len() - 2].to_vec();
+        assert!(T::decode(&encoded_too_short).is_err());
+    }
+
+    #[test]
+    fn simple_struct_with_named_fields() {
+        prop(DeriveTestStructA {
+            field_a: 14,
+            field_b: 555558,
+            field_c: 1337,
+        });
+    }
+
+    #[test]
+    fn simple_struct_with_one_unnamed_field() {
+        prop(DeriveTestStructB(127));
+    }
+
+    #[test]
+    fn simple_struct_with_unnamed_fields() {
+        prop(DeriveTestStructC(127 << 100, 14, 1000));
     }
 }

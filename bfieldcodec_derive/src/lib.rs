@@ -53,26 +53,42 @@ fn impl_bfieldcodec_macro(ast: &syn::DeriveInput) -> TokenStream {
     }
 
     fn struct_with_unnamed_fields(name: &syn::Ident, fields: &syn::FieldsUnnamed) -> TokenStream {
-        // todo!()
         let indices: Vec<_> = (0..fields.unnamed.len()).map(syn::Index::from).collect();
 
         let indices2 = indices.clone();
-        let indices3 = indices;
         let field_type = fields.unnamed.iter().map(|field| &field.ty);
+
+        // Generate variables to capture decoded field values
+        let field_vars: Vec<_> = indices
+            .iter()
+            .map(|i| quote::format_ident!("field_value_{}", i.index))
+            .collect();
+
+        // Generate statements to decode each field
+        let decode_statements: Vec<_> = field_type
+            .clone()
+            .zip(&field_vars)
+            .map(|(ty, var)| {
+                quote! {
+                    let (field_value, sequence) = decode_field_length_prepended::<#ty>(&sequence)?;
+                    let #var = field_value;
+                }
+            })
+            .collect();
 
         let gen = quote! {
             impl BFieldCodec for #name {
                 fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
                     let mut sequence = sequence.to_vec();
-                    #(
-                        let (field_value, sequence) = decode_field_length_prepended::<#field_type>(&sequence)?;
-                    )*
+                    #(#decode_statements)*
 
                     if !sequence.is_empty() {
                         anyhow::bail!("Failed to decode {}", stringify!(#name));
                     }
 
-                    Ok(Box::new(Self( #(#indices3,)* )))
+                    let res = Self( #(#field_vars),* );
+
+                    Ok(Box::new(res))
                 }
 
                 fn encode(&self) -> Vec<BFieldElement> {
