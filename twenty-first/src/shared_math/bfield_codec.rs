@@ -7,6 +7,7 @@ use itertools::Itertools;
 use num_traits::One;
 use num_traits::Zero;
 
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree::PartialAuthenticationPath;
 
 use super::b_field_element::BFieldElement;
@@ -965,7 +966,10 @@ pub mod derive_tests {
 
     use rand::{random, thread_rng, Rng};
 
-    use crate::shared_math::other::random_elements;
+    use crate::{
+        shared_math::{other::random_elements, tip5::Tip5},
+        util_types::algebraic_hasher::AlgebraicHasher,
+    };
 
     use super::*;
 
@@ -1054,6 +1058,32 @@ pub mod derive_tests {
                 field_d: random_elements(length_d),
                 field_e: random_elements(length_e),
                 field_f: random_elements(length_f),
+            }
+        }
+        for _ in 0..20 {
+            prop(random_struct());
+        }
+
+        // Also test the Default/empty struct
+        prop(DeriveTestStructF::default());
+    }
+
+    #[test]
+    fn struct_with_phantom_data() {
+        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+        struct WithPhantomData<H: AlgebraicHasher> {
+            a_field: u128,
+            _phantom_data: PhantomData<H>,
+            another_field: Vec<u64>,
+        }
+
+        fn random_struct() -> WithPhantomData<Tip5> {
+            let mut rng = thread_rng();
+            let length_another_field: usize = rng.gen_range(0..10);
+            WithPhantomData {
+                a_field: random(),
+                _phantom_data: PhantomData,
+                another_field: random_elements(length_another_field),
             }
         }
         for _ in 0..20 {
