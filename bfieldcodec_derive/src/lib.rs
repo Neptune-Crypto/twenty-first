@@ -1,10 +1,10 @@
 extern crate proc_macro;
 
-use proc_macro::TokenStream;
+use proc_macro::{Ident, TokenStream};
 use quote::quote;
 use syn::{Type, TypePath};
 
-#[proc_macro_derive(BFieldCodec)]
+#[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
     // ...
     // Construct a representation of Rust code as a syntax tree
@@ -12,10 +12,87 @@ pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
 
     // Build the trait implementation
-    impl_bfieldcodec_macro(&ast)
+    impl_bfieldcodec_macro(ast)
 }
 
-fn impl_bfieldcodec_macro(ast: &syn::DeriveInput) -> TokenStream {
+// Add a bound `T: GetSize` to every type parameter T, unless we ignore it.
+fn add_trait_bounds(mut generics: syn::Generics, ignored: &Vec<String>) -> syn::Generics {
+    for param in &mut generics.params {
+        if let syn::GenericParam::Type(type_param) = param {
+            let name = type_param.ident.to_string();
+            let mut found = false;
+            for ignored in ignored.iter() {
+                if ignored == &name {
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                continue;
+            }
+            type_param.bounds.push(syn::parse_quote!(BFieldCodec));
+        }
+    }
+    generics
+}
+
+fn extract_ignored_generics_list(list: &Vec<syn::Attribute>) -> Vec<String> {
+    let mut collection = Vec::new();
+
+    for attr in list.iter() {
+        let mut list = extract_ignored_generics(attr);
+
+        collection.append(&mut list);
+    }
+
+    collection
+}
+
+fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<String> {
+    let mut collection = Vec::new();
+
+    if let Ok(meta) = attr.parse_meta() {
+        if let Some(ident) = meta.path().get_ident() {
+            if &ident.to_string() != "bfield_codec" {
+                return collection;
+            }
+            if let syn::Meta::List(list) = meta {
+                for nested in list.nested.iter() {
+                    if let syn::NestedMeta::Meta(nmeta) = nested {
+                        let ident = nmeta
+                            .path()
+                            .get_ident()
+                            .expect("Invalid attribute syntax! (no iden)");
+                        if &ident.to_string() != "ignore" {
+                            panic!(
+                                "Invalid attribute syntax! Unknown name {:?}",
+                                ident.to_string()
+                            );
+                        }
+
+                        if let syn::Meta::List(list) = nmeta {
+                            for nested in list.nested.iter() {
+                                if let syn::NestedMeta::Meta(nmeta) = nested {
+                                    if let syn::Meta::Path(path) = nmeta {
+                                        let path = path
+                                            .get_ident()
+                                            .expect("Invalid attribute syntax! (no ident)")
+                                            .to_string();
+                                        collection.push(path);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    collection
+}
+
+fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
     let (decode_statements, encode_statements, value_constructor) = match &ast.data {
         syn::Data::Struct(syn::DataStruct {
             fields: syn::Fields::Named(fields),
@@ -29,8 +106,18 @@ fn impl_bfieldcodec_macro(ast: &syn::DeriveInput) -> TokenStream {
     };
 
     let name = &ast.ident;
+
+    // Extract all generics we shall ignore.
+    let ignored = extract_ignored_generics_list(&ast.attrs);
+
+    // Add a bound `T: GetSize` to every type parameter T.
+    let generics = add_trait_bounds(ast.generics, &ignored);
+
+    // Extract the generics of the struct/enum.
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
     let gen = quote! {
-        impl BFieldCodec for #name {
+        impl #impl_generics BFieldCodec for #name #ty_generics #where_clause{
             fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
                 let mut sequence = sequence.to_vec();
                 #(#decode_statements)*

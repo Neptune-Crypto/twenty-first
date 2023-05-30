@@ -590,6 +590,7 @@ mod bfield_codec_tests {
     use rand::RngCore;
 
     use crate::amount::u32s::U32s;
+    use crate::shared_math::tip5::Tip5;
 
     use super::*;
 
@@ -927,6 +928,22 @@ mod bfield_codec_tests {
         let false_decoded = *bool::decode(&false_encoded).unwrap();
         assert_eq!(false_decoded, fallse);
     }
+
+    #[test]
+    fn test_phantom_data() {
+        let pd = PhantomData::<Tip5>;
+        let encoded = pd.encode();
+        let decoded = *PhantomData::decode(&encoded).unwrap();
+        assert_eq!(decoded, pd);
+
+        let mut sequence = vec![BFieldElement::new(encoded.len() as u64)];
+        sequence.append(&mut pd.encode());
+
+        let (field_value, sequence) =
+            decode_field_length_prepended::<PhantomData<Tip5>>(&sequence).unwrap();
+        assert_eq!(pd, field_value);
+        assert!(sequence.is_empty());
+    }
 }
 
 #[derive(BFieldCodec, PartialEq, Eq, Debug)]
@@ -957,6 +974,14 @@ struct DeriveTestStructF {
     field_d: Vec<bool>,
     field_e: Vec<BFieldElement>,
     field_f: Vec<BFieldElement>,
+}
+
+#[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+struct WithPhantomData<H: AlgebraicHasher> {
+    a_field: u128,
+    #[bfield_codec(ignore)]
+    _phantom_data: PhantomData<H>,
+    another_field: Vec<u64>,
 }
 
 #[cfg(test)]
@@ -1070,13 +1095,6 @@ pub mod derive_tests {
 
     #[test]
     fn struct_with_phantom_data() {
-        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
-        struct WithPhantomData<H: AlgebraicHasher> {
-            a_field: u128,
-            _phantom_data: PhantomData<H>,
-            another_field: Vec<u64>,
-        }
-
         fn random_struct() -> WithPhantomData<Tip5> {
             let mut rng = thread_rng();
             let length_another_field: usize = rng.gen_range(0..10);

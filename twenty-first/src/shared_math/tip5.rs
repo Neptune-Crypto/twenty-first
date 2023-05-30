@@ -1,3 +1,4 @@
+use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use itertools::Itertools;
 use num_traits::Zero;
@@ -9,6 +10,7 @@ pub use crate::shared_math::digest::{Digest, DIGEST_LENGTH};
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
 use super::{
+    bfield_codec::BFieldCodec,
     mds::generated_function,
     x_field_element::{XFieldElement, EXTENSION_DEGREE},
 };
@@ -47,7 +49,7 @@ impl Tip5State {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec)]
 pub struct Tip5 {}
 
 /// The lookup table with a high algebraic degree used in the TIP-5 permutation. To verify its
