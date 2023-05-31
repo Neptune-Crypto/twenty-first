@@ -938,9 +938,12 @@ pub mod derive_tests {
     // Since we cannot use the derive macro in the same crate where it is defined,
     // we test the macro here instead.
 
-    use rand::{random, thread_rng, Rng};
+    use rand::{random, thread_rng, Rng, RngCore};
 
-    use crate::shared_math::{other::random_elements, tip5::Tip5};
+    use crate::{
+        shared_math::{other::random_elements, tip5::Tip5},
+        util_types::mmr::mmr_membership_proof::MmrMembershipProof,
+    };
 
     use super::*;
 
@@ -1140,6 +1143,67 @@ pub mod derive_tests {
             }
 
             ret
+        }
+
+        for _ in 0..5 {
+            prop(random_struct());
+        }
+    }
+
+    #[test]
+    fn ms_membership_proof_derive_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        struct MsMembershipProof<H: AlgebraicHasher> {
+            sender_randomness: Digest,
+            receiver_preimage: Digest,
+            auth_path_aocl: MmrMembershipProof<H>,
+        }
+
+        fn random_mmr_membership_proof<H: AlgebraicHasher>() -> MmrMembershipProof<H> {
+            let leaf_index: u64 = random();
+            let authentication_path: Vec<Digest> =
+                random_elements((thread_rng().next_u32() % 15) as usize);
+            MmrMembershipProof {
+                leaf_index,
+                authentication_path,
+                _hasher: PhantomData,
+            }
+        }
+
+        fn random_struct() -> MsMembershipProof<Tip5> {
+            let sender_randomness: Digest = random();
+            let receiver_preimage: Digest = random();
+            let auth_path_aocl: MmrMembershipProof<Tip5> = random_mmr_membership_proof();
+            MsMembershipProof {
+                sender_randomness,
+                receiver_preimage,
+                auth_path_aocl,
+            }
+        }
+
+        for _ in 0..5 {
+            prop(random_struct());
+        }
+    }
+
+    #[test]
+    fn mmr_bfieldcodec_derive_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        struct MmrAccumulator<H: BFieldCodec> {
+            leaf_count: u64,
+            peaks: Vec<Digest>,
+            _hasher: PhantomData<H>,
+        }
+
+        fn random_struct() -> MmrAccumulator<Tip5> {
+            let leaf_count: u64 = random();
+            let mut rng = thread_rng();
+            let peaks = random_elements(rng.gen_range(0..63));
+            MmrAccumulator {
+                leaf_count,
+                peaks,
+                _hasher: PhantomData,
+            }
         }
 
         for _ in 0..5 {
