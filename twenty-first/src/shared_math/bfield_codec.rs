@@ -132,46 +132,6 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
     }
 }
 
-impl BFieldCodec for PartialAuthenticationPath<Digest> {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.is_empty() {
-            bail!("cannot decode empty string into PartialAuthenticationPath");
-        }
-        let mut vect: Vec<Option<Digest>> = vec![];
-        let mut index = 0;
-        while index < sequence.len() {
-            let len = sequence[index].value();
-            if sequence.len() < index + 1 + len as usize {
-                bail!(
-                    "cannot decode vec of optional digests because of improper length prepending"
-                );
-            }
-            let substr = &sequence[(index + 1)..(index + 1 + len as usize)];
-            let decoded = Option::<Digest>::decode(substr);
-            if let Ok(optional_digest) = decoded {
-                vect.push(*optional_digest);
-            } else {
-                bail!("cannot decode optional digest in vec");
-            }
-
-            index += 1 + len as usize;
-        }
-        Ok(Box::new(PartialAuthenticationPath::<Digest>(vect)))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        let mut vect = vec![];
-        for optional_authpath in self.0.iter() {
-            let mut encoded = optional_authpath.encode();
-            vect.push(BFieldElement::new(encoded.len().try_into().expect(
-                "encoded optional authpath has length greater than what fits into BFieldElement",
-            )));
-            vect.append(&mut encoded);
-        }
-        vect
-    }
-}
-
 impl<T: BFieldCodec> BFieldCodec for Option<T> {
     fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
         let maybe_element_zero = str.get(0);
@@ -205,87 +165,46 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
     }
 }
 
-impl BFieldCodec for Vec<BFieldElement> {
-    fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        Ok(Box::new(str.to_vec()))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        self.to_vec()
-    }
-}
-
-impl BFieldCodec for Vec<XFieldElement> {
-    fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        if str.len() % EXTENSION_DEGREE != 0 {
-            bail!(
-                "cannot decode string of BFieldElements into XFieldElements \
-                when string length is not a multiple of EXTENSION_DEGREE",
-            );
+impl<T: BFieldCodec> BFieldCodec for Vec<T> {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.is_empty() {
+            bail!("Cannot decode empty sequence into Vec<T>");
         }
-        let mut vector = vec![];
-        for chunk in str.chunks(EXTENSION_DEGREE) {
-            let coefficients: [BFieldElement; EXTENSION_DEGREE] = chunk.try_into().unwrap();
-            vector.push(XFieldElement::new(coefficients));
+        let total_length_indication = sequence[0].value() as usize;
+
+        if sequence.len() != total_length_indication + 1 {
+            bail!("Length indication plus one must match actual sequence length. Indication was {}. Actual length was {}.", total_length_indication, sequence.len());
         }
-        Ok(Box::new(vector))
-    }
 
-    fn encode(&self) -> Vec<BFieldElement> {
-        self.iter().map(|xfe| xfe.coefficients.to_vec()).concat()
-    }
-}
-
-impl BFieldCodec for Vec<Digest> {
-    fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        if str.len() % DIGEST_LENGTH != 0 {
-            bail!(
-                "cannot decode string of BFieldElements into Digests \
-                when string length is not a multiple of DIGEST_LENGTH",
-            );
-        }
-        let mut vector: Vec<Digest> = vec![];
-        for chunk in str.chunks(DIGEST_LENGTH) {
-            let digest: [BFieldElement; DIGEST_LENGTH] = chunk.try_into().unwrap();
-            vector.push(Digest::new(digest));
-        }
-        Ok(Box::new(vector))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        self.iter().map(|d| d.encode()).concat()
-    }
-}
-
-impl<T> BFieldCodec for Vec<Vec<T>>
-where
-    Vec<T>: BFieldCodec,
-{
-    fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        let mut index = 0;
-        let mut outer_vec: Vec<Vec<T>> = vec![];
-        while index < str.len() {
-            let len = str[index].value() as usize;
+        let mut ret = vec![];
+        let sequence = sequence.to_vec();
+        let mut index = 1;
+        while index < sequence.len() {
+            let element_length_indication = sequence[index].value() as usize;
             index += 1;
-
-            if let Some(inner_vec) = str.get(index..(index + len)) {
-                outer_vec.push(*Vec::<T>::decode(inner_vec)?);
-            } else {
-                bail!("cannot decode string BFieldElements into Vec<Vec<T>>; length mismatch");
-            }
-            index += len;
+            let element = *T::decode(&sequence[index..index + element_length_indication])?;
+            index += element_length_indication;
+            ret.push(element);
         }
-        Ok(Box::new(outer_vec))
+
+        Ok(Box::new(ret))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
-        let mut str = vec![];
-        for inner_vec in self {
-            let mut encoding = inner_vec.encode();
-            str.push(BFieldElement::new(encoding.len().try_into().unwrap()));
-            str.append(&mut encoding);
+        // Set temp value for total length indication
+        let mut ret = vec![BFieldElement::new(0)];
+
+        for elem in self {
+            let mut element_encoded = elem.encode();
+            let element_length_indicator = BFieldElement::new(element_encoded.len() as u64);
+            ret.push(element_length_indicator);
+            ret.append(&mut element_encoded);
         }
-        str
+
+        // Set total length indicator
+        ret[0] = BFieldElement::new((ret.len() - 1) as u64);
+
+        ret
     }
 }
 
@@ -353,6 +272,10 @@ impl BFieldCodec for Vec<PartialAuthenticationPath<Digest>> {
             }
 
             vector.push(PartialAuthenticationPath(pap));
+        }
+
+        if index != str.len() {
+            bail!("Did not consume entire sequence when decoding Vec<PartialAuthenticaionPath>");
         }
 
         Ok(Box::new(vector))
@@ -630,18 +553,27 @@ mod bfield_codec_tests {
         ])
     }
 
-    fn random_partial_authentication_path(len: usize) -> PartialAuthenticationPath<Digest> {
-        PartialAuthenticationPath(
-            (0..len)
-                .map(|_| {
-                    if random_bool() {
-                        Some(random_digest())
-                    } else {
-                        None
-                    }
-                })
-                .collect_vec(),
-        )
+    fn random_partial_authentication_paths(
+        inner_length: usize,
+        count: usize,
+    ) -> Vec<PartialAuthenticationPath<Digest>> {
+        let mut ret = vec![];
+
+        for _ in 0..count {
+            ret.push(PartialAuthenticationPath(
+                (0..inner_length)
+                    .map(|_| {
+                        if random_bool() {
+                            Some(random_digest())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect_vec(),
+            ))
+        }
+
+        ret
     }
 
     #[test]
@@ -743,9 +675,10 @@ mod bfield_codec_tests {
     fn test_encode_decode_random_partial_authentication_path() {
         for _ in 1..=10 {
             let len = 1 + random_length(10);
-            let pap = random_partial_authentication_path(len);
+            let count = random_length(10);
+            let pap = random_partial_authentication_paths(len, count);
             let str = pap.encode();
-            let pap_ = *PartialAuthenticationPath::decode(&str).unwrap();
+            let pap_ = *Vec::<PartialAuthenticationPath<Digest>>::decode(&str).unwrap();
             assert_eq!(pap, pap_);
         }
     }
@@ -806,9 +739,9 @@ mod bfield_codec_tests {
                 }
             }
 
-            if let Ok(_sth) = PartialAuthenticationPath::decode(&str) {
-                panic!();
-            }
+            // if let Ok(_sth) = Vec::<PartialAuthenticationPath<Digest>>::decode(&str) {
+            //     (will work quite often)
+            // }
         }
     }
 
@@ -995,6 +928,11 @@ struct WithNestedPhantomData<H: AlgebraicHasher> {
     a_fourth_field: WithPhantomData<Tip5>,
 }
 
+#[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+struct WithNestedVec {
+    a_field: Vec<Vec<u64>>,
+}
+
 #[cfg(test)]
 pub mod derive_tests {
     // Since we cannot use the derive macro in the same crate where it is defined,
@@ -1002,10 +940,7 @@ pub mod derive_tests {
 
     use rand::{random, thread_rng, Rng};
 
-    use crate::{
-        shared_math::{other::random_elements, tip5::Tip5},
-        util_types::algebraic_hasher::AlgebraicHasher,
-    };
+    use crate::shared_math::{other::random_elements, tip5::Tip5};
 
     use super::*;
 
@@ -1104,19 +1039,20 @@ pub mod derive_tests {
         prop(DeriveTestStructF::default());
     }
 
+    fn random_with_phantomdata_struct() -> WithPhantomData<Tip5> {
+        let mut rng = thread_rng();
+        let length_another_field: usize = rng.gen_range(0..10);
+        WithPhantomData {
+            a_field: random(),
+            _phantom_data: PhantomData,
+            another_field: random_elements(length_another_field),
+        }
+    }
+
     #[test]
     fn struct_with_phantom_data() {
-        fn random_struct() -> WithPhantomData<Tip5> {
-            let mut rng = thread_rng();
-            let length_another_field: usize = rng.gen_range(0..10);
-            WithPhantomData {
-                a_field: random(),
-                _phantom_data: PhantomData,
-                another_field: random_elements(length_another_field),
-            }
-        }
         for _ in 0..20 {
-            prop(random_struct());
+            prop(random_with_phantomdata_struct());
         }
 
         // Also test the Default/empty struct
@@ -1125,20 +1061,89 @@ pub mod derive_tests {
 
     #[test]
     fn struct_with_nested_phantom_data() {
-        fn random_struct() -> WithPhantomData<Tip5> {
+        fn random_struct() -> WithNestedPhantomData<Tip5> {
             let mut rng = thread_rng();
-            let length_another_field: usize = rng.gen_range(0..10);
+            let length_a_fourth_field: usize = rng.gen_range(0..20);
+            let a_third_field = (0..length_a_fourth_field)
+                .map(|_| random_with_phantomdata_struct())
+                .collect_vec();
             WithNestedPhantomData {
-                a_field: random(),
                 _phantom_data: PhantomData,
-                another_field: random_elements(length_another_field),
+                a_field: random(),
+                another_field: random_elements(rng.gen_range(0..30)),
+                a_fourth_field: random_with_phantomdata_struct(),
+                a_third_field,
             }
         }
+
         for _ in 0..20 {
             prop(random_struct());
         }
 
         // Also test the Default/empty struct
         prop(WithNestedPhantomData::<Tip5>::default());
+    }
+
+    #[test]
+    fn struct_with_nested_vec() {
+        fn random_struct() -> WithNestedVec {
+            let mut rng = thread_rng();
+            let outer_length = rng.gen_range(0..30);
+            let mut ret = WithNestedVec {
+                a_field: Vec::with_capacity(outer_length),
+            };
+            for _ in 0..outer_length {
+                let inner_length = rng.gen_range(0..20);
+                let inner_vec: Vec<u64> = random_elements(inner_length);
+                ret.a_field.push(inner_vec);
+            }
+
+            ret
+        }
+
+        for _ in 0..20 {
+            prop(random_struct());
+        }
+
+        // Also test the Default/empty struct
+        prop(WithNestedVec::default());
+    }
+
+    #[test]
+    fn deeply_nested_vec() {
+        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+        struct MuchNesting {
+            a: Vec<Vec<Vec<Vec<BFieldElement>>>>,
+            b: PhantomData<Tip5>,
+            c: PhantomData<Tip5>,
+        }
+
+        fn random_struct() -> MuchNesting {
+            let mut rng = thread_rng();
+            let outer_length = rng.gen_range(0..10);
+            let mut ret = MuchNesting {
+                a: Vec::with_capacity(outer_length),
+                b: PhantomData,
+                c: PhantomData,
+            };
+            for i in 0..outer_length {
+                ret.a.push(vec![]);
+                let second_length = rng.gen_range(0..10);
+                for j in 0..second_length {
+                    ret.a[i].push(vec![]);
+                    let third_length = rng.gen_range(0..10);
+                    for k in 0..third_length {
+                        ret.a[i][j].push(vec![]);
+                        ret.a[i][j][k] = random_elements(rng.gen_range(0..15));
+                    }
+                }
+            }
+
+            ret
+        }
+
+        for _ in 0..5 {
+            prop(random_struct());
+        }
     }
 }

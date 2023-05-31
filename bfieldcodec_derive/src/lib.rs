@@ -1,8 +1,7 @@
 extern crate proc_macro;
 
-use proc_macro::{Ident, TokenStream};
+use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Type, TypePath};
 
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
@@ -15,8 +14,8 @@ pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
     impl_bfieldcodec_macro(ast)
 }
 
-// Add a bound `T: GetSize` to every type parameter T, unless we ignore it.
-fn add_trait_bounds(mut generics: syn::Generics, ignored: &Vec<String>) -> syn::Generics {
+// Add a bound `T: BFieldCodec` to every type parameter T, unless we ignore it.
+fn add_trait_bounds(mut generics: syn::Generics, ignored: &[String]) -> syn::Generics {
     for param in &mut generics.params {
         if let syn::GenericParam::Type(type_param) = param {
             let name = type_param.ident.to_string();
@@ -36,7 +35,7 @@ fn add_trait_bounds(mut generics: syn::Generics, ignored: &Vec<String>) -> syn::
     generics
 }
 
-fn extract_ignored_generics_list(list: &Vec<syn::Attribute>) -> Vec<String> {
+fn extract_ignored_generics_list(list: &[syn::Attribute]) -> Vec<String> {
     let mut collection = Vec::new();
 
     for attr in list.iter() {
@@ -72,14 +71,12 @@ fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<String> {
 
                         if let syn::Meta::List(list) = nmeta {
                             for nested in list.nested.iter() {
-                                if let syn::NestedMeta::Meta(nmeta) = nested {
-                                    if let syn::Meta::Path(path) = nmeta {
-                                        let path = path
-                                            .get_ident()
-                                            .expect("Invalid attribute syntax! (no ident)")
-                                            .to_string();
-                                        collection.push(path);
-                                    }
+                                if let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested {
+                                    let path = path
+                                        .get_ident()
+                                        .expect("Invalid attribute syntax! (no ident)")
+                                        .to_string();
+                                    collection.push(path);
                                 }
                             }
                         }
@@ -110,7 +107,7 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
     // Extract all generics we shall ignore.
     let ignored = extract_ignored_generics_list(&ast.attrs);
 
-    // Add a bound `T: GetSize` to every type parameter T.
+    // Add a bound `T: BFieldCodec` to every type parameter T.
     let generics = add_trait_bounds(ast.generics, &ignored);
 
     // Extract the generics of the struct/enum.
@@ -155,31 +152,13 @@ fn struct_with_named_fields(
 
     let field_types = fields.iter().map(|field| &field.ty);
 
-    let encode_statements: Vec<_> = field_types
-        .clone()
-        .zip(&field_names)
-        .map(|(ftype, fname)| {
-            let vec_element_type = if let syn::Type::Path(type_path) = ftype {
-                get_vec_element_type(type_path)
-            } else {
-                None
-            };
-
-            match vec_element_type {
-                Some(element_type) => {
-                    quote! {
-                        let mut field_value: Vec<BFieldElement> = encode_vec::<#element_type>(&self.#fname);
-                        elements.push(BFieldElement::new(field_value.len() as u64));
-                        elements.append(&mut field_value);
-                    }
-                },
-                None => {
-                    quote! {
-                        let mut #fname: Vec<BFieldElement> = self.#fname.encode();
-                        elements.push(BFieldElement::new(#fname.len() as u64));
-                        elements.append(&mut #fname);
-                    }
-                }
+    let encode_statements: Vec<_> = field_names
+        .iter()
+        .map(|fname| {
+            quote! {
+                let mut #fname: Vec<BFieldElement> = self.#fname.encode();
+                elements.push(BFieldElement::new(#fname.len() as u64));
+                elements.append(&mut #fname);
             }
         })
         .collect();
@@ -218,29 +197,13 @@ fn struct_with_unnamed_fields(
         .map(|(ty, var)| generate_decode_statement(var, ty))
         .collect();
 
-    let encode_statements: Vec<_> = field_types
-        .clone()
-        .zip(&indices)
-        .map(|(ty, idx)| {
-            let vec_element_type = if let syn::Type::Path(type_path) = ty {
-                get_vec_element_type(type_path)
-            } else {
-                None
-            };
-
-            match vec_element_type {
-                Some(element_type) => {
-                        quote! {
-                    let mut field_value: Vec<BFieldElement> = encode_vec::<#element_type>(&self.#idx);
-                    elements.push(BFieldElement::new(field_value.len() as u64));
-                    elements.append(&mut field_value);
-                }
-                },
-                None => quote! {
+    let encode_statements: Vec<_> = indices
+        .iter()
+        .map(|idx| {
+            quote! {
                     let mut field_value: Vec<BFieldElement> = self.#idx.encode();
                     elements.push(BFieldElement::new(field_value.len() as u64));
                     elements.append(&mut field_value);
-                },
             }
         })
         .collect();
@@ -250,49 +213,12 @@ fn struct_with_unnamed_fields(
     (decode_statements, encode_statements, value_constructor)
 }
 
-fn get_vec_element_type(type_path: &TypePath) -> Option<Type> {
-    let is_vec = type_path.path.segments.last().unwrap().ident == "Vec";
-    if is_vec {
-        let path_args = type_path.path.segments[0].arguments.clone();
-        let element_type = match path_args {
-            syn::PathArguments::None => todo!(),
-            syn::PathArguments::AngleBracketed(ab) => {
-                assert_eq!(1, ab.args.len());
-                match &ab.args[0] {
-                    syn::GenericArgument::Type(ty) => ty.to_owned(),
-                    _ => todo!(),
-                }
-            }
-            syn::PathArguments::Parenthesized(_) => todo!(),
-        };
-        Some(element_type)
-    } else {
-        None
-    }
-}
-
 fn generate_decode_statement(
     field_name: &syn::Ident,
     field_type: &syn::Type,
 ) -> quote::__private::TokenStream {
-    let vec_element_type = if let syn::Type::Path(type_path) = field_type {
-        get_vec_element_type(type_path)
-    } else {
-        None
-    };
-
-    match vec_element_type {
-        Some(element_type) => {
-            quote! {
-            let (field_value, sequence) = decode_vec_length_prepended::<#element_type>(&sequence)?;
-            let #field_name = field_value;
-            }
-        }
-        None => {
-            quote! {
-                let (field_value, sequence) = decode_field_length_prepended::<#field_type>(&sequence)?;
-                let #field_name = field_value;
-            }
-        }
+    quote! {
+        let (field_value, sequence) = decode_field_length_prepended::<#field_type>(&sequence)?;
+        let #field_name = field_value;
     }
 }

@@ -630,7 +630,7 @@ mod mmr_membership_proof_test {
         let mp0 = MmrMembershipProof::<H>::new(4, vec![]);
         let mp1 = MmrMembershipProof::<H>::new(4, vec![]);
         assert_eq!(mp0, mp1);
-        assert_eq!(H::hash(&mp0.encode()), H::hash(&mp1));
+        assert_eq!(H::hash(&mp0), H::hash(&mp1));
 
         let mp2 = MmrMembershipProof::<H>::new(4, vec![some_digest]);
         let mp3 = MmrMembershipProof::<H>::new(4, vec![some_digest]);
