@@ -12,6 +12,7 @@ use crate::util_types::merkle_tree::PartialAuthenticationPath;
 
 use super::b_field_element::BFieldElement;
 use super::tip5::Digest;
+use super::tip5::Tip5;
 use super::tip5::DIGEST_LENGTH;
 use super::x_field_element::XFieldElement;
 use super::x_field_element::EXTENSION_DEGREE;
@@ -984,6 +985,16 @@ struct WithPhantomData<H: AlgebraicHasher> {
     another_field: Vec<u64>,
 }
 
+#[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+struct WithNestedPhantomData<H: AlgebraicHasher> {
+    a_field: u128,
+    #[bfield_codec(ignore)]
+    _phantom_data: PhantomData<H>,
+    another_field: Vec<u64>,
+    a_third_field: Vec<WithPhantomData<H>>,
+    a_fourth_field: WithPhantomData<Tip5>,
+}
+
 #[cfg(test)]
 pub mod derive_tests {
     // Since we cannot use the derive macro in the same crate where it is defined,
@@ -1109,6 +1120,25 @@ pub mod derive_tests {
         }
 
         // Also test the Default/empty struct
-        prop(DeriveTestStructF::default());
+        prop(WithPhantomData::<Tip5>::default());
+    }
+
+    #[test]
+    fn struct_with_nested_phantom_data() {
+        fn random_struct() -> WithPhantomData<Tip5> {
+            let mut rng = thread_rng();
+            let length_another_field: usize = rng.gen_range(0..10);
+            WithNestedPhantomData {
+                a_field: random(),
+                _phantom_data: PhantomData,
+                another_field: random_elements(length_another_field),
+            }
+        }
+        for _ in 0..20 {
+            prop(random_struct());
+        }
+
+        // Also test the Default/empty struct
+        prop(WithNestedPhantomData::<Tip5>::default());
     }
 }
