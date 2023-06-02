@@ -640,7 +640,7 @@ impl SpongeHasher for Tip5 {
         sponge.state[..RATE]
             .iter_mut()
             .zip_eq(input.iter())
-            .for_each(|(a, &b)| *a += b);
+            .for_each(|(a, &b)| *a = b);
 
         Tip5::permutation(sponge);
     }
@@ -888,11 +888,11 @@ mod tip5_tests {
             digest_sum.iter().map(|b| b.value()).collect_vec()
         );
         let expected_sum = [
-            6483667016211232820,
-            1120398765245047030,
-            9375424207996641714,
-            17770540514093105302,
-            17391179748947955,
+            7610004073009036015,
+            5725198067541094245,
+            4721320565792709122,
+            1732504843634706218,
+            259800783350288362,
         ]
         .map(BFieldElement::new);
         assert_eq!(
