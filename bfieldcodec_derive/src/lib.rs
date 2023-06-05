@@ -117,7 +117,7 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
 
     let gen = quote! {
         impl #impl_generics BFieldCodec for #name #ty_generics #where_clause{
-            fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
+            fn decode(sequence: &[crate::shared_math::b_field_element::BFieldElement]) -> anyhow::Result<Box<Self>> {
                 let mut sequence = sequence.to_vec();
                 #(#decode_statements)*
 
@@ -128,7 +128,7 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
                 Ok(Box::new(#value_constructor))
             }
 
-            fn encode(&self) -> Vec<BFieldElement> {
+            fn encode(&self) -> Vec<crate::shared_math::b_field_element::BFieldElement> {
                 let mut elements = Vec::new();
                 #(#encode_statements)*
                 elements
@@ -172,8 +172,8 @@ fn struct_with_named_fields(
         .iter()
         .map(|fname| {
             quote! {
-                let mut #fname: Vec<BFieldElement> = self.#fname.encode();
-                elements.push(BFieldElement::new(#fname.len() as u64));
+                let mut #fname: Vec<crate::shared_math::b_field_element::BFieldElement> = self.#fname.encode();
+                elements.push(crate::shared_math::b_field_element::BFieldElement::new(#fname.len() as u64));
                 elements.append(&mut #fname);
             }
         })
@@ -227,8 +227,8 @@ fn struct_with_unnamed_fields(
         .iter()
         .map(|idx| {
             quote! {
-                    let mut field_value: Vec<BFieldElement> = self.#idx.encode();
-                    elements.push(BFieldElement::new(field_value.len() as u64));
+                    let mut field_value: Vec<crate::shared_math::b_field_element::BFieldElement> = self.#idx.encode();
+                    elements.push(crate::shared_math::b_field_element::BFieldElement::new(field_value.len() as u64));
                     elements.append(&mut field_value);
             }
         })
@@ -250,11 +250,11 @@ fn generate_decode_statement(
 ) -> quote::__private::TokenStream {
     quote! {
         let (field_value, sequence) = {if sequence.is_empty() {
-            bail!("Cannot decode field: sequence is empty.");
+            anyhow::bail!("Cannot decode field: sequence is empty.");
         }
         let len = sequence[0].value() as usize;
         if sequence.len() < 1 + len {
-            bail!("Cannot decode field: sequence too short.");
+            anyhow::bail!("Cannot decode field: sequence too short.");
         }
         let decoded = *<#field_type as BFieldCodec>::decode(&sequence[1..1 + len])?;
         (decoded, sequence[1 + len..].to_vec())};
