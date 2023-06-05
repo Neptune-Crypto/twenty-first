@@ -864,16 +864,22 @@ pub mod derive_tests {
             field_b: 555558,
             field_c: 1337,
         });
+
+        assert_eq!(Some(6), DeriveTestStructA::static_length());
     }
 
     #[test]
     fn simple_struct_with_one_unnamed_field() {
         prop(DeriveTestStructB(127));
+
+        assert_eq!(Some(4), DeriveTestStructB::static_length());
     }
 
     #[test]
     fn simple_struct_with_unnamed_fields() {
         prop(DeriveTestStructC(127 << 100, 14, 1000));
+
+        assert_eq!(Some(7), DeriveTestStructC::static_length());
     }
 
     #[test]
@@ -888,6 +894,8 @@ pub mod derive_tests {
 
         // Test the empty struct
         prop(DeriveTestStructD(vec![]));
+
+        assert!(DeriveTestStructD::static_length().is_none());
     }
 
     #[test]
@@ -912,6 +920,8 @@ pub mod derive_tests {
 
         // Also test the Default/empty struct
         prop(DeriveTestStructE::default());
+
+        assert!(DeriveTestStructE::static_length().is_none());
     }
 
     #[test]
@@ -937,6 +947,8 @@ pub mod derive_tests {
 
         // Also test the Default/empty struct
         prop(DeriveTestStructF::default());
+
+        assert!(DeriveTestStructF::static_length().is_none());
     }
 
     fn random_with_phantomdata_struct() -> WithPhantomData<Tip5> {
@@ -1007,6 +1019,8 @@ pub mod derive_tests {
 
         // Also test the Default/empty struct
         prop(WithNestedVec::default());
+
+        assert!(WithNestedVec::static_length().is_none());
     }
 
     #[test]
@@ -1045,6 +1059,8 @@ pub mod derive_tests {
         for _ in 0..5 {
             prop(random_struct());
         }
+
+        assert!(MuchNesting::static_length().is_none());
     }
 
     #[test]
@@ -1081,6 +1097,8 @@ pub mod derive_tests {
         for _ in 0..5 {
             prop(random_struct());
         }
+
+        assert!(MsMembershipProof::<Tip5>::static_length().is_none());
     }
 
     #[test]
