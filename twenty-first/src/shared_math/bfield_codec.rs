@@ -8,7 +8,6 @@ use num_traits::One;
 use num_traits::Zero;
 
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::merkle_tree::PartialAuthenticationPath;
 
 use super::b_field_element::BFieldElement;
 use super::tip5::Digest;
@@ -404,107 +403,6 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
     }
 }
 
-impl BFieldCodec for Vec<PartialAuthenticationPath<Digest>> {
-    fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        let mut index = 0;
-        let mut vector = vec![];
-
-        // while there is at least one partial auth path left, parse it
-        while index < str.len() {
-            let len_remaining = str[index].value() as usize;
-            index += 1;
-
-            if len_remaining < 2 || index + len_remaining > str.len() {
-                bail!(
-                    "cannot decode string of BFieldElements as Vec of PartialAuthenticationPaths \
-                    due to length mismatch (1)",
-                );
-            }
-
-            let vec_len = str[index].value() as usize;
-            let mask = str[index + 1].value() as u32;
-            index += 2;
-
-            // if the vector length and mask indicates some digests are following
-            // and we are already at the end of the buffer
-            if vec_len != 0 && mask != 0 && index == str.len() {
-                bail!(
-                    "Cannot decode string of BFieldElements as Vec of PartialAuthenticationPaths \
-                    due to length mismatch (2).\n\
-                    vec_len: {}\n\
-                    mask: {}\n\
-                    index: {}\n\
-                    str.len(): {}\n\
-                    str[0]: {}",
-                    vec_len,
-                    mask,
-                    index,
-                    str.len(),
-                    str[0]
-                );
-            }
-
-            if (len_remaining - 2) % DIGEST_LENGTH != 0 {
-                bail!(
-                    "cannot decode string of BFieldElements as Vec of PartialAuthenticationPaths \
-                    due to length mismatch (3)",
-                );
-            }
-
-            let mut pap = vec![];
-
-            for i in (0..vec_len).rev() {
-                if mask & (1 << i) == 0 {
-                    pap.push(None);
-                } else if let Some(chunk) = str.get(index..(index + DIGEST_LENGTH)) {
-                    pap.push(Some(Digest::new(chunk.try_into().unwrap())));
-                    index += DIGEST_LENGTH;
-                } else {
-                    bail!(
-                        "cannot decode string of BFieldElements as Vec of \
-                        PartialAuthenticationPaths due to length mismatch (4)",
-                    );
-                }
-            }
-
-            vector.push(PartialAuthenticationPath(pap));
-        }
-
-        if index != str.len() {
-            bail!("Did not consume entire sequence when decoding Vec<PartialAuthenticaionPath>");
-        }
-
-        Ok(Box::new(vector))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        let mut str = vec![];
-        for pap in self.iter() {
-            let len = pap.len();
-            let mut mask = 0u32;
-            for maybe_digest in pap.iter() {
-                mask <<= 1;
-                if maybe_digest.is_some() {
-                    mask |= 1;
-                }
-            }
-            let mut vector = pap.iter().flatten().map(|d| d.values().to_vec()).concat();
-
-            str.push(BFieldElement::new(
-                2u64 + std::convert::TryInto::<u64>::try_into(vector.len()).unwrap(),
-            ));
-            str.push(BFieldElement::new(len.try_into().unwrap()));
-            str.push(BFieldElement::new(mask.try_into().unwrap()));
-            str.append(&mut vector);
-        }
-        str
-    }
-
-    fn static_length() -> Option<usize> {
-        None
-    }
-}
-
 impl<T> BFieldCodec for PhantomData<T> {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if !sequence.is_empty() {
@@ -535,6 +433,7 @@ mod bfield_codec_tests {
 
     use crate::shared_math::other::random_elements;
     use crate::shared_math::tip5::Tip5;
+    use crate::util_types::merkle_tree::PartialAuthenticationPath;
 
     use super::*;
 

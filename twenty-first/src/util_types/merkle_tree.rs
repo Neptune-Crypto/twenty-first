@@ -1,3 +1,4 @@
+use bfieldcodec_derive::BFieldCodec;
 use itertools::izip;
 use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
@@ -8,6 +9,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+use crate::shared_math::bfield_codec::BFieldCodec;
 use crate::shared_math::digest::Digest;
 use crate::shared_math::other::{bit_representation, is_power_of_two, log_2_floor};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
@@ -44,7 +46,7 @@ where
 /// A single partial authentication path probably does not make a lot of sense. However, if you
 /// have multiple authentication paths that overlap, using multiple partial authentication paths
 /// is more space efficient.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, BFieldCodec)]
 pub struct PartialAuthenticationPath<Digest>(pub Vec<Option<Digest>>);
 
 impl Deref for PartialAuthenticationPath<Digest> {

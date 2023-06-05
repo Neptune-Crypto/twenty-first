@@ -1,4 +1,3 @@
-use anyhow::bail;
 use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use serde::{Deserialize, Serialize};
@@ -9,7 +8,6 @@ use super::archival_mmr::ArchivalMmr;
 use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::shared_basic;
-use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::bfield_codec::BFieldCodec;
 use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
