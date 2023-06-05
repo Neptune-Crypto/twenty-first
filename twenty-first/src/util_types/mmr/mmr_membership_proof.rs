@@ -55,6 +55,10 @@ impl<H: AlgebraicHasher> BFieldCodec for MmrMembershipProof<H> {
     fn encode(&self) -> Vec<crate::shared_math::b_field_element::BFieldElement> {
         [self.leaf_index.encode(), self.authentication_path.encode()].concat()
     }
+
+    fn static_length() -> Option<usize> {
+        None
+    }
 }
 
 impl<H: AlgebraicHasher> MmrMembershipProof<H> {

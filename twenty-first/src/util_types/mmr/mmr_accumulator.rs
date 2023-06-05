@@ -1,4 +1,5 @@
 use anyhow::bail;
+use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
@@ -9,7 +10,7 @@ use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::shared_basic;
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::bfield_codec::{decode_field_length_prepended, BFieldCodec};
+use crate::shared_math::bfield_codec::BFieldCodec;
 use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::mmr::shared_advanced;
@@ -41,7 +42,7 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> From<&ArchivalMmr<H, Stora
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize, BFieldCodec)]
 pub struct MmrAccumulator<H>
 where
     H: AlgebraicHasher,
@@ -298,36 +299,6 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
 
     fn to_accumulator(&self) -> MmrAccumulator<H> {
         self.to_owned()
-    }
-}
-
-impl<H: AlgebraicHasher> BFieldCodec for MmrAccumulator<H> {
-    fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
-        let (leaf_count, sequence) = decode_field_length_prepended(sequence)?;
-        let (peaks, sequence) = decode_field_length_prepended(&sequence)?;
-        if !sequence.is_empty() {
-            bail!("After decoding sequence of BFieldElements as MmrAccumulator, sequence should be empty!");
-        }
-
-        Ok(Box::new(MmrAccumulator {
-            leaf_count,
-            peaks,
-            _hasher: PhantomData,
-        }))
-    }
-
-    fn encode(&self) -> Vec<crate::shared_math::b_field_element::BFieldElement> {
-        let leaf_count_encoded = self.leaf_count.encode();
-        let leaf_count_len = BFieldElement::new(leaf_count_encoded.len() as u64);
-        let peaks_encoded = self.peaks.encode();
-        let peaks_len = BFieldElement::new(peaks_encoded.len() as u64);
-        [
-            vec![leaf_count_len],
-            leaf_count_encoded,
-            vec![peaks_len],
-            peaks_encoded,
-        ]
-        .concat()
     }
 }
 

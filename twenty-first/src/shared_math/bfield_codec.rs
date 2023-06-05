@@ -20,13 +20,15 @@ use super::x_field_element::EXTENSION_DEGREE;
 /// BFieldCodec
 ///
 /// This trait provides functions for encoding to and decoding from a
-/// Vec of BFieldElements. This encoding records the length of
-/// variable-size structures, whether implicitly or explicitly via
-/// length-prepending. It does not record type information; this is
+/// Vec of BFieldElements. This encoding does not record the size of
+/// objects nor their type information; this is
 /// the responsibility of the decoder.
 pub trait BFieldCodec {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>>;
     fn encode(&self) -> Vec<BFieldElement>;
+
+    /// Returns the length in number of BFieldElements if it is known at compile-time. Otherwise, None.
+    fn static_length() -> Option<usize>;
 }
 
 impl BFieldCodec for BFieldElement {
@@ -40,6 +42,10 @@ impl BFieldCodec for BFieldElement {
 
     fn encode(&self) -> Vec<BFieldElement> {
         [*self].to_vec()
+    }
+
+    fn static_length() -> Option<usize> {
+        Some(1)
     }
 }
 
@@ -60,6 +66,10 @@ impl BFieldCodec for XFieldElement {
     fn encode(&self) -> Vec<BFieldElement> {
         self.coefficients.to_vec()
     }
+
+    fn static_length() -> Option<usize> {
+        Some(EXTENSION_DEGREE)
+    }
 }
 
 impl BFieldCodec for Digest {
@@ -75,78 +85,209 @@ impl BFieldCodec for Digest {
     fn encode(&self) -> Vec<BFieldElement> {
         self.values().to_vec()
     }
+
+    fn static_length() -> Option<usize> {
+        Some(DIGEST_LENGTH)
+    }
+}
+
+impl BFieldCodec for u128 {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.len() != 4 {
+            bail!(
+                "Cannot decode sequence of length {} =/= 4 as u128.",
+                sequence.len()
+            );
+        }
+        if !sequence.iter().all(|s| s.value() <= u32::MAX as u64) {
+            bail!(
+                "Could not parse sequence of BFieldElements {:?} as u128.",
+                sequence
+            );
+        }
+        return Ok(Box::new(
+            sequence
+                .iter()
+                .enumerate()
+                .map(|(i, s)| (s.value() as u128) << (i * 32))
+                .sum(),
+        ));
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        (0..4)
+            .map(|i| (*self >> (i * 32)) as u64 & u32::MAX as u64)
+            .map(BFieldElement::new)
+            .collect_vec()
+    }
+
+    fn static_length() -> Option<usize> {
+        Some(4)
+    }
+}
+
+impl BFieldCodec for u64 {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.len() != 2 {
+            bail!(
+                "Cannot decode sequence of length {} =/= 2 as u64.",
+                sequence.len()
+            );
+        }
+        if !sequence.iter().all(|s| s.value() <= u32::MAX as u64) {
+            bail!(
+                "Could not parse sequence of BFieldElements {:?} as u64.",
+                sequence
+            );
+        }
+        return Ok(Box::new(
+            sequence
+                .iter()
+                .enumerate()
+                .map(|(i, s)| s.value() << (i * 32))
+                .sum(),
+        ));
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        (0..2)
+            .map(|i| (*self >> (i * 32)) & u32::MAX as u64)
+            .map(BFieldElement::new)
+            .collect_vec()
+    }
+
+    fn static_length() -> Option<usize> {
+        Some(2)
+    }
+}
+
+impl BFieldCodec for bool {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.len() != 1 {
+            bail!(
+                "Cannot decode sequence of {} =/= 1 BFieldElements as bool.",
+                sequence.len()
+            );
+        }
+        Ok(Box::new(match sequence[0].value() {
+            0 => false,
+            1 => true,
+            n => bail!("Failed to parse BFieldElement {n} as bool."),
+        }))
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        vec![BFieldElement::new(*self as u64)]
+    }
+
+    fn static_length() -> Option<usize> {
+        Some(1)
+    }
+}
+
+impl BFieldCodec for u32 {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.len() != 1 {
+            bail!(
+                "Cannot decode sequence of length {} =/= 1 BFieldElements as u32.",
+                sequence.len()
+            );
+        }
+        let value = sequence[0].value();
+        if value > u32::MAX as u64 {
+            bail!("Cannot decode BFieldElement {value} as u32.");
+        }
+        Ok(Box::new(value as u32))
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        vec![BFieldElement::new(*self as u64)]
+    }
+
+    fn static_length() -> Option<usize> {
+        Some(1)
+    }
 }
 
 impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
     fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
+        let mut index = 0;
         // decode T
-        let maybe_element_zero = str.get(0);
-        if matches!(maybe_element_zero, None) {
-            bail!("trying to decode empty slice as tuple",);
-        }
-
-        let len_t = maybe_element_zero.unwrap().value() as usize;
-        if str.len() < 1 + len_t {
-            bail!("prepended length of tuple element does not match with remaining string length");
-        }
-        let maybe_t = T::decode(&str[1..(1 + len_t)]);
+        let len_t = match T::static_length() {
+            Some(len) => len,
+            None => {
+                let length = match str.get(index) {
+                    Some(bfe) => bfe.value() as usize,
+                    None => bail!(
+                        "Prepended length of type T satisfying unsized BFieldCodec does not exist"
+                    ),
+                };
+                index += 1;
+                length
+            }
+        };
+        let t = *T::decode(&str[index..index + len_t])?;
+        index += len_t;
 
         // decode S
-        let maybe_next_element = str.get(1 + len_t);
-        if matches!(maybe_next_element, None) {
-            bail!("trying to decode singleton as tuple");
-        }
-
-        let len_s = maybe_next_element.unwrap().value() as usize;
-        if str.len() != 1 + len_t + 1 + len_s {
-            bail!(
-                "prepended length of second tuple element does not match with remaining string length",
-            );
-        }
-        let maybe_s = S::decode(&str[(1 + len_t + 1)..]);
-
-        if let Ok(t) = maybe_t {
-            if let Ok(s) = maybe_s {
-                Ok(Box::new((*t, *s)))
-            } else {
-                bail!("could not decode s")
+        let len_s = match S::static_length() {
+            Some(len) => len,
+            None => {
+                let length = match str.get(index) {
+                    Some(bfe) => bfe.value() as usize,
+                    None => bail!(
+                        "Prepended length of type S satisfying unsized BFieldCodec does not exist"
+                    ),
+                };
+                index += 1;
+                length
             }
-        } else {
-            bail!("could not decode t")
+        };
+        let s = *S::decode(&str[index..index + len_s])?;
+        index += len_t;
+
+        if index != str.len() {
+            bail!("Error decoding (T,S): length mismatch");
         }
+
+        Ok(Box::new((t, s)))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
         let mut str = vec![];
         let mut encoding_of_t = self.0.encode();
         let mut encoding_of_s = self.1.encode();
-        str.push(BFieldElement::new(encoding_of_t.len().try_into().expect(
-            "encoding of t has length that does not fit in BFieldElement",
-        )));
+        if let Some(len_t) = T::static_length() {
+            str.push(BFieldElement::new(len_t as u64));
+        }
         str.append(&mut encoding_of_t);
-        str.push(BFieldElement::new(encoding_of_s.len().try_into().expect(
-            "encoding of s has length that does not fit in BFieldElement",
-        )));
+        if let Some(len_s) = S::static_length() {
+            str.push(BFieldElement::new(len_s as u64));
+        }
         str.append(&mut encoding_of_s);
         str
+    }
+
+    fn static_length() -> Option<usize> {
+        if T::static_length().is_none() || S::static_length().is_none() {
+            None
+        } else {
+            Some(T::static_length().unwrap() + S::static_length().unwrap())
+        }
     }
 }
 
 impl<T: BFieldCodec> BFieldCodec for Option<T> {
     fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        let maybe_element_zero = str.get(0);
-        if matches!(maybe_element_zero, None) {
-            bail!("trying to decode empty slice into option of elements");
-        }
+        let isset = match str.get(0) {
+            Some(e) => e.value() != 0,
+            None => bail!("Cannot decode Option of T: empty sequence"),
+        };
 
-        if maybe_element_zero.unwrap().is_zero() {
+        if !isset {
             Ok(Box::new(None))
         } else {
-            let maybe_t = T::decode(&str[1..]);
-            match maybe_t {
-                Ok(t) => Ok(Box::new(Some(*t))),
-                Err(e) => Err(e),
-            }
+            Ok(Box::new(Some(*T::decode(&str[1..])?)))
         }
     }
 
@@ -163,6 +304,10 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
         }
         str
     }
+
+    fn static_length() -> Option<usize> {
+        None
+    }
 }
 
 impl<T: BFieldCodec> BFieldCodec for Vec<T> {
@@ -170,41 +315,92 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
         if sequence.is_empty() {
             bail!("Cannot decode empty sequence into Vec<T>");
         }
-        let total_length_indication = sequence[0].value() as usize;
+        match T::static_length() {
+            Some(element_length) => {
+                let vector_length_indication = sequence[0].value() as usize;
 
-        if sequence.len() != total_length_indication + 1 {
-            bail!("Length indication plus one must match actual sequence length. Indication was {}. Actual length was {}.", total_length_indication, sequence.len());
+                if vector_length_indication
+                    .checked_mul(element_length)
+                    .is_none()
+                {
+                    bail!("Length indication too large: {}", vector_length_indication);
+                }
+
+                if sequence.len() != vector_length_indication * element_length + 1 {
+                    bail!("Length indication plus one must match actual sequence length. Indication was {}. Sequence length was {}.", vector_length_indication, sequence.len());
+                }
+
+                let mut ret: Vec<T> = Vec::with_capacity(vector_length_indication);
+                let mut index = 1;
+                while index < sequence.len() {
+                    let element = *T::decode(&sequence[index..index + element_length])?;
+                    index += element_length;
+                    ret.push(element);
+                }
+
+                Ok(Box::new(ret))
+            }
+            None => {
+                let total_length_indication = sequence[0].value() as usize;
+
+                if sequence.len() != total_length_indication + 1 {
+                    bail!("Length indication plus one must match actual sequence length. Indication was {}. Sequence length was {}.", total_length_indication, sequence.len());
+                }
+
+                let mut ret = vec![];
+                let sequence = sequence.to_vec();
+                let mut index = 1;
+                while index < sequence.len() {
+                    let element_length_indication = match sequence.get(index) {
+                        Some(e) => e.value() as usize,
+                        None => bail!("Index count mismatch while decoding Vec of T"),
+                    };
+                    index += 1;
+                    let element = *T::decode(&sequence[index..index + element_length_indication])?;
+                    index += element_length_indication;
+                    ret.push(element);
+                }
+
+                Ok(Box::new(ret))
+            }
         }
-
-        let mut ret = vec![];
-        let sequence = sequence.to_vec();
-        let mut index = 1;
-        while index < sequence.len() {
-            let element_length_indication = sequence[index].value() as usize;
-            index += 1;
-            let element = *T::decode(&sequence[index..index + element_length_indication])?;
-            index += element_length_indication;
-            ret.push(element);
-        }
-
-        Ok(Box::new(ret))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
-        // Set temp value for total length indication
-        let mut ret = vec![BFieldElement::new(0)];
+        match T::static_length() {
+            Some(_) => {
+                // Set temp value for vector length indication
+                let mut ret = vec![BFieldElement::new(0)];
 
-        for elem in self {
-            let mut element_encoded = elem.encode();
-            let element_length_indicator = BFieldElement::new(element_encoded.len() as u64);
-            ret.push(element_length_indicator);
-            ret.append(&mut element_encoded);
+                for elem in self {
+                    let mut element_encoded = elem.encode();
+                    ret.append(&mut element_encoded);
+                }
+
+                // Set total length indicator
+                ret[0] = BFieldElement::new(self.len() as u64);
+
+                ret
+            }
+            None => {
+                let mut ret = vec![BFieldElement::new(0)];
+
+                for elem in self {
+                    let mut element_encoded = elem.encode();
+                    ret.push(BFieldElement::new(element_encoded.len() as u64));
+                    ret.append(&mut element_encoded);
+                }
+
+                // Set total length indicator
+                ret[0] = BFieldElement::new(ret.len() as u64 - 1);
+
+                ret
+            }
         }
+    }
 
-        // Set total length indicator
-        ret[0] = BFieldElement::new((ret.len() - 1) as u64);
-
-        ret
+    fn static_length() -> Option<usize> {
+        None
     }
 }
 
@@ -261,7 +457,7 @@ impl BFieldCodec for Vec<PartialAuthenticationPath<Digest>> {
                 if mask & (1 << i) == 0 {
                     pap.push(None);
                 } else if let Some(chunk) = str.get(index..(index + DIGEST_LENGTH)) {
-                    pap.push(Some(*Digest::decode(chunk)?));
+                    pap.push(Some(Digest::new(chunk.try_into().unwrap())));
                     index += DIGEST_LENGTH;
                 } else {
                     bail!(
@@ -292,7 +488,7 @@ impl BFieldCodec for Vec<PartialAuthenticationPath<Digest>> {
                     mask |= 1;
                 }
             }
-            let mut vector = pap.iter().flatten().map(|d| d.encode()).concat();
+            let mut vector = pap.iter().flatten().map(|d| d.values().to_vec()).concat();
 
             str.push(BFieldElement::new(
                 2u64 + std::convert::TryInto::<u64>::try_into(vector.len()).unwrap(),
@@ -303,67 +499,19 @@ impl BFieldCodec for Vec<PartialAuthenticationPath<Digest>> {
         }
         str
     }
-}
 
-/// Decode a string of `BFieldElement`s into a `Vec` for `T`s. This
-/// function exists because it is not a good idea to implement
-/// `BFieldCodec` for `Vec<T>`.
-pub fn decode_vec<T: BFieldCodec>(sequence: &[BFieldElement]) -> Result<Box<Vec<T>>> {
-    let total_length = match sequence.get(0) {
-        Some(result) => result.value() as usize,
-        None => bail!("Cannot decode empty Vec of BFieldElements."),
-    };
-    if sequence.len() < total_length + 1 {
-        bail!("Cannot decode Vec of BFieldElements because of improper length prepending.");
+    fn static_length() -> Option<usize> {
+        None
     }
-
-    let mut vector: Vec<T> = vec![];
-    let mut read_index = 1;
-    while read_index < sequence.len() {
-        let inner_len = match sequence.get(read_index) {
-            Some(result) => result.value() as usize,
-            None => bail!(
-                "Cannot decode Vec of BFieldElements because element is not length-prepended."
-            ),
-        };
-        read_index += 1;
-
-        if sequence.len() < read_index + inner_len {
-            bail!("Cannot decode Vec of BFieldElements because of improper element length prepending.");
-        }
-
-        let inner_sequence = &sequence[read_index..read_index + inner_len];
-        read_index += inner_len;
-        vector.push(*T::decode(inner_sequence)?);
-    }
-
-    Ok(Box::new(vector))
-}
-
-/// Encode a `Vec` of `T`s into a `Vec` of `BFieldElement`s in such a
-/// way that the matching `decode_vec` function recovers the original
-/// This function exists because it is not a good idea to implement
-/// `BFieldCodec` for `Vec<T>`.
-///
-/// This function should not be used when `Vec<T>` already implements
-/// `BFieldCodec`. In that case, just use `.encode()` instead.
-///
-/// Todo: investigate whether a smarter encoding makes sense
-pub fn encode_vec<T: BFieldCodec>(vector: &[T]) -> Vec<BFieldElement> {
-    let mut sequence: Vec<BFieldElement> = vec![BFieldElement::zero()];
-    for v in vector.iter() {
-        let mut element = v.encode();
-        sequence.push(BFieldElement::new(element.len() as u64));
-        sequence.append(&mut element);
-    }
-    sequence[0] = BFieldElement::new(sequence.len() as u64 - 1);
-    sequence
 }
 
 impl<T> BFieldCodec for PhantomData<T> {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if !sequence.is_empty() {
-            bail!("Cannot decode non-empty BFE slice as phantom data")
+            bail!(
+                "Cannot decode non-empty BFE slice as phantom data; sequence length: {}",
+                sequence.len()
+            )
         }
         Ok(Box::new(PhantomData))
     }
@@ -371,149 +519,21 @@ impl<T> BFieldCodec for PhantomData<T> {
     fn encode(&self) -> Vec<BFieldElement> {
         vec![]
     }
-}
 
-impl BFieldCodec for u128 {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != 4 {
-            bail!(
-                "Cannot decode sequence of length {} =/= 4 as u128.",
-                sequence.len()
-            );
-        }
-        if !sequence.iter().all(|s| s.value() <= u32::MAX as u64) {
-            bail!(
-                "Could not parse sequence of BFieldElements {:?} as u128.",
-                sequence
-            );
-        }
-        return Ok(Box::new(
-            sequence
-                .iter()
-                .enumerate()
-                .map(|(i, s)| (s.value() as u128) << (i * 32))
-                .sum(),
-        ));
+    fn static_length() -> Option<usize> {
+        Some(0)
     }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        (0..4)
-            .map(|i| (*self >> (i * 32)) as u64 & u32::MAX as u64)
-            .map(BFieldElement::new)
-            .collect_vec()
-    }
-}
-
-impl BFieldCodec for u64 {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != 2 {
-            bail!(
-                "Cannot decode sequence of length {} =/= 2 as u64.",
-                sequence.len()
-            );
-        }
-        if !sequence.iter().all(|s| s.value() <= u32::MAX as u64) {
-            bail!(
-                "Could not parse sequence of BFieldElements {:?} as u64.",
-                sequence
-            );
-        }
-        return Ok(Box::new(
-            sequence
-                .iter()
-                .enumerate()
-                .map(|(i, s)| s.value() << (i * 32))
-                .sum(),
-        ));
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        (0..2)
-            .map(|i| (*self >> (i * 32)) & u32::MAX as u64)
-            .map(BFieldElement::new)
-            .collect_vec()
-    }
-}
-
-impl BFieldCodec for bool {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != 1 {
-            bail!(
-                "Cannot decode sequence of {} =/= 1 BFieldElements as bool.",
-                sequence.len()
-            );
-        }
-        Ok(Box::new(match sequence[0].value() {
-            0 => false,
-            1 => true,
-            n => bail!("Failed to parse BFieldElement {n} as bool."),
-        }))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        vec![BFieldElement::new(*self as u64)]
-    }
-}
-
-impl BFieldCodec for u32 {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != 1 {
-            bail!(
-                "Cannot decode sequence of {} =/= 1 BFieldElements as bool.",
-                sequence.len()
-            );
-        }
-        let value = sequence[0].value();
-        if value > u32::MAX as u64 {
-            bail!("Cannot decode BFieldElement {value} as u32.");
-        }
-        Ok(Box::new(value as u32))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        vec![BFieldElement::new(*self as u64)]
-    }
-}
-
-/// Decode a single field of a struct, assuming its length is prepended.
-/// Return the remaining sequence.
-pub fn decode_field_length_prepended<T: BFieldCodec>(
-    sequence: &[BFieldElement],
-) -> Result<(T, Vec<BFieldElement>)> {
-    if sequence.is_empty() {
-        bail!("Cannot decode field: sequence is empty.");
-    }
-    let len = sequence[0].value() as usize;
-    if sequence.len() < 1 + len {
-        bail!("Cannot decode field: sequence too short.");
-    }
-    let decoded = *T::decode(&sequence[1..1 + len])?;
-    Ok((decoded, sequence[1 + len..].to_vec()))
-}
-
-/// Decode a vector of some struct, assuming the length of the encoding is prepended. Return the remaining sequence.
-pub fn decode_vec_length_prepended<T: BFieldCodec>(
-    sequence: &[BFieldElement],
-) -> Result<(Vec<T>, Vec<BFieldElement>)> {
-    if sequence.is_empty() {
-        bail!("Cannot decode vec: sequence is empty.");
-    }
-    let len = sequence[0].value() as usize;
-    if sequence.len() < 1 + len {
-        bail!("Cannot decode vec: sequence too short.");
-    }
-    let decoded: Vec<T> = *decode_vec(&sequence[1..1 + len])?;
-    Ok((decoded, sequence[1 + len..].to_vec()))
 }
 
 #[cfg(test)]
 mod bfield_codec_tests {
+
     use itertools::Itertools;
     use rand::thread_rng;
     use rand::Rng;
     use rand::RngCore;
 
-    use crate::amount::u32s::U32s;
+    use crate::shared_math::other::random_elements;
     use crate::shared_math::tip5::Tip5;
 
     use super::*;
@@ -687,41 +707,23 @@ mod bfield_codec_tests {
     fn test_decode_random_negative() {
         for _ in 1..=10000 {
             let len = random_length(100);
-            let str = (0..len).map(|_| random_bfieldelement()).collect_vec();
+            let str: Vec<BFieldElement> = random_elements(len);
 
             // Some of the following cases can be triggered by false
             // positives. This should occur with probability roughly
             // 2^-60.
 
-            if let Ok(_sth) = BFieldElement::decode(&str) {
-                if str.len() != 1 {
-                    panic!();
-                }
+            if let Ok(sth) = Vec::<BFieldElement>::decode(&str) {
+                panic!("{sth:?}");
             }
 
-            if let Ok(_sth) = XFieldElement::decode(&str) {
-                if str.len() != EXTENSION_DEGREE {
-                    panic!();
-                }
-            }
-
-            if let Ok(_sth) = Digest::decode(&str) {
-                if str.len() != DIGEST_LENGTH {
-                    panic!();
-                }
-            }
-
-            // if let Ok(sth) = Vec::<BFieldElement>::decode(&str) {
-            //     (should work)
-            // }
-
-            if str.len() % EXTENSION_DEGREE != 0 {
+            if str.len() % EXTENSION_DEGREE != 1 {
                 if let Ok(sth) = Vec::<XFieldElement>::decode(&str) {
                     panic!("{sth:?}");
                 }
             }
 
-            if str.len() % DIGEST_LENGTH != 0 {
+            if str.len() % DIGEST_LENGTH != 1 {
                 if let Ok(sth) = Vec::<Digest>::decode(&str) {
                     panic!("{sth:?}");
                 }
@@ -758,109 +760,10 @@ mod bfield_codec_tests {
             }
         }
 
-        let encoded = encode_vec(&vector);
-        let decoded = *decode_vec(&encoded).unwrap();
+        let encoded = vector.encode();
+        let decoded = *Vec::<Option<XFieldElement>>::decode(&encoded).unwrap();
 
         assert_eq!(vector, decoded);
-    }
-
-    #[test]
-    fn test_decode_u128() {
-        let mut rng = thread_rng();
-        for _ in 0..100 {
-            let num = (rng.next_u64() as u128) << 64 | rng.next_u64() as u128;
-            let encoded = num.encode();
-            let decoded = *u128::decode(&encoded).unwrap();
-            assert_eq!(num, decoded);
-
-            // Verify same encoding as U32<4>
-            let u32_4: U32s<4> = num.try_into().unwrap();
-            let u32_4_encoded = u32_4.encode();
-            assert_eq!(encoded, u32_4_encoded);
-        }
-
-        for v in [
-            0u64,
-            1u64,
-            u64::MAX - 1,
-            u64::MAX,
-            BFieldElement::MAX,
-            BFieldElement::P,
-        ] {
-            let encoded = v.encode();
-            assert_eq!(*u64::decode(&encoded).unwrap(), v);
-
-            // Verify same encoding as U32<2>
-            let u32_2: U32s<2> = v.try_into().unwrap();
-            let u32_2_encoded = u32_2.encode();
-            assert_eq!(encoded, u32_2_encoded);
-        }
-    }
-
-    #[test]
-    fn test_decode_u64() {
-        let mut rng = thread_rng();
-        for _ in 0..100 {
-            let num = rng.next_u64();
-            let encoded = num.encode();
-            let decoded = *u64::decode(&encoded).unwrap();
-            assert_eq!(num, decoded);
-
-            // Verify same encoding as U32<2>
-            let u32_2: U32s<2> = num.try_into().unwrap();
-            let u32_2_encoded = u32_2.encode();
-            assert_eq!(encoded, u32_2_encoded);
-        }
-
-        for v in [
-            0u64,
-            1u64,
-            u64::MAX - 1,
-            u64::MAX,
-            BFieldElement::MAX,
-            BFieldElement::P,
-        ] {
-            let encoded = v.encode();
-            assert_eq!(*u64::decode(&encoded).unwrap(), v);
-
-            // Verify same encoding as U32<2>
-            let u32_2: U32s<2> = v.try_into().unwrap();
-            let u32_2_encoded = u32_2.encode();
-            assert_eq!(encoded, u32_2_encoded);
-        }
-    }
-
-    #[test]
-    fn test_decode_u32() {
-        let mut rng = thread_rng();
-        for _ in 0..100 {
-            let num = rng.next_u32();
-            let encoded = num.encode();
-            let decoded = *u32::decode(&encoded).unwrap();
-            assert_eq!(num, decoded);
-
-            // Verify same encoding as U32<1>
-            let u32_1: U32s<1> = num.try_into().unwrap();
-            let u32_1_encoded = u32_1.encode();
-            assert_eq!(encoded, u32_1_encoded);
-        }
-
-        for v in [0u32, 1u32, u32::MAX - 1, u32::MAX] {
-            assert_eq!(*u32::decode(&v.encode()).unwrap(), v);
-        }
-    }
-
-    #[test]
-    fn test_decode_bool() {
-        let trew = true;
-        let true_encoded = trew.encode();
-        let true_decoded = *bool::decode(&true_encoded).unwrap();
-        assert_eq!(true_decoded, trew);
-
-        let fallse = false;
-        let false_encoded = fallse.encode();
-        let false_decoded = *bool::decode(&false_encoded).unwrap();
-        assert_eq!(false_decoded, fallse);
     }
 
     #[test]
@@ -870,13 +773,7 @@ mod bfield_codec_tests {
         let decoded = *PhantomData::decode(&encoded).unwrap();
         assert_eq!(decoded, pd);
 
-        let mut sequence = vec![BFieldElement::new(encoded.len() as u64)];
-        sequence.append(&mut pd.encode());
-
-        let (field_value, sequence) =
-            decode_field_length_prepended::<PhantomData<Tip5>>(&sequence).unwrap();
-        assert_eq!(pd, field_value);
-        assert!(sequence.is_empty());
+        assert!(encoded.is_empty());
     }
 }
 

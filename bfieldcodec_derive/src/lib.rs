@@ -90,7 +90,7 @@ fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<String> {
 }
 
 fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
-    let (decode_statements, encode_statements, value_constructor) = match &ast.data {
+    let (decode_statements, encode_statements, value_constructor, field_types) = match &ast.data {
         syn::Data::Struct(syn::DataStruct {
             fields: syn::Fields::Named(fields),
             ..
@@ -113,6 +113,8 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
     // Extract the generics of the struct/enum.
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
+    let num_fields = field_types.len();
+
     let gen = quote! {
         impl #impl_generics BFieldCodec for #name #ty_generics #where_clause{
             fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
@@ -131,6 +133,16 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
                 #(#encode_statements)*
                 elements
             }
+
+            fn static_length() -> Option<usize> {
+                let field_lengths : [Option<usize>; #num_fields] = [#(<#field_types as BFieldCodec>::static_length(),)*];
+                if field_lengths.iter().all(|fl| fl.is_some() ) {
+                    Some(field_lengths.iter().map(|fl| fl.unwrap()).sum())
+                }
+                else {
+                    None
+                }
+            }
         }
     };
 
@@ -143,6 +155,7 @@ fn struct_with_named_fields(
     Vec<quote::__private::TokenStream>,
     Vec<quote::__private::TokenStream>,
     quote::__private::TokenStream,
+    Vec<syn::Type>,
 ) {
     let fields: Vec<_> = fields.named.iter().collect();
     let field_names: Vec<_> = fields
@@ -150,7 +163,10 @@ fn struct_with_named_fields(
         .map(|field| field.ident.as_ref().unwrap().to_owned())
         .collect();
 
-    let field_types = fields.iter().map(|field| &field.ty);
+    let field_types = fields
+        .iter()
+        .map(|field| field.ty.clone())
+        .collect::<Vec<_>>();
 
     let encode_statements: Vec<_> = field_names
         .iter()
@@ -164,14 +180,19 @@ fn struct_with_named_fields(
         .collect();
 
     let decode_statements: Vec<_> = field_types
-        .clone()
+        .iter()
         .zip(&field_names)
         .map(|(ftype, fname)| generate_decode_statement(fname, ftype))
         .collect();
 
     let value_constructor = quote! { Self { #(#field_names,)* } };
 
-    (decode_statements, encode_statements, value_constructor)
+    (
+        decode_statements,
+        encode_statements,
+        value_constructor,
+        field_types,
+    )
 }
 
 fn struct_with_unnamed_fields(
@@ -180,9 +201,14 @@ fn struct_with_unnamed_fields(
     Vec<quote::__private::TokenStream>,
     Vec<quote::__private::TokenStream>,
     quote::__private::TokenStream,
+    Vec<syn::Type>,
 ) {
     let indices: Vec<_> = (0..fields.unnamed.len()).map(syn::Index::from).collect();
-    let field_types = fields.unnamed.iter().map(|field| &field.ty);
+    let field_types = fields
+        .unnamed
+        .iter()
+        .map(|field| field.ty.clone())
+        .collect::<Vec<_>>();
 
     // Generate variables to capture decoded field values
     let field_names: Vec<_> = indices
@@ -192,7 +218,7 @@ fn struct_with_unnamed_fields(
 
     // Generate statements to decode each field
     let decode_statements: Vec<_> = field_types
-        .clone()
+        .iter()
         .zip(&field_names)
         .map(|(ty, var)| generate_decode_statement(var, ty))
         .collect();
@@ -210,7 +236,12 @@ fn struct_with_unnamed_fields(
 
     let value_constructor: quote::__private::TokenStream = quote! { Self ( #(#field_names,)* ) };
 
-    (decode_statements, encode_statements, value_constructor)
+    (
+        decode_statements,
+        encode_statements,
+        value_constructor,
+        field_types,
+    )
 }
 
 fn generate_decode_statement(
@@ -218,7 +249,15 @@ fn generate_decode_statement(
     field_type: &syn::Type,
 ) -> quote::__private::TokenStream {
     quote! {
-        let (field_value, sequence) = decode_field_length_prepended::<#field_type>(&sequence)?;
+        let (field_value, sequence) = {if sequence.is_empty() {
+            bail!("Cannot decode field: sequence is empty.");
+        }
+        let len = sequence[0].value() as usize;
+        if sequence.len() < 1 + len {
+            bail!("Cannot decode field: sequence too short.");
+        }
+        let decoded = *<#field_type as BFieldCodec>::decode(&sequence[1..1 + len])?;
+        (decoded, sequence[1 + len..].to_vec())};
         let #field_name = field_value;
     }
 }

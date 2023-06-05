@@ -358,6 +358,10 @@ impl<const N: usize> BFieldCodec for U32s<N> {
         }
         Ok(Box::new(Self::new(array)))
     }
+
+    fn static_length() -> Option<usize> {
+        Some(N)
+    }
 }
 
 #[cfg(test)]
