@@ -1,4 +1,3 @@
-use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;

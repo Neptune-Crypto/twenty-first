@@ -2,10 +2,13 @@ use std::marker::PhantomData;
 
 use anyhow::bail;
 use anyhow::Result;
-use bfieldcodec_derive::BFieldCodec;
 use itertools::Itertools;
 use num_traits::One;
 use num_traits::Zero;
+
+// Re-export the derive macro so that it can be used in other crates without having to add
+// an explicit dependency on `bfieldcodec_derive` to their Cargo.toml.
+pub use bfieldcodec_derive::BFieldCodec;
 
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
@@ -26,7 +29,8 @@ pub trait BFieldCodec {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>>;
     fn encode(&self) -> Vec<BFieldElement>;
 
-    /// Returns the length in number of BFieldElements if it is known at compile-time. Otherwise, None.
+    /// Returns the length in number of BFieldElements if it is known at compile-time.
+    /// Otherwise, None.
     fn static_length() -> Option<usize>;
 }
 
@@ -326,7 +330,12 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
                 }
 
                 if sequence.len() != vector_length_indication * element_length + 1 {
-                    bail!("Length indication plus one must match actual sequence length. Indication was {}. Sequence length was {}.", vector_length_indication, sequence.len());
+                    bail!(
+                        "Length indication plus one must match actual sequence length. \
+                        Indication was {}. Sequence length was {}.",
+                        vector_length_indication,
+                        sequence.len()
+                    );
                 }
 
                 let mut ret: Vec<T> = Vec::with_capacity(vector_length_indication);
@@ -343,7 +352,12 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
                 let total_length_indication = sequence[0].value() as usize;
 
                 if sequence.len() != total_length_indication + 1 {
-                    bail!("Length indication plus one must match actual sequence length. Indication was {}. Sequence length was {}.", total_length_indication, sequence.len());
+                    bail!(
+                        "Length indication plus one must match actual sequence length. \
+                        Indication was {}. Sequence length was {}.",
+                        total_length_indication,
+                        sequence.len()
+                    );
                 }
 
                 let mut ret = vec![];

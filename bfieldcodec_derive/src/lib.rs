@@ -1,3 +1,5 @@
+//! This crate provides a derive macro for the `BFieldCodec` trait.
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
@@ -116,8 +118,11 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
     let num_fields = field_types.len();
 
     let gen = quote! {
-        impl #impl_generics BFieldCodec for #name #ty_generics #where_clause{
-            fn decode(sequence: &[crate::shared_math::b_field_element::BFieldElement]) -> anyhow::Result<Box<Self>> {
+        impl #impl_generics ::twenty_first::shared_math::bfield_codec::BFieldCodec
+        for #name #ty_generics #where_clause{
+            fn decode(
+                sequence: &[::twenty_first::shared_math::b_field_element::BFieldElement],
+            ) -> anyhow::Result<Box<Self>> {
                 let mut sequence = sequence.to_vec();
                 #(#decode_statements)*
 
@@ -128,14 +133,19 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
                 Ok(Box::new(#value_constructor))
             }
 
-            fn encode(&self) -> Vec<crate::shared_math::b_field_element::BFieldElement> {
+            fn encode(&self) -> Vec<::twenty_first::shared_math::b_field_element::BFieldElement> {
                 let mut elements = Vec::new();
                 #(#encode_statements)*
                 elements
             }
 
             fn static_length() -> Option<usize> {
-                let field_lengths : [Option<usize>; #num_fields] = [#(<#field_types as BFieldCodec>::static_length(),)*];
+                let field_lengths : [Option<usize>; #num_fields] = [
+                    #(
+                        <#field_types as
+                        ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length(),
+                    )*
+                ];
                 if field_lengths.iter().all(|fl| fl.is_some() ) {
                     Some(field_lengths.iter().map(|fl| fl.unwrap()).sum())
                 }
@@ -172,8 +182,13 @@ fn struct_with_named_fields(
         .iter()
         .map(|fname| {
             quote! {
-                let mut #fname: Vec<crate::shared_math::b_field_element::BFieldElement> = self.#fname.encode();
-                elements.push(crate::shared_math::b_field_element::BFieldElement::new(#fname.len() as u64));
+                let mut #fname: Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
+                    = self.#fname.encode();
+                elements.push(
+                    ::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                        #fname.len() as u64
+                    )
+                );
                 elements.append(&mut #fname);
             }
         })
@@ -227,9 +242,13 @@ fn struct_with_unnamed_fields(
         .iter()
         .map(|idx| {
             quote! {
-                    let mut field_value: Vec<crate::shared_math::b_field_element::BFieldElement> = self.#idx.encode();
-                    elements.push(crate::shared_math::b_field_element::BFieldElement::new(field_value.len() as u64));
-                    elements.append(&mut field_value);
+                let mut field_value:
+                    Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
+                    = self.#idx.encode();
+                elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                    field_value.len() as u64)
+                );
+                elements.append(&mut field_value);
             }
         })
         .collect();
@@ -256,7 +275,10 @@ fn generate_decode_statement(
         if sequence.len() < 1 + len {
             anyhow::bail!("Cannot decode field: sequence too short.");
         }
-        let decoded = *<#field_type as BFieldCodec>::decode(&sequence[1..1 + len])?;
+        let decoded = *<#field_type
+            as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
+                &sequence[1..1 + len]
+            )?;
         (decoded, sequence[1 + len..].to_vec())};
         let #field_name = field_value;
     }

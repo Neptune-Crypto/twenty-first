@@ -1,4 +1,3 @@
-use bfieldcodec_derive::BFieldCodec;
 use itertools::izip;
 use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
