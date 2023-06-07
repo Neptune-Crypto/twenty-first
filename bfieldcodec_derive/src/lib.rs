@@ -4,6 +4,8 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::spanned::Spanned;
+use syn::Ident;
 
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
@@ -16,79 +18,67 @@ pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
     impl_bfieldcodec_macro(ast)
 }
 
-// Add a bound `T: BFieldCodec` to every type parameter T, unless we ignore it.
-fn add_trait_bounds(mut generics: syn::Generics, ignored: &[String]) -> syn::Generics {
+/// Add a bound `T: BFieldCodec` to every type parameter T, unless we ignore it.
+fn add_trait_bounds(mut generics: syn::Generics, ignored: &[Ident]) -> syn::Generics {
     for param in &mut generics.params {
-        if let syn::GenericParam::Type(type_param) = param {
-            let name = type_param.ident.to_string();
-            let mut found = false;
-            for ignored in ignored.iter() {
-                if ignored == &name {
-                    found = true;
-                    break;
-                }
-            }
-            if found {
-                continue;
-            }
-            type_param.bounds.push(syn::parse_quote!(BFieldCodec));
+        let syn::GenericParam::Type(type_param) = param else {
+            continue
+        };
+        if ignored.contains(&type_param.ident) {
+            continue;
         }
+        type_param.bounds.push(syn::parse_quote!(BFieldCodec));
     }
     generics
 }
 
-fn extract_ignored_generics_list(list: &[syn::Attribute]) -> Vec<String> {
-    let mut collection = Vec::new();
-
-    for attr in list.iter() {
-        let mut list = extract_ignored_generics(attr);
-
-        collection.append(&mut list);
-    }
-
-    collection
+fn extract_ignored_generics_list(list: &[syn::Attribute]) -> Vec<Ident> {
+    list.iter().flat_map(extract_ignored_generics).collect()
 }
 
-fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<String> {
-    let mut collection = Vec::new();
+fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<Ident> {
+    let bfield_codec_ident = Ident::new("bfield_codec", attr.span());
+    let ignore_ident = Ident::new("ignore", attr.span());
 
-    if let Ok(meta) = attr.parse_meta() {
-        if let Some(ident) = meta.path().get_ident() {
-            if &ident.to_string() != "bfield_codec" {
-                return collection;
-            }
-            if let syn::Meta::List(list) = meta {
-                for nested in list.nested.iter() {
-                    if let syn::NestedMeta::Meta(nmeta) = nested {
-                        let ident = nmeta
-                            .path()
-                            .get_ident()
-                            .expect("Invalid attribute syntax! (no iden)");
-                        if &ident.to_string() != "ignore" {
-                            panic!(
-                                "Invalid attribute syntax! Unknown name {:?}",
-                                ident.to_string()
-                            );
-                        }
+    let Ok(meta) = attr.parse_meta() else {
+        return vec![];
+    };
+    let Some(ident) = meta.path().get_ident() else {
+        return vec![];
+    };
+    if ident != &bfield_codec_ident {
+        return vec![];
+    }
+    let syn::Meta::List(list) = meta else {
+        return vec![];
+    };
 
-                        if let syn::Meta::List(list) = nmeta {
-                            for nested in list.nested.iter() {
-                                if let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested {
-                                    let path = path
-                                        .get_ident()
-                                        .expect("Invalid attribute syntax! (no ident)")
-                                        .to_string();
-                                    collection.push(path);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    let mut ignored_generics = vec![];
+    for nested in list.nested.iter() {
+        let syn::NestedMeta::Meta(nmeta) = nested else {
+            continue;
+        };
+        let Some(ident) = nmeta.path().get_ident() else {
+            panic!("Invalid attribute syntax! (no ident)");
+        };
+        if ident != &ignore_ident {
+            panic!("Invalid attribute syntax! Unknown name {ident}");
+        }
+        let syn::Meta::List(list) = nmeta else {
+            panic!("Invalid attribute syntax! Expected a list");
+        };
+
+        for nested in list.nested.iter() {
+            let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested else {
+                continue;
+            };
+            let Some(ident) = path.get_ident() else {
+                panic!("Invalid attribute syntax! (no ident)")
+            };
+            ignored_generics.push(ident.to_owned());
         }
     }
-
-    collection
+    ignored_generics
 }
 
 fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
