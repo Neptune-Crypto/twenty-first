@@ -149,6 +149,39 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
+fn field_is_ignored(field: &syn::Field) -> bool {
+    let bfield_codec_ident = Ident::new("bfield_codec", field.span());
+    let ignore_ident = Ident::new("ignore", field.span());
+
+    for attribute in field.attrs.iter() {
+        let Ok(meta) = attribute.parse_meta() else {
+            continue;
+        };
+        let Some(ident) = meta.path().get_ident() else {
+            continue;
+        };
+        if ident != &bfield_codec_ident {
+            continue;
+        }
+        let syn::Meta::List(list) = meta else {
+            panic!("Attribute {ident} must be of type `List`.");
+        };
+        for arg in list.nested.iter() {
+            let syn::NestedMeta::Meta(arg_meta) = arg else {
+                continue;
+            };
+            let Some(arg_ident) = arg_meta.path().get_ident() else {
+                panic!("Invalid attribute syntax! (no ident)");
+            };
+            if arg_ident != &ignore_ident {
+                panic!("Invalid attribute syntax! Unknown name {arg_ident}");
+            }
+            return true;
+        }
+    }
+    false
+}
+
 fn struct_with_named_fields(
     fields: &syn::FieldsNamed,
 ) -> (
@@ -157,19 +190,21 @@ fn struct_with_named_fields(
     quote::__private::TokenStream,
     Vec<syn::Type>,
 ) {
-    let fields: Vec<_> = fields.named.iter().collect();
-    let field_names: Vec<_> = fields
-        .iter()
-        .map(|field| field.ident.as_ref().unwrap().to_owned())
-        .collect();
+    let fields = fields.named.iter();
+    let included_fields = fields.clone().filter(|field| !field_is_ignored(field));
+    let ignored_fields = fields.clone().filter(|field| field_is_ignored(field));
 
-    let field_types = fields
-        .iter()
-        .map(|field| field.ty.clone())
-        .collect::<Vec<_>>();
+    let included_field_names = included_fields
+        .clone()
+        .map(|field| field.ident.as_ref().unwrap().to_owned());
+    let ignored_field_names = ignored_fields
+        .clone()
+        .map(|field| field.ident.as_ref().unwrap().to_owned());
 
-    let encode_statements: Vec<_> = field_names
-        .iter()
+    let included_field_types = included_fields.clone().map(|field| field.ty.clone());
+
+    let encode_statements = included_field_names
+        .clone()
         .map(|fname| {
             quote! {
                 let mut #fname: Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
@@ -184,19 +219,24 @@ fn struct_with_named_fields(
         })
         .collect();
 
-    let decode_statements: Vec<_> = field_types
-        .iter()
-        .zip(&field_names)
-        .map(|(ftype, fname)| generate_decode_statement(fname, ftype))
+    let decode_statements: Vec<_> = included_field_types
+        .clone()
+        .zip(included_field_names.clone())
+        .map(|(ftype, fname)| generate_decode_statement(&fname, &ftype))
         .collect();
 
-    let value_constructor = quote! { Self { #(#field_names,)* } };
+    let value_constructor = quote! {
+        Self {
+            #(#included_field_names,)*
+            #(#ignored_field_names: Default::default(),)*
+        }
+    };
 
     (
         decode_statements,
         encode_statements,
         value_constructor,
-        field_types,
+        included_field_types.collect(),
     )
 }
 
@@ -243,7 +283,7 @@ fn struct_with_unnamed_fields(
         })
         .collect();
 
-    let value_constructor: quote::__private::TokenStream = quote! { Self ( #(#field_names,)* ) };
+    let value_constructor = quote! { Self ( #(#field_names,)* ) };
 
     (
         decode_statements,
@@ -258,18 +298,20 @@ fn generate_decode_statement(
     field_type: &syn::Type,
 ) -> quote::__private::TokenStream {
     quote! {
-        let (field_value, sequence) = {if sequence.is_empty() {
-            anyhow::bail!("Cannot decode field: sequence is empty.");
-        }
-        let len = sequence[0].value() as usize;
-        if sequence.len() < 1 + len {
-            anyhow::bail!("Cannot decode field: sequence too short.");
-        }
-        let decoded = *<#field_type
-            as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
-                &sequence[1..1 + len]
-            )?;
-        (decoded, sequence[1 + len..].to_vec())};
+        let (field_value, sequence) = {
+            if sequence.is_empty() {
+                anyhow::bail!("Cannot decode field: sequence is empty.");
+            }
+            let len = sequence[0].value() as usize;
+            if sequence.len() < 1 + len {
+                anyhow::bail!("Cannot decode field: sequence too short.");
+            }
+            let decoded = *<#field_type
+                as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
+                    &sequence[1..1 + len]
+                )?;
+            (decoded, sequence[1 + len..].to_vec())
+        };
         let #field_name = field_value;
     }
 }

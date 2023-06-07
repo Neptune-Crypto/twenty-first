@@ -1038,4 +1038,21 @@ pub mod derive_tests {
             prop(random_struct());
         }
     }
+
+    #[test]
+    fn unsupported_fields_can_be_ignored_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        struct UnsupportedFields {
+            a: u64,
+            #[bfield_codec(ignore)]
+            b: usize,
+        }
+        let my_struct = UnsupportedFields {
+            a: random(),
+            b: random(),
+        };
+        let encoded = my_struct.encode();
+        let decoded = UnsupportedFields::decode(&encoded).unwrap();
+        assert_eq!(my_struct.a, decoded.a);
+    }
 }
