@@ -113,13 +113,10 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
             fn decode(
                 sequence: &[::twenty_first::shared_math::b_field_element::BFieldElement],
             ) -> anyhow::Result<Box<Self>> {
-                let mut sequence = sequence.to_vec();
                 #(#decode_statements)*
-
                 if !sequence.is_empty() {
                     anyhow::bail!("Failed to decode {}", stringify!(#name));
                 }
-
                 Ok(Box::new(#value_constructor))
             }
 
@@ -310,7 +307,7 @@ fn generate_decode_statement(
                 as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
                     &sequence[1..1 + len]
                 )?;
-            (decoded, sequence[1 + len..].to_vec())
+            (decoded, &sequence[1 + len..])
         };
         let #field_name = field_value;
     }
