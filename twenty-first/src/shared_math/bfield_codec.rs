@@ -318,52 +318,48 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
         if sequence.is_empty() {
             bail!("Cannot decode empty sequence into Vec<T>");
         }
-        match T::static_length() {
+        let vec_t = match T::static_length() {
             Some(element_length) => {
                 let vector_length_indication = sequence[0].value() as usize;
-
-                if vector_length_indication
-                    .checked_mul(element_length)
-                    .is_none()
-                {
+                let maybe_vector_size = vector_length_indication.checked_mul(element_length);
+                let Some(vector_size) = maybe_vector_size else {
                     bail!("Length indication too large: {}", vector_length_indication);
-                }
+                };
 
-                if sequence.len() != vector_length_indication * element_length + 1 {
+                if sequence.len() != vector_size + 1 {
                     bail!(
                         "Length indication plus one must match actual sequence length. \
-                        Indication was {}. Sequence length was {}.",
-                        vector_length_indication,
+                        Claimed vector length was {vector_length_indication}. \
+                        Item size was {element_length}. \
+                        Sequence length was {}.",
                         sequence.len()
                     );
                 }
-
-                let mut ret: Vec<T> = Vec::with_capacity(vector_length_indication);
-                let mut index = 1;
-                while index < sequence.len() {
-                    let element = *T::decode(&sequence[index..index + element_length])?;
-                    index += element_length;
-                    ret.push(element);
+                let raw_item_iter = sequence[1..].chunks_exact(element_length);
+                if !raw_item_iter.remainder().is_empty() {
+                    bail!("Could not chunk sequence into equal parts of size {element_length}.");
                 }
-
-                Ok(Box::new(ret))
+                let mut vec_t = Vec::with_capacity(vector_length_indication);
+                for raw_item in raw_item_iter {
+                    let item = *T::decode(raw_item)?;
+                    vec_t.push(item);
+                }
+                vec_t
             }
             None => {
+                let sequence_len = sequence.len();
                 let total_length_indication = sequence[0].value() as usize;
-
-                if sequence.len() != total_length_indication + 1 {
+                if sequence_len != total_length_indication + 1 {
                     bail!(
                         "Length indication plus one must match actual sequence length. \
-                        Indication was {}. Sequence length was {}.",
-                        total_length_indication,
-                        sequence.len()
+                        Length indication was {total_length_indication}. \
+                        Sequence length was {sequence_len}.",
                     );
                 }
 
-                let mut ret = vec![];
-                let sequence = sequence.to_vec();
                 let mut index = 1;
-                while index < sequence.len() {
+                let mut vec_t = vec![];
+                while index < sequence_len {
                     let element_length_indication = match sequence.get(index) {
                         Some(e) => e.value() as usize,
                         None => bail!("Index count mismatch while decoding Vec of T"),
@@ -371,12 +367,12 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
                     index += 1;
                     let element = *T::decode(&sequence[index..index + element_length_indication])?;
                     index += element_length_indication;
-                    ret.push(element);
+                    vec_t.push(element);
                 }
-
-                Ok(Box::new(ret))
+                vec_t
             }
-        }
+        };
+        Ok(Box::new(vec_t))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
