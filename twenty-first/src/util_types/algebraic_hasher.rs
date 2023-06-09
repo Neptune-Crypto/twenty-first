@@ -95,19 +95,29 @@ pub trait AlgebraicHasher: SpongeHasher {
     /// - The randomness depends on `state`.
     /// - `upper_bound` must be a power of 2.
     ///
-    /// If `num_indices` is not divisible by `RATE`, spill the remaining elements of the last `squeeze`.
+    /// This method uses von Neumann rejection sampling.
+    /// Specifically, if the top 32 bits of a BFieldElement are all
+    /// ones, then the bottom 32 bits are not uniformly distributed,
+    /// and so they are dropped. This method invokes squeeze until
+    /// enough uniform u32s have been sampled.
     fn sample_indices(
         state: &mut Self::SpongeState,
         upper_bound: u32,
         num_indices: usize,
     ) -> Vec<u32> {
-        assert!(is_power_of_two(upper_bound));
-        let num_squeezes = (num_indices + Self::RATE - 1) / Self::RATE;
-        (0..num_squeezes)
-            .flat_map(|_| Self::squeeze(state))
-            .take(num_indices)
-            .map(|b| (b.value() % upper_bound as u64) as u32)
-            .collect()
+        debug_assert!(is_power_of_two(upper_bound));
+        let mut indices = vec![];
+        let mut squeezed_elements = vec![];
+        while indices.len() != num_indices {
+            if squeezed_elements.is_empty() {
+                squeezed_elements = Self::squeeze(state).into_iter().rev().collect_vec();
+            }
+            let element = squeezed_elements.pop().unwrap();
+            if element != BFieldElement::new(BFieldElement::MAX) {
+                indices.push(element.value() as u32 % upper_bound);
+            }
+        }
+        indices
     }
 
     /// Produce `num_elements` random [XFieldElement] values.
