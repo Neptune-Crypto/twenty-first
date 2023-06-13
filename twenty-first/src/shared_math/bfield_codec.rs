@@ -310,6 +310,97 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
     }
 }
 
+impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N] {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+        if sequence.is_empty() {
+            bail!("Cannot decode empty sequence into Vec<T>");
+        }
+        let vec_t = match T::static_length() {
+            Some(element_size) => {
+                let expected_sequence_size = N.checked_mul(element_size);
+                let Some(expected_sequence_size) = expected_sequence_size else {
+                    bail!("Static array length too large: {}", N);
+                };
+
+                if sequence.len() != expected_sequence_size {
+                    bail!(
+                        "`Array length` * `element_size` match actual sequence length. \
+                        Claimed array length was {N}. \
+                        Item size was {element_size}. \
+                        Sequence length was {}.",
+                        sequence.len()
+                    );
+                }
+                let raw_item_iter = sequence.chunks_exact(element_size);
+                if !raw_item_iter.remainder().is_empty() {
+                    bail!("Could not chunk sequence into equal parts of size {element_size}.");
+                }
+                let mut vec_t = Vec::with_capacity(N);
+                for raw_item in raw_item_iter {
+                    let item = *T::decode(raw_item)?;
+                    vec_t.push(item);
+                }
+                vec_t
+            }
+            None => {
+                let sequence_len = sequence.len();
+                let total_length_indication = sequence[0].value() as usize;
+                if sequence_len != total_length_indication + 1 {
+                    bail!(
+                        "Length indication plus one must match actual sequence length. \
+                        Length indication was {total_length_indication}. \
+                        Sequence length was {sequence_len}.",
+                    );
+                }
+
+                let mut index = 1;
+                let mut vec_t = vec![];
+                while index < sequence_len {
+                    let element_length_indication = match sequence.get(index) {
+                        Some(e) => e.value() as usize,
+                        None => bail!("Index count mismatch while decoding Vec of T"),
+                    };
+                    index += 1;
+                    let element = *T::decode(&sequence[index..index + element_length_indication])?;
+                    index += element_length_indication;
+                    vec_t.push(element);
+                }
+                vec_t
+            }
+        };
+        Ok(Box::new(vec_t.try_into().unwrap_or_else(|_| {
+            panic!("Must be able to convert to array of length {N}")
+        })))
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        match T::static_length() {
+            // Length of both the sequence and the elements is known at compile time,
+            // so there's no need to prepend the length of the sequence.
+            Some(_) => self.iter().flat_map(|elem| elem.encode()).collect(),
+            None => {
+                // Prepend the length of the sequence as it's not known at compile time.
+                let mut ret = vec![BFieldElement::new(0)];
+
+                for elem in self {
+                    let mut element_encoded = elem.encode();
+                    ret.push(BFieldElement::new(element_encoded.len() as u64));
+                    ret.append(&mut element_encoded);
+                }
+
+                // Set total length indicator
+                ret[0] = BFieldElement::new(ret.len() as u64 - 1);
+
+                ret
+            }
+        }
+    }
+
+    fn static_length() -> Option<usize> {
+        T::static_length().map(|len| len * N)
+    }
+}
+
 impl<T: BFieldCodec> BFieldCodec for Vec<T> {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if sequence.is_empty() {
@@ -1061,6 +1152,115 @@ pub mod derive_tests {
         }
 
         assert!(MuchNesting::static_length().is_none());
+    }
+
+    #[test]
+    fn struct_with_small_array() {
+        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+        struct SmallArrayStructUnnamedFields([u128; 1]);
+
+        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+        struct SmallArrayStructNamedFields {
+            a: [u128; 1],
+        }
+
+        fn random_struct_unnamed_fields() -> SmallArrayStructUnnamedFields {
+            SmallArrayStructUnnamedFields([random(); 1])
+        }
+
+        fn random_struct_named_fields() -> SmallArrayStructNamedFields {
+            SmallArrayStructNamedFields { a: [random(); 1] }
+        }
+
+        for _ in 0..5 {
+            prop(random_struct_unnamed_fields());
+            prop(random_struct_named_fields());
+        }
+
+        assert_eq!(Some(4), SmallArrayStructUnnamedFields::static_length());
+        assert_eq!(Some(4), SmallArrayStructNamedFields::static_length());
+    }
+
+    #[test]
+    fn struct_with_big_array() {
+        const BIG_ARRAY_LENGTH: usize = 600;
+
+        #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+        struct BigArrayStructUnnamedFields([u128; BIG_ARRAY_LENGTH]);
+
+        #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+        struct BigArrayStructNamedFields {
+            a: [XFieldElement; BIG_ARRAY_LENGTH],
+            b: XFieldElement,
+            c: u64,
+        }
+
+        fn random_struct_unnamed_fields() -> BigArrayStructUnnamedFields {
+            BigArrayStructUnnamedFields(
+                random_elements::<u128>(BIG_ARRAY_LENGTH)
+                    .try_into()
+                    .unwrap(),
+            )
+        }
+
+        fn random_struct_named_fields() -> BigArrayStructNamedFields {
+            BigArrayStructNamedFields {
+                a: random_elements::<XFieldElement>(BIG_ARRAY_LENGTH)
+                    .try_into()
+                    .unwrap(),
+                b: random(),
+                c: random(),
+            }
+        }
+
+        for _ in 0..5 {
+            prop(random_struct_unnamed_fields());
+            prop(random_struct_named_fields());
+        }
+
+        assert_eq!(
+            Some(BIG_ARRAY_LENGTH * 4),
+            BigArrayStructUnnamedFields::static_length()
+        );
+        assert_eq!(
+            Some(BIG_ARRAY_LENGTH * 3 + 3 + 2),
+            BigArrayStructNamedFields::static_length()
+        );
+    }
+
+    #[test]
+    fn struct_with_array_with_dynamically_sized_elements() {
+        const ARRAY_LENGTH: usize = 7;
+
+        #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+        struct ArrayStructDynamicallySizedElementsUnnamedFields([Vec<u128>; ARRAY_LENGTH]);
+
+        #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+        struct ArrayStructDynamicallySizedElementsNamedFields {
+            a: [Vec<u128>; ARRAY_LENGTH],
+        }
+
+        fn random_struct_unnamed_fields() -> ArrayStructDynamicallySizedElementsUnnamedFields {
+            let mut rng = thread_rng();
+            ArrayStructDynamicallySizedElementsUnnamedFields(std::array::from_fn(|_| {
+                random_elements(rng.gen_range(0..100))
+            }))
+        }
+
+        fn random_struct_named_fields() -> ArrayStructDynamicallySizedElementsNamedFields {
+            let mut rng = thread_rng();
+            ArrayStructDynamicallySizedElementsNamedFields {
+                a: std::array::from_fn(|_| random_elements(rng.gen_range(0..100))),
+            }
+        }
+
+        for _ in 0..5 {
+            prop(random_struct_unnamed_fields());
+            prop(random_struct_named_fields());
+        }
+
+        assert!(ArrayStructDynamicallySizedElementsUnnamedFields::static_length().is_none());
+        assert!(ArrayStructDynamicallySizedElementsNamedFields::static_length().is_none());
     }
 
     #[test]
