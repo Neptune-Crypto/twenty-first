@@ -9,11 +9,9 @@ pub use crate::shared_math::digest::{Digest, DIGEST_LENGTH};
 
 use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
 
-use super::{
-    bfield_codec::BFieldCodec,
-    mds::generated_function,
-    x_field_element::{XFieldElement, EXTENSION_DEGREE},
-};
+use crate::shared_math::mds::generated_function;
+use crate::shared_math::x_field_element::XFieldElement;
+use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;

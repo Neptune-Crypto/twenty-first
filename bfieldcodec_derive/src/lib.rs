@@ -1,8 +1,45 @@
+//! This crate provides a derive macro for the `BFieldCodec` trait.
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::spanned::Spanned;
+use syn::Ident;
 
+/// Derives `BFieldCodec` for structs.
+///
+/// Fields that should not be serialized can be ignored by annotating them with
+/// `#[bfield_codec(ignore)]`.
+/// Ignored fields must implement [`Default`].
+///
+/// ### Example
+///
+/// ```ignore
+/// #[derive(BFieldCodec)]
+/// struct Foo {
+///    bar: u64,
+///    #[bfield_codec(ignore)]
+///    ignored: usize,
+/// }
+/// let foo = Foo { bar: 42, ignored: 7 };
+/// let encoded = foo.encode();
+/// let decoded = Foo::decode(&encoded).unwrap();
+/// assert_eq!(foo.bar, decoded.bar);
+/// ```
+///
+/// ### Known limitations
+/// Structs with tuples as fields are not supported.
+/// More specifically, deriving the trait will succeed, and the resulting implementations of
+/// `encode` and `decode` will compile.
+/// However, the derived methods `encode` and `decode` won't be each others duals.
+/// For example, the following code will panic:
+/// ```ignore
+/// #[derive(BFieldCodec)]
+/// struct Foo((u8, u8));
+/// let encoded = Foo((1, 2)).encode();
+/// let decoded = Foo::decode(&encoded).unwrap();
+/// ```
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
     // ...
@@ -14,79 +51,67 @@ pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
     impl_bfieldcodec_macro(ast)
 }
 
-// Add a bound `T: BFieldCodec` to every type parameter T, unless we ignore it.
-fn add_trait_bounds(mut generics: syn::Generics, ignored: &[String]) -> syn::Generics {
+/// Add a bound `T: BFieldCodec` to every type parameter T, unless we ignore it.
+fn add_trait_bounds(mut generics: syn::Generics, ignored: &[Ident]) -> syn::Generics {
     for param in &mut generics.params {
-        if let syn::GenericParam::Type(type_param) = param {
-            let name = type_param.ident.to_string();
-            let mut found = false;
-            for ignored in ignored.iter() {
-                if ignored == &name {
-                    found = true;
-                    break;
-                }
-            }
-            if found {
-                continue;
-            }
-            type_param.bounds.push(syn::parse_quote!(BFieldCodec));
+        let syn::GenericParam::Type(type_param) = param else {
+            continue
+        };
+        if ignored.contains(&type_param.ident) {
+            continue;
         }
+        type_param.bounds.push(syn::parse_quote!(BFieldCodec));
     }
     generics
 }
 
-fn extract_ignored_generics_list(list: &[syn::Attribute]) -> Vec<String> {
-    let mut collection = Vec::new();
-
-    for attr in list.iter() {
-        let mut list = extract_ignored_generics(attr);
-
-        collection.append(&mut list);
-    }
-
-    collection
+fn extract_ignored_generics_list(list: &[syn::Attribute]) -> Vec<Ident> {
+    list.iter().flat_map(extract_ignored_generics).collect()
 }
 
-fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<String> {
-    let mut collection = Vec::new();
+fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<Ident> {
+    let bfield_codec_ident = Ident::new("bfield_codec", attr.span());
+    let ignore_ident = Ident::new("ignore", attr.span());
 
-    if let Ok(meta) = attr.parse_meta() {
-        if let Some(ident) = meta.path().get_ident() {
-            if &ident.to_string() != "bfield_codec" {
-                return collection;
-            }
-            if let syn::Meta::List(list) = meta {
-                for nested in list.nested.iter() {
-                    if let syn::NestedMeta::Meta(nmeta) = nested {
-                        let ident = nmeta
-                            .path()
-                            .get_ident()
-                            .expect("Invalid attribute syntax! (no iden)");
-                        if &ident.to_string() != "ignore" {
-                            panic!(
-                                "Invalid attribute syntax! Unknown name {:?}",
-                                ident.to_string()
-                            );
-                        }
+    let Ok(meta) = attr.parse_meta() else {
+        return vec![];
+    };
+    let Some(ident) = meta.path().get_ident() else {
+        return vec![];
+    };
+    if ident != &bfield_codec_ident {
+        return vec![];
+    }
+    let syn::Meta::List(list) = meta else {
+        return vec![];
+    };
 
-                        if let syn::Meta::List(list) = nmeta {
-                            for nested in list.nested.iter() {
-                                if let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested {
-                                    let path = path
-                                        .get_ident()
-                                        .expect("Invalid attribute syntax! (no ident)")
-                                        .to_string();
-                                    collection.push(path);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    let mut ignored_generics = vec![];
+    for nested in list.nested.iter() {
+        let syn::NestedMeta::Meta(nmeta) = nested else {
+            continue;
+        };
+        let Some(ident) = nmeta.path().get_ident() else {
+            panic!("Invalid attribute syntax! (no ident)");
+        };
+        if ident != &ignore_ident {
+            panic!("Invalid attribute syntax! Unknown name {ident}");
+        }
+        let syn::Meta::List(list) = nmeta else {
+            panic!("Invalid attribute syntax! Expected a list");
+        };
+
+        for nested in list.nested.iter() {
+            let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested else {
+                continue;
+            };
+            let Some(ident) = path.get_ident() else {
+                panic!("Invalid attribute syntax! (no ident)")
+            };
+            ignored_generics.push(ident.to_owned());
         }
     }
-
-    collection
+    ignored_generics
 }
 
 fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
@@ -116,26 +141,31 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
     let num_fields = field_types.len();
 
     let gen = quote! {
-        impl #impl_generics BFieldCodec for #name #ty_generics #where_clause{
-            fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
-                let mut sequence = sequence.to_vec();
+        impl #impl_generics ::twenty_first::shared_math::bfield_codec::BFieldCodec
+        for #name #ty_generics #where_clause{
+            fn decode(
+                sequence: &[::twenty_first::shared_math::b_field_element::BFieldElement],
+            ) -> anyhow::Result<Box<Self>> {
                 #(#decode_statements)*
-
                 if !sequence.is_empty() {
                     anyhow::bail!("Failed to decode {}", stringify!(#name));
                 }
-
                 Ok(Box::new(#value_constructor))
             }
 
-            fn encode(&self) -> Vec<BFieldElement> {
+            fn encode(&self) -> Vec<::twenty_first::shared_math::b_field_element::BFieldElement> {
                 let mut elements = Vec::new();
                 #(#encode_statements)*
                 elements
             }
 
             fn static_length() -> Option<usize> {
-                let field_lengths : [Option<usize>; #num_fields] = [#(<#field_types as BFieldCodec>::static_length(),)*];
+                let field_lengths : [Option<usize>; #num_fields] = [
+                    #(
+                        <#field_types as
+                        ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length(),
+                    )*
+                ];
                 if field_lengths.iter().all(|fl| fl.is_some() ) {
                     Some(field_lengths.iter().map(|fl| fl.unwrap()).sum())
                 }
@@ -149,6 +179,39 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
+fn field_is_ignored(field: &syn::Field) -> bool {
+    let bfield_codec_ident = Ident::new("bfield_codec", field.span());
+    let ignore_ident = Ident::new("ignore", field.span());
+
+    for attribute in field.attrs.iter() {
+        let Ok(meta) = attribute.parse_meta() else {
+            continue;
+        };
+        let Some(ident) = meta.path().get_ident() else {
+            continue;
+        };
+        if ident != &bfield_codec_ident {
+            continue;
+        }
+        let syn::Meta::List(list) = meta else {
+            panic!("Attribute {ident} must be of type `List`.");
+        };
+        for arg in list.nested.iter() {
+            let syn::NestedMeta::Meta(arg_meta) = arg else {
+                continue;
+            };
+            let Some(arg_ident) = arg_meta.path().get_ident() else {
+                panic!("Invalid attribute syntax! (no ident)");
+            };
+            if arg_ident != &ignore_ident {
+                panic!("Invalid attribute syntax! Unknown name {arg_ident}");
+            }
+            return true;
+        }
+    }
+    false
+}
+
 fn struct_with_named_fields(
     fields: &syn::FieldsNamed,
 ) -> (
@@ -157,41 +220,53 @@ fn struct_with_named_fields(
     quote::__private::TokenStream,
     Vec<syn::Type>,
 ) {
-    let fields: Vec<_> = fields.named.iter().collect();
-    let field_names: Vec<_> = fields
-        .iter()
-        .map(|field| field.ident.as_ref().unwrap().to_owned())
-        .collect();
+    let fields = fields.named.iter();
+    let included_fields = fields.clone().filter(|field| !field_is_ignored(field));
+    let ignored_fields = fields.clone().filter(|field| field_is_ignored(field));
 
-    let field_types = fields
-        .iter()
-        .map(|field| field.ty.clone())
-        .collect::<Vec<_>>();
+    let included_field_names = included_fields
+        .clone()
+        .map(|field| field.ident.as_ref().unwrap().to_owned());
+    let ignored_field_names = ignored_fields
+        .clone()
+        .map(|field| field.ident.as_ref().unwrap().to_owned());
 
-    let encode_statements: Vec<_> = field_names
-        .iter()
+    let included_field_types = included_fields.clone().map(|field| field.ty.clone());
+
+    let encode_statements = included_field_names
+        .clone()
         .map(|fname| {
             quote! {
-                let mut #fname: Vec<BFieldElement> = self.#fname.encode();
-                elements.push(BFieldElement::new(#fname.len() as u64));
+                let mut #fname: Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
+                    = self.#fname.encode();
+                elements.push(
+                    ::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                        #fname.len() as u64
+                    )
+                );
                 elements.append(&mut #fname);
             }
         })
         .collect();
 
-    let decode_statements: Vec<_> = field_types
-        .iter()
-        .zip(&field_names)
-        .map(|(ftype, fname)| generate_decode_statement(fname, ftype))
+    let decode_statements: Vec<_> = included_field_types
+        .clone()
+        .zip(included_field_names.clone())
+        .map(|(ftype, fname)| generate_decode_statement(&fname, &ftype))
         .collect();
 
-    let value_constructor = quote! { Self { #(#field_names,)* } };
+    let value_constructor = quote! {
+        Self {
+            #(#included_field_names,)*
+            #(#ignored_field_names: Default::default(),)*
+        }
+    };
 
     (
         decode_statements,
         encode_statements,
         value_constructor,
-        field_types,
+        included_field_types.collect(),
     )
 }
 
@@ -227,14 +302,18 @@ fn struct_with_unnamed_fields(
         .iter()
         .map(|idx| {
             quote! {
-                    let mut field_value: Vec<BFieldElement> = self.#idx.encode();
-                    elements.push(BFieldElement::new(field_value.len() as u64));
-                    elements.append(&mut field_value);
+                let mut field_value:
+                    Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
+                    = self.#idx.encode();
+                elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                    field_value.len() as u64)
+                );
+                elements.append(&mut field_value);
             }
         })
         .collect();
 
-    let value_constructor: quote::__private::TokenStream = quote! { Self ( #(#field_names,)* ) };
+    let value_constructor = quote! { Self ( #(#field_names,)* ) };
 
     (
         decode_statements,
@@ -249,15 +328,20 @@ fn generate_decode_statement(
     field_type: &syn::Type,
 ) -> quote::__private::TokenStream {
     quote! {
-        let (field_value, sequence) = {if sequence.is_empty() {
-            bail!("Cannot decode field: sequence is empty.");
-        }
-        let len = sequence[0].value() as usize;
-        if sequence.len() < 1 + len {
-            bail!("Cannot decode field: sequence too short.");
-        }
-        let decoded = *<#field_type as BFieldCodec>::decode(&sequence[1..1 + len])?;
-        (decoded, sequence[1 + len..].to_vec())};
+        let (field_value, sequence) = {
+            if sequence.is_empty() {
+                anyhow::bail!("Cannot decode field: sequence is empty.");
+            }
+            let len = sequence[0].value() as usize;
+            if sequence.len() < 1 + len {
+                anyhow::bail!("Cannot decode field: sequence too short.");
+            }
+            let decoded = *<#field_type
+                as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
+                    &sequence[1..1 + len]
+                )?;
+            (decoded, &sequence[1 + len..])
+        };
         let #field_name = field_value;
     }
 }

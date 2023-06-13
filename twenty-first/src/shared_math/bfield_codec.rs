@@ -2,13 +2,15 @@ use std::marker::PhantomData;
 
 use anyhow::bail;
 use anyhow::Result;
-use bfieldcodec_derive::BFieldCodec;
 use itertools::Itertools;
 use num_traits::One;
 use num_traits::Zero;
 
+// Re-export the derive macro so that it can be used in other crates without having to add
+// an explicit dependency on `bfieldcodec_derive` to their Cargo.toml.
+pub use bfieldcodec_derive::BFieldCodec;
+
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::merkle_tree::PartialAuthenticationPath;
 
 use super::b_field_element::BFieldElement;
 use super::tip5::Digest;
@@ -27,7 +29,8 @@ pub trait BFieldCodec {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>>;
     fn encode(&self) -> Vec<BFieldElement>;
 
-    /// Returns the length in number of BFieldElements if it is known at compile-time. Otherwise, None.
+    /// Returns the length in number of BFieldElements if it is known at compile-time.
+    /// Otherwise, None.
     fn static_length() -> Option<usize>;
 }
 
@@ -406,42 +409,48 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
         if sequence.is_empty() {
             bail!("Cannot decode empty sequence into Vec<T>");
         }
-        match T::static_length() {
+        let vec_t = match T::static_length() {
             Some(element_length) => {
                 let vector_length_indication = sequence[0].value() as usize;
-
-                if vector_length_indication
-                    .checked_mul(element_length)
-                    .is_none()
-                {
+                let maybe_vector_size = vector_length_indication.checked_mul(element_length);
+                let Some(vector_size) = maybe_vector_size else {
                     bail!("Length indication too large: {}", vector_length_indication);
-                }
+                };
 
-                if sequence.len() != vector_length_indication * element_length + 1 {
-                    bail!("Length indication plus one must match actual sequence length. Indication was {}. Sequence length was {}.", vector_length_indication, sequence.len());
+                if sequence.len() != vector_size + 1 {
+                    bail!(
+                        "Length indication plus one must match actual sequence length. \
+                        Claimed vector length was {vector_length_indication}. \
+                        Item size was {element_length}. \
+                        Sequence length was {}.",
+                        sequence.len()
+                    );
                 }
-
-                let mut ret: Vec<T> = Vec::with_capacity(vector_length_indication);
-                let mut index = 1;
-                while index < sequence.len() {
-                    let element = *T::decode(&sequence[index..index + element_length])?;
-                    index += element_length;
-                    ret.push(element);
+                let raw_item_iter = sequence[1..].chunks_exact(element_length);
+                if !raw_item_iter.remainder().is_empty() {
+                    bail!("Could not chunk sequence into equal parts of size {element_length}.");
                 }
-
-                Ok(Box::new(ret))
+                let mut vec_t = Vec::with_capacity(vector_length_indication);
+                for raw_item in raw_item_iter {
+                    let item = *T::decode(raw_item)?;
+                    vec_t.push(item);
+                }
+                vec_t
             }
             None => {
+                let sequence_len = sequence.len();
                 let total_length_indication = sequence[0].value() as usize;
-
-                if sequence.len() != total_length_indication + 1 {
-                    bail!("Length indication plus one must match actual sequence length. Indication was {}. Sequence length was {}.", total_length_indication, sequence.len());
+                if sequence_len != total_length_indication + 1 {
+                    bail!(
+                        "Length indication plus one must match actual sequence length. \
+                        Length indication was {total_length_indication}. \
+                        Sequence length was {sequence_len}.",
+                    );
                 }
 
-                let mut ret = vec![];
-                let sequence = sequence.to_vec();
                 let mut index = 1;
-                while index < sequence.len() {
+                let mut vec_t = vec![];
+                while index < sequence_len {
                     let element_length_indication = match sequence.get(index) {
                         Some(e) => e.value() as usize,
                         None => bail!("Index count mismatch while decoding Vec of T"),
@@ -449,12 +458,12 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
                     index += 1;
                     let element = *T::decode(&sequence[index..index + element_length_indication])?;
                     index += element_length_indication;
-                    ret.push(element);
+                    vec_t.push(element);
                 }
-
-                Ok(Box::new(ret))
+                vec_t
             }
-        }
+        };
+        Ok(Box::new(vec_t))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
@@ -495,107 +504,6 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
     }
 }
 
-impl BFieldCodec for Vec<PartialAuthenticationPath<Digest>> {
-    fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        let mut index = 0;
-        let mut vector = vec![];
-
-        // while there is at least one partial auth path left, parse it
-        while index < str.len() {
-            let len_remaining = str[index].value() as usize;
-            index += 1;
-
-            if len_remaining < 2 || index + len_remaining > str.len() {
-                bail!(
-                    "cannot decode string of BFieldElements as Vec of PartialAuthenticationPaths \
-                    due to length mismatch (1)",
-                );
-            }
-
-            let vec_len = str[index].value() as usize;
-            let mask = str[index + 1].value() as u32;
-            index += 2;
-
-            // if the vector length and mask indicates some digests are following
-            // and we are already at the end of the buffer
-            if vec_len != 0 && mask != 0 && index == str.len() {
-                bail!(
-                    "Cannot decode string of BFieldElements as Vec of PartialAuthenticationPaths \
-                    due to length mismatch (2).\n\
-                    vec_len: {}\n\
-                    mask: {}\n\
-                    index: {}\n\
-                    str.len(): {}\n\
-                    str[0]: {}",
-                    vec_len,
-                    mask,
-                    index,
-                    str.len(),
-                    str[0]
-                );
-            }
-
-            if (len_remaining - 2) % DIGEST_LENGTH != 0 {
-                bail!(
-                    "cannot decode string of BFieldElements as Vec of PartialAuthenticationPaths \
-                    due to length mismatch (3)",
-                );
-            }
-
-            let mut pap = vec![];
-
-            for i in (0..vec_len).rev() {
-                if mask & (1 << i) == 0 {
-                    pap.push(None);
-                } else if let Some(chunk) = str.get(index..(index + DIGEST_LENGTH)) {
-                    pap.push(Some(Digest::new(chunk.try_into().unwrap())));
-                    index += DIGEST_LENGTH;
-                } else {
-                    bail!(
-                        "cannot decode string of BFieldElements as Vec of \
-                        PartialAuthenticationPaths due to length mismatch (4)",
-                    );
-                }
-            }
-
-            vector.push(PartialAuthenticationPath(pap));
-        }
-
-        if index != str.len() {
-            bail!("Did not consume entire sequence when decoding Vec<PartialAuthenticaionPath>");
-        }
-
-        Ok(Box::new(vector))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        let mut str = vec![];
-        for pap in self.iter() {
-            let len = pap.len();
-            let mut mask = 0u32;
-            for maybe_digest in pap.iter() {
-                mask <<= 1;
-                if maybe_digest.is_some() {
-                    mask |= 1;
-                }
-            }
-            let mut vector = pap.iter().flatten().map(|d| d.values().to_vec()).concat();
-
-            str.push(BFieldElement::new(
-                2u64 + std::convert::TryInto::<u64>::try_into(vector.len()).unwrap(),
-            ));
-            str.push(BFieldElement::new(len.try_into().unwrap()));
-            str.push(BFieldElement::new(mask.try_into().unwrap()));
-            str.append(&mut vector);
-        }
-        str
-    }
-
-    fn static_length() -> Option<usize> {
-        None
-    }
-}
-
 impl<T> BFieldCodec for PhantomData<T> {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if !sequence.is_empty() {
@@ -626,6 +534,7 @@ mod bfield_codec_tests {
 
     use crate::shared_math::other::random_elements;
     use crate::shared_math::tip5::Tip5;
+    use crate::util_types::merkle_tree::PartialAuthenticationPath;
 
     use super::*;
 
@@ -1324,5 +1233,22 @@ pub mod derive_tests {
         for _ in 0..5 {
             prop(random_struct());
         }
+    }
+
+    #[test]
+    fn unsupported_fields_can_be_ignored_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        struct UnsupportedFields {
+            a: u64,
+            #[bfield_codec(ignore)]
+            b: usize,
+        }
+        let my_struct = UnsupportedFields {
+            a: random(),
+            b: random(),
+        };
+        let encoded = my_struct.encode();
+        let decoded = UnsupportedFields::decode(&encoded).unwrap();
+        assert_eq!(my_struct.a, decoded.a);
     }
 }
