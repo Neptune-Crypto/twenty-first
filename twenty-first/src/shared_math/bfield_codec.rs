@@ -580,7 +580,7 @@ mod bfield_codec_tests {
         let mut ret = vec![];
 
         for _ in 0..count {
-            ret.push(PartialAuthenticationPath(
+            ret.push(
                 (0..inner_length)
                     .map(|_| {
                         if random_bool() {
@@ -590,7 +590,7 @@ mod bfield_codec_tests {
                         }
                     })
                     .collect_vec(),
-            ))
+            )
         }
 
         ret

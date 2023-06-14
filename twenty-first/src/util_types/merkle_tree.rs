@@ -1,14 +1,10 @@
 use itertools::izip;
 use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::Deref;
-use std::ops::DerefMut;
 
-use crate::shared_math::bfield_codec::BFieldCodec;
 use crate::shared_math::digest::Digest;
 use crate::shared_math::other::{bit_representation, is_power_of_two, log_2_floor};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
@@ -45,22 +41,7 @@ where
 /// A single partial authentication path probably does not make a lot of sense. However, if you
 /// have multiple authentication paths that overlap, using multiple partial authentication paths
 /// is more space efficient.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, BFieldCodec)]
-pub struct PartialAuthenticationPath<Digest>(pub Vec<Option<Digest>>);
-
-impl Deref for PartialAuthenticationPath<Digest> {
-    type Target = Vec<Option<Digest>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for PartialAuthenticationPath<Digest> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+pub type PartialAuthenticationPath<Digest> = Vec<Option<Digest>>;
 
 /// # Design
 /// Static methods are called from the verifier, who does not have
@@ -169,12 +150,11 @@ where
         let mut partial_authentication_paths: Vec<PartialAuthenticationPath<Digest>> =
             Vec::with_capacity(leaf_indices.len());
         for leaf_index in leaf_indices.iter() {
-            let authentication_path = PartialAuthenticationPath(
-                self.get_authentication_path(*leaf_index)
-                    .into_iter()
-                    .map(Some)
-                    .collect(),
-            );
+            let authentication_path: PartialAuthenticationPath<_> = self
+                .get_authentication_path(*leaf_index)
+                .into_iter()
+                .map(Some)
+                .collect();
             let mut node_index = num_leaves + leaf_index;
             calculable_indices.insert(node_index);
             for _ in 1..authentication_path.len() {
