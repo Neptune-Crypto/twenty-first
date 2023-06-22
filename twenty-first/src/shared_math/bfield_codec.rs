@@ -410,12 +410,12 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
             bail!("Cannot decode empty sequence into Vec<T>");
         }
 
-        let elements_are_fixed_len = T::static_length().is_some();
         let num_elements = sequence[0].value() as usize;
         let sequence = &sequence[1..];
-        let mut vec_t = Vec::with_capacity(num_elements);
+        // Initializing the vector with the correct capacity potentially allows a DOS.
+        let mut vec_t = vec![];
 
-        if elements_are_fixed_len {
+        if T::static_length().is_some() {
             let element_length = T::static_length().unwrap();
             let maybe_vector_size = num_elements.checked_mul(element_length);
             let Some(vector_size) = maybe_vector_size else {
@@ -658,11 +658,7 @@ mod bfield_codec_tests {
     fn test_decode_random_negative() {
         for _ in 1..=10000 {
             let len = random_length(100);
-            let mut str: Vec<BFieldElement> = random_elements(len);
-            // Claiming a length that is too large leads to error “capacity overflow” when decoding.
-            if !str.is_empty() {
-                str[0] = (100 + random_length(500) as u64).into();
-            }
+            let str: Vec<BFieldElement> = random_elements(len);
 
             // Some of the following cases can be triggered by false
             // positives. This should occur with probability roughly
