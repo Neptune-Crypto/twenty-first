@@ -10,11 +10,8 @@ use num_traits::Zero;
 // an explicit dependency on `bfieldcodec_derive` to their Cargo.toml.
 pub use bfieldcodec_derive::BFieldCodec;
 
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
-
 use super::b_field_element::BFieldElement;
 use super::tip5::Digest;
-use super::tip5::Tip5;
 use super::tip5::DIGEST_LENGTH;
 use super::x_field_element::XFieldElement;
 use super::x_field_element::EXTENSION_DEGREE;
@@ -229,6 +226,10 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
                 length
             }
         };
+
+        if str.len() < index + len_t {
+            bail!("Sequence too short to decode tuple, element 0");
+        }
         let t = *T::decode(&str[index..index + len_t])?;
         index += len_t;
 
@@ -246,8 +247,12 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
                 length
             }
         };
+
+        if str.len() < index + len_s {
+            bail!("Sequence too short to decode tuple, element 1");
+        }
         let s = *S::decode(&str[index..index + len_s])?;
-        index += len_t;
+        index += len_s;
 
         if index != str.len() {
             bail!("Error decoding (T,S): length mismatch");
@@ -260,12 +265,12 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
         let mut str = vec![];
         let mut encoding_of_t = self.0.encode();
         let mut encoding_of_s = self.1.encode();
-        if let Some(len_t) = T::static_length() {
-            str.push(BFieldElement::new(len_t as u64));
+        if T::static_length().is_none() {
+            str.push(BFieldElement::new(encoding_of_t.len() as u64));
         }
         str.append(&mut encoding_of_t);
-        if let Some(len_s) = S::static_length() {
-            str.push(BFieldElement::new(len_s as u64));
+        if S::static_length().is_none() {
+            str.push(BFieldElement::new(encoding_of_s.len() as u64));
         }
         str.append(&mut encoding_of_s);
         str
@@ -366,9 +371,12 @@ impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N] {
                 while index < sequence_len {
                     let element_length_indication = match sequence.get(index) {
                         Some(e) => e.value() as usize,
-                        None => bail!("Index count mismatch while decoding Vec of T"),
+                        None => bail!("Index count mismatch while decoding [T; N]"),
                     };
                     index += 1;
+                    if sequence.len() < index + element_length_indication {
+                        bail!("Element size exceeds sequence length in decoding of [T; N]")
+                    }
                     let element = *T::decode(&sequence[index..index + element_length_indication])?;
                     index += element_length_indication;
                     vec_t.push(element);
@@ -585,9 +593,7 @@ mod tests {
         fn test_encode_decode_random_bfieldelement() {
             for _ in 1..=10 {
                 let bfe: BFieldElement = random();
-                let str = bfe.encode();
-                let bfe_ = *BFieldElement::decode(&str).unwrap();
-                assert_eq!(bfe, bfe_);
+                prop(&bfe);
             }
         }
 
@@ -595,9 +601,7 @@ mod tests {
         fn test_encode_decode_random_xfieldelement() {
             for _ in 1..=10 {
                 let xfe: XFieldElement = random();
-                let str = xfe.encode();
-                let xfe_ = *XFieldElement::decode(&str).unwrap();
-                assert_eq!(xfe, xfe_);
+                prop(&xfe);
             }
         }
 
@@ -605,9 +609,7 @@ mod tests {
         fn test_encode_decode_random_digest() {
             for _ in 1..=10 {
                 let dig: Digest = random();
-                let str = dig.encode();
-                let dig_ = *Digest::decode(&str).unwrap();
-                assert_eq!(dig, dig_);
+                prop(&dig);
             }
         }
 
@@ -616,9 +618,7 @@ mod tests {
             for _ in 1..=10 {
                 let len = random_length(100);
                 let bfe_vec: Vec<BFieldElement> = (0..len).map(|_| random()).collect_vec();
-                let str = bfe_vec.encode();
-                let bfe_vec_ = *Vec::<BFieldElement>::decode(&str).unwrap();
-                assert_eq!(bfe_vec, bfe_vec_);
+                prop(&bfe_vec);
             }
         }
 
@@ -627,9 +627,7 @@ mod tests {
             for _ in 1..=10 {
                 let len = random_length(100);
                 let xfe_vec: Vec<XFieldElement> = (0..len).map(|_| random()).collect_vec();
-                let str = xfe_vec.encode();
-                let xfe_vec_ = *Vec::<XFieldElement>::decode(&str).unwrap();
-                assert_eq!(xfe_vec, xfe_vec_);
+                prop(&xfe_vec);
             }
         }
 
@@ -638,9 +636,7 @@ mod tests {
             for _ in 1..=10 {
                 let len = random_length(100);
                 let digest_vec: Vec<Digest> = (0..len).map(|_| random()).collect_vec();
-                let str = digest_vec.encode();
-                let digest_vec_ = *Vec::<Digest>::decode(&str).unwrap();
-                assert_eq!(digest_vec, digest_vec_);
+                prop(&digest_vec);
             }
         }
 
@@ -654,9 +650,7 @@ mod tests {
                         (0..inner_len).map(|_| random()).collect_vec()
                     })
                     .collect_vec();
-                let str = bfe_vec_vec.encode();
-                let bfe_vec_vec_ = *Vec::<Vec<BFieldElement>>::decode(&str).unwrap();
-                assert_eq!(bfe_vec_vec, bfe_vec_vec_);
+                prop(&bfe_vec_vec);
             }
         }
 
@@ -670,9 +664,7 @@ mod tests {
                         (0..inner_len).map(|_| random()).collect_vec()
                     })
                     .collect_vec();
-                let str = xfe_vec_vec.encode();
-                let xfe_vec_vec_ = *Vec::<Vec<XFieldElement>>::decode(&str).unwrap();
-                assert_eq!(xfe_vec_vec, xfe_vec_vec_);
+                prop(&xfe_vec_vec);
             }
         }
 
@@ -682,9 +674,74 @@ mod tests {
                 let len = 1 + random_length(10);
                 let count = random_length(10);
                 let pap = random_partial_authentication_paths(len, count);
-                let str = pap.encode();
-                let pap_ = *Vec::<PartialAuthenticationPath<Digest>>::decode(&str).unwrap();
-                assert_eq!(pap, pap_);
+                prop(&pap);
+            }
+        }
+
+        #[test]
+        fn test_encode_decode_tuples_static_static_size_0() {
+            let static_static: (Digest, u128) = (random(), random());
+            prop(&static_static);
+        }
+
+        #[test]
+        fn test_encode_decode_tuples_static_static_size_1() {
+            let static_static: (Digest, u64) = (random(), random());
+            prop(&static_static);
+        }
+
+        #[test]
+        fn test_encode_decode_tuples_static_static_size_2() {
+            let static_static: (BFieldElement, BFieldElement) = (random(), random());
+            prop(&static_static);
+        }
+
+        #[test]
+        fn test_encode_decode_tuples_static_static_size_3() {
+            let static_static: (BFieldElement, XFieldElement) = (random(), random());
+            prop(&static_static);
+        }
+
+        #[test]
+        fn test_encode_decode_tuples_static_static_size_4() {
+            let static_static: (XFieldElement, BFieldElement) = (random(), random());
+            prop(&static_static);
+        }
+
+        #[test]
+        fn test_encode_decode_tuples_static_static_size_5() {
+            let static_static: (XFieldElement, Digest) = (random(), random());
+            prop(&static_static);
+        }
+
+        #[test]
+        fn test_encode_decode_tuples_static_dynamic_size() {
+            for vec_length in 0..10 {
+                let static_dynamic: (Digest, Vec<BFieldElement>) =
+                    (random(), random_elements(vec_length));
+                prop(&static_dynamic);
+            }
+        }
+
+        #[test]
+        fn test_encode_decode_tuples_dynamic_static_size() {
+            for vec_length in 0..10 {
+                let dynamic_static: (Vec<XFieldElement>, Digest) =
+                    (random_elements(vec_length), random());
+                prop(&dynamic_static);
+            }
+        }
+
+        #[test]
+        fn test_encode_decode_tuples_dynamic_dynamic_size() {
+            for vec_length_left in 0..4 {
+                for vec_length_right in 0..4 {
+                    let dynamic_dynamic: (Vec<XFieldElement>, Vec<Digest>) = (
+                        random_elements(vec_length_left),
+                        random_elements(vec_length_right),
+                    );
+                    prop(&dynamic_dynamic);
+                }
             }
         }
 
@@ -745,10 +802,7 @@ mod tests {
                 }
             }
 
-            let encoded = vector.encode();
-            let decoded = *Vec::<Option<XFieldElement>>::decode(&encoded).unwrap();
-
-            assert_eq!(vector, decoded);
+            prop(&vector);
         }
 
         #[test]
