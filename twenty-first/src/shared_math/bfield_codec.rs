@@ -539,10 +539,85 @@ mod tests {
     use rand::{random, thread_rng};
 
     fn prop<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(value: &T) {
+        fn expensive_encoding_pbt<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(
+            original_encoded: &[BFieldElement],
+            original_decoded: Box<T>,
+        ) {
+            const PBT_SIZE: usize = 50;
+
+            // Go over every single element in the sequence, to see if mutating anyone
+            // of the elements causes undesired behavior
+            let mut mutated_encoding = original_encoded.to_vec();
+            for i in 0..mutated_encoding.len() {
+                let original_value = mutated_encoding[i];
+
+                // Ensure that random values do not cause problems
+                for _ in 0..PBT_SIZE {
+                    mutated_encoding[i] = random();
+                    let decoded_mutated = T::decode(&mutated_encoding);
+                    assert!(
+                        decoded_mutated.is_err()
+                            || *decoded_mutated.unwrap() != *original_decoded
+                            || mutated_encoding[i] == original_value
+                    );
+                }
+
+                // Ensure that "nearby" values do not cause problems
+                mutated_encoding[i] = original_value - BFieldElement::new((PBT_SIZE / 2) as u64);
+                for _ in 0..PBT_SIZE {
+                    mutated_encoding[i].increment();
+                    let decoded_mutated = T::decode(&mutated_encoding);
+                    assert!(
+                        decoded_mutated.is_err()
+                            || *decoded_mutated.unwrap() != *original_decoded
+                            || mutated_encoding[i] == original_value
+                    );
+                }
+
+                // Reset word
+                mutated_encoding[i] = original_value;
+            }
+
+            // Ensure no crash while decoding very short sequences
+            let upper_length_bound = std::cmp::min(mutated_encoding.len(), PBT_SIZE / 2);
+            for i in 0..upper_length_bound {
+                let random_bfes = random_elements(i);
+
+                // Ensure `decode` does not crash
+                let dec_res = T::decode(&random_bfes);
+                assert!(
+                    dec_res.is_err() || *dec_res.unwrap() != *original_decoded,
+                    "random BFEs of shorter length than original encoding should not decode to the original struct"
+                );
+            }
+
+            // Ensure no crash while decoding a sequence *one* shorter than the original sequence
+            assert_eq!(
+                original_encoded, mutated_encoding,
+                "Sanity check of test integrity"
+            );
+            match mutated_encoding.pop() {
+                Some(_) => {
+                    let dec_res = T::decode(&mutated_encoding);
+                    assert!(
+                        dec_res.is_err() || *dec_res.unwrap() != *original_decoded,
+                        "random BFEs of shorter length than original encoding should not decode to the original struct"
+                    );
+                }
+                None => (),
+            }
+        }
+
         let encoded = value.encode();
         let decoded = T::decode(&encoded);
         let decoded = decoded.unwrap();
         assert_eq!(*value, *decoded);
+
+        // Set this environment variable to run an expensive PBT of encoding/decoding
+        // uniqueness and `decode`'s inability to panic
+        if std::env::var("EXPENSIVE_ENCODING_PBT").is_ok() {
+            expensive_encoding_pbt(&encoded, decoded);
+        }
 
         let encoded_too_long = vec![encoded, vec![BFieldElement::new(5)]].concat();
         assert!(T::decode(&encoded_too_long).is_err());
