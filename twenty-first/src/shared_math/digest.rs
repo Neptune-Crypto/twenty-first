@@ -27,10 +27,6 @@ impl GetSize for Digest {
     fn get_heap_size(&self) -> usize {
         0
     }
-
-    fn get_size(&self) -> usize {
-        Self::get_stack_size()
-    }
 }
 
 impl PartialOrd for Digest {

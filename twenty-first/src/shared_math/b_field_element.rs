@@ -68,10 +68,6 @@ impl GetSize for BFieldElement {
     fn get_heap_size(&self) -> usize {
         0
     }
-
-    fn get_size(&self) -> usize {
-        Self::get_stack_size() + GetSize::get_heap_size(self)
-    }
 }
 
 pub const BFIELD_ZERO: BFieldElement = BFieldElement::new(0);
