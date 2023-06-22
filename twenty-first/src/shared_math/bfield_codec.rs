@@ -437,7 +437,8 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
             }
             if raw_item_iter.len() != indicated_num_elements {
                 bail!(
-                    "Vector contains wrong number of items. Expected {indicated_num_elements} found {}",
+                    "Vector contains wrong number of items. \
+                    Expected {indicated_num_elements} found {}",
                     raw_item_iter.len()
                 );
             }
