@@ -979,7 +979,9 @@ pub mod derive_tests {
         #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
         struct MuchNesting {
             a: Vec<Vec<Vec<Vec<BFieldElement>>>>,
+            #[bfield_codec(ignore)]
             b: PhantomData<Tip5>,
+            #[bfield_codec(ignore)]
             c: PhantomData<Tip5>,
         }
 
@@ -1167,6 +1169,7 @@ pub mod derive_tests {
         struct MmrAccumulator<H: BFieldCodec> {
             leaf_count: u64,
             peaks: Vec<Digest>,
+            #[bfield_codec(ignore)]
             _hasher: PhantomData<H>,
         }
 
@@ -1201,5 +1204,131 @@ pub mod derive_tests {
         let encoded = my_struct.encode();
         let decoded = UnsupportedFields::decode(&encoded).unwrap();
         assert_eq!(my_struct.a, decoded.a);
+    }
+
+    #[test]
+    fn vec_of_struct_with_one_fix_len_field_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        pub struct OneFixedLenField {
+            pub some_digest: Digest,
+        }
+
+        let rand_struct = || OneFixedLenField {
+            some_digest: random(),
+        };
+
+        for num_elements in 0..5 {
+            dbg!(num_elements);
+            prop(vec![rand_struct(); num_elements]);
+        }
+    }
+
+    #[test]
+    fn vec_of_struct_with_two_fix_len_fields_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        pub struct TwoFixedLenFields {
+            pub some_digest: Digest,
+            pub some_u64: u64,
+        }
+
+        let rand_struct = || TwoFixedLenFields {
+            some_digest: random(),
+            some_u64: random(),
+        };
+
+        for num_elements in 0..5 {
+            dbg!(num_elements);
+            prop(vec![rand_struct(); num_elements]);
+        }
+    }
+
+    #[test]
+    fn vec_of_struct_with_two_fix_len_unnamed_fields_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        pub struct TwoFixedLenUnnamedFields(Digest, u64);
+
+        let rand_struct = || TwoFixedLenUnnamedFields(random(), random());
+
+        for num_elements in 0..5 {
+            dbg!(num_elements);
+            prop(vec![rand_struct(); num_elements]);
+        }
+    }
+
+    #[test]
+    fn vec_of_struct_with_fix_and_var_len_fields_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        pub struct FixAndVarLenFields {
+            pub some_digest: Digest,
+            pub some_vec: Vec<u64>,
+        }
+
+        let rand_struct = || {
+            let num_elements: usize = thread_rng().gen_range(0..42);
+            FixAndVarLenFields {
+                some_digest: random(),
+                some_vec: random_elements(num_elements),
+            }
+        };
+
+        for num_elements in 0..5 {
+            dbg!(num_elements);
+            prop(vec![rand_struct(); num_elements]);
+        }
+    }
+
+    #[test]
+    fn vec_of_struct_with_fix_and_var_len_unnamed_fields_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        pub struct FixAndVarLenUnnamedFields(Digest, Vec<u64>);
+
+        let rand_struct = || {
+            let num_elements: usize = thread_rng().gen_range(0..42);
+            FixAndVarLenUnnamedFields(random(), random_elements(num_elements))
+        };
+
+        for num_elements in 0..5 {
+            dbg!(num_elements);
+            prop(vec![rand_struct(); num_elements]);
+        }
+    }
+
+    #[test]
+    fn vec_of_struct_with_quite_a_few_fix_and_var_len_fields_test() {
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        pub struct QuiteAFewFixAndVarLenFields {
+            pub some_digest: Digest,
+            pub some_vec: Vec<u64>,
+            pub some_u64: u64,
+            pub other_vec: Vec<u32>,
+            pub other_digest: Digest,
+            pub yet_another_vec: Vec<u32>,
+            pub and_another_vec: Vec<u64>,
+            pub more_fixed_len: u64,
+            pub even_more_fixed_len: u64,
+        }
+
+        let rand_struct = || {
+            let num_elements_0: usize = thread_rng().gen_range(0..42);
+            let num_elements_1: usize = thread_rng().gen_range(0..42);
+            let num_elements_2: usize = thread_rng().gen_range(0..42);
+            let num_elements_3: usize = thread_rng().gen_range(0..42);
+            QuiteAFewFixAndVarLenFields {
+                some_digest: random(),
+                some_vec: random_elements(num_elements_0),
+                some_u64: random(),
+                other_vec: random_elements(num_elements_1),
+                other_digest: random(),
+                yet_another_vec: random_elements(num_elements_2),
+                and_another_vec: random_elements(num_elements_3),
+                more_fixed_len: random(),
+                even_more_fixed_len: random(),
+            }
+        };
+
+        for num_elements in 0..5 {
+            dbg!(num_elements);
+            prop(vec![rand_struct(); num_elements]);
+        }
     }
 }
