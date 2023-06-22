@@ -409,94 +409,86 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
         if sequence.is_empty() {
             bail!("Cannot decode empty sequence into Vec<T>");
         }
-        let vec_t = match T::static_length() {
-            Some(element_length) => {
-                let vector_length_indication = sequence[0].value() as usize;
-                let maybe_vector_size = vector_length_indication.checked_mul(element_length);
-                let Some(vector_size) = maybe_vector_size else {
-                    bail!("Length indication too large: {}", vector_length_indication);
+
+        let elements_are_fixed_len = T::static_length().is_some();
+        let num_elements = sequence[0].value() as usize;
+        let sequence = &sequence[1..];
+        let mut vec_t = Vec::with_capacity(num_elements);
+
+        if elements_are_fixed_len {
+            let element_length = T::static_length().unwrap();
+            let maybe_vector_size = num_elements.checked_mul(element_length);
+            let Some(vector_size) = maybe_vector_size else {
+                bail!("Length indication too large: {num_elements} * {element_length}");
+            };
+
+            if sequence.len() != vector_size {
+                bail!(
+                    "Length indication plus one must match actual sequence length. \
+                    Vector claims to contain {num_elements} items. \
+                    Item size is {element_length}. Sequence length is {}.",
+                    sequence.len() + 1
+                );
+            }
+            let raw_item_iter = sequence.chunks_exact(element_length);
+            if !raw_item_iter.remainder().is_empty() {
+                bail!("Could not chunk sequence into equal parts of size {element_length}.");
+            }
+            if raw_item_iter.len() != num_elements {
+                bail!(
+                    "Vector contains wrong number of items. Expected {num_elements} found {}",
+                    raw_item_iter.len()
+                );
+            }
+            for raw_item in raw_item_iter {
+                let item = *T::decode(raw_item)?;
+                vec_t.push(item);
+            }
+        } else {
+            let sequence_length = sequence.len();
+            let mut sequence_index = 0;
+            for element_idx in 0..num_elements {
+                let element_length = match sequence.get(sequence_index) {
+                    Some(len) => len.value() as usize,
+                    None => bail!(
+                        "Index count mismatch while decoding Vec of T. \
+                        Attempted to decode element {} of {num_elements}.",
+                        element_idx + 1
+                    ),
                 };
-
-                if sequence.len() != vector_size + 1 {
+                sequence_index += 1;
+                if sequence_length < sequence_index + element_length {
                     bail!(
-                        "Length indication plus one must match actual sequence length. \
-                        Claimed vector length was {vector_length_indication}. \
-                        Item size was {element_length}. \
-                        Sequence length was {}.",
-                        sequence.len()
+                        "Sequence too short to decode Vec of T: \
+                        {sequence_length} < {sequence_index} + {element_length}. \
+                        Attempted to decode element {} of {num_elements}.",
+                        element_idx + 1
                     );
                 }
-                let raw_item_iter = sequence[1..].chunks_exact(element_length);
-                if !raw_item_iter.remainder().is_empty() {
-                    bail!("Could not chunk sequence into equal parts of size {element_length}.");
-                }
-                let mut vec_t = Vec::with_capacity(vector_length_indication);
-                for raw_item in raw_item_iter {
-                    let item = *T::decode(raw_item)?;
-                    vec_t.push(item);
-                }
-                vec_t
+                let element =
+                    *T::decode(&sequence[sequence_index..sequence_index + element_length])?;
+                sequence_index += element_length;
+                vec_t.push(element);
             }
-            None => {
-                let sequence_len = sequence.len();
-                let total_length_indication = sequence[0].value() as usize;
-                if sequence_len != total_length_indication + 1 {
-                    bail!(
-                        "Length indication plus one must match actual sequence length. \
-                        Length indication was {total_length_indication}. \
-                        Sequence length was {sequence_len}.",
-                    );
-                }
-
-                let mut index = 1;
-                let mut vec_t = vec![];
-                while index < sequence_len {
-                    let element_length_indication = match sequence.get(index) {
-                        Some(e) => e.value() as usize,
-                        None => bail!("Index count mismatch while decoding Vec of T"),
-                    };
-                    index += 1;
-                    let element = *T::decode(&sequence[index..index + element_length_indication])?;
-                    index += element_length_indication;
-                    vec_t.push(element);
-                }
-                vec_t
+            if sequence_length != sequence_index {
+                bail!("Vector contains too many items: {sequence_length} != {sequence_index}.");
             }
-        };
+        }
         Ok(Box::new(vec_t))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
-        match T::static_length() {
-            Some(_) => {
-                // Set temp value for vector length indication
-                let mut ret = vec![BFieldElement::new(0)];
-
-                for elem in self {
-                    let mut element_encoded = elem.encode();
-                    ret.append(&mut element_encoded);
-                }
-
-                // Set total length indicator
-                ret[0] = BFieldElement::new(self.len() as u64);
-
-                ret
+        let elements_are_variable_len = T::static_length().is_none();
+        let num_elements = (self.len() as u64).into();
+        let mut encoding = vec![num_elements];
+        for elem in self {
+            let mut element_encoded = elem.encode();
+            if elements_are_variable_len {
+                encoding.push((element_encoded.len() as u64).into());
             }
-            None => {
-                let mut ret = vec![BFieldElement::new(0)];
-
-                for elem in self {
-                    let mut element_encoded = elem.encode();
-                    ret.push(BFieldElement::new(element_encoded.len() as u64));
-                    ret.append(&mut element_encoded);
-                }
-
-                // Set total length indicator
-                ret[0] = BFieldElement::new(ret.len() as u64 - 1);
-
-                ret
-            }
+            encoding.append(&mut element_encoded);
         }
+        encoding
     }
 
     fn static_length() -> Option<usize> {
@@ -666,7 +658,11 @@ mod bfield_codec_tests {
     fn test_decode_random_negative() {
         for _ in 1..=10000 {
             let len = random_length(100);
-            let str: Vec<BFieldElement> = random_elements(len);
+            let mut str: Vec<BFieldElement> = random_elements(len);
+            // Claiming a length that is too large leads to error “capacity overflow” when decoding.
+            if !str.is_empty() {
+                str[0] = (100 + random_length(500) as u64).into();
+            }
 
             // Some of the following cases can be triggered by false
             // positives. This should occur with probability roughly
