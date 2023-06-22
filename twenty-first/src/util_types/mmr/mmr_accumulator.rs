@@ -46,6 +46,7 @@ where
 {
     leaf_count: u64,
     peaks: Vec<Digest>,
+    #[bfield_codec(ignore)]
     _hasher: PhantomData<H>,
 }
 

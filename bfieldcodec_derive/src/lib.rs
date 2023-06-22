@@ -235,15 +235,19 @@ fn struct_with_named_fields(
 
     let encode_statements = included_field_names
         .clone()
-        .map(|fname| {
+        .zip(included_field_types.clone())
+        .map(|(fname, field_type)| {
             quote! {
                 let mut #fname: Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
                     = self.#fname.encode();
-                elements.push(
-                    ::twenty_first::shared_math::b_field_element::BFieldElement::new(
-                        #fname.len() as u64
-                    )
-                );
+                if <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                    ::static_length().is_none() {
+                    elements.push(
+                        ::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                            #fname.len() as u64
+                        )
+                    );
+                }
                 elements.append(&mut #fname);
             }
         })
@@ -300,14 +304,18 @@ fn struct_with_unnamed_fields(
 
     let encode_statements: Vec<_> = indices
         .iter()
-        .map(|idx| {
+        .zip(field_types.clone())
+        .map(|(idx, field_type)| {
             quote! {
                 let mut field_value:
                     Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
                     = self.#idx.encode();
-                elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new(
-                    field_value.len() as u64)
-                );
+                if <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                    ::static_length().is_none() {
+                    elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                        field_value.len() as u64)
+                    );
+                }
                 elements.append(&mut field_value);
             }
         })
@@ -332,15 +340,19 @@ fn generate_decode_statement(
             if sequence.is_empty() {
                 anyhow::bail!("Cannot decode field: sequence is empty.");
             }
-            let len = sequence[0].value() as usize;
-            if sequence.len() < 1 + len {
+            let (len, sequence) = match <#field_type
+                as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length() {
+                Some(len) => (len, sequence),
+                None => (sequence[0].value() as usize, &sequence[1..]),
+            };
+            if sequence.len() < len {
                 anyhow::bail!("Cannot decode field: sequence too short.");
             }
             let decoded = *<#field_type
                 as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
-                    &sequence[1..1 + len]
+                    &sequence[..len]
                 )?;
-            (decoded, &sequence[1 + len..])
+            (decoded, &sequence[len..])
         };
         let #field_name = field_value;
     }
