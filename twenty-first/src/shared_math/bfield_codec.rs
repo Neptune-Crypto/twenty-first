@@ -410,22 +410,23 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
             bail!("Cannot decode empty sequence into Vec<T>");
         }
 
-        let num_elements = sequence[0].value() as usize;
+        let indicated_num_elements = sequence[0].value() as usize;
         let sequence = &sequence[1..];
-        // Initializing the vector with the correct capacity potentially allows a DOS.
+
+        // Initializing the vector with the indicated capacity potentially allows a DOS.
         let mut vec_t = vec![];
 
         if T::static_length().is_some() {
             let element_length = T::static_length().unwrap();
-            let maybe_vector_size = num_elements.checked_mul(element_length);
+            let maybe_vector_size = indicated_num_elements.checked_mul(element_length);
             let Some(vector_size) = maybe_vector_size else {
-                bail!("Length indication too large: {num_elements} * {element_length}");
+                bail!("Length indication too large: {indicated_num_elements} * {element_length}");
             };
 
             if sequence.len() != vector_size {
                 bail!(
                     "Length indication plus one must match actual sequence length. \
-                    Vector claims to contain {num_elements} items. \
+                    Vector claims to contain {indicated_num_elements} items. \
                     Item size is {element_length}. Sequence length is {}.",
                     sequence.len() + 1
                 );
@@ -434,9 +435,9 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
             if !raw_item_iter.remainder().is_empty() {
                 bail!("Could not chunk sequence into equal parts of size {element_length}.");
             }
-            if raw_item_iter.len() != num_elements {
+            if raw_item_iter.len() != indicated_num_elements {
                 bail!(
-                    "Vector contains wrong number of items. Expected {num_elements} found {}",
+                    "Vector contains wrong number of items. Expected {indicated_num_elements} found {}",
                     raw_item_iter.len()
                 );
             }
@@ -447,12 +448,12 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
         } else {
             let sequence_length = sequence.len();
             let mut sequence_index = 0;
-            for element_idx in 0..num_elements {
+            for element_idx in 0..indicated_num_elements {
                 let element_length = match sequence.get(sequence_index) {
                     Some(len) => len.value() as usize,
                     None => bail!(
                         "Index count mismatch while decoding Vec of T. \
-                        Attempted to decode element {} of {num_elements}.",
+                        Attempted to decode element {} of {indicated_num_elements}.",
                         element_idx + 1
                     ),
                 };
@@ -461,7 +462,7 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
                     bail!(
                         "Sequence too short to decode Vec of T: \
                         {sequence_length} < {sequence_index} + {element_length}. \
-                        Attempted to decode element {} of {num_elements}.",
+                        Attempted to decode element {} of {indicated_num_elements}.",
                         element_idx + 1
                     );
                 }
@@ -1249,9 +1250,12 @@ pub mod derive_tests {
 
     #[test]
     fn vec_of_struct_with_one_fix_len_field_test() {
+        // This is a regression test addressing #124.
+        // https://github.com/Neptune-Crypto/twenty-first/issues/124
+
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-        pub struct OneFixedLenField {
-            pub some_digest: Digest,
+        struct OneFixedLenField {
+            some_digest: Digest,
         }
 
         let rand_struct = || OneFixedLenField {
