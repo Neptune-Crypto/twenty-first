@@ -272,25 +272,30 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
     }
 
     fn static_length() -> Option<usize> {
-        if T::static_length().is_none() || S::static_length().is_none() {
-            None
-        } else {
-            Some(T::static_length().unwrap() + S::static_length().unwrap())
+        match (T::static_length(), S::static_length()) {
+            (Some(sl_t), Some(sl_s)) => Some(sl_t + sl_s),
+            _ => None,
         }
     }
 }
 
 impl<T: BFieldCodec> BFieldCodec for Option<T> {
     fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        let isset = match str.get(0) {
-            Some(e) => e.value() != 0,
+        let is_some = match str.get(0) {
+            Some(e) => {
+                if e.is_one() || e.is_zero() {
+                    e.is_one()
+                } else {
+                    bail!("Invalid option indicator: {e}")
+                }
+            }
             None => bail!("Cannot decode Option of T: empty sequence"),
         };
 
-        if !isset {
-            Ok(Box::new(None))
-        } else {
+        if is_some {
             Ok(Box::new(Some(*T::decode(&str[1..])?)))
+        } else {
+            Ok(Box::new(None))
         }
     }
 
@@ -316,7 +321,7 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
 impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N] {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if sequence.is_empty() {
-            bail!("Cannot decode empty sequence into Vec<T>");
+            bail!("Cannot decode empty sequence into [T; {N}]");
         }
         let vec_t = match T::static_length() {
             Some(element_size) => {
@@ -382,7 +387,7 @@ impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N] {
             // so there's no need to prepend the length of the sequence.
             Some(_) => self.iter().flat_map(|elem| elem.encode()).collect(),
             None => {
-                // Prepend the length of the sequence as it's not known at compile time.
+                // Prepend the length of the entire sequence as it's not known at compile time.
                 let mut ret = vec![BFieldElement::new(0)];
 
                 for elem in self {
@@ -768,6 +773,57 @@ mod bfield_codec_tests {
         assert_eq!(decoded, pd);
 
         assert!(encoded.is_empty());
+    }
+
+    #[test]
+    fn decode_encode_array_with_static_element_size() {
+        const N: usize = 14;
+        type Array = [u64; N];
+
+        let an_array: Array = [14u64; N];
+        prop(&an_array);
+
+        assert_eq!(
+            Some(N * 2),
+            <Array>::static_length(),
+            "Static length must be set and correct for array with static element lengths"
+        );
+    }
+
+    #[test]
+    fn decode_encode_array_with_dynamic_element_size() {
+        const N: usize = 19;
+        type Array = [Vec<Digest>; N];
+
+        // Initialize an array with empty vectors in all elements
+        let mut an_array: Array = Default::default();
+        prop(&an_array);
+
+        // Should also work if the elements are not just the empty vectors
+        let mut rng = thread_rng();
+        for elem in an_array.iter_mut() {
+            *elem = random_elements(rng.gen_range(0..7));
+        }
+
+        prop(&an_array);
+
+        assert!(
+            <Array>::static_length().is_none(),
+            "Static length must be none for array with dynamic element lengths"
+        );
+    }
+
+    fn prop<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(value: &T) {
+        let encoded = value.encode();
+        let decoded = T::decode(&encoded);
+        let decoded = decoded.unwrap();
+        assert_eq!(*value, *decoded);
+
+        let encoded_too_long = vec![encoded, vec![BFieldElement::new(5)]].concat();
+        assert!(T::decode(&encoded_too_long).is_err());
+
+        let encoded_too_short = encoded_too_long[..encoded_too_long.len() - 2].to_vec();
+        assert!(T::decode(&encoded_too_short).is_err());
     }
 }
 
@@ -1246,7 +1302,15 @@ pub mod derive_tests {
         };
         let encoded = my_struct.encode();
         let decoded = UnsupportedFields::decode(&encoded).unwrap();
-        assert_eq!(my_struct.a, decoded.a);
+        assert_eq!(
+            my_struct.a, decoded.a,
+            "Non-ignored fields must be preserved under encoding"
+        );
+        assert_eq!(
+            usize::default(),
+            decoded.b,
+            "Ignored field must decode to default value"
+        )
     }
 
     #[test]
@@ -1326,7 +1390,7 @@ pub mod derive_tests {
     #[test]
     fn vec_of_struct_with_fix_and_var_len_unnamed_fields_test() {
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-        pub struct FixAndVarLenUnnamedFields(Digest, Vec<u64>);
+        struct FixAndVarLenUnnamedFields(Digest, Vec<u64>);
 
         let rand_struct = || {
             let num_elements: usize = thread_rng().gen_range(0..42);
@@ -1342,16 +1406,16 @@ pub mod derive_tests {
     #[test]
     fn vec_of_struct_with_quite_a_few_fix_and_var_len_fields_test() {
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-        pub struct QuiteAFewFixAndVarLenFields {
-            pub some_digest: Digest,
-            pub some_vec: Vec<u64>,
-            pub some_u64: u64,
-            pub other_vec: Vec<u32>,
-            pub other_digest: Digest,
-            pub yet_another_vec: Vec<u32>,
-            pub and_another_vec: Vec<u64>,
-            pub more_fixed_len: u64,
-            pub even_more_fixed_len: u64,
+        struct QuiteAFewFixAndVarLenFields {
+            some_digest: Digest,
+            some_vec: Vec<u64>,
+            some_u64: u64,
+            other_vec: Vec<u32>,
+            other_digest: Digest,
+            yet_another_vec: Vec<u32>,
+            and_another_vec: Vec<u64>,
+            more_fixed_len: u64,
+            even_more_fixed_len: u64,
         }
 
         let rand_struct = || {
