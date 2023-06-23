@@ -29,16 +29,6 @@ use syn::Ident;
 /// ```
 ///
 /// ### Known limitations
-/// Structs with tuples as fields are not supported.
-/// More specifically, deriving the trait will succeed, and the resulting implementations of
-/// `encode` and `decode` will compile.
-/// However, the derived methods `encode` and `decode` won't be each others duals.
-/// For example, the following code will panic:
-/// ```ignore
-/// #[derive(BFieldCodec)]
-/// struct Foo((u8, u8));
-/// let encoded = Foo((1, 2)).encode();
-/// let decoded = Foo::decode(&encoded).unwrap();
 /// ```
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {

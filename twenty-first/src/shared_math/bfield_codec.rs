@@ -1316,6 +1316,71 @@ mod tests {
         }
 
         #[test]
+        fn struct_with_tuple_field_dynamic_size() {
+            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+            struct StructWithTupleField {
+                a: (Digest, Vec<Digest>),
+            }
+
+            fn random_struct() -> StructWithTupleField {
+                let mut rng = thread_rng();
+                StructWithTupleField {
+                    a: (random(), random_elements(rng.gen_range(0..10))),
+                }
+            }
+
+            for _ in 0..5 {
+                prop(&random_struct());
+            }
+
+            assert!(StructWithTupleField::static_length().is_none());
+        }
+
+        #[test]
+        fn struct_with_tuple_field_static_size() {
+            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+            struct StructWithTupleField {
+                a: ([Digest; 2], XFieldElement),
+            }
+
+            fn random_struct() -> StructWithTupleField {
+                StructWithTupleField {
+                    a: ([random(), random()], random()),
+                }
+            }
+
+            for _ in 0..5 {
+                prop(&random_struct());
+            }
+
+            assert_eq!(Some(13), StructWithTupleField::static_length());
+        }
+
+        #[test]
+        fn struct_with_nested_tuple_field() {
+            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+            struct StructWithTupleField {
+                a: (([Digest; 2], Vec<XFieldElement>), (XFieldElement, u64)),
+            }
+
+            fn random_struct() -> StructWithTupleField {
+                let mut rng = thread_rng();
+                StructWithTupleField {
+                    a: (
+                        ([random(), random()], random_elements(rng.gen_range(0..10))),
+                        (random(), random()),
+                    ),
+                }
+            }
+
+            for _ in 0..5 {
+                prop(&random_struct());
+            }
+
+            assert!(StructWithTupleField::static_length().is_none());
+        }
+
+        #[test]
         fn ms_membership_proof_derive_test() {
             #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
             struct MsMembershipProof<H: AlgebraicHasher> {
