@@ -583,30 +583,16 @@ mod tests {
 
         use super::*;
 
-        fn random_bool() -> bool {
-            let mut rng = thread_rng();
-            rng.next_u32() % 2 == 0
-        }
-
-        fn random_length(max: usize) -> usize {
-            let mut rng = thread_rng();
-            rng.next_u32() as usize % max
-        }
-
         fn random_partial_authentication_paths(
-            inner_length: usize,
-            count: usize,
+            path_len: usize,
+            num_paths: usize,
         ) -> Vec<PartialAuthenticationPath<Digest>> {
+            let maybe_elem = || if random() { Some(random()) } else { None };
             let mut ret = vec![];
-
-            for _ in 0..count {
-                ret.push(
-                    (0..inner_length)
-                        .map(|_| if random_bool() { Some(random()) } else { None })
-                        .collect_vec(),
-                )
+            for _ in 0..num_paths {
+                let path = (0..path_len).map(|_| maybe_elem()).collect();
+                ret.push(path);
             }
-
             ret
         }
 
@@ -637,7 +623,7 @@ mod tests {
         #[test]
         fn test_encode_decode_random_vec_of_bfieldelement() {
             for _ in 1..=10 {
-                let len = random_length(100);
+                let len = thread_rng().gen_range(0..100);
                 let bfe_vec: Vec<BFieldElement> = (0..len).map(|_| random()).collect_vec();
                 prop(&bfe_vec);
             }
@@ -646,7 +632,7 @@ mod tests {
         #[test]
         fn test_encode_decode_random_vec_of_xfieldelement() {
             for _ in 1..=10 {
-                let len = random_length(100);
+                let len = thread_rng().gen_range(0..100);
                 let xfe_vec: Vec<XFieldElement> = (0..len).map(|_| random()).collect_vec();
                 prop(&xfe_vec);
             }
@@ -655,7 +641,7 @@ mod tests {
         #[test]
         fn test_encode_decode_random_vec_of_digest() {
             for _ in 1..=10 {
-                let len = random_length(100);
+                let len = thread_rng().gen_range(0..100);
                 let digest_vec: Vec<Digest> = (0..len).map(|_| random()).collect_vec();
                 prop(&digest_vec);
             }
@@ -664,10 +650,10 @@ mod tests {
         #[test]
         fn test_encode_decode_random_vec_of_vec_of_bfieldelement() {
             for _ in 1..=10 {
-                let len = random_length(10);
+                let len = thread_rng().gen_range(0..10);
                 let bfe_vec_vec: Vec<Vec<BFieldElement>> = (0..len)
                     .map(|_| {
-                        let inner_len = random_length(20);
+                        let inner_len = thread_rng().gen_range(0..20);
                         (0..inner_len).map(|_| random()).collect_vec()
                     })
                     .collect_vec();
@@ -678,10 +664,10 @@ mod tests {
         #[test]
         fn test_encode_decode_random_vec_of_vec_of_xfieldelement() {
             for _ in 1..=10 {
-                let len = random_length(10);
+                let len = thread_rng().gen_range(0..10);
                 let xfe_vec_vec: Vec<Vec<XFieldElement>> = (0..len)
                     .map(|_| {
-                        let inner_len = random_length(20);
+                        let inner_len = thread_rng().gen_range(0..20);
                         (0..inner_len).map(|_| random()).collect_vec()
                     })
                     .collect_vec();
@@ -692,8 +678,8 @@ mod tests {
         #[test]
         fn test_encode_decode_random_partial_authentication_path() {
             for _ in 1..=10 {
-                let len = 1 + random_length(10);
-                let count = random_length(10);
+                let len = 1 + thread_rng().gen_range(0..10);
+                let count = thread_rng().gen_range(0..10);
                 let pap = random_partial_authentication_paths(len, count);
                 prop(&pap);
             }
@@ -769,7 +755,7 @@ mod tests {
         #[test]
         fn test_decode_random_negative() {
             for _ in 1..=10000 {
-                let len = random_length(100);
+                let len = thread_rng().gen_range(0..100);
                 let str: Vec<BFieldElement> = random_elements(len);
 
                 // Some of the following cases can be triggered by false
