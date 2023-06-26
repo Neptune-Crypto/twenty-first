@@ -483,6 +483,7 @@ mod tests {
     use rand::{random, thread_rng};
 
     /// Extensive (and computationally expensive) testing of properties for [`BFieldCodec`].
+    /// Checks uniqueness of encoding & decoding, as well as checking that `decode` does not panic.
     fn expensive_encoding_pbt<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(
         original_encoded: &[BFieldElement],
         original_decoded: T,
@@ -551,16 +552,18 @@ mod tests {
         }
     }
 
-    /// Basic property testing for [`BFieldCodec`].
-    /// See [`expensive_encoding_pbt`] for more extensive property testing.
-    fn prop<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(value: &T) {
+    /// Assert properties for [`BFieldCodec`].
+    /// Usually only tests basic properties.
+    /// With environment variable `EXPENSIVE_ENCODING_PBT` set, runs an extensive set of tests.
+    /// See also [`expensive_encoding_pbt`].
+    fn assert_bfield_codec_properties<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(
+        value: &T,
+    ) {
         let encoded = value.encode();
         let decoded = T::decode(&encoded);
         let decoded = *decoded.unwrap();
         assert_eq!(*value, decoded);
 
-        // Set this environment variable to run an expensive PBT of encoding/decoding
-        // uniqueness and `decode`'s inability to panic
         if std::env::var("EXPENSIVE_ENCODING_PBT").is_ok() {
             expensive_encoding_pbt(&encoded, decoded);
         }
@@ -600,7 +603,7 @@ mod tests {
         fn test_encode_decode_random_bfieldelement() {
             for _ in 1..=10 {
                 let bfe: BFieldElement = random();
-                prop(&bfe);
+                assert_bfield_codec_properties(&bfe);
             }
         }
 
@@ -608,7 +611,7 @@ mod tests {
         fn test_encode_decode_random_xfieldelement() {
             for _ in 1..=10 {
                 let xfe: XFieldElement = random();
-                prop(&xfe);
+                assert_bfield_codec_properties(&xfe);
             }
         }
 
@@ -616,7 +619,7 @@ mod tests {
         fn test_encode_decode_random_digest() {
             for _ in 1..=10 {
                 let dig: Digest = random();
-                prop(&dig);
+                assert_bfield_codec_properties(&dig);
             }
         }
 
@@ -625,7 +628,7 @@ mod tests {
             for _ in 1..=10 {
                 let len = thread_rng().gen_range(0..100);
                 let bfe_vec: Vec<BFieldElement> = (0..len).map(|_| random()).collect_vec();
-                prop(&bfe_vec);
+                assert_bfield_codec_properties(&bfe_vec);
             }
         }
 
@@ -634,7 +637,7 @@ mod tests {
             for _ in 1..=10 {
                 let len = thread_rng().gen_range(0..100);
                 let xfe_vec: Vec<XFieldElement> = (0..len).map(|_| random()).collect_vec();
-                prop(&xfe_vec);
+                assert_bfield_codec_properties(&xfe_vec);
             }
         }
 
@@ -643,7 +646,7 @@ mod tests {
             for _ in 1..=10 {
                 let len = thread_rng().gen_range(0..100);
                 let digest_vec: Vec<Digest> = (0..len).map(|_| random()).collect_vec();
-                prop(&digest_vec);
+                assert_bfield_codec_properties(&digest_vec);
             }
         }
 
@@ -657,7 +660,7 @@ mod tests {
                         (0..inner_len).map(|_| random()).collect_vec()
                     })
                     .collect_vec();
-                prop(&bfe_vec_vec);
+                assert_bfield_codec_properties(&bfe_vec_vec);
             }
         }
 
@@ -671,7 +674,7 @@ mod tests {
                         (0..inner_len).map(|_| random()).collect_vec()
                     })
                     .collect_vec();
-                prop(&xfe_vec_vec);
+                assert_bfield_codec_properties(&xfe_vec_vec);
             }
         }
 
@@ -681,44 +684,44 @@ mod tests {
                 let len = 1 + thread_rng().gen_range(0..10);
                 let count = thread_rng().gen_range(0..10);
                 let pap = random_partial_authentication_paths(len, count);
-                prop(&pap);
+                assert_bfield_codec_properties(&pap);
             }
         }
 
         #[test]
         fn test_encode_decode_tuples_static_static_size_0() {
             let static_static: (Digest, u128) = (random(), random());
-            prop(&static_static);
+            assert_bfield_codec_properties(&static_static);
         }
 
         #[test]
         fn test_encode_decode_tuples_static_static_size_1() {
             let static_static: (Digest, u64) = (random(), random());
-            prop(&static_static);
+            assert_bfield_codec_properties(&static_static);
         }
 
         #[test]
         fn test_encode_decode_tuples_static_static_size_2() {
             let static_static: (BFieldElement, BFieldElement) = (random(), random());
-            prop(&static_static);
+            assert_bfield_codec_properties(&static_static);
         }
 
         #[test]
         fn test_encode_decode_tuples_static_static_size_3() {
             let static_static: (BFieldElement, XFieldElement) = (random(), random());
-            prop(&static_static);
+            assert_bfield_codec_properties(&static_static);
         }
 
         #[test]
         fn test_encode_decode_tuples_static_static_size_4() {
             let static_static: (XFieldElement, BFieldElement) = (random(), random());
-            prop(&static_static);
+            assert_bfield_codec_properties(&static_static);
         }
 
         #[test]
         fn test_encode_decode_tuples_static_static_size_5() {
             let static_static: (XFieldElement, Digest) = (random(), random());
-            prop(&static_static);
+            assert_bfield_codec_properties(&static_static);
         }
 
         #[test]
@@ -726,7 +729,7 @@ mod tests {
             for vec_length in 0..10 {
                 let static_dynamic: (Digest, Vec<BFieldElement>) =
                     (random(), random_elements(vec_length));
-                prop(&static_dynamic);
+                assert_bfield_codec_properties(&static_dynamic);
             }
         }
 
@@ -735,7 +738,7 @@ mod tests {
             for vec_length in 0..10 {
                 let dynamic_static: (Vec<XFieldElement>, Digest) =
                     (random_elements(vec_length), random());
-                prop(&dynamic_static);
+                assert_bfield_codec_properties(&dynamic_static);
             }
         }
 
@@ -747,7 +750,7 @@ mod tests {
                         random_elements(vec_length_left),
                         random_elements(vec_length_right),
                     );
-                    prop(&dynamic_dynamic);
+                    assert_bfield_codec_properties(&dynamic_dynamic);
                 }
             }
         }
@@ -809,7 +812,7 @@ mod tests {
                 }
             }
 
-            prop(&vector);
+            assert_bfield_codec_properties(&vector);
         }
 
         #[test]
@@ -828,7 +831,7 @@ mod tests {
             type Array = [u64; N];
 
             let an_array: Array = [14u64; N];
-            prop(&an_array);
+            assert_bfield_codec_properties(&an_array);
 
             assert_eq!(
                 Some(N * 2),
@@ -844,7 +847,7 @@ mod tests {
 
             // Initialize an array with empty vectors in all elements
             let mut an_array: Array = Default::default();
-            prop(&an_array);
+            assert_bfield_codec_properties(&an_array);
 
             // Should also work if the elements are not just the empty vectors
             let mut rng = thread_rng();
@@ -852,7 +855,7 @@ mod tests {
                 *elem = random_elements(rng.gen_range(0..7));
             }
 
-            prop(&an_array);
+            assert_bfield_codec_properties(&an_array);
 
             assert!(
                 <Array>::static_length().is_none(),
@@ -932,7 +935,7 @@ mod tests {
 
         #[test]
         fn simple_struct_with_named_fields() {
-            prop(&DeriveTestStructA {
+            assert_bfield_codec_properties(&DeriveTestStructA {
                 field_a: 14,
                 field_b: 555558,
                 field_c: 1337,
@@ -943,21 +946,21 @@ mod tests {
 
         #[test]
         fn simple_struct_with_one_unnamed_field() {
-            prop(&DeriveTestStructB(127));
+            assert_bfield_codec_properties(&DeriveTestStructB(127));
 
             assert_eq!(Some(4), DeriveTestStructB::static_length());
         }
 
         #[test]
         fn simple_struct_with_unnamed_fields() {
-            prop(&DeriveTestStructC(127 << 100, 14, 1000));
+            assert_bfield_codec_properties(&DeriveTestStructC(127 << 100, 14, 1000));
 
             assert_eq!(Some(7), DeriveTestStructC::static_length());
         }
 
         #[test]
         fn struct_with_unnamed_vec_field() {
-            prop(&DeriveTestStructD(vec![
+            assert_bfield_codec_properties(&DeriveTestStructD(vec![
                 1 << 99,
                 99,
                 1 << 120,
@@ -966,7 +969,7 @@ mod tests {
             ]));
 
             // Test the empty struct
-            prop(&DeriveTestStructD(vec![]));
+            assert_bfield_codec_properties(&DeriveTestStructD(vec![]));
 
             assert!(DeriveTestStructD::static_length().is_none());
         }
@@ -988,11 +991,11 @@ mod tests {
                 )
             }
             for _ in 0..20 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
 
             // Also test the Default/empty struct
-            prop(&DeriveTestStructE::default());
+            assert_bfield_codec_properties(&DeriveTestStructE::default());
 
             assert!(DeriveTestStructE::static_length().is_none());
         }
@@ -1015,11 +1018,11 @@ mod tests {
                 }
             }
             for _ in 0..20 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
 
             // Also test the Default/empty struct
-            prop(&DeriveTestStructF::default());
+            assert_bfield_codec_properties(&DeriveTestStructF::default());
 
             assert!(DeriveTestStructF::static_length().is_none());
         }
@@ -1037,11 +1040,11 @@ mod tests {
         #[test]
         fn struct_with_phantom_data() {
             for _ in 0..20 {
-                prop(&random_with_phantomdata_struct());
+                assert_bfield_codec_properties(&random_with_phantomdata_struct());
             }
 
             // Also test the Default/empty struct
-            prop(&WithPhantomData::<Tip5>::default());
+            assert_bfield_codec_properties(&WithPhantomData::<Tip5>::default());
         }
 
         #[test]
@@ -1062,11 +1065,11 @@ mod tests {
             }
 
             for _ in 0..10 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
 
             // Also test the Default/empty struct
-            prop(&WithNestedPhantomData::<Tip5>::default());
+            assert_bfield_codec_properties(&WithNestedPhantomData::<Tip5>::default());
         }
 
         #[test]
@@ -1087,11 +1090,11 @@ mod tests {
             }
 
             for _ in 0..10 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
 
             // Also test the Default/empty struct
-            prop(&WithNestedVec::default());
+            assert_bfield_codec_properties(&WithNestedVec::default());
 
             assert!(WithNestedVec::static_length().is_none());
         }
@@ -1132,7 +1135,7 @@ mod tests {
             }
 
             for _ in 0..5 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
 
             assert!(MuchNesting::static_length().is_none());
@@ -1157,8 +1160,8 @@ mod tests {
             }
 
             for _ in 0..5 {
-                prop(&random_struct_unnamed_fields());
-                prop(&random_struct_named_fields());
+                assert_bfield_codec_properties(&random_struct_unnamed_fields());
+                assert_bfield_codec_properties(&random_struct_named_fields());
             }
 
             assert_eq!(Some(4), SmallArrayStructUnnamedFields::static_length());
@@ -1198,8 +1201,8 @@ mod tests {
             }
 
             for _ in 0..3 {
-                prop(&random_struct_unnamed_fields());
-                prop(&random_struct_named_fields());
+                assert_bfield_codec_properties(&random_struct_unnamed_fields());
+                assert_bfield_codec_properties(&random_struct_named_fields());
             }
 
             assert_eq!(
@@ -1239,8 +1242,8 @@ mod tests {
             }
 
             for _ in 0..5 {
-                prop(&random_struct_unnamed_fields());
-                prop(&random_struct_named_fields());
+                assert_bfield_codec_properties(&random_struct_unnamed_fields());
+                assert_bfield_codec_properties(&random_struct_named_fields());
             }
 
             assert!(ArrayStructDynamicallySizedElementsUnnamedFields::static_length().is_none());
@@ -1262,7 +1265,7 @@ mod tests {
             }
 
             for _ in 0..5 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
 
             assert!(StructWithTupleField::static_length().is_none());
@@ -1282,7 +1285,7 @@ mod tests {
             }
 
             for _ in 0..5 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
 
             assert_eq!(Some(13), StructWithTupleField::static_length());
@@ -1306,7 +1309,7 @@ mod tests {
             }
 
             for _ in 0..5 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
 
             assert!(StructWithTupleField::static_length().is_none());
@@ -1344,7 +1347,7 @@ mod tests {
             }
 
             for _ in 0..5 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
 
             assert!(MsMembershipProof::<Tip5>::static_length().is_none());
@@ -1372,7 +1375,7 @@ mod tests {
             }
 
             for _ in 0..5 {
-                prop(&random_struct());
+                assert_bfield_codec_properties(&random_struct());
             }
         }
 
@@ -1417,7 +1420,7 @@ mod tests {
 
             for num_elements in 0..5 {
                 dbg!(num_elements);
-                prop(&vec![rand_struct(); num_elements]);
+                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
             }
         }
 
@@ -1436,7 +1439,7 @@ mod tests {
 
             for num_elements in 0..5 {
                 dbg!(num_elements);
-                prop(&vec![rand_struct(); num_elements]);
+                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
             }
         }
 
@@ -1449,7 +1452,7 @@ mod tests {
 
             for num_elements in 0..5 {
                 dbg!(num_elements);
-                prop(&vec![rand_struct(); num_elements]);
+                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
             }
         }
 
@@ -1471,7 +1474,7 @@ mod tests {
 
             for num_elements in 0..5 {
                 dbg!(num_elements);
-                prop(&vec![rand_struct(); num_elements]);
+                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
             }
         }
 
@@ -1487,7 +1490,7 @@ mod tests {
 
             for num_elements in 0..5 {
                 dbg!(num_elements);
-                prop(&vec![rand_struct(); num_elements]);
+                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
             }
         }
 
@@ -1526,7 +1529,7 @@ mod tests {
 
             for num_elements in 0..5 {
                 dbg!(num_elements);
-                prop(&vec![rand_struct(); num_elements]);
+                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
             }
         }
     }
