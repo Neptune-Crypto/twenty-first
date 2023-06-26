@@ -1,6 +1,7 @@
 use core::fmt;
 use std::str::FromStr;
 
+use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use itertools::Itertools;
 use num_bigint::{BigUint, TryFromBigIntError};
@@ -16,7 +17,7 @@ use crate::util_types::emojihash_trait::Emojihash;
 
 pub const DIGEST_LENGTH: usize = 5;
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, BFieldCodec)]
 pub struct Digest(pub [BFieldElement; DIGEST_LENGTH]);
 
 impl GetSize for Digest {

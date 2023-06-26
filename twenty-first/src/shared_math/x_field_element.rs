@@ -1,3 +1,4 @@
+use bfieldcodec_derive::BFieldCodec;
 use num_traits::{One, Zero};
 use rand::Rng;
 use rand_distr::{Distribution, Standard};
@@ -15,7 +16,7 @@ use crate::util_types::emojihash_trait::Emojihash;
 
 pub const EXTENSION_DEGREE: usize = 3;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize, BFieldCodec)]
 pub struct XFieldElement {
     pub coefficients: [BFieldElement; EXTENSION_DEGREE],
 }
