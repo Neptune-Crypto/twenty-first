@@ -12,10 +12,6 @@ use num_traits::Zero;
 pub use bfieldcodec_derive::BFieldCodec;
 
 use super::b_field_element::BFieldElement;
-use super::tip5::Digest;
-use super::tip5::DIGEST_LENGTH;
-use super::x_field_element::XFieldElement;
-use super::x_field_element::EXTENSION_DEGREE;
 
 /// BFieldCodec
 ///
@@ -32,6 +28,10 @@ pub trait BFieldCodec {
     fn static_length() -> Option<usize>;
 }
 
+// The underlying type of a BFieldElement is a u64. A single u64 does not fit in one BFieldElement.
+// Therefore, deriving the BFieldCodec for BFieldElement using the derive macro will result in a
+// BFieldCodec implementation that encodes a single BFieldElement as two BFieldElements.
+// This is not desired. Hence, BFieldCodec is implemented manually for BFieldElement.
 impl BFieldCodec for BFieldElement {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if sequence.len() != 1 {
@@ -47,48 +47,6 @@ impl BFieldCodec for BFieldElement {
 
     fn static_length() -> Option<usize> {
         Some(1)
-    }
-}
-
-impl BFieldCodec for XFieldElement {
-    // FIXME: Use `XFieldElement::try_into()`.
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != EXTENSION_DEGREE {
-            bail!(
-                "trying to decode slice of not EXTENSION_DEGREE BFieldElements into XFieldElement"
-            );
-        }
-
-        Ok(Box::new(XFieldElement {
-            coefficients: sequence.try_into().unwrap(),
-        }))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        self.coefficients.to_vec()
-    }
-
-    fn static_length() -> Option<usize> {
-        Some(EXTENSION_DEGREE)
-    }
-}
-
-impl BFieldCodec for Digest {
-    // FIXME: Use `Digest::try_from()`
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != DIGEST_LENGTH {
-            bail!("trying to decode slice of not DIGEST_LENGTH BFieldElements into Digest");
-        }
-
-        Ok(Box::new(Digest::new(sequence.try_into().unwrap())))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        self.values().to_vec()
-    }
-
-    fn static_length() -> Option<usize> {
-        Some(DIGEST_LENGTH)
     }
 }
 
@@ -580,7 +538,10 @@ mod tests {
         use rand::{Rng, RngCore};
 
         use crate::{
-            shared_math::{other::random_elements, tip5::Tip5},
+            shared_math::{
+                digest::Digest, digest::DIGEST_LENGTH, other::random_elements, tip5::Tip5,
+                x_field_element::XFieldElement, x_field_element::EXTENSION_DEGREE,
+            },
             util_types::merkle_tree::PartialAuthenticationPath,
         };
 
@@ -872,7 +833,9 @@ mod tests {
         use rand::{random, thread_rng, Rng, RngCore};
 
         use crate::{
-            shared_math::{other::random_elements, tip5::Tip5},
+            shared_math::{
+                digest::Digest, other::random_elements, tip5::Tip5, x_field_element::XFieldElement,
+            },
             util_types::{
                 algebraic_hasher::AlgebraicHasher, mmr::mmr_membership_proof::MmrMembershipProof,
             },
