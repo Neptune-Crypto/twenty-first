@@ -461,7 +461,9 @@ mod tests {
                 assert!(
                     decoded_mutated.is_err()
                         || *decoded_mutated.unwrap() != original_decoded
-                        || mutated_encoding[i] == original_value
+                        || mutated_encoding[i] == original_value,
+                    "Error: Mutated encoding was: {}",
+                    mutated_encoding.iter().join(",")
                 );
             }
 
@@ -473,7 +475,9 @@ mod tests {
                 assert!(
                     decoded_mutated.is_err()
                         || *decoded_mutated.unwrap() != original_decoded
-                        || mutated_encoding[i] == original_value
+                        || mutated_encoding[i] == original_value,
+                    "Error: Mutated encoding was: {}",
+                    mutated_encoding.iter().join(",")
                 );
             }
 
