@@ -16,25 +16,13 @@ use crate::util_types::shared::bag_peaks;
 // be a higher number than 16 when using a faster hash function.
 const PARALLELLIZATION_THRESHOLD: usize = 16;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MerkleTree<H>
 where
     H: AlgebraicHasher,
 {
     pub nodes: Vec<Digest>,
     pub _hasher: PhantomData<H>,
-}
-
-impl<H> Clone for MerkleTree<H>
-where
-    H: AlgebraicHasher,
-{
-    fn clone(&self) -> Self {
-        Self {
-            nodes: self.nodes.clone(),
-            _hasher: PhantomData,
-        }
-    }
 }
 
 /// A partial authentication path is like a full authentication path, but with some nodes missing.
