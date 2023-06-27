@@ -1,7 +1,6 @@
 use itertools::izip;
 use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use std::collections::HashSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
@@ -128,91 +127,65 @@ where
         acc_hash == root_hash
     }
 
-    /// Compact Merkle Authentication Structure Generation
+    /// Generate a de-duplicated authentication structure for the given leaf indices.
     pub fn get_authentication_structure(
         &self,
         leaf_indices: &[usize],
     ) -> Vec<PartialAuthenticationPath<Digest>> {
-        let num_leaves = self.nodes.len() / 2;
-        let mut calculable_indices: HashSet<usize> = HashSet::new();
-        let mut partial_authentication_paths: Vec<PartialAuthenticationPath<Digest>> =
-            Vec::with_capacity(leaf_indices.len());
-        for leaf_index in leaf_indices.iter() {
-            let authentication_path: PartialAuthenticationPath<_> = self
-                .get_authentication_path(*leaf_index)
-                .into_iter()
-                .map(Some)
-                .collect();
-            let mut node_index = num_leaves + leaf_index;
-            calculable_indices.insert(node_index);
-            for _ in 1..authentication_path.len() {
-                let sibling_node_index = node_index ^ 1;
-                calculable_indices.insert(sibling_node_index);
-                node_index /= 2;
-            }
-            partial_authentication_paths.push(authentication_path);
-        }
+        let num_nodes = self.nodes.len();
+        let num_leaves = num_nodes / 2;
 
-        let mut complete = false;
-        while !complete {
-            complete = true;
-            let parent_node_indices: Vec<usize> =
-                calculable_indices.iter().map(|&x| x / 2).collect();
-
-            for parent_node_index in parent_node_indices.into_iter() {
-                let left_child_node_index = parent_node_index * 2;
-                let right_child_node_index = left_child_node_index + 1;
-                if calculable_indices.contains(&left_child_node_index)
-                    && calculable_indices.contains(&right_child_node_index)
-                    && !calculable_indices.contains(&parent_node_index)
-                {
-                    calculable_indices.insert(parent_node_index);
-                    complete = false;
-                }
-            }
-        }
-
-        let mut scanned: HashSet<usize> = HashSet::new();
-        for (leaf_index, partial_authentication_path) in leaf_indices
+        let all_indices_are_valid = leaf_indices
             .iter()
-            .zip(partial_authentication_paths.iter_mut())
-        {
-            let mut node_index: usize = num_leaves + leaf_index;
-            scanned.insert(node_index);
-            for authentication_path_element in partial_authentication_path.iter_mut() {
-                // Note that the authentication path contains the siblings to the nodes given by
-                // the list (node_index, node_index / 2, node_index / 4, …). Hence, all the tests
-                // performed here exclusively deal with the current node's sibling.
-                let sibling_node_index = node_index ^ 1;
-                let sibling_already_covered = scanned.contains(&sibling_node_index);
+            .all(|leaf_index| leaf_index + num_leaves < num_nodes);
+        assert!(all_indices_are_valid, "All leaf indices must be valid.");
 
-                let siblings_left_child_node_index = sibling_node_index * 2;
-                let siblings_right_child_node_index = siblings_left_child_node_index + 1;
-                let both_sibling_children_can_be_calculated = calculable_indices
-                    .contains(&siblings_left_child_node_index)
-                    && calculable_indices.contains(&siblings_right_child_node_index);
+        // Indicates whether a node needs to be included in the authentications structure.
+        // In principle, every node of every authentication path is needed.
+        // Indexing is as in the Merkle tree.
+        let mut node_is_needed = vec![false; num_nodes];
 
-                let sibling_is_in_leaf_layer = sibling_node_index >= num_leaves;
-                let sibling_is_explicitly_requested = if sibling_is_in_leaf_layer {
-                    let sibling_leaf_index = sibling_node_index - num_leaves;
-                    leaf_indices.contains(&sibling_leaf_index)
-                } else {
-                    // Only leaves can be explicitly requested.
-                    false
-                };
+        // Every node on the direct path from the leaf to the root can be computed by the very
+        // nature of “authentication path”. Again, indexing is as in the Merkle tree.
+        let mut node_can_be_computed = vec![false; num_nodes];
 
-                let authentication_path_element_is_redundant = sibling_already_covered
-                    || both_sibling_children_can_be_calculated
-                    || sibling_is_explicitly_requested;
-                if authentication_path_element_is_redundant {
-                    *authentication_path_element = None;
-                }
-                scanned.insert(sibling_node_index);
+        for leaf_index in leaf_indices {
+            let mut node_index = leaf_index + num_leaves;
+            while node_index > 1 {
+                let sibling_index = node_index ^ 1;
+                node_can_be_computed[node_index] = true;
+                node_is_needed[sibling_index] = true;
                 node_index /= 2;
             }
         }
 
-        partial_authentication_paths
+        // With the information about needed and computable nodes at hand, iterate over all
+        // authentication paths again. Collect any node that is needed but cannot be computed into
+        // a partial authentication path, and remove the “needed” indication.
+        let mut authentication_structure = vec![];
+        for leaf_index in leaf_indices {
+            let mut node_index = leaf_index + num_leaves;
+            let mut authentication_path = vec![];
+            while node_index > 1 {
+                let sibling_index = node_index ^ 1;
+                let sibling_is_needed = node_is_needed[sibling_index];
+                let sibling_can_be_computed = node_can_be_computed[sibling_index];
+                let put_sibling_in_path = sibling_is_needed && !sibling_can_be_computed;
+
+                if put_sibling_in_path {
+                    node_is_needed[sibling_index] = false;
+                }
+                let authentication_path_element = match put_sibling_in_path {
+                    true => Some(self.nodes[sibling_index]),
+                    false => None,
+                };
+                authentication_path.push(authentication_path_element);
+                node_index /= 2;
+            }
+            authentication_structure.push(authentication_path);
+        }
+
+        authentication_structure
     }
 
     /// Verifies a list of indicated digests and corresponding authentication paths against a
