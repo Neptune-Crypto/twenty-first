@@ -126,6 +126,8 @@ where
         num_nodes: usize,
         leaf_indices: &[usize],
     ) -> Vec<usize> {
+        // This function is not defined as a method (taking self as argument) since it's
+        // needed by the verifier who does not have access to the Merkle tree.
         let num_leaves = num_nodes / 2;
         let root_index = 1;
 
@@ -190,6 +192,7 @@ where
             return false;
         }
 
+        // Verify that the authentication structure contains the expected number of digests
         let indices_of_nodes_in_authentication_structure =
             Self::indices_of_nodes_in_authentication_structure(num_nodes, leaf_indices);
         if authentication_structure.len() != indices_of_nodes_in_authentication_structure.len() {
@@ -233,7 +236,7 @@ where
         parent_node_indices.sort();
         parent_node_indices.dedup();
 
-        // Hash the partial tree from the bottom up.
+        // Hash the partial tree from the bottom up, all the way to the root.
         for _ in 0..tree_height {
             for &parent_node_index in parent_node_indices.iter() {
                 let left_node_index = parent_node_index * 2;
