@@ -84,3 +84,7 @@ harness = false
 [[bench]]
 name = "merkle_tree_authenticate"
 harness = false
+
+[[bench]]
+name = "merkle_tree_auth_structure_size"
+harness = false
