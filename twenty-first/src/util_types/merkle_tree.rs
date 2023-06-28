@@ -124,12 +124,12 @@ where
 
     /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to
     /// prove (or verify) that the indicated leaves are in the Merkle tree.
+    // This function is not defined as a method (taking self as argument) since it's
+    // needed by the verifier who does not have access to the Merkle tree.
     fn indices_of_nodes_in_authentication_structure(
         num_nodes: usize,
         leaf_indices: &[usize],
     ) -> Vec<usize> {
-        // This function is not defined as a method (taking self as argument) since it's
-        // needed by the verifier who does not have access to the Merkle tree.
         let num_leaves = num_nodes / 2;
         let root_index = 1;
 
@@ -139,7 +139,8 @@ where
         assert!(all_indices_are_valid, "All leaf indices must be valid.");
 
         // Indicates whether a node needs to be included in the authentications structure.
-        // In principle, every node of every authentication path is needed.
+        // In principle, every node of every authentication path is needed. The root is never
+        // needed. Hence, it is not considered in the computation below.
         // Indexing is as in the Merkle tree.
         let mut node_is_needed = vec![false; num_nodes];
 
@@ -163,6 +164,38 @@ where
     }
 
     /// Generate a de-duplicated authentication structure for the given leaf indices.
+    /// If a single index is supplied, the authentication structure is the authentication path
+    /// for the indicated leaf.
+    ///
+    /// For example, consider the following Merkle tree.
+    ///
+    /// ```markdown
+    ///         ──── 1 ────          ╮
+    ///        ╱           ╲         │
+    ///       2             3        │
+    ///      ╱  ╲          ╱  ╲      ├╴ node indices
+    ///     ╱    ╲        ╱    ╲     │
+    ///    4      5      6      7    │
+    ///   ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲   │
+    ///  8   9  10 11  12 13  14 15  ╯
+    ///
+    ///  0   1  2   3  4   5  6   7  ←── leaf indices
+    /// ```
+    ///
+    /// The authentication path for leaf 2, _i.e._, node 10, is nodes [3, 4, 11].
+    ///
+    /// The authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively,
+    /// is nodes [3, 9, 11].
+    /// Note how:
+    /// - Node 3 is included only once, even though the individual authentication paths for
+    /// leaves 0 and 2 both include node 3. This is one part of the de-duplication.
+    /// - Node 4 is not included at all, even though the authentication path for leaf 2 requires
+    /// the node. Instead, node 4 can be computed from nodes 8 and 9;
+    /// the former is supplied explicitly for during [verification][verify],
+    /// the latter is included in the authentication structure.
+    /// This is the other part of the de-duplication.
+    ///
+    /// [verify]: Self::verify_authentication_structure
     pub fn get_authentication_structure(&self, leaf_indices: &[usize]) -> Vec<Digest> {
         let num_nodes = self.nodes.len();
         Self::indices_of_nodes_in_authentication_structure(num_nodes, leaf_indices)
@@ -172,7 +205,7 @@ where
     }
 
     /// Verify a list of indicated digests and corresponding authentication structure against a
-    /// Merkle root.
+    /// Merkle root. See also [`get_authentication_structure`][Self::get_authentication_structure].
     pub fn verify_authentication_structure(
         root: Digest,
         tree_height: usize,
