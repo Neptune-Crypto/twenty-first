@@ -534,14 +534,8 @@ mod bfield_codec_tests {
 
     use crate::shared_math::other::random_elements;
     use crate::shared_math::tip5::Tip5;
-    use crate::util_types::merkle_tree::PartialAuthenticationPath;
 
     use super::*;
-
-    fn random_bool() -> bool {
-        let mut rng = thread_rng();
-        rng.next_u32() % 2 == 0
-    }
 
     fn random_length(max: usize) -> usize {
         let mut rng = thread_rng();
@@ -571,29 +565,6 @@ mod bfield_codec_tests {
             random_bfieldelement(),
             random_bfieldelement(),
         ])
-    }
-
-    fn random_partial_authentication_paths(
-        inner_length: usize,
-        count: usize,
-    ) -> Vec<PartialAuthenticationPath<Digest>> {
-        let mut ret = vec![];
-
-        for _ in 0..count {
-            ret.push(
-                (0..inner_length)
-                    .map(|_| {
-                        if random_bool() {
-                            Some(random_digest())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect_vec(),
-            )
-        }
-
-        ret
     }
 
     #[test]
@@ -692,18 +663,6 @@ mod bfield_codec_tests {
     }
 
     #[test]
-    fn test_encode_decode_random_partial_authentication_path() {
-        for _ in 1..=10 {
-            let len = 1 + random_length(10);
-            let count = random_length(10);
-            let pap = random_partial_authentication_paths(len, count);
-            let str = pap.encode();
-            let pap_ = *Vec::<PartialAuthenticationPath<Digest>>::decode(&str).unwrap();
-            assert_eq!(pap, pap_);
-        }
-    }
-
-    #[test]
     fn test_decode_random_negative() {
         for _ in 1..=10000 {
             let len = random_length(100);
@@ -740,10 +699,6 @@ mod bfield_codec_tests {
                     panic!("{sth:?}");
                 }
             }
-
-            // if let Ok(_sth) = Vec::<PartialAuthenticationPath<Digest>>::decode(&str) {
-            //     (will work quite often)
-            // }
         }
     }
 
