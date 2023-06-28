@@ -39,7 +39,7 @@ fn merkle_tree_authenticate(c: &mut Criterion) {
         BenchmarkId::new("merkle_tree_authenticate", num_leaves),
         |bencher| {
             bencher.iter(|| {
-                MerkleTree::<Tip5>::verify_authentication_structure_from_leaves(
+                MerkleTree::<Tip5>::verify_authentication_structure(
                     mt_root,
                     tree_height,
                     &opened_indices,
