@@ -63,65 +63,6 @@ where
         bag_peaks::<H>(&roots)
     }
 
-    /// Similar to `get_proof', but instead of returning a `Vec<Node<T>>`, we only
-    /// return the hashes, not the tree nodes (and potential leaf values), and instead
-    /// of referring to this as a `proof', we call it the `authentication path'.
-    ///
-    /// ```markdown
-    ///              root
-    ///             /    \
-    /// H(H(a)+H(b))      H(H(c)+H(d))
-    ///   /      \        /      \
-    /// H(a)    H(b)    H(c)    H(d)
-    /// ```
-    ///
-    /// The authentication path for `c` (index: 2) would be `vec![ H(d), H(H(a)+H(b)) ]`, i.e.,
-    /// a criss-cross of siblings upwards.
-    pub fn get_authentication_path(&self, leaf_index: usize) -> Vec<Digest> {
-        let auth_path_len = self.get_height();
-        let mut auth_path: Vec<Digest> = Vec::with_capacity(auth_path_len);
-
-        let num_leaves = self.nodes.len() / 2;
-        let mut node_index = leaf_index + num_leaves;
-        while node_index > 1 {
-            // We get the sibling node by XOR'ing with 1.
-            let sibling_i = node_index ^ 1;
-            auth_path.push(self.nodes[sibling_i]);
-            node_index /= 2;
-        }
-
-        // We don't include the root hash in the authentication path
-        // because it's implied in the context of use.
-        debug_assert_eq!(auth_path_len, auth_path.len());
-        auth_path
-    }
-
-    // Consider renaming this `verify_leaf_with_authentication_path()`.
-    pub fn verify_authentication_path_from_leaf_hash(
-        root_hash: Digest,
-        leaf_index: u32,
-        leaf_hash: Digest,
-        auth_path: Vec<Digest>,
-    ) -> bool {
-        let path_length = auth_path.len() as u32;
-
-        // Initialize `acc_hash' as leaf_hash
-        let mut acc_hash = leaf_hash;
-        let mut i = leaf_index + 2u32.pow(path_length);
-        for path_hash in auth_path.iter() {
-            // Use Merkle tree index parity (odd/even) to determine which
-            // order to concatenate the hashes before hashing them.
-            match i % 2 {
-                0 => acc_hash = H::hash_pair(&acc_hash, path_hash),
-                1 => acc_hash = H::hash_pair(path_hash, &acc_hash),
-                _ => unreachable!(),
-            }
-            i /= 2;
-        }
-
-        acc_hash == root_hash
-    }
-
     /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to
     /// prove (or verify) that the indicated leaves are in the Merkle tree.
     // This function is not defined as a method (taking self as argument) since it's
@@ -756,24 +697,25 @@ mod merkle_tree_test {
         type MT = MerkleTree<H>;
 
         // 1: Create Merkle tree
-        //
-        //     root
+
+        //     _ 1_
         //    /    \
-        //   x      y
+        //   2      3
         //  / \    / \
-        // 0   1  2   3
+        // 4   5  6   7
+        // 0   1  2   3 <- leaf indices
         let num_leaves_a = 4;
         let leaves_a: Vec<Digest> = random_elements(num_leaves_a);
         let tree_a: MT = M::from_digests(&leaves_a);
 
         // 2: Get the path for some index
         let leaf_index_a = 2;
-        let auth_path_a = tree_a.get_authentication_path(leaf_index_a);
+        let auth_path_a = tree_a.get_authentication_structure(&[leaf_index_a]);
 
         let auth_path_a_len = 2;
         assert_eq!(auth_path_a_len, auth_path_a.len());
-        assert_eq!(tree_a.nodes[2], auth_path_a[1]);
-        assert_eq!(tree_a.nodes[7], auth_path_a[0]);
+        assert_eq!(tree_a.nodes[2], auth_path_a[0]);
+        assert_eq!(tree_a.nodes[7], auth_path_a[1]);
 
         // Also test this small Merkle tree with compressed auth paths. To get the node index
         // in the tree assign 1 to the root, 2/3 to its left/right child, and so on. To convert
@@ -787,26 +729,29 @@ mod merkle_tree_test {
 
         // 1: Create Merkle tree
         //
-        //        ___root___
-        //       /          \
-        //      e            f
-        //    /   \        /   \
-        //   a     b      c     d
-        //  / \   / \    / \   / \
-        // 0   1 2   3  4   5 6   7
+        //         ──── 1 ────
+        //        ╱           ╲
+        //       2             3
+        //      ╱  ╲          ╱  ╲
+        //     ╱    ╲        ╱    ╲
+        //    4      5      6      7
+        //   ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲
+        //  8   9  10 11  12 13  14 15
+        //
+        //  0   1  2   3  4   5  6   7  <- leaf indices
         let num_leaves_b = 8;
         let leaves_b: Vec<Digest> = random_elements(num_leaves_b);
         let tree_b: MT = M::from_digests(&leaves_b);
 
         // 2: Get the path for some index
         let leaf_index_b = 5;
-        let auth_path_b = tree_b.get_authentication_path(leaf_index_b);
+        let auth_path_b = tree_b.get_authentication_structure(&[leaf_index_b]);
 
         let auth_path_b_len = 3;
         assert_eq!(auth_path_b_len, auth_path_b.len());
-        assert_eq!(tree_b.nodes[12], auth_path_b[0]);
+        assert_eq!(tree_b.nodes[2], auth_path_b[0]);
         assert_eq!(tree_b.nodes[7], auth_path_b[1]);
-        assert_eq!(tree_b.nodes[2], auth_path_b[2]);
+        assert_eq!(tree_b.nodes[12], auth_path_b[2]);
     }
 
     #[test]
@@ -853,12 +798,13 @@ mod merkle_tree_test {
         let root_hash = tree.get_root().to_owned();
 
         for (leaf_idx, leaf) in leafs.iter().enumerate() {
-            let ap = tree.get_authentication_path(leaf_idx);
-            let verdict = MT::verify_authentication_path_from_leaf_hash(
+            let ap = tree.get_authentication_structure(&[leaf_idx]);
+            let verdict = MT::verify_authentication_structure(
                 root_hash,
-                leaf_idx as u32,
-                *leaf,
-                ap,
+                tree.get_height(),
+                &[leaf_idx],
+                &[*leaf],
+                &ap,
             );
             assert!(
                 verdict,
@@ -910,12 +856,13 @@ mod merkle_tree_test {
 
         let root_hash = tree.get_root().to_owned();
 
-        let ap = tree.get_authentication_path(test_leaf_idx);
-        let verdict = MT::verify_authentication_path_from_leaf_hash(
+        let ap = tree.get_authentication_structure(&[test_leaf_idx]);
+        let verdict = MT::verify_authentication_structure(
             root_hash,
-            test_leaf_idx as u32,
-            H::hash_varlen(&payload_leaf),
-            ap,
+            tree.get_height(),
+            &[test_leaf_idx],
+            &[H::hash_varlen(&payload_leaf)],
+            &ap,
         );
         assert_eq!(
             tree.get_leaf_by_index(test_leaf_idx),
@@ -965,8 +912,9 @@ mod merkle_tree_test {
         let mt: MT = CpuParallel::from_digests(&leafs.iter().map(|&x| x.into()).collect_vec());
 
         let leaf_index: usize = thread_rng().gen_range(0..num_leaves);
-        let path = mt.get_authentication_path(leaf_index);
+        let path = mt.get_authentication_structure(&[leaf_index]);
+        let last_path_element = *path.last().unwrap();
         let sibling = leafs[leaf_index ^ 1];
-        assert_eq!(path[0], sibling.into());
+        assert_eq!(last_path_element, sibling.into());
     }
 }
