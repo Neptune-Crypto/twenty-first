@@ -2,6 +2,7 @@ use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
@@ -79,28 +80,31 @@ where
             .all(|leaf_index| leaf_index + num_leaves < num_nodes);
         assert!(all_indices_are_valid, "All leaf indices must be valid.");
 
-        // Indicates whether a node needs to be included in the authentications structure.
+        // The set of indices of nodes that need to be included in the authentications structure.
         // In principle, every node of every authentication path is needed. The root is never
         // needed. Hence, it is not considered in the computation below.
-        // Indexing is as in the Merkle tree.
-        let mut node_is_needed = vec![false; num_nodes];
+        let mut node_is_needed = HashSet::new();
 
+        // The set of indices of nodes that can be computed from other nodes in the authentication
+        // structure or the leafs that are explicitly supplied during verification.
         // Every node on the direct path from the leaf to the root can be computed by the very
-        // nature of “authentication path”. Again, indexing is as in the Merkle tree.
-        let mut node_can_be_computed = vec![false; num_nodes];
+        // nature of “authentication path”.
+        let mut node_can_be_computed = HashSet::new();
 
         for leaf_index in leaf_indices {
             let mut node_index = leaf_index + num_leaves;
             while node_index > root_index {
                 let sibling_index = node_index ^ 1;
-                node_can_be_computed[node_index] = true;
-                node_is_needed[sibling_index] = true;
+                node_can_be_computed.insert(node_index);
+                node_is_needed.insert(sibling_index);
                 node_index /= 2;
             }
         }
 
-        (0..num_nodes)
-            .filter(|&idx| node_is_needed[idx] && !node_can_be_computed[idx])
+        node_is_needed
+            .difference(&node_can_be_computed)
+            .cloned()
+            .sorted_unstable()
             .collect()
     }
 
