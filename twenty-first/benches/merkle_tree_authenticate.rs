@@ -17,14 +17,14 @@ use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
 fn merkle_tree_authenticate(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0);
 
-    let tree_height = 16;
+    let tree_height = 22;
     let num_leaves = 1 << tree_height;
     let leaves = (0..num_leaves).map(|_| rng.next_u64()).collect_vec();
     let leaf_digests = leaves.iter().map(Tip5::hash).collect_vec();
     let mt: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests);
     let mt_root = mt.get_root();
 
-    let num_opened_indices = num_leaves / 4;
+    let num_opened_indices = 40;
     let opened_indices = (0..num_opened_indices)
         .map(|_| rng.gen_range(0..num_leaves))
         .collect_vec();
@@ -36,7 +36,11 @@ fn merkle_tree_authenticate(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("merkle_tree_authenticate");
     group.bench_function(
-        BenchmarkId::new("merkle_tree_authenticate", num_leaves),
+        BenchmarkId::new("gen_auth_structure", num_leaves),
+        |bencher| bencher.iter(|| mt.get_authentication_structure(&opened_indices)),
+    );
+    group.bench_function(
+        BenchmarkId::new("verify_auth_structure", num_leaves),
         |bencher| {
             bencher.iter(|| {
                 MerkleTree::<Tip5>::verify_authentication_structure(
