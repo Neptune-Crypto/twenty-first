@@ -23,12 +23,6 @@ where
     pub _hasher: PhantomData<H>,
 }
 
-/// A partial authentication path is like a full authentication path, but with some nodes missing.
-/// A single partial authentication path probably does not make a lot of sense. However, if you
-/// have multiple authentication paths that overlap, using multiple partial authentication paths
-/// is more space efficient.
-pub type PartialAuthenticationPath<Digest> = Vec<Option<Digest>>;
-
 /// # Design
 /// Static methods are called from the verifier, who does not have
 /// the original `MerkleTree` object, but only partial information from it,
@@ -415,7 +409,7 @@ mod merkle_tree_test {
             // Get a vector of digests for each of those indices
             let selected_leaves: Vec<Digest> = tree.get_leaves_by_indices(&random_indices);
 
-            // Get the partial authentication paths for those indices
+            // Get the authentication structure for those indices
             let auth_structure = tree.get_authentication_structure(&random_indices);
 
             // Assert membership of randomly chosen leaves
