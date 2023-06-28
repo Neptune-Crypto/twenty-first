@@ -1,5 +1,7 @@
 use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use std::collections::hash_map::Entry::Vacant;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
@@ -199,25 +201,19 @@ where
             return false;
         }
 
-        // The partial merkle tree is represented as a vector of Option<Digest> where the
-        // Option is None if the node is not in the partial tree.
-        // The indexing works identical as in the general Merkle tree.
-        let mut partial_merkle_tree = vec![None; num_nodes];
-
-        // Translate the authentication structure into a partial merkle tree.
-        for (node_index, &node_digest) in indices_of_nodes_in_authentication_structure
+        // The partial merkle tree only contains the digests of the nodes that are needed to
+        // verify the given leaf digests. The indexing works identical to the general Merkle tree.
+        let mut partial_merkle_tree: HashMap<_, _> = indices_of_nodes_in_authentication_structure
             .into_iter()
-            .zip_eq(authentication_structure.iter())
-        {
-            partial_merkle_tree[node_index] = Some(node_digest);
-        }
+            .zip(authentication_structure.iter().copied())
+            .collect();
 
         // Add the revealed leaf digests to the partial merkle tree.
         for (leaf_index, &leaf_digest) in leaf_indices.iter().zip_eq(leaf_digests.iter()) {
             let node_index = leaf_index + num_leaves;
-            if partial_merkle_tree[node_index].is_none() {
-                partial_merkle_tree[node_index] = Some(leaf_digest);
-            } else if partial_merkle_tree[node_index] != Some(leaf_digest) {
+            if let Vacant(entry) = partial_merkle_tree.entry(node_index) {
+                entry.insert(leaf_digest);
+            } else if partial_merkle_tree[&node_index] != leaf_digest {
                 // In case of repeated leaf indices, the leaf digests must be identical.
                 return false;
             }
@@ -246,22 +242,23 @@ where
                 // authentication structure is not fully de-duplicated.
                 // This, in turn, might point to inconsistency or maliciousness, both of which
                 // should be rejected.
-                if partial_merkle_tree[parent_node_index].is_some() {
+                if partial_merkle_tree.contains_key(&parent_node_index) {
                     return false;
                 }
 
                 // Similarly, check that the children nodes do exist. If they don't, the
                 // authentication structure is incomplete, making verification impossible.
-                if partial_merkle_tree[left_node_index].is_none()
-                    || partial_merkle_tree[right_node_index].is_none()
-                {
-                    return false;
-                }
-                let parent_digest = H::hash_pair(
-                    &partial_merkle_tree[left_node_index].unwrap(),
-                    &partial_merkle_tree[right_node_index].unwrap(),
-                );
-                partial_merkle_tree[parent_node_index] = Some(parent_digest);
+                let left_node = match partial_merkle_tree.get(&left_node_index) {
+                    Some(left_node) => left_node,
+                    None => return false,
+                };
+                let right_node = match partial_merkle_tree.get(&right_node_index) {
+                    Some(right_node) => right_node,
+                    None => return false,
+                };
+
+                let parent_digest = H::hash_pair(left_node, right_node);
+                partial_merkle_tree.insert(parent_node_index, parent_digest);
             }
 
             // Move the indices for the parent nodes one layer up, deduplicate to guarantee the
@@ -272,10 +269,10 @@ where
 
         debug_assert_eq!(1, parent_node_indices.len());
         debug_assert_eq!(0, parent_node_indices[0]);
-        debug_assert!(partial_merkle_tree[1].is_some());
+        debug_assert!(partial_merkle_tree.contains_key(&1));
 
         // Finally, check that the root of the partial tree matches the expected root.
-        partial_merkle_tree[1] == Some(root)
+        partial_merkle_tree[&1] == root
     }
 
     pub fn get_root(&self) -> Digest {
