@@ -19,8 +19,8 @@ pub struct MerkleTree<H>
 where
     H: AlgebraicHasher,
 {
-    pub nodes: Vec<Digest>,
-    pub _hasher: PhantomData<H>,
+    nodes: Vec<Digest>,
+    _hasher: PhantomData<H>,
 }
 
 /// # Design
