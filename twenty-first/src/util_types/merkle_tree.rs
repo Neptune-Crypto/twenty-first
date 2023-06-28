@@ -745,6 +745,16 @@ mod merkle_tree_test {
         assert_eq!(tree_a.nodes[2], auth_path_a[1]);
         assert_eq!(tree_a.nodes[7], auth_path_a[0]);
 
+        // Also test this small Merkle tree with compressed auth paths. To get the node index
+        // in the tree assign 1 to the root, 2/3 to its left/right child, and so on. To convert
+        // from a leaf index to a node index, add the number of leaves. So leaf number 3 above
+        // is node index 7. `x` is node index 2.
+        let needed_nodes = MerkleTree::<Tip5>::indices_of_nodes_in_authentication_structure(
+            tree_a.get_leaf_count() * 2,
+            &[leaf_index_a],
+        );
+        assert_eq!(vec![2, 7], needed_nodes);
+
         // 1: Create Merkle tree
         //
         //        ___root___
