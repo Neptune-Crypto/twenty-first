@@ -7,10 +7,9 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use crate::shared_math::digest::Digest;
-use crate::shared_math::other::{bit_representation, is_power_of_two, log_2_floor};
+use crate::shared_math::other::{is_power_of_two, log_2_floor};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
-use crate::util_types::shared::bag_peaks;
 
 // Chosen from a very small number of benchmark runs, optimized for a slow
 // hash function (the original Rescue Prime implementation). It should probably
@@ -35,35 +34,6 @@ impl<H> MerkleTree<H>
 where
     H: AlgebraicHasher,
 {
-    /// Calculate a Merkle root from a list of digests that is not necessarily a power of two.
-    pub fn root_from_arbitrary_number_of_digests(digests: &[Digest]) -> Digest {
-        // This function should preferably construct a whole Merkle tree data structure and not just the root,
-        // but I couldn't figure out how to do that as the indexing for this problem seems hard to me. Perhaps, the
-        // data structure would need to be changed, since some of the nodes will be `None`/null.
-
-        // The main reason this function exists is that I wanted to be able to calculate a Merkle
-        // root from an odd (non-2^k) number of digests in parallel. This will be used when calculating the digest
-        // of a block, where one of the components is a list of MS addition/removal records.
-
-        // Note that this function *does* allow the calculation of a MT root from an empty list of digests
-        // since the number of removal records in a block can be zero.
-
-        let heights = bit_representation(digests.len() as u64);
-        let mut trees: Vec<MerkleTree<H>> = vec![];
-        let mut acc_counter = 0;
-        for height in heights {
-            let sub_tree =
-                CpuParallel::from_digests(&digests[acc_counter..acc_counter + (1 << height)]);
-            acc_counter += 1 << height;
-            trees.push(sub_tree);
-        }
-
-        // Calculate the root from a list of Merkle trees
-        let roots: Vec<Digest> = trees.iter().map(|t| t.get_root()).collect();
-
-        bag_peaks::<H>(&roots)
-    }
-
     /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to
     /// prove (or verify) that the indicated leaves are in the Merkle tree.
     // This function is not defined as a method (taking self as argument) since it's
@@ -350,19 +320,36 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
 }
 
 #[cfg(test)]
-mod merkle_tree_test {
+pub mod merkle_tree_test {
     use super::*;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::{
-        random_elements, random_elements_distinct_range, random_elements_range,
+        indices_of_set_bits, random_elements, random_elements_distinct_range, random_elements_range,
     };
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::test_shared::corrupt_digest;
+    use crate::util_types::shared::bag_peaks;
     use itertools::Itertools;
     use rand::thread_rng;
     use rand::Rng;
     use rand::RngCore;
+
+    /// Calculate a Merkle root from a list of digests of arbitrary length.
+    pub fn root_from_arbitrary_number_of_digests<H: AlgebraicHasher>(digests: &[Digest]) -> Digest {
+        let mut trees = vec![];
+        let mut num_processed_digests = 0;
+        for tree_height in indices_of_set_bits(digests.len() as u64) {
+            let num_leaves_in_tree = 1 << tree_height;
+            let leaf_digests =
+                &digests[num_processed_digests..num_processed_digests + num_leaves_in_tree];
+            let tree: MerkleTree<H> = CpuParallel::from_digests(leaf_digests);
+            num_processed_digests += num_leaves_in_tree;
+            trees.push(tree);
+        }
+        let roots = trees.iter().map(|t| t.get_root()).collect_vec();
+        bag_peaks::<H>(&roots)
+    }
 
     #[test]
     fn merkle_tree_test_32() {
@@ -891,7 +878,7 @@ mod merkle_tree_test {
 
         assert_eq!(
             mt.get_root(),
-            MT::root_from_arbitrary_number_of_digests(&leafs)
+            root_from_arbitrary_number_of_digests::<H>(&leafs)
         );
     }
 
@@ -902,9 +889,7 @@ mod merkle_tree_test {
         // removal records.
 
         type H = Tip5;
-        type MT = MerkleTree<H>;
-
-        MT::root_from_arbitrary_number_of_digests(&[]);
+        root_from_arbitrary_number_of_digests::<H>(&[]);
     }
 
     #[test]

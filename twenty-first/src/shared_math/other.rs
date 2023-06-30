@@ -24,26 +24,36 @@ pub fn log_2_ceil(x: u128) -> u64 {
     }
 }
 
-/// Convert a number to an array showing which bits are set in its bit representation
-pub fn bit_representation(x: u64) -> Vec<u8> {
-    // The peak heights in an MMR can be read directly from the bit-decomposition
-    // of the leaf count.
+/// The indices of the bits that are set in the binary representation of the argument.
+/// Can be used to get a Merkle Mountain Range's peak heights from the total number of leaves.
+///
+/// Returns the empty vector on input 0.
+///
+/// # Examples
+///
+/// ```
+/// # use twenty_first::shared_math::other::indices_of_set_bits;
+/// assert_eq!(indices_of_set_bits(0b1010), vec![3, 1]);
+/// assert_eq!(indices_of_set_bits(0b1011), vec![3, 1, 0]);
+/// ```
+pub fn indices_of_set_bits(x: u64) -> Vec<u8> {
     if x == 0 {
         return vec![];
     }
 
-    let bit_count: u64 = log_2_floor(x as u128);
-    let mut heights = vec![];
-    for i in 0..=bit_count {
-        if ((1 << i) & x) != 0 {
-            heights.push(i as u8);
+    let mut indices_of_set_bits = vec![];
+    let num_bits_in_x = x.ilog2();
+    for bit_index in 0..=num_bits_in_x {
+        let bit_mask = 1 << bit_index;
+        let is_set_bit_in_x = bit_mask & x != 0;
+        if is_set_bit_in_x {
+            indices_of_set_bits.push(bit_index as u8);
         }
     }
 
-    // Reverse order of heights so we get this highest bit first.
-    heights.reverse();
-
-    heights
+    // put highest index first
+    indices_of_set_bits.reverse();
+    indices_of_set_bits
 }
 
 /// Check if the number is a power of two: { 1,2,4 .. }
@@ -269,14 +279,18 @@ mod test_other {
     }
 
     #[test]
-    fn bit_representation_test() {
-        assert_eq!(Vec::<u8>::new(), bit_representation(0));
-        assert_eq!(vec![0], bit_representation(1));
-        assert_eq!(vec![1], bit_representation(2));
-        assert_eq!(vec![1, 0], bit_representation(3));
-
-        // test example made on calculator
-        assert_eq!(vec![23, 7, 5, 4, 3, 2, 1, 0], bit_representation(8388799));
+    fn indices_of_set_bits_test() {
+        let empty_vec: Vec<u8> = vec![];
+        assert_eq!(empty_vec, indices_of_set_bits(0b0));
+        assert_eq!(vec![0], indices_of_set_bits(0b1));
+        assert_eq!(vec![1], indices_of_set_bits(0b10));
+        assert_eq!(vec![1, 0], indices_of_set_bits(0b11));
+        assert_eq!(vec![3, 2], indices_of_set_bits(0b1100));
+        assert_eq!(vec![4, 0], indices_of_set_bits(0b10001));
+        assert_eq!(
+            vec![23, 7, 5, 4, 3, 2, 1, 0],
+            indices_of_set_bits(0b100000000000000010111111)
+        );
     }
 
     #[test]
