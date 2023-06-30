@@ -79,6 +79,7 @@ where
             .difference(&node_can_be_computed)
             .cloned()
             .sorted_unstable()
+            .rev()
             .collect()
     }
 
@@ -101,10 +102,10 @@ where
     ///  0   1  2   3  4   5  6   7  ←── leaf indices
     /// ```
     ///
-    /// The authentication path for leaf 2, _i.e._, node 10, is nodes [3, 4, 11].
+    /// The authentication path for leaf 2, _i.e._, node 10, is nodes [11, 4, 3].
     ///
     /// The authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively,
-    /// is nodes [3, 9, 11].
+    /// is nodes [11, 9, 3].
     /// Note how:
     /// - Node 3 is included only once, even though the individual authentication paths for
     /// leaves 0 and 2 both include node 3. This is one part of the de-duplication.
@@ -158,7 +159,7 @@ where
     /// Continuing the example from
     /// [`get_authentication_structure`][Self::get_authentication_structure],
     /// the partial tree for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively,
-    /// with nodes [3, 9, 11] from the authentication structure is:
+    /// with nodes [11, 9, 3] from the authentication structure is:
     ///
     /// ```markdown
     ///         ──── _ ────
@@ -286,7 +287,7 @@ where
     /// Continuing the example from
     /// [`get_authentication_structure`][Self::get_authentication_structure],
     /// the authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively,
-    /// is nodes [3, 9, 11].
+    /// is nodes [11, 9, 3].
     ///
     /// The authentication path
     /// - for leaf 0 is [9, 5, 3], and
@@ -302,11 +303,6 @@ where
     ///   ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲
     ///  8   9  10 11  12 13  14 15
     /// ```
-    ///
-    /// Notably, the elements in an authentication path are given in index-descending order.
-    /// This is the order in which the nodes are visited when computing the Merkle root.
-    /// In contrast, the elements in an authentication structure are given in index-ascending
-    /// order.
     pub fn authentication_paths_from_authentication_structure(
         tree_height: usize,
         leaf_indices: &[usize],
@@ -853,8 +849,8 @@ pub mod merkle_tree_test {
 
         let auth_path_a_len = 2;
         assert_eq!(auth_path_a_len, auth_path_a.len());
-        assert_eq!(tree_a.nodes[2], auth_path_a[0]);
-        assert_eq!(tree_a.nodes[7], auth_path_a[1]);
+        assert_eq!(tree_a.nodes[7], auth_path_a[0]);
+        assert_eq!(tree_a.nodes[2], auth_path_a[1]);
 
         // Also test this small Merkle tree with compressed auth paths. To get the node index
         // in the tree assign 1 to the root, 2/3 to its left/right child, and so on. To convert
@@ -864,7 +860,7 @@ pub mod merkle_tree_test {
             tree_a.get_leaf_count() * 2,
             &[leaf_index_a],
         );
-        assert_eq!(vec![2, 7], needed_nodes);
+        assert_eq!(vec![7, 2], needed_nodes);
 
         // 1: Create Merkle tree
         //
@@ -888,9 +884,9 @@ pub mod merkle_tree_test {
 
         let auth_path_b_len = 3;
         assert_eq!(auth_path_b_len, auth_path_b.len());
-        assert_eq!(tree_b.nodes[2], auth_path_b[0]);
+        assert_eq!(tree_b.nodes[12], auth_path_b[0]);
         assert_eq!(tree_b.nodes[7], auth_path_b[1]);
-        assert_eq!(tree_b.nodes[12], auth_path_b[2]);
+        assert_eq!(tree_b.nodes[2], auth_path_b[2]);
     }
 
     #[test]
@@ -1050,9 +1046,8 @@ pub mod merkle_tree_test {
 
         let leaf_index: usize = thread_rng().gen_range(0..num_leaves);
         let path = mt.get_authentication_structure(&[leaf_index]);
-        let last_path_element = *path.last().unwrap();
         let sibling = leafs[leaf_index ^ 1];
-        assert_eq!(last_path_element, sibling.into());
+        assert_eq!(path[0], sibling.into());
     }
 
     #[test]
