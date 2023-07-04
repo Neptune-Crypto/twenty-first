@@ -1,5 +1,5 @@
 use super::shared_basic::*;
-use crate::shared_math::other::{bit_representation, log_2_floor};
+use crate::shared_math::other::{indices_of_set_bits, log_2_floor};
 
 /// Get (index, height) of leftmost ancestor
 /// This ancestor does *not* have to be in the MMR
@@ -148,7 +148,7 @@ pub fn get_authentication_path_node_indices(
 pub fn get_peak_heights(leaf_count: u64) -> Vec<u8> {
     // The peak heights in an MMR can be read directly from the bit-decomposition
     // of the leaf count.
-    bit_representation(leaf_count)
+    indices_of_set_bits(leaf_count)
 }
 
 /// Given leaf count, return a vector representing the height of

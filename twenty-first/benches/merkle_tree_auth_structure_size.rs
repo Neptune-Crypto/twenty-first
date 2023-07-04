@@ -28,9 +28,7 @@ impl Measurement for AuthStructureEncodingLength {
     type Intermediate = ();
     type Value = Self;
 
-    fn start(&self) -> Self::Intermediate {
-        ()
-    }
+    fn start(&self) -> Self::Intermediate {}
 
     fn end(&self, _i: Self::Intermediate) -> Self::Value {
         self.to_owned()

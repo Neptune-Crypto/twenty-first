@@ -328,7 +328,7 @@ mod mmr_test {
     use crate::test_shared::mmr::{
         get_empty_rustyleveldb_ammr, get_rustyleveldb_ammr_from_digests,
     };
-    use crate::util_types::merkle_tree::MerkleTree;
+    use crate::util_types::merkle_tree::merkle_tree_test;
     use crate::{
         shared_math::b_field_element::BFieldElement,
         util_types::mmr::{
@@ -350,7 +350,6 @@ mod mmr_test {
     #[test]
     fn empty_mmr_behavior_test() {
         type H = blake3::Hasher;
-        type MT = MerkleTree<H>;
         type Storage = RustyLevelDbVec<Digest>;
 
         let mut archival_mmr: ArchivalMmr<H, Storage> = get_empty_rustyleveldb_ammr();
@@ -363,7 +362,7 @@ mod mmr_test {
         assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
         assert_eq!(
             archival_mmr.bag_peaks(),
-            MT::root_from_arbitrary_number_of_digests(&[]),
+            merkle_tree_test::root_from_arbitrary_number_of_digests::<H>(&[]),
             "Bagged peaks for empty MMR must agree with MT root finder"
         );
         assert_eq!(0, archival_mmr.count_nodes());
@@ -819,7 +818,6 @@ mod mmr_test {
     #[test]
     fn variable_size_tip5_mmr_test() {
         type H = Tip5;
-        type MT = MerkleTree<H>;
 
         let leaf_counts: Vec<u64> = (1..34).collect();
         let node_counts: Vec<u64> = vec![
@@ -850,7 +848,8 @@ mod mmr_test {
 
             // Verify that MMR root from odd number of digests and MMR bagged peaks agree
             let mmra_root = mmr.bag_peaks();
-            let mt_root = MT::root_from_arbitrary_number_of_digests(&input_hashes);
+            let mt_root =
+                merkle_tree_test::root_from_arbitrary_number_of_digests::<H>(&input_hashes);
 
             assert_eq!(
                 mmra_root, mt_root,
@@ -948,7 +947,6 @@ mod mmr_test {
     #[test]
     fn variable_size_blake3_mmr_test() {
         type H = blake3::Hasher;
-        type MT = MerkleTree<H>;
 
         let node_counts: Vec<u64> = vec![
             1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41, 42,
@@ -976,7 +974,8 @@ mod mmr_test {
 
             // Verify that MMR root from odd number of digests and MMR bagged peaks agree
             let mmra_root = mmr.bag_peaks();
-            let mt_root = MT::root_from_arbitrary_number_of_digests(&input_digests);
+            let mt_root =
+                merkle_tree_test::root_from_arbitrary_number_of_digests::<H>(&input_digests);
             assert_eq!(
                 mmra_root, mt_root,
                 "MMRA bagged peaks and MT root must agree"
