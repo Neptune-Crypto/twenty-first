@@ -581,12 +581,16 @@ mod mmr_membership_proof_test {
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::Digest;
-    use crate::shared_math::other::random_elements;
+    use crate::shared_math::other::{log_2_ceil, random_elements};
     use crate::shared_math::tip5::Tip5;
     use crate::test_shared::mmr::get_rustyleveldb_ammr_from_digests;
     use crate::util_types::mmr::archival_mmr::ArchivalMmr;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::mmr_trait::Mmr;
+    use crate::util_types::mmr::shared_advanced::{
+        leaf_index_to_node_index, right_lineage_length_from_node_index,
+    };
+    use crate::util_types::mmr::shared_basic::leaf_index_to_mt_index_and_peak_index;
     use crate::util_types::storage_vec::RustyLevelDbVec;
 
     use super::*;
@@ -1381,6 +1385,87 @@ mod mmr_membership_proof_test {
                     (membership_proof_mutated, new_peaks)
                 );
             }
+        }
+    }
+
+    #[test]
+    fn batch_update_from_leaf_mutation_construct_test() {
+        // Initial setup
+        type H = Tip5;
+        for leaf_count in 2..100 {
+            let leaf_hashes: Vec<Digest> = random_elements(leaf_count as usize);
+            let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
+                get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+            let mut rng = thread_rng();
+            let original_leaf_index = rng.gen_range(0..leaf_count);
+            let mut original_mp: MmrMembershipProof<H> =
+                archival_mmr.prove_membership(original_leaf_index).0;
+            let mmra = archival_mmr.to_accumulator();
+            let original_leaf = leaf_hashes[original_leaf_index as usize];
+
+            // Sanity check
+            let old_peaks = mmra.get_peaks();
+            assert!(
+                original_mp
+                    .verify(&mmra.get_peaks(), &original_leaf, mmra.count_leaves())
+                    .0
+            );
+
+            // Change leaf value and update peaks
+            let new_leaf: Digest = random();
+            let mut new_leaf_index = original_leaf_index;
+            while new_leaf_index == original_leaf_index {
+                new_leaf_index = rng.gen_range(0..leaf_count);
+            }
+
+            let (new_leaf_mt_index, _new_leaf_peaks_index) =
+                leaf_index_to_mt_index_and_peak_index(new_leaf_index, leaf_count);
+            let height_of_new_mt = log_2_ceil(new_leaf_mt_index as u128 + 1) - 1;
+            let mut new_mp = MmrMembershipProof::<H>::new(
+                new_leaf_index,
+                random_elements(height_of_new_mt as usize),
+            );
+            let original_node_path_indices = original_mp.get_direct_path_indices();
+            let original_node_ap_indices = original_mp.get_node_indices();
+            let new_node_indices = new_mp.get_node_indices();
+
+            let mut height = 0;
+            let mut acc_hash = original_leaf;
+            for new_node_index in new_node_indices {
+                if original_node_ap_indices.contains(&new_node_index) {
+                    // AP element may not be mutated
+                    new_mp.authentication_path[height] = original_mp.authentication_path[height];
+                } else if original_node_path_indices.contains(&new_node_index) {
+                    // AP element must refer to both old and new leaf
+                    new_mp.authentication_path[height] = acc_hash;
+                }
+
+                // Update acc_hash if needed
+                if original_mp.authentication_path.len() > height {
+                    if right_lineage_length_from_node_index(original_node_path_indices[height]) != 0
+                    {
+                        acc_hash =
+                            H::hash_pair(&original_mp.authentication_path[height], &acc_hash);
+                    } else {
+                        acc_hash =
+                            H::hash_pair(&acc_hash, &original_mp.authentication_path[height]);
+                    }
+                }
+
+                height += 1;
+            }
+
+            let new_peaks = shared_basic::calculate_new_peaks_from_leaf_mutation::<H>(
+                &old_peaks, &new_leaf, leaf_count, &new_mp,
+            );
+            assert!(new_mp.verify(&new_peaks, &new_leaf, leaf_count).0);
+            let mut all_mps = vec![&mut original_mp];
+            assert!(all_mps[0].verify(&old_peaks, &original_leaf, leaf_count).0);
+            MmrMembershipProof::batch_update_from_batch_leaf_mutation(
+                &mut all_mps,
+                vec![(new_mp, new_leaf)],
+            );
+            assert!(all_mps[0].verify(&new_peaks, &original_leaf, leaf_count).0);
         }
     }
 
