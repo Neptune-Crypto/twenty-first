@@ -595,7 +595,7 @@ pub mod merkle_tree_test {
         let tree: MT = M::from_digests(&leaves);
 
         let empty_proof = tree.get_authentication_structure(&[]);
-        assert_eq!(0, empty_proof.len());
+        assert!(empty_proof.is_empty());
 
         let empty_proof_verifies = MT::verify_authentication_structure(
             tree.get_root(),
@@ -792,7 +792,7 @@ pub mod merkle_tree_test {
         let leaf_indices = (0..num_leaves).collect_vec();
         let opened_leaves = leaf_indices.iter().map(|&i| leaf_digests[i]).collect_vec();
         let authentication_structure = tree.get_authentication_structure(&leaf_indices);
-        assert_eq!(0, authentication_structure.len());
+        assert!(authentication_structure.is_empty());
 
         let verdict = MT::verify_authentication_structure(
             tree.get_root(),
@@ -813,7 +813,7 @@ pub mod merkle_tree_test {
             .map(|&i| leaf_digests[i])
             .collect_vec();
         let authentication_structure_x2 = tree.get_authentication_structure(&leaf_indices_x2);
-        assert_eq!(0, authentication_structure_x2.len());
+        assert!(authentication_structure_x2.is_empty());
 
         let verdict_x2 = MT::verify_authentication_structure(
             tree.get_root(),
