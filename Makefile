@@ -7,6 +7,12 @@ $(info debug is $(debug))
 # Treat all warnings as errors
 export RUSTFLAGS = -Dwarnings
 
+# Set another target dir than default to avoid builds from `make`
+# to invalidate cache from barebones use of `cargo` commands.
+# The cache is cleared when a new `RUSTFLAGS` value is encountered,
+# so to prevent the two builds from interfering, we use two dirs.
+export CARGO_TARGET_DIR=./makefile-target
+
 ifdef debug
   release :=
   target :=debug
