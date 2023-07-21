@@ -541,28 +541,12 @@ mod tests {
 
         use rand::{Rng, RngCore};
 
-        use crate::{
-            shared_math::{
-                digest::Digest, digest::DIGEST_LENGTH, other::random_elements, tip5::Tip5,
-                x_field_element::XFieldElement, x_field_element::EXTENSION_DEGREE,
-            },
-            util_types::merkle_tree::PartialAuthenticationPath,
+        use crate::shared_math::{
+            digest::Digest, digest::DIGEST_LENGTH, other::random_elements, tip5::Tip5,
+            x_field_element::XFieldElement, x_field_element::EXTENSION_DEGREE,
         };
 
         use super::*;
-
-        fn random_partial_authentication_paths(
-            path_len: usize,
-            num_paths: usize,
-        ) -> Vec<PartialAuthenticationPath<Digest>> {
-            let maybe_elem = || if random() { Some(random()) } else { None };
-            let mut ret = vec![];
-            for _ in 0..num_paths {
-                let path = (0..path_len).map(|_| maybe_elem()).collect();
-                ret.push(path);
-            }
-            ret
-        }
 
         #[test]
         fn test_encode_decode_random_bfieldelement() {
@@ -640,16 +624,6 @@ mod tests {
                     })
                     .collect_vec();
                 assert_bfield_codec_properties(&xfe_vec_vec);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_random_partial_authentication_path() {
-            for _ in 1..=10 {
-                let len = 1 + thread_rng().gen_range(0..10);
-                let count = thread_rng().gen_range(0..10);
-                let pap = random_partial_authentication_paths(len, count);
-                assert_bfield_codec_properties(&pap);
             }
         }
 
