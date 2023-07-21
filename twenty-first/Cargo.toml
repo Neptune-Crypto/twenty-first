@@ -40,7 +40,7 @@ phf = { version = "0.11", features = ["macros"] }
 rand = { version = "0.8", features = ["min_const_gen"] }
 rand_distr = "0.4"
 rayon = "1.5"
-rusty-leveldb = "^1.0.8"
+rusty-leveldb = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde-big-array = "0"
 serde_derive = "1"
