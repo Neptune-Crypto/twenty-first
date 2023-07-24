@@ -531,10 +531,16 @@ mod tests {
         }
 
         let encoded_too_long = vec![encoded, vec![BFieldElement::new(5)]].concat();
-        assert!(T::decode(&encoded_too_long).is_err());
+        assert!(
+            T::decode(&encoded_too_long).is_err(),
+            "decoding a sequence that is too long does not fail"
+        );
 
         let encoded_too_short = encoded_too_long[..encoded_too_long.len() - 2].to_vec();
-        assert!(T::decode(&encoded_too_short).is_err());
+        assert!(
+            T::decode(&encoded_too_short).is_err(),
+            "decoding a sequence that is stoo short does not fail"
+        );
     }
 
     mod bfield_codec_tests {
@@ -1471,6 +1477,88 @@ mod tests {
             for num_elements in 0..5 {
                 dbg!(num_elements);
                 assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
+            }
+        }
+
+        #[cfg(test)]
+        mod simple_derivations {
+            use itertools::Itertools;
+            use rand::random;
+
+            use crate::shared_math::{
+                b_field_element::BFieldElement, bfield_codec::BFieldCodec, tip5::Digest,
+                x_field_element::XFieldElement,
+            };
+
+            #[derive(BFieldCodec)]
+            struct SimpleStructA {
+                a: BFieldElement,
+                b: XFieldElement,
+            }
+
+            #[derive(BFieldCodec)]
+            struct SimpleStructB(u32, u64);
+
+            #[derive(PartialEq, Eq, Debug, BFieldCodec)]
+            enum SimpleEnum {
+                A,
+                B(u32),
+                C(BFieldElement, u32, u32),
+            }
+
+            #[test]
+            fn test_simple_struct_a() {
+                let simple_struct = SimpleStructA {
+                    a: BFieldElement::new(42u64),
+                    b: XFieldElement::new([
+                        BFieldElement::new(1u64),
+                        BFieldElement::new(2u64),
+                        BFieldElement::new(3u64),
+                    ]),
+                };
+                let encoded = simple_struct.encode();
+                let decoded = *SimpleStructA::decode(&encoded).unwrap();
+                assert_eq!(simple_struct.a, decoded.a);
+                assert_eq!(simple_struct.b, decoded.b);
+
+                let mut too_long = encoded;
+                too_long.push(BFieldElement::new(5));
+                assert!(SimpleStructA::decode(&too_long).is_err())
+            }
+
+            #[test]
+            fn test_simple_struct_b() {
+                let simple_struct = SimpleStructB(42, 7);
+                let encoded = simple_struct.encode();
+                let decoded = *SimpleStructB::decode(&encoded).unwrap();
+                assert_eq!(simple_struct.0, decoded.0);
+                assert_eq!(simple_struct.1, decoded.1);
+
+                let mut too_long = encoded;
+                too_long.push(BFieldElement::new(5));
+                assert!(SimpleStructB::decode(&too_long).is_err())
+            }
+
+            #[test]
+            fn test_simple_enum() {
+                let simple_enum = SimpleEnum::C(BFieldElement::new(10), 7, 8);
+                assert!(SimpleEnum::static_length().is_none());
+                let encoded = simple_enum.encode();
+                assert_eq!(4, encoded.len());
+                let decoded = *SimpleEnum::decode(&encoded).unwrap();
+                assert_eq!(simple_enum, decoded);
+            }
+
+            #[test]
+            fn test_simple_digest() {
+                let digest: Digest = random();
+                let encoded = digest.encode();
+                let decoded = *Digest::decode(&encoded).unwrap();
+                assert_eq!(digest, decoded);
+
+                let mut too_long = encoded;
+                too_long.push(BFieldElement::new(5));
+                assert!(Digest::decode(&too_long).is_err())
             }
         }
     }
