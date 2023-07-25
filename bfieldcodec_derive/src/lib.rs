@@ -114,7 +114,7 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
             fields: syn::Fields::Unnamed(fields),
             ..
         }) => generate_tokens_for_struct_with_unnamed_fields(fields),
-        syn::Data::Enum(data_enum) => generate_tokens_for_enum_with_variants(&data_enum.variants),
+        syn::Data::Enum(data_enum) => generate_tokens_for_enum(&data_enum.variants),
         _ => panic!("expected a struct with named fields, with unnamed fields, or an enum"),
     };
 
@@ -339,7 +339,7 @@ fn generate_tokens_for_struct_with_unnamed_fields(
     )
 }
 
-fn generate_tokens_for_enum_with_variants(
+fn generate_tokens_for_enum(
     variants: &syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
 ) -> (
     Vec<quote::__private::TokenStream>,
@@ -402,7 +402,11 @@ fn generate_tokens_for_enum_with_variants(
                 quote!{
                     {
                         let field_lengths : [Option<usize>; #num_fields] = [ #( #field_lengths , )* ];
-                        if field_lengths.iter().all(|fl| fl.is_some()) { Some(field_lengths.iter().map(|fl|fl.unwrap()).sum()) } else { None }
+                        if field_lengths.iter().all(|fl| fl.is_some()) {
+                            Some(field_lengths.iter().map(|fl|fl.unwrap()).sum())
+                        } else {
+                            None
+                        }
                     }
                 }
             })
@@ -468,6 +472,9 @@ fn generate_decode_clause_for_variant(
 ) -> quote::__private::TokenStream {
     if associated_data.is_empty() {
         quote! {
+            if !sequence.is_empty() {
+                anyhow::bail!("Cannot decode enum: sequence too long.");
+            }
             Ok(Box::new(Self::#name))
         }
     } else {
@@ -478,7 +485,7 @@ fn generate_decode_clause_for_variant(
             quote! {
                 let (#field_value, sequence) = {
                     if sequence.is_empty() {
-                        anyhow::bail!("Cannot decode field {}: sequence is empty.", #field_index);
+                        anyhow::bail!("Cannot decode variant {} field {}: sequence is empty.", #variant_index, #field_index);
                     }
                     let (len, sequence) = match <#field_type
                         as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length() {
@@ -486,7 +493,7 @@ fn generate_decode_clause_for_variant(
                         None => (sequence[0].value() as usize, &sequence[1..]),
                     };
                     if sequence.len() < len {
-                        anyhow::bail!("Cannot decode field {}: sequence too short.", #field_index);
+                        anyhow::bail!("Cannot decode variant {} field {}: sequence too short.", #variant_index, #field_index);
                     }
                     let decoded = *<#field_type
                         as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
@@ -501,7 +508,13 @@ fn generate_decode_clause_for_variant(
             .iter()
             .enumerate()
             .map(|(field_index, _field)| enum_variant_field_name(variant_index, field_index));
-        quote! { #field_decoders Ok(Box::new(Self::#name ( #( #field_names , )* ))) }
+        quote! {
+            #field_decoders
+            if !sequence.is_empty() {
+                anyhow::bail!("Cannot decode enum: sequence too long.");
+            }
+            Ok(Box::new(Self::#name ( #( #field_names , )* )))
+        }
     }
 }
 

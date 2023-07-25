@@ -1561,5 +1561,53 @@ mod tests {
                 assert!(Digest::decode(&too_long).is_err())
             }
         }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        enum ComplexEnum {
+            A,
+            B(u32),
+            C(BFieldElement, XFieldElement, u32),
+            D(Vec<BFieldElement>, Digest),
+            E(Option<bool>),
+        }
+
+        #[test]
+        fn test_complex_enum_derive() {
+            let mut rng = thread_rng();
+            match ComplexEnum::A {
+                ComplexEnum::A => {
+                    let object = ComplexEnum::A;
+
+                    assert_bfield_codec_properties(&object);
+                }
+                ComplexEnum::B(_) => {
+                    let object = ComplexEnum::B(rng.next_u32());
+
+                    assert_bfield_codec_properties(&object);
+                }
+                ComplexEnum::C(_, _, _) => {
+                    let object = ComplexEnum::C(rng.gen(), rng.gen(), rng.next_u32());
+
+                    assert_bfield_codec_properties(&object);
+                }
+                ComplexEnum::D(_, _) => {
+                    let d_3 = ComplexEnum::D(rng.gen::<[BFieldElement; 3]>().to_vec(), rng.gen());
+                    assert_bfield_codec_properties(&d_3);
+
+                    let d_0 = ComplexEnum::D(Vec::<BFieldElement>::new(), rng.gen());
+                    assert_bfield_codec_properties(&d_0);
+                }
+                ComplexEnum::E(_) => {
+                    let e_none = ComplexEnum::E(None);
+                    assert_bfield_codec_properties(&e_none);
+
+                    let e_some_false = ComplexEnum::E(Some(false));
+                    assert_bfield_codec_properties(&e_some_false);
+
+                    let e_some_true = ComplexEnum::E(Some(true));
+                    assert_bfield_codec_properties(&e_some_true);
+                }
+            }
+        }
     }
 }
