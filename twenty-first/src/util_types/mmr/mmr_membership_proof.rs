@@ -1,4 +1,3 @@
-use anyhow::bail;
 use get_size::GetSize;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::RandomState;
@@ -13,13 +12,14 @@ use crate::shared_math::digest::Digest;
 use crate::shared_math::other::log_2_floor;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
-#[derive(Debug, Clone, Serialize, Deserialize, GetSize)]
+#[derive(Debug, Clone, Serialize, Deserialize, GetSize, BFieldCodec)]
 pub struct MmrMembershipProof<H>
 where
     H: AlgebraicHasher + Sized,
 {
     pub leaf_index: u64,
     pub authentication_path: Vec<Digest>,
+    #[bfield_codec(ignore)]
     pub _hasher: PhantomData<H>,
 }
 
@@ -33,34 +33,6 @@ impl<H: AlgebraicHasher> PartialEq for MmrMembershipProof<H> {
 
 impl<H: AlgebraicHasher> Eq for MmrMembershipProof<H> {}
 
-impl<H: AlgebraicHasher> BFieldCodec for MmrMembershipProof<H> {
-    fn decode(
-        sequence: &[crate::shared_math::b_field_element::BFieldElement],
-    ) -> anyhow::Result<Box<Self>> {
-        if sequence.len() < 2 {
-            bail!("Length of sequence must be at least 2 in order to decode Vec of BFieldElements into MmrMembershipProof");
-        }
-
-        let leaf_index = *u64::decode(&sequence[0..2])?;
-
-        let path = *Vec::<Digest>::decode(&sequence[2..])?;
-
-        Ok(Box::new(Self {
-            leaf_index,
-            authentication_path: path,
-            _hasher: PhantomData,
-        }))
-    }
-
-    fn encode(&self) -> Vec<crate::shared_math::b_field_element::BFieldElement> {
-        [self.leaf_index.encode(), self.authentication_path.encode()].concat()
-    }
-
-    fn static_length() -> Option<usize> {
-        None
-    }
-}
-
 impl<H: AlgebraicHasher> MmrMembershipProof<H> {
     pub fn new(leaf_index: u64, authentication_path: Vec<Digest>) -> Self {
         Self {
@@ -70,10 +42,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         }
     }
 
-    /**
-     * verify
-     * Verify a membership proof for an MMR. If verification succeeds, return the final state of the accumulator hash.
-     */
+    /// Verify a membership proof for an MMR. If verification succeeds, return the final state of the accumulator hash.
     pub fn verify(
         &self,
         peaks: &[Digest],
@@ -624,7 +593,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn equality_and_hash_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
         let mut rng = rand::thread_rng();
         let some_digest: Digest = rng.gen();
         let other_digest: Digest = rng.gen();
