@@ -1,6 +1,6 @@
 [package]
 name = "twenty-first"
-version = "0.32.0"
+version = "0.32.1"
 authors = ["Triton Software AG"]
 edition = "2021"
 
