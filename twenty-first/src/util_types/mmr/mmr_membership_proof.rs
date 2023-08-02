@@ -593,13 +593,12 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn equality_and_hash_test() {
-        type H = Tip5;
+        type H = blake3::Hasher;
         let mut rng = rand::thread_rng();
         let some_digest: Digest = rng.gen();
         let other_digest: Digest = rng.gen();
 
         // Assert that both membership proofs and their digests are equal
-
         let mp0 = MmrMembershipProof::<H>::new(4, vec![]);
         let mp1 = MmrMembershipProof::<H>::new(4, vec![]);
         assert_eq!(mp0, mp1);

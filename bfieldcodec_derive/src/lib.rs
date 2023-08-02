@@ -5,7 +5,6 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
-use syn::Ident;
 
 /// Derives `BFieldCodec` for structs.
 ///
@@ -40,76 +39,21 @@ pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
     // Build the trait implementation
     impl_bfieldcodec_macro(ast)
 }
-
-/// Add a bound `T: BFieldCodec` to every type parameter T, unless we ignore it.
-fn add_trait_bounds(mut generics: syn::Generics, ignored: &[Ident]) -> syn::Generics {
-    for param in &mut generics.params {
-        let syn::GenericParam::Type(type_param) = param else {
-            continue
-        };
-        if ignored.contains(&type_param.ident) {
-            continue;
-        }
-        type_param.bounds.push(syn::parse_quote!(BFieldCodec));
-    }
-    generics
-}
-
-fn extract_ignored_generics_list(list: &[syn::Attribute]) -> Vec<Ident> {
-    list.iter().flat_map(extract_ignored_generics).collect()
-}
-
-fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<Ident> {
-    let bfield_codec_ident = Ident::new("bfield_codec", attr.span());
-    let ignore_ident = Ident::new("ignore", attr.span());
-
-    let Ok(meta) = attr.parse_meta() else {
-        return vec![];
-    };
-    let Some(ident) = meta.path().get_ident() else {
-        return vec![];
-    };
-    if ident != &bfield_codec_ident {
-        return vec![];
-    }
-    let syn::Meta::List(list) = meta else {
-        return vec![];
-    };
-
-    let mut ignored_generics = vec![];
-    for nested in list.nested.iter() {
-        let syn::NestedMeta::Meta(nmeta) = nested else {
-            continue;
-        };
-        let Some(ident) = nmeta.path().get_ident() else {
-            panic!("Invalid attribute syntax! (no ident)");
-        };
-        if ident != &ignore_ident {
-            panic!("Invalid attribute syntax! Unknown name {ident}");
-        }
-        let syn::Meta::List(list) = nmeta else {
-            panic!("Invalid attribute syntax! Expected a list");
-        };
-
-        for nested in list.nested.iter() {
-            let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested else {
-                continue;
-            };
-            let Some(ident) = path.get_ident() else {
-                panic!("Invalid attribute syntax! (no ident)")
-            };
-            ignored_generics.push(ident.to_owned());
-        }
-    }
-    ignored_generics
-}
-
 fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
+    let mut ignored_fields = vec![];
     let (encode_statements, decode_function_body, static_length_body) = match &ast.data {
         syn::Data::Struct(syn::DataStruct {
             fields: syn::Fields::Named(fields),
             ..
-        }) => generate_tokens_for_struct_with_named_fields(fields),
+        }) => {
+            ignored_fields = fields
+                .named
+                .iter()
+                .filter(|field| field_is_ignored(field))
+                .cloned()
+                .collect::<Vec<_>>();
+            generate_tokens_for_struct_with_named_fields(fields)
+        }
         syn::Data::Struct(syn::DataStruct {
             fields: syn::Fields::Unnamed(fields),
             ..
@@ -121,9 +65,39 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
     // Extract all generics we shall ignore.
-    let ignored = extract_ignored_generics_list(&ast.attrs);
+    let mut ignored = extract_ignored_generics_list(&ast.attrs);
 
-    // Add a bound `T: BFieldCodec` to every type parameter T.
+    // For all ignored fields, add all type identifiers (including, recursively, the type
+    // identifiers of generic type arguments) to the list of ignored type identifiers.
+    let mut ignored_types: Vec<syn::Type> =
+        ignored_fields.iter().map(|igf| igf.ty.clone()).collect();
+    while !ignored_types.is_empty() {
+        let ignored_type = ignored_types[0].clone();
+        ignored_types = ignored_types[1..].to_vec();
+        match ignored_type {
+            syn::Type::Path(type_path) => {
+                for segment in type_path.path.segments.into_iter() {
+                    ignored.push(segment.ident);
+                    match segment.arguments {
+                        syn::PathArguments::AngleBracketed(angle_bracketed_generic_arguments) => {
+                            for abga in angle_bracketed_generic_arguments.args.into_iter() {
+                                match abga {
+                                    syn::GenericArgument::Type(t) => {
+                                        ignored_types.push(t.clone());
+                                    }
+                                    _ => continue,
+                                }
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+            }
+            _ => continue,
+        }
+    }
+
+    // Add a bound `T: BFieldCodec` to every type parameter T, unless it is ignored
     let generics = add_trait_bounds(ast.generics, &ignored);
 
     // Extract the generics of the struct/enum.
@@ -153,9 +127,73 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
+/// Add a bound `T: BFieldCodec` to every type parameter T, unless we ignore it.
+fn add_trait_bounds(mut generics: syn::Generics, ignored: &[syn::Ident]) -> syn::Generics {
+    for param in &mut generics.params {
+        let syn::GenericParam::Type(type_param) = param else {
+            continue
+        };
+        if ignored.contains(&type_param.ident) {
+            continue;
+        }
+        type_param.bounds.push(syn::parse_quote!(BFieldCodec));
+    }
+    generics
+}
+
+fn extract_ignored_generics_list(list: &[syn::Attribute]) -> Vec<syn::Ident> {
+    list.iter().flat_map(extract_ignored_generics).collect()
+}
+
+fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<syn::Ident> {
+    let bfield_codec_ident = syn::Ident::new("bfield_codec", attr.span());
+    let ignore_ident = syn::Ident::new("ignore", attr.span());
+
+    let Ok(meta) = attr.parse_meta() else {
+        return vec![];
+    };
+    let Some(ident) = meta.path().get_ident() else {
+        return vec![];
+    };
+    if ident != &bfield_codec_ident {
+        return vec![];
+    }
+    let syn::Meta::List(list) = meta else {
+        return vec![];
+    };
+
+    let mut ignored_generics = vec![];
+    for nested in list.nested.iter() {
+        let syn::NestedMeta::Meta(nmeta) = nested else {
+            continue;
+        };
+        let Some(ident) = nmeta.path().get_ident() else {
+            panic!("Invalid attribute syntax! (no ident)");
+        };
+        // we only have one attribute flag: "ignore"
+        if ident != &ignore_ident {
+            panic!("Invalid attribute syntax! Unknown name {ident}");
+        }
+        let syn::Meta::List(list) = nmeta else {
+            panic!("Invalid attribute syntax! Expected a list");
+        };
+
+        for nested in list.nested.iter() {
+            let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested else {
+                continue;
+            };
+            let Some(ident) = path.get_ident() else {
+                panic!("Invalid attribute syntax! (no ident)")
+            };
+            ignored_generics.push(ident.to_owned());
+        }
+    }
+    ignored_generics
+}
+
 fn field_is_ignored(field: &syn::Field) -> bool {
-    let bfield_codec_ident = Ident::new("bfield_codec", field.span());
-    let ignore_ident = Ident::new("ignore", field.span());
+    let bfield_codec_ident = syn::Ident::new("bfield_codec", field.span());
+    let ignore_ident = syn::Ident::new("ignore", field.span());
 
     for attribute in field.attrs.iter() {
         let Ok(meta) = attribute.parse_meta() else {
