@@ -552,7 +552,7 @@ impl Tip5 {
 
     // permutation
     #[inline(always)]
-    fn permutation(sponge: &mut Tip5State) {
+    pub fn permutation(sponge: &mut Tip5State) {
         for i in 0..NUM_ROUNDS {
             Self::round(sponge, i);
         }
