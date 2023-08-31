@@ -329,7 +329,7 @@ impl<
                 let lhs_counters = lhs.as_ref().borrow().get_all_visited_counters();
                 let rhs_counters = rhs.as_ref().borrow().get_all_visited_counters();
                 let own_counter = self.visited_counter;
-                let mut all = vec![vec![own_counter], lhs_counters, rhs_counters].concat();
+                let mut all = [vec![own_counter], lhs_counters, rhs_counters].concat();
                 all.sort_unstable();
                 all.dedup();
                 all.reverse();

@@ -360,7 +360,7 @@ where
             output.push_str(&to_output_rhs);
             output.push(')');
 
-            let ret_as_vec = vec![lhs_symbols, rhs_symbols].concat();
+            let ret_as_vec = [lhs_symbols, rhs_symbols].concat();
             let ret_as_hash_set: HashSet<String> = ret_as_vec.into_iter().collect();
             dependent_symbols = ret_as_hash_set.into_iter().collect_vec()
         }

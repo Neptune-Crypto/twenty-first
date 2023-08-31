@@ -30,7 +30,7 @@ impl SpongeHasher for blake3::Hasher {
         sponge.update(&[1]);
         let digest_b = from_blake3_digest(&sponge.finalize());
 
-        vec![digest_a.values(), digest_b.values()]
+        [digest_a.values(), digest_b.values()]
             .concat()
             .try_into()
             .unwrap()

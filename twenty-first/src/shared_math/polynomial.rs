@@ -310,7 +310,7 @@ where
 
         let mut hadamard_product: Vec<FF> = rhs_coefficients
             .into_iter()
-            .zip(lhs_coefficients.into_iter())
+            .zip(lhs_coefficients)
             .map(|(r, l)| r * l)
             .collect();
 
@@ -1171,7 +1171,7 @@ impl<FF: FiniteField> Add for Polynomial<FF> {
         let summed: Vec<FF> = self
             .coefficients
             .into_iter()
-            .zip_longest(other.coefficients.into_iter())
+            .zip_longest(other.coefficients)
             .map(|a: itertools::EitherOrBoth<FF, FF>| match a {
                 Both(l, r) => l.to_owned() + r.to_owned(),
                 Left(l) => l.to_owned(),
@@ -1207,7 +1207,7 @@ impl<FF: FiniteField> Sub for Polynomial<FF> {
         let summed: Vec<FF> = self
             .coefficients
             .into_iter()
-            .zip_longest(other.coefficients.into_iter())
+            .zip_longest(other.coefficients)
             .map(|a: itertools::EitherOrBoth<FF, FF>| match a {
                 Both(l, r) => l - r,
                 Left(l) => l,

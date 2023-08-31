@@ -131,7 +131,7 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
 fn add_trait_bounds(mut generics: syn::Generics, ignored: &[syn::Ident]) -> syn::Generics {
     for param in &mut generics.params {
         let syn::GenericParam::Type(type_param) = param else {
-            continue
+            continue;
         };
         if ignored.contains(&type_param.ident) {
             continue;

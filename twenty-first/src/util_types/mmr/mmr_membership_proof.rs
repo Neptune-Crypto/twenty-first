@@ -774,7 +774,7 @@ mod mmr_membership_proof_test {
             membership_proofs
                 .clone()
                 .into_iter()
-                .zip(leaf_hashes_final.clone().into_iter())
+                .zip(leaf_hashes_final.clone())
                 .collect();
         let changed_values = MmrMembershipProof::batch_update_from_batch_leaf_mutation(
             &mut membership_proofs.iter_mut().collect::<Vec<_>>(),
@@ -907,7 +907,7 @@ mod mmr_membership_proof_test {
             membership_proofs
                 .clone()
                 .into_iter()
-                .zip(leaf_hashes.clone().into_iter())
+                .zip(leaf_hashes.clone())
                 .collect();
         let ret = MmrMembershipProof::batch_update_from_batch_leaf_mutation(
             &mut membership_proofs.iter_mut().collect::<Vec<_>>(),

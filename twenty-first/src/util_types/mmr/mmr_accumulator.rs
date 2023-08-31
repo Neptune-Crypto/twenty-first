@@ -401,7 +401,7 @@ mod accumulator_mmr_tests {
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
         let appended_leafs: Vec<Digest> = random_elements(2);
         let leaf_hashes_end: Vec<Digest> =
-            vec![leaf_hashes_start.clone(), appended_leafs.clone()].concat();
+            [leaf_hashes_start.clone(), appended_leafs.clone()].concat();
         let accumulator_mmr_start: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_start);
         let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 

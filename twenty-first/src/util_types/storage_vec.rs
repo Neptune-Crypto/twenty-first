@@ -144,7 +144,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
 
     /// Return the level-DB key used to store the element at an index
     fn get_index_key(&self, index: Index) -> [u8; 9] {
-        vec![vec![self.key_prefix], bincode::serialize(&index).unwrap()]
+        [vec![self.key_prefix], bincode::serialize(&index).unwrap()]
             .concat()
             .try_into()
             .unwrap()
@@ -180,13 +180,13 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
                 }
                 WriteElement::Push(t) => {
                     let key =
-                        vec![vec![self.key_prefix], bincode::serialize(&length).unwrap()].concat();
+                        [vec![self.key_prefix], bincode::serialize(&length).unwrap()].concat();
                     length += 1;
                     let value = bincode::serialize(&t).unwrap();
                     write_batch.put(&key, &value);
                 }
                 WriteElement::Pop => {
-                    let key = vec![
+                    let key = [
                         vec![self.key_prefix],
                         bincode::serialize(&(length - 1)).unwrap(),
                     ]
