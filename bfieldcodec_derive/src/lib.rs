@@ -523,7 +523,8 @@ fn generate_decode_clause_for_variant(
             let field_value = quote::format_ident!("variant_{}_field_{}_value", variant_index, field_index);
             quote! {
                 let (#field_value, sequence) = {
-                    if sequence.is_empty() {
+                    if sequence.is_empty() && <#field_type
+                        as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length().is_none() {
                         anyhow::bail!("Cannot decode variant {} field {}: sequence is empty.", #variant_index, #field_index);
                     }
                     let (len, sequence) = match <#field_type

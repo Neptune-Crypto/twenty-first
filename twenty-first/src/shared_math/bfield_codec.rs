@@ -538,7 +538,6 @@ mod tests {
         encoded.pop().unwrap();
 
         if !encoded.is_empty() {
-            // let encoded_too_short = encoded_too_long[..encoded_too_long.len() - 2].to_vec();
             encoded.pop();
             assert!(
                 T::decode(&encoded).is_err(),
@@ -913,6 +912,16 @@ mod tests {
             assert_bfield_codec_properties(&StructWithEmptyStruct::default());
             assert_bfield_codec_properties(&StructWithTwoEmptyStructs::default());
             assert_bfield_codec_properties(&BigStructWithEmptyStructs::default());
+
+            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+            enum EnumWithEmptyStruct {
+                A(EmptyStruct),
+                B,
+                C(EmptyStruct),
+            }
+            assert_bfield_codec_properties(&EnumWithEmptyStruct::A(EmptyStruct::default()));
+            assert_bfield_codec_properties(&EnumWithEmptyStruct::B);
+            assert_bfield_codec_properties(&EnumWithEmptyStruct::C(EmptyStruct::default()));
         }
 
         #[test]
