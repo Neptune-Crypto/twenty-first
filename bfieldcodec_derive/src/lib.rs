@@ -479,7 +479,8 @@ fn generate_decode_statement_for_field(
     let field_name_as_string_literal = field_name.to_string();
     quote! {
         let (#field_name, sequence) = {
-            if sequence.is_empty() {
+            if sequence.is_empty() && <#field_type
+            as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length().is_none() {
                 anyhow::bail!("Cannot decode field {}: sequence is empty.", #field_name_as_string_literal);
             }
             let (len, sequence) = match <#field_type
