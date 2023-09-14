@@ -1928,7 +1928,7 @@ mod test_mpolynomials {
             BFieldElement::new(6),
             BFieldElement::new(648),
         ];
-        for (i, k) in vec![vec![0, 0], vec![0, 1], vec![0, 2], vec![1, 1], vec![3, 4]]
+        for (i, k) in [vec![0, 0], vec![0, 1], vec![0, 2], vec![1, 1], vec![3, 4]]
             .iter()
             .enumerate()
         {

@@ -530,7 +530,7 @@ mod tests {
             expensive_encoding_pbt(&encoded, decoded);
         }
 
-        let encoded_too_long = vec![encoded, vec![BFieldElement::new(5)]].concat();
+        let encoded_too_long = [encoded, vec![BFieldElement::new(5)]].concat();
         assert!(
             T::decode(&encoded_too_long).is_err(),
             "decoding a sequence that is too long does not fail"
