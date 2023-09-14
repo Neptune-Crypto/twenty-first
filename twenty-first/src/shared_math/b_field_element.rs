@@ -153,11 +153,6 @@ impl BFieldElement {
     #[must_use]
     #[inline]
     pub const fn mod_pow(&self, exp: u64) -> Self {
-        // Special case for handling 0^0 = 1
-        if exp == 0 {
-            return BFieldElement::new(1);
-        }
-
         let mut acc = BFieldElement::new(1);
         let bit_length = u64::BITS - exp.leading_zeros();
         let mut i = 0;
@@ -1067,6 +1062,7 @@ mod b_prime_field_element_test {
         assert!(BFieldElement::new(18446744069397807105).mod_pow(8).is_one());
         assert!(BFieldElement::new(2625919085333925275).mod_pow(10).is_one());
         assert!(BFieldElement::new(281474976645120).mod_pow(12).is_one());
+        assert!(BFieldElement::new(0).mod_pow(0).is_one());
     }
 
     #[test]

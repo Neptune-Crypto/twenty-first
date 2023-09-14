@@ -564,17 +564,12 @@ impl Div for XFieldElement {
 impl ModPowU64 for XFieldElement {
     #[inline]
     fn mod_pow_u64(&self, exponent: u64) -> Self {
-        // Special case for handling 0^0 = 1
-        if exponent == 0 {
-            return Self::one();
-        }
-
         let mut x = *self;
         let mut result = Self::one();
         let mut i = exponent;
 
         while i > 0 {
-            if i % 2 == 1 {
+            if i & 1 == 1 {
                 result *= x;
             }
 
@@ -589,8 +584,6 @@ impl ModPowU64 for XFieldElement {
 impl ModPowU32 for XFieldElement {
     #[inline]
     fn mod_pow_u32(&self, exp: u32) -> Self {
-        // TODO: This can be sped up by a factor 2 by implementing
-        // it for u32 and not using the 64-bit version
         self.mod_pow_u64(exp as u64)
     }
 }
@@ -598,6 +591,7 @@ impl ModPowU32 for XFieldElement {
 #[cfg(test)]
 mod x_field_element_test {
     use itertools::{izip, Itertools};
+    use rand::{random, thread_rng};
 
     use crate::shared_math::ntt::{intt, ntt};
     use crate::shared_math::other::{log_2_floor, random_elements};
@@ -1107,6 +1101,41 @@ mod x_field_element_test {
             let mut a_minus_b_field_b_as_b = a;
             a_minus_b_field_b_as_b -= b.coefficients[0];
             assert_eq!(a_minus_b_field_b_as_b, a_minus_b_field_b_as_x);
+        }
+    }
+
+    #[test]
+    fn xfe_mod_pow_zero_test() {
+        assert!(
+            XFieldElement::zero().mod_pow_u32(0).is_one(),
+            "0^0 must be 1 for XFE"
+        );
+        assert!(
+            XFieldElement::zero().mod_pow_u64(0).is_one(),
+            "0^0 must be 1 for XFE"
+        );
+        assert!(
+            XFieldElement::one().mod_pow_u32(0).is_one(),
+            "0^0 must be 1 for XFE"
+        );
+        assert!(
+            XFieldElement::one().mod_pow_u64(0).is_one(),
+            "0^0 must be 1 for XFE"
+        );
+    }
+
+    #[test]
+    fn xfe_mod_pow_pbt() {
+        let mut rng = thread_rng();
+        for _ in 0..3 {
+            let exponent: u32 = rng.gen_range(0..200);
+            let base: XFieldElement = random();
+            let mut acc = XFieldElement::one();
+
+            for i in 0..exponent {
+                assert_eq!(acc, base.mod_pow_u32(i));
+                acc *= base;
+            }
         }
     }
 
