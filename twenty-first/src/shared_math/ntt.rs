@@ -50,6 +50,9 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
     omega: BFieldElement,
     log_2_of_n: u32,
 ) {
+    if x.is_empty() {
+        return;
+    }
     let n = x.len() as u32;
 
     // `n` must be a power of 2
@@ -110,6 +113,9 @@ pub fn intt<FF: FiniteField + MulAssign<BFieldElement>>(
     omega: BFieldElement,
     log_2_of_n: u32,
 ) {
+    if x.is_empty() {
+        return;
+    }
     let n: BFieldElement = omega.new_from_usize(x.len());
     let n_inv: BFieldElement = BFieldElement::one() / n;
     ntt::<FF>(x, omega.inverse(), log_2_of_n);
@@ -403,6 +409,20 @@ mod fast_ntt_attempt_tests {
 
         // Verify that INTT(NTT(x)) = x
         intt::<BFieldElement>(&mut input_output, omega, 2);
+        assert_eq!(original_input, input_output);
+    }
+
+    #[test]
+    fn ntt_on_empty_input() {
+        let mut input_output = vec![];
+        let original_input = input_output.clone();
+        let omega = BFieldElement::primitive_root_of_unity(0).unwrap();
+
+        ntt::<BFieldElement>(&mut input_output, omega, 0);
+        assert_eq!(0, input_output.len());
+
+        // Verify that INTT(NTT(x)) = x
+        intt::<BFieldElement>(&mut input_output, omega, 0);
         assert_eq!(original_input, input_output);
     }
 
