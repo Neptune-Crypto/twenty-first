@@ -2540,6 +2540,19 @@ mod test_polynomials {
     }
 
     #[test]
+    fn fast_coset_evaluate_on_small_domain() {
+        // x^5 + x^3
+        let poly_coefficients = [0, 0, 0, 1, 0, 1].map(BFieldElement::new).to_vec();
+        let poly = Polynomial::<BFieldElement>::new(poly_coefficients);
+
+        let domain_length = 4;
+        let offset = BFieldElement::generator();
+        let primitive_root = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
+
+        poly.fast_coset_evaluate(offset, primitive_root, domain_length);
+    }
+
+    #[test]
     fn fast_and_slow_evaluation_are_equivalent() {
         let poly_coefficients = [0, 0, 0, 1, 0, 1].map(BFieldElement::new).to_vec();
         let poly = Polynomial::<BFieldElement>::new(poly_coefficients);
