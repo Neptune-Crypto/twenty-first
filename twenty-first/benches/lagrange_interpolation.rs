@@ -69,7 +69,7 @@ fn ntt_based_fast_interpolate(
     group.sample_size(10);
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {
-        b.iter(|| polynomial::Polynomial::fast_interpolate(&xs, &ys, &omega, size))
+        b.iter(|| polynomial::Polynomial::fast_interpolate(&xs, &ys, omega, size))
     });
 }
 
@@ -87,7 +87,7 @@ fn ntt_based_fast_interpolate_batched(
     group.sample_size(10);
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {
-        b.iter(|| polynomial::Polynomial::batch_fast_interpolate(&xs, &ys, &omega, size))
+        b.iter(|| polynomial::Polynomial::batch_fast_interpolate(&xs, &ys, omega, size))
     });
 }
 
