@@ -754,8 +754,7 @@ mod b_prime_field_element_test {
     proptest! {
         #[test]
         fn value_is_preserved(value in 0..BFieldElement::P) {
-            let bfe = BFieldElement::new(value);
-            prop_assert_eq!(value, bfe.value());
+            prop_assert_eq!(value, BFieldElement::new(value).value());
         }
     }
 
@@ -773,8 +772,7 @@ mod b_prime_field_element_test {
     proptest! {
         #[test]
         fn lift_then_unlift_preserves_element(bfe: BFieldElement) {
-            let maybe_same_bfe = bfe.lift().unlift();
-            prop_assert_eq!(Some(bfe), maybe_same_bfe);
+            prop_assert_eq!(Some(bfe), bfe.lift().unlift());
         }
     }
 
