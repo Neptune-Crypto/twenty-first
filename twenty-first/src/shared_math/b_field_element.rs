@@ -689,10 +689,27 @@ mod b_prime_field_element_test {
         assert!(zero.is_zero());
     }
 
+    proptest! {
+        #[test]
+        fn not_zero_is_nonzero(bfe in arbitrary_non_zero_bfield_element()) {
+            prop_assert!(!bfe.is_zero());
+        }
+    }
+
     #[test]
     fn one_is_one() {
         let one = BFieldElement::one();
         assert!(one.is_one());
+    }
+
+    proptest! {
+        #[test]
+        fn not_one_is_not_one(bfe: BFieldElement) {
+            if bfe.value() == 1 {
+                return Ok(());
+            }
+            prop_assert!(!bfe.is_one());
+        }
     }
 
     #[test]
