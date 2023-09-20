@@ -44,26 +44,28 @@ use super::{
 /// * `omega`^`k` ≠ 1 for all integers 1 ≤ k < n (making it a primitive `n`th root of unity)
 ///
 /// This transform is performed in-place.
+///
+/// If called on an empty array, returns an empty array.
 #[allow(clippy::many_single_char_names)]
 pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
     x: &mut [FF],
     omega: BFieldElement,
     log_2_of_n: u32,
 ) {
-    if x.is_empty() {
-        return;
-    }
     let n = x.len() as u32;
 
-    // `n` must be a power of 2
-    debug_assert_eq!(n, 1 << log_2_of_n, "2^log2(n) == n");
+    // `n` must be a power of 2, or be zero
+    debug_assert!(
+        n == 1 << log_2_of_n || n == 0 && log_2_of_n == 0,
+        "2^log2(n) == n || n == 0 && log_2_of_n == 0 must evaluate to true"
+    );
 
     // `omega` must be a primitive root of unity of order `n`
     debug_assert!(
         omega.mod_pow_u32(n).is_one(),
         "Got {omega} which is not a {n}th root of 1"
     );
-    debug_assert!(!omega.mod_pow_u32(n / 2).is_one());
+    debug_assert!(!omega.mod_pow_u32(n / 2).is_one() || n == 0);
 
     for k in 0..n {
         let rk = bitreverse(k, log_2_of_n);
@@ -113,16 +115,14 @@ pub fn intt<FF: FiniteField + MulAssign<BFieldElement>>(
     omega: BFieldElement,
     log_2_of_n: u32,
 ) {
-    if x.is_empty() {
-        return;
-    }
     let n: BFieldElement = omega.new_from_usize(x.len());
-    let n_inv: BFieldElement = BFieldElement::one() / n;
+    let n_inv_or_zero = n.inverse_or_zero();
     ntt::<FF>(x, omega.inverse(), log_2_of_n);
     for elem in x.iter_mut() {
-        *elem *= n_inv
+        *elem *= n_inv_or_zero
     }
 }
+
 #[inline]
 pub fn bitreverse_usize(mut n: usize, l: usize) -> usize {
     let mut r = 0;
