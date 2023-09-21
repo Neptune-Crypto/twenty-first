@@ -787,7 +787,7 @@ mod b_prime_field_element_test {
     }
 
     #[test]
-    fn increment_overflow() {
+    fn incrementing_max_value_wraps_around() {
         let mut bfe = BFieldElement::new(BFieldElement::MAX);
         bfe.increment();
         assert_eq!(0, bfe.value());
@@ -807,7 +807,7 @@ mod b_prime_field_element_test {
     }
 
     #[test]
-    fn decrement_underflow() {
+    fn decrementing_min_value_wraps_around() {
         let mut bfe = BFieldElement::zero();
         bfe.decrement();
         assert_eq!(BFieldElement::MAX, bfe.value());
