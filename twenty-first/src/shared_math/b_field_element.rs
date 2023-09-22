@@ -311,10 +311,6 @@ impl From<BFieldElement> for [u8; 8] {
 impl From<[u8; 8]> for BFieldElement {
     fn from(array: [u8; 8]) -> Self {
         let n: u64 = u64::from_le_bytes(array);
-        debug_assert!(
-            n <= Self::MAX,
-            "Byte representation must represent a valid B field element, less than the quotient."
-        );
         BFieldElement::new(n)
     }
 }
@@ -743,11 +739,13 @@ mod b_prime_field_element_test {
 
     proptest! {
         #[test]
-        #[should_panic(expected = "must represent a valid B field element")]
-        fn byte_array_outside_range_cannot_be_converted(
-            byte_array in (BFieldElement::P..u64::MAX).prop_map(|i| i.to_le_bytes())
+        fn byte_array_outside_range_is_brought_into_range(
+            value in BFieldElement::P..u64::MAX
         ) {
-            let _: BFieldElement = byte_array.into();
+            let byte_array = value.to_le_bytes();
+            let bfe: BFieldElement = byte_array.into();
+            let expected_value = value - BFieldElement::P;
+            assert_eq!(expected_value, bfe.value());
         }
     }
 
