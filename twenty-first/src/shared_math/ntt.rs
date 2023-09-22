@@ -428,6 +428,17 @@ mod fast_ntt_attempt_tests {
         assert_eq!(original_input, input_output);
     }
 
+    proptest! {
+        #[test]
+        fn ntt_on_input_of_length_one(bfe: BFieldElement) {
+            let mut test_vector = vec![bfe];
+            let root_of_unity = BFieldElement::one();
+
+            ntt(&mut test_vector, root_of_unity, 0);
+            assert_eq!(vec![bfe], test_vector);
+        }
+    }
+
     prop_compose! {
         fn bfield_element_vec_of_length_some_power_of_two()(log_2_vector_length in 0_usize..20)(
             bfe_vector in vec(BFieldElement::arbitrary(), 1 << log_2_vector_length),
