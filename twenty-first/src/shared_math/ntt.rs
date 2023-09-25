@@ -65,7 +65,7 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
         omega.mod_pow_u32(n).is_one(),
         "Got {omega} which is not a {n}th root of 1"
     );
-    debug_assert!(!omega.mod_pow_u32(n / 2).is_one() || n == 0);
+    debug_assert!(!omega.mod_pow_u32(n / 2).is_one() || n == 0 || n == 1);
 
     for k in 0..n {
         let rk = bitreverse(k, log_2_of_n);
@@ -268,6 +268,8 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
 mod fast_ntt_attempt_tests {
     use itertools::Itertools;
     use num_traits::{One, Zero};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::random_elements;
@@ -424,6 +426,41 @@ mod fast_ntt_attempt_tests {
         // Verify that INTT(NTT(x)) = x
         intt::<BFieldElement>(&mut input_output, omega, 0);
         assert_eq!(original_input, input_output);
+    }
+
+    proptest! {
+        #[test]
+        fn ntt_on_input_of_length_one(bfe: BFieldElement) {
+            let mut test_vector = vec![bfe];
+            let root_of_unity = BFieldElement::one();
+
+            ntt(&mut test_vector, root_of_unity, 0);
+            assert_eq!(vec![bfe], test_vector);
+        }
+    }
+
+    prop_compose! {
+        fn bfield_element_vec_of_length_some_power_of_two()(log_2_vector_length in 0_usize..20)(
+            bfe_vector in vec(BFieldElement::arbitrary(), 1 << log_2_vector_length),
+        ) -> Vec<BFieldElement> {
+            bfe_vector
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn ntt_then_intt_is_identity_operation(
+            mut input in bfield_element_vec_of_length_some_power_of_two()
+        ) {
+            let original_input = input.clone();
+            let log_2_of_input_length = input.len().ilog2();
+            let root_of_unity = BFieldElement::primitive_root_of_unity(input.len() as u64).unwrap();
+
+            ntt::<BFieldElement>(&mut input, root_of_unity, log_2_of_input_length);
+            intt::<BFieldElement>(&mut input, root_of_unity, log_2_of_input_length);
+
+            assert_eq!(original_input, input);
+        }
     }
 
     #[test]
