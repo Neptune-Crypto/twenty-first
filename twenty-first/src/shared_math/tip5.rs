@@ -592,10 +592,14 @@ impl Tip5 {
 
 impl AlgebraicHasher for Tip5 {
     fn hash_pair(left: Digest, right: Digest) -> Digest {
-        let mut input = [BFIELD_ZERO; 10];
-        input[..DIGEST_LENGTH].copy_from_slice(&left.values());
-        input[DIGEST_LENGTH..].copy_from_slice(&right.values());
-        Digest::new(Tip5::hash_10(&input))
+        let mut sponge = Tip5State::new(Domain::FixedLength);
+        sponge.state[..DIGEST_LENGTH].copy_from_slice(&left.values());
+        sponge.state[DIGEST_LENGTH..2 * DIGEST_LENGTH].copy_from_slice(&right.values());
+
+        Self::permutation(&mut sponge);
+
+        let digest_values = sponge.state[..DIGEST_LENGTH].try_into().unwrap();
+        Digest::new(digest_values)
     }
 
     /// Produce `num_elements` random [XFieldElement] values.
