@@ -60,7 +60,7 @@ pub trait SpongeHasher: Clone + Send + Sync {
 
 pub trait AlgebraicHasher: SpongeHasher {
     /// Hash two [Digest]s into one.
-    fn hash_pair(left: &Digest, right: &Digest) -> Digest;
+    fn hash_pair(left: Digest, right: Digest) -> Digest;
 
     /// Hash a `value: &T` to a [Digest].
     ///

@@ -85,7 +85,7 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
         let new_hash = peaks.pop().unwrap();
         let previous_peak = peaks.pop().unwrap();
         membership_proof.authentication_path.push(previous_peak);
-        peaks.push(H::hash_pair(&previous_peak, &new_hash));
+        peaks.push(H::hash_pair(previous_peak, new_hash));
         right_lineage_count -= 1;
     }
 
@@ -97,7 +97,7 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
 /// than `old_peaks`
 pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
     old_peaks: &[Digest],
-    new_leaf: &Digest,
+    new_leaf: Digest,
     leaf_count: u64,
     membership_proof: &MmrMembershipProof<H>,
 ) -> Vec<Digest> {
@@ -109,10 +109,10 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
         let ap_element = membership_proof.authentication_path[i];
         if acc_mt_index % 2 == 1 {
             // Node with `acc_hash` is a right child
-            acc_hash = H::hash_pair(&ap_element, &acc_hash);
+            acc_hash = H::hash_pair(ap_element, acc_hash);
         } else {
             // Node with `acc_hash` is a left child
-            acc_hash = H::hash_pair(&acc_hash, &ap_element);
+            acc_hash = H::hash_pair(acc_hash, ap_element);
         }
 
         acc_mt_index /= 2;
