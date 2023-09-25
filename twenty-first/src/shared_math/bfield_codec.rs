@@ -521,7 +521,7 @@ mod tests {
     fn assert_bfield_codec_properties<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(
         value: &T,
     ) {
-        let encoded = value.encode();
+        let mut encoded = value.encode();
         let decoded = T::decode(&encoded);
         let decoded = *decoded.unwrap();
         assert_eq!(*value, decoded);
@@ -530,17 +530,20 @@ mod tests {
             expensive_encoding_pbt(&encoded, decoded);
         }
 
-        let encoded_too_long = [encoded, vec![BFieldElement::new(5)]].concat();
+        encoded.push(BFieldElement::new(5));
         assert!(
-            T::decode(&encoded_too_long).is_err(),
+            T::decode(&encoded).is_err(),
             "decoding a sequence that is too long does not fail"
         );
+        encoded.pop().unwrap();
 
-        let encoded_too_short = encoded_too_long[..encoded_too_long.len() - 2].to_vec();
-        assert!(
-            T::decode(&encoded_too_short).is_err(),
-            "decoding a sequence that is stoo short does not fail"
-        );
+        if !encoded.is_empty() {
+            encoded.pop();
+            assert!(
+                T::decode(&encoded).is_err(),
+                "decoding a sequence that is stoo short does not fail"
+            );
+        }
     }
 
     mod bfield_codec_tests {
@@ -878,6 +881,47 @@ mod tests {
         #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
         struct WithNestedVec {
             a_field: Vec<Vec<u64>>,
+        }
+
+        #[test]
+        fn empty_structs_and_enums() {
+            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+            struct EmptyStruct {}
+
+            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+            struct StructWithEmptyStruct {
+                a: EmptyStruct,
+            }
+
+            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+            struct StructWithTwoEmptyStructs {
+                a: EmptyStruct,
+                b: EmptyStruct,
+            }
+
+            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+            struct BigStructWithEmptyStructs {
+                a: EmptyStruct,
+                b: EmptyStruct,
+                c: StructWithTwoEmptyStructs,
+                d: StructWithEmptyStruct,
+                e: EmptyStruct,
+            }
+
+            assert_bfield_codec_properties(&EmptyStruct::default());
+            assert_bfield_codec_properties(&StructWithEmptyStruct::default());
+            assert_bfield_codec_properties(&StructWithTwoEmptyStructs::default());
+            assert_bfield_codec_properties(&BigStructWithEmptyStructs::default());
+
+            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+            enum EnumWithEmptyStruct {
+                A(EmptyStruct),
+                B,
+                C(EmptyStruct),
+            }
+            assert_bfield_codec_properties(&EnumWithEmptyStruct::A(EmptyStruct::default()));
+            assert_bfield_codec_properties(&EnumWithEmptyStruct::B);
+            assert_bfield_codec_properties(&EnumWithEmptyStruct::C(EmptyStruct::default()));
         }
 
         #[test]
