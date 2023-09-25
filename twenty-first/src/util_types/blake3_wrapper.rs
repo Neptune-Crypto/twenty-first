@@ -38,7 +38,7 @@ impl SpongeHasher for blake3::Hasher {
 }
 
 impl AlgebraicHasher for blake3::Hasher {
-    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+    fn hash_pair(left: Digest, right: Digest) -> Digest {
         let mut hasher = blake3::Hasher::new();
         for elem in left.values().iter().chain(right.values().iter()) {
             hasher.update(&elem.value().to_be_bytes());

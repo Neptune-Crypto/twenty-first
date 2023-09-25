@@ -591,7 +591,7 @@ impl Tip5 {
 }
 
 impl AlgebraicHasher for Tip5 {
-    fn hash_pair(left: &Digest, right: &Digest) -> Digest {
+    fn hash_pair(left: Digest, right: Digest) -> Digest {
         let mut input = [BFIELD_ZERO; 10];
         input[..DIGEST_LENGTH].copy_from_slice(&left.values());
         input[DIGEST_LENGTH..].copy_from_slice(&right.values());

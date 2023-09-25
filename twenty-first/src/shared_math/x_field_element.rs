@@ -166,7 +166,7 @@ impl XFieldElement {
     /// more efficient `sample_weights()` implementation:
     ///
     /// https://github.com/Neptune-Crypto/twenty-first/pull/66#discussion_r1049771105
-    pub fn sample(digest: &Digest) -> Self {
+    pub fn sample(digest: Digest) -> Self {
         let elements = digest.values();
         XFieldElement::new([elements[2], elements[3], elements[4]])
     }

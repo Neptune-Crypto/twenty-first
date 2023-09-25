@@ -51,7 +51,7 @@ impl Ord for Digest {
 impl Digest {
     pub const BYTES: usize = DIGEST_LENGTH * BFieldElement::BYTES;
 
-    pub fn values(&self) -> [BFieldElement; DIGEST_LENGTH] {
+    pub fn values(self) -> [BFieldElement; DIGEST_LENGTH] {
         self.0
     }
 
@@ -214,8 +214,8 @@ impl Digest {
     /// method invokes hash_pair with the right operand being the zero
     /// digest, agreeing with the standard way to hash a digest in the
     /// virtual machine.
-    pub fn hash<H: AlgebraicHasher>(&self) -> Digest {
-        H::hash_pair(self, &Digest::new([BFieldElement::zero(); DIGEST_LENGTH]))
+    pub fn hash<H: AlgebraicHasher>(self) -> Digest {
+        H::hash_pair(self, Digest::new([BFieldElement::zero(); DIGEST_LENGTH]))
     }
 }
 

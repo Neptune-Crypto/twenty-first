@@ -30,7 +30,7 @@ pub trait Mmr<H: AlgebraicHasher> {
     /// Mutate an existing leaf. It is the caller's responsibility that the
     /// membership proof is valid. If the membership proof is wrong, the MMR
     /// will end up in a broken state.
-    fn mutate_leaf(&mut self, old_membership_proof: &MmrMembershipProof<H>, new_leaf: &Digest);
+    fn mutate_leaf(&mut self, old_membership_proof: &MmrMembershipProof<H>, new_leaf: Digest);
 
     /// Batch mutate an MMR while updating a list of membership proofs. Returns the indices of the
     /// membership proofs that have changed as a result of this operation.

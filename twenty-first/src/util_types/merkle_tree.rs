@@ -248,14 +248,14 @@ where
                 }
 
                 let left_node = match partial_tree.get(&left_node_index) {
-                    Some(left_node) => left_node,
+                    Some(&left_node) => left_node,
                     None => bail!(
                         "The partial tree must contain all necessary information. \
                         Node {left_node_index} is missing."
                     ),
                 };
                 let right_node = match partial_tree.get(&right_node_index) {
-                    Some(right_node) => right_node,
+                    Some(&right_node) => right_node,
                     None => bail!(
                         "The partial tree must contain all necessary information. \
                         Node {right_node_index} is missing."
@@ -434,8 +434,8 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
                 .into_par_iter()
                 .map(|i| {
                     let j = node_count_on_this_level + i;
-                    let left_child = &nodes[j * 2];
-                    let right_child = &nodes[j * 2 + 1];
+                    let left_child = nodes[j * 2];
+                    let right_child = nodes[j * 2 + 1];
                     H::hash_pair(left_child, right_child)
                 })
                 .collect_into_vec(&mut local_digests);
@@ -447,7 +447,7 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
 
         // Sequential digest calculations
         for i in (1..(digests.len() - count_acc)).rev() {
-            nodes[i] = H::hash_pair(&nodes[i * 2], &nodes[i * 2 + 1]);
+            nodes[i] = H::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
         }
 
         MerkleTree {
@@ -526,7 +526,7 @@ pub mod merkle_tree_test {
             assert!(random_leaves_are_members);
 
             // Negative: Verify bad Merkle root
-            let bad_root_digest = corrupt_digest(&tree.get_root());
+            let bad_root_digest = corrupt_digest(tree.get_root());
             let bad_root_verifies = MT::verify_authentication_structure(
                 bad_root_digest,
                 tree_height,
@@ -647,7 +647,7 @@ pub mod merkle_tree_test {
                 );
 
                 // Negative: Corrupt the root and thereby the tree
-                let bad_root_hash = corrupt_digest(&tree.get_root());
+                let bad_root_hash = corrupt_digest(tree.get_root());
 
                 let verified = MT::verify_authentication_structure(
                     bad_root_hash,
@@ -661,8 +661,7 @@ pub mod merkle_tree_test {
                 // Negative: Corrupt authentication structure at random index
                 let random_index = thread_rng().gen_range(0..auth_structure.len());
                 let mut bad_auth_structure = auth_structure.clone();
-                bad_auth_structure[random_index] =
-                    corrupt_digest(&bad_auth_structure[random_index]);
+                bad_auth_structure[random_index] = corrupt_digest(bad_auth_structure[random_index]);
 
                 let corrupted_proof_verifies = MT::verify_authentication_structure(
                     tree.get_root(),

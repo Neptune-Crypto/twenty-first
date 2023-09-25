@@ -26,7 +26,7 @@ fn bench_pair(c: &mut Criterion) {
     let right = thread_rng().gen();
 
     group.bench_function(BenchmarkId::new("Tip5 / Hash Pair", "pair"), |bencher| {
-        bencher.iter(|| Tip5::hash_pair(&left, &right));
+        bencher.iter(|| Tip5::hash_pair(left, right));
     });
 }
 

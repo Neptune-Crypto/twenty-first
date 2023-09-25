@@ -105,7 +105,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
     /// Mutate an existing leaf. It is the caller's responsibility that the
     /// membership proof is valid. If the membership proof is wrong, the MMR
     /// will end up in a broken state.
-    fn mutate_leaf(&mut self, old_membership_proof: &MmrMembershipProof<H>, new_leaf: &Digest) {
+    fn mutate_leaf(&mut self, old_membership_proof: &MmrMembershipProof<H>, new_leaf: Digest) {
         self.peaks = shared_basic::calculate_new_peaks_from_leaf_mutation(
             &self.peaks,
             new_leaf,
@@ -160,7 +160,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             // Calculate the new peaks after mutating a leaf
             running_peaks = shared_basic::calculate_new_peaks_from_leaf_mutation(
                 &running_peaks,
-                &new_leaf_value,
+                new_leaf_value,
                 self.leaf_count,
                 &membership_proof,
             );
@@ -170,7 +170,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             MmrMembershipProof::<H>::batch_update_from_leaf_mutation(
                 &mut updated_membership_proofs,
                 &membership_proof,
-                &new_leaf_value,
+                new_leaf_value,
             );
         }
 
@@ -219,7 +219,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             );
             let mut acc_hash: Digest = new_leaf.to_owned();
 
-            for (count, hash) in ap.authentication_path.iter().enumerate() {
+            for (count, &hash) in ap.authentication_path.iter().enumerate() {
                 // If sibling node is something that has already been calculated, we use that
                 // hash digest. Otherwise we use the one in our authentication path.
                 let (right_ancestor_count, height) =
@@ -227,21 +227,21 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
                 let is_right_child = right_ancestor_count != 0;
                 if is_right_child {
                     let left_sibling_index = shared_advanced::left_sibling(node_index, height);
-                    let sibling_hash: &Digest = match new_ap_digests.get(&left_sibling_index) {
-                        Some(h) => h,
+                    let sibling_hash: Digest = match new_ap_digests.get(&left_sibling_index) {
+                        Some(&h) => h,
                         None => hash,
                     };
-                    acc_hash = H::hash_pair(sibling_hash, &acc_hash);
+                    acc_hash = H::hash_pair(sibling_hash, acc_hash);
 
                     // Find parent node index
                     node_index += 1;
                 } else {
                     let right_sibling_index = shared_advanced::right_sibling(node_index, height);
-                    let sibling_hash: &Digest = match new_ap_digests.get(&right_sibling_index) {
-                        Some(h) => h,
+                    let sibling_hash: Digest = match new_ap_digests.get(&right_sibling_index) {
+                        Some(&h) => h,
                         None => hash,
                     };
-                    acc_hash = H::hash_pair(&acc_hash, sibling_hash);
+                    acc_hash = H::hash_pair(acc_hash, sibling_hash);
 
                     // Find parent node index
                     node_index += 1 << (height + 1);
@@ -535,7 +535,7 @@ mod accumulator_mmr_tests {
             assert!(mmra_mps
                 .iter()
                 .zip(terminal_leafs_for_mps.iter())
-                .all(|(mp, leaf)| mp.verify(&mmra.get_peaks(), leaf, mmra.count_leaves()).0));
+                .all(|(mp, &leaf)| mp.verify(&mmra.get_peaks(), leaf, mmra.count_leaves()).0));
 
             // Manually construct an MMRA from the new data and verify that peaks and leaf count matches
             assert!(

@@ -23,9 +23,9 @@ where
         return peaks[0].to_owned();
     }
 
-    let mut acc: Digest = H::hash_pair(&peaks[peaks_count - 2], &peaks[peaks_count - 1]);
+    let mut acc: Digest = H::hash_pair(peaks[peaks_count - 2], peaks[peaks_count - 1]);
     for i in 2..peaks_count {
-        acc = H::hash_pair(&peaks[peaks_count - 1 - i], &acc);
+        acc = H::hash_pair(peaks[peaks_count - 1 - i], acc);
     }
 
     acc
