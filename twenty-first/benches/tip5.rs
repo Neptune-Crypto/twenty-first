@@ -1,6 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use itertools::Itertools;
-use rand::RngCore;
+use rand::{thread_rng, Rng};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::digest::DIGEST_LENGTH;
@@ -14,15 +13,20 @@ fn bench_10(c: &mut Criterion) {
     let size = 10;
     group.sample_size(100);
 
-    let mut rng = rand::thread_rng();
-    let single_element: [BFieldElement; 10] = (0..10)
-        .map(|_| BFieldElement::new(rng.next_u64()))
-        .collect_vec()
-        .try_into()
-        .unwrap();
-
+    let single_element: [BFieldElement; 10] = thread_rng().gen();
     group.bench_function(BenchmarkId::new("Tip5 / Hash 10", size), |bencher| {
         bencher.iter(|| Tip5::hash_10(&single_element));
+    });
+}
+
+fn bench_pair(c: &mut Criterion) {
+    let mut group = c.benchmark_group("tip5/hash_pair");
+
+    let left = thread_rng().gen();
+    let right = thread_rng().gen();
+
+    group.bench_function(BenchmarkId::new("Tip5 / Hash Pair", "pair"), |bencher| {
+        bencher.iter(|| Tip5::hash_pair(&left, &right));
     });
 }
 
@@ -60,5 +64,5 @@ fn bench_parallel(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_10, bench_varlen, bench_parallel);
+criterion_group!(benches, bench_10, bench_pair, bench_varlen, bench_parallel);
 criterion_main!(benches);
