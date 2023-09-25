@@ -479,19 +479,19 @@ fn generate_decode_statement_for_field(
     let field_name_as_string_literal = field_name.to_string();
     quote! {
         let (#field_name, sequence) = {
-            if sequence.is_empty() {
+            let maybe_fields_static_length = <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length();
+            let field_has_dynamic_length = maybe_fields_static_length.is_none();
+            if sequence.is_empty() && field_has_dynamic_length {
                 anyhow::bail!("Cannot decode field {}: sequence is empty.", #field_name_as_string_literal);
             }
-            let (len, sequence) = match <#field_type
-                as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length() {
+            let (len, sequence) = match maybe_fields_static_length {
                 Some(len) => (len, sequence),
                 None => (sequence[0].value() as usize, &sequence[1..]),
             };
             if sequence.len() < len {
                 anyhow::bail!("Cannot decode field {}: sequence too short.", #field_name_as_string_literal);
             }
-            let decoded = *<#field_type
-                as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
+            let decoded = *<#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
                     &sequence[..len]
                 )?;
             (decoded, &sequence[len..])
@@ -522,19 +522,19 @@ fn generate_decode_clause_for_variant(
             let field_value = quote::format_ident!("variant_{}_field_{}_value", variant_index, field_index);
             quote! {
                 let (#field_value, sequence) = {
-                    if sequence.is_empty() {
+                    let maybe_fields_static_length = <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length();
+                    let field_has_dynamic_length = maybe_fields_static_length.is_none();
+                    if sequence.is_empty() && field_has_dynamic_length {
                         anyhow::bail!("Cannot decode variant {} field {}: sequence is empty.", #variant_index, #field_index);
                     }
-                    let (len, sequence) = match <#field_type
-                        as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length() {
+                    let (len, sequence) = match maybe_fields_static_length {
                         Some(len) => (len, sequence),
                         None => (sequence[0].value() as usize, &sequence[1..]),
                     };
                     if sequence.len() < len {
                         anyhow::bail!("Cannot decode variant {} field {}: sequence too short.", #variant_index, #field_index);
                     }
-                    let decoded = *<#field_type
-                        as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
+                    let decoded = *<#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::decode(
                             &sequence[..len]
                         )?;
                     (decoded, &sequence[len..])
