@@ -435,6 +435,78 @@ mod tests {
     }
 
     #[test]
+    fn get_many_ordering_of_outputs() {
+        let db = get_test_db();
+        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
+            RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
+
+        delegated_db_vec_a.push(1000);
+        delegated_db_vec_a.push(2000);
+        delegated_db_vec_a.push(3000);
+
+        // Test `get_many` ordering of outputs
+        assert_eq!(
+            vec![1000, 2000, 3000],
+            delegated_db_vec_a.get_many(&[0, 1, 2])
+        );
+        assert_eq!(
+            vec![2000, 3000, 1000],
+            delegated_db_vec_a.get_many(&[1, 2, 0])
+        );
+        assert_eq!(
+            vec![3000, 1000, 2000],
+            delegated_db_vec_a.get_many(&[2, 0, 1])
+        );
+        assert_eq!(
+            vec![2000, 1000, 3000],
+            delegated_db_vec_a.get_many(&[1, 0, 2])
+        );
+        assert_eq!(
+            vec![3000, 2000, 1000],
+            delegated_db_vec_a.get_many(&[2, 1, 0])
+        );
+        assert_eq!(
+            vec![1000, 3000, 2000],
+            delegated_db_vec_a.get_many(&[0, 2, 1])
+        );
+
+        // Persist
+        let mut write_batch = WriteBatch::new();
+        delegated_db_vec_a.pull_queue(&mut write_batch);
+        assert!(
+            db.lock().unwrap().write(write_batch, true).is_ok(),
+            "DB write must succeed"
+        );
+        assert_eq!(3, delegated_db_vec_a.persisted_length());
+
+        // Check ordering after persisting
+        assert_eq!(
+            vec![1000, 2000, 3000],
+            delegated_db_vec_a.get_many(&[0, 1, 2])
+        );
+        assert_eq!(
+            vec![2000, 3000, 1000],
+            delegated_db_vec_a.get_many(&[1, 2, 0])
+        );
+        assert_eq!(
+            vec![3000, 1000, 2000],
+            delegated_db_vec_a.get_many(&[2, 0, 1])
+        );
+        assert_eq!(
+            vec![2000, 1000, 3000],
+            delegated_db_vec_a.get_many(&[1, 0, 2])
+        );
+        assert_eq!(
+            vec![3000, 2000, 1000],
+            delegated_db_vec_a.get_many(&[2, 1, 0])
+        );
+        assert_eq!(
+            vec![1000, 3000, 2000],
+            delegated_db_vec_a.get_many(&[0, 2, 1])
+        );
+    }
+
+    #[test]
     fn delegated_vec_pbt() {
         let (mut persisted_vector, mut normal_vector, db) =
             get_persisted_vec_with_length(10000, "vec 1");
@@ -454,10 +526,15 @@ mod tests {
                 }
                 2 => {
                     let index = rng.gen_range(0..normal_vector.len());
+                    assert_eq!(Vec::<u64>::default(), persisted_vector.get_many(&[]));
                     assert_eq!(normal_vector[index], persisted_vector.get(index as u64));
                     assert_eq!(
                         vec![normal_vector[index]],
                         persisted_vector.get_many(&[index as u64])
+                    );
+                    assert_eq!(
+                        vec![normal_vector[index], normal_vector[index]],
+                        persisted_vector.get_many(&[index as u64, index as u64])
                     );
                 }
                 3 => {
