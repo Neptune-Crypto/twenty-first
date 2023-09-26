@@ -1,15 +1,13 @@
+use itertools::Itertools;
+use rusty_leveldb::{WriteBatch, DB};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
     sync::{Arc, Mutex},
 };
 
-use itertools::Itertools;
-use rusty_leveldb::{WriteBatch, DB};
-
-use crate::shared_math::b_field_element::BFieldElement;
-
 use super::storage_vec::{Index, StorageVec};
+use crate::shared_math::b_field_element::BFieldElement;
 
 pub enum WriteOperation<ParentKey, ParentValue> {
     Write(ParentKey, ParentValue),
@@ -109,14 +107,14 @@ where
     fn len(&self) -> Index {
         let current_length = self
             .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (len)")
+            .expect("Could not get lock on DbtVec as StorageVec (len 1)")
             .current_length;
         if let Some(length) = current_length {
             return length;
         }
         let persisted_length = self
             .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (len)")
+            .expect("Could not get lock on DbtVec as StorageVec (len 2)")
             .persisted_length();
         if let Some(length) = persisted_length {
             length
@@ -175,19 +173,22 @@ where
         val.into()
     }
 
+    /// Fetch multiple elements from a `DbtVec` and return the elements matching the order
+    /// of the input indices.
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        assert!(
-            indices.iter().all(|x| *x < self.len()),
-            "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
-            self.len(),
-            self.lock()
-                .expect("Could not get lock on DbtVec as StorageVec (get_many 1)")
-                .name
-        );
-
+        let self_length = self.len();
         let self_lock = self
             .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (get_many 2)");
+            .expect("Could not get lock on DbtVec as StorageVec (get_many 1)");
+
+        // Do *not* refer to `self` after this point, instead use `self_lock`, as e.g.
+        // `self.len()` attempts to acquire the same lock that `self_lock` has.
+        assert!(
+            indices.iter().all(|x| *x < self_length),
+            "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
+            self_length,
+            self_lock.name
+        );
 
         // First, get all possible values from cache
         let mut res = HashMap::with_capacity(indices.len());
@@ -212,28 +213,24 @@ where
         let mut reader = self_lock
             .reader
             .lock()
-            .expect("Could not get lock on DbtVec object (get_many 3).");
+            .expect("Could not get lock on StorageReader object (get_many 3).");
 
         let mut remaining_indices = vec![];
         let mut keys_for_remaining_indices = vec![];
         for (index, index_count) in indices.iter().zip(0u64..) {
             if !res.contains_key(&index_count) {
-                let key = self_lock.get_index_key(*index);
-                remaining_indices.push((index_count, key));
+                remaining_indices.push(index_count);
                 keys_for_remaining_indices.push(self_lock.get_index_key(*index));
             }
         }
 
         res.extend(
-            remaining_indices
-                .into_iter()
-                .map(|(index_count, _key)| index_count)
-                .zip_eq(
-                    reader
-                        .get_many(&keys_for_remaining_indices)
-                        .into_iter()
-                        .map(|x| x.unwrap().into()),
-                ),
+            remaining_indices.into_iter().zip_eq(
+                reader
+                    .get_many(&keys_for_remaining_indices)
+                    .into_iter()
+                    .map(|x| x.unwrap().into()),
+            ),
         );
 
         // Convert resulting hashmap to a list of tuples to allow for a sorted
@@ -740,6 +737,8 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
 #[cfg(test)]
 mod tests {
 
+    use crate::shared_math::other::random_elements;
+
     use super::*;
 
     #[derive(Default, PartialEq, Eq, Clone, Debug)]
@@ -926,6 +925,58 @@ mod tests {
         );
         assert_eq!(new_vector.get_many(&[]), vec![]);
         assert_eq!(new_vector.get_many(&[3]), vec![new_vector.get(3)]);
+    }
+
+    #[test]
+    fn test_dbtcvecs_get_many() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let mut vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
+
+        // initialize
+        rusty_storage.restore_or_new();
+
+        // populate
+        const TEST_LIST_LENGTH: u8 = 105;
+        for i in 0u8..TEST_LIST_LENGTH {
+            vector.push(S(vec![i, i, i]));
+        }
+
+        let read_indices: Vec<u64> = random_elements::<u64>(30)
+            .into_iter()
+            .map(|x| x % TEST_LIST_LENGTH as u64)
+            .collect();
+        let values = vector.get_many(&read_indices);
+        assert!(read_indices
+            .iter()
+            .zip(values)
+            .all(|(index, value)| value == S(vec![*index as u8, *index as u8, *index as u8])));
+
+        // Mutate some indices
+        let mutate_indices: Vec<u64> = random_elements::<u64>(30)
+            .into_iter()
+            .map(|x| x % TEST_LIST_LENGTH as u64)
+            .collect();
+        for index in mutate_indices.iter() {
+            vector.set(
+                *index,
+                S(vec![*index as u8 + 1, *index as u8 + 1, *index as u8 + 1]),
+            )
+        }
+
+        let new_values = vector.get_many(&read_indices);
+        for (value, index) in new_values.into_iter().zip(read_indices) {
+            if mutate_indices.contains(&index) {
+                assert_eq!(
+                    S(vec![index as u8 + 1, index as u8 + 1, index as u8 + 1]),
+                    value
+                )
+            } else {
+                assert_eq!(S(vec![index as u8, index as u8, index as u8]), value)
+            }
+        }
     }
 
     #[test]
