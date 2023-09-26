@@ -4,6 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use itertools::Itertools;
 use rusty_leveldb::{WriteBatch, DB};
 
 use crate::shared_math::b_field_element::BFieldElement;
@@ -21,6 +22,10 @@ pub trait DbTable<ParentKey, ParentValue> {
 }
 
 pub trait StorageReader<ParentKey, ParentValue> {
+    /// Return multiple values from storage, in the same order as the input keys
+    fn get_many(&mut self, keys: &[ParentKey]) -> Vec<Option<ParentValue>>;
+
+    /// Return a single value from storage
     fn get(&mut self, key: ParentKey) -> Option<ParentValue>;
 }
 
@@ -168,6 +173,76 @@ where
                 )
             });
         val.into()
+    }
+
+    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        assert!(
+            indices.iter().all(|x| *x < self.len()),
+            "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
+            self.len(),
+            self.lock()
+                .expect("Could not get lock on DbtVec as StorageVec (get_many 1)")
+                .name
+        );
+
+        let self_lock = self
+            .lock()
+            .expect("Could not get lock on DbtVec as StorageVec (get_many 2)");
+
+        // First, get all possible values from cache
+        let mut res = HashMap::with_capacity(indices.len());
+        for (index, index_count) in indices.iter().zip(0u64..) {
+            if self_lock.cache.contains_key(index) {
+                let value = self_lock.cache.get(index).unwrap().clone();
+                res.insert(index_count, value);
+            }
+        }
+
+        // Early return if all values were found in cache
+        if res.len() == indices.len() {
+            let mut indices_and_values = res.into_iter().collect_vec();
+            indices_and_values.sort_unstable_by_key(|(index_count, _value)| *index_count);
+            return indices_and_values
+                .into_iter()
+                .map(|(_index_count, value)| value)
+                .collect();
+        }
+
+        // Get remaining values from persistent storage
+        let mut reader = self_lock
+            .reader
+            .lock()
+            .expect("Could not get lock on DbtVec object (get_many 3).");
+
+        let mut remaining_indices = vec![];
+        let mut keys_for_remaining_indices = vec![];
+        for (index, index_count) in indices.iter().zip(0u64..) {
+            if !res.contains_key(&index_count) {
+                let key = self_lock.get_index_key(*index);
+                remaining_indices.push((index_count, key));
+                keys_for_remaining_indices.push(self_lock.get_index_key(*index));
+            }
+        }
+
+        res.extend(
+            remaining_indices
+                .into_iter()
+                .map(|(index_count, _key)| index_count)
+                .zip_eq(
+                    reader
+                        .get_many(&keys_for_remaining_indices)
+                        .into_iter()
+                        .map(|x| x.unwrap().into()),
+                ),
+        );
+
+        // Convert resulting hashmap to a list of tuples to allow for a sorted
+        // result to be returned. The result is sorted such that the output matches
+        // the ordering of the requested indices.
+        let mut res = res.into_iter().collect_vec();
+        res.sort_unstable_by_key(|(index_count, _)| *index_count);
+
+        res.into_iter().map(|(_key, value)| value).collect()
     }
 
     fn set(&mut self, index: Index, value: T) {
@@ -557,6 +632,17 @@ impl StorageReader<RustyKey, RustyValue> for RustyReader {
             .get(&key.0)
             .map(RustyValue)
     }
+
+    fn get_many(&mut self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
+        let mut lock = self.db.lock().expect("Could not get lock");
+
+        let mut res = vec![];
+        for key in keys {
+            res.push(lock.get(&key.0).map(RustyValue));
+        }
+
+        res
+    }
 }
 
 /// Database schema and tables logic for RustyLevelDB. You probably
@@ -635,9 +721,19 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
     fn get(&mut self, key: RustyKey) -> Option<RustyValue> {
         self.db
             .lock()
-            .expect("singleton::get: could not get lock on database (for reading)")
+            .expect("get: could not get lock on database (for reading)")
             .get(&key.0)
             .map(RustyValue)
+    }
+
+    fn get_many(&mut self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
+        let mut db_lock = self
+            .db
+            .lock()
+            .expect("get_many: could not get lock on database (for reading)");
+        keys.iter()
+            .map(|key| db_lock.get(&key.0).map(RustyValue))
+            .collect()
     }
 }
 
@@ -744,13 +840,39 @@ mod tests {
         vector.push(S([7u8].to_vec()));
         vector.push(S([8u8].to_vec()));
 
-        // test
+        // test `get`
         assert_eq!(vector.get(0), S([1u8].to_vec()));
         assert_eq!(vector.get(1), S([3u8].to_vec()));
         assert_eq!(vector.get(2), S([4u8].to_vec()));
         assert_eq!(vector.get(3), S([7u8].to_vec()));
         assert_eq!(vector.get(4), S([8u8].to_vec()));
         assert_eq!(vector.len(), 5);
+
+        // test `get_many`
+        assert_eq!(
+            vector.get_many(&[0, 2, 3]),
+            vec![vector.get(0), vector.get(2), vector.get(3)]
+        );
+        assert_eq!(
+            vector.get_many(&[2, 3, 0]),
+            vec![vector.get(2), vector.get(3), vector.get(0)]
+        );
+        assert_eq!(
+            vector.get_many(&[3, 0, 2]),
+            vec![vector.get(3), vector.get(0), vector.get(2)]
+        );
+        assert_eq!(
+            vector.get_many(&[0, 1, 2, 3, 4]),
+            vec![
+                vector.get(0),
+                vector.get(1),
+                vector.get(2),
+                vector.get(3),
+                vector.get(4),
+            ]
+        );
+        assert_eq!(vector.get_many(&[]), vec![]);
+        assert_eq!(vector.get_many(&[3]), vec![vector.get(3)]);
 
         // persist
         rusty_storage.persist();
@@ -782,6 +904,28 @@ mod tests {
         assert_eq!(new_vector.get(2), S([3u8].to_vec()));
         assert_eq!(new_vector.get(3), S([7u8].to_vec()));
         assert_eq!(new_vector.len(), 4);
+
+        // test `get_many`, ensure that output matches input ordering
+        assert_eq!(new_vector.get_many(&[2]), vec![new_vector.get(2)]);
+        assert_eq!(
+            new_vector.get_many(&[3, 1, 0]),
+            vec![new_vector.get(3), new_vector.get(1), new_vector.get(0)]
+        );
+        assert_eq!(
+            new_vector.get_many(&[0, 2, 3]),
+            vec![new_vector.get(0), new_vector.get(2), new_vector.get(3)]
+        );
+        assert_eq!(
+            new_vector.get_many(&[0, 1, 2, 3]),
+            vec![
+                new_vector.get(0),
+                new_vector.get(1),
+                new_vector.get(2),
+                new_vector.get(3),
+            ]
+        );
+        assert_eq!(new_vector.get_many(&[]), vec![]);
+        assert_eq!(new_vector.get_many(&[3]), vec![new_vector.get(3)]);
     }
 
     #[test]
@@ -825,16 +969,41 @@ mod tests {
         assert_eq!(vector1.get(2), S([4u8].to_vec()));
         assert_eq!(vector1.get(3), S([7u8].to_vec()));
         assert_eq!(vector1.get(4), S([8u8].to_vec()));
+        assert_eq!(
+            vector1.get_many(&[2, 0, 3]),
+            vec![vector1.get(2), vector1.get(0), vector1.get(3)]
+        );
+        assert_eq!(
+            vector1.get_many(&[2, 3, 1]),
+            vec![vector1.get(2), vector1.get(3), vector1.get(1)]
+        );
         assert_eq!(vector1.len(), 5);
         assert_eq!(vector2.get(0), S([1u8].to_vec()));
         assert_eq!(vector2.get(1), S([3u8].to_vec()));
         assert_eq!(vector2.get(2), S([3u8].to_vec()));
         assert_eq!(vector2.get(3), S([7u8].to_vec()));
+        assert_eq!(
+            vector2.get_many(&[0, 1, 2]),
+            vec![vector2.get(0), vector2.get(1), vector2.get(2)]
+        );
+        assert_eq!(vector2.get_many(&[]), vec![]);
+        assert_eq!(
+            vector2.get_many(&[1, 2]),
+            vec![vector2.get(1), vector2.get(2)]
+        );
+        assert_eq!(
+            vector2.get_many(&[2, 1]),
+            vec![vector2.get(2), vector2.get(1)]
+        );
         assert_eq!(vector2.len(), 4);
         assert_eq!(singleton.get(), singleton_value);
 
         // persist and drop
         rusty_storage.persist();
+        assert_eq!(
+            vector2.get_many(&[2, 1]),
+            vec![vector2.get(2), vector2.get(1)]
+        );
         rusty_storage.close();
 
         // restore from disk
@@ -857,5 +1026,30 @@ mod tests {
         assert_eq!(new_vector2.get(3), S([7u8].to_vec()));
         assert_eq!(new_vector2.len(), 4);
         assert_eq!(singleton.get(), singleton_value);
+
+        // Test `get_many` for a restored DB
+        assert_eq!(
+            new_vector2.get_many(&[2, 1]),
+            vec![new_vector2.get(2), new_vector2.get(1)]
+        );
+        assert_eq!(
+            new_vector2.get_many(&[0, 1]),
+            vec![new_vector2.get(0), new_vector2.get(1)]
+        );
+        assert_eq!(
+            new_vector2.get_many(&[1, 0]),
+            vec![new_vector2.get(1), new_vector2.get(0)]
+        );
+        assert_eq!(
+            new_vector2.get_many(&[0, 1, 2, 3]),
+            vec![
+                new_vector2.get(0),
+                new_vector2.get(1),
+                new_vector2.get(2),
+                new_vector2.get(3),
+            ]
+        );
+        assert_eq!(new_vector2.get_many(&[2]), vec![new_vector2.get(2),]);
+        assert_eq!(new_vector2.get_many(&[]), vec![]);
     }
 }

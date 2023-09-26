@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use itertools::Itertools;
 use rusty_leveldb::{WriteBatch, DB};
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -12,6 +13,7 @@ pub trait StorageVec<T> {
     fn is_empty(&self) -> bool;
     fn len(&self) -> Index;
     fn get(&self, index: Index) -> T;
+    fn get_many(&self, indices: &[Index]) -> Vec<T>;
     fn set(&mut self, index: Index, value: T);
     fn pop(&mut self) -> Option<T>;
     fn push(&mut self, value: T);
@@ -64,6 +66,62 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
             )
         });
         bincode::deserialize(&db_val).unwrap()
+    }
+
+    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        assert!(
+            indices.iter().all(|x| *x < self.len()),
+            "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
+            self.len(),
+            self.name
+        );
+
+        // First, try cache for all values
+        let mut res: HashMap<u64, T> = HashMap::with_capacity(indices.len());
+        for (index, index_count) in indices.iter().zip(0u64..) {
+            if self.cache.contains_key(index) {
+                res.insert(index_count, self.cache[index].clone());
+            }
+        }
+
+        // Return if all values were found in cache
+        if res.len() == indices.len() {
+            let mut indices_and_values = res.into_iter().collect_vec();
+            indices_and_values.sort_unstable_by_key(|(index_count, _value)| *index_count);
+            return indices_and_values
+                .into_iter()
+                .map(|(_index_count, value)| value)
+                .collect();
+        }
+
+        let mut remaining_indices = vec![];
+        let mut keys_for_remaining_indices = vec![];
+        for (index, index_count) in indices.iter().zip(0u64..) {
+            if !res.contains_key(&index_count) {
+                let key = self.get_index_key(*index);
+                remaining_indices.push((index_count, key));
+                keys_for_remaining_indices.push(self.get_index_key(*index));
+            }
+        }
+
+        let mut db_lock = self.db.lock().expect("get_many: db-locking must succeed");
+        for (index_count, key) in remaining_indices {
+            let db_val = db_lock.get(&key).unwrap_or_else(|| {
+                panic!(
+                    "Element with index {} does not exist in {}. This should not happen",
+                    indices[index_count as usize], self.name
+                )
+            });
+            res.insert(index_count, bincode::deserialize(&db_val).unwrap());
+        }
+
+        // Convert resulting hashmap to a list of tuples to allow for a sorted
+        // result to be returned. The result is sorted such that the output matches
+        // the ordering of the requested indices.
+        let mut res = res.into_iter().collect_vec();
+        res.sort_unstable_by_key(|(index_count, _)| *index_count);
+
+        res.into_iter().map(|(_key, value)| value).collect()
     }
 
     fn set(&mut self, index: Index, value: T) {
@@ -221,6 +279,13 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
         self.0[index as usize].clone()
     }
 
+    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        indices
+            .iter()
+            .map(|index| self.0[*index as usize].clone())
+            .collect()
+    }
+
     fn set(&mut self, index: Index, value: T) {
         self.0[index as usize] = value;
     }
@@ -290,12 +355,20 @@ mod tests {
         assert_eq!(2, delegated_db_vec.len());
         assert!(!delegated_db_vec.is_empty());
 
-        // Check `get` and `set`
+        // Check `get`, `set`, and `get_many`
         assert_eq!([44; 13], delegated_db_vec.get(1));
         assert_eq!([42; 13], delegated_db_vec.get(0));
+        assert_eq!(vec![[42; 13], [44; 13]], delegated_db_vec.get_many(&[0, 1]));
+        assert_eq!(vec![[44; 13], [42; 13]], delegated_db_vec.get_many(&[1, 0]));
+        assert_eq!(vec![[42; 13]], delegated_db_vec.get_many(&[0]));
+        assert_eq!(vec![[44; 13]], delegated_db_vec.get_many(&[1]));
+        assert_eq!(Vec::<[u8; 13]>::default(), delegated_db_vec.get_many(&[]));
 
         delegated_db_vec.set(0, [101; 13]);
         delegated_db_vec.set(1, [200; 13]);
+        assert_eq!(vec![[101; 13]], delegated_db_vec.get_many(&[0]));
+        assert_eq!(vec![[200; 13]], delegated_db_vec.get_many(&[1]));
+        assert_eq!(Vec::<[u8; 13]>::default(), delegated_db_vec.get_many(&[]));
 
         // Pop two values, check length and return value of further pops
         assert_eq!([200; 13], delegated_db_vec.pop().unwrap());
@@ -304,6 +377,7 @@ mod tests {
         assert!(delegated_db_vec.pop().is_none());
         assert_eq!(0, delegated_db_vec.len());
         assert!(delegated_db_vec.pop().is_none());
+        assert_eq!(Vec::<[u8; 13]>::default(), delegated_db_vec.get_many(&[]));
     }
 
     #[test]
@@ -381,6 +455,10 @@ mod tests {
                 2 => {
                     let index = rng.gen_range(0..normal_vector.len());
                     assert_eq!(normal_vector[index], persisted_vector.get(index as u64));
+                    assert_eq!(
+                        vec![normal_vector[index]],
+                        persisted_vector.get_many(&[index as u64])
+                    );
                 }
                 3 => {
                     let value = rng.next_u64();
@@ -398,6 +476,12 @@ mod tests {
             assert_eq!(*nvi, persisted_vector.get(i as u64));
         }
 
+        // Check equality using `get_many`
+        assert_eq!(
+            normal_vector,
+            persisted_vector.get_many(&(0..normal_vector.len() as u64).collect_vec())
+        );
+
         // Check equality after persisting updates
         let mut write_batch = WriteBatch::new();
         persisted_vector.pull_queue(&mut write_batch);
@@ -414,6 +498,12 @@ mod tests {
         for (i, nvi) in normal_vector.iter().enumerate() {
             assert_eq!(*nvi, persisted_vector.get(i as u64));
         }
+
+        // Check equality using `get_many`
+        assert_eq!(
+            normal_vector,
+            persisted_vector.get_many(&(0..normal_vector.len() as u64).collect_vec())
+        );
     }
 
     #[should_panic(
@@ -423,6 +513,15 @@ mod tests {
     fn panic_on_out_of_bounds_get() {
         let (delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
         delegated_db_vec.get(3);
+    }
+
+    #[should_panic(
+        expected = "Out-of-bounds. Got indices [3] but length was 1. persisted vector name: unit test vec 0"
+    )]
+    #[test]
+    fn panic_on_out_of_bounds_get_many() {
+        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        delegated_db_vec.get_many(&[3]);
     }
 
     #[should_panic(
