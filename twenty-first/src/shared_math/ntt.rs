@@ -270,6 +270,7 @@ mod fast_ntt_attempt_tests {
     use num_traits::{One, Zero};
     use proptest::collection::vec;
     use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::random_elements;
@@ -430,7 +431,7 @@ mod fast_ntt_attempt_tests {
 
     proptest! {
         #[test]
-        fn ntt_on_input_of_length_one(bfe: BFieldElement) {
+        fn ntt_on_input_of_length_one(bfe in arb::<BFieldElement>()) {
             let mut test_vector = vec![bfe];
             let root_of_unity = BFieldElement::one();
 
@@ -441,7 +442,7 @@ mod fast_ntt_attempt_tests {
 
     prop_compose! {
         fn bfield_element_vec_of_length_some_power_of_two()(log_2_vector_length in 0_usize..20)(
-            bfe_vector in vec(BFieldElement::arbitrary(), 1 << log_2_vector_length),
+            bfe_vector in vec(arb::<BFieldElement>(), 1 << log_2_vector_length),
         ) -> Vec<BFieldElement> {
             bfe_vector
         }

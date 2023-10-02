@@ -7,6 +7,7 @@ use num_traits::{One, Zero};
 use rand_distr::{Distribution, Standard};
 use std::hash::Hash;
 
+use arbitrary::{Arbitrary, Unstructured};
 use phf::phf_map;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -67,6 +68,12 @@ impl GetSize for BFieldElement {
 
     fn get_heap_size(&self) -> usize {
         0
+    }
+}
+
+impl<'a> Arbitrary<'a> for BFieldElement {
+    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+        u.arbitrary().map(BFieldElement::new)
     }
 }
 
@@ -548,16 +555,8 @@ mod b_prime_field_element_test {
     use crate::shared_math::polynomial::Polynomial;
     use itertools::izip;
     use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
-
-    impl Arbitrary for BFieldElement {
-        type Parameters = ();
-        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-            (0..BFieldElement::P).prop_map(BFieldElement::new).boxed()
-        }
-
-        type Strategy = BoxedStrategy<Self>;
-    }
 
     prop_compose! {
         fn arbitrary_non_zero_bfield_element()(x in 1..BFieldElement::P) -> BFieldElement {
@@ -567,14 +566,14 @@ mod b_prime_field_element_test {
 
     proptest! {
         #[test]
-        fn get_size(bfe: BFieldElement) {
+        fn get_size(bfe in arb::<BFieldElement>()) {
             prop_assert_eq!(8, bfe.get_size());
         }
     }
 
     proptest! {
         #[test]
-        fn zero_is_neutral_element_for_addition(bfe: BFieldElement) {
+        fn zero_is_neutral_element_for_addition(bfe in arb::<BFieldElement>()) {
             let zero = BFieldElement::zero();
             prop_assert_eq!(bfe + zero, bfe);
         }
@@ -582,7 +581,7 @@ mod b_prime_field_element_test {
 
     proptest! {
         #[test]
-        fn one_is_neutral_element_for_multiplication(bfe: BFieldElement) {
+        fn one_is_neutral_element_for_multiplication(bfe in arb::<BFieldElement>()) {
             let one = BFieldElement::one();
             prop_assert_eq!(bfe * one, bfe);
         }
@@ -590,14 +589,20 @@ mod b_prime_field_element_test {
 
     proptest! {
         #[test]
-        fn addition_is_commutative(element_0: BFieldElement, element_1: BFieldElement) {
+        fn addition_is_commutative(
+            element_0 in arb::<BFieldElement>(),
+            element_1 in arb::<BFieldElement>(),
+        ) {
             prop_assert_eq!(element_0 + element_1, element_1 + element_0);
         }
     }
 
     proptest! {
         #[test]
-        fn multiplication_is_commutative(element_0: BFieldElement, element_1: BFieldElement) {
+        fn multiplication_is_commutative(
+            element_0 in arb::<BFieldElement>(),
+            element_1 in arb::<BFieldElement>(),
+        ) {
             prop_assert_eq!(element_0 * element_1, element_1 * element_0);
         }
     }
@@ -605,9 +610,9 @@ mod b_prime_field_element_test {
     proptest! {
         #[test]
         fn addition_is_associative(
-            element_0: BFieldElement,
-            element_1: BFieldElement,
-            element_2: BFieldElement
+            element_0 in arb::<BFieldElement>(),
+            element_1 in arb::<BFieldElement>(),
+            element_2 in arb::<BFieldElement>(),
         ) {
             prop_assert_eq!(
                 (element_0 + element_1) + element_2,
@@ -619,9 +624,9 @@ mod b_prime_field_element_test {
     proptest! {
         #[test]
         fn multiplication_is_associative(
-            element_0: BFieldElement,
-            element_1: BFieldElement,
-            element_2: BFieldElement
+            element_0 in arb::<BFieldElement>(),
+            element_1 in arb::<BFieldElement>(),
+            element_2 in arb::<BFieldElement>(),
         ) {
             prop_assert_eq!(
                 (element_0 * element_1) * element_2,
@@ -633,9 +638,9 @@ mod b_prime_field_element_test {
     proptest! {
         #[test]
         fn multiplication_distributes_over_addition(
-            element_0: BFieldElement,
-            element_1: BFieldElement,
-            element_2: BFieldElement,
+            element_0 in arb::<BFieldElement>(),
+            element_1 in arb::<BFieldElement>(),
+            element_2 in arb::<BFieldElement>(),
         ) {
             prop_assert_eq!(
                 element_0 * (element_1 + element_2),
@@ -700,7 +705,7 @@ mod b_prime_field_element_test {
 
     proptest! {
         #[test]
-        fn not_one_is_not_one(bfe: BFieldElement) {
+        fn not_one_is_not_one(bfe in arb::<BFieldElement>()) {
             if bfe.value() == 1 {
                 return Ok(());
             }
@@ -730,7 +735,7 @@ mod b_prime_field_element_test {
 
     proptest! {
         #[test]
-        fn byte_array_conversion(bfe: BFieldElement) {
+        fn byte_array_conversion(bfe in arb::<BFieldElement>()) {
             let array: [u8; 8] = bfe.into();
             let bfe_recalculated: BFieldElement = array.into();
             prop_assert_eq!(bfe, bfe_recalculated);
@@ -769,14 +774,14 @@ mod b_prime_field_element_test {
 
     proptest! {
         #[test]
-        fn lift_then_unlift_preserves_element(bfe: BFieldElement) {
+        fn lift_then_unlift_preserves_element(bfe in arb::<BFieldElement>()) {
             prop_assert_eq!(Some(bfe), bfe.lift().unlift());
         }
     }
 
     proptest! {
         #[test]
-        fn increment(mut bfe: BFieldElement) {
+        fn increment(mut bfe in arb::<BFieldElement>()) {
             let old_value = bfe.value();
             bfe.increment();
             let expected_value = (old_value + 1) % BFieldElement::P;
@@ -793,7 +798,7 @@ mod b_prime_field_element_test {
 
     proptest! {
         #[test]
-        fn decrement(mut bfe: BFieldElement) {
+        fn decrement(mut bfe in arb::<BFieldElement>()) {
             let old_value = bfe.value();
             bfe.decrement();
             let expected_value = match old_value.checked_sub(1) {
@@ -819,7 +824,7 @@ mod b_prime_field_element_test {
 
     proptest! {
         #[test]
-        fn batch_inversion(bfes: Vec<BFieldElement>) {
+        fn batch_inversion(bfes in arb::<Vec<BFieldElement>>()) {
             let bfes_inv = BFieldElement::batch_inversion(bfes.clone());
             prop_assert_eq!(bfes.len(), bfes_inv.len());
             for (bfe, bfe_inv) in izip!(bfes, bfes_inv) {
