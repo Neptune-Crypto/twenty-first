@@ -8,7 +8,7 @@ description = "Derive macro for BFieldCodec."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-syn = { version = "^1", features = ["full", "derive"] }
+syn = { version = "^2", features = ["full", "derive"] }
 quote = "1.0"
 
 [lib]
