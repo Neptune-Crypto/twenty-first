@@ -48,7 +48,9 @@ impl Tip5State {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary,
+)]
 pub struct Tip5 {}
 
 /// The lookup table with a high algebraic degree used in the TIP-5 permutation. To verify its
