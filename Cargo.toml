@@ -1,5 +1,6 @@
 [workspace]
 members = ["twenty-first", "bfieldcodec_derive"]
+resolver = "2"
 
 [profile.dev]
 opt-level = 0
