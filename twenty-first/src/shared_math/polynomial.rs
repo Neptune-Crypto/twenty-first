@@ -2,6 +2,7 @@ use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::other::{log_2_floor, roundup_npo2};
 use crate::shared_math::traits::{FiniteField, ModPowU32};
 use crate::utils::has_unique_elements;
+use arbitrary::Arbitrary;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
 use num_bigint::BigInt;
@@ -91,7 +92,7 @@ impl<FF: FiniteField> One for Polynomial<FF> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Arbitrary)]
 pub struct Polynomial<FF: FiniteField> {
     pub coefficients: Vec<FF>,
 }
