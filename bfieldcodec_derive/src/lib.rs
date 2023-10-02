@@ -4,7 +4,6 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::spanned::Spanned;
 
 /// Derives `BFieldCodec` for structs.
 ///
@@ -146,80 +145,36 @@ fn extract_ignored_generics_list(list: &[syn::Attribute]) -> Vec<syn::Ident> {
 }
 
 fn extract_ignored_generics(attr: &syn::Attribute) -> Vec<syn::Ident> {
-    let bfield_codec_ident = syn::Ident::new("bfield_codec", attr.span());
-    let ignore_ident = syn::Ident::new("ignore", attr.span());
-
-    let Ok(meta) = attr.parse_meta() else {
-        return vec![];
-    };
-    let Some(ident) = meta.path().get_ident() else {
-        return vec![];
-    };
-    if ident != &bfield_codec_ident {
+    if !attr.path().is_ident("bfield_codec") {
         return vec![];
     }
-    let syn::Meta::List(list) = meta else {
-        return vec![];
-    };
 
     let mut ignored_generics = vec![];
-    for nested in list.nested.iter() {
-        let syn::NestedMeta::Meta(nmeta) = nested else {
-            continue;
-        };
-        let Some(ident) = nmeta.path().get_ident() else {
-            panic!("Invalid attribute syntax! (no ident)");
-        };
-        // we only have one attribute flag: "ignore"
-        if ident != &ignore_ident {
-            panic!("Invalid attribute syntax! Unknown name {ident}");
-        }
-        let syn::Meta::List(list) = nmeta else {
-            panic!("Invalid attribute syntax! Expected a list");
-        };
-
-        for nested in list.nested.iter() {
-            let syn::NestedMeta::Meta(syn::Meta::Path(path)) = nested else {
-                continue;
-            };
-            let Some(ident) = path.get_ident() else {
-                panic!("Invalid attribute syntax! (no ident)")
-            };
+    attr.parse_nested_meta(|meta| match meta.path.get_ident() {
+        Some(ident) if ident == "ignore" => {
             ignored_generics.push(ident.to_owned());
+            Ok(())
         }
-    }
+        Some(ident) => Err(meta.error(format!("Unknown identifier \"{ident}\"."))),
+        _ => Err(meta.error("Expected an identifier.")),
+    })
+    .unwrap();
     ignored_generics
 }
 
 fn field_is_ignored(field: &syn::Field) -> bool {
-    let bfield_codec_ident = syn::Ident::new("bfield_codec", field.span());
-    let ignore_ident = syn::Ident::new("ignore", field.span());
-
     for attribute in field.attrs.iter() {
-        let Ok(meta) = attribute.parse_meta() else {
-            continue;
-        };
-        let Some(ident) = meta.path().get_ident() else {
-            continue;
-        };
-        if ident != &bfield_codec_ident {
+        if !attribute.path().is_ident("bfield_codec") {
             continue;
         }
-        let syn::Meta::List(list) = meta else {
-            panic!("Attribute {ident} must be of type `List`.");
-        };
-        for arg in list.nested.iter() {
-            let syn::NestedMeta::Meta(arg_meta) = arg else {
-                continue;
-            };
-            let Some(arg_ident) = arg_meta.path().get_ident() else {
-                panic!("Invalid attribute syntax! (no ident)");
-            };
-            if arg_ident != &ignore_ident {
-                panic!("Invalid attribute syntax! Unknown name {arg_ident}");
-            }
-            return true;
-        }
+        attribute
+            .parse_nested_meta(|meta| match meta.path.get_ident() {
+                Some(ident) if ident == "ignore" => Ok(()),
+                Some(ident) => Err(meta.error(format!("Unknown identifier \"{ident}\"."))),
+                _ => Err(meta.error("Expected an identifier.")),
+            })
+            .unwrap();
+        return true;
     }
     false
 }
