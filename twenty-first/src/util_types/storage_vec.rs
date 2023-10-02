@@ -69,6 +69,12 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     }
 
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        fn sort_to_match_requested_index_order<T>(indexed_elements: HashMap<usize, T>) -> Vec<T> {
+            let mut elements = indexed_elements.into_iter().collect_vec();
+            elements.sort_unstable_by_key(|&(index_position, _)| index_position);
+            elements.into_iter().map(|(_, element)| element).collect()
+        }
+
         assert!(
             indices.iter().all(|x| *x < self.len()),
             "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
@@ -76,52 +82,39 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
             self.name
         );
 
-        // First, try cache for all values
-        let mut res: HashMap<u64, T> = HashMap::with_capacity(indices.len());
-        for (index, index_count) in indices.iter().zip(0u64..) {
-            if self.cache.contains_key(index) {
-                res.insert(index_count, self.cache[index].clone());
-            }
+        let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
+            indices
+                .iter()
+                .copied()
+                .enumerate()
+                .partition(|&(_, index)| self.cache.contains_key(&index));
+
+        let mut fetched_elements = HashMap::with_capacity(indices.len());
+        for (index_position, index) in indices_of_elements_in_cache {
+            let element = self.cache[&index].clone();
+            fetched_elements.insert(index_position, element);
         }
 
-        // Return if all values were found in cache
-        if res.len() == indices.len() {
-            let mut indices_and_values = res.into_iter().collect_vec();
-            indices_and_values.sort_unstable_by_key(|(index_count, _value)| *index_count);
-            return indices_and_values
-                .into_iter()
-                .map(|(_index_count, value)| value)
-                .collect();
+        let no_need_to_lock_database = indices_of_elements_not_in_cache.is_empty();
+        if no_need_to_lock_database {
+            return sort_to_match_requested_index_order(fetched_elements);
         }
 
-        let mut remaining_indices = vec![];
-        let mut keys_for_remaining_indices = vec![];
-        for (index, index_count) in indices.iter().zip(0u64..) {
-            if !res.contains_key(&index_count) {
-                let key = self.get_index_key(*index);
-                remaining_indices.push((index_count, key));
-                keys_for_remaining_indices.push(self.get_index_key(*index));
-            }
-        }
+        let mut db_reader = self.db.lock().expect("get_many: db-locking must succeed");
 
-        let mut db_lock = self.db.lock().expect("get_many: db-locking must succeed");
-        for (index_count, key) in remaining_indices {
-            let db_val = db_lock.get(&key).unwrap_or_else(|| {
-                panic!(
-                    "Element with index {} does not exist in {}. This should not happen",
-                    indices[index_count as usize], self.name
-                )
-            });
-            res.insert(index_count, bincode::deserialize(&db_val).unwrap());
-        }
+        let elements_fetched_from_db = indices_of_elements_not_in_cache
+            .iter()
+            .map(|&(_, index)| self.get_index_key(index))
+            .map(|key| db_reader.get(&key).unwrap())
+            .map(|db_element| bincode::deserialize(&db_element).unwrap());
 
-        // Convert resulting hashmap to a list of tuples to allow for a sorted
-        // result to be returned. The result is sorted such that the output matches
-        // the ordering of the requested indices.
-        let mut res = res.into_iter().collect_vec();
-        res.sort_unstable_by_key(|(index_count, _)| *index_count);
+        let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
+            .iter()
+            .map(|&(index_position, _)| index_position)
+            .zip_eq(elements_fetched_from_db);
+        fetched_elements.extend(indexed_fetched_elements_from_db);
 
-        res.into_iter().map(|(_key, value)| value).collect()
+        sort_to_match_requested_index_order(fetched_elements)
     }
 
     fn set(&mut self, index: Index, value: T) {

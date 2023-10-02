@@ -176,6 +176,12 @@ where
     /// Fetch multiple elements from a `DbtVec` and return the elements matching the order
     /// of the input indices.
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        fn sort_to_match_requested_index_order<T>(indexed_elements: HashMap<usize, T>) -> Vec<T> {
+            let mut elements = indexed_elements.into_iter().collect_vec();
+            elements.sort_unstable_by_key(|&(index_position, _)| index_position);
+            elements.into_iter().map(|(_, element)| element).collect()
+        }
+
         let self_length = self.len();
         let self_lock = self
             .lock()
@@ -190,56 +196,45 @@ where
             self_lock.name
         );
 
-        // First, get all possible values from cache
-        let mut res = HashMap::with_capacity(indices.len());
-        for (index, index_count) in indices.iter().zip(0u64..) {
-            if self_lock.cache.contains_key(index) {
-                let value = self_lock.cache.get(index).unwrap().clone();
-                res.insert(index_count, value);
-            }
+        let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
+            indices
+                .iter()
+                .copied()
+                .enumerate()
+                .partition(|&(_, index)| self_lock.cache.contains_key(&index));
+
+        let mut fetched_elements = HashMap::with_capacity(indices.len());
+        for (index_position, index) in indices_of_elements_in_cache {
+            let value = self_lock.cache.get(&index).unwrap().clone();
+            fetched_elements.insert(index_position, value);
         }
 
-        // Early return if all values were found in cache
-        if res.len() == indices.len() {
-            let mut indices_and_values = res.into_iter().collect_vec();
-            indices_and_values.sort_unstable_by_key(|(index_count, _value)| *index_count);
-            return indices_and_values
-                .into_iter()
-                .map(|(_index_count, value)| value)
-                .collect();
+        let no_need_to_lock_database = indices_of_elements_not_in_cache.is_empty();
+        if no_need_to_lock_database {
+            return sort_to_match_requested_index_order(fetched_elements);
         }
 
-        // Get remaining values from persistent storage
-        let mut reader = self_lock
+        let mut db_reader = self_lock
             .reader
             .lock()
             .expect("Could not get lock on StorageReader object (get_many 3).");
 
-        let mut remaining_indices = vec![];
-        let mut keys_for_remaining_indices = vec![];
-        for (index, index_count) in indices.iter().zip(0u64..) {
-            if !res.contains_key(&index_count) {
-                remaining_indices.push(index_count);
-                keys_for_remaining_indices.push(self_lock.get_index_key(*index));
-            }
-        }
+        let keys_for_indices_not_in_cache = indices_of_elements_not_in_cache
+            .iter()
+            .map(|&(_, index)| self_lock.get_index_key(index))
+            .collect_vec();
+        let elements_fetched_from_db = db_reader
+            .get_many(&keys_for_indices_not_in_cache)
+            .into_iter()
+            .map(|x| x.unwrap().into());
 
-        res.extend(
-            remaining_indices.into_iter().zip_eq(
-                reader
-                    .get_many(&keys_for_remaining_indices)
-                    .into_iter()
-                    .map(|x| x.unwrap().into()),
-            ),
-        );
+        let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
+            .iter()
+            .map(|&(index_position, _)| index_position)
+            .zip_eq(elements_fetched_from_db);
+        fetched_elements.extend(indexed_fetched_elements_from_db);
 
-        // Convert resulting hashmap to a list of tuples to allow for a sorted
-        // result to be returned. The result is sorted such that the output matches
-        // the ordering of the requested indices.
-        let mut res = res.into_iter().collect_vec();
-        res.sort_unstable_by_key(|(index_count, _)| *index_count);
-
-        res.into_iter().map(|(_key, value)| value).collect()
+        sort_to_match_requested_index_order(fetched_elements)
     }
 
     fn set(&mut self, index: Index, value: T) {
