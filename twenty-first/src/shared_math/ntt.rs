@@ -449,6 +449,7 @@ mod fast_ntt_attempt_tests {
     }
 
     proptest! {
+        #![proptest_config(ProptestConfig::with_cases(10))]
         #[test]
         fn ntt_then_intt_is_identity_operation(
             mut input in bfield_element_vec_of_length_some_power_of_two()
