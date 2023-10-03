@@ -868,6 +868,18 @@ mod tests {
         assert_eq!(vector.get_many(&[]), vec![]);
         assert_eq!(vector.get_many(&[3]), vec![vector.get(3)]);
 
+        // We allow `get_many` to take repeated indices.
+        assert_eq!(vector.get_many(&[3; 0]), vec![vector.get(3); 0]);
+        assert_eq!(vector.get_many(&[3; 1]), vec![vector.get(3); 1]);
+        assert_eq!(vector.get_many(&[3; 2]), vec![vector.get(3); 2]);
+        assert_eq!(vector.get_many(&[3; 3]), vec![vector.get(3); 3]);
+        assert_eq!(vector.get_many(&[3; 4]), vec![vector.get(3); 4]);
+        assert_eq!(vector.get_many(&[3; 5]), vec![vector.get(3); 5]);
+        assert_eq!(
+            vector.get_many(&[3, 3, 2, 3]),
+            vec![vector.get(3), vector.get(3), vector.get(2), vector.get(3)]
+        );
+
         // persist
         rusty_storage.persist();
 
@@ -920,6 +932,14 @@ mod tests {
         );
         assert_eq!(new_vector.get_many(&[]), vec![]);
         assert_eq!(new_vector.get_many(&[3]), vec![new_vector.get(3)]);
+
+        // We allow `get_many` to take repeated indices.
+        assert_eq!(vector.get_many(&[3; 0]), vec![vector.get(3); 0]);
+        assert_eq!(vector.get_many(&[3; 1]), vec![vector.get(3); 1]);
+        assert_eq!(vector.get_many(&[3; 2]), vec![vector.get(3); 2]);
+        assert_eq!(vector.get_many(&[3; 3]), vec![vector.get(3); 3]);
+        assert_eq!(vector.get_many(&[3; 4]), vec![vector.get(3); 4]);
+        assert_eq!(vector.get_many(&[3; 5]), vec![vector.get(3); 5]);
     }
 
     #[test]
@@ -1097,5 +1117,43 @@ mod tests {
         );
         assert_eq!(new_vector2.get_many(&[2]), vec![new_vector2.get(2),]);
         assert_eq!(new_vector2.get_many(&[]), vec![]);
+    }
+
+    #[should_panic(
+        expected = "Out-of-bounds. Got 2 but length was 2. persisted vector name: test-vector"
+    )]
+    #[test]
+    fn out_of_bounds_using_get() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+
+        // initialize
+        rusty_storage.restore_or_new();
+
+        vector.push(1);
+        vector.push(1);
+        vector.get(2);
+    }
+
+    #[should_panic(
+        expected = "Out-of-bounds. Got indices [0, 0, 0, 1, 1, 2] but length was 2. persisted vector name: test-vector"
+    )]
+    #[test]
+    fn out_of_bounds_using_get_many() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+
+        // initialize
+        rusty_storage.restore_or_new();
+
+        vector.push(1);
+        vector.push(1);
+        vector.get_many(&[0, 0, 0, 1, 1, 2]);
     }
 }

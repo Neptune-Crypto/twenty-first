@@ -360,8 +360,14 @@ mod tests {
         delegated_db_vec.set(0, [101; 13]);
         delegated_db_vec.set(1, [200; 13]);
         assert_eq!(vec![[101; 13]], delegated_db_vec.get_many(&[0]));
-        assert_eq!(vec![[200; 13]], delegated_db_vec.get_many(&[1]));
         assert_eq!(Vec::<[u8; 13]>::default(), delegated_db_vec.get_many(&[]));
+        assert_eq!(vec![[200; 13]], delegated_db_vec.get_many(&[1]));
+        assert_eq!(vec![[200; 13]; 2], delegated_db_vec.get_many(&[1, 1]));
+        assert_eq!(vec![[200; 13]; 3], delegated_db_vec.get_many(&[1, 1, 1]));
+        assert_eq!(
+            vec![[200; 13], [101; 13], [200; 13]],
+            delegated_db_vec.get_many(&[1, 0, 1])
+        );
 
         // Pop two values, check length and return value of further pops
         assert_eq!([200; 13], delegated_db_vec.pop().unwrap());
