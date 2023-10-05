@@ -7,6 +7,7 @@ use std::marker::PhantomData;
 use anyhow::anyhow;
 use anyhow::bail;
 use anyhow::Result;
+use arbitrary::Arbitrary;
 use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
@@ -20,7 +21,7 @@ use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 // be a higher number than 16 when using a faster hash function.
 const PARALLELLIZATION_THRESHOLD: usize = 16;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Arbitrary)]
 pub struct MerkleTree<H>
 where
     H: AlgebraicHasher,

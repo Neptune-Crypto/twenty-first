@@ -1,3 +1,4 @@
+use arbitrary::Arbitrary;
 use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use itertools::Itertools;
@@ -20,7 +21,7 @@ pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;
 pub const NUM_ROUNDS: usize = 5;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Arbitrary)]
 pub struct Tip5State {
     pub state: [BFieldElement; STATE_SIZE],
 }
@@ -47,7 +48,9 @@ impl Tip5State {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary,
+)]
 pub struct Tip5 {}
 
 /// The lookup table with a high algebraic degree used in the TIP-5 permutation. To verify its

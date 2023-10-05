@@ -1,3 +1,4 @@
+use arbitrary::Arbitrary;
 use std::fmt::Debug;
 use std::iter;
 
@@ -30,7 +31,7 @@ pub enum Domain {
 
 pub trait SpongeHasher: Clone + Send + Sync {
     const RATE: usize;
-    type SpongeState: Clone + Debug;
+    type SpongeState: Clone + Debug + for<'a> Arbitrary<'a>;
 
     /// Initialize a sponge state
     fn init() -> Self::SpongeState;
