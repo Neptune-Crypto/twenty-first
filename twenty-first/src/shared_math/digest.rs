@@ -35,19 +35,17 @@ impl GetSize for Digest {
 
 impl PartialOrd for Digest {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        for i in (0..DIGEST_LENGTH).rev() {
-            if self.0[i].value() != other.0[i].value() {
-                return self.0[i].value().partial_cmp(&other.0[i].value());
-            }
-        }
-
-        None
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for Digest {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
+        let Digest(self_inner) = self;
+        let Digest(other_inner) = other;
+        let self_as_u64s = self_inner.iter().rev().map(|bfe| bfe.value());
+        let other_as_u64s = other_inner.iter().rev().map(|bfe| bfe.value());
+        self_as_u64s.cmp(other_as_u64s)
     }
 }
 

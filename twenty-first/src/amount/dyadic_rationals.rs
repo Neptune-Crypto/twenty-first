@@ -1,7 +1,6 @@
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering::{Equal, Greater, Less};
 use std::ops::{Add, Mul, Sub};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -126,36 +125,25 @@ impl Add for DyadicRational {
 
 impl PartialOrd for DyadicRational {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        // Make sure self.exponent is the larger exponent
-        if self.exponent < other.exponent {
-            // Flip result when this function is called recursively with flipped
-            // arguments.
-            return match other.partial_cmp(self) {
-                Some(Greater) => Some(Less),
-                Some(Less) => Some(Greater),
-                _ => Some(Equal),
-            };
-        }
-
-        // Put on same denominator
-        let max_exponent = self.exponent;
-        let min_exponent = other.exponent;
-        let mut shift = max_exponent - min_exponent;
-
-        // Add numerators
-        let mut shifted_other_mantissa = other.mantissa.clone();
-        while !shift.is_zero() {
-            shifted_other_mantissa += shifted_other_mantissa.clone();
-            shift -= 1;
-        }
-
-        self.mantissa.partial_cmp(&shifted_other_mantissa)
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for DyadicRational {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
+        if self.exponent < other.exponent {
+            return other.cmp(self).reverse();
+        }
+
+        // Put on same denominator
+        let max_exponent = self.exponent;
+        let min_exponent = other.exponent;
+        let shift = max_exponent - min_exponent + 1;
+
+        // Add numerators
+        let shifted_other_mantissa = shift * other.mantissa.clone();
+
+        self.mantissa.cmp(&shifted_other_mantissa)
     }
 }
 

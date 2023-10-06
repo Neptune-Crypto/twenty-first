@@ -139,19 +139,15 @@ impl<const N: usize> From<U32s<N>> for [BFieldElement; N] {
 
 impl<const N: usize> PartialOrd for U32s<N> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        for i in (0..N).rev() {
-            if self.values[i] != other.values[i] {
-                return Some(self.values[i].cmp(&other.values[i]));
-            }
-        }
-
-        Some(std::cmp::Ordering::Equal)
+        Some(self.cmp(other))
     }
 }
 
 impl<const N: usize> Ord for U32s<N> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
+        let self_values = self.values.iter().rev();
+        let other_values = other.values.iter().rev();
+        self_values.cmp(other_values)
     }
 }
 
