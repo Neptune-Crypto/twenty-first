@@ -2526,28 +2526,51 @@ mod test_polynomials {
 
     #[test]
     fn fast_coset_evaluate_test() {
-        let _1 = BFieldElement::from(1u64);
-        let _0 = BFieldElement::from(0u64);
-
         // x^5 + x^3
-        let poly = Polynomial::<BFieldElement>::new(vec![_0, _0, _0, _1, _0, _1]);
+        let poly_coefficients = [0, 0, 0, 1, 0, 1].map(BFieldElement::new).to_vec();
+        let poly = Polynomial::<BFieldElement>::new(poly_coefficients);
 
+        let domain_length = 8;
         let offset = BFieldElement::generator();
-        let omega = BFieldElement::primitive_root_of_unity(8).unwrap();
+        let primitive_root = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
 
-        let values = poly.fast_coset_evaluate(offset, omega, 8);
+        let values = poly.fast_coset_evaluate(offset, primitive_root, domain_length);
 
-        let mut domain = vec![_0; 8];
-        domain[0] = offset;
-        for i in 1..8 {
-            domain[i] = domain[i - 1].to_owned() * omega.to_owned();
-        }
-
-        let reinterp = Polynomial::fast_interpolate(&domain, &values, omega, 8);
-        assert_eq!(reinterp, poly);
-
-        let poly_interpolated = Polynomial::fast_coset_interpolate(offset, omega, &values);
+        let poly_interpolated = Polynomial::fast_coset_interpolate(offset, primitive_root, &values);
         assert_eq!(poly, poly_interpolated);
+    }
+
+    #[test]
+    fn fast_coset_evaluate_on_small_domain() {
+        // x^5 + x^3
+        let poly_coefficients = [0, 0, 0, 1, 0, 1].map(BFieldElement::new).to_vec();
+        let poly = Polynomial::<BFieldElement>::new(poly_coefficients);
+
+        let domain_length = 4;
+        let offset = BFieldElement::generator();
+        let primitive_root = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
+
+        poly.fast_coset_evaluate(offset, primitive_root, domain_length);
+    }
+
+    #[test]
+    fn fast_and_slow_evaluation_are_equivalent() {
+        let poly_coefficients = [0, 0, 0, 1, 0, 1].map(BFieldElement::new).to_vec();
+        let poly = Polynomial::<BFieldElement>::new(poly_coefficients);
+
+        let domain_length = 8;
+        let offset = BFieldElement::generator();
+        let primitive_root = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
+
+        let domain = (0..domain_length)
+            .map(|i| offset * primitive_root.mod_pow(i as u64))
+            .collect_vec();
+        let fast_values = poly.fast_evaluate(&domain, primitive_root, domain_length);
+
+        for (i, domain_point) in domain.into_iter().enumerate() {
+            let slow_value = poly.evaluate(&domain_point);
+            assert_eq!(slow_value, fast_values[i]);
+        }
     }
 
     #[test]
