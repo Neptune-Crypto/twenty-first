@@ -237,6 +237,56 @@ where
         sort_to_match_requested_index_order(fetched_elements)
     }
 
+    /// Return all stored elements in a vector, whose index matches the StorageVec's.
+    /// It's the caller's responsibility that there is enough memory to store all elements.
+    fn get_all(&self) -> Vec<T> {
+        let length = self.len();
+        let self_lock = self
+            .lock()
+            .expect("Could not get lock on DbtVec as StorageVec (get_all 1)");
+
+        let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
+            (0..length).partition(|index| self_lock.cache.contains_key(index));
+
+        let mut fetched_elements: Vec<Option<T>> = vec![None; length as usize];
+        for index in indices_of_elements_in_cache {
+            let element = self_lock.cache[&index].clone();
+            fetched_elements[index as usize] = Some(element);
+        }
+
+        let no_need_to_lock_database = indices_of_elements_not_in_cache.is_empty();
+        if no_need_to_lock_database {
+            return fetched_elements
+                .into_iter()
+                .map(|x| x.unwrap())
+                .collect_vec();
+        }
+
+        let keys = indices_of_elements_not_in_cache
+            .iter()
+            .map(|x| self_lock.get_index_key(*x))
+            .collect_vec();
+        let mut db_reader = self_lock
+            .reader
+            .lock()
+            .expect("Could not get lock on StorageReader object (get_all 2).");
+        let elements_fetched_from_db = db_reader
+            .get_many(&keys)
+            .into_iter()
+            .map(|x| x.unwrap().into());
+        let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
+            .into_iter()
+            .zip_eq(elements_fetched_from_db);
+        for (index, element) in indexed_fetched_elements_from_db {
+            fetched_elements[index as usize] = Some(element);
+        }
+
+        fetched_elements
+            .into_iter()
+            .map(|x| x.unwrap())
+            .collect_vec()
+    }
+
     fn set(&mut self, index: Index, value: T) {
         // Disallow setting values out-of-bounds
         assert!(
@@ -827,6 +877,12 @@ mod tests {
         // initialize
         rusty_storage.restore_or_new();
 
+        // test `get_all`
+        assert!(
+            vector.get_all().is_empty(),
+            "`get_all` on unpopulated vector must return empty vector"
+        );
+
         // populate
         vector.push(S([1u8].to_vec()));
         vector.push(S([3u8].to_vec()));
@@ -880,8 +936,34 @@ mod tests {
             vec![vector.get(3), vector.get(3), vector.get(2), vector.get(3)]
         );
 
+        // test `get_all`
+        assert_eq!(
+            vec![
+                S([1u8].to_vec()),
+                S([3u8].to_vec()),
+                S([4u8].to_vec()),
+                S([7u8].to_vec()),
+                S([8u8].to_vec())
+            ],
+            vector.get_all(),
+            "`get_all` must return expected values"
+        );
+
         // persist
         rusty_storage.persist();
+
+        // test `get_all`
+        assert_eq!(
+            vec![
+                S([1u8].to_vec()),
+                S([3u8].to_vec()),
+                S([4u8].to_vec()),
+                S([7u8].to_vec()),
+                S([8u8].to_vec())
+            ],
+            vector.get_all(),
+            "`get_all` must return expected values"
+        );
 
         // modify
         let last = vector.pop().unwrap();
@@ -934,12 +1016,36 @@ mod tests {
         assert_eq!(new_vector.get_many(&[3]), vec![new_vector.get(3)]);
 
         // We allow `get_many` to take repeated indices.
-        assert_eq!(vector.get_many(&[3; 0]), vec![vector.get(3); 0]);
-        assert_eq!(vector.get_many(&[3; 1]), vec![vector.get(3); 1]);
-        assert_eq!(vector.get_many(&[3; 2]), vec![vector.get(3); 2]);
-        assert_eq!(vector.get_many(&[3; 3]), vec![vector.get(3); 3]);
-        assert_eq!(vector.get_many(&[3; 4]), vec![vector.get(3); 4]);
-        assert_eq!(vector.get_many(&[3; 5]), vec![vector.get(3); 5]);
+        assert_eq!(new_vector.get_many(&[3; 0]), vec![new_vector.get(3); 0]);
+        assert_eq!(new_vector.get_many(&[3; 1]), vec![new_vector.get(3); 1]);
+        assert_eq!(new_vector.get_many(&[3; 2]), vec![new_vector.get(3); 2]);
+        assert_eq!(new_vector.get_many(&[3; 3]), vec![new_vector.get(3); 3]);
+        assert_eq!(new_vector.get_many(&[3; 4]), vec![new_vector.get(3); 4]);
+        assert_eq!(new_vector.get_many(&[3; 5]), vec![new_vector.get(3); 5]);
+
+        // test `get_all`
+        assert_eq!(
+            vec![
+                S([1u8].to_vec()),
+                S([3u8].to_vec()),
+                S([3u8].to_vec()),
+                S([7u8].to_vec()),
+            ],
+            new_vector.get_all(),
+            "`get_all` must return expected values"
+        );
+
+        new_vector.set(1, S([130u8].to_vec()));
+        assert_eq!(
+            vec![
+                S([1u8].to_vec()),
+                S([130u8].to_vec()),
+                S([3u8].to_vec()),
+                S([7u8].to_vec()),
+            ],
+            new_vector.get_all(),
+            "`get_all` must return expected values, after mutation"
+        );
     }
 
     #[test]
@@ -1010,9 +1116,18 @@ mod tests {
         // initialize
         rusty_storage.restore_or_new();
 
+        assert!(
+            vector1.get_all().is_empty(),
+            "`get_all` call to unpopulated persistent vector must return empty vector"
+        );
+        assert!(
+            vector2.get_all().is_empty(),
+            "`get_all` call to unpopulated persistent vector must return empty vector"
+        );
+
         // populate 1
         vector1.push(S([1u8].to_vec()));
-        vector1.push(S([3u8].to_vec()));
+        vector1.push(S([30u8].to_vec()));
         vector1.push(S([4u8].to_vec()));
         vector1.push(S([7u8].to_vec()));
         vector1.push(S([8u8].to_vec()));
@@ -1031,7 +1146,7 @@ mod tests {
 
         // test
         assert_eq!(vector1.get(0), S([8u8].to_vec()));
-        assert_eq!(vector1.get(1), S([3u8].to_vec()));
+        assert_eq!(vector1.get(1), S([30u8].to_vec()));
         assert_eq!(vector1.get(2), S([4u8].to_vec()));
         assert_eq!(vector1.get(3), S([7u8].to_vec()));
         assert_eq!(vector1.get(4), S([8u8].to_vec()));
@@ -1063,6 +1178,25 @@ mod tests {
         );
         assert_eq!(vector2.len(), 4);
         assert_eq!(singleton.get(), singleton_value);
+        assert_eq!(
+            vec![
+                S([8u8].to_vec()),
+                S([30u8].to_vec()),
+                S([4u8].to_vec()),
+                S([7u8].to_vec()),
+                S([8u8].to_vec())
+            ],
+            vector1.get_all()
+        );
+        assert_eq!(
+            vec![
+                S([1u8].to_vec()),
+                S([3u8].to_vec()),
+                S([3u8].to_vec()),
+                S([7u8].to_vec()),
+            ],
+            vector2.get_all()
+        );
 
         // persist and drop
         rusty_storage.persist();
@@ -1076,12 +1210,12 @@ mod tests {
         let new_db = DB::open("test-database", opt).unwrap();
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
         let new_vector1 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector1");
-        let new_vector2 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector2");
+        let mut new_vector2 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector2");
         new_rusty_storage.restore_or_new();
 
         // test again
         assert_eq!(new_vector1.get(0), S([8u8].to_vec()));
-        assert_eq!(new_vector1.get(1), S([3u8].to_vec()));
+        assert_eq!(new_vector1.get(1), S([30u8].to_vec()));
         assert_eq!(new_vector1.get(2), S([4u8].to_vec()));
         assert_eq!(new_vector1.get(3), S([7u8].to_vec()));
         assert_eq!(new_vector1.get(4), S([8u8].to_vec()));
@@ -1117,6 +1251,29 @@ mod tests {
         );
         assert_eq!(new_vector2.get_many(&[2]), vec![new_vector2.get(2),]);
         assert_eq!(new_vector2.get_many(&[]), vec![]);
+
+        // Test `get_all` for a restored DB
+        assert_eq!(
+            vec![
+                S([1u8].to_vec()),
+                S([3u8].to_vec()),
+                S([3u8].to_vec()),
+                S([7u8].to_vec()),
+            ],
+            new_vector2.get_all(),
+            "`get_all` must return expected values, before mutation"
+        );
+        new_vector2.set(1, S([130u8].to_vec()));
+        assert_eq!(
+            vec![
+                S([1u8].to_vec()),
+                S([130u8].to_vec()),
+                S([3u8].to_vec()),
+                S([7u8].to_vec()),
+            ],
+            new_vector2.get_all(),
+            "`get_all` must return expected values, after mutation"
+        );
     }
 
     #[should_panic(

@@ -14,6 +14,7 @@ pub trait StorageVec<T> {
     fn len(&self) -> Index;
     fn get(&self, index: Index) -> T;
     fn get_many(&self, indices: &[Index]) -> Vec<T>;
+    fn get_all(&self) -> Vec<T>;
     fn set(&mut self, index: Index, value: T);
     fn pop(&mut self) -> Option<T>;
     fn push(&mut self, value: T);
@@ -115,6 +116,42 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         fetched_elements.extend(indexed_fetched_elements_from_db);
 
         sort_to_match_requested_index_order(fetched_elements)
+    }
+
+    /// Return all stored elements in a vector, whose index matches the StorageVec's.
+    /// It's the caller's responsibility that there is enough memory to store all elements.
+    fn get_all(&self) -> Vec<T> {
+        let length = self.len();
+
+        let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
+            (0..length).partition(|index| self.cache.contains_key(index));
+
+        let mut fetched_elements: Vec<Option<T>> = vec![None; length as usize];
+        for index in indices_of_elements_in_cache {
+            let element = self.cache[&index].clone();
+            fetched_elements[index as usize] = Some(element);
+        }
+
+        let no_need_to_lock_database = indices_of_elements_not_in_cache.is_empty();
+        if no_need_to_lock_database {
+            return fetched_elements
+                .into_iter()
+                .map(|x| x.unwrap())
+                .collect_vec();
+        }
+
+        let mut db_reader = self.db.lock().expect("get_all: db-locking must succeed");
+        for index in indices_of_elements_not_in_cache {
+            let key = self.get_index_key(index);
+            let element = db_reader.get(&key).unwrap();
+            let element = bincode::deserialize(&element).unwrap();
+            fetched_elements[index as usize] = Some(element);
+        }
+
+        fetched_elements
+            .into_iter()
+            .map(|x| x.unwrap())
+            .collect_vec()
     }
 
     fn set(&mut self, index: Index, value: T) {
@@ -277,6 +314,10 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
             .iter()
             .map(|index| self.0[*index as usize].clone())
             .collect()
+    }
+
+    fn get_all(&self) -> Vec<T> {
+        self.0.clone()
     }
 
     fn set(&mut self, index: Index, value: T) {
