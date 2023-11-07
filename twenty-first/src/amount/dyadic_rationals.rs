@@ -135,13 +135,15 @@ impl Ord for DyadicRational {
             return other.cmp(self).reverse();
         }
 
+        // We now know that: self.exponent >= other.exponent
+
         // Put on same denominator
         let max_exponent = self.exponent;
         let min_exponent = other.exponent;
-        let shift = max_exponent - min_exponent + 1;
+        let shift = max_exponent - min_exponent;
 
         // Add numerators
-        let shifted_other_mantissa = shift * other.mantissa.clone();
+        let shifted_other_mantissa = other.mantissa.clone() << shift;
 
         self.mantissa.cmp(&shifted_other_mantissa)
     }
@@ -154,7 +156,7 @@ impl Sub for DyadicRational {
         // panic if rhs is larger
         assert!(
             self >= rhs,
-            "Right-hand-side argument cannot be larger than left-hand-side for subtraction"
+            "Right-hand-side argument cannot be larger than left-hand-side for subtraction.\nLHS was: {self:?},\nRHS: {rhs:?}"
         );
 
         // Put on same denominator
@@ -362,6 +364,32 @@ mod dyadic_rationals_tests {
         };
 
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn ordering_unit_test() {
+        let a: DyadicRational = 16.into();
+        let b = DyadicRational {
+            exponent: 2,
+            mantissa: 64u32.into(),
+        };
+
+        assert!(!(a > b));
+        assert!(!(b > a));
+        assert!(!(a < b));
+        assert!(!(b < a));
+        assert!(a <= b);
+        assert!(a >= b);
+
+        let c = DyadicRational {
+            exponent: 3,
+            mantissa: 127u32.into(),
+        };
+
+        assert!(b > c);
+        assert!(c < b);
+        assert!(a > c);
+        assert!(c < a);
     }
 
     #[test]
