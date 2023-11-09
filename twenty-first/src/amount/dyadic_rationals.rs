@@ -201,6 +201,7 @@ impl From<u32> for DyadicRational {
 #[cfg(test)]
 mod dyadic_rationals_tests {
     use rand::{Rng, RngCore};
+    use std::cmp::Ordering;
 
     use super::*;
 
@@ -374,12 +375,10 @@ mod dyadic_rationals_tests {
             mantissa: 64u32.into(),
         };
 
-        assert!(!(a > b));
-        assert!(!(b > a));
-        assert!(!(a < b));
-        assert!(!(b < a));
-        assert!(a <= b);
-        assert!(a >= b);
+        assert_eq!(a, b);
+        assert_eq!(Ordering::Equal, a.cmp(&b));
+        assert_ne!(Ordering::Greater, a.cmp(&b));
+        assert_ne!(Ordering::Less, a.cmp(&b));
 
         let c = DyadicRational {
             exponent: 3,
