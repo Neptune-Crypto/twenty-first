@@ -10,13 +10,54 @@ use serde::{de::DeserializeOwned, Serialize};
 pub type Index = u64;
 
 pub trait StorageVec<T> {
+    /// check if collection is empty
     fn is_empty(&self) -> bool;
+
+    /// get collection length
     fn len(&self) -> Index;
+
+    /// get single element at index
     fn get(&self, index: Index) -> T;
+
+    /// get multiple elements matching indices
     fn get_many(&self, indices: &[Index]) -> Vec<T>;
+
+    /// get all elements
     fn get_all(&self) -> Vec<T>;
+
+    /// set a single element.
     fn set(&mut self, index: Index, value: T);
+
+    /// set multiple elements.
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>);
+
+    /// set all elements.
+    fn set_all(
+        &mut self,
+        vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = (Index, T)>>,
+    );
+
+    /// convenience method to set all elements with a simple
+    /// list of values in an array or Vec.
+    ///
+    /// calls ::set_all() internally.
+    ///
+    /// note: casts the array's indexes from usize to Index.
+    fn set_all_by_array(&mut self, vals: &[T])
+    where
+        T: Clone,
+    {
+        self.set_all(
+            vals.iter()
+                .enumerate()
+                .map(|(i, v)| (i as Index, v.clone())),
+        );
+    }
+
+    /// pop an element from end of collection
     fn pop(&mut self) -> Option<T>;
+
+    /// push an element to end of collection
     fn push(&mut self, value: T);
 }
 
@@ -163,13 +204,56 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
             self.name
         );
 
-        let _old_value = self.cache.insert(index, value.clone());
+        if let Some(_old_val) = self.cache.insert(index, value.clone()) {
+            // If cache entry exists, we remove any corresponding
+            // OverWrite ops in the `write_queue` to reduce disk IO.
 
-        // TODO: If `old_value` is Some(*) use it to remove the corresponding
-        // element in the `write_queue` to reduce disk IO.
+            // logic: retain all ops that are not overwrite, and
+            // overwrite ops that do not have an index matching cache_index.
+            self.write_queue.retain(|op| match op {
+                WriteElement::OverWrite((i, _)) => *i != index,
+                _ => true,
+            })
+        }
 
         self.write_queue
             .push_back(WriteElement::OverWrite((index, value)));
+    }
+
+    /// set multiple elements.
+    /// panics if key_vals contains an index not in the collection
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+        for (index, value) in key_vals.into_iter() {
+            assert!(
+                index < self.len(),
+                "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
+                self.length,
+                self.name
+            );
+
+            self.set(index, value);
+        }
+    }
+
+    /// set all elements.
+    /// panics if count of input vals does not match the collection count.
+    fn set_all(
+        &mut self,
+        vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = (Index, T)>>,
+    ) {
+        let iter = vals.into_iter();
+
+        assert!(
+            iter.len() as Index == self.len(),
+            "size-mismatch.  input has {} elements and target has {} elements. persisted vector name: {}",
+            iter.len(),
+            self.length,
+            self.name
+        );
+
+        for (index, value) in iter {
+            self.set(index, value);
+        }
     }
 
     fn pop(&mut self) -> Option<T> {
@@ -206,8 +290,9 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         // record in cache
         let _old_value = self.cache.insert(self.length, value);
 
-        // TODO: if `old_value` is Some(_) then use it to remove the corresponding
-        // element from the `write_queue` to reduce disk operations
+        // note: we cannot naively remove any previous `Push` ops with
+        // this value from the write_queue (to reduce disk i/o) because
+        // there might be corresponding `Pop` op(s).
 
         // update length
         self.length += 1;
@@ -321,7 +406,33 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
     }
 
     fn set(&mut self, index: Index, value: T) {
+        // note: on 32 bit systems, this could panic.
         self.0[index as usize] = value;
+    }
+
+    /// set multiple elements.
+    /// panics if key_vals contains an index not in the collection
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+        for (index, value) in key_vals.into_iter() {
+            // note: on 32 bit systems, this could panic.
+            self.0[index as usize] = value;
+        }
+    }
+
+    /// set all elements.
+    /// panics if count of input vals does not match the collection count.
+    fn set_all(
+        &mut self,
+        vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = (Index, T)>>,
+    ) {
+        let iter = vals.into_iter();
+
+        assert!(self.len() == iter.len() as Index);
+
+        for (index, value) in iter {
+            // note: on 32 bit systems, this could panic.
+            self.0[index as usize] = value;
+        }
     }
 
     fn pop(&mut self) -> Option<T> {
@@ -410,6 +521,14 @@ mod tests {
             delegated_db_vec.get_many(&[1, 0, 1])
         );
 
+        // test set_many, get_many.  pass array to set_many
+        delegated_db_vec.set_many([(0, [41; 13]), (1, [42; 13])]);
+        // get in reverse order
+        assert_eq!(vec![[42; 13], [41; 13]], delegated_db_vec.get_many(&[1, 0]));
+
+        // set values back how they were before prior set_many() passing HashMap
+        delegated_db_vec.set_many(HashMap::from([(0, [101; 13]), (1, [200; 13])]));
+
         // Pop two values, check length and return value of further pops
         assert_eq!([200; 13], delegated_db_vec.pop().unwrap());
         assert_eq!(1, delegated_db_vec.len());
@@ -472,6 +591,86 @@ mod tests {
         assert_eq!(0, delegated_db_vec_b.len());
         assert!(delegated_db_vec_a.cache.is_empty());
         assert!(delegated_db_vec_b.cache.is_empty());
+    }
+
+    #[test]
+    fn rusty_level_db_set_many() {
+        let db = get_test_db();
+        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
+            RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
+
+        delegated_db_vec_a.push(10);
+        delegated_db_vec_a.push(20);
+        delegated_db_vec_a.push(30);
+
+        let updates = [(0, 100), (1, 200), (2, 300)];
+        delegated_db_vec_a.set_many(updates);
+
+        assert_eq!(vec![100, 200, 300], delegated_db_vec_a.get_many(&[0, 1, 2]));
+
+        #[allow(clippy::shadow_unrelated)]
+        let updates = HashMap::from([(0, 1000), (1, 2000), (2, 3000)]);
+        delegated_db_vec_a.set_many(updates);
+
+        assert_eq!(
+            vec![1000, 2000, 3000],
+            delegated_db_vec_a.get_many(&[0, 1, 2])
+        );
+
+        // Persist
+        let mut write_batch = WriteBatch::new();
+        delegated_db_vec_a.pull_queue(&mut write_batch);
+        assert!(
+            db.lock().unwrap().write(write_batch, true).is_ok(),
+            "DB write must succeed"
+        );
+        assert_eq!(3, delegated_db_vec_a.persisted_length());
+
+        // Check values after persisting
+        assert_eq!(
+            vec![1000, 2000, 3000],
+            delegated_db_vec_a.get_many(&[0, 1, 2])
+        );
+    }
+
+    #[test]
+    fn rusty_level_db_set_all() {
+        let db = get_test_db();
+        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
+            RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
+
+        delegated_db_vec_a.push(10);
+        delegated_db_vec_a.push(20);
+        delegated_db_vec_a.push(30);
+
+        let updates = [100, 200, 300];
+        delegated_db_vec_a.set_all_by_array(&updates);
+
+        assert_eq!(vec![100, 200, 300], delegated_db_vec_a.get_many(&[0, 1, 2]));
+
+        #[allow(clippy::shadow_unrelated)]
+        let updates = vec![1000, 2000, 3000];
+        delegated_db_vec_a.set_all_by_array(&updates);
+
+        assert_eq!(
+            vec![1000, 2000, 3000],
+            delegated_db_vec_a.get_many(&[0, 1, 2])
+        );
+
+        // Persist
+        let mut write_batch = WriteBatch::new();
+        delegated_db_vec_a.pull_queue(&mut write_batch);
+        assert!(
+            db.lock().unwrap().write(write_batch, true).is_ok(),
+            "DB write must succeed"
+        );
+        assert_eq!(3, delegated_db_vec_a.persisted_length());
+
+        // Check values after persisting
+        assert_eq!(
+            vec![1000, 2000, 3000],
+            delegated_db_vec_a.get_many(&[0, 1, 2])
+        );
     }
 
     #[test]
@@ -648,6 +847,28 @@ mod tests {
     fn panic_on_out_of_bounds_set() {
         let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
         delegated_db_vec.set(1, 3000);
+    }
+
+    #[should_panic(
+        expected = "Out-of-bounds. Got 1 but length was 1. persisted vector name: unit test vec 0"
+    )]
+    #[test]
+    fn panic_on_out_of_bounds_set_many() {
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+
+        // attempt to set 2 values, when only one is in vector.
+        delegated_db_vec.set_many([(0, 0), (1, 1)]);
+    }
+
+    #[should_panic(
+        expected = "size-mismatch.  input has 2 elements and target has 1 elements. persisted vector name: unit test vec 0"
+    )]
+    #[test]
+    fn panic_on_size_mismatch_set_all() {
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+
+        // attempt to set 2 values, when only one is in vector.
+        delegated_db_vec.set_all([(0, 1), (1, 2)]);
     }
 
     #[should_panic(
