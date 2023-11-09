@@ -1234,9 +1234,7 @@ impl<FF: FiniteField> Polynomial<FF> {
 
         // The result is valid up to a coefficient, so we normalize the result,
         // to ensure that x has a leading coefficient of 1.
-        // x cannot be zero here since polynomials form a group and all elements,
-        // except the zero polynomial, have an inverse.
-        let lc = x.leading_coefficient().unwrap();
+        let lc = x.leading_coefficient().unwrap_or_else(FF::one);
         let scale = lc.inverse();
         (
             x.scalar_mul(scale),
@@ -2673,6 +2671,14 @@ mod test_polynomials {
             // Verify Bezout relations: ax + by = gcd
             assert_eq!(gcd, a * x + b * y);
         }
+    fn xgcd_does_not_panic_on_input_zero() {
+        let zero = Polynomial::<BFieldElement>::zero;
+        let (gcd, a, b) = Polynomial::xgcd(zero(), zero());
+        assert_eq!(zero(), gcd);
+        println!("a = {a}");
+        println!("b = {b}");
+    }
+
     }
 
     #[test]
