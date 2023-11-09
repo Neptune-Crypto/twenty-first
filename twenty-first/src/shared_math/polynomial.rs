@@ -1275,13 +1275,17 @@ impl<FF: FiniteField> Mul for Polynomial<FF> {
 mod test_polynomials {
     #![allow(clippy::just_underscores_and_digits)]
 
+    use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
     use rand::Rng;
     use rand_distr::Standard;
+    use test_strategy::proptest;
 
-    use super::*;
     use crate::shared_math::other::{random_elements, random_elements_distinct};
     use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::shared_math::x_field_element::XFieldElement;
+
+    use super::*;
 
     #[test]
     fn polynomial_display_test() {
@@ -2640,37 +2644,6 @@ mod test_polynomials {
     }
 
     #[test]
-    pub fn xgcd_b_field_pol_test() {
-        for _ in 0..100 {
-            let x: Polynomial<BFieldElement> = gen_polynomial_non_zero();
-            let y: Polynomial<BFieldElement> = gen_polynomial_non_zero();
-            let (gcd, a, b): (
-                Polynomial<BFieldElement>,
-                Polynomial<BFieldElement>,
-                Polynomial<BFieldElement>,
-            ) = Polynomial::xgcd(x.clone(), y.clone());
-            assert!(gcd.is_one());
-
-            // Verify Bezout relations: ax + by = gcd
-            assert_eq!(gcd, a * x + b * y);
-        }
-    }
-
-    #[test]
-    pub fn xgcd_x_field_pol_test() {
-        for _ in 0..50 {
-            let x: Polynomial<XFieldElement> = gen_polynomial_non_zero();
-            let y: Polynomial<XFieldElement> = gen_polynomial_non_zero();
-            let (gcd, a, b): (
-                Polynomial<XFieldElement>,
-                Polynomial<XFieldElement>,
-                Polynomial<XFieldElement>,
-            ) = Polynomial::xgcd(x.clone(), y.clone());
-            assert!(gcd.is_one());
-
-            // Verify Bezout relations: ax + by = gcd
-            assert_eq!(gcd, a * x + b * y);
-        }
     fn xgcd_does_not_panic_on_input_zero() {
         let zero = Polynomial::<BFieldElement>::zero;
         let (gcd, a, b) = Polynomial::xgcd(zero(), zero());
@@ -2679,6 +2652,24 @@ mod test_polynomials {
         println!("b = {b}");
     }
 
+    #[proptest]
+    fn xgcd_b_field_pol_test(
+        #[strategy(arb())] x: Polynomial<BFieldElement>,
+        #[strategy(arb())] y: Polynomial<BFieldElement>,
+    ) {
+        let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
+        // Bezout relation
+        prop_assert_eq!(gcd, a * x + b * y);
+    }
+
+    #[proptest]
+    fn xgcd_x_field_pol_test(
+        #[strategy(arb())] x: Polynomial<XFieldElement>,
+        #[strategy(arb())] y: Polynomial<XFieldElement>,
+    ) {
+        let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
+        // Bezout relation
+        prop_assert_eq!(gcd, a * x + b * y);
     }
 
     #[test]
@@ -2821,7 +2812,7 @@ mod test_polynomials {
         let zero_polynomial1 = Polynomial::<BFieldElement>::zero();
         let zero_polynomial2 = Polynomial::<BFieldElement>::zero();
 
-        assert!(zero_polynomial1 == zero_polynomial2)
+        assert_eq!(zero_polynomial1, zero_polynomial2)
     }
 
     #[test]
@@ -2852,18 +2843,6 @@ mod test_polynomials {
     fn get_point_on_line_tests() {
         get_point_on_line_prop::<BFieldElement>();
         get_point_on_line_prop::<XFieldElement>();
-    }
-
-    fn gen_polynomial_non_zero<T: FiniteField>() -> Polynomial<T>
-    where
-        Standard: rand_distr::Distribution<T>,
-    {
-        let mut rng = rand::thread_rng();
-        let coefficient_count: usize = rng.gen_range(1..40);
-
-        Polynomial {
-            coefficients: random_elements(coefficient_count),
-        }
     }
 
     fn gen_polynomial<T: FiniteField>() -> Polynomial<T>
