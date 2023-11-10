@@ -2294,7 +2294,7 @@ mod test_polynomials {
     }
 
     #[test]
-    #[should_panic(expected = "assertion `left != right` failed")]
+    #[should_panic(expected = "Line must not be parallel to y-axis")]
     fn get_point_on_invalid_line_test() {
         let one = BFieldElement::one();
         let two = one + one;
