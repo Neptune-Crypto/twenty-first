@@ -174,49 +174,6 @@ impl XFieldElement {
         XFieldElement::new([elements[2], elements[3], elements[4]])
     }
 
-    // TODO: Move this into Polynomial when PrimeField can implement Zero + One.
-    // Division in 𝔽_p[X], not 𝔽_{p^e} ≅ 𝔽[X]/p(x).
-    pub fn xgcd(
-        mut x: Polynomial<BFieldElement>,
-        mut y: Polynomial<BFieldElement>,
-    ) -> (
-        Polynomial<BFieldElement>,
-        Polynomial<BFieldElement>,
-        Polynomial<BFieldElement>,
-    ) {
-        let mut a_factor = Polynomial::new(vec![BFieldElement::one()]);
-        let mut a1 = Polynomial::new(vec![BFieldElement::zero()]);
-        let mut b_factor = Polynomial::new(vec![BFieldElement::zero()]);
-        let mut b1 = Polynomial::new(vec![BFieldElement::one()]);
-
-        while !y.is_zero() {
-            let (quotient, remainder): (Polynomial<BFieldElement>, Polynomial<BFieldElement>) =
-                x.clone().divide(y.clone());
-            let (c, d) = (
-                a_factor - quotient.clone() * a1.clone(),
-                b_factor.clone() - quotient * b1.clone(),
-            );
-
-            x = y;
-            y = remainder;
-            a_factor = a1;
-            a1 = c;
-            b_factor = b1;
-            b1 = d;
-        }
-
-        // The result is valid up to a coefficient, so we normalize the result,
-        // to ensure that x has a leading coefficient of 1.
-        // TODO: What happens if x is zero here, can it be?
-        let lc = x.leading_coefficient().unwrap();
-        let scale = lc.inverse();
-        (
-            x.scalar_mul(scale),
-            a_factor.scalar_mul(scale),
-            b_factor.scalar_mul(scale),
-        )
-    }
-
     // `increment` and `decrement` are mainly used for testing purposes
     pub fn increment(&mut self, index: usize) {
         self.coefficients[index].increment();
