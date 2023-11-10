@@ -1577,19 +1577,22 @@ mod test_polynomials {
     fn polynomial_zero_is_neutral_element_for_addition(
         #[strategy(arb())] a: Polynomial<BFieldElement>,
     ) {
-        prop_assert_eq!(a.clone() + Polynomial::zero(), a);
+        prop_assert_eq!(a.clone() + Polynomial::zero(), a.clone());
+        prop_assert_eq!(Polynomial::zero() + a.clone(), a);
     }
 
     #[proptest]
     fn polynomial_one_is_neutral_element_for_multiplication(
         #[strategy(arb())] a: Polynomial<BFieldElement>,
     ) {
-        prop_assert_eq!(a.clone() * Polynomial::one(), a);
+        prop_assert_eq!(a.clone() * Polynomial::one(), a.clone());
+        prop_assert_eq!(Polynomial::one() * a.clone(), a);
     }
 
     #[proptest]
     fn multiplication_by_zero_is_zero(#[strategy(arb())] a: Polynomial<BFieldElement>) {
         prop_assert_eq!(Polynomial::zero(), a.clone() * Polynomial::zero());
+        prop_assert_eq!(Polynomial::zero(), Polynomial::zero() * a.clone());
     }
 
     #[proptest]
