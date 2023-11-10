@@ -1673,6 +1673,10 @@ mod test_polynomials {
 
     #[test]
     fn leading_zeros_dont_affect_polynomial_division() {
+        // This test was used to catch a bug where the polynomial division
+        // was wrong when the divisor has a leading zero coefficient, i.e.
+        // when it was not normalized
+
         let polynomial =
             |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
 
