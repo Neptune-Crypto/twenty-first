@@ -1275,7 +1275,7 @@ impl<FF: FiniteField> Mul for Polynomial<FF> {
 mod test_polynomials {
     #![allow(clippy::just_underscores_and_digits)]
 
-    use proptest::collection::vec;
+    use proptest::collection::size_range;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::Rng;
@@ -1287,6 +1287,26 @@ mod test_polynomials {
     use crate::shared_math::x_field_element::XFieldElement;
 
     use super::*;
+
+    impl proptest::arbitrary::Arbitrary for Polynomial<BFieldElement> {
+        type Parameters = ();
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            arb().boxed()
+        }
+
+        type Strategy = BoxedStrategy<Self>;
+    }
+
+    impl proptest::arbitrary::Arbitrary for Polynomial<XFieldElement> {
+        type Parameters = ();
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            arb().boxed()
+        }
+
+        type Strategy = BoxedStrategy<Self>;
+    }
 
     #[test]
     fn polynomial_display_test() {
@@ -1321,8 +1341,8 @@ mod test_polynomials {
 
     #[proptest]
     fn leading_coefficient_of_non_zero_polynomial_is_some(
-        #[strategy(arb())] polynomial: Polynomial<BFieldElement>,
-        #[strategy(arb())] leading_coefficient: BFieldElement,
+        polynomial: Polynomial<BFieldElement>,
+        leading_coefficient: BFieldElement,
         #[strategy(0usize..30)] num_leading_zeros: usize,
     ) {
         let coefficients = polynomial
@@ -1347,8 +1367,8 @@ mod test_polynomials {
 
     #[proptest]
     fn normalizing_removes_spurious_leading_zeros(
-        #[strategy(arb())] polynomial: Polynomial<BFieldElement>,
-        #[strategy(arb())] leading_coefficient: BFieldElement,
+        polynomial: Polynomial<BFieldElement>,
+        leading_coefficient: BFieldElement,
         #[strategy(0usize..30)] num_leading_zeros: usize,
     ) {
         let coefficients = polynomial
@@ -1370,10 +1390,9 @@ mod test_polynomials {
 
     #[proptest]
     fn slow_lagrange_interpolation(
-        #[strategy(arb())] polynomial: Polynomial<BFieldElement>,
-        #[strategy(Just(#polynomial.coefficients.len().max(1)))] _min_num_points: usize,
-        #[strategy(#_min_num_points..8 * #_min_num_points)] _num_points: usize,
-        #[strategy(vec(arb(), #_num_points))] points: Vec<BFieldElement>,
+        polynomial: Polynomial<BFieldElement>,
+        #[strategy(Just(#polynomial.coefficients.len().max(1)))] _min_points: usize,
+        #[any(size_range(#_min_points..8 * #_min_points).lift())] points: Vec<BFieldElement>,
     ) {
         let evaluations = points
             .into_iter()
@@ -1385,14 +1404,9 @@ mod test_polynomials {
 
     #[proptest]
     fn three_colinear_points_are_colinear(
-        #[strategy(arb())] p0: (BFieldElement, BFieldElement),
-        #[strategy(arb())]
-        #[filter(#p0.0 != #p1.0)]
-        p1: (BFieldElement, BFieldElement),
-        #[strategy(arb())]
-        #[filter(#p0.0 != #p2_x)]
-        #[filter(#p1.0 != #p2_x)]
-        p2_x: BFieldElement,
+        p0: (BFieldElement, BFieldElement),
+        #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
+        #[filter(#p0.0 != #p2_x && #p1.0 != #p2_x)] p2_x: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
         let p2 = (p2_x, line.evaluate(&p2_x));
@@ -1401,17 +1415,10 @@ mod test_polynomials {
 
     #[proptest]
     fn three_non_colinear_points_are_not_colinear(
-        #[strategy(arb())] p0: (BFieldElement, BFieldElement),
-        #[strategy(arb())]
-        #[filter(#p0.0 != #p1.0)]
-        p1: (BFieldElement, BFieldElement),
-        #[strategy(arb())]
-        #[filter(#p0.0 != #p2_x)]
-        #[filter(#p1.0 != #p2_x)]
-        p2_x: BFieldElement,
-        #[strategy(arb())]
-        #[filter(!#disturbance.is_zero())]
-        disturbance: BFieldElement,
+        p0: (BFieldElement, BFieldElement),
+        #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
+        #[filter(#p0.0 != #p2_x && #p1.0 != #p2_x)] p2_x: BFieldElement,
+        #[filter(!#disturbance.is_zero())] disturbance: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
         let p2 = (p2_x, line.evaluate(&p2_x) + disturbance);
@@ -1420,10 +1427,8 @@ mod test_polynomials {
 
     #[proptest]
     fn colinearity_check_needs_at_least_three_points(
-        #[strategy(arb())] p0: (BFieldElement, BFieldElement),
-        #[strategy(arb())]
-        #[filter(#p0.0 != #p1.0)]
-        p1: (BFieldElement, BFieldElement),
+        p0: (BFieldElement, BFieldElement),
+        #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
     ) {
         prop_assert!(!Polynomial::<BFieldElement>::are_colinear(&[]));
         prop_assert!(!Polynomial::are_colinear(&[p0]));
@@ -1432,25 +1437,20 @@ mod test_polynomials {
 
     #[proptest]
     fn colinearity_check_with_repeated_points_fails(
-        #[strategy(arb())] p0: (BFieldElement, BFieldElement),
-        #[strategy(arb())]
-        #[filter(#p0.0 != #p1.0)]
-        p1: (BFieldElement, BFieldElement),
+        p0: (BFieldElement, BFieldElement),
+        #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
     ) {
         prop_assert!(!Polynomial::are_colinear(&[p0, p1, p1]));
     }
 
     #[proptest]
     fn colinear_points_are_colinear(
-        #[strategy(arb())] p0: (BFieldElement, BFieldElement),
-        #[strategy(arb())]
-        #[filter(#p0.0 != #p1.0)]
-        p1: (BFieldElement, BFieldElement),
-        #[strategy(1usize..50)] _num_additional_points: usize,
-        #[strategy(vec(arb(), #_num_additional_points))]
+        p0: (BFieldElement, BFieldElement),
+        #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
         #[filter(!#additional_points_xs.contains(&#p0.0))]
         #[filter(!#additional_points_xs.contains(&#p1.0))]
-        #[filter(#additional_points_xs.iter().unique().count() == #_num_additional_points)]
+        #[filter(#additional_points_xs.iter().unique().count() == #additional_points_xs.len())]
+        #[any(size_range(1..100).lift())]
         additional_points_xs: Vec<BFieldElement>,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
@@ -1464,7 +1464,7 @@ mod test_polynomials {
 
     #[proptest]
     fn shifting_polynomial_coefficients_by_zero_is_the_same_as_not_shifting_it(
-        #[strategy(arb())] poly: Polynomial<BFieldElement>,
+        poly: Polynomial<BFieldElement>,
     ) {
         prop_assert_eq!(poly.clone(), poly.shift_coefficients(0));
     }
@@ -1502,7 +1502,7 @@ mod test_polynomials {
 
     #[proptest]
     fn shifting_a_polynomial_means_prepending_zeros_to_its_coefficients(
-        #[strategy(arb())] polynomial: Polynomial<BFieldElement>,
+        polynomial: Polynomial<BFieldElement>,
         #[strategy(0usize..30)] shift: usize,
     ) {
         let shifted_polynomial = polynomial.shift_coefficients(shift);
@@ -1516,17 +1516,13 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn any_polynomial_to_the_power_of_zero_is_one(
-        #[strategy(arb())] poly: Polynomial<BFieldElement>,
-    ) {
+    fn any_polynomial_to_the_power_of_zero_is_one(poly: Polynomial<BFieldElement>) {
         let poly_to_the_zero = poly.mod_pow(0.into());
         prop_assert_eq!(Polynomial::one(), poly_to_the_zero);
     }
 
     #[proptest]
-    fn any_polynomial_to_the_power_one_is_itself(
-        #[strategy(arb())] poly: Polynomial<BFieldElement>,
-    ) {
+    fn any_polynomial_to_the_power_one_is_itself(poly: Polynomial<BFieldElement>) {
         let poly_to_the_one = poly.mod_pow(1.into());
         prop_assert_eq!(poly, poly_to_the_one);
     }
@@ -1559,7 +1555,7 @@ mod test_polynomials {
 
     #[proptest]
     fn mod_pow_arbitrary_test(
-        #[strategy(arb())] poly: Polynomial<BFieldElement>,
+        poly: Polynomial<BFieldElement>,
         #[strategy(0u32..15)] exponent: u32,
     ) {
         let actual = poly.mod_pow(exponent.into());
@@ -1574,66 +1570,62 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn polynomial_zero_is_neutral_element_for_addition(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-    ) {
+    fn polynomial_zero_is_neutral_element_for_addition(a: Polynomial<BFieldElement>) {
         prop_assert_eq!(a.clone() + Polynomial::zero(), a.clone());
         prop_assert_eq!(Polynomial::zero() + a.clone(), a);
     }
 
     #[proptest]
-    fn polynomial_one_is_neutral_element_for_multiplication(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-    ) {
+    fn polynomial_one_is_neutral_element_for_multiplication(a: Polynomial<BFieldElement>) {
         prop_assert_eq!(a.clone() * Polynomial::one(), a.clone());
         prop_assert_eq!(Polynomial::one() * a.clone(), a);
     }
 
     #[proptest]
-    fn multiplication_by_zero_is_zero(#[strategy(arb())] a: Polynomial<BFieldElement>) {
+    fn multiplication_by_zero_is_zero(a: Polynomial<BFieldElement>) {
         prop_assert_eq!(Polynomial::zero(), a.clone() * Polynomial::zero());
         prop_assert_eq!(Polynomial::zero(), Polynomial::zero() * a.clone());
     }
 
     #[proptest]
     fn polynomial_addition_is_commutative(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-        #[strategy(arb())] b: Polynomial<BFieldElement>,
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
     ) {
         prop_assert_eq!(a.clone() + b.clone(), b + a);
     }
 
     #[proptest]
     fn polynomial_multiplication_is_commutative(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-        #[strategy(arb())] b: Polynomial<BFieldElement>,
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
     ) {
         prop_assert_eq!(a.clone() * b.clone(), b * a);
     }
 
     #[proptest]
     fn polynomial_addition_is_associative(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-        #[strategy(arb())] b: Polynomial<BFieldElement>,
-        #[strategy(arb())] c: Polynomial<BFieldElement>,
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
+        c: Polynomial<BFieldElement>,
     ) {
         prop_assert_eq!((a.clone() + b.clone()) + c.clone(), a + (b + c));
     }
 
     #[proptest]
     fn polynomial_multiplication_is_associative(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-        #[strategy(arb())] b: Polynomial<BFieldElement>,
-        #[strategy(arb())] c: Polynomial<BFieldElement>,
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
+        c: Polynomial<BFieldElement>,
     ) {
         prop_assert_eq!((a.clone() * b.clone()) * c.clone(), a * (b * c));
     }
 
     #[proptest]
     fn polynomial_multiplication_is_distributive(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-        #[strategy(arb())] b: Polynomial<BFieldElement>,
-        #[strategy(arb())] c: Polynomial<BFieldElement>,
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
+        c: Polynomial<BFieldElement>,
     ) {
         prop_assert_eq!(
             (a.clone() + b.clone()) * c.clone(),
@@ -1642,33 +1634,27 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn polynomial_subtraction_of_self_is_zero(#[strategy(arb())] a: Polynomial<BFieldElement>) {
+    fn polynomial_subtraction_of_self_is_zero(a: Polynomial<BFieldElement>) {
         prop_assert_eq!(Polynomial::zero(), a.clone() - a);
     }
 
     #[proptest]
-    fn polynomial_division_by_self_is_one(
-        #[strategy(arb())]
-        #[filter(!#a.is_zero())]
-        a: Polynomial<BFieldElement>,
-    ) {
+    fn polynomial_division_by_self_is_one(#[filter(!#a.is_zero())] a: Polynomial<BFieldElement>) {
         prop_assert_eq!(Polynomial::one(), a.clone() / a);
     }
 
     #[proptest]
     fn polynomial_division_removes_common_factors(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-        #[strategy(arb())]
-        #[filter(!#b.is_zero())]
-        b: Polynomial<BFieldElement>,
+        a: Polynomial<BFieldElement>,
+        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
     ) {
         prop_assert_eq!(a.clone(), a * b.clone() / b);
     }
 
     #[proptest]
     fn polynomial_multiplication_raises_degree_at_maximum_to_sum_of_degrees(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-        #[strategy(arb())] b: Polynomial<BFieldElement>,
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
     ) {
         let sum_of_degrees = (a.degree() + b.degree()).max(-1);
         prop_assert!((a * b).degree() <= sum_of_degrees);
@@ -1711,14 +1697,14 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn fast_multiplication_by_zero_gives_zero(#[strategy(arb())] poly: Polynomial<BFieldElement>) {
+    fn fast_multiplication_by_zero_gives_zero(poly: Polynomial<BFieldElement>) {
         let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
         let product = Polynomial::fast_multiply(&Polynomial::zero(), &poly, primitive_root, 32);
         prop_assert_eq!(Polynomial::zero(), product);
     }
 
     #[proptest]
-    fn fast_multiplication_by_one_gives_self(#[strategy(arb())] poly: Polynomial<BFieldElement>) {
+    fn fast_multiplication_by_one_gives_self(poly: Polynomial<BFieldElement>) {
         let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
         let product = Polynomial::fast_multiply(&Polynomial::one(), &poly, primitive_root, 32);
         prop_assert_eq!(poly, product);
@@ -1726,8 +1712,8 @@ mod test_polynomials {
 
     #[proptest]
     fn fast_multiplication_is_commutative(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-        #[strategy(arb())] b: Polynomial<BFieldElement>,
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
     ) {
         let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
         let product = Polynomial::fast_multiply(&a, &b, primitive_root, 32);
@@ -1737,8 +1723,8 @@ mod test_polynomials {
 
     #[proptest]
     fn fast_multiplication_and_normal_multiplication_are_equivalent(
-        #[strategy(arb())] a: Polynomial<BFieldElement>,
-        #[strategy(arb())] b: Polynomial<BFieldElement>,
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
     ) {
         let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
         let product = Polynomial::fast_multiply(&a, &b, primitive_root, 32);
@@ -2138,20 +2124,14 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn xgcd_b_field_pol_test(
-        #[strategy(arb())] x: Polynomial<BFieldElement>,
-        #[strategy(arb())] y: Polynomial<BFieldElement>,
-    ) {
+    fn xgcd_b_field_pol_test(x: Polynomial<BFieldElement>, y: Polynomial<BFieldElement>) {
         let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
         // Bezout relation
         prop_assert_eq!(gcd, a * x + b * y);
     }
 
     #[proptest]
-    fn xgcd_x_field_pol_test(
-        #[strategy(arb())] x: Polynomial<XFieldElement>,
-        #[strategy(arb())] y: Polynomial<XFieldElement>,
-    ) {
+    fn xgcd_x_field_pol_test(x: Polynomial<XFieldElement>, y: Polynomial<XFieldElement>) {
         let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
         // Bezout relation
         prop_assert_eq!(gcd, a * x + b * y);
