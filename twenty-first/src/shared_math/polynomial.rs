@@ -335,7 +335,7 @@ where
         );
 
         if domain.is_empty() {
-            return Self::zero();
+            return Self::one();
         }
 
         if domain.len() == 1 {
@@ -1731,86 +1731,45 @@ mod test_polynomials {
         prop_assert_eq!(a * b, product);
     }
 
-    #[test]
-    fn fast_zerofier_test() {
-        let _1_17 = BFieldElement::from(1u64);
-        let _5_17 = BFieldElement::from(5u64);
-        let root_order: usize = 8;
+    #[proptest(cases = 50)]
+    fn zerofier_and_fast_zerofier_are_identical(
+        #[strategy(..4usize)] order_surplus: usize,
+        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+    ) {
+        let root_order = (domain.len() + 1).next_power_of_two() * (1 << order_surplus);
         let omega = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        let domain = vec![_1_17, _5_17];
-        let actual = Polynomial::<BFieldElement>::fast_zerofier(&domain, omega, root_order);
-        assert!(
-            actual.evaluate(&_1_17).is_zero(),
-            "expecting {actual} = 0 when x = 1"
-        );
-        assert!(
-            actual.evaluate(&_5_17).is_zero(),
-            "expecting {actual} = 0 when x = 5"
-        );
-        assert!(
-            !actual.evaluate(&omega).is_zero(),
-            "expecting {actual} != 0 when x = 9"
-        );
-
-        let _7_17 = BFieldElement::from(7u64);
-        let _10_17 = BFieldElement::from(10u64);
-        let root_order_2 = 16;
-        let omega2 = BFieldElement::primitive_root_of_unity(root_order_2 as u64).unwrap();
-        let domain_2 = vec![_7_17, _10_17];
-        let actual_2 = Polynomial::<BFieldElement>::fast_zerofier(&domain_2, omega2, root_order_2);
-        assert!(
-            actual_2.evaluate(&_7_17).is_zero(),
-            "expecting {actual_2} = 0 when x = 7"
-        );
-        assert!(
-            actual_2.evaluate(&_10_17).is_zero(),
-            "expecting {actual_2} = 0 when x = 10"
-        );
+        let zerofier = Polynomial::zerofier(&domain);
+        let fast_zerofier = Polynomial::fast_zerofier(&domain, omega, root_order);
+        prop_assert_eq!(zerofier, fast_zerofier);
     }
 
-    #[test]
-    fn fast_zerofier_pb_test() {
-        let mut rng = rand::thread_rng();
-        for _trial_index in 0..100 {
-            let num_points: usize = rng.gen_range(1..=200);
-
-            // sample random but distinct domain points
-            let domain: Vec<BFieldElement> = random_elements_distinct(num_points);
-
-            // prepare NTT-based methods
-
-            // find order by rounding num_points up to the next power of 2
-            let mut order = num_points << 1;
-            while (order & (order - 1)) != 0 {
-                order &= order - 1;
-            }
-
-            // get matching primitive nth root of unity
-            let maybe_omega = BFieldElement::primitive_root_of_unity(order as u64);
-            let omega = maybe_omega.unwrap();
-
-            // compute zerofier
-            let zerofier = Polynomial::<BFieldElement>::fast_zerofier(&domain, omega, order);
-
-            // evaluate in all domain points and match against zero
-            for d in domain.iter() {
-                assert_eq!(zerofier.evaluate(d), BFieldElement::zero());
-            }
-
-            // evaluate in non domain points and match against nonzer
-            for point in random_elements(num_points).iter() {
-                if domain.contains(point) {
-                    continue;
-                }
-                assert_ne!(zerofier.evaluate(point), BFieldElement::zero());
-            }
-
-            // verify leading coefficient
-            assert_eq!(
-                zerofier.leading_coefficient().unwrap(),
-                BFieldElement::one()
-            );
+    #[proptest(cases = 50)]
+    fn zerofier_is_zero_only_on_domain(
+        #[strategy(..4usize)] order_surplus: usize,
+        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+        #[filter(#out_of_domain_points.iter().all(|p| !#domain.contains(p)))]
+        out_of_domain_points: Vec<BFieldElement>,
+    ) {
+        let root_order = (domain.len() + 1).next_power_of_two() * (1 << order_surplus);
+        let omega = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
+        let zerofier = Polynomial::fast_zerofier(&domain, omega, root_order);
+        for point in domain {
+            prop_assert_eq!(BFieldElement::zero(), zerofier.evaluate(&point));
         }
+        for point in out_of_domain_points {
+            prop_assert_ne!(BFieldElement::zero(), zerofier.evaluate(&point));
+        }
+    }
+
+    #[proptest]
+    fn zerofier_has_leading_coefficient_one(domain: Vec<BFieldElement>) {
+        let root_order = (domain.len() + 1).next_power_of_two();
+        let omega = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
+        let zerofier = Polynomial::fast_zerofier(&domain, omega, root_order);
+        prop_assert_eq!(
+            BFieldElement::one(),
+            zerofier.leading_coefficient().unwrap()
+        );
     }
 
     #[test]
