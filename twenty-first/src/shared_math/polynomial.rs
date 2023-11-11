@@ -1773,103 +1773,85 @@ mod test_polynomials {
     }
 
     #[test]
-    fn fast_evaluate_test() {
-        let _0_17 = BFieldElement::from(0u64);
-        let _1_17 = BFieldElement::from(1u64);
-        let omega = BFieldElement::primitive_root_of_unity(16).unwrap();
-        let _5_17 = BFieldElement::from(5u64);
+    fn fast_evaluate_on_hardcoded_domain_and_polynomial() {
+        let polynomial =
+            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
 
         // x^5 + x^3
-        let poly = Polynomial::<BFieldElement>::new(vec![_0_17, _0_17, _0_17, _1_17, _0_17, _1_17]);
+        let poly = polynomial(&[0, 0, 0, 1, 0, 1]);
+        let domain = [6, 12].map(BFieldElement::new);
 
-        let _6_17 = BFieldElement::from(6u64);
-        let _12_17 = BFieldElement::from(12u64);
-        let domain = vec![_6_17, _12_17];
+        let root_of_unity = BFieldElement::primitive_root_of_unity(16).unwrap();
+        let evaluation = poly.fast_evaluate(&domain, root_of_unity, 16);
 
-        let actual = poly.fast_evaluate(&domain, omega, 16);
-        let expected_6 = _6_17.mod_pow(5u64) + _6_17.mod_pow(3u64);
-        assert_eq!(expected_6, actual[0]);
+        let expected_0 = domain[0].mod_pow(5u64) + domain[0].mod_pow(3u64);
+        assert_eq!(expected_0, evaluation[0]);
 
-        let expected_12 = _12_17.mod_pow(5u64) + _12_17.mod_pow(3u64);
-        assert_eq!(expected_12, actual[1]);
+        let expected_1 = domain[1].mod_pow(5u64) + domain[1].mod_pow(3u64);
+        assert_eq!(expected_1, evaluation[1]);
+    }
+
+    #[proptest]
+    fn slow_and_fast_polynomial_evaluation_are_equivalent(
+        poly: Polynomial<BFieldElement>,
+        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+    ) {
+        let evaluations = domain.iter().map(|x| poly.evaluate(x)).collect_vec();
+        let root_order = domain.len().next_power_of_two();
+        let omega = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
+        let fast_evaluations = poly.fast_evaluate(&domain, omega, root_order);
+        prop_assert_eq!(evaluations, fast_evaluations);
     }
 
     #[test]
-    fn fast_evaluate_pb_test() {
-        let mut rng = rand::thread_rng();
-        for _trial_index in 0..100 {
-            let num_points: usize = rng.gen_range(1..=200);
-
-            // sample random but distinct domain points
-            let domain = random_elements_distinct(num_points);
-
-            // sample polynomial
-            let degree: usize = rng.gen_range(0..200);
-            let coefficients: Vec<BFieldElement> = random_elements(degree);
-            let poly = Polynomial::<BFieldElement> { coefficients };
-
-            // slow evaluate
-            let slow_eval = domain.iter().map(|d| poly.evaluate(d)).collect_vec();
-
-            // prepare NTT-based methods
-
-            // find order by rounding num_points up to the next power of 2
-            let mut order = num_points << 1;
-            while (order & (order - 1)) != 0 {
-                order &= order - 1;
-            }
-
-            // get matching primitive nth root of unity
-            let maybe_omega = BFieldElement::primitive_root_of_unity(order as u64);
-            let omega = maybe_omega.unwrap();
-
-            // fast evaluate
-            let fast_eval = poly.fast_evaluate(&domain, omega, order);
-
-            // match evaluations
-            assert_eq!(slow_eval, fast_eval);
-        }
+    #[should_panic(expected = "0 points")]
+    fn lagrange_interpolation_through_no_points_is_impossible() {
+        let _ = Polynomial::<BFieldElement>::lagrange_interpolate(&[], &[]);
     }
 
     #[test]
-    fn fast_interpolate_test() {
-        let _0_17 = BFieldElement::from(0u64);
-        let _1_17 = BFieldElement::from(1u64);
-        let omega = BFieldElement::primitive_root_of_unity(4).unwrap();
-        let _5_17 = BFieldElement::from(5u64);
+    #[should_panic(expected = "zero points")]
+    fn fast_interpolation_through_no_points_is_impossible() {
+        let root_of_unity = BFieldElement::primitive_root_of_unity(1).unwrap();
+        let _ = Polynomial::<BFieldElement>::fast_interpolate(&[], &[], root_of_unity, 1);
+    }
 
-        // x^3 + x^1
-        let poly = Polynomial::<BFieldElement>::new(vec![_0_17, _1_17, _0_17, _1_17]);
+    #[proptest(cases = 10)]
+    fn lagrange_and_fast_interpolation_are_identical(
+        #[any(size_range(1..2048).lift())]
+        #[filter(#domain.iter().unique().count() == #domain.len())]
+        domain: Vec<BFieldElement>,
+        #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
+    ) {
+        let lagrange_interpolant = Polynomial::lagrange_interpolate(&domain, &values);
 
-        let _6_17 = BFieldElement::from(6u64);
-        let _7_17 = BFieldElement::from(7u64);
-        let _8_17 = BFieldElement::from(8u64);
-        let _9_17 = BFieldElement::from(9u64);
-        let domain = vec![_6_17, _7_17, _8_17, _9_17];
+        let root_order = domain.len().next_power_of_two();
+        let root_of_unity = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
+        let fast_interpolant =
+            Polynomial::fast_interpolate(&domain, &values, root_of_unity, root_order);
+        prop_assert_eq!(lagrange_interpolant, fast_interpolant);
+    }
 
-        let evals = poly.fast_evaluate(&domain, omega, 4);
-        let reinterp = Polynomial::fast_interpolate(&domain, &evals, omega, 4);
-        assert_eq!(poly, reinterp);
-
-        let reinterps_batch: Vec<Polynomial<BFieldElement>> =
-            Polynomial::batch_fast_interpolate(&domain, &vec![evals], omega, 4);
-        assert_eq!(poly, reinterps_batch[0]);
+    #[proptest(cases = 20)]
+    fn interpolation_then_evaluation_is_identity(
+        #[any(size_range(1..2048).lift())]
+        #[filter(#domain.iter().unique().count() == #domain.len())]
+        domain: Vec<BFieldElement>,
+        #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
+    ) {
+        let root_order = domain.len().next_power_of_two();
+        let root_of_unity = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
+        let interpolant = Polynomial::fast_interpolate(&domain, &values, root_of_unity, root_order);
+        let evaluations = interpolant.fast_evaluate(&domain, root_of_unity, root_order);
+        prop_assert_eq!(values, evaluations);
     }
 
     #[test]
-    fn fast_interpolate_pbt() {
+    fn fast_batch_interpolate_pbt() {
         for num_points in [1, 2, 4, 8, 16, 32, 64, 128, 2000] {
             let domain: Vec<BFieldElement> = random_elements(num_points);
-            let values: Vec<BFieldElement> = random_elements(num_points);
             let order_of_omega = other::roundup_npo2(num_points as u64) as usize;
             let omega = BFieldElement::primitive_root_of_unity(order_of_omega as u64).unwrap();
-
-            // Unbatched fast interpolation
-            let interpolant = Polynomial::fast_interpolate(&domain, &values, omega, order_of_omega);
-
-            for (x, y) in domain.iter().zip(values) {
-                assert_eq!(y, interpolant.evaluate(x));
-            }
 
             // Batched fast interpolation
             let values_vec: Vec<Vec<BFieldElement>> = vec![
