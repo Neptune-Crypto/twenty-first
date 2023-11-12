@@ -1895,26 +1895,42 @@ mod test_polynomials {
         domain
     }
 
-    #[test]
-    fn fast_coset_evaluate_test() {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
-
-        // x^5 + x^3
-        let poly = polynomial(&[0, 0, 0, 1, 0, 1]);
-
-        let root_order = 8;
+    #[proptest]
+    fn fast_coset_evaluation_and_fast_evaluation_on_coset_are_identical(
+        polynomial: Polynomial<BFieldElement>,
+        offset: BFieldElement,
+        #[strategy(0..8usize)]
+        #[map(|x: usize| 1 << x)]
+        // due to current limitation in `Polynomial::fast_coset_evaluate`
+        #[filter((#root_order as isize) > #polynomial.degree())]
+        root_order: usize,
+    ) {
         let root_of_unity = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        let offset = BFieldElement::generator();
         let domain =
             coset_domain_of_size_from_generator_with_offset(root_order, root_of_unity, offset);
 
-        let values = poly.fast_coset_evaluate(offset, root_of_unity, root_order);
-        let interpolant = Polynomial::fast_interpolate(&domain, &values, root_of_unity, root_order);
-        assert_eq!(poly, interpolant);
+        let fast_values = polynomial.fast_evaluate(&domain, root_of_unity, root_order);
+        let fast_coset_values = polynomial.fast_coset_evaluate(offset, root_of_unity, root_order);
+        prop_assert_eq!(fast_values, fast_coset_values);
+    }
 
-        let coset_interpolant = Polynomial::fast_coset_interpolate(offset, root_of_unity, &values);
-        assert_eq!(poly, coset_interpolant);
+    #[proptest]
+    fn fast_coset_interpolation_and_and_fast_interpolation_on_coset_are_identical(
+        #[filter(!#offset.is_zero())] offset: BFieldElement,
+        #[strategy(0..8usize)]
+        #[map(|x: usize| 1 << x)]
+        root_order: usize,
+        #[strategy(vec(arb(), #root_order))] values: Vec<BFieldElement>,
+    ) {
+        let root_of_unity = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
+        let domain =
+            coset_domain_of_size_from_generator_with_offset(root_order, root_of_unity, offset);
+
+        let fast_interpolant =
+            Polynomial::fast_interpolate(&domain, &values, root_of_unity, root_order);
+        let fast_coset_interpolant =
+            Polynomial::fast_coset_interpolate(offset, root_of_unity, &values);
+        prop_assert_eq!(fast_interpolant, fast_coset_interpolant);
     }
 
     #[test]
