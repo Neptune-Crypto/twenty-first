@@ -1273,9 +1273,8 @@ impl<FF: FiniteField> Mul for Polynomial<FF> {
 
 #[cfg(test)]
 mod test_polynomials {
-    #![allow(clippy::just_underscores_and_digits)]
-
     use proptest::collection::size_range;
+    use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::Rng;
@@ -1846,122 +1845,58 @@ mod test_polynomials {
         prop_assert_eq!(values, evaluations);
     }
 
-    #[test]
-    fn fast_batch_interpolate_pbt() {
-        for num_points in [1, 2, 4, 8, 16, 32, 64, 128, 2000] {
-            let domain: Vec<BFieldElement> = random_elements(num_points);
-            let order_of_omega = other::roundup_npo2(num_points as u64) as usize;
-            let omega = BFieldElement::primitive_root_of_unity(order_of_omega as u64).unwrap();
+    #[proptest(cases = 1)]
+    fn fast_batch_interpolation_is_equivalent_to_fast_interpolation(
+        #[any(size_range(1..2048).lift())]
+        #[filter(#domain.iter().unique().count() == #domain.len())]
+        domain: Vec<BFieldElement>,
+        #[strategy(vec(vec(arb(), #domain.len()), 0..10))] value_vecs: Vec<Vec<BFieldElement>>,
+    ) {
+        let root_order = domain.len().next_power_of_two();
+        let root_of_unity = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
 
-            // Batched fast interpolation
-            let values_vec: Vec<Vec<BFieldElement>> = vec![
-                random_elements(num_points),
-                random_elements(num_points),
-                random_elements(num_points),
-                random_elements(num_points),
-                random_elements(num_points),
-            ];
+        let interpolants = value_vecs
+            .iter()
+            .map(|values| Polynomial::fast_interpolate(&domain, values, root_of_unity, root_order))
+            .collect_vec();
 
-            let batch_interpolated =
-                Polynomial::batch_fast_interpolate(&domain, &values_vec, omega, order_of_omega);
-            for (y_values, interpolant_from_batch_function) in
-                values_vec.into_iter().zip(batch_interpolated.into_iter())
-            {
-                for (x, y) in domain.iter().zip(y_values) {
-                    assert_eq!(y, interpolant_from_batch_function.evaluate(x));
-                }
-            }
-        }
+        let batched_interpolants =
+            Polynomial::batch_fast_interpolate(&domain, &value_vecs, root_of_unity, root_order);
+        prop_assert_eq!(interpolants, batched_interpolants);
     }
 
-    #[test]
-    fn interpolate_pb_test() {
-        let mut rng = rand::thread_rng();
-        for _trial_index in 0..100 {
-            let num_points: usize = rng.gen_range(1..=200);
-
-            // sample random but distinct domain points
-            let domain = random_elements_distinct(num_points);
-
-            // sample random values
-            let values = random_elements(num_points);
-
-            // use lagrange interpolation
-            let lagrange_interpolant =
-                Polynomial::<BFieldElement>::lagrange_interpolate(&domain, &values);
-
-            // re-evaluate and match against values
-            let lagrange_re_eval = domain
-                .iter()
-                .map(|d| lagrange_interpolant.evaluate(d))
-                .collect_vec();
-            for (v, r) in values.iter().zip(lagrange_re_eval.iter()) {
-                assert_eq!(v, r);
-            }
-
-            // prepare NTT-based methods
-
-            // find order by rounding num_points up to the next power of 2
-            let mut order = num_points << 1;
-            while (order & (order - 1)) != 0 {
-                order &= order - 1;
-            }
-
-            // get matching primitive nth root of unity
-            let maybe_omega = BFieldElement::primitive_root_of_unity(order as u64);
-            let omega = maybe_omega.unwrap();
-
-            // use NTT-based interpolation
-            let interpolant =
-                Polynomial::<BFieldElement>::fast_interpolate(&domain, &values, omega, order);
-
-            // re-evaluate and match against sampled values
-            let re_eval = interpolant.fast_evaluate(&domain, omega, order);
-            for (v, r) in values.iter().zip(re_eval.iter()) {
-                assert_eq!(v, r);
-            }
-
-            // match against lagrange interpolation
-            assert_eq!(interpolant, lagrange_interpolant);
-
-            // Use batched-NTT-based interpolation
-            let batched_interpolants = Polynomial::<BFieldElement>::batch_fast_interpolate(
-                &domain,
-                &vec![values],
-                omega,
-                order,
-            );
-
-            // match against lagrange interpolation
-            assert_eq!(batched_interpolants[0], lagrange_interpolant);
-            assert_eq!(1, batched_interpolants.len())
+    fn coset_domain_of_size_from_generator_with_offset(
+        size: usize,
+        generator: BFieldElement,
+        offset: BFieldElement,
+    ) -> Vec<BFieldElement> {
+        let mut domain = vec![offset];
+        for _ in 1..size {
+            domain.push(domain.last().copied().unwrap() * generator);
         }
+        domain
     }
 
     #[test]
     fn fast_coset_evaluate_test() {
-        let _1 = BFieldElement::from(1u64);
-        let _0 = BFieldElement::from(0u64);
+        let polynomial =
+            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
 
         // x^5 + x^3
-        let poly = Polynomial::<BFieldElement>::new(vec![_0, _0, _0, _1, _0, _1]);
+        let poly = polynomial(&[0, 0, 0, 1, 0, 1]);
 
+        let root_order = 8;
+        let root_of_unity = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
         let offset = BFieldElement::generator();
-        let omega = BFieldElement::primitive_root_of_unity(8).unwrap();
+        let domain =
+            coset_domain_of_size_from_generator_with_offset(root_order, root_of_unity, offset);
 
-        let values = poly.fast_coset_evaluate(offset, omega, 8);
+        let values = poly.fast_coset_evaluate(offset, root_of_unity, root_order);
+        let interpolant = Polynomial::fast_interpolate(&domain, &values, root_of_unity, root_order);
+        assert_eq!(poly, interpolant);
 
-        let mut domain = vec![_0; 8];
-        domain[0] = offset;
-        for i in 1..8 {
-            domain[i] = domain[i - 1].to_owned() * omega.to_owned();
-        }
-
-        let reinterp = Polynomial::fast_interpolate(&domain, &values, omega, 8);
-        assert_eq!(reinterp, poly);
-
-        let poly_interpolated = Polynomial::fast_coset_interpolate(offset, omega, &values);
-        assert_eq!(poly, poly_interpolated);
+        let coset_interpolant = Polynomial::fast_coset_interpolate(offset, root_of_unity, &values);
+        assert_eq!(poly, coset_interpolant);
     }
 
     #[test]
