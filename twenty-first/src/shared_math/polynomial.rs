@@ -891,6 +891,7 @@ impl<FF: FiniteField> Polynomial<FF> {
     pub fn zerofier(domain: &[FF]) -> Self {
         domain
             .iter()
+            .unique()
             .map(|&r| Self::new(vec![-r, FF::one()]))
             .reduce(|accumulator, linear_poly| accumulator * linear_poly)
             .unwrap_or_else(Self::one)
