@@ -271,6 +271,7 @@ mod fast_ntt_attempt_tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
+    use test_strategy::proptest;
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::random_elements;
@@ -429,117 +430,79 @@ mod fast_ntt_attempt_tests {
         assert_eq!(original_input, input_output);
     }
 
-    proptest! {
-        #[test]
-        fn ntt_on_input_of_length_one(bfe in arb::<BFieldElement>()) {
-            let mut test_vector = vec![bfe];
-            let root_of_unity = BFieldElement::one();
+    #[proptest]
+    fn ntt_on_input_of_length_one(bfe: BFieldElement) {
+        let mut test_vector = vec![bfe];
+        let root_of_unity = BFieldElement::one();
 
-            ntt(&mut test_vector, root_of_unity, 0);
-            assert_eq!(vec![bfe], test_vector);
-        }
+        ntt(&mut test_vector, root_of_unity, 0);
+        assert_eq!(vec![bfe], test_vector);
     }
 
-    prop_compose! {
-        fn bfield_element_vec_of_length_some_power_of_two()(log_2_vector_length in 0_usize..20)(
-            bfe_vector in vec(arb::<BFieldElement>(), 1 << log_2_vector_length),
-        ) -> Vec<BFieldElement> {
-            bfe_vector
-        }
-    }
+    #[proptest(cases = 10)]
+    fn ntt_then_intt_is_identity_operation(
+        #[strategy((0_usize..20).prop_map(|l| 1 << l))] _vector_length: usize,
+        #[strategy(vec(arb(), #_vector_length))] mut input: Vec<BFieldElement>,
+    ) {
+        let original_input = input.clone();
+        let log_2_of_input_length = input.len().ilog2();
+        let root_of_unity = BFieldElement::primitive_root_of_unity(input.len() as u64).unwrap();
 
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(10))]
-        #[test]
-        fn ntt_then_intt_is_identity_operation(
-            mut input in bfield_element_vec_of_length_some_power_of_two()
-        ) {
-            let original_input = input.clone();
-            let log_2_of_input_length = input.len().ilog2();
-            let root_of_unity = BFieldElement::primitive_root_of_unity(input.len() as u64).unwrap();
+        ntt::<BFieldElement>(&mut input, root_of_unity, log_2_of_input_length);
+        intt::<BFieldElement>(&mut input, root_of_unity, log_2_of_input_length);
 
-            ntt::<BFieldElement>(&mut input, root_of_unity, log_2_of_input_length);
-            intt::<BFieldElement>(&mut input, root_of_unity, log_2_of_input_length);
-
-            assert_eq!(original_input, input);
-        }
+        assert_eq!(original_input, input);
     }
 
     #[test]
     fn b_field_ntt_with_length_32() {
-        let mut input_output = vec![
-            BFieldElement::new(1),
-            BFieldElement::new(4),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(1),
-            BFieldElement::new(4),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(1),
-            BFieldElement::new(4),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(1),
-            BFieldElement::new(4),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-        ];
+        let mut input_output = [
+            1, 4, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0,
+            0, 0, 0,
+        ]
+        .map(BFieldElement::new)
+        .to_vec();
         let original_input = input_output.clone();
         let omega = BFieldElement::primitive_root_of_unity(32).unwrap();
         ntt::<BFieldElement>(&mut input_output, omega, 5);
         // let actual_output = ntt(&mut input_output, &omega, 5);
         println!("actual_output = {input_output:?}");
-        let expected = vec![
-            BFieldElement::new(20),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(18446744069146148869),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(4503599627370500),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(18446726477228544005),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(18446744069414584309),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(268435460),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(18442240469787213829),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(17592186040324),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-        ];
+        let expected = [
+            20,
+            0,
+            0,
+            0,
+            18446744069146148869,
+            0,
+            0,
+            0,
+            4503599627370500,
+            0,
+            0,
+            0,
+            18446726477228544005,
+            0,
+            0,
+            0,
+            18446744069414584309,
+            0,
+            0,
+            0,
+            268435460,
+            0,
+            0,
+            0,
+            18442240469787213829,
+            0,
+            0,
+            0,
+            17592186040324,
+            0,
+            0,
+            0,
+        ]
+        .map(BFieldElement::new)
+        .to_vec();
         assert_eq!(expected, input_output);
 
         // Verify that INTT(NTT(x)) = x

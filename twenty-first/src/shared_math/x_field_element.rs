@@ -551,11 +551,23 @@ impl ModPowU32 for XFieldElement {
 #[cfg(test)]
 mod x_field_element_test {
     use itertools::{izip, Itertools};
+    use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
     use rand::{random, thread_rng};
 
     use crate::shared_math::ntt::{intt, ntt};
     use crate::shared_math::other::{log_2_floor, random_elements};
     use crate::shared_math::{b_field_element::*, x_field_element::*};
+
+    impl proptest::arbitrary::Arbitrary for XFieldElement {
+        type Parameters = ();
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            arb().boxed()
+        }
+
+        type Strategy = BoxedStrategy<Self>;
+    }
 
     #[test]
     fn one_zero_test() {
