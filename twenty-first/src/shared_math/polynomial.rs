@@ -771,12 +771,6 @@ impl<FF: FiniteField> Polynomial<FF> {
         Self { coefficients }
     }
 
-    pub fn new_const(element: FF) -> Self {
-        Self {
-            coefficients: vec![element],
-        }
-    }
-
     pub fn normalize(&mut self) {
         while !self.coefficients.is_empty() && self.coefficients.last().unwrap().is_zero() {
             self.coefficients.pop();
@@ -2009,9 +2003,9 @@ mod test_polynomials {
         a: BFieldElement,
         #[filter(!#b.is_zero())] b: BFieldElement,
     ) {
-        let a_poly = Polynomial::new_const(a);
-        let b_poly = Polynomial::new_const(b);
-        let expected_quotient = Polynomial::new_const(a / b);
+        let a_poly = Polynomial::from_constant(a);
+        let b_poly = Polynomial::from_constant(b);
+        let expected_quotient = Polynomial::from_constant(a / b);
         prop_assert_eq!(expected_quotient, a_poly / b_poly);
     }
 
@@ -2165,7 +2159,7 @@ mod test_polynomials {
     fn no_constant_polynomial_with_non_zero_coefficient_is_zero(
         #[filter(!#constant.is_zero())] constant: BFieldElement,
     ) {
-        let constant_polynomial = Polynomial::new_const(constant);
+        let constant_polynomial = Polynomial::from_constant(constant);
         prop_assert!(!constant_polynomial.is_zero());
     }
 
@@ -2200,7 +2194,7 @@ mod test_polynomials {
     fn no_constant_polynomial_with_non_one_coefficient_is_one(
         #[filter(!#constant.is_one())] constant: BFieldElement,
     ) {
-        let constant_polynomial = Polynomial::new_const(constant);
+        let constant_polynomial = Polynomial::from_constant(constant);
         prop_assert!(!constant_polynomial.is_one());
     }
 
