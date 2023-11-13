@@ -1357,12 +1357,9 @@ mod test_polynomials {
         leading_coefficient: BFieldElement,
         #[strategy(0usize..30)] num_leading_zeros: usize,
     ) {
-        let coefficients = polynomial
-            .coefficients
-            .into_iter()
-            .chain([leading_coefficient])
-            .chain([BFieldElement::zero()].repeat(num_leading_zeros))
-            .collect();
+        let mut coefficients = polynomial.coefficients;
+        coefficients.push(leading_coefficient);
+        coefficients.extend(vec![BFieldElement::zero(); num_leading_zeros]);
         let polynomial_with_leading_zeros = Polynomial { coefficients };
         prop_assert_eq!(
             leading_coefficient,
@@ -1559,12 +1556,8 @@ mod test_polynomials {
         #[strategy(0usize..30)] shift: usize,
     ) {
         let shifted_polynomial = polynomial.shift_coefficients(shift);
-        let expected_coefficients = [0]
-            .repeat(shift)
-            .into_iter()
-            .map(BFieldElement::new)
-            .chain(polynomial.coefficients.iter().copied())
-            .collect_vec();
+        let mut expected_coefficients = vec![BFieldElement::zero(); shift];
+        expected_coefficients.extend(polynomial.coefficients);
         prop_assert_eq!(expected_coefficients, shifted_polynomial.coefficients);
     }
 
