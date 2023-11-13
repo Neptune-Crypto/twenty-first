@@ -1299,10 +1299,8 @@ mod test_polynomials {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use rand::Rng;
     use test_strategy::proptest;
 
-    use crate::shared_math::other::random_elements;
     use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::shared_math::x_field_element::XFieldElement;
 
@@ -1386,18 +1384,26 @@ mod test_polynomials {
     }
 
     #[proptest]
+    fn spurious_leading_zeros_dont_affect_equality(
+        polynomial: Polynomial<BFieldElement>,
+        #[strategy(0usize..30)] num_leading_zeros: usize,
+    ) {
+        let mut coefficients = polynomial.coefficients.clone();
+        coefficients.extend(vec![BFieldElement::zero(); num_leading_zeros]);
+        let polynomial_with_leading_zeros = Polynomial { coefficients };
+
+        prop_assert_eq!(polynomial, polynomial_with_leading_zeros);
+    }
+
+    #[proptest]
     fn normalizing_removes_spurious_leading_zeros(
         polynomial: Polynomial<BFieldElement>,
         leading_coefficient: BFieldElement,
         #[strategy(0usize..30)] num_leading_zeros: usize,
     ) {
-        let coefficients = polynomial
-            .coefficients
-            .iter()
-            .copied()
-            .chain([leading_coefficient])
-            .chain([BFieldElement::zero()].repeat(num_leading_zeros))
-            .collect();
+        let mut coefficients = polynomial.coefficients.clone();
+        coefficients.push(leading_coefficient);
+        coefficients.extend(vec![BFieldElement::zero(); num_leading_zeros]);
         let mut polynomial_with_leading_zeros = Polynomial { coefficients };
         polynomial_with_leading_zeros.normalize();
 
@@ -2199,84 +2205,35 @@ mod test_polynomials {
     }
 
     #[test]
-    fn differentiate_zero() {
-        let elm = BFieldElement::new(0);
-        let p = Polynomial::new_const(elm);
-        let q = p.formal_derivative();
-
-        assert!(q.is_zero());
-        assert_eq!(q.degree(), -1)
+    fn formal_derivative_of_zero_is_zero() {
+        assert!(Polynomial::<BFieldElement>::zero()
+            .formal_derivative()
+            .is_zero());
+        assert!(Polynomial::<XFieldElement>::zero()
+            .formal_derivative()
+            .is_zero());
     }
 
-    #[test]
-    fn differentiate_const() {
-        let elm = BFieldElement::new(42);
-        let p = Polynomial::new_const(elm);
-        let q = p.formal_derivative();
-
-        assert!(q.is_zero());
-        assert_eq!(q.degree(), -1)
+    #[proptest]
+    fn formal_derivative_of_constant_polynomial_is_zero(constant: BFieldElement) {
+        let formal_derivative = Polynomial::from_constant(constant).formal_derivative();
+        prop_assert!(formal_derivative.is_zero());
     }
 
-    #[test]
-    fn differentiate_quartic() {
-        let elm = BFieldElement::new(42);
-        let coeffs = vec![elm, elm, elm, elm, elm];
-        let p = Polynomial::new(coeffs);
-        let q = p.formal_derivative();
-
-        assert!(!q.is_zero());
-        assert_eq!(q.degree(), 3);
-
-        let manual_result = Polynomial::new(vec![
-            elm,
-            BFieldElement::new(2) * elm,
-            BFieldElement::new(3) * elm,
-            BFieldElement::new(4) * elm,
-        ]);
-
-        assert_eq!(q, manual_result)
+    #[proptest]
+    fn formal_derivative_of_non_zero_polynomial_is_of_degree_one_less_than_the_polynomial(
+        #[filter(!#poly.is_zero())] poly: Polynomial<BFieldElement>,
+    ) {
+        prop_assert_eq!(poly.degree() - 1, poly.formal_derivative().degree());
     }
 
-    #[test]
-    fn differentiate_leibniz() {
-        let mut rng = rand::thread_rng();
-
-        for _ in 0..10 {
-            let terms_count_p = rng.gen_range(2..10);
-            let terms_count_q = rng.gen_range(2..10);
-
-            let rnd_coeffs_p: Vec<BFieldElement> = random_elements(terms_count_p);
-            let rnd_coeffs_q: Vec<BFieldElement> = random_elements(terms_count_q);
-
-            let p = Polynomial::new(rnd_coeffs_p);
-
-            let q = Polynomial::new(rnd_coeffs_q);
-
-            let pq_prime = (p.clone() * q.clone()).formal_derivative();
-
-            let leibniz = p.formal_derivative() * q.clone() + p * q.formal_derivative();
-
-            assert_eq!(pq_prime, leibniz)
-        }
-    }
-
-    #[test]
-    fn equality() {
-        let mut rng = rand::thread_rng();
-
-        for _ in 0..10 {
-            let terms_count_p = rng.gen_range(2..10);
-
-            let rnd_coeffs_p: Vec<BFieldElement> = random_elements(terms_count_p);
-
-            let mut p = Polynomial::new(rnd_coeffs_p);
-            let original_p = p.clone();
-
-            for _ in 0..4 {
-                p.coefficients.push(BFieldElement::new(0));
-                assert_eq!(p, original_p);
-            }
-        }
+    #[proptest]
+    fn formal_derivative_of_product_adheres_to_the_leibniz_product_rule(
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
+    ) {
+        let product_formal_derivative = (a.clone() * b.clone()).formal_derivative();
+        let product_rule = a.formal_derivative() * b.clone() + a * b.formal_derivative();
+        prop_assert_eq!(product_rule, product_formal_derivative);
     }
 }
