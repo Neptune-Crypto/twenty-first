@@ -2128,60 +2128,63 @@ mod test_polynomials {
     }
 
     #[test]
-    fn zero_test() {
-        let mut zero_pol: Polynomial<BFieldElement> = Polynomial::zero();
-        assert!(zero_pol.is_zero());
+    fn zero_polynomial_is_zero() {
+        assert!(Polynomial::<BFieldElement>::zero().is_zero());
+        assert!(Polynomial::<XFieldElement>::zero().is_zero());
+    }
 
-        // Verify that trailing zeros in the coefficients does not affect the `is_zero` result
-        for _ in 0..12 {
-            zero_pol.coefficients.push(BFieldElement::zero());
-            assert!(zero_pol.is_zero());
-        }
+    #[proptest]
+    fn zero_polynomial_is_zero_independent_of_spurious_leading_zeros(
+        #[strategy(..500usize)] num_zeros: usize,
+    ) {
+        let polynomial =
+            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
 
-        // Verify that other constant-polynomials are not `zero`
-        let rand_bs: Vec<BFieldElement> = random_elements(10);
-        for rand_b in rand_bs {
-            let pol: Polynomial<BFieldElement> = Polynomial {
-                coefficients: vec![rand_b],
-            };
-            assert!(
-                !pol.is_zero() || rand_b.is_zero(),
-                "Pol is not zero if constant coefficient is not zero"
-            );
-        }
+        let coefficients = vec![0; num_zeros];
+        prop_assert_eq!(Polynomial::zero(), polynomial(&coefficients));
+    }
+
+    #[proptest]
+    fn no_constant_polynomial_with_non_zero_coefficient_is_zero(
+        #[filter(!#constant.is_zero())] constant: BFieldElement,
+    ) {
+        let constant_polynomial = Polynomial::new_const(constant);
+        prop_assert!(!constant_polynomial.is_zero());
     }
 
     #[test]
-    fn one_test() {
-        let mut one_pol: Polynomial<BFieldElement> = Polynomial::one();
-        assert!(one_pol.is_one(), "One must be one");
+    fn constant_one_eq_constant_one() {
+        let one_polynomial1 = Polynomial::<BFieldElement>::one();
+        let one_polynomial2 = Polynomial::<BFieldElement>::one();
 
-        // Verify that trailing zeros in the coefficients does not affect the `is_zero` result
-        let one_pol_original = one_pol.clone();
-        for _ in 0..12 {
-            one_pol.coefficients.push(BFieldElement::zero());
-            assert!(
-                one_pol.is_one(),
-                "One must be one, also with trailing zeros"
-            );
-            assert_eq!(
-                one_pol_original, one_pol,
-                "One must be equal to one with trailing zeros"
-            );
-        }
+        assert_eq!(one_polynomial1, one_polynomial2)
+    }
 
-        // Verify that other constant-polynomials are not `one`
-        let rand_bs: Vec<BFieldElement> = random_elements(10);
-        for rand_b in rand_bs {
-            let pol: Polynomial<BFieldElement> = Polynomial {
-                coefficients: vec![rand_b],
-            };
-            assert!(
-                !pol.is_one() || rand_b.is_one(),
-                "Pol is not one if constant coefficient is not one"
-            );
-            assert!(0 == pol.degree() || -1 == pol.degree());
-        }
+    #[test]
+    fn one_polynomial_is_one() {
+        assert!(Polynomial::<BFieldElement>::one().is_one());
+        assert!(Polynomial::<XFieldElement>::one().is_one());
+    }
+
+    #[proptest]
+    fn one_polynomial_is_one_independent_of_spurious_leading_zeros(
+        #[strategy(..500usize)] num_leading_zeros: usize,
+    ) {
+        let polynomial =
+            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
+
+        let spurious_leading_zeros = vec![0; num_leading_zeros];
+        let mut coefficients = vec![1];
+        coefficients.extend(spurious_leading_zeros);
+        prop_assert_eq!(Polynomial::one(), polynomial(&coefficients));
+    }
+
+    #[proptest]
+    fn no_constant_polynomial_with_non_one_coefficient_is_one(
+        #[filter(!#constant.is_one())] constant: BFieldElement,
+    ) {
+        let constant_polynomial = Polynomial::new_const(constant);
+        prop_assert!(!constant_polynomial.is_one());
     }
 
     #[test]
