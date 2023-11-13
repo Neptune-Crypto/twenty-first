@@ -2022,139 +2022,69 @@ mod test_polynomials {
         prop_assert_eq!(gcd, a * x + b * y);
     }
 
-    #[test]
-    fn add_assign_test() {
-        for _ in 0..10 {
-            let poly1: Polynomial<BFieldElement> = gen_polynomial();
-            let poly2 = gen_polynomial();
-            let expected = poly1.clone() + poly2.clone();
-            let mut actual = poly1.clone();
-            actual += poly2.clone();
-
-            assert_eq!(expected, actual);
-        }
+    #[proptest]
+    fn add_assign_is_equivalent_to_adding_and_assigning(
+        a: Polynomial<BFieldElement>,
+        b: Polynomial<BFieldElement>,
+    ) {
+        let mut c = a.clone();
+        c += b.clone();
+        prop_assert_eq!(a + b, c);
     }
 
     #[test]
-    fn is_x_test() {
-        let zero: Polynomial<BFieldElement> = Polynomial::zero();
-        assert!(!zero.is_x());
+    fn only_monic_polynomial_of_degree_1_is_x() {
+        let polynomial =
+            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
 
-        let one: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![BFieldElement::one()],
-        };
-        assert!(!one.is_x());
-        let x: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![BFieldElement::zero(), BFieldElement::one()],
-        };
-        assert!(x.is_x());
-        let x_alt: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![
-                BFieldElement::zero(),
-                BFieldElement::one(),
-                BFieldElement::zero(),
-            ],
-        };
-        assert!(x_alt.is_x());
-        let x_alt_alt: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![
-                BFieldElement::zero(),
-                BFieldElement::one(),
-                BFieldElement::zero(),
-                BFieldElement::zero(),
-            ],
-        };
-        assert!(x_alt_alt.is_x());
-        let _2x: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![
-                BFieldElement::zero(),
-                BFieldElement::one() + BFieldElement::one(),
-            ],
-        };
-        assert!(!_2x.is_x());
-        let not_x = Polynomial::<BFieldElement>::new(
-            vec![14, 1, 3, 4]
-                .into_iter()
-                .map(BFieldElement::new)
-                .collect::<Vec<BFieldElement>>(),
+        assert!(polynomial(&[0, 1]).is_x());
+        assert!(polynomial(&[0, 1, 0]).is_x());
+        assert!(polynomial(&[0, 1, 0, 0]).is_x());
+
+        assert!(!polynomial(&[]).is_x());
+        assert!(!polynomial(&[0]).is_x());
+        assert!(!polynomial(&[1]).is_x());
+        assert!(!polynomial(&[1, 0]).is_x());
+        assert!(!polynomial(&[0, 2]).is_x());
+        assert!(!polynomial(&[0, 0, 1]).is_x());
+    }
+
+    #[test]
+    fn hardcoded_polynomial_squaring() {
+        let polynomial =
+            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
+
+        assert_eq!(Polynomial::zero(), polynomial(&[]).square());
+
+        let x_plus_1 = polynomial(&[1, 1]);
+        assert_eq!(polynomial(&[1, 2, 1]), x_plus_1.square());
+
+        let x_to_the_15 = polynomial(&[1]).shift_coefficients(15);
+        let x_to_the_30 = polynomial(&[1]).shift_coefficients(30);
+        assert_eq!(x_to_the_30, x_to_the_15.square());
+
+        let some_poly = polynomial(&[14, 1, 3, 4]);
+        assert_eq!(
+            polynomial(&[196, 28, 85, 118, 17, 24, 16]),
+            some_poly.square()
         );
-        assert!(!not_x.is_x());
     }
 
-    #[test]
-    fn square_simple_test() {
-        let coefficients = vec![14, 1, 3, 4]
-            .into_iter()
-            .map(BFieldElement::new)
-            .collect::<Vec<BFieldElement>>();
-        let poly: Polynomial<BFieldElement> = Polynomial { coefficients };
-        let expected = Polynomial {
-            coefficients: vec![
-                14 * 14,            // 0th degree
-                2 * 14,             // 1st degree
-                2 * 3 * 14 + 1,     // 2nd degree
-                2 * 3 + 2 * 4 * 14, // 3rd degree
-                3 * 3 + 2 * 4,      // 4th degree
-                2 * 3 * 4,          // 5th degree
-                4 * 4,              // 6th degree
-            ]
-            .into_iter()
-            .map(BFieldElement::new)
-            .collect::<Vec<BFieldElement>>(),
-        };
-
-        assert_eq!(expected, poly.square());
-        assert_eq!(expected, poly.slow_square());
+    #[proptest]
+    fn polynomial_squaring_is_equivalent_to_multiplication_with_self(
+        poly: Polynomial<BFieldElement>,
+    ) {
+        prop_assert_eq!(poly.clone() * poly.clone(), poly.square());
     }
 
-    #[test]
-    fn fast_square_test() {
-        let mut poly: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![],
-        };
-        assert!(poly.fast_square().is_zero());
-
-        // square P(x) = x + 1; (P(x))^2 = (x + 1)^2 = x^2 + 2x + 1
-        poly.coefficients = vec![1, 1].into_iter().map(BFieldElement::new).collect();
-        let mut expected: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![1, 2, 1].into_iter().map(BFieldElement::new).collect(),
-        };
-        assert_eq!(expected, poly.fast_square());
-
-        // square P(x) = x^15; (P(x))^2 = (x^15)^2 = x^30
-        poly.coefficients = vec![0; 16].into_iter().map(BFieldElement::new).collect();
-        poly.coefficients[15] = BFieldElement::one();
-        expected.coefficients = vec![0; 32].into_iter().map(BFieldElement::new).collect();
-        expected.coefficients[30] = BFieldElement::one();
-        assert_eq!(expected, poly.fast_square());
+    #[proptest]
+    fn slow_and_normal_squaring_are_equivalent(poly: Polynomial<BFieldElement>) {
+        prop_assert_eq!(poly.slow_square(), poly.square());
     }
 
-    #[test]
-    fn square_test() {
-        let one_pol = Polynomial {
-            coefficients: vec![BFieldElement::one()],
-        };
-        for _ in 0..1000 {
-            let poly = gen_polynomial() + one_pol.clone();
-            let actual = poly.square();
-            let fast_square_actual = poly.fast_square();
-            let slow_square_actual = poly.slow_square();
-            let expected = poly.clone() * poly;
-            assert_eq!(expected, actual);
-            assert_eq!(expected, fast_square_actual);
-            assert_eq!(expected, slow_square_actual);
-        }
-    }
-
-    #[test]
-    fn mul_commutative_test() {
-        for _ in 0..10 {
-            let a: Polynomial<BFieldElement> = gen_polynomial();
-            let b = gen_polynomial();
-            let ab = a.clone() * b.clone();
-            let ba = b.clone() * a.clone();
-            assert_eq!(ab, ba);
-        }
+    #[proptest]
+    fn normal_and_fast_squaring_are_equivalent(poly: Polynomial<BFieldElement>) {
+        prop_assert_eq!(poly.square(), poly.fast_square());
     }
 
     #[test]
