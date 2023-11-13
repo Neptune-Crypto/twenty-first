@@ -1043,7 +1043,8 @@ mod tests {
 
         // modify
         new_vector.set(2, S([3u8].to_vec()));
-        new_vector.pop();
+        let last_again = new_vector.pop().unwrap();
+        assert_eq!(last_again, S([8u8].to_vec()));
 
         // test
         assert_eq!(new_vector.get(0), S([1u8].to_vec()));
@@ -1217,7 +1218,21 @@ mod tests {
 
         // Verify mutated values, and non-mutated also.
         let new_values = vector.get_many(&read_indices);
-        for (value, index) in new_values.into_iter().zip(read_indices) {
+        for (value, index) in new_values.into_iter().zip(read_indices.clone()) {
+            if mutate_indices.contains(&index) {
+                assert_eq!(
+                    S(vec![index as u8 + 1, index as u8 + 1, index as u8 + 1]),
+                    value
+                )
+            } else {
+                assert_eq!(S(vec![index as u8, index as u8, index as u8]), value)
+            }
+        }
+
+        // Persist and verify that result is unchanged
+        rusty_storage.persist();
+        let new_values_after_persist = vector.get_many(&read_indices);
+        for (value, index) in new_values_after_persist.into_iter().zip(read_indices) {
             if mutate_indices.contains(&index) {
                 assert_eq!(
                     S(vec![index as u8 + 1, index as u8 + 1, index as u8 + 1]),

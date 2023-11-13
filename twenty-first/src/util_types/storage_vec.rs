@@ -602,8 +602,14 @@ mod tests {
         delegated_db_vec_a.push(10);
         delegated_db_vec_a.push(20);
         delegated_db_vec_a.push(30);
+        delegated_db_vec_a.push(40);
 
-        let updates = [(0, 100), (1, 200), (2, 300)];
+        // Allow `set_many` with empty input
+        delegated_db_vec_a.set_many([]);
+        assert_eq!(vec![10, 20, 30], delegated_db_vec_a.get_many(&[0, 1, 2]));
+
+        // Perform an actual update with `set_many`
+        let updates = [(0, 100), (1, 200), (2, 300), (3, 400)];
         delegated_db_vec_a.set_many(updates);
 
         assert_eq!(vec![100, 200, 300], delegated_db_vec_a.get_many(&[0, 1, 2]));
@@ -624,12 +630,16 @@ mod tests {
             db.lock().unwrap().write(write_batch, true).is_ok(),
             "DB write must succeed"
         );
-        assert_eq!(3, delegated_db_vec_a.persisted_length());
+        assert_eq!(4, delegated_db_vec_a.persisted_length());
 
         // Check values after persisting
         assert_eq!(
             vec![1000, 2000, 3000],
             delegated_db_vec_a.get_many(&[0, 1, 2])
+        );
+        assert_eq!(
+            vec![1000, 2000, 3000, 400],
+            delegated_db_vec_a.get_many(&[0, 1, 2, 3])
         );
     }
 
@@ -752,18 +762,21 @@ mod tests {
 
         let mut rng = rand::thread_rng();
         for _ in 0..10000 {
-            match rng.gen_range(0..4) {
+            match rng.gen_range(0..=5) {
                 0 => {
+                    // `push`
                     let push_val = rng.next_u64();
                     persisted_vector.push(push_val);
                     normal_vector.push(push_val);
                 }
                 1 => {
+                    // `pop`
                     let persisted_pop_val = persisted_vector.pop().unwrap();
                     let normal_pop_val = normal_vector.pop().unwrap();
                     assert_eq!(persisted_pop_val, normal_pop_val);
                 }
                 2 => {
+                    // `get_many`
                     let index = rng.gen_range(0..normal_vector.len());
                     assert_eq!(Vec::<u64>::default(), persisted_vector.get_many(&[]));
                     assert_eq!(normal_vector[index], persisted_vector.get(index as u64));
@@ -777,10 +790,31 @@ mod tests {
                     );
                 }
                 3 => {
+                    // `set`
                     let value = rng.next_u64();
                     let index = rng.gen_range(0..normal_vector.len());
                     normal_vector[index] = value;
                     persisted_vector.set(index as u64, value);
+                }
+                4 => {
+                    // `set_many`
+                    let indices: Vec<u64> = (0..rng.gen_range(0..10))
+                        .map(|_| rng.gen_range(0..normal_vector.len() as u64))
+                        .unique()
+                        .collect();
+                    let values: Vec<u64> = (0..indices.len()).map(|_| rng.next_u64()).collect_vec();
+                    let update: Vec<(u64, u64)> =
+                        indices.into_iter().zip_eq(values.into_iter()).collect();
+                    for (key, val) in update.iter() {
+                        normal_vector[*key as usize] = *val;
+                    }
+                    persisted_vector.set_many(update);
+                }
+                5 => {
+                    // persist
+                    let mut write_batch = WriteBatch::new();
+                    persisted_vector.pull_queue(&mut write_batch);
+                    db.lock().unwrap().write(write_batch, true).unwrap();
                 }
                 _ => panic!("Bad range"),
             }
