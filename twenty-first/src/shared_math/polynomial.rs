@@ -1861,6 +1861,16 @@ mod test_polynomials {
         let _ = Polynomial::<BFieldElement>::lagrange_interpolate(&[], &[]);
     }
 
+    #[proptest]
+    fn interpolating_through_one_point_gives_constant_polynomial(
+        x: BFieldElement,
+        y: BFieldElement,
+    ) {
+        let interpolant = Polynomial::lagrange_interpolate(&[x], &[y]);
+        let polynomial = Polynomial::from_constant(y);
+        prop_assert_eq!(polynomial, interpolant);
+    }
+
     #[test]
     #[should_panic(expected = "zero points")]
     fn fast_interpolation_through_no_points_is_impossible() {
@@ -2185,18 +2195,6 @@ mod test_polynomials {
     ) {
         let constant_polynomial = Polynomial::new_const(constant);
         prop_assert!(!constant_polynomial.is_one());
-    }
-
-    #[test]
-    fn lagrange_interpolate_size_one_test() {
-        type BPoly = Polynomial<BFieldElement>;
-        let interpoly =
-            BPoly::lagrange_interpolate(&[BFieldElement::new(14)], &[BFieldElement::new(7888854)]);
-        assert_eq!(
-            BFieldElement::new(7888854),
-            interpoly.evaluate(&BFieldElement::new(5))
-        );
-        assert!(interpoly.degree().is_zero());
     }
 
     #[test]
