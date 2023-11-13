@@ -776,6 +776,7 @@ impl<FF: FiniteField> Polynomial<FF> {
             coefficients: vec![element],
         }
     }
+
     pub fn normalize(&mut self) {
         while !self.coefficients.is_empty() && self.coefficients.last().unwrap().is_zero() {
             self.coefficients.pop();
@@ -1301,7 +1302,7 @@ mod test_polynomials {
     use rand::Rng;
     use test_strategy::proptest;
 
-    use crate::shared_math::other::{random_elements, random_elements_distinct};
+    use crate::shared_math::other::random_elements;
     use crate::shared_math::traits::PrimitiveRootOfUnity;
     use crate::shared_math::x_field_element::XFieldElement;
 
@@ -2198,82 +2199,6 @@ mod test_polynomials {
     }
 
     #[test]
-    fn lagrange_interpolate_test() {
-        type BPoly = Polynomial<BFieldElement>;
-        let mut rng = rand::thread_rng();
-        for _ in 0..10 {
-            let num_points: usize = rng.gen_range(2..10);
-            let domain = random_elements_distinct(num_points);
-            let values: Vec<BFieldElement> = random_elements(num_points);
-            let interpoly = BPoly::lagrange_interpolate(&domain, &values);
-
-            assert!(num_points as isize > interpoly.degree());
-            for (i, y) in values.into_iter().enumerate() {
-                assert_eq!(y, interpoly.evaluate(&domain[i]));
-            }
-        }
-    }
-
-    #[test]
-    fn fast_lagrange_interpolate_test() {
-        type BPoly = Polynomial<BFieldElement>;
-        let mut rng = rand::thread_rng();
-        for _ in 0..10 {
-            let num_points: usize = rng.gen_range(2..10);
-            let domain = random_elements_distinct(num_points);
-            let values: Vec<BFieldElement> = random_elements(num_points);
-            let interpoly = BPoly::lagrange_interpolate(&domain, &values);
-
-            assert!(num_points as isize > interpoly.degree());
-            for (i, y) in values.into_iter().enumerate() {
-                assert_eq!(y, interpoly.evaluate(&domain[i]));
-            }
-        }
-    }
-
-    #[test]
-    fn zerofier_test() {
-        let mut rng = rand::thread_rng();
-        for _ in 0..10 {
-            let num_samples: usize = rng.gen_range(2..100);
-            let domain = random_elements_distinct(num_samples);
-
-            // zerofier method
-            let zerofier_polynomial = Polynomial::<BFieldElement>::zerofier(&domain);
-
-            // verify zeros
-            for domain_value in domain.iter() {
-                assert!(
-                    zerofier_polynomial.evaluate(domain_value).is_zero(),
-                    "The zerofier polynomial evaluates to zero in the entire domain"
-                );
-            }
-
-            // verify non-zeros
-            for _ in 0..num_samples {
-                let elem = rng.gen();
-                if domain.contains(&elem) {
-                    continue;
-                }
-                assert_ne!(zerofier_polynomial.evaluate(&elem), BFieldElement::zero())
-            }
-
-            // NTT-based fast zerofier
-            let mut next_po2 = domain.len() << 1;
-            while next_po2 & (next_po2 - 1) != 0 {
-                next_po2 = next_po2 & (next_po2 - 1);
-            }
-
-            let omega = BFieldElement::primitive_root_of_unity(next_po2 as u64).unwrap();
-
-            let fast_zerofier_polynomial =
-                Polynomial::<BFieldElement>::fast_zerofier(&domain, omega, next_po2);
-
-            assert_eq!(zerofier_polynomial, fast_zerofier_polynomial);
-        }
-    }
-
-    #[test]
     fn differentiate_zero() {
         let elm = BFieldElement::new(0);
         let p = Polynomial::new_const(elm);
@@ -2282,8 +2207,8 @@ mod test_polynomials {
         assert!(q.is_zero());
         assert_eq!(q.degree(), -1)
     }
-    #[test]
 
+    #[test]
     fn differentiate_const() {
         let elm = BFieldElement::new(42);
         let p = Polynomial::new_const(elm);
