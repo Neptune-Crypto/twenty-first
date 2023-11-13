@@ -691,56 +691,59 @@ where
     /// to zero in their domain, we do the division with an offset from the polynomials' original
     /// domains. The issue of zero in the numerator and divisor arises when we divide a transition
     /// polynomial with a zerofier.
+    ///
+    /// ### Current limitations
+    ///
+    /// - The order of the domain must be greater than the degree of the `numerator`.
     pub fn fast_coset_divide(
-        lhs: &Polynomial<FF>,
-        rhs: &Polynomial<FF>,
+        numerator: &Polynomial<FF>,
+        denominator: &Polynomial<FF>,
         offset: BFieldElement,
         primitive_root: BFieldElement,
         root_order: usize,
     ) -> Polynomial<FF> {
-        assert!(
-            primitive_root.mod_pow_u32(root_order as u32).is_one(),
-            "primitive root raised to given order must yield 1"
-        );
-        assert!(
-            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one(),
-            "primitive root raised to half of given order must not yield 1"
-        );
-        assert!(!rhs.is_zero(), "cannot divide by zero polynomial");
+        assert!(!denominator.is_zero(), "cannot divide by zero polynomial");
 
-        if lhs.is_zero() {
+        if numerator.is_zero() {
             return Polynomial {
                 coefficients: vec![],
             };
         }
 
         assert!(
-            rhs.degree() <= lhs.degree(),
-            "in polynomial division, right hand side degree must be at most that of left hand side"
+            denominator.degree() <= numerator.degree(),
+            "in polynomial division, denominator degree must be at most that of numerator"
         );
 
-        let zero = FF::zero();
-        let mut root: BFieldElement = primitive_root.to_owned();
-        let mut order = root_order;
-        let degree: usize = lhs.degree() as usize;
+        // See the comment in `fast_coset_evaluate` for why this is necessary.
+        assert!(
+            (root_order as isize) > numerator.degree(),
+            "`Polynomial::fast_coset_divide` is currently limited to domains of order \
+            greater than the degree of the numerator."
+        );
 
-        if degree < 8 {
-            return lhs.to_owned() / rhs.to_owned();
+        if numerator.degree() < 8 {
+            return numerator.to_owned() / denominator.to_owned();
         }
 
+        let mut root: BFieldElement = primitive_root;
+        let mut order = root_order;
+        let degree: usize = numerator.degree() as usize;
+
+        // shrink the size of the domain as much as possible
         while degree < order / 2 {
             root *= root;
             order /= 2;
         }
 
-        let mut scaled_lhs_coefficients: Vec<FF> = lhs.scale(offset).coefficients;
-        scaled_lhs_coefficients.append(&mut vec![zero; order - scaled_lhs_coefficients.len()]);
+        let mut scaled_lhs_coefficients: Vec<FF> = numerator.scale(offset).coefficients;
+        let mut scaled_rhs_coefficients: Vec<FF> = denominator.scale(offset).coefficients;
 
-        let mut scaled_rhs_coefficients: Vec<FF> = rhs.scale(offset).coefficients;
-        scaled_rhs_coefficients.append(&mut vec![zero; order - scaled_rhs_coefficients.len()]);
+        scaled_lhs_coefficients.resize(order, FF::zero());
+        scaled_rhs_coefficients.resize(order, FF::zero());
 
-        let lhs_log_2_of_n = log_2_floor(scaled_lhs_coefficients.len() as u128) as u32;
-        let rhs_log_2_of_n = log_2_floor(scaled_rhs_coefficients.len() as u128) as u32;
+        let lhs_log_2_of_n = scaled_lhs_coefficients.len().ilog2();
+        let rhs_log_2_of_n = scaled_rhs_coefficients.len().ilog2();
 
         ntt::<FF>(&mut scaled_lhs_coefficients, root, lhs_log_2_of_n);
         ntt::<FF>(&mut scaled_rhs_coefficients, root, rhs_log_2_of_n);
@@ -752,7 +755,7 @@ where
             .map(|(l, r)| l.to_owned() * r)
             .collect();
 
-        let log_2_of_n = log_2_floor(quotient_codeword.len() as u128) as u32;
+        let log_2_of_n = quotient_codeword.len().ilog2();
         intt::<FF>(&mut quotient_codeword, root, log_2_of_n);
 
         let scaled_quotient = Polynomial {
@@ -1933,46 +1936,23 @@ mod test_polynomials {
         prop_assert_eq!(fast_interpolant, fast_coset_interpolant);
     }
 
-    #[test]
-    fn fast_coset_divide_test() {
-        let offset = BFieldElement::primitive_root_of_unity(64).unwrap();
-        let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
-        println!("primitive_root = {primitive_root}");
-        let a: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![
-                BFieldElement::from(1u64),
-                BFieldElement::from(2u64),
-                BFieldElement::from(3u64),
-                BFieldElement::from(4u64),
-                BFieldElement::from(5u64),
-                BFieldElement::from(6u64),
-                BFieldElement::from(7u64),
-                BFieldElement::from(8u64),
-                BFieldElement::from(9u64),
-                BFieldElement::from(10u64),
-            ],
-        };
-        let b: Polynomial<BFieldElement> = Polynomial {
-            coefficients: vec![
-                BFieldElement::from(1u64),
-                BFieldElement::from(2u64),
-                BFieldElement::from(3u64),
-                BFieldElement::from(4u64),
-                BFieldElement::from(5u64),
-                BFieldElement::from(6u64),
-                BFieldElement::from(7u64),
-                BFieldElement::from(8u64),
-                BFieldElement::from(9u64),
-                BFieldElement::from(17u64),
-            ],
-        };
-        let c_fast = Polynomial::fast_multiply(&a, &b, primitive_root, 32);
+    #[proptest]
+    fn fast_coset_division_and_division_are_equivalent(
+        a: Polynomial<BFieldElement>,
+        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
+        #[filter(!#offset.is_zero())] offset: BFieldElement,
+        #[strategy(0..8usize)]
+        #[map(|x: usize| 1 << x)]
+        // due to current limitation in `Polynomial::fast_coset_divide`
+        #[filter((#root_order as isize) > (#a * #b).degree())]
+        root_order: usize,
+    ) {
+        let primitive_root = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
 
-        let mut quotient = Polynomial::fast_coset_divide(&c_fast, &b, offset, primitive_root, 32);
-        assert_eq!(a, quotient);
-
-        quotient = Polynomial::fast_coset_divide(&c_fast, &a, offset, primitive_root, 32);
-        assert_eq!(b, quotient);
+        let product = a.clone() * b.clone();
+        let quotient =
+            Polynomial::fast_coset_divide(&product, &b, offset, primitive_root, root_order);
+        prop_assert_eq!(product / b, quotient);
     }
 
     #[test]
