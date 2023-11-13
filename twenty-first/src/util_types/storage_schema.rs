@@ -3,7 +3,7 @@ use rusty_leveldb::{WriteBatch, DB};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use super::storage_vec::{Index, StorageVec};
@@ -90,6 +90,55 @@ where
     }
 }
 
+/// A trait that does things with already acquired locks
+trait WithLock<ParentKey, ParentValue, T> {
+    fn len_with_lock(&self, lock: &MutexGuard<DbtVec<ParentKey, ParentValue, Index, T>>) -> Index;
+    fn write_op_overwrite_with_lock(
+        &self,
+        lock: &mut MutexGuard<DbtVec<ParentKey, ParentValue, Index, T>>,
+        index: Index,
+        value: T,
+    );
+}
+
+impl<ParentKey, ParentValue, T> WithLock<ParentKey, ParentValue, T>
+    for Arc<Mutex<DbtVec<ParentKey, ParentValue, Index, T>>>
+where
+    ParentKey: From<Index>,
+    ParentValue: From<T>,
+    T: Clone + From<ParentValue> + Debug,
+    ParentKey: From<(ParentKey, ParentKey)>,
+    ParentKey: From<u8>,
+    Index: From<ParentValue> + From<u64>,
+{
+    fn len_with_lock(&self, lock: &MutexGuard<DbtVec<ParentKey, ParentValue, u64, T>>) -> Index {
+        lock.current_length
+            .unwrap_or_else(|| lock.persisted_length().unwrap_or(0))
+    }
+
+    fn write_op_overwrite_with_lock(
+        &self,
+        lock: &mut MutexGuard<DbtVec<ParentKey, ParentValue, Index, T>>,
+        index: Index,
+        value: T,
+    ) {
+        if let Some(_old_val) = lock.cache.insert(index, value.clone()) {
+            // If cache entry exists, we remove any corresponding
+            // OverWrite ops in the `write_queue` to reduce disk IO.
+
+            // logic: retain all ops that are not overwrite, and
+            // overwrite ops that do not have an index matching cache_index.
+            lock.write_queue.retain(|op| match op {
+                VecWriteOperation::OverWrite((i, _)) => *i != index,
+                _ => true,
+            })
+        }
+
+        lock.write_queue
+            .push_back(VecWriteOperation::OverWrite((index, value)));
+    }
+}
+
 impl<ParentKey, ParentValue, T> StorageVec<T>
     for Arc<Mutex<DbtVec<ParentKey, ParentValue, Index, T>>>
 where
@@ -100,74 +149,49 @@ where
     ParentKey: From<u8>,
     Index: From<ParentValue> + From<u64>,
 {
+    /// note: acquires lock
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// note: acquires lock
     fn len(&self) -> Index {
-        let current_length = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (len 1)")
-            .current_length;
-        if let Some(length) = current_length {
-            return length;
-        }
-        let persisted_length = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (len 2)")
-            .persisted_length();
-        if let Some(length) = persisted_length {
-            length
-        } else {
-            0
-        }
+        self.len_with_lock(
+            &self
+                .lock()
+                .expect("Could not get lock on DbtVec as StorageVec"),
+        )
     }
 
     fn get(&self, index: Index) -> T {
         // Disallow getting values out-of-bounds
+        let lock = self
+            .lock()
+            .expect("Could not get lock on DbtVec as StorageVec");
+
         assert!(
-            index < self.len(),
+            index < self.len_with_lock(&lock),
             "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-            self.len(),
-            self.lock()
-                .expect("Could not get lock on DbtVec as StorageVec (get 1)")
-                .name
+            self.len_with_lock(&lock),
+            lock.name
         );
 
         // try cache first
-        if self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (get 2)")
-            .cache
-            .contains_key(&index)
-        {
-            return self
-                .lock()
-                .expect("Could not get lock on DbtVec as StorageVec (get 3)")
-                .cache
-                .get(&index)
-                .unwrap()
-                .clone();
+        if lock.cache.contains_key(&index) {
+            return lock.cache.get(&index).unwrap().clone();
         }
 
         // then try persistent storage
-        let key: ParentKey = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (get 4)")
-            .get_index_key(index);
-        let val = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (get 5)")
+        let key: ParentKey = lock.get_index_key(index);
+        let val = lock
             .reader
             .lock()
-            .expect("Could not get lock on DbtVec object (get 6).")
+            .expect("Could not get lock on DbtVec object")
             .get(key)
             .unwrap_or_else(|| {
                 panic!(
                     "Element with index {index} does not exist in {}. This should not happen",
-                    self.lock()
-                        .expect("Could not get lock on DbtVec as StorageVec (get 7)")
-                        .name
+                    lock.name
                 )
             });
         val.into()
@@ -182,13 +206,13 @@ where
             elements.into_iter().map(|(_, element)| element).collect()
         }
 
-        let self_length = self.len();
         let self_lock = self
             .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (get_many 1)");
+            .expect("Could not get lock on DbtVec as StorageVec");
 
-        // Do *not* refer to `self` after this point, instead use `self_lock`, as e.g.
-        // `self.len()` attempts to acquire the same lock that `self_lock` has.
+        let self_length = self.len_with_lock(&self_lock);
+
+        // Do *not* refer to `self` after this point, instead use `self_lock`
         assert!(
             indices.iter().all(|x| *x < self_length),
             "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
@@ -240,10 +264,11 @@ where
     /// Return all stored elements in a vector, whose index matches the StorageVec's.
     /// It's the caller's responsibility that there is enough memory to store all elements.
     fn get_all(&self) -> Vec<T> {
-        let length = self.len();
         let self_lock = self
             .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (get_all 1)");
+            .expect("Could not get lock on DbtVec as StorageVec");
+
+        let length = self.len_with_lock(&self_lock);
 
         let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
             (0..length).partition(|index| self_lock.cache.contains_key(index));
@@ -269,7 +294,7 @@ where
         let mut db_reader = self_lock
             .reader
             .lock()
-            .expect("Could not get lock on StorageReader object (get_all 2).");
+            .expect("Could not get lock on StorageReader object");
         let elements_fetched_from_db = db_reader
             .get_many(&keys)
             .into_iter()
@@ -289,100 +314,100 @@ where
 
     fn set(&mut self, index: Index, value: T) {
         // Disallow setting values out-of-bounds
+        let mut self_lock = self
+            .lock()
+            .expect("Could not get lock on DbtVec as StorageVec");
+
+        let self_len = self.len_with_lock(&self_lock);
+
         assert!(
-            index < self.len(),
+            index < self_len,
             "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-            self.len(),
-            self.lock()
-                .expect("Could not get lock on DbtVec as StorageVec (set 1)")
-                .name
+            self_len,
+            self_lock.name
         );
 
-        let _old_value = self
+        self.write_op_overwrite_with_lock(&mut self_lock, index, value);
+    }
+
+    /// set multiple elements.
+    ///
+    /// panics if key_vals contains an index not in the collection
+    ///
+    /// It is the caller's responsibility to ensure that index values are
+    /// unique.  If not, the last value with the same index will win.
+    /// For unordered collections such as HashMap, the behavior is undefined.
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+        let mut self_lock = self
             .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (set 2)")
-            .cache
-            .insert(index, value.clone());
+            .expect("Could not get lock on DbtVec as StorageVec");
 
-        // TODO: If `old_value` is Some(*) use it to remove the corresponding
-        // element in the `write_queue` to reduce disk IO.
+        let self_len = self.len_with_lock(&self_lock);
 
-        self.lock()
-            .expect("Could not get lock on DbtVec as StorageVec (set 3)")
-            .write_queue
-            .push_back(VecWriteOperation::OverWrite((index, value)));
+        for (index, value) in key_vals.into_iter() {
+            assert!(
+                index < self_len,
+                "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
+                self_len,
+                self_lock.name
+            );
+
+            self.write_op_overwrite_with_lock(&mut self_lock, index, value);
+        }
     }
 
     fn pop(&mut self) -> Option<T> {
-        // add to write queue
-        self.lock()
-            .expect("Could not get lock on DbtVec as StorageVec (pop 1)")
-            .write_queue
-            .push_back(VecWriteOperation::Pop);
+        let mut self_lock = self
+            .lock()
+            .expect("Could not get lock on DbtVec as StorageVec");
 
         // If vector is empty, return None
-        if self.len() == 0 {
+        if self.len_with_lock(&self_lock) == 0 {
             return None;
         }
 
+        // add to write queue
+        self_lock.write_queue.push_back(VecWriteOperation::Pop);
+
         // Update length
-        *self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (pop 2)")
-            .current_length
-            .as_mut()
-            .unwrap() -= 1;
+        *self_lock.current_length.as_mut().unwrap() -= 1;
 
         // try cache first
-        let current_length = self.len();
-        if self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (pop 3)")
-            .cache
-            .contains_key(&current_length)
-        {
-            self.lock()
-                .expect("Could not get lock on DbtVec as StorageVec (pop 4)")
-                .cache
-                .remove(&current_length)
+        let current_length = self.len_with_lock(&self_lock);
+        if self_lock.cache.contains_key(&current_length) {
+            self_lock.cache.remove(&current_length)
         } else {
             // then try persistent storage
-            let key = self
-                .lock()
-                .expect("Could not get lock on DbtVec as StorageVec (pop 5)")
-                .get_index_key(current_length);
-            self.lock()
-                .expect("Could not get lock on DbtVec as StorageVec (pop 6)")
+            let key = self_lock.get_index_key(current_length);
+            self_lock
                 .reader
                 .lock()
-                .expect("Could not get lock on DbtVec object (pop 7).")
+                .expect("Could not get lock on DbtVec object.")
                 .get(key)
                 .map(|value| value.into())
         }
     }
 
     fn push(&mut self, value: T) {
+        let mut self_lock = self
+            .lock()
+            .expect("Could not get lock on DbtVec as StorageVec)");
+
         // add to write queue
-        self.lock()
-            .expect("Could not get lock on DbtVec as StorageVec (push 1)")
+        self_lock
             .write_queue
             .push_back(VecWriteOperation::Push(value.clone()));
 
         // record in cache
-        let current_length = self.len();
-        let _old_value = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec (push 2)")
-            .cache
-            .insert(current_length, value);
+        let current_length = self.len_with_lock(&self_lock);
+        let _old_val = self_lock.cache.insert(current_length, value);
 
-        // TODO: if `old_value` is Some(_) then use it to remove the corresponding
-        // element from the `write_queue` to reduce disk operations
+        // note: we cannot naively remove any previous `Push` ops with
+        // this value from the write_queue (to reduce disk i/o) because
+        // there might be corresponding `Pop` op(s).
 
         // update length
-        self.lock()
-            .expect("Could not get lock on DbtVec as StorageVec (push 3)")
-            .current_length = Some(current_length + 1);
+        self_lock.current_length = Some(current_length + 1);
     }
 }
 
@@ -398,16 +423,11 @@ where
     Index: From<ParentValue>,
     ParentValue: From<Index>,
 {
-    /// Collect all added elements that have not yet bit persisted
+    /// Collect all added elements that have not yet been persisted
     fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
         let maybe_original_length = self.persisted_length();
         // necessary because we need maybe_original_length.is_none() later
-        #[allow(clippy::unnecessary_unwrap)]
-        let original_length = if maybe_original_length.is_some() {
-            maybe_original_length.unwrap()
-        } else {
-            0
-        };
+        let original_length = maybe_original_length.unwrap_or(0);
         let mut length = original_length;
         let mut queue = vec![];
         while let Some(write_element) = self.write_queue.pop_front() {
@@ -782,6 +802,8 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
 #[cfg(test)]
 mod tests {
 
+    use rand::{random, Rng, RngCore};
+
     use crate::shared_math::other::random_elements;
 
     use super::*;
@@ -877,6 +899,9 @@ mod tests {
         // initialize
         rusty_storage.restore_or_new();
 
+        // should work to pass empty array, when vector.is_empty() == true
+        vector.set_all(&[]);
+
         // test `get_all`
         assert!(
             vector.get_all().is_empty(),
@@ -936,33 +961,48 @@ mod tests {
             vec![vector.get(3), vector.get(3), vector.get(2), vector.get(3)]
         );
 
+        // at this point, `vector` should contain:
+        let expect_values = vec![
+            S([1u8].to_vec()),
+            S([3u8].to_vec()),
+            S([4u8].to_vec()),
+            S([7u8].to_vec()),
+            S([8u8].to_vec()),
+        ];
+
         // test `get_all`
         assert_eq!(
-            vec![
-                S([1u8].to_vec()),
-                S([3u8].to_vec()),
-                S([4u8].to_vec()),
-                S([7u8].to_vec()),
-                S([8u8].to_vec())
-            ],
+            expect_values,
             vector.get_all(),
             "`get_all` must return expected values"
         );
 
+        // test roundtrip through `set_all`, `get_all`
+        let values_tmp = vec![
+            S([2u8].to_vec()),
+            S([4u8].to_vec()),
+            S([6u8].to_vec()),
+            S([8u8].to_vec()),
+            S([9u8].to_vec()),
+        ];
+        vector.set_all(&values_tmp);
+
+        assert_eq!(
+            values_tmp,
+            vector.get_all(),
+            "`get_all` must return values passed to `set_all`",
+        );
+
+        vector.set_all(&expect_values);
+
         // persist
         rusty_storage.persist();
 
-        // test `get_all`
+        // test `get_all` after persist
         assert_eq!(
-            vec![
-                S([1u8].to_vec()),
-                S([3u8].to_vec()),
-                S([4u8].to_vec()),
-                S([7u8].to_vec()),
-                S([8u8].to_vec())
-            ],
+            expect_values,
             vector.get_all(),
-            "`get_all` must return expected values"
+            "`get_all` must return expected values after persist"
         );
 
         // modify
@@ -984,7 +1024,8 @@ mod tests {
 
         // modify
         new_vector.set(2, S([3u8].to_vec()));
-        new_vector.pop();
+        let last_again = new_vector.pop().unwrap();
+        assert_eq!(last_again, S([8u8].to_vec()));
 
         // test
         assert_eq!(new_vector.get(0), S([1u8].to_vec()));
@@ -1098,6 +1139,262 @@ mod tests {
                 assert_eq!(S(vec![index as u8, index as u8, index as u8]), value)
             }
         }
+    }
+
+    #[test]
+    fn test_dbtcvecs_set_many_get_many() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        // initialize storage
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        rusty_storage.restore_or_new();
+        let mut vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
+
+        // Generate initial index/value pairs.
+        const TEST_LIST_LENGTH: u8 = 105;
+        let init_keyvals: Vec<(Index, S)> = (0u8..TEST_LIST_LENGTH)
+            .map(|i| (i as Index, S(vec![i, i, i])))
+            .collect();
+
+        // set_many() does not grow the list, so we must first push
+        // some empty elems, to desired length.
+        for _ in 0u8..TEST_LIST_LENGTH {
+            vector.push(S(vec![]));
+        }
+
+        // set the initial values
+        vector.set_many(init_keyvals);
+
+        // generate some random indices to read
+        let read_indices: Vec<u64> = random_elements::<u64>(30)
+            .into_iter()
+            .map(|x| x % TEST_LIST_LENGTH as u64)
+            .collect();
+
+        // perform read, and validate as expected
+        let values = vector.get_many(&read_indices);
+        assert!(read_indices
+            .iter()
+            .zip(values)
+            .all(|(index, value)| value == S(vec![*index as u8, *index as u8, *index as u8])));
+
+        // Generate some random indices for mutation
+        let mutate_indices: Vec<u64> = random_elements::<u64>(30)
+            .iter()
+            .map(|x| x % TEST_LIST_LENGTH as u64)
+            .collect();
+
+        // Generate keyvals for mutation
+        let mutate_keyvals: Vec<(Index, S)> = mutate_indices
+            .iter()
+            .map(|index| {
+                let val = (index % TEST_LIST_LENGTH as u64 + 1) as u8;
+                (*index, S(vec![val, val, val]))
+            })
+            .collect();
+
+        // Mutate values at randomly generated indices
+        vector.set_many(mutate_keyvals);
+
+        // Verify mutated values, and non-mutated also.
+        let new_values = vector.get_many(&read_indices);
+        for (value, index) in new_values.into_iter().zip(read_indices.clone()) {
+            if mutate_indices.contains(&index) {
+                assert_eq!(
+                    S(vec![index as u8 + 1, index as u8 + 1, index as u8 + 1]),
+                    value
+                )
+            } else {
+                assert_eq!(S(vec![index as u8, index as u8, index as u8]), value)
+            }
+        }
+
+        // Persist and verify that result is unchanged
+        rusty_storage.persist();
+        let new_values_after_persist = vector.get_many(&read_indices);
+        for (value, index) in new_values_after_persist.into_iter().zip(read_indices) {
+            if mutate_indices.contains(&index) {
+                assert_eq!(
+                    S(vec![index as u8 + 1, index as u8 + 1, index as u8 + 1]),
+                    value
+                )
+            } else {
+                assert_eq!(S(vec![index as u8, index as u8, index as u8]), value)
+            }
+        }
+    }
+
+    #[test]
+    fn test_dbtcvecs_set_all_get_many() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        // initialize storage
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        rusty_storage.restore_or_new();
+        let mut vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
+
+        // Generate initial index/value pairs.
+        const TEST_LIST_LENGTH: u8 = 105;
+        let init_vals: Vec<S> = (0u8..TEST_LIST_LENGTH)
+            .map(|i| (S(vec![i, i, i])))
+            .collect();
+
+        let mut mutate_vals = init_vals.clone(); // for later
+
+        // set_all() does not grow the list, so we must first push
+        // some empty elems, to desired length.
+        for _ in 0u8..TEST_LIST_LENGTH {
+            vector.push(S(vec![]));
+        }
+
+        // set the initial values
+        vector.set_all(&init_vals);
+
+        // generate some random indices to read
+        let read_indices: Vec<u64> = random_elements::<u64>(30)
+            .into_iter()
+            .map(|x| x % TEST_LIST_LENGTH as u64)
+            .collect();
+
+        // perform read, and validate as expected
+        let values = vector.get_many(&read_indices);
+        assert!(read_indices
+            .iter()
+            .zip(values)
+            .all(|(index, value)| value == S(vec![*index as u8, *index as u8, *index as u8])));
+
+        // Generate some random indices for mutation
+        let mutate_indices: Vec<u64> = random_elements::<u64>(30)
+            .iter()
+            .map(|x| x % TEST_LIST_LENGTH as u64)
+            .collect();
+
+        // Generate vals for mutation
+        for index in mutate_indices.iter() {
+            let val = (index % TEST_LIST_LENGTH as u64 + 1) as u8;
+            mutate_vals[*index as usize] = S(vec![val, val, val]);
+        }
+
+        // Mutate values at randomly generated indices
+        vector.set_all(&mutate_vals);
+
+        // Verify mutated values, and non-mutated also.
+        let new_values = vector.get_many(&read_indices);
+        for (value, index) in new_values.into_iter().zip(read_indices) {
+            if mutate_indices.contains(&index) {
+                assert_eq!(
+                    S(vec![index as u8 + 1, index as u8 + 1, index as u8 + 1]),
+                    value
+                )
+            } else {
+                assert_eq!(S(vec![index as u8, index as u8, index as u8]), value)
+            }
+        }
+    }
+
+    #[test]
+    fn storage_schema_vector_pbt() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let mut persisted_vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+
+        // Insert 1000 elements
+        let mut rng = rand::thread_rng();
+        let mut normal_vector = vec![];
+        for _ in 0..1000 {
+            let value = random();
+            normal_vector.push(value);
+            persisted_vector.push(value);
+        }
+        rusty_storage.persist();
+
+        for _ in 0..1000 {
+            match rng.gen_range(0..=5) {
+                0 => {
+                    // `push`
+                    let push_val = rng.next_u64();
+                    persisted_vector.push(push_val);
+                    normal_vector.push(push_val);
+                }
+                1 => {
+                    // `pop`
+                    let persisted_pop_val = persisted_vector.pop().unwrap();
+                    let normal_pop_val = normal_vector.pop().unwrap();
+                    assert_eq!(persisted_pop_val, normal_pop_val);
+                }
+                2 => {
+                    // `get_many`
+                    assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
+
+                    let index = rng.gen_range(0..normal_vector.len());
+                    assert_eq!(Vec::<u64>::default(), persisted_vector.get_many(&[]));
+                    assert_eq!(normal_vector[index], persisted_vector.get(index as u64));
+                    assert_eq!(
+                        vec![normal_vector[index]],
+                        persisted_vector.get_many(&[index as u64])
+                    );
+                    assert_eq!(
+                        vec![normal_vector[index], normal_vector[index]],
+                        persisted_vector.get_many(&[index as u64, index as u64])
+                    );
+                }
+                3 => {
+                    // `set`
+                    let value = rng.next_u64();
+                    let index = rng.gen_range(0..normal_vector.len());
+                    normal_vector[index] = value;
+                    persisted_vector.set(index as u64, value);
+                }
+                4 => {
+                    // `set_many`
+                    let indices: Vec<u64> = (0..rng.gen_range(0..10))
+                        .map(|_| rng.gen_range(0..normal_vector.len() as u64))
+                        .unique()
+                        .collect();
+                    let values: Vec<u64> = (0..indices.len()).map(|_| rng.next_u64()).collect_vec();
+                    let update: Vec<(u64, u64)> =
+                        indices.into_iter().zip_eq(values.into_iter()).collect();
+                    for (key, val) in update.iter() {
+                        normal_vector[*key as usize] = *val;
+                    }
+                    persisted_vector.set_many(update);
+                }
+                5 => {
+                    // persist
+                    rusty_storage.persist();
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        // Check equality after above loop
+        assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
+        for (i, nvi) in normal_vector.iter().enumerate() {
+            assert_eq!(*nvi, persisted_vector.get(i as u64));
+        }
+
+        // Check equality using `get_many`
+        assert_eq!(
+            normal_vector,
+            persisted_vector.get_many(&(0..normal_vector.len() as u64).collect_vec())
+        );
+
+        // Check equality after persisting updates
+        rusty_storage.persist();
+        assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
+        for (i, nvi) in normal_vector.iter().enumerate() {
+            assert_eq!(*nvi, persisted_vector.get(i as u64));
+        }
+
+        // Check equality using `get_many`
+        assert_eq!(
+            normal_vector,
+            persisted_vector.get_many(&(0..normal_vector.len() as u64).collect_vec())
+        );
     }
 
     #[test]
@@ -1312,5 +1609,62 @@ mod tests {
         vector.push(1);
         vector.push(1);
         vector.get_many(&[0, 0, 0, 1, 1, 2]);
+    }
+
+    #[should_panic(
+        expected = "Out-of-bounds. Got 1 but length was 1. persisted vector name: test-vector"
+    )]
+    #[test]
+    fn out_of_bounds_using_set_many() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+
+        // initialize
+        rusty_storage.restore_or_new();
+
+        vector.push(1);
+
+        // attempt to set 2 values, when only one is in vector.
+        vector.set_many([(0, 0), (1, 1)]);
+    }
+
+    #[should_panic(expected = "size-mismatch.  input has 2 elements and target has 1 elements")]
+    #[test]
+    fn size_mismatch_too_many_using_set_all() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+
+        // initialize
+        rusty_storage.restore_or_new();
+
+        vector.push(1);
+
+        // attempt to set 2 values, when only one is in vector.
+        vector.set_all(&[0, 1]);
+    }
+
+    #[should_panic(expected = "size-mismatch.  input has 1 elements and target has 2 elements")]
+    #[test]
+    fn size_mismatch_too_few_using_set_all() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+
+        // initialize
+        rusty_storage.restore_or_new();
+
+        vector.push(0);
+        vector.push(1);
+
+        // attempt to set 1 values, when two are in vector.
+        vector.set_all(&[5]);
     }
 }
