@@ -884,7 +884,7 @@ impl<FF: FiniteField> Polynomial<FF> {
     }
 
     pub fn get_colinear_y(p0: (FF, FF), p1: (FF, FF), p2_x: FF) -> FF {
-        debug_assert_ne!(p0.0, p1.0, "Line must not be parallel to y-axis");
+        assert_ne!(p0.0, p1.0, "Line must not be parallel to y-axis");
         let dy = p0.1 - p1.1;
         let dx = p0.0 - p1.0;
         let p2_y_times_dx = dy * (p2_x - p0.0) + dx * p0.1;
@@ -1299,7 +1299,6 @@ mod test_polynomials {
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::Rng;
-    use rand_distr::Standard;
     use test_strategy::proptest;
 
     use crate::shared_math::other::{random_elements, random_elements_distinct};
@@ -1480,6 +1479,39 @@ mod test_polynomials {
             .collect_vec();
         let all_points = [p0, p1].into_iter().chain(additional_points).collect_vec();
         prop_assert!(Polynomial::are_colinear(&all_points));
+    }
+
+    #[test]
+    #[should_panic(expected = "Line must not be parallel to y-axis")]
+    fn getting_point_on_invalid_line_fails() {
+        let one = BFieldElement::one();
+        let two = one + one;
+        let three = two + one;
+        Polynomial::<BFieldElement>::get_colinear_y((one, one), (one, three), two);
+    }
+
+    #[proptest]
+    fn point_on_line_and_colinear_point_are_identical(
+        p0: (BFieldElement, BFieldElement),
+        #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
+        x: BFieldElement,
+    ) {
+        let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
+        let y = line.evaluate(&x);
+        let y_from_get_point_on_line = Polynomial::get_colinear_y(p0, p1, x);
+        prop_assert_eq!(y, y_from_get_point_on_line);
+    }
+
+    #[proptest]
+    fn point_on_line_and_colinear_point_are_identical_in_extension_field(
+        p0: (XFieldElement, XFieldElement),
+        #[filter(#p0.0 != #p1.0)] p1: (XFieldElement, XFieldElement),
+        x: XFieldElement,
+    ) {
+        let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
+        let y = line.evaluate(&x);
+        let y_from_get_point_on_line = Polynomial::get_colinear_y(p0, p1, x);
+        prop_assert_eq!(y, y_from_get_point_on_line);
     }
 
     #[proptest]
@@ -2093,48 +2125,6 @@ mod test_polynomials {
         let zero_polynomial2 = Polynomial::<BFieldElement>::zero();
 
         assert_eq!(zero_polynomial1, zero_polynomial2)
-    }
-
-    #[test]
-    #[should_panic(expected = "Line must not be parallel to y-axis")]
-    fn get_point_on_invalid_line_test() {
-        let one = BFieldElement::one();
-        let two = one + one;
-        let three = two + one;
-        Polynomial::<BFieldElement>::get_colinear_y((one, one), (one, three), two);
-    }
-
-    fn get_point_on_line_prop<FF: FiniteField>() {
-        let one = FF::one();
-        let two = one + one;
-        let three = two + one;
-
-        let colinear_y_1 = Polynomial::<FF>::get_colinear_y((one, one), (three, three), two);
-        assert_eq!(two, colinear_y_1);
-
-        let colinear_y_2 = Polynomial::<FF>::get_colinear_y((three, three), (one, one), two);
-        assert_eq!(two, colinear_y_2);
-
-        let colinear_y_3 = Polynomial::<FF>::get_colinear_y((one, one), (three, one), two);
-        assert_eq!(one, colinear_y_3);
-    }
-
-    #[test]
-    fn get_point_on_line_tests() {
-        get_point_on_line_prop::<BFieldElement>();
-        get_point_on_line_prop::<XFieldElement>();
-    }
-
-    fn gen_polynomial<T: FiniteField>() -> Polynomial<T>
-    where
-        Standard: rand_distr::Distribution<T>,
-    {
-        let mut rng = rand::thread_rng();
-        let coefficient_count: usize = rng.gen_range(0..40);
-
-        Polynomial {
-            coefficients: random_elements(coefficient_count),
-        }
     }
 
     #[test]
