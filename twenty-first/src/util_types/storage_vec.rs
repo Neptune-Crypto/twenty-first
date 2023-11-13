@@ -784,7 +784,7 @@ mod tests {
                     persisted_vector.pull_queue(&mut write_batch);
                     db.lock().unwrap().write(write_batch, true).unwrap();
                 }
-                _ => panic!("Bad range"),
+                _ => unreachable!(),
             }
         }
 

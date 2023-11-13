@@ -802,6 +802,8 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
 #[cfg(test)]
 mod tests {
 
+    use rand::{random, Rng, RngCore};
+
     use crate::shared_math::other::random_elements;
 
     use super::*;
@@ -1290,6 +1292,109 @@ mod tests {
                 assert_eq!(S(vec![index as u8, index as u8, index as u8]), value)
             }
         }
+    }
+
+    #[test]
+    fn storage_schema_vector_pbt() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        let mut persisted_vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+
+        // Insert 1000 elements
+        let mut rng = rand::thread_rng();
+        let mut normal_vector = vec![];
+        for _ in 0..1000 {
+            let value = random();
+            normal_vector.push(value);
+            persisted_vector.push(value);
+        }
+        rusty_storage.persist();
+
+        for _ in 0..1000 {
+            match rng.gen_range(0..=5) {
+                0 => {
+                    // `push`
+                    let push_val = rng.next_u64();
+                    persisted_vector.push(push_val);
+                    normal_vector.push(push_val);
+                }
+                1 => {
+                    // `pop`
+                    let persisted_pop_val = persisted_vector.pop().unwrap();
+                    let normal_pop_val = normal_vector.pop().unwrap();
+                    assert_eq!(persisted_pop_val, normal_pop_val);
+                }
+                2 => {
+                    // `get_many`
+                    assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
+
+                    let index = rng.gen_range(0..normal_vector.len());
+                    assert_eq!(Vec::<u64>::default(), persisted_vector.get_many(&[]));
+                    assert_eq!(normal_vector[index], persisted_vector.get(index as u64));
+                    assert_eq!(
+                        vec![normal_vector[index]],
+                        persisted_vector.get_many(&[index as u64])
+                    );
+                    assert_eq!(
+                        vec![normal_vector[index], normal_vector[index]],
+                        persisted_vector.get_many(&[index as u64, index as u64])
+                    );
+                }
+                3 => {
+                    // `set`
+                    let value = rng.next_u64();
+                    let index = rng.gen_range(0..normal_vector.len());
+                    normal_vector[index] = value;
+                    persisted_vector.set(index as u64, value);
+                }
+                4 => {
+                    // `set_many`
+                    let indices: Vec<u64> = (0..rng.gen_range(0..10))
+                        .map(|_| rng.gen_range(0..normal_vector.len() as u64))
+                        .unique()
+                        .collect();
+                    let values: Vec<u64> = (0..indices.len()).map(|_| rng.next_u64()).collect_vec();
+                    let update: Vec<(u64, u64)> =
+                        indices.into_iter().zip_eq(values.into_iter()).collect();
+                    for (key, val) in update.iter() {
+                        normal_vector[*key as usize] = *val;
+                    }
+                    persisted_vector.set_many(update);
+                }
+                5 => {
+                    // persist
+                    rusty_storage.persist();
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        // Check equality after above loop
+        assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
+        for (i, nvi) in normal_vector.iter().enumerate() {
+            assert_eq!(*nvi, persisted_vector.get(i as u64));
+        }
+
+        // Check equality using `get_many`
+        assert_eq!(
+            normal_vector,
+            persisted_vector.get_many(&(0..normal_vector.len() as u64).collect_vec())
+        );
+
+        // Check equality after persisting updates
+        rusty_storage.persist();
+        assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
+        for (i, nvi) in normal_vector.iter().enumerate() {
+            assert_eq!(*nvi, persisted_vector.get(i as u64));
+        }
+
+        // Check equality using `get_many`
+        assert_eq!(
+            normal_vector,
+            persisted_vector.get_many(&(0..normal_vector.len() as u64).collect_vec())
+        );
     }
 
     #[test]
