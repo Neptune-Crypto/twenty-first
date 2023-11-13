@@ -1955,53 +1955,48 @@ mod test_polynomials {
         prop_assert_eq!(product / b, quotient);
     }
 
+    #[proptest]
+    fn dividing_constant_polynomials_is_equivalent_to_dividing_constants(
+        a: BFieldElement,
+        #[filter(!#b.is_zero())] b: BFieldElement,
+    ) {
+        let a_poly = Polynomial::new_const(a);
+        let b_poly = Polynomial::new_const(b);
+        let expected_quotient = Polynomial::new_const(a / b);
+        prop_assert_eq!(expected_quotient, a_poly / b_poly);
+    }
+
+    #[proptest]
+    fn dividing_any_polynomial_by_a_constant_polynomial_results_in_remainder_zero(
+        a: Polynomial<BFieldElement>,
+        #[filter(!#b.is_zero())] b: BFieldElement,
+    ) {
+        let b_poly = Polynomial::new(vec![b]);
+        let (_, remainder) = a.divide(b_poly);
+        prop_assert_eq!(Polynomial::zero(), remainder);
+    }
+
     #[test]
-    pub fn polynomial_divide_test() {
-        let minus_one = BFieldElement::P - 1;
-        let zero = BFieldElement::zero();
-        let one = BFieldElement::one();
-        let two = BFieldElement::new(2);
+    fn polynomial_division_by_and_with_shah_polynomial() {
+        let polynomial =
+            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
 
-        let a: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(30));
-        let b: Polynomial<BFieldElement> = Polynomial::new_const(BFieldElement::new(5));
-
-        {
-            let (actual_quot, actual_rem) = a.divide(b);
-            let expected_quot: Polynomial<BFieldElement> =
-                Polynomial::new_const(BFieldElement::new(6));
-            assert_eq!(expected_quot, actual_quot);
-            assert!(actual_rem.is_zero());
-        }
-
-        // Shah-polynomial test
         let shah = XFieldElement::shah_polynomial();
-        let c = Polynomial::new(vec![
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-            BFieldElement::one(),
-        ]);
-        {
-            let (actual_quot, actual_rem) = shah.divide(c);
-            let expected_quot = Polynomial::new_const(BFieldElement::new(1));
-            let expected_rem =
-                Polynomial::new(vec![BFieldElement::one(), BFieldElement::new(minus_one)]);
-            assert_eq!(expected_quot, actual_quot);
-            assert_eq!(expected_rem, actual_rem);
-        }
+        let x_to_the_3 = polynomial(&[1]).shift_coefficients(3);
+        let (shah_div_x_to_the_3, shah_mod_x_to_the_3) = shah.divide(x_to_the_3);
+        assert_eq!(polynomial(&[1]), shah_div_x_to_the_3);
+        assert_eq!(polynomial(&[1, BFieldElement::P - 1]), shah_mod_x_to_the_3);
 
-        // x^6
-        let d: Polynomial<BFieldElement> = Polynomial::new(vec![one]).shift_coefficients(6);
-        let (actual_sixth_quot, actual_sixth_rem) = d.divide(shah);
+        let x_to_the_6 = polynomial(&[1]).shift_coefficients(6);
+        let (x_to_the_6_div_shah, x_to_the_6_mod_shah) = x_to_the_6.divide(shah);
 
         // x^3 + x - 1
-        let expected_sixth_quot: Polynomial<BFieldElement> =
-            Polynomial::new(vec![-one, one, zero, one]);
-        // x^2 - 2x + 1
-        let expected_sixth_rem: Polynomial<BFieldElement> = Polynomial::new(vec![one, -two, one]);
+        let expected_quot = polynomial(&[BFieldElement::P - 1, 1, 0, 1]);
+        assert_eq!(expected_quot, x_to_the_6_div_shah);
 
-        assert_eq!(expected_sixth_quot, actual_sixth_quot);
-        assert_eq!(expected_sixth_rem, actual_sixth_rem);
+        // x^2 - 2x + 1
+        let expected_rem = polynomial(&[1, BFieldElement::P - 2, 1]);
+        assert_eq!(expected_rem, x_to_the_6_mod_shah);
     }
 
     #[test]
