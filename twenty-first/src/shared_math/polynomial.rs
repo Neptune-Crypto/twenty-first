@@ -889,24 +889,11 @@ impl<FF: FiniteField> Polynomial<FF> {
     }
 
     pub fn zerofier(domain: &[FF]) -> Self {
-        if domain.is_empty() {
-            return Self {
-                coefficients: vec![FF::one()],
-            };
-        }
-        let mut zerofier_array = vec![FF::zero(); domain.len() + 1];
-        zerofier_array[0] = FF::one();
-        let mut num_coeffs = 1;
-        for &d in domain.iter() {
-            for k in (1..num_coeffs + 1).rev() {
-                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
-            }
-            zerofier_array[0] = -d * zerofier_array[0];
-            num_coeffs += 1;
-        }
-        Self {
-            coefficients: zerofier_array,
-        }
+        domain
+            .iter()
+            .map(|&r| Self::new(vec![-r, FF::one()]))
+            .reduce(|accumulator, linear_poly| accumulator * linear_poly)
+            .unwrap_or_else(Self::one)
     }
 
     // Slow square implementation that does not use NTT
