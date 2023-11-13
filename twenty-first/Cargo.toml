@@ -79,3 +79,7 @@ harness = false
 [[bench]]
 name = "merkle_tree_auth_structure_size"
 harness = false
+
+[[bench]]
+name = "zerofier"
+harness = false
