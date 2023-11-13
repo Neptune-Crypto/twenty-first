@@ -31,23 +31,25 @@ pub trait StorageVec<T> {
     /// set multiple elements.
     fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>);
 
-    /// set all elements.
-    fn set_all(
-        &mut self,
-        vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = (Index, T)>>,
-    );
-
-    /// convenience method to set all elements with a simple
-    /// list of values in an array or Vec.
+    /// set all elements with a simple list of values in an array or Vec.
     ///
-    /// calls ::set_all() internally.
+    /// calls ::set_many() internally.
+    ///
+    /// panics if input length does not match target length.
     ///
     /// note: casts the array's indexes from usize to Index.
-    fn set_all_by_array(&mut self, vals: &[T])
+    fn set_all(&mut self, vals: &[T])
     where
         T: Clone,
     {
-        self.set_all(
+        assert!(
+            vals.len() as Index == self.len(),
+            "size-mismatch.  input has {} elements and target has {} elements.",
+            vals.len(),
+            self.len(),
+        );
+
+        self.set_many(
             vals.iter()
                 .enumerate()
                 .map(|(i, v)| (i as Index, v.clone())),
@@ -221,37 +223,14 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     }
 
     /// set multiple elements.
+    ///
     /// panics if key_vals contains an index not in the collection
+    ///
+    /// It is the caller's responsibility to ensure that index values are
+    /// unique.  If not, the last value with the same index will win.
+    /// For unordered collections such as HashMap, the behavior is undefined.
     fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
         for (index, value) in key_vals.into_iter() {
-            assert!(
-                index < self.len(),
-                "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-                self.length,
-                self.name
-            );
-
-            self.set(index, value);
-        }
-    }
-
-    /// set all elements.
-    /// panics if count of input vals does not match the collection count.
-    fn set_all(
-        &mut self,
-        vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = (Index, T)>>,
-    ) {
-        let iter = vals.into_iter();
-
-        assert!(
-            iter.len() as Index == self.len(),
-            "size-mismatch.  input has {} elements and target has {} elements. persisted vector name: {}",
-            iter.len(),
-            self.length,
-            self.name
-        );
-
-        for (index, value) in iter {
             self.set(index, value);
         }
     }
@@ -411,25 +390,14 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
     }
 
     /// set multiple elements.
+    ///
     /// panics if key_vals contains an index not in the collection
+    ///
+    /// It is the caller's responsibility to ensure that index values are
+    /// unique.  If not, the last value with the same index will win.
+    /// For unordered collections such as HashMap, the behavior is undefined.
     fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
         for (index, value) in key_vals.into_iter() {
-            // note: on 32 bit systems, this could panic.
-            self.0[index as usize] = value;
-        }
-    }
-
-    /// set all elements.
-    /// panics if count of input vals does not match the collection count.
-    fn set_all(
-        &mut self,
-        vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = (Index, T)>>,
-    ) {
-        let iter = vals.into_iter();
-
-        assert!(self.len() == iter.len() as Index);
-
-        for (index, value) in iter {
             // note: on 32 bit systems, this could panic.
             self.0[index as usize] = value;
         }
@@ -644,13 +612,13 @@ mod tests {
         delegated_db_vec_a.push(30);
 
         let updates = [100, 200, 300];
-        delegated_db_vec_a.set_all_by_array(&updates);
+        delegated_db_vec_a.set_all(&updates);
 
         assert_eq!(vec![100, 200, 300], delegated_db_vec_a.get_many(&[0, 1, 2]));
 
         #[allow(clippy::shadow_unrelated)]
         let updates = vec![1000, 2000, 3000];
-        delegated_db_vec_a.set_all_by_array(&updates);
+        delegated_db_vec_a.set_all(&updates);
 
         assert_eq!(
             vec![1000, 2000, 3000],
@@ -860,15 +828,13 @@ mod tests {
         delegated_db_vec.set_many([(0, 0), (1, 1)]);
     }
 
-    #[should_panic(
-        expected = "size-mismatch.  input has 2 elements and target has 1 elements. persisted vector name: unit test vec 0"
-    )]
+    #[should_panic(expected = "size-mismatch.  input has 2 elements and target has 1 elements.")]
     #[test]
     fn panic_on_size_mismatch_set_all() {
         let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
 
         // attempt to set 2 values, when only one is in vector.
-        delegated_db_vec.set_all([(0, 1), (1, 2)]);
+        delegated_db_vec.set_all(&[1, 2]);
     }
 
     #[should_panic(

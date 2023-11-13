@@ -331,7 +331,12 @@ where
     }
 
     /// set multiple elements.
+    ///
     /// panics if key_vals contains an index not in the collection
+    ///
+    /// It is the caller's responsibility to ensure that index values are
+    /// unique.  If not, the last value with the same index will win.
+    /// For unordered collections such as HashMap, the behavior is undefined.
     fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
         let mut self_lock = self
             .lock()
@@ -347,32 +352,6 @@ where
                 self_lock.name
             );
 
-            self.write_op_overwrite_with_lock(&mut self_lock, index, value);
-        }
-    }
-
-    /// set all elements.
-    /// panics if count of input vals does not match the collection count.
-    fn set_all(
-        &mut self,
-        vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = (Index, T)>>,
-    ) {
-        let mut self_lock = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec");
-
-        let iter = vals.into_iter();
-
-        // assert lengths match before writing out any values.
-        assert!(
-            self.len_with_lock(&self_lock) == iter.len() as Index,
-            "size-mismatch.  input has {} elements and target has {} elements. persisted vector name: {}",
-            iter.len(),
-            self.len_with_lock(&self_lock),
-            self_lock.name
-        );
-
-        for (index, value) in iter {
             self.write_op_overwrite_with_lock(&mut self_lock, index, value);
         }
     }
@@ -919,7 +898,7 @@ mod tests {
         rusty_storage.restore_or_new();
 
         // should work to pass empty array, when vector.is_empty() == true
-        vector.set_all([]);
+        vector.set_all(&[]);
 
         // test `get_all`
         assert!(
@@ -1004,7 +983,7 @@ mod tests {
             S([8u8].to_vec()),
             S([9u8].to_vec()),
         ];
-        vector.set_all_by_array(&values_tmp);
+        vector.set_all(&values_tmp);
 
         assert_eq!(
             values_tmp,
@@ -1012,7 +991,7 @@ mod tests {
             "`get_all` must return values passed to `set_all`",
         );
 
-        vector.set_all_by_array(&expect_values);
+        vector.set_all(&expect_values);
 
         // persist
         rusty_storage.persist();
@@ -1254,7 +1233,7 @@ mod tests {
         }
 
         // set the initial values
-        vector.set_all_by_array(&init_vals);
+        vector.set_all(&init_vals);
 
         // generate some random indices to read
         let read_indices: Vec<u64> = random_elements::<u64>(30)
@@ -1282,7 +1261,7 @@ mod tests {
         }
 
         // Mutate values at randomly generated indices
-        vector.set_all_by_array(&mutate_vals);
+        vector.set_all(&mutate_vals);
 
         // Verify mutated values, and non-mutated also.
         let new_values = vector.get_many(&read_indices);
@@ -1547,7 +1526,7 @@ mod tests {
         vector.push(1);
 
         // attempt to set 2 values, when only one is in vector.
-        vector.set_all([(0, 0), (1, 1)]);
+        vector.set_all(&[0, 1]);
     }
 
     #[should_panic(expected = "size-mismatch.  input has 1 elements and target has 2 elements")]
@@ -1566,6 +1545,6 @@ mod tests {
         vector.push(1);
 
         // attempt to set 1 values, when two are in vector.
-        vector.set_all([(0, 5)]);
+        vector.set_all(&[5]);
     }
 }
