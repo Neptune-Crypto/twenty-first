@@ -2,8 +2,12 @@
 
 extern crate proc_macro;
 
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
 use quote::quote;
+use syn::parse_macro_input;
+use syn::punctuated::Punctuated;
+use syn::DeriveInput;
+use syn::Variant;
 
 /// Derives `BFieldCodec` for structs.
 ///
@@ -29,16 +33,11 @@ use quote::quote;
 /// ### Known limitations
 /// ```
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
-pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
-    // ...
-    // Construct a representation of Rust code as a syntax tree
-    // that we can manipulate
-    let ast = syn::parse(input).unwrap();
-
-    // Build the trait implementation
-    impl_bfieldcodec_macro(ast)
+pub fn bfieldcodec_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    impl_bfieldcodec_macro(ast).into()
 }
-fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
+fn impl_bfieldcodec_macro(ast: DeriveInput) -> TokenStream {
     let mut ignored_fields = vec![];
     let (encode_statements, decode_function_body, static_length_body) = match &ast.data {
         syn::Data::Struct(syn::DataStruct {
@@ -104,10 +103,12 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
 
     let gen = quote! {
         impl #impl_generics ::twenty_first::shared_math::bfield_codec::BFieldCodec
-        for #name #ty_generics #where_clause{
+        for #name #ty_generics #where_clause {
+            type Error = anyhow::Error;
+
             fn decode(
                 sequence: &[::twenty_first::shared_math::b_field_element::BFieldElement],
-            ) -> anyhow::Result<Box<Self>> {
+            ) -> Result<Box<Self>, Self::Error> {
                 #decode_function_body
             }
 
@@ -123,7 +124,7 @@ fn impl_bfieldcodec_macro(ast: syn::DeriveInput) -> TokenStream {
         }
     };
 
-    gen.into()
+    gen
 }
 
 /// Add a bound `T: BFieldCodec` to every type parameter T, unless we ignore it.
@@ -181,11 +182,7 @@ fn field_is_ignored(field: &syn::Field) -> bool {
 
 fn generate_tokens_for_struct_with_named_fields(
     fields: &syn::FieldsNamed,
-) -> (
-    Vec<quote::__private::TokenStream>,
-    quote::__private::TokenStream,
-    quote::__private::TokenStream,
-) {
+) -> (Vec<TokenStream>, TokenStream, TokenStream) {
     let fields = fields.named.iter();
     let included_fields = fields.clone().filter(|field| !field_is_ignored(field));
     let ignored_fields = fields.clone().filter(|field| field_is_ignored(field));
@@ -204,7 +201,7 @@ fn generate_tokens_for_struct_with_named_fields(
         .zip(included_field_types.clone())
         .map(|(fname, field_type)| {
             quote! {
-                let mut #fname: Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
+                let #fname: Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
                     = self.#fname.encode();
                 if <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
                     ::static_length().is_none() {
@@ -214,7 +211,7 @@ fn generate_tokens_for_struct_with_named_fields(
                         )
                     );
                 }
-                elements.append(&mut #fname);
+                elements.extend(#fname);
             }
         })
         .collect();
@@ -248,9 +245,7 @@ fn generate_tokens_for_struct_with_named_fields(
     )
 }
 
-fn generate_static_length_function_body_for_struct(
-    field_types: Vec<syn::Type>,
-) -> quote::__private::TokenStream {
+fn generate_static_length_function_body_for_struct(field_types: Vec<syn::Type>) -> TokenStream {
     let num_fields = field_types.len();
     quote! {
 
@@ -271,11 +266,7 @@ fn generate_static_length_function_body_for_struct(
 
 fn generate_tokens_for_struct_with_unnamed_fields(
     fields: &syn::FieldsUnnamed,
-) -> (
-    Vec<quote::__private::TokenStream>,
-    quote::__private::TokenStream,
-    quote::__private::TokenStream,
-) {
+) -> (Vec<TokenStream>, TokenStream, TokenStream) {
     let indices: Vec<_> = (0..fields.unnamed.len()).map(syn::Index::from).collect();
     let field_types = fields
         .unnamed
@@ -301,7 +292,7 @@ fn generate_tokens_for_struct_with_unnamed_fields(
         .zip(field_types.clone())
         .map(|(idx, field_type)| {
             quote! {
-                let mut field_value:
+                let field_value:
                     Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
                     = self.#idx.encode();
                 if <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
@@ -310,7 +301,7 @@ fn generate_tokens_for_struct_with_unnamed_fields(
                         field_value.len() as u64)
                     );
                 }
-                elements.append(&mut field_value);
+                elements.extend(field_value);
             }
         })
         .collect();
@@ -333,12 +324,8 @@ fn generate_tokens_for_struct_with_unnamed_fields(
 }
 
 fn generate_tokens_for_enum(
-    variants: &syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
-) -> (
-    Vec<quote::__private::TokenStream>,
-    quote::__private::TokenStream,
-    quote::__private::TokenStream,
-) {
+    variants: &Punctuated<Variant, syn::token::Comma>,
+) -> (Vec<TokenStream>, TokenStream, TokenStream) {
     let decode_clauses = variants
         .iter()
         .enumerate()
@@ -430,7 +417,7 @@ fn generate_tokens_for_enum(
 fn generate_decode_statement_for_field(
     field_name: &syn::Ident,
     field_type: &syn::Type,
-) -> quote::__private::TokenStream {
+) -> TokenStream {
     let field_name_as_string_literal = field_name.to_string();
     quote! {
         let (#field_name, sequence) = {
@@ -462,7 +449,7 @@ fn generate_decode_clause_for_variant(
     variant_index: usize,
     name: &syn::Ident,
     associated_data: &syn::Fields,
-) -> quote::__private::TokenStream {
+) -> TokenStream {
     if associated_data.is_empty() {
         quote! {
             if !sequence.is_empty() {
@@ -515,43 +502,43 @@ fn generate_encode_clause_for_variant(
     variant_index: usize,
     variant_name: &syn::Ident,
     associated_data: &syn::Fields,
-) -> quote::__private::TokenStream {
+) -> TokenStream {
     if associated_data.is_empty() {
-        quote! {
+        return quote! {
             Self::#variant_name => { elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new( #variant_index as u64)); }
-        }
-    } else {
-        let field_encoders = associated_data.iter().enumerate().map(|(field_index, ad)| {
-            let field_name = enum_variant_field_name(variant_index, field_index);
-            let field_type = ad.ty.clone();
-            let field_encoding =
-                quote::format_ident!("variant_{}_field_{}_encoding", variant_index, field_index);
-            quote! {
-                let mut #field_encoding :
-                    Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
-                    = #field_name.encode();
-                if <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
-                    ::static_length().is_none() {
-                    elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new(
-                        #field_encoding.len() as u64)
-                    );
-                }
-                elements.append(&mut #field_encoding);
-            }
-        });
-
-        let field_names = associated_data
-            .iter()
-            .enumerate()
-            .map(|(field_index, _field)| enum_variant_field_name(variant_index, field_index));
-
-        let ret = quote! {
-            Self::#variant_name ( #( #field_names , )* ) => {
-                elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new( #variant_index as u64));
-                #( #field_encoders )*
-            }
         };
-
-        ret
     }
+
+    let field_encoders = associated_data.iter().enumerate().map(|(field_index, ad)| {
+        let field_name = enum_variant_field_name(variant_index, field_index);
+        let field_type = ad.ty.clone();
+        let field_encoding =
+            quote::format_ident!("variant_{}_field_{}_encoding", variant_index, field_index);
+        quote! {
+            let #field_encoding :
+                Vec<::twenty_first::shared_math::b_field_element::BFieldElement>
+                = #field_name.encode();
+            if <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                ::static_length().is_none() {
+                elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                    #field_encoding.len() as u64)
+                );
+            }
+            elements.extend(#field_encoding);
+        }
+    });
+
+    let field_names = associated_data
+        .iter()
+        .enumerate()
+        .map(|(field_index, _field)| enum_variant_field_name(variant_index, field_index));
+
+    let ret = quote! {
+        Self::#variant_name ( #( #field_names , )* ) => {
+            elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new( #variant_index as u64));
+            #( #field_encoders )*
+        }
+    };
+
+    ret
 }

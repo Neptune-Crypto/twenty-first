@@ -339,6 +339,8 @@ impl<const N: usize> Display for U32s<N> {
 }
 
 impl<const N: usize> BFieldCodec for U32s<N> {
+    type Error = anyhow::Error;
+
     fn encode(&self) -> Vec<BFieldElement> {
         self.values.into_iter().flat_map(|v| v.encode()).collect()
     }

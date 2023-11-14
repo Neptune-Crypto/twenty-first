@@ -1,6 +1,9 @@
+use std::fmt::Debug;
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::slice::Iter;
 
+use anyhow::anyhow;
 use anyhow::bail;
 use anyhow::Result;
 use itertools::Itertools;
@@ -20,7 +23,9 @@ use super::b_field_element::BFieldElement;
 /// objects nor their type information; this is
 /// the responsibility of the decoder.
 pub trait BFieldCodec {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>>;
+    type Error: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Debug + Display;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error>;
     fn encode(&self) -> Vec<BFieldElement>;
 
     /// Returns the length in number of BFieldElements if it is known at compile-time.
@@ -33,6 +38,8 @@ pub trait BFieldCodec {
 // BFieldCodec implementation that encodes a single BFieldElement as two BFieldElements.
 // This is not desired. Hence, BFieldCodec is implemented manually for BFieldElement.
 impl BFieldCodec for BFieldElement {
+    type Error = anyhow::Error;
+
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if sequence.len() != 1 {
             bail!("trying to decode more or less than one BFieldElements as one BFieldElement");
@@ -51,6 +58,8 @@ impl BFieldCodec for BFieldElement {
 }
 
 impl BFieldCodec for u128 {
+    type Error = anyhow::Error;
+
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if sequence.len() != 4 {
             bail!(
@@ -86,6 +95,8 @@ impl BFieldCodec for u128 {
 }
 
 impl BFieldCodec for u64 {
+    type Error = anyhow::Error;
+
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if sequence.len() != 2 {
             bail!(
@@ -121,6 +132,8 @@ impl BFieldCodec for u64 {
 }
 
 impl BFieldCodec for bool {
+    type Error = anyhow::Error;
+
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if sequence.len() != 1 {
             bail!(
@@ -145,6 +158,8 @@ impl BFieldCodec for bool {
 }
 
 impl BFieldCodec for u32 {
+    type Error = anyhow::Error;
+
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if sequence.len() != 1 {
             bail!(
@@ -168,7 +183,13 @@ impl BFieldCodec for u32 {
     }
 }
 
-impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
+impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S)
+where
+    T::Error: Into<anyhow::Error>,
+    S::Error: Into<anyhow::Error>,
+{
+    type Error = anyhow::Error;
+
     fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
         let mut index = 0;
         // decode T
@@ -189,7 +210,7 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
         if str.len() < index + len_t {
             bail!("Sequence too short to decode tuple, element 0");
         }
-        let t = *T::decode(&str[index..index + len_t])?;
+        let t = *T::decode(&str[index..index + len_t]).map_err(|e| e.into())?;
         index += len_t;
 
         // decode S
@@ -210,7 +231,7 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
         if str.len() < index + len_s {
             bail!("Sequence too short to decode tuple, element 1");
         }
-        let s = *S::decode(&str[index..index + len_s])?;
+        let s = *S::decode(&str[index..index + len_s]).map_err(|e| e.into())?;
         index += len_s;
 
         if index != str.len() {
@@ -243,7 +264,12 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
     }
 }
 
-impl<T: BFieldCodec> BFieldCodec for Option<T> {
+impl<T: BFieldCodec> BFieldCodec for Option<T>
+where
+    T::Error: Into<anyhow::Error>,
+{
+    type Error = anyhow::Error;
+
     fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
         let is_some = match str.get(0) {
             Some(e) => {
@@ -257,7 +283,7 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
         };
 
         if is_some {
-            Ok(Box::new(Some(*T::decode(&str[1..])?)))
+            Ok(Box::new(Some(*T::decode(&str[1..]).map_err(|e| e.into())?)))
         } else {
             Ok(Box::new(None))
         }
@@ -282,13 +308,18 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
     }
 }
 
-impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N] {
+impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N]
+where
+    T::Error: Into<anyhow::Error>,
+{
+    type Error = anyhow::Error;
+
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if N > 0 && sequence.is_empty() {
             bail!("Cannot decode empty sequence into [T; {N}]");
         }
 
-        let vec_t = bfield_codec_decode_list(N, sequence)?;
+        let vec_t = bfield_codec_decode_list(N, sequence).map_err(|e| anyhow!(e))?;
         let array = match vec_t.try_into() {
             Ok(array) => array,
             Err(_) => bail!("Cannot convert Vec<T> into [T; {N}]."),
@@ -305,14 +336,20 @@ impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N] {
     }
 }
 
-impl<T: BFieldCodec> BFieldCodec for Vec<T> {
+impl<T: BFieldCodec> BFieldCodec for Vec<T>
+where
+    T::Error: Into<anyhow::Error>,
+{
+    type Error = anyhow::Error;
+
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if sequence.is_empty() {
             bail!("Cannot decode empty sequence into Vec<T>");
         }
 
         let indicated_num_elements = sequence[0].value() as usize;
-        let vec_t = bfield_codec_decode_list(indicated_num_elements, &sequence[1..])?;
+        let vec_t = bfield_codec_decode_list(indicated_num_elements, &sequence[1..])
+            .map_err(|e| anyhow!(e))?;
         Ok(Box::new(vec_t))
     }
 
@@ -334,7 +371,10 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
 fn bfield_codec_decode_list<T: BFieldCodec>(
     indicated_num_items: usize,
     sequence: &[BFieldElement],
-) -> Result<Vec<T>> {
+) -> Result<Vec<T>>
+where
+    T::Error: Into<anyhow::Error>,
+{
     // Initializing the vector with the indicated capacity potentially allows a DOS.
     let mut vec_t = vec![];
 
@@ -364,7 +404,7 @@ fn bfield_codec_decode_list<T: BFieldCodec>(
             );
         }
         for raw_item in raw_item_iter {
-            let item = *T::decode(raw_item)?;
+            let item = *T::decode(raw_item).map_err(|e| e.into())?;
             vec_t.push(item);
         }
     } else {
@@ -385,7 +425,8 @@ fn bfield_codec_decode_list<T: BFieldCodec>(
                     Attempted to decode item {item_idx} of {indicated_num_items}.",
                 );
             }
-            let item = *T::decode(&sequence[sequence_index..sequence_index + item_length])?;
+            let item = *T::decode(&sequence[sequence_index..sequence_index + item_length])
+                .map_err(|e| e.into())?;
             sequence_index += item_length;
             vec_t.push(item);
         }
@@ -414,6 +455,8 @@ fn bfield_codec_encode_list<T: BFieldCodec>(item_iter: Iter<T>) -> Vec<BFieldEle
 }
 
 impl<T> BFieldCodec for PhantomData<T> {
+    type Error = anyhow::Error;
+
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
         if !sequence.is_empty() {
             bail!(
