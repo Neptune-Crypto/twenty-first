@@ -1526,7 +1526,6 @@ mod tests {
 
         #[cfg(test)]
         mod simple_derivations {
-            use itertools::Itertools;
             use rand::random;
 
             use crate::shared_math::{

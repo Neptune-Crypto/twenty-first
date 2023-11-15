@@ -411,7 +411,7 @@ fn generate_tokens_for_enum(
                     #variant_lengths ,
                 )*
             ];
-            if variant_lengths.iter().all(|fl| fl.is_some() ) && variant_lengths.iter().tuple_windows().all(|(l, r)| l.unwrap() == r.unwrap()) {
+            if variant_lengths.iter().all(|fl| fl.is_some() ) && variant_lengths.iter().all(|x| x.unwrap() == variant_lengths[0].unwrap()) {
                 variant_lengths[0]
             }
             else {
