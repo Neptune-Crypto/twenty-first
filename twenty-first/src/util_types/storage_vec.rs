@@ -3,7 +3,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use itertools::Itertools;
 use rusty_leveldb::{WriteBatch, DB};
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -20,10 +19,35 @@ pub trait StorageVec<T> {
     fn get(&self, index: Index) -> T;
 
     /// get multiple elements matching indices
-    fn get_many(&self, indices: &[Index]) -> Vec<T>;
+    ///
+    /// This is a convenience method. For large collections
+    /// it will be more efficient to use `get_many_iter` directly
+    /// and avoid allocating a Vec
+    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        self.get_many_iter(indices.to_vec())
+            .map(|(_i, v)| v)
+            .collect()
+    }
+
+    /// get multiple elements matching indices and return as an iterator
+    fn get_many_iter(
+        &self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_>;
 
     /// get all elements
-    fn get_all(&self) -> Vec<T>;
+    ///
+    /// This is a convenience method. For large collections
+    /// it will be more efficient to use `get_all_iter` directly
+    /// and avoid allocating a Vec
+    fn get_all(&self) -> Vec<T> {
+        self.get_all_iter().map(|(_i, v)| v).collect()
+    }
+
+    /// get all elements and return as an iterator
+    fn get_all_iter(&self) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        self.get_many_iter(0..self.len())
+    }
 
     /// set a single element.
     fn set(&mut self, index: Index, value: T);
@@ -31,29 +55,42 @@ pub trait StorageVec<T> {
     /// set multiple elements.
     fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>);
 
-    /// set all elements with a simple list of values in an array or Vec.
+    /// set elements from start to vals.count()
+    ///
+    /// calls ::set_many() internally.
+    ///
+    /// note: casts the array's indexes from usize to Index
+    ///       so
+    fn set_first(&mut self, vals: impl IntoIterator<Item = T>)
+    where
+        T: Clone,
+    {
+        self.set_many((0..).zip(vals));
+    }
+
+    /// set all elements with a simple list of values in an array or Vec
+    /// and validates that input length matches target length.
     ///
     /// calls ::set_many() internally.
     ///
     /// panics if input length does not match target length.
     ///
-    /// note: casts the array's indexes from usize to Index.
-    fn set_all(&mut self, vals: &[T])
+    /// note: casts the input value's length from usize to Index
+    ///       so will panic if vals contains more than 2^32 items
+    fn set_all(&mut self, vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = T>>)
     where
         T: Clone,
     {
+        let iter = vals.into_iter();
+
         assert!(
-            vals.len() as Index == self.len(),
+            iter.len() as Index == self.len(),
             "size-mismatch.  input has {} elements and target has {} elements.",
-            vals.len(),
+            iter.len(),
             self.len(),
         );
 
-        self.set_many(
-            vals.iter()
-                .enumerate()
-                .map(|(i, v)| (i as Index, v.clone())),
-        );
+        self.set_first(iter);
     }
 
     /// pop an element from end of collection
@@ -112,89 +149,31 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         bincode::deserialize(&db_val).unwrap()
     }
 
-    fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        fn sort_to_match_requested_index_order<T>(indexed_elements: HashMap<usize, T>) -> Vec<T> {
-            let mut elements = indexed_elements.into_iter().collect_vec();
-            elements.sort_unstable_by_key(|&(index_position, _)| index_position);
-            elements.into_iter().map(|(_, element)| element).collect()
-        }
-
-        assert!(
-            indices.iter().all(|x| *x < self.len()),
-            "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
-            self.len(),
-            self.name
-        );
-
-        let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
-            indices
-                .iter()
-                .copied()
-                .enumerate()
-                .partition(|&(_, index)| self.cache.contains_key(&index));
-
-        let mut fetched_elements = HashMap::with_capacity(indices.len());
-        for (index_position, index) in indices_of_elements_in_cache {
-            let element = self.cache[&index].clone();
-            fetched_elements.insert(index_position, element);
-        }
-
-        let no_need_to_lock_database = indices_of_elements_not_in_cache.is_empty();
-        if no_need_to_lock_database {
-            return sort_to_match_requested_index_order(fetched_elements);
-        }
-
+    fn get_many_iter(
+        &self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        // note: this lock is moved into the iterator closure and is not
+        //       released until caller the drops the returned iterator
         let mut db_reader = self.db.lock().expect("get_many: db-locking must succeed");
 
-        let elements_fetched_from_db = indices_of_elements_not_in_cache
-            .iter()
-            .map(|&(_, index)| self.get_index_key(index))
-            .map(|key| db_reader.get(&key).unwrap())
-            .map(|db_element| bincode::deserialize(&db_element).unwrap());
+        Box::new(indices.into_iter().map(move |i| {
+            assert!(
+                i < self.length,
+                "Out-of-bounds. Got index {} but length was {}. persisted vector name: {}",
+                i,
+                self.length,
+                self.name
+            );
 
-        let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
-            .iter()
-            .map(|&(index_position, _)| index_position)
-            .zip_eq(elements_fetched_from_db);
-        fetched_elements.extend(indexed_fetched_elements_from_db);
-
-        sort_to_match_requested_index_order(fetched_elements)
-    }
-
-    /// Return all stored elements in a vector, whose index matches the StorageVec's.
-    /// It's the caller's responsibility that there is enough memory to store all elements.
-    fn get_all(&self) -> Vec<T> {
-        let length = self.len();
-
-        let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
-            (0..length).partition(|index| self.cache.contains_key(index));
-
-        let mut fetched_elements: Vec<Option<T>> = vec![None; length as usize];
-        for index in indices_of_elements_in_cache {
-            let element = self.cache[&index].clone();
-            fetched_elements[index as usize] = Some(element);
-        }
-
-        let no_need_to_lock_database = indices_of_elements_not_in_cache.is_empty();
-        if no_need_to_lock_database {
-            return fetched_elements
-                .into_iter()
-                .map(|x| x.unwrap())
-                .collect_vec();
-        }
-
-        let mut db_reader = self.db.lock().expect("get_all: db-locking must succeed");
-        for index in indices_of_elements_not_in_cache {
-            let key = self.get_index_key(index);
-            let element = db_reader.get(&key).unwrap();
-            let element = bincode::deserialize(&element).unwrap();
-            fetched_elements[index as usize] = Some(element);
-        }
-
-        fetched_elements
-            .into_iter()
-            .map(|x| x.unwrap())
-            .collect_vec()
+            if self.cache.contains_key(&i) {
+                (i, self.cache[&i].clone())
+            } else {
+                let key = self.get_index_key(i);
+                let db_element = db_reader.get(&key).unwrap();
+                (i, bincode::deserialize(&db_element).unwrap())
+            }
+        }))
     }
 
     fn set(&mut self, index: Index, value: T) {
@@ -360,6 +339,31 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
 
 pub struct OrdinaryVec<T>(Vec<T>);
 
+// Some niceties for OrdinaryVec
+
+impl<T> IntoIterator for OrdinaryVec<T> {
+    type Item = T;
+    type IntoIter = <Vec<T> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+// We deref to slice so that we can reuse the slice impls
+impl<T> std::ops::Deref for OrdinaryVec<T> {
+    type Target = [T];
+    fn deref(&self) -> &[T] {
+        &self.0[..]
+    }
+}
+
+impl<T> std::ops::DerefMut for OrdinaryVec<T> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        &mut self.0[..]
+    }
+}
+
 impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
     fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -373,15 +377,15 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
         self.0[index as usize].clone()
     }
 
-    fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        indices
-            .iter()
-            .map(|index| self.0[*index as usize].clone())
-            .collect()
-    }
-
-    fn get_all(&self) -> Vec<T> {
-        self.0.clone()
+    fn get_many_iter(
+        &self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        Box::new(
+            indices
+                .into_iter()
+                .map(|index| (index, self.0[index as usize].clone())),
+        )
     }
 
     fn set(&mut self, index: Index, value: T) {
@@ -415,6 +419,7 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use itertools::Itertools;
     use rand::{Rng, RngCore};
     use rusty_leveldb::DB;
 
@@ -622,13 +627,13 @@ mod tests {
         delegated_db_vec_a.push(30);
 
         let updates = [100, 200, 300];
-        delegated_db_vec_a.set_all(&updates);
+        delegated_db_vec_a.set_all(updates);
 
         assert_eq!(vec![100, 200, 300], delegated_db_vec_a.get_many(&[0, 1, 2]));
 
         #[allow(clippy::shadow_unrelated)]
         let updates = vec![1000, 2000, 3000];
-        delegated_db_vec_a.set_all(&updates);
+        delegated_db_vec_a.set_all(updates);
 
         assert_eq!(
             vec![1000, 2000, 3000],
@@ -824,6 +829,34 @@ mod tests {
         );
     }
 
+    #[test]
+    // This tests that we can obtain a subset of elements with
+    // get_many_iter() and feed the results directly into set_many()
+    // and the collection should be unchanged, meaning that the
+    // index values were preserved.
+    fn get_many_iter_indexes() {
+        let db = get_test_db();
+        let mut v: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
+
+        let pattern = vec![100, 200, 300, 400];
+        v.push(pattern[0]);
+        v.push(pattern[1]);
+        v.push(pattern[2]);
+        v.push(pattern[3]);
+
+        let set: Vec<_> = v.get_many_iter([1, 3]).collect();
+
+        // set indexes 1 and 3 to 0, to prove set_many is effecting change.
+        let pattern_wipe = vec![100, 0, 300, 0];
+        v.set_all(pattern_wipe.clone());
+        assert_eq!(pattern_wipe, v.get_all());
+
+        // now send the fetched values to set_many and we
+        // should have restored the original pattern.
+        v.set_many(set);
+        assert_eq!(pattern, v.get_all());
+    }
+
     #[should_panic(
         expected = "Out-of-bounds. Got 3 but length was 1. persisted vector name: unit test vec 0"
     )]
@@ -834,7 +867,7 @@ mod tests {
     }
 
     #[should_panic(
-        expected = "Out-of-bounds. Got indices [3] but length was 1. persisted vector name: unit test vec 0"
+        expected = "Out-of-bounds. Got index 3 but length was 1. persisted vector name: unit test vec 0"
     )]
     #[test]
     fn panic_on_out_of_bounds_get_many() {
@@ -868,7 +901,7 @@ mod tests {
         let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
 
         // attempt to set 2 values, when only one is in vector.
-        delegated_db_vec.set_all(&[1, 2]);
+        delegated_db_vec.set_all([1, 2]);
     }
 
     #[should_panic(

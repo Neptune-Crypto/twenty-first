@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use rusty_leveldb::{WriteBatch, DB};
 use std::{
     collections::{HashMap, VecDeque},
@@ -144,7 +143,7 @@ impl<ParentKey, ParentValue, T> StorageVec<T>
 where
     ParentKey: From<Index>,
     ParentValue: From<T>,
-    T: Clone + From<ParentValue> + Debug,
+    T: Clone + From<ParentValue> + Debug + 'static,
     ParentKey: From<(ParentKey, ParentKey)>,
     ParentKey: From<u8>,
     Index: From<ParentValue> + From<u64>,
@@ -197,119 +196,39 @@ where
         val.into()
     }
 
-    /// Fetch multiple elements from a `DbtVec` and return the elements matching the order
-    /// of the input indices.
-    fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        fn sort_to_match_requested_index_order<T>(indexed_elements: HashMap<usize, T>) -> Vec<T> {
-            let mut elements = indexed_elements.into_iter().collect_vec();
-            elements.sort_unstable_by_key(|&(index_position, _)| index_position);
-            elements.into_iter().map(|(_, element)| element).collect()
-        }
-
+    fn get_many_iter<'a>(
+        &'a self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
         let self_lock = self
             .lock()
             .expect("Could not get lock on DbtVec as StorageVec");
 
         let self_length = self.len_with_lock(&self_lock);
 
-        // Do *not* refer to `self` after this point, instead use `self_lock`
-        assert!(
-            indices.iter().all(|x| *x < self_length),
-            "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
-            self_length,
-            self_lock.name
-        );
+        Box::new(indices.into_iter().map(move |i| {
+            assert!(
+                i < self_length,
+                "Out-of-bounds. Got index {} but length was {}. persisted vector name: {}",
+                i,
+                self_length,
+                self_lock.name
+            );
 
-        let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
-            indices
-                .iter()
-                .copied()
-                .enumerate()
-                .partition(|&(_, index)| self_lock.cache.contains_key(&index));
-
-        let mut fetched_elements = HashMap::with_capacity(indices.len());
-        for (index_position, index) in indices_of_elements_in_cache {
-            let value = self_lock.cache.get(&index).unwrap().clone();
-            fetched_elements.insert(index_position, value);
-        }
-
-        let no_need_to_lock_database = indices_of_elements_not_in_cache.is_empty();
-        if no_need_to_lock_database {
-            return sort_to_match_requested_index_order(fetched_elements);
-        }
-
-        let mut db_reader = self_lock
-            .reader
-            .lock()
-            .expect("Could not get lock on StorageReader object (get_many 3).");
-
-        let keys_for_indices_not_in_cache = indices_of_elements_not_in_cache
-            .iter()
-            .map(|&(_, index)| self_lock.get_index_key(index))
-            .collect_vec();
-        let elements_fetched_from_db = db_reader
-            .get_many(&keys_for_indices_not_in_cache)
-            .into_iter()
-            .map(|x| x.unwrap().into());
-
-        let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
-            .iter()
-            .map(|&(index_position, _)| index_position)
-            .zip_eq(elements_fetched_from_db);
-        fetched_elements.extend(indexed_fetched_elements_from_db);
-
-        sort_to_match_requested_index_order(fetched_elements)
-    }
-
-    /// Return all stored elements in a vector, whose index matches the StorageVec's.
-    /// It's the caller's responsibility that there is enough memory to store all elements.
-    fn get_all(&self) -> Vec<T> {
-        let self_lock = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec");
-
-        let length = self.len_with_lock(&self_lock);
-
-        let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
-            (0..length).partition(|index| self_lock.cache.contains_key(index));
-
-        let mut fetched_elements: Vec<Option<T>> = vec![None; length as usize];
-        for index in indices_of_elements_in_cache {
-            let element = self_lock.cache[&index].clone();
-            fetched_elements[index as usize] = Some(element);
-        }
-
-        let no_need_to_lock_database = indices_of_elements_not_in_cache.is_empty();
-        if no_need_to_lock_database {
-            return fetched_elements
-                .into_iter()
-                .map(|x| x.unwrap())
-                .collect_vec();
-        }
-
-        let keys = indices_of_elements_not_in_cache
-            .iter()
-            .map(|x| self_lock.get_index_key(*x))
-            .collect_vec();
-        let mut db_reader = self_lock
-            .reader
-            .lock()
-            .expect("Could not get lock on StorageReader object");
-        let elements_fetched_from_db = db_reader
-            .get_many(&keys)
-            .into_iter()
-            .map(|x| x.unwrap().into());
-        let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
-            .into_iter()
-            .zip_eq(elements_fetched_from_db);
-        for (index, element) in indexed_fetched_elements_from_db {
-            fetched_elements[index as usize] = Some(element);
-        }
-
-        fetched_elements
-            .into_iter()
-            .map(|x| x.unwrap())
-            .collect_vec()
+            if self_lock.cache.contains_key(&i) {
+                (i, self_lock.cache[&i].clone())
+            } else {
+                let key = self_lock.get_index_key(i);
+                // let db_element = db_reader.get(key).unwrap();
+                let db_element = self_lock
+                    .reader
+                    .lock()
+                    .expect("Could not get lock on StorageReader object.")
+                    .get(key)
+                    .unwrap();
+                (i, T::from(db_element))
+            }
+        }))
     }
 
     fn set(&mut self, index: Index, value: T) {
@@ -802,6 +721,7 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
 #[cfg(test)]
 mod tests {
 
+    use itertools::Itertools;
     use rand::{random, Rng, RngCore};
 
     use crate::shared_math::other::random_elements;
@@ -900,7 +820,7 @@ mod tests {
         rusty_storage.restore_or_new();
 
         // should work to pass empty array, when vector.is_empty() == true
-        vector.set_all(&[]);
+        vector.set_all([]);
 
         // test `get_all`
         assert!(
@@ -985,7 +905,7 @@ mod tests {
             S([8u8].to_vec()),
             S([9u8].to_vec()),
         ];
-        vector.set_all(&values_tmp);
+        vector.set_all(values_tmp.clone());
 
         assert_eq!(
             values_tmp,
@@ -993,7 +913,7 @@ mod tests {
             "`get_all` must return values passed to `set_all`",
         );
 
-        vector.set_all(&expect_values);
+        vector.set_all(expect_values.clone());
 
         // persist
         rusty_storage.persist();
@@ -1250,7 +1170,7 @@ mod tests {
         }
 
         // set the initial values
-        vector.set_all(&init_vals);
+        vector.set_all(init_vals);
 
         // generate some random indices to read
         let read_indices: Vec<u64> = random_elements::<u64>(30)
@@ -1278,7 +1198,7 @@ mod tests {
         }
 
         // Mutate values at randomly generated indices
-        vector.set_all(&mutate_vals);
+        vector.set_all(mutate_vals);
 
         // Verify mutated values, and non-mutated also.
         let new_values = vector.get_many(&read_indices);
@@ -1593,7 +1513,7 @@ mod tests {
     }
 
     #[should_panic(
-        expected = "Out-of-bounds. Got indices [0, 0, 0, 1, 1, 2] but length was 2. persisted vector name: test-vector"
+        expected = "Out-of-bounds. Got index 2 but length was 2. persisted vector name: test-vector"
     )]
     #[test]
     fn out_of_bounds_using_get_many() {
@@ -1646,7 +1566,7 @@ mod tests {
         vector.push(1);
 
         // attempt to set 2 values, when only one is in vector.
-        vector.set_all(&[0, 1]);
+        vector.set_all([0, 1]);
     }
 
     #[should_panic(expected = "size-mismatch.  input has 1 elements and target has 2 elements")]
@@ -1665,6 +1585,6 @@ mod tests {
         vector.push(1);
 
         // attempt to set 1 values, when two are in vector.
-        vector.set_all(&[5]);
+        vector.set_all([5]);
     }
 }
