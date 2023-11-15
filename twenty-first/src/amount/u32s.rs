@@ -339,15 +339,17 @@ impl<const N: usize> Display for U32s<N> {
 }
 
 impl<const N: usize> BFieldCodec for U32s<N> {
-    type Error = anyhow::Error;
+    type Error = String;
 
     fn encode(&self) -> Vec<BFieldElement> {
         self.values.into_iter().flat_map(|v| v.encode()).collect()
     }
 
-    fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if sequence.len() != N {
-            bail!("Failed to decode {sequence:?} into U32s<{N}>. Bad length.");
+            return Err(format!(
+                "Failed to decode {sequence:?} into U32s<{N}>. Bad length."
+            ));
         }
 
         let mut array: [u32; N] = [0u32; N];
