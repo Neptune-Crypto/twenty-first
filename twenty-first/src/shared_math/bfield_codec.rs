@@ -817,6 +817,7 @@ mod tests {
         // Since we cannot use the derive macro in the same crate where it is defined,
         // we test the macro here instead.
 
+        use arbitrary::{Arbitrary, Unstructured};
         use rand::{random, thread_rng, Rng, RngCore};
 
         use crate::{
@@ -1522,6 +1523,54 @@ mod tests {
                 dbg!(num_elements);
                 assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
             }
+        }
+
+        #[test]
+        fn encode_enum_with_uniform_data_size() {
+            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+            enum UniformDataSize {
+                A(Digest),
+                B(Digest),
+                C(Digest),
+            }
+
+            let rand: [u8; 10] = random();
+            let test_value_uniform_data =
+                UniformDataSize::arbitrary(&mut Unstructured::new(&rand)).unwrap();
+
+            assert_eq!(
+                Some(6),
+                UniformDataSize::static_length(),
+                "Static B-field codec length is known if enum-variants hold uniform data. Expected 1 for discriminant, and 5 for digest."
+            );
+            assert_eq!(
+                UniformDataSize::static_length().unwrap(),
+                test_value_uniform_data.encode().len(),
+                "Encoding of uniform-enum must have expected length"
+            );
+
+            assert_bfield_codec_properties(&test_value_uniform_data);
+        }
+
+        #[test]
+        fn encode_enum_with_irregular_data_size() {
+            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+            enum IrregularDataSize {
+                A(u32),
+                B,
+                C(Digest),
+                D(Vec<XFieldElement>),
+            }
+
+            assert!(
+                IrregularDataSize::static_length().is_none(),
+                "Static B-field codec length is unknown if enum-variants hold irregular data"
+            );
+
+            let rand: [u8; 10] = random();
+            let test_value_irregular_data =
+                IrregularDataSize::arbitrary(&mut Unstructured::new(&rand)).unwrap();
+            assert_bfield_codec_properties(&test_value_irregular_data);
         }
 
         #[cfg(test)]
