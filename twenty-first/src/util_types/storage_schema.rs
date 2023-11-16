@@ -1641,4 +1641,37 @@ mod tests {
             let _ = vector.get_all_iter();
         }
     }
+
+    #[test]
+    fn time_db_interaction() {
+        let opt = rusty_leveldb::Options::default();
+        // let opt = rusty_leveldb::default();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        // initialize storage
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        rusty_storage.restore_or_new();
+        let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+
+        // Generate initial index/value pairs.
+        const TEST_LIST_LENGTH: usize = 100000;
+        for v in 0..TEST_LIST_LENGTH {
+            vector.push(v as Index);
+        }
+
+        // Persist
+        rusty_storage.persist();
+
+        for _ in 0..10 {
+            let mut v = vector.get_all();
+
+            for v in v.iter_mut() {
+                *v += 1;
+            }
+
+            vector.set_all(v);
+
+            rusty_storage.persist();
+        }
+    }
 }
