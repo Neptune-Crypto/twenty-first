@@ -1,3 +1,4 @@
+use std::iter::Iterator;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
@@ -8,6 +9,64 @@ use serde::{de::DeserializeOwned, Serialize};
 
 pub type Index = u64;
 
+pub struct ManyIterMut<'a, V, T>
+where
+    V: StorageVec<T>,
+{
+    iter: Box<dyn Iterator<Item = (Index, T)>>,
+    data: &'a mut V,
+}
+
+impl<'a, V, T> ManyIterMut<'a, V, T>
+where
+    V: StorageVec<T>,
+{
+    pub fn new(iter: Box<dyn Iterator<Item = (Index, T)>>, data: &'a mut V) -> Self {
+        // let set: HashSet<Index> = indices.iter().copied().collect();
+        // assert!(indices.len() == set.len(), "Duplicate indices!");
+
+        Self { iter, data }
+    }
+}
+
+impl<'a, V, T> Iterator for ManyIterMut<'a, V, T>
+where
+    V: StorageVec<T>,
+{
+    type Item = StorageSetter<'a, V, T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some((i, _v)) = self.iter.next() {
+            let setter = self.data.get_mut(i);
+            Some(setter)
+        } else {
+            None
+        }
+    }
+}
+
+pub struct StorageSetter<'a, V, T>
+where
+    V: StorageVec<T> + ?Sized,
+{
+    vec: &'a mut V,
+    index: Index,
+    value: T,
+}
+
+impl<'a, V, T> StorageSetter<'a, V, T>
+where
+    V: StorageVec<T> + ?Sized,
+{
+    pub fn set(self, value: T) {
+        self.vec.set(self.index, value);
+    }
+
+    pub fn value(&self) -> &T {
+        &self.value
+    }
+}
+
 pub trait StorageVec<T> {
     /// check if collection is empty
     fn is_empty(&self) -> bool;
@@ -17,6 +76,15 @@ pub trait StorageVec<T> {
 
     /// get single element at index
     fn get(&self, index: Index) -> T;
+
+    fn get_mut(&mut self, index: Index) -> StorageSetter<Self, T> {
+        let value = self.get(index);
+        StorageSetter {
+            vec: self,
+            index,
+            value,
+        }
+    }
 
     /// get multiple elements matching indices
     ///
@@ -34,6 +102,17 @@ pub trait StorageVec<T> {
         &self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_>;
+
+    /// get multiple elements matching indices and return as an iterator
+    // fn many_iter_mut(
+    //     &mut self,
+    //     indices: impl IntoIterator<Item = Index> + 'static,
+    // ) -> Box<dyn Iterator<Item = (Index, T)> + '_>;
+
+    // #[inline]
+    // pub fn iter_mut(&mut self) -> IterMut<'_, T> {
+    //     IterMut::new(self)
+    // }
 
     /// get all elements
     ///
