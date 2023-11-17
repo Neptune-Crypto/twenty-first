@@ -1,4 +1,3 @@
-use crate::util_types::storage_vec::LendingIterator;
 use rusty_leveldb::{WriteBatch, DB};
 use std::{
     collections::{HashMap, VecDeque},
@@ -722,6 +721,7 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
 mod tests {
 
     use itertools::Itertools;
+    use lending_iterator::prelude::*;
     use rand::{random, Rng, RngCore};
     use std::collections::BTreeSet;
 
@@ -1243,13 +1243,10 @@ mod tests {
         // Generate some random indices for mutation
         let mutate_indices: BTreeSet<u64> = random_elements::<u64>(30)
             .iter()
-            .map(|x| x % TEST_LIST_LENGTH as u64)
+            .map(|x| x % TEST_LIST_LENGTH)
             .collect();
 
-        // for setter in vector.many_iter_mut(mutate_indices) {
-        //     setter.set(setter.value() / 2);
-        // }
-
+        // note: with LendingIterator for loop is not available.
         let mut iter = vector.many_iter_mut(mutate_indices.clone());
         while let Some(mut setter) = iter.next() {
             let val = setter.value();
