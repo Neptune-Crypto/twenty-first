@@ -9,36 +9,55 @@ use serde::{de::DeserializeOwned, Serialize};
 
 pub type Index = u64;
 
+pub trait LendingIterator {
+    type Item<'a>
+    where
+        Self: 'a;
+
+    fn next(&mut self) -> Option<Self::Item<'_>>;
+}
+
 pub struct ManyIterMut<'a, V, T>
 where
-    V: StorageVec<T>,
+    V: StorageVec<T> + ?Sized,
 {
-    iter: Box<dyn Iterator<Item = (Index, T)>>,
+    indices: Box<dyn Iterator<Item = Index>>,
+    // indices: BTreeSet<Index>,
     data: &'a mut V,
+    phantom: std::marker::PhantomData<T>,
 }
 
 impl<'a, V, T> ManyIterMut<'a, V, T>
 where
     V: StorageVec<T>,
 {
-    pub fn new(iter: Box<dyn Iterator<Item = (Index, T)>>, data: &'a mut V) -> Self {
-        // let set: HashSet<Index> = indices.iter().copied().collect();
-        // assert!(indices.len() == set.len(), "Duplicate indices!");
-
-        Self { iter, data }
+    pub fn new<I>(indices: I, data: &'a mut V) -> Self
+    where
+        I: IntoIterator<Item = Index> + 'static,
+    {
+        Self {
+            indices: Box::new(indices.into_iter()),
+            // indices: indices.into_iter().collect(),
+            data,
+            phantom: Default::default(),
+        }
     }
 }
 
-impl<'a, V, T> Iterator for ManyIterMut<'a, V, T>
+impl<'a, V, T: 'a> LendingIterator for ManyIterMut<'a, V, T>
 where
     V: StorageVec<T>,
+    T: Clone,
 {
-    type Item = StorageSetter<'a, V, T>;
+    type Item<'b> = StorageSetter<'b, V, T>
+    where
+        Self: 'b;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some((i, _v)) = self.iter.next() {
-            let setter = self.data.get_mut(i);
-            Some(setter)
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        // if let Some(i) = self.indices.pop_first() {
+        // if let Some(i) = self.indices.next() {
+        if let Some(i) = Iterator::next(&mut self.indices) {
+            self.data.get_mut(i)
         } else {
             None
         }
@@ -58,7 +77,7 @@ impl<'a, V, T> StorageSetter<'a, V, T>
 where
     V: StorageVec<T> + ?Sized,
 {
-    pub fn set(self, value: T) {
+    pub fn set(&mut self, value: T) {
         self.vec.set(self.index, value);
     }
 
@@ -77,13 +96,14 @@ pub trait StorageVec<T> {
     /// get single element at index
     fn get(&self, index: Index) -> T;
 
-    fn get_mut(&mut self, index: Index) -> StorageSetter<Self, T> {
+    #[inline]
+    fn get_mut(&mut self, index: Index) -> Option<StorageSetter<Self, T>> {
         let value = self.get(index);
-        StorageSetter {
+        Some(StorageSetter {
             vec: self,
             index,
             value,
-        }
+        })
     }
 
     /// get multiple elements matching indices
@@ -91,6 +111,7 @@ pub trait StorageVec<T> {
     /// This is a convenience method. For large collections
     /// it will be more efficient to use `get_many_iter` directly
     /// and avoid allocating a Vec
+    #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
         self.get_many_iter(indices.to_vec())
             .map(|(_i, v)| v)
@@ -104,26 +125,37 @@ pub trait StorageVec<T> {
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_>;
 
     /// get multiple elements matching indices and return as an iterator
-    // fn many_iter_mut(
-    //     &mut self,
-    //     indices: impl IntoIterator<Item = Index> + 'static,
-    // ) -> Box<dyn Iterator<Item = (Index, T)> + '_>;
+    #[inline]
+    fn many_iter_mut(
+        &mut self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> ManyIterMut<Self, T>
+    where
+        Self: Sized,
+    {
+        ManyIterMut::new(indices.into_iter(), self)
+    }
 
-    // #[inline]
-    // pub fn iter_mut(&mut self) -> IterMut<'_, T> {
-    //     IterMut::new(self)
-    // }
+    #[inline]
+    fn iter_mut(&mut self) -> ManyIterMut<Self, T>
+    where
+        Self: Sized,
+    {
+        ManyIterMut::new(0..self.len(), self)
+    }
 
     /// get all elements
     ///
     /// This is a convenience method. For large collections
     /// it will be more efficient to use `get_all_iter` directly
     /// and avoid allocating a Vec
+    #[inline]
     fn get_all(&self) -> Vec<T> {
         self.get_all_iter().map(|(_i, v)| v).collect()
     }
 
     /// get all elements and return as an iterator
+    #[inline]
     fn get_all_iter(&self) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
         self.get_many_iter(0..self.len())
     }
@@ -140,6 +172,7 @@ pub trait StorageVec<T> {
     ///
     /// note: casts the array's indexes from usize to Index
     ///       so
+    #[inline]
     fn set_first(&mut self, vals: impl IntoIterator<Item = T>)
     where
         T: Clone,
@@ -156,6 +189,7 @@ pub trait StorageVec<T> {
     ///
     /// note: casts the input value's length from usize to Index
     ///       so will panic if vals contains more than 2^32 items
+    #[inline]
     fn set_all(&mut self, vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = T>>)
     where
         T: Clone,
