@@ -1254,7 +1254,7 @@ mod tests {
         }
 
         // Verify mutated values, and non-mutated also.
-        for (index, value) in vector.get_all_iter() {
+        for (index, value) in vector.iter() {
             if mutate_indices.contains(&index) {
                 assert_eq!(index, value)
             } else {
@@ -1658,7 +1658,7 @@ mod tests {
 
         let mut i = 0;
         for _ in 0..1000 {
-            let iter = vector.get_all_iter();
+            let iter = vector.iter();
 
             for (_i, v) in iter {
                 i += v;
@@ -1687,7 +1687,7 @@ mod tests {
         rusty_storage.persist();
 
         for _ in 0..1000 {
-            let _ = vector.get_all_iter();
+            let _ = vector.iter();
         }
     }
 

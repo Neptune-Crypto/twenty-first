@@ -104,10 +104,7 @@ pub trait StorageVec<T> {
     /// note: casts the array's indexes from usize to Index
     ///       so
     #[inline]
-    fn set_first_n(&mut self, vals: impl IntoIterator<Item = T>)
-    where
-        T: Clone,
-    {
+    fn set_first_n(&mut self, vals: impl IntoIterator<Item = T>) {
         self.set_many((0..).zip(vals));
     }
 
@@ -120,10 +117,7 @@ pub trait StorageVec<T> {
     /// note: casts the input value's length from usize to Index
     ///       so will panic if vals contains more than 2^32 items
     #[inline]
-    fn set_all(&mut self, vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = T>>)
-    where
-        T: Clone,
-    {
+    fn set_all(&mut self, vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = T>>) {
         let iter = vals.into_iter();
 
         assert!(
@@ -175,7 +169,6 @@ where
 impl<'a, V, T: 'a> LendingIterator for ManyIterMut<'a, V, T>
 where
     V: StorageVec<T>,
-    T: Clone,
 {
     type Item<'b> = StorageVecSetter<'b, V, T>
     where
@@ -267,7 +260,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
         // note: this lock is moved into the iterator closure and is not
-        //       released until caller the drops the returned iterator
+        //       released until the caller drops the returned iterator
         let mut db_reader = self.db.lock().expect("get_many: db-locking must succeed");
 
         Box::new(indices.into_iter().map(move |i| {
