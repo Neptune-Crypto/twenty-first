@@ -219,7 +219,6 @@ where
                 (i, self_lock.cache[&i].clone())
             } else {
                 let key = self_lock.get_index_key(i);
-                // let db_element = db_reader.get(key).unwrap();
                 let db_element = self_lock
                     .reader
                     .lock()
@@ -722,7 +721,9 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
 mod tests {
 
     use itertools::Itertools;
+    use lending_iterator::prelude::*;
     use rand::{random, Rng, RngCore};
+    use std::collections::BTreeSet;
 
     use crate::shared_math::other::random_elements;
 
@@ -1210,6 +1211,54 @@ mod tests {
                 )
             } else {
                 assert_eq!(S(vec![index as u8, index as u8, index as u8]), value)
+            }
+        }
+    }
+
+    #[test]
+    fn test_dbtcvecs_iter_mut() {
+        let opt = rusty_leveldb::in_memory();
+        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        // initialize storage
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        rusty_storage.restore_or_new();
+        let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+
+        // Generate initial index/value pairs.
+        const TEST_LIST_LENGTH: u64 = 105;
+        let init_vals: Vec<u64> = (0..TEST_LIST_LENGTH).map(|i| i * 2).collect();
+
+        // let mut mutate_vals = init_vals.clone(); // for later
+
+        // set_all() does not grow the list, so we must first push
+        // some empty elems, to desired length.
+        for _ in 0..TEST_LIST_LENGTH {
+            vector.push(0);
+        }
+
+        // set the initial values
+        vector.set_all(init_vals);
+
+        // Generate some random indices for mutation
+        let mutate_indices: BTreeSet<u64> = random_elements::<u64>(30)
+            .iter()
+            .map(|x| x % TEST_LIST_LENGTH)
+            .collect();
+
+        // note: with LendingIterator for loop is not available.
+        let mut iter = vector.many_iter_mut(mutate_indices.clone());
+        while let Some(mut setter) = iter.next() {
+            let val = setter.value();
+            setter.set(*val / 2);
+        }
+
+        // Verify mutated values, and non-mutated also.
+        for (index, value) in vector.get_all_iter() {
+            if mutate_indices.contains(&index) {
+                assert_eq!(index, value)
+            } else {
+                assert_eq!(index * 2, value)
             }
         }
     }
