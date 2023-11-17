@@ -11,6 +11,138 @@ use serde::{de::DeserializeOwned, Serialize};
 
 pub type Index = u64;
 
+pub trait StorageVec<T> {
+    /// check if collection is empty
+    fn is_empty(&self) -> bool;
+
+    /// get collection length
+    fn len(&self) -> Index;
+
+    /// get single element at index
+    fn get(&self, index: Index) -> T;
+
+    /// retrieve a `StorageVecSetter` at index.
+    ///
+    /// The returned value can be used to read or mutate the value.
+    #[inline]
+    fn get_mut(&mut self, index: Index) -> Option<StorageVecSetter<Self, T>> {
+        let value = self.get(index);
+        Some(StorageVecSetter {
+            vec: self,
+            index,
+            value,
+        })
+    }
+
+    /// get elements matching `indices` as a Vec
+    ///
+    /// This is a convenience method. For large collections
+    /// it will be more efficient to use `iter` and avoid
+    /// allocating a Vec
+    #[inline]
+    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        self.many_iter(indices.to_vec()).map(|(_i, v)| v).collect()
+    }
+
+    /// returns iterator over multiple elements matching `indices`
+    fn many_iter(
+        &self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_>;
+
+    /// returns a mutable iterator over elements matching `indices``
+    #[inline]
+    fn many_iter_mut(
+        &mut self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> ManyIterMut<Self, T>
+    where
+        Self: Sized,
+    {
+        ManyIterMut::new(indices, self)
+    }
+
+    /// returns a mutable iterator over all elements
+    #[inline]
+    fn iter_mut(&mut self) -> ManyIterMut<Self, T>
+    where
+        Self: Sized,
+    {
+        ManyIterMut::new(0..self.len(), self)
+    }
+
+    /// get all elements
+    ///
+    /// This is a convenience method. For large collections
+    /// it will be more efficient to use `get_all_iter` directly
+    /// and avoid allocating a Vec
+    #[inline]
+    fn get_all(&self) -> Vec<T> {
+        self.iter().map(|(_i, v)| v).collect()
+    }
+
+    /// get all elements and return as an iterator
+    #[inline]
+    fn iter(&self) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        self.many_iter(0..self.len())
+    }
+
+    /// set a single element.
+    fn set(&mut self, index: Index, value: T);
+
+    /// set multiple elements.
+    //
+    //  note: set_many is mostly redundant now that many_iter_mut() exists.
+    //        We keep it for now because implementors can lock once rather
+    //        than for each element.  eg: DbtVec::set_many
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>);
+
+    /// set elements from start to vals.count()
+    ///
+    /// calls ::set_many() internally.
+    ///
+    /// note: casts the array's indexes from usize to Index
+    ///       so
+    #[inline]
+    fn set_first_n(&mut self, vals: impl IntoIterator<Item = T>)
+    where
+        T: Clone,
+    {
+        self.set_many((0..).zip(vals));
+    }
+
+    /// set all elements with a list of values and validates that input length matches target length.
+    ///
+    /// calls ::set_many() internally.
+    ///
+    /// panics if input length does not match target length.
+    ///
+    /// note: casts the input value's length from usize to Index
+    ///       so will panic if vals contains more than 2^32 items
+    #[inline]
+    fn set_all(&mut self, vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = T>>)
+    where
+        T: Clone,
+    {
+        let iter = vals.into_iter();
+
+        assert!(
+            iter.len() as Index == self.len(),
+            "size-mismatch.  input has {} elements and target has {} elements.",
+            iter.len(),
+            self.len(),
+        );
+
+        self.set_first_n(iter);
+    }
+
+    /// pop an element from end of collection
+    fn pop(&mut self) -> Option<T>;
+
+    /// push an element to end of collection
+    fn push(&mut self, value: T);
+}
+
 /// a mutating iterator for StorageVec trait
 pub struct ManyIterMut<'a, V, T>
 where
@@ -45,7 +177,7 @@ where
     V: StorageVec<T>,
     T: Clone,
 {
-    type Item<'b> = StorageSetter<'b, V, T>
+    type Item<'b> = StorageVecSetter<'b, V, T>
     where
         Self: 'b;
 
@@ -59,7 +191,7 @@ where
 }
 
 /// used for accessing and setting values returned from StorageVec::get_mut() and mutable iterators
-pub struct StorageSetter<'a, V, T>
+pub struct StorageVecSetter<'a, V, T>
 where
     V: StorageVec<T> + ?Sized,
 {
@@ -68,7 +200,7 @@ where
     value: T,
 }
 
-impl<'a, V, T> StorageSetter<'a, V, T>
+impl<'a, V, T> StorageVecSetter<'a, V, T>
 where
     V: StorageVec<T> + ?Sized,
 {
@@ -79,133 +211,6 @@ where
     pub fn value(&self) -> &T {
         &self.value
     }
-}
-
-pub trait StorageVec<T> {
-    /// check if collection is empty
-    fn is_empty(&self) -> bool;
-
-    /// get collection length
-    fn len(&self) -> Index;
-
-    /// get single element at index
-    fn get(&self, index: Index) -> T;
-
-    #[inline]
-    fn get_mut(&mut self, index: Index) -> Option<StorageSetter<Self, T>> {
-        let value = self.get(index);
-        Some(StorageSetter {
-            vec: self,
-            index,
-            value,
-        })
-    }
-
-    /// get multiple elements matching indices
-    ///
-    /// This is a convenience method. For large collections
-    /// it will be more efficient to use `get_many_iter` directly
-    /// and avoid allocating a Vec
-    #[inline]
-    fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        self.get_many_iter(indices.to_vec())
-            .map(|(_i, v)| v)
-            .collect()
-    }
-
-    /// get multiple elements matching indices and return as an iterator
-    fn get_many_iter(
-        &self,
-        indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> Box<dyn Iterator<Item = (Index, T)> + '_>;
-
-    /// get multiple elements matching indices and return as an iterator
-    #[inline]
-    fn many_iter_mut(
-        &mut self,
-        indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> ManyIterMut<Self, T>
-    where
-        Self: Sized,
-    {
-        ManyIterMut::new(indices, self)
-    }
-
-    #[inline]
-    fn iter_mut(&mut self) -> ManyIterMut<Self, T>
-    where
-        Self: Sized,
-    {
-        ManyIterMut::new(0..self.len(), self)
-    }
-
-    /// get all elements
-    ///
-    /// This is a convenience method. For large collections
-    /// it will be more efficient to use `get_all_iter` directly
-    /// and avoid allocating a Vec
-    #[inline]
-    fn get_all(&self) -> Vec<T> {
-        self.get_all_iter().map(|(_i, v)| v).collect()
-    }
-
-    /// get all elements and return as an iterator
-    #[inline]
-    fn get_all_iter(&self) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
-        self.get_many_iter(0..self.len())
-    }
-
-    /// set a single element.
-    fn set(&mut self, index: Index, value: T);
-
-    /// set multiple elements.
-    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>);
-
-    /// set elements from start to vals.count()
-    ///
-    /// calls ::set_many() internally.
-    ///
-    /// note: casts the array's indexes from usize to Index
-    ///       so
-    #[inline]
-    fn set_first(&mut self, vals: impl IntoIterator<Item = T>)
-    where
-        T: Clone,
-    {
-        self.set_many((0..).zip(vals));
-    }
-
-    /// set all elements with a simple list of values in an array or Vec
-    /// and validates that input length matches target length.
-    ///
-    /// calls ::set_many() internally.
-    ///
-    /// panics if input length does not match target length.
-    ///
-    /// note: casts the input value's length from usize to Index
-    ///       so will panic if vals contains more than 2^32 items
-    #[inline]
-    fn set_all(&mut self, vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = T>>)
-    where
-        T: Clone,
-    {
-        let iter = vals.into_iter();
-
-        assert!(
-            iter.len() as Index == self.len(),
-            "size-mismatch.  input has {} elements and target has {} elements.",
-            iter.len(),
-            self.len(),
-        );
-
-        self.set_first(iter);
-    }
-
-    /// pop an element from end of collection
-    fn pop(&mut self) -> Option<T>;
-
-    /// push an element to end of collection
-    fn push(&mut self, value: T);
 }
 
 pub enum WriteElement<T: Serialize + DeserializeOwned> {
@@ -257,7 +262,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         bincode::deserialize(&db_val).unwrap()
     }
 
-    fn get_many_iter(
+    fn many_iter(
         &self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
@@ -485,7 +490,7 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
         self.0[index as usize].clone()
     }
 
-    fn get_many_iter(
+    fn many_iter(
         &self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
@@ -939,10 +944,10 @@ mod tests {
 
     #[test]
     // This tests that we can obtain a subset of elements with
-    // get_many_iter() and feed the results directly into set_many()
+    // many_iter() and feed the results directly into set_many()
     // and the collection should be unchanged, meaning that the
     // index values were preserved.
-    fn get_many_iter_indexes() {
+    fn many_iter_indexes() {
         let db = get_test_db();
         let mut v: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
@@ -952,7 +957,7 @@ mod tests {
         v.push(pattern[2]);
         v.push(pattern[3]);
 
-        let set: Vec<_> = v.get_many_iter([1, 3]).collect();
+        let set: Vec<_> = v.many_iter([1, 3]).collect();
 
         // set indexes 1 and 3 to 0, to prove set_many is effecting change.
         let pattern_wipe = vec![100, 0, 300, 0];

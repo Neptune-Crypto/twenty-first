@@ -196,7 +196,7 @@ where
         val.into()
     }
 
-    fn get_many_iter<'a>(
+    fn many_iter<'a>(
         &'a self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
