@@ -579,10 +579,6 @@ mod tests {
     {
         let mut encoding = test_data.encoding.to_owned();
         for i in 0..encoding.len() {
-            if encoding[i] == test_data.random_encoding[i] {
-                continue;
-            }
-
             let original_value = encoding[i];
             encoding[i] = test_data.random_encoding[i];
             let decoding = T::decode(&encoding);
