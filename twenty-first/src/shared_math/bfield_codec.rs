@@ -478,8 +478,12 @@ impl<T> BFieldCodec for PhantomData<T> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
     use rand::{random, thread_rng};
     use rand::{Rng, RngCore};
+    use test_strategy::proptest;
 
     use crate::shared_math::{
         digest::Digest, digest::DIGEST_LENGTH, other::random_elements, tip5::Tip5,
@@ -487,6 +491,52 @@ mod tests {
     };
 
     use super::*;
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct BFieldCodecPropertyTestData<T: BFieldCodec + Eq + Debug> {
+        value: T,
+        encoding: Vec<BFieldElement>,
+        random_encoding: Vec<BFieldElement>,
+        encoding_lengthener: BFieldElement,
+        length_of_too_short_sequence: usize,
+    }
+
+    fn derive_bfield_codec_property_test_data<T: BFieldCodec + Eq + Debug + Clone>(
+        value: T,
+    ) -> impl Strategy<Value = BFieldCodecPropertyTestData<T>> {
+        let encoding = value.encode();
+        let random_encoding_strategy = vec(arb(), encoding.len());
+        let encoding_lengthener_strategy = arb();
+        let length_of_too_short_sequence_strategy = 0..encoding.len();
+
+        let value_strategy = Just(value);
+        let encoding_strategy = Just(encoding);
+
+        (
+            value_strategy,
+            encoding_strategy,
+            random_encoding_strategy,
+            encoding_lengthener_strategy,
+            length_of_too_short_sequence_strategy,
+        )
+            .prop_map(
+                |(
+                    just_value,
+                    just_encoding,
+                    random_encoding,
+                    encoding_lengthener,
+                    length_of_too_short_sequence,
+                )| {
+                    BFieldCodecPropertyTestData {
+                        value: just_value,
+                        encoding: just_encoding,
+                        random_encoding,
+                        encoding_lengthener,
+                        length_of_too_short_sequence,
+                    }
+                },
+            )
+    }
 
     fn assert_bfield_codec_properties<T: BFieldCodec + Eq + Debug>(
         value: T,
@@ -569,12 +619,13 @@ mod tests {
         assert!(decoding_result.is_err() || *decoding_result.unwrap() != *value);
     }
 
-    #[test]
-    fn test_encode_decode_random_bfieldelement() {
-        for _ in 1..=10 {
-            let bfe: BFieldElement = random();
-            assert_bfield_codec_properties(bfe, 5_u32.into());
-        }
+    #[proptest]
+    fn test_encode_decode_random_bfieldelement(
+        bfe: BFieldElement,
+        #[strategy(derive_bfield_codec_property_test_data(#bfe))]
+        randomness: BFieldCodecPropertyTestData<BFieldElement>,
+    ) {
+        assert_bfield_codec_properties(bfe, randomness.encoding_lengthener);
     }
 
     #[test]
