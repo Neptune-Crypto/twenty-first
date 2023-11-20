@@ -1,3 +1,4 @@
+use arbitrary::Arbitrary;
 use get_size::GetSize;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
@@ -39,7 +40,7 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> From<&ArchivalMmr<H, Stora
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize, BFieldCodec)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary)]
 pub struct MmrAccumulator<H>
 where
     H: AlgebraicHasher,
