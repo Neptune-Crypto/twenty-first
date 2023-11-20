@@ -501,31 +501,28 @@ mod tests {
         length_of_too_short_sequence: usize,
     }
 
-    fn derive_bfield_codec_property_test_data<T: BFieldCodec + Eq + Debug + Clone>(
-        value: T,
-    ) -> impl Strategy<Value = BFieldCodecPropertyTestData<T>> {
-        let encoding = value.encode();
-        let random_encoding_strategy = vec(arb(), encoding.len());
-        let encoding_lengthener_strategy = arb();
-        let length_of_too_short_sequence_strategy = 0..=encoding.len().min(25);
+    fn derive_bfield_codec_property_test_data<
+        T: 'static + BFieldCodec + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
+    >() -> impl Strategy<Value = BFieldCodecPropertyTestData<T>> {
+        arb()
+            .prop_flat_map(|value: T| {
+                let encoding = value.encode();
 
-        let value_strategy = Just(value);
-        let encoding_strategy = Just(encoding);
-
-        (
-            value_strategy,
-            encoding_strategy,
-            random_encoding_strategy,
-            encoding_lengthener_strategy,
-            length_of_too_short_sequence_strategy,
-        )
+                (
+                    vec(arb(), encoding.len()),
+                    arb(),
+                    0..=encoding.len().min(25),
+                    Just(value),
+                    Just(encoding),
+                )
+            })
             .prop_map(
                 |(
-                    just_value,
-                    just_encoding,
                     random_encoding,
                     encoding_lengthener,
                     length_of_too_short_sequence,
+                    just_value,
+                    just_encoding,
                 )| {
                     BFieldCodecPropertyTestData {
                         value: just_value,
@@ -623,8 +620,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_bfieldelement(
-        bfe: BFieldElement,
-        #[strategy(derive_bfield_codec_property_test_data(#bfe))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<BFieldElement>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -632,8 +628,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_xfieldelement(
-        xfe: XFieldElement,
-        #[strategy(derive_bfield_codec_property_test_data(#xfe))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<XFieldElement>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -641,8 +636,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_digest(
-        #[strategy(arb())] digest: Digest,
-        #[strategy(derive_bfield_codec_property_test_data(#digest))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<Digest>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -650,8 +644,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_vec_of_bfieldelement(
-        bfe_vec: Vec<BFieldElement>,
-        #[strategy(derive_bfield_codec_property_test_data(#bfe_vec))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<Vec<BFieldElement>>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -659,8 +652,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_vec_of_xfieldelement(
-        xfe_vec: Vec<XFieldElement>,
-        #[strategy(derive_bfield_codec_property_test_data(#xfe_vec))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<Vec<XFieldElement>>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -668,8 +660,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_vec_of_digest(
-        #[strategy(arb())] digest_vec: Vec<Digest>,
-        #[strategy(derive_bfield_codec_property_test_data(#digest_vec))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<Vec<Digest>>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -677,8 +668,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_vec_of_vec_of_bfieldelement(
-        bfe_vec_vec: Vec<Vec<BFieldElement>>,
-        #[strategy(derive_bfield_codec_property_test_data(#bfe_vec_vec))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<Vec<Vec<BFieldElement>>>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -686,8 +676,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_vec_of_vec_of_xfieldelement(
-        xfe_vec_vec: Vec<Vec<XFieldElement>>,
-        #[strategy(derive_bfield_codec_property_test_data(#xfe_vec_vec))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<Vec<Vec<XFieldElement>>>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -695,8 +684,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_vec_of_vec_of_digest(
-        #[strategy(arb())] digest_vec_vec: Vec<Vec<Digest>>,
-        #[strategy(derive_bfield_codec_property_test_data(#digest_vec_vec))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<Vec<Vec<Digest>>>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -704,8 +692,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_0(
-        #[strategy(arb())] tuple: (Digest, u128),
-        #[strategy(derive_bfield_codec_property_test_data(#tuple))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<(Digest, u128)>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -713,8 +700,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_1(
-        #[strategy(arb())] tuple: (Digest, u64),
-        #[strategy(derive_bfield_codec_property_test_data(#tuple))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<(Digest, u64)>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -722,8 +708,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_2(
-        tuple: (BFieldElement, BFieldElement),
-        #[strategy(derive_bfield_codec_property_test_data(#tuple))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<(BFieldElement, BFieldElement)>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -731,8 +716,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_3(
-        tuple: (BFieldElement, XFieldElement),
-        #[strategy(derive_bfield_codec_property_test_data(#tuple))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<(BFieldElement, XFieldElement)>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -740,8 +724,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_4(
-        tuple: (XFieldElement, BFieldElement),
-        #[strategy(derive_bfield_codec_property_test_data(#tuple))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<(XFieldElement, BFieldElement)>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -749,8 +732,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_5(
-        #[strategy(arb())] tuple: (XFieldElement, Digest),
-        #[strategy(derive_bfield_codec_property_test_data(#tuple))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<(XFieldElement, Digest)>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -758,8 +740,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_tuples_static_dynamic_size(
-        #[strategy(arb())] tuple: (Digest, Vec<BFieldElement>),
-        #[strategy(derive_bfield_codec_property_test_data(#tuple))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<(Digest, Vec<BFieldElement>)>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -767,8 +748,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_tuples_dynamic_static_size(
-        #[strategy(arb())] tuple: (Vec<XFieldElement>, Digest),
-        #[strategy(derive_bfield_codec_property_test_data(#tuple))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<(Vec<XFieldElement>, Digest)>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -776,8 +756,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_tuples_dynamic_dynamic_size(
-        #[strategy(arb())] tuple: (Vec<XFieldElement>, Vec<Digest>),
-        #[strategy(derive_bfield_codec_property_test_data(#tuple))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<(Vec<XFieldElement>, Vec<Digest>)>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -785,8 +764,7 @@ mod tests {
 
     #[proptest]
     fn test_phantom_data(
-        #[strategy(arb())] phantom_data: PhantomData<Tip5>,
-        #[strategy(derive_bfield_codec_property_test_data(#phantom_data))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<PhantomData<Tip5>>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -794,8 +772,7 @@ mod tests {
 
     #[proptest]
     fn test_encode_decode_random_vec_option_xfieldelement(
-        xfe_vec: Vec<Option<XFieldElement>>,
-        #[strategy(derive_bfield_codec_property_test_data(#xfe_vec))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<Vec<Option<XFieldElement>>>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -803,8 +780,7 @@ mod tests {
 
     #[proptest]
     fn decode_encode_array_with_static_element_size(
-        array: [u64; 14],
-        #[strategy(derive_bfield_codec_property_test_data(#array))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<[u64; 14]>,
     ) {
         assert_bfield_codec_properties(&test_data);
@@ -812,8 +788,7 @@ mod tests {
 
     #[proptest]
     fn decode_encode_array_with_dynamic_element_size(
-        #[strategy(arb())] array: [Vec<Digest>; 19],
-        #[strategy(derive_bfield_codec_property_test_data(#array))]
+        #[strategy(derive_bfield_codec_property_test_data())]
         test_data: BFieldCodecPropertyTestData<[Vec<Digest>; 19]>,
     ) {
         assert_bfield_codec_properties(&test_data);
