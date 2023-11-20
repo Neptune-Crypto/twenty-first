@@ -478,6 +478,7 @@ impl<T> BFieldCodec for PhantomData<T> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::collection::size_range;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
@@ -507,7 +508,8 @@ mod tests {
         #[filter(#encoding.iter().zip(#random_encoding.iter()).all(|(a, b)| a != b))]
         random_encoding: Vec<BFieldElement>,
 
-        encoding_lengthener: BFieldElement,
+        #[any(size_range(1..128).lift())]
+        encoding_lengthener: Vec<BFieldElement>,
 
         #[strategy(0..=#encoding.len().min(25))]
         length_of_too_short_sequence: usize,
@@ -542,7 +544,7 @@ mod tests {
     {
         let too_long_encoding = [
             test_data.encoding.to_owned(),
-            vec![test_data.encoding_lengthener],
+            test_data.encoding_lengthener.to_owned(),
         ]
         .concat();
         assert!(T::decode(&too_long_encoding).is_err());
