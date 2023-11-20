@@ -510,247 +510,224 @@ mod tests {
         length_of_too_short_sequence: usize,
     }
 
-    fn assert_bfield_codec_properties<T>(
-        test_data: &BFieldCodecPropertyTestData<T>,
-    ) -> Result<(), TestCaseError>
+    impl<T> BFieldCodecPropertyTestData<T>
     where
-        T: BFieldCodec + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
+        T: 'static + BFieldCodec + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
     {
-        assert_decoded_encoding_is_self(test_data)?;
-        assert_decoding_too_long_encoding_fails(test_data)?;
-        assert_decoding_too_short_encoding_fails(test_data)?;
-        modify_each_element_and_assert_decoding_failure(test_data)?;
-        assert_decoding_random_too_short_encoding_fails_gracefully(test_data)
-    }
-
-    fn assert_decoded_encoding_is_self<T>(
-        test_data: &BFieldCodecPropertyTestData<T>,
-    ) -> Result<(), TestCaseError>
-    where
-        T: BFieldCodec + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
-    {
-        let encoding = test_data.encoding.to_owned();
-        let decoding = T::decode(&encoding);
-        let decoding = *decoding.unwrap();
-        prop_assert_eq!(&test_data.value, &decoding);
-        Ok(())
-    }
-
-    fn assert_decoding_too_long_encoding_fails<T>(
-        test_data: &BFieldCodecPropertyTestData<T>,
-    ) -> Result<(), TestCaseError>
-    where
-        T: BFieldCodec + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
-    {
-        let too_long_encoding = [
-            test_data.encoding.to_owned(),
-            test_data.encoding_lengthener.to_owned(),
-        ]
-        .concat();
-        prop_assert!(T::decode(&too_long_encoding).is_err());
-        Ok(())
-    }
-
-    fn assert_decoding_too_short_encoding_fails<T>(
-        test_data: &BFieldCodecPropertyTestData<T>,
-    ) -> Result<(), TestCaseError>
-    where
-        T: BFieldCodec + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
-    {
-        let mut encoded = test_data.encoding.to_owned();
-        if encoded.is_empty() {
-            return Ok(());
+        fn assert_bfield_codec_properties(&self) -> Result<(), TestCaseError> {
+            self.assert_decoded_encoding_is_self()?;
+            self.assert_decoding_too_long_encoding_fails()?;
+            self.assert_decoding_too_short_encoding_fails()?;
+            self.modify_each_element_and_assert_decoding_failure()?;
+            self.assert_decoding_random_too_short_encoding_fails_gracefully()
         }
-        encoded.pop();
-        prop_assert!(T::decode(&encoded).is_err());
-        Ok(())
-    }
 
-    fn modify_each_element_and_assert_decoding_failure<T>(
-        test_data: &BFieldCodecPropertyTestData<T>,
-    ) -> Result<(), TestCaseError>
-    where
-        T: BFieldCodec + PartialEq + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
-    {
-        let mut encoding = test_data.encoding.to_owned();
-        for i in 0..encoding.len() {
-            let original_value = encoding[i];
-            encoding[i] = test_data.random_encoding[i];
+        fn assert_decoded_encoding_is_self(&self) -> Result<(), TestCaseError> {
+            let encoding = self.encoding.to_owned();
             let decoding = T::decode(&encoding);
-            prop_assert!(
-                decoding.is_err() || *decoding.unwrap() != test_data.value,
-                "failing index: {i}"
-            );
-            encoding[i] = original_value;
-        }
-        Ok(())
-    }
-
-    fn assert_decoding_random_too_short_encoding_fails_gracefully<T>(
-        test_data: &BFieldCodecPropertyTestData<T>,
-    ) -> Result<(), TestCaseError>
-    where
-        T: BFieldCodec + PartialEq + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
-    {
-        if test_data.encoding.is_empty() {
-            return Ok(());
+            let decoding = *decoding.unwrap();
+            prop_assert_eq!(&self.value, &decoding);
+            Ok(())
         }
 
-        let random_encoding =
-            test_data.random_encoding[..test_data.length_of_too_short_sequence].to_vec();
-        let decoding_result = T::decode(&random_encoding);
-        prop_assert!(decoding_result.is_err() || *decoding_result.unwrap() != test_data.value);
-        Ok(())
+        fn assert_decoding_too_long_encoding_fails(&self) -> Result<(), TestCaseError> {
+            let too_long_encoding = [
+                self.encoding.to_owned(),
+                self.encoding_lengthener.to_owned(),
+            ]
+            .concat();
+            prop_assert!(T::decode(&too_long_encoding).is_err());
+            Ok(())
+        }
+
+        fn assert_decoding_too_short_encoding_fails(&self) -> Result<(), TestCaseError> {
+            let mut encoded = self.encoding.to_owned();
+            if encoded.is_empty() {
+                return Ok(());
+            }
+            encoded.pop();
+            prop_assert!(T::decode(&encoded).is_err());
+            Ok(())
+        }
+
+        fn modify_each_element_and_assert_decoding_failure(&self) -> Result<(), TestCaseError> {
+            let mut encoding = self.encoding.to_owned();
+            for i in 0..encoding.len() {
+                let original_value = encoding[i];
+                encoding[i] = self.random_encoding[i];
+                let decoding = T::decode(&encoding);
+                prop_assert!(
+                    decoding.is_err() || *decoding.unwrap() != self.value,
+                    "failing index: {i}"
+                );
+                encoding[i] = original_value;
+            }
+            Ok(())
+        }
+
+        fn assert_decoding_random_too_short_encoding_fails_gracefully(
+            &self,
+        ) -> Result<(), TestCaseError> {
+            if self.encoding.is_empty() {
+                return Ok(());
+            }
+
+            let random_encoding =
+                self.random_encoding[..self.length_of_too_short_sequence].to_vec();
+            let decoding_result = T::decode(&random_encoding);
+            prop_assert!(decoding_result.is_err() || *decoding_result.unwrap() != self.value);
+            Ok(())
+        }
     }
 
     #[proptest]
     fn test_encode_decode_random_bfieldelement(
         test_data: BFieldCodecPropertyTestData<BFieldElement>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_random_xfieldelement(
         test_data: BFieldCodecPropertyTestData<XFieldElement>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_random_digest(test_data: BFieldCodecPropertyTestData<Digest>) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_random_vec_of_bfieldelement(
         test_data: BFieldCodecPropertyTestData<Vec<BFieldElement>>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_random_vec_of_xfieldelement(
         test_data: BFieldCodecPropertyTestData<Vec<XFieldElement>>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_random_vec_of_digest(
         test_data: BFieldCodecPropertyTestData<Vec<Digest>>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_random_vec_of_vec_of_bfieldelement(
         test_data: BFieldCodecPropertyTestData<Vec<Vec<BFieldElement>>>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_random_vec_of_vec_of_xfieldelement(
         test_data: BFieldCodecPropertyTestData<Vec<Vec<XFieldElement>>>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_random_vec_of_vec_of_digest(
         test_data: BFieldCodecPropertyTestData<Vec<Vec<Digest>>>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_0(
         test_data: BFieldCodecPropertyTestData<(Digest, u128)>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_1(
         test_data: BFieldCodecPropertyTestData<(Digest, u64)>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_2(
         test_data: BFieldCodecPropertyTestData<(BFieldElement, BFieldElement)>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_3(
         test_data: BFieldCodecPropertyTestData<(BFieldElement, XFieldElement)>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_4(
         test_data: BFieldCodecPropertyTestData<(XFieldElement, BFieldElement)>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_tuples_static_static_size_5(
         test_data: BFieldCodecPropertyTestData<(XFieldElement, Digest)>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_tuples_static_dynamic_size(
         test_data: BFieldCodecPropertyTestData<(Digest, Vec<BFieldElement>)>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_tuples_dynamic_static_size(
         test_data: BFieldCodecPropertyTestData<(Vec<XFieldElement>, Digest)>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_tuples_dynamic_dynamic_size(
         test_data: BFieldCodecPropertyTestData<(Vec<XFieldElement>, Vec<Digest>)>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_phantom_data(test_data: BFieldCodecPropertyTestData<PhantomData<Tip5>>) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn test_encode_decode_random_vec_option_xfieldelement(
         test_data: BFieldCodecPropertyTestData<Vec<Option<XFieldElement>>>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn decode_encode_array_with_static_element_size(
         test_data: BFieldCodecPropertyTestData<[u64; 14]>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[proptest]
     fn decode_encode_array_with_dynamic_element_size(
         test_data: BFieldCodecPropertyTestData<[Vec<Digest>; 19]>,
     ) {
-        assert_bfield_codec_properties(&test_data)?;
+        test_data.assert_bfield_codec_properties()?;
     }
 
     #[test]
@@ -836,7 +813,7 @@ mod tests {
         fn bfield_codec_derive_test_struct_a(
             test_data: BFieldCodecPropertyTestData<DeriveTestStructA>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -851,7 +828,7 @@ mod tests {
         fn bfield_codec_derive_test_struct_b(
             test_data: BFieldCodecPropertyTestData<DeriveTestStructB>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -866,7 +843,7 @@ mod tests {
         fn bfield_codec_derive_test_struct_c(
             test_data: BFieldCodecPropertyTestData<DeriveTestStructC>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         // Struct containing Vec<T> where T is BFieldCodec
@@ -882,7 +859,7 @@ mod tests {
         fn bfield_codec_derive_test_struct_d(
             test_data: BFieldCodecPropertyTestData<DeriveTestStructD>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -897,7 +874,7 @@ mod tests {
         fn bfield_codec_derive_test_struct_e(
             test_data: BFieldCodecPropertyTestData<DeriveTestStructE>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -919,7 +896,7 @@ mod tests {
         fn bfield_codec_derive_test_struct_f(
             test_data: BFieldCodecPropertyTestData<DeriveTestStructF>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -934,7 +911,7 @@ mod tests {
         fn bfield_codec_derive_with_phantom_data(
             test_data: BFieldCodecPropertyTestData<WithPhantomData<Tip5>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -951,7 +928,7 @@ mod tests {
         fn bfield_codec_derive_with_nested_phantom_data(
             test_data: BFieldCodecPropertyTestData<WithNestedPhantomData<Tip5>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -968,7 +945,7 @@ mod tests {
         fn bfield_codec_derive_with_nested_vec(
             test_data: BFieldCodecPropertyTestData<WithNestedVec>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -976,7 +953,7 @@ mod tests {
 
         #[proptest]
         fn bfield_codec_derive_empty_struct(test_data: BFieldCodecPropertyTestData<EmptyStruct>) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -988,7 +965,7 @@ mod tests {
         fn bfield_codec_derive_struct_with_empty_struct(
             test_data: BFieldCodecPropertyTestData<StructWithEmptyStruct>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1001,7 +978,7 @@ mod tests {
         fn bfield_codec_derive_struct_with_two_empty_structs(
             test_data: BFieldCodecPropertyTestData<StructWithTwoEmptyStructs>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1017,7 +994,7 @@ mod tests {
         fn bfield_codec_derive_big_struct_with_empty_structs(
             test_data: BFieldCodecPropertyTestData<BigStructWithEmptyStructs>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1031,7 +1008,7 @@ mod tests {
         fn bfield_codec_derive_enum_with_empty_struct(
             test_data: BFieldCodecPropertyTestData<EnumWithEmptyStruct>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1050,7 +1027,7 @@ mod tests {
 
         #[proptest]
         fn bfield_codec_derive_much_nesting(test_data: BFieldCodecPropertyTestData<MuchNesting>) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1065,7 +1042,7 @@ mod tests {
         fn bfield_codec_derive_small_array_struct_unnamed_fields(
             test_data: BFieldCodecPropertyTestData<SmallArrayStructUnnamedFields>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1082,7 +1059,7 @@ mod tests {
         fn bfield_codec_derive_small_array_struct_named_fields(
             test_data: BFieldCodecPropertyTestData<SmallArrayStructNamedFields>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1103,7 +1080,7 @@ mod tests {
         fn bfield_codec_derive_big_array_struct_unnamed_fields(
             test_data: BFieldCodecPropertyTestData<BigArrayStructUnnamedFields>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1125,7 +1102,7 @@ mod tests {
         fn bfield_codec_derive_big_array_struct_named_fields(
             test_data: BFieldCodecPropertyTestData<BigArrayStructNamedFields>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1142,7 +1119,7 @@ mod tests {
                 ArrayStructDynamicallySizedElementsUnnamedFields,
             >,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1159,7 +1136,7 @@ mod tests {
         fn bfield_codec_derive_array_struct_dyn_sized_elements_named_fields(
             test_data: BFieldCodecPropertyTestData<ArrayStructDynamicallySizedElementsNamedFields>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1176,7 +1153,7 @@ mod tests {
         fn bfield_codec_derive_struct_with_tuple_field(
             test_data: BFieldCodecPropertyTestData<StructWithTupleField>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1193,7 +1170,7 @@ mod tests {
         fn bfield_codec_derive_struct_with_tuple_field_two_elements(
             test_data: BFieldCodecPropertyTestData<StructWithTupleFieldTwoElements>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1210,7 +1187,7 @@ mod tests {
         fn bfield_codec_derive_struct_with_nested_tuple_field(
             test_data: BFieldCodecPropertyTestData<StructWithNestedTupleField>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1229,7 +1206,7 @@ mod tests {
         fn bfield_codec_derive_ms_membership_proof_derive(
             test_data: BFieldCodecPropertyTestData<MsMembershipProof<Tip5>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[test]
@@ -1241,7 +1218,7 @@ mod tests {
         fn bfield_codec_derive_mmr_bfieldcodec_derive(
             test_data: BFieldCodecPropertyTestData<MmrAccumulator<Tip5>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1276,7 +1253,7 @@ mod tests {
         fn bfield_codec_derive_vec_of_struct_with_one_fix_len_field_test(
             test_data: BFieldCodecPropertyTestData<Vec<OneFixedLenField>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1289,7 +1266,7 @@ mod tests {
         fn bfield_codec_derive_vec_of_struct_with_two_fix_len_fields_test(
             test_data: BFieldCodecPropertyTestData<Vec<TwoFixedLenFields>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1299,7 +1276,7 @@ mod tests {
         fn bfield_codec_derive_vec_of_struct_with_two_fix_len_unnamed_fields_test(
             test_data: BFieldCodecPropertyTestData<Vec<TwoFixedLenUnnamedFields>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1312,7 +1289,7 @@ mod tests {
         fn bfield_codec_derive_vec_of_struct_with_fix_and_var_len_fields_test(
             test_data: BFieldCodecPropertyTestData<Vec<FixAndVarLenFields>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1322,7 +1299,7 @@ mod tests {
         fn bfield_codec_derive_vec_of_struct_with_fix_and_var_len_unnamed_fields_test(
             test_data: BFieldCodecPropertyTestData<Vec<FixAndVarLenUnnamedFields>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1342,7 +1319,7 @@ mod tests {
         fn bfield_codec_derive_vec_of_struct_with_quite_a_few_fix_and_var_len_fields_test(
             test_data: BFieldCodecPropertyTestData<Vec<QuiteAFewFixAndVarLenFields>>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1355,7 +1332,7 @@ mod tests {
         fn bfield_codec_derive_simple_struct_a(
             test_data: BFieldCodecPropertyTestData<SimpleStructA>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1365,7 +1342,7 @@ mod tests {
         fn bfield_codec_derive_simple_struct_b(
             test_data: BFieldCodecPropertyTestData<SimpleStructB>,
         ) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1377,12 +1354,12 @@ mod tests {
 
         #[proptest]
         fn bfield_codec_derive_simple_enum(test_data: BFieldCodecPropertyTestData<SimpleEnum>) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[proptest]
         fn bfield_codec_derive_digest(test_data: BFieldCodecPropertyTestData<Digest>) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
@@ -1396,7 +1373,7 @@ mod tests {
 
         #[proptest]
         fn bfield_codec_derive_complex_enum(test_data: BFieldCodecPropertyTestData<ComplexEnum>) {
-            assert_bfield_codec_properties(&test_data)?;
+            test_data.assert_bfield_codec_properties()?;
         }
     }
 }
