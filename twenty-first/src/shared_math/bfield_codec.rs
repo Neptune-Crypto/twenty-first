@@ -482,14 +482,9 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use rand::thread_rng;
-    use rand::Rng;
     use test_strategy::proptest;
 
-    use crate::shared_math::{
-        digest::Digest, digest::DIGEST_LENGTH, other::random_elements, tip5::Tip5,
-        x_field_element::XFieldElement, x_field_element::EXTENSION_DEGREE,
-    };
+    use crate::shared_math::{digest::Digest, tip5::Tip5, x_field_element::XFieldElement};
 
     use super::*;
 
@@ -770,48 +765,42 @@ mod tests {
         assert!(<[Vec<Digest>; N]>::static_length().is_none());
     }
 
-    #[test]
-    fn test_decode_random_negative() {
-        for _ in 1..=10000 {
-            let len = thread_rng().gen_range(0..100);
-            let str: Vec<BFieldElement> = random_elements(len);
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_bfield_elements_fails(
+        random_encoding: Vec<BFieldElement>,
+    ) {
+        let decoding = Vec::<BFieldElement>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
+    }
 
-            // Some of the following cases can be triggered by false
-            // positives. This should occur with probability roughly
-            // 2^-60.
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_xfield_elements_fails(
+        random_encoding: Vec<BFieldElement>,
+    ) {
+        let decoding = Vec::<XFieldElement>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
+    }
 
-            if let Ok(sth) = Vec::<BFieldElement>::decode(&str) {
-                panic!("{sth:?}");
-            }
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_digests_fails(random_encoding: Vec<BFieldElement>) {
+        let decoding = Vec::<Digest>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
+    }
 
-            if str.len() % EXTENSION_DEGREE != 1 {
-                if let Ok(sth) = Vec::<XFieldElement>::decode(&str) {
-                    panic!("{sth:?}");
-                }
-            }
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_vec_of_bfield_elements_fails(
+        random_encoding: Vec<BFieldElement>,
+    ) {
+        let decoding = Vec::<Vec<BFieldElement>>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
+    }
 
-            if str.len() % DIGEST_LENGTH != 1 {
-                if let Ok(sth) = Vec::<Digest>::decode(&str) {
-                    panic!("{sth:?}");
-                }
-            }
-
-            if let Ok(sth) = Vec::<Vec<BFieldElement>>::decode(&str) {
-                if !sth.is_empty() {
-                    panic!("{sth:?}");
-                }
-            }
-
-            if let Ok(sth) = Vec::<Vec<XFieldElement>>::decode(&str) {
-                if !sth.is_empty() {
-                    panic!("{sth:?}");
-                }
-            }
-
-            // if let Ok(_sth) = Vec::<PartialAuthenticationPath<Digest>>::decode(&str) {
-            //     (will work quite often)
-            // }
-        }
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_vec_of_xfield_elements_fails(
+        random_encoding: Vec<BFieldElement>,
+    ) {
+        let decoding = Vec::<Vec<XFieldElement>>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
     }
 
     /*
