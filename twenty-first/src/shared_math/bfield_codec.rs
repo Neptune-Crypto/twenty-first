@@ -524,11 +524,8 @@ mod tests {
         assert_decoded_encoding_is_self(test_data)?;
         assert_decoding_too_long_encoding_fails(test_data)?;
         assert_decoding_too_short_encoding_fails(test_data)?;
-
-        if std::env::var("EXPENSIVE_ENCODING_PBT").is_ok() {
-            extensively_assert_bfield_codec_properties(test_data)?;
-        }
-        Ok(())
+        modify_each_element_and_assert_decoding_failure(test_data)?;
+        assert_decoding_random_too_short_encoding_fails_gracefully(test_data)
     }
 
     fn assert_decoded_encoding_is_self<T>(
@@ -574,18 +571,6 @@ mod tests {
         Ok(())
     }
 
-    /// Extensive (and computationally expensive) testing of properties for [`BFieldCodec`].
-    /// Checks uniqueness of encoding & decoding, as well as checking that `decode` does not panic.
-    fn extensively_assert_bfield_codec_properties<T>(
-        test_data: &BFieldCodecPropertyTestData<T>,
-    ) -> Result<(), TestCaseError>
-    where
-        T: BFieldCodec + PartialEq + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
-    {
-        modify_each_element_and_assert_decoding_failure(test_data)?;
-        assert_decoding_random_too_short_encoding_fails_gracefully(test_data)
-    }
-
     fn modify_each_element_and_assert_decoding_failure<T>(
         test_data: &BFieldCodecPropertyTestData<T>,
     ) -> Result<(), TestCaseError>
@@ -616,6 +601,10 @@ mod tests {
     where
         T: BFieldCodec + PartialEq + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
     {
+        if test_data.encoding.is_empty() {
+            return Ok(());
+        }
+
         let random_encoding =
             test_data.random_encoding[..test_data.length_of_too_short_sequence].to_vec();
         let decoding_result = T::decode(&random_encoding);
