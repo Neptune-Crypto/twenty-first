@@ -506,7 +506,7 @@ mod tests {
         #[any(size_range(1..128).lift())]
         encoding_lengthener: Vec<BFieldElement>,
 
-        #[strategy(0..=#encoding.len().min(25))]
+        #[strategy(0..=#encoding.len())]
         length_of_too_short_sequence: usize,
     }
 
