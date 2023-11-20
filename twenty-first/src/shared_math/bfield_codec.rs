@@ -523,28 +523,26 @@ mod tests {
         }
 
         fn assert_decoded_encoding_is_self(&self) -> Result<(), TestCaseError> {
-            let encoding = self.encoding.to_owned();
-            let decoding = T::decode(&encoding);
-            let decoding = *decoding.unwrap();
-            prop_assert_eq!(&self.value, &decoding);
+            let Ok(decoding) = T::decode(&self.encoding) else {
+                let err = TestCaseError::Fail("decoding canonical encoding must not fail".into());
+                return Err(err);
+            };
+            prop_assert_eq!(&self.value, &*decoding);
             Ok(())
         }
 
         fn assert_decoding_too_long_encoding_fails(&self) -> Result<(), TestCaseError> {
-            let too_long_encoding = [
-                self.encoding.to_owned(),
-                self.encoding_lengthener.to_owned(),
-            ]
-            .concat();
+            let mut too_long_encoding = self.encoding.to_owned();
+            too_long_encoding.extend(self.encoding_lengthener.to_owned());
             prop_assert!(T::decode(&too_long_encoding).is_err());
             Ok(())
         }
 
         fn assert_decoding_too_short_encoding_fails(&self) -> Result<(), TestCaseError> {
-            let mut encoded = self.encoding.to_owned();
-            if encoded.is_empty() {
+            if self.encoding.is_empty() {
                 return Ok(());
             }
+            let mut encoded = self.encoding.to_owned();
             encoded.pop();
             prop_assert!(T::decode(&encoded).is_err());
             Ok(())
