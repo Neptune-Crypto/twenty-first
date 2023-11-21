@@ -10,14 +10,14 @@ use twenty_first::shared_math::polynomial::Polynomial;
 criterion_main!(benches);
 criterion_group!(
     benches,
-    zerofier<0>,
-    zerofier<10>,
-    zerofier<100>,
-    zerofier<200>,
-    zerofier<500>,
-    zerofier<700>,
-    zerofier<1_000>,
-    zerofier<10_000>,
+    naive_zerofier<0>,
+    naive_zerofier<10>,
+    naive_zerofier<100>,
+    naive_zerofier<200>,
+    naive_zerofier<500>,
+    naive_zerofier<700>,
+    naive_zerofier<1_000>,
+    naive_zerofier<10_000>,
     fast_zerofier<0>,
     fast_zerofier<10>,
     fast_zerofier<100>,
@@ -28,13 +28,13 @@ criterion_group!(
     fast_zerofier<10_000>,
 );
 
-fn zerofier<const N: usize>(c: &mut Criterion) {
+fn naive_zerofier<const N: usize>(c: &mut Criterion) {
     let mut rng = thread_rng();
     let id = format!("zerofier {N}");
     c.bench_function(&id, |b| {
         b.iter_batched(
             || rng.gen(),
-            |v: [BFieldElement; N]| Polynomial::zerofier(&v),
+            |v: [BFieldElement; N]| Polynomial::naive_zerofier(&v),
             BatchSize::SmallInput,
         )
     });

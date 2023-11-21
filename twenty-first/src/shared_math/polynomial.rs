@@ -324,6 +324,18 @@ where
         }
     }
 
+    /// Extracted from `cargo bench --bench zerofier` on mjolnir.
+    const CUTOFF_POINT_FOR_FAST_ZEROFIER: usize = 200;
+
+    /// Uses the fastest version of zerofier available, depending on the size of the domain.
+    /// Should be preferred over [`Self::fast_zerofier`] and [`Self::naive_zerofier`].
+    pub fn zerofier(domain: &[FF]) -> Self {
+        if domain.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
+            return Self::naive_zerofier(domain);
+        }
+        Self::fast_zerofier(domain)
+    }
+
     pub fn fast_zerofier(domain: &[FF]) -> Self {
         let dedup_domain = domain.iter().copied().unique().collect::<Vec<_>>();
         let root_order = (dedup_domain.len() + 1).next_power_of_two();
@@ -875,7 +887,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         p2_y_times_dx / dx
     }
 
-    pub fn zerofier(domain: &[FF]) -> Self {
+    pub fn naive_zerofier(domain: &[FF]) -> Self {
         domain
             .iter()
             .unique()
@@ -1753,12 +1765,21 @@ mod test_polynomials {
     }
 
     #[proptest(cases = 50)]
-    fn zerofier_and_fast_zerofier_are_identical(
+    fn naive_zerofier_and_fast_zerofier_are_identical(
+        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+    ) {
+        let zerofier = Polynomial::naive_zerofier(&domain);
+        let fast_zerofier = Polynomial::fast_zerofier(&domain);
+        prop_assert_eq!(zerofier, fast_zerofier);
+    }
+
+    #[proptest(cases = 50)]
+    fn zerofier_and_naive_zerofier_are_identical(
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
     ) {
         let zerofier = Polynomial::zerofier(&domain);
-        let fast_zerofier = Polynomial::fast_zerofier(&domain);
-        prop_assert_eq!(zerofier, fast_zerofier);
+        let naive_zerofier = Polynomial::naive_zerofier(&domain);
+        prop_assert_eq!(zerofier, naive_zerofier);
     }
 
     #[proptest(cases = 50)]
@@ -1767,7 +1788,7 @@ mod test_polynomials {
         #[filter(#out_of_domain_points.iter().all(|p| !#domain.contains(p)))]
         out_of_domain_points: Vec<BFieldElement>,
     ) {
-        let zerofier = Polynomial::fast_zerofier(&domain);
+        let zerofier = Polynomial::zerofier(&domain);
         for point in domain {
             prop_assert_eq!(BFieldElement::zero(), zerofier.evaluate(&point));
         }
@@ -1778,7 +1799,7 @@ mod test_polynomials {
 
     #[proptest]
     fn zerofier_has_leading_coefficient_one(domain: Vec<BFieldElement>) {
-        let zerofier = Polynomial::fast_zerofier(&domain);
+        let zerofier = Polynomial::zerofier(&domain);
         prop_assert_eq!(
             BFieldElement::one(),
             zerofier.leading_coefficient().unwrap()
