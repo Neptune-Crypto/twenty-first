@@ -539,7 +539,7 @@ mod tests {
         }
 
         fn assert_decoding_too_short_encoding_fails(&self) -> Result<(), TestCaseError> {
-            if self.encoding.is_empty() {
+            if self.failure_assertions_for_decoding_too_short_sequence_is_not_meaningful() {
                 return Ok(());
             }
             let mut encoded = self.encoding.to_owned();
@@ -554,10 +554,9 @@ mod tests {
                 let original_value = encoding[i];
                 encoding[i] = self.random_encoding[i];
                 let decoding = T::decode(&encoding);
-                prop_assert!(
-                    decoding.is_err() || *decoding.unwrap() != self.value,
-                    "failing index: {i}"
-                );
+                if decoding.is_ok_and(|d| *d == self.value) {
+                    return Err(TestCaseError::Fail(format!("failing index: {i}").into()));
+                }
                 encoding[i] = original_value;
             }
             Ok(())
@@ -566,15 +565,21 @@ mod tests {
         fn assert_decoding_random_too_short_encoding_fails_gracefully(
             &self,
         ) -> Result<(), TestCaseError> {
-            if self.encoding.is_empty() {
+            if self.failure_assertions_for_decoding_too_short_sequence_is_not_meaningful() {
                 return Ok(());
             }
 
             let random_encoding =
                 self.random_encoding[..self.length_of_too_short_sequence].to_vec();
             let decoding_result = T::decode(&random_encoding);
-            prop_assert!(decoding_result.is_err() || *decoding_result.unwrap() != self.value);
+            if decoding_result.is_ok_and(|d| *d == self.value) {
+                return Err(TestCaseError::Fail("randomness mustn't be `self`".into()));
+            }
             Ok(())
+        }
+
+        fn failure_assertions_for_decoding_too_short_sequence_is_not_meaningful(&self) -> bool {
+            self.encoding.is_empty()
         }
     }
 
