@@ -783,10 +783,16 @@ mod tests {
         prop_assert!(decoding.is_err());
     }
 
+    /// Depending on the test helper [`BFieldCodecPropertyTestData`] in the bfieldcodec_derive crate
+    /// would introduce an almost-cyclic dependency.[^1] This would make publishing to crates.io
+    /// quite difficult. Hence, integration tests in the bfieldcodec_derive crate are also off the
+    /// table. Consequently, we test the derive macro here.
+    ///
+    /// See also: https://github.com/rust-lang/cargo/issues/8379#issuecomment-1261970561
+    ///
+    /// [^1]: almost-cyclic because the dependency would be a dev-dependency
     #[cfg(test)]
     pub mod derive_tests {
-        // Since we cannot use the derive macro in the same crate where it is defined,
-        // we test the macro here instead.
 
         use arbitrary::Arbitrary;
 
