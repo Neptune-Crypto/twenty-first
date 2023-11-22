@@ -1,12 +1,16 @@
+use crate::util_types::level_db::DB;
+use crate::util_types::storage_vec::{Index, StorageVec};
 use itertools::Itertools;
-use rusty_leveldb::{WriteBatch, DB};
+use leveldb::{
+    batch::{Batch, WriteBatch},
+    options::{ReadOptions, WriteOptions},
+};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
     sync::{Arc, Mutex, MutexGuard},
 };
 
-use super::storage_vec::{Index, StorageVec};
 use crate::shared_math::b_field_element::BFieldElement;
 
 pub enum WriteOperation<ParentKey, ParentValue> {
@@ -691,16 +695,21 @@ impl StorageReader<RustyKey, RustyValue> for RustyReader {
         self.db
             .lock()
             .expect("StorageReader for RustyWallet: could not get database lock for reading (get)")
-            .get(&key.0)
+            .get(&ReadOptions::new(), &key.0)
+            .unwrap()
             .map(RustyValue)
     }
 
     fn get_many(&mut self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
-        let mut lock = self.db.lock().expect("Could not get lock");
+        let lock = self.db.lock().expect("Could not get lock");
 
         let mut res = vec![];
         for key in keys {
-            res.push(lock.get(&key.0).map(RustyValue));
+            res.push(
+                lock.get(&ReadOptions::new(), &key.0)
+                    .unwrap()
+                    .map(RustyValue),
+            );
         }
 
         res
@@ -719,7 +728,7 @@ pub struct SimpleRustyStorage {
 
 impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
     fn persist(&mut self) {
-        let mut write_batch = WriteBatch::new();
+        let write_batch = WriteBatch::new();
         for table in &self.schema.tables {
             let operations = table
                 .lock()
@@ -736,7 +745,7 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
         self.db
             .lock()
             .expect("Persist: could not get lock on database.")
-            .write(write_batch, true)
+            .write(&WriteOptions::new(), &write_batch)
             .expect("Could not persist to database.");
     }
 
@@ -765,14 +774,6 @@ impl SimpleRustyStorage {
             schema,
         }
     }
-
-    pub fn close(&mut self) {
-        self.db
-            .lock()
-            .expect("SimpleRustyStorage::close: could not get lock on database.")
-            .close()
-            .expect("Could not close database.");
-    }
 }
 
 struct SimpleRustyReader {
@@ -784,17 +785,23 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
         self.db
             .lock()
             .expect("get: could not get lock on database (for reading)")
-            .get(&key.0)
+            .get(&ReadOptions::new(), &key.0)
+            .unwrap()
             .map(RustyValue)
     }
 
     fn get_many(&mut self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
-        let mut db_lock = self
+        let db_lock = self
             .db
             .lock()
             .expect("get_many: could not get lock on database (for reading)");
         keys.iter()
-            .map(|key| db_lock.get(&key.0).map(RustyValue))
+            .map(|key| {
+                db_lock
+                    .get(&ReadOptions::new(), &key.0)
+                    .unwrap()
+                    .map(RustyValue)
+            })
             .collect()
     }
 }
@@ -846,11 +853,13 @@ mod tests {
     #[test]
     fn test_simple_singleton() {
         let singleton_value = S([1u8, 3u8, 3u8, 7u8].to_vec());
-        // let opt = rusty_leveldb::Options::default();
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        // open new DB that will not be dropped on close.
+        let db = DB::open_new_test_database(false, None).unwrap();
+        let db_path = db.path.clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
+        assert_eq!(2, Arc::strong_count(&rusty_storage.db));
         let mut singleton = rusty_storage
             .schema
             .new_singleton::<S>(RustyKey([1u8; 1].to_vec()));
@@ -869,15 +878,27 @@ mod tests {
 
         // persist
         rusty_storage.persist();
+        assert_eq!(2, Arc::strong_count(&rusty_storage.db));
 
         // test
         assert_eq!(singleton.get(), singleton_value);
 
-        // drop
-        rusty_storage.close();
+        let db_ref = rusty_storage.db.clone();
+        assert_eq!(3, Arc::strong_count(&db_ref));
 
-        // restore
-        let new_db = DB::open("test-database", opt).unwrap();
+        // drop
+        drop(rusty_storage); // <--- DB ref dropped
+
+        assert_eq!(2, Arc::strong_count(&db_ref));
+
+        drop(singleton); //     <--- DB ref dropped
+
+        assert_eq!(1, Arc::strong_count(&db_ref));
+
+        drop(db_ref); //        <--- Final DB ref dropped.  Db closes.
+
+        // restore.  re-open existing DB.
+        let new_db = DB::open_test_database(&db_path, true, None).unwrap();
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
         let new_singleton = new_rusty_storage
             .schema
@@ -890,8 +911,9 @@ mod tests {
 
     #[test]
     fn test_simple_vector() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        // open new DB that will not be dropped on close.
+        let db = DB::open_new_test_database(false, None).unwrap();
+        let db_path = db.path.clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
@@ -1012,10 +1034,12 @@ mod tests {
         assert_eq!(last, S([8u8].to_vec()));
 
         // drop without persisting
-        rusty_storage.close();
+        drop(rusty_storage); // <--- DB ref dropped.
+        drop(vector); //        <--- Final DB ref dropped. DB closes
 
-        // create new database
-        let new_db = DB::open("test-database", opt).unwrap();
+        // Open existing database.
+        let new_db = DB::open_test_database(&db_path, true, None).unwrap();
+
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
         let mut new_vector = new_rusty_storage.schema.new_vec::<u64, S>("test-vector");
 
@@ -1091,8 +1115,7 @@ mod tests {
 
     #[test]
     fn test_dbtcvecs_get_many() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
@@ -1143,8 +1166,7 @@ mod tests {
 
     #[test]
     fn test_dbtcvecs_set_many_get_many() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
 
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
@@ -1227,8 +1249,7 @@ mod tests {
 
     #[test]
     fn test_dbtcvecs_set_all_get_many() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
 
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
@@ -1296,8 +1317,7 @@ mod tests {
 
     #[test]
     fn storage_schema_vector_pbt() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut persisted_vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -1400,8 +1420,10 @@ mod tests {
     #[test]
     fn test_two_vectors_and_singleton() {
         let singleton_value = S([3u8, 3u8, 3u8, 1u8].to_vec());
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+
+        // Open new database that will not be destroyed on close.
+        let db = DB::open_new_test_database(false, None).unwrap();
+        let db_path = db.path.clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector1 = rusty_storage.schema.new_vec::<u64, S>("test-vector1");
@@ -1501,13 +1523,20 @@ mod tests {
             vector2.get_many(&[2, 1]),
             vec![vector2.get(2), vector2.get(1)]
         );
-        rusty_storage.close();
+        drop(rusty_storage); // <-- DB ref dropped
+        drop(vector1); //       <-- DB ref dropped
+        drop(vector2); //       <-- DB ref dropped
+        drop(singleton); //     <-- final DB ref dropped (DB closes)
 
-        // restore from disk
-        let new_db = DB::open("test-database", opt).unwrap();
+        // re-open DB / restore from disk
+        let new_db = DB::open_test_database(&db_path, true, None).unwrap();
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
         let new_vector1 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector1");
         let mut new_vector2 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector2");
+        new_rusty_storage.restore_or_new();
+        let new_singleton = new_rusty_storage
+            .schema
+            .new_singleton::<S>(RustyKey([1u8; 1].to_vec()));
         new_rusty_storage.restore_or_new();
 
         // test again
@@ -1522,7 +1551,7 @@ mod tests {
         assert_eq!(new_vector2.get(2), S([3u8].to_vec()));
         assert_eq!(new_vector2.get(3), S([7u8].to_vec()));
         assert_eq!(new_vector2.len(), 4);
-        assert_eq!(singleton.get(), singleton_value);
+        assert_eq!(new_singleton.get(), singleton_value);
 
         // Test `get_many` for a restored DB
         assert_eq!(
@@ -1578,8 +1607,7 @@ mod tests {
     )]
     #[test]
     fn out_of_bounds_using_get() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -1597,8 +1625,7 @@ mod tests {
     )]
     #[test]
     fn out_of_bounds_using_get_many() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -1616,8 +1643,7 @@ mod tests {
     )]
     #[test]
     fn out_of_bounds_using_set_many() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -1634,8 +1660,7 @@ mod tests {
     #[should_panic(expected = "size-mismatch.  input has 2 elements and target has 1 elements")]
     #[test]
     fn size_mismatch_too_many_using_set_all() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -1652,8 +1677,7 @@ mod tests {
     #[should_panic(expected = "size-mismatch.  input has 1 elements and target has 2 elements")]
     #[test]
     fn size_mismatch_too_few_using_set_all() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("test-database", opt.clone()).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");

@@ -1,11 +1,11 @@
+use crate::util_types::level_db::DB;
+use itertools::Itertools;
+use leveldb::{batch::WriteBatch, options::ReadOptions};
+use serde::{de::DeserializeOwned, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
 };
-
-use itertools::Itertools;
-use rusty_leveldb::{WriteBatch, DB};
-use serde::{de::DeserializeOwned, Serialize};
 
 pub type Index = u64;
 
@@ -103,12 +103,18 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
 
         // then try persistent storage
         let db_key = self.get_index_key(index);
-        let db_val = self.db.lock().unwrap().get(&db_key).unwrap_or_else(|| {
-            panic!(
-                "Element with index {index} does not exist in {}. This should not happen",
-                self.name
-            )
-        });
+        let db_val = self
+            .db
+            .lock()
+            .unwrap()
+            .get_u8(&ReadOptions::new(), &db_key)
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Element with index {index} does not exist in {}. This should not happen",
+                    self.name
+                )
+            })
+            .unwrap();
         bincode::deserialize(&db_val).unwrap()
     }
 
@@ -144,12 +150,17 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
             return sort_to_match_requested_index_order(fetched_elements);
         }
 
-        let mut db_reader = self.db.lock().expect("get_many: db-locking must succeed");
+        let db_reader = self.db.lock().expect("get_many: db-locking must succeed");
 
         let elements_fetched_from_db = indices_of_elements_not_in_cache
             .iter()
             .map(|&(_, index)| self.get_index_key(index))
-            .map(|key| db_reader.get(&key).unwrap())
+            .map(|key| {
+                db_reader
+                    .get_u8(&ReadOptions::new(), &key)
+                    .unwrap()
+                    .unwrap()
+            })
             .map(|db_element| bincode::deserialize(&db_element).unwrap());
 
         let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
@@ -183,10 +194,13 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
                 .collect_vec();
         }
 
-        let mut db_reader = self.db.lock().expect("get_all: db-locking must succeed");
+        let db_reader = self.db.lock().expect("get_all: db-locking must succeed");
         for index in indices_of_elements_not_in_cache {
             let key = self.get_index_key(index);
-            let element = db_reader.get(&key).unwrap();
+            let element = db_reader
+                .get_u8(&ReadOptions::new(), &key)
+                .unwrap()
+                .unwrap();
             let element = bincode::deserialize(&element).unwrap();
             fetched_elements[index as usize] = Some(element);
         }
@@ -256,7 +270,8 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
             self.db
                 .lock()
                 .unwrap()
-                .get(&db_key)
+                .get_u8(&ReadOptions::new(), &db_key)
+                .unwrap()
                 .map(|bytes| bincode::deserialize(&bytes).unwrap())
         }
     }
@@ -288,7 +303,13 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     /// Return the length at the last write to disk
     fn persisted_length(&self) -> Index {
         let key = Self::get_length_key(self.key_prefix);
-        match self.db.lock().unwrap().get(&key) {
+        match self
+            .db
+            .lock()
+            .unwrap()
+            .get_u8(&ReadOptions::new(), &key)
+            .unwrap()
+        {
             Some(value) => bincode::deserialize(&value).unwrap(),
             None => 0,
         }
@@ -304,7 +325,12 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
 
     pub fn new(db: Arc<Mutex<DB>>, key_prefix: u8, name: &str) -> Self {
         let length_key = Self::get_length_key(key_prefix);
-        let length = match db.lock().unwrap().get(&length_key) {
+        let length = match db
+            .lock()
+            .unwrap()
+            .get_u8(&ReadOptions::new(), &length_key)
+            .unwrap()
+        {
             Some(length_bytes) => bincode::deserialize(&length_bytes).unwrap(),
             None => 0,
         };
@@ -328,7 +354,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
                 WriteElement::OverWrite((i, t)) => {
                     let key = self.get_index_key(i);
                     let value = bincode::serialize(&t).unwrap();
-                    write_batch.put(&key, &value);
+                    write_batch.put_u8(&key, &value);
                 }
                 WriteElement::Push(t) => {
                     let key =
@@ -351,7 +377,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
 
         if original_length != length {
             let key = Self::get_length_key(self.key_prefix);
-            write_batch.put(&key, &bincode::serialize(&self.length).unwrap());
+            write_batch.put_u8(&key, &bincode::serialize(&self.length).unwrap());
         }
 
         self.cache.clear();
@@ -414,13 +440,23 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use rand::{Rng, RngCore};
-    use rusty_leveldb::DB;
 
-    fn get_test_db() -> Arc<Mutex<DB>> {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
+    use leveldb::{
+        batch::{Batch, WriteBatch},
+        options::WriteOptions,
+    };
+
+    fn get_test_db(destroy_db_on_drop: bool) -> Arc<Mutex<DB>> {
+        let db = DB::open_new_test_database(destroy_db_on_drop, None).unwrap();
+        Arc::new(Mutex::new(db))
+    }
+
+    fn open_test_db(path: &std::path::Path, destroy_db_on_drop: bool) -> Arc<Mutex<DB>> {
+        let db = DB::open_test_database(path, destroy_db_on_drop, None).unwrap();
         Arc::new(Mutex::new(db))
     }
 
@@ -429,7 +465,7 @@ mod tests {
         length: Index,
         name: &str,
     ) -> (RustyLevelDbVec<u64>, Vec<u64>, Arc<Mutex<DB>>) {
-        let db = get_test_db();
+        let db = get_test_db(true);
         let mut persisted_vec = RustyLevelDbVec::new(db.clone(), 0, name);
         let mut regular_vec = vec![];
 
@@ -442,7 +478,11 @@ mod tests {
 
         let mut write_batch = WriteBatch::new();
         persisted_vec.pull_queue(&mut write_batch);
-        assert!(db.lock().unwrap().write(write_batch, true).is_ok());
+        assert!(db
+            .lock()
+            .unwrap()
+            .write(&WriteOptions::new(), &write_batch)
+            .is_ok());
 
         // Sanity checks
         assert!(persisted_vec.cache.is_empty());
@@ -509,7 +549,7 @@ mod tests {
 
     #[test]
     fn test_simple_prop() {
-        let db = get_test_db();
+        let db = get_test_db(true);
         let delegated_db_vec: RustyLevelDbVec<[u8; 13]> =
             RustyLevelDbVec::new(db, 0, "unit test vec 0");
         simple_prop(delegated_db_vec);
@@ -520,7 +560,7 @@ mod tests {
 
     #[test]
     fn multiple_vectors_in_one_db() {
-        let db = get_test_db();
+        let db = get_test_db(true);
         let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
         let mut delegated_db_vec_b: RustyLevelDbVec<u128> =
@@ -550,7 +590,10 @@ mod tests {
         assert_eq!(0, delegated_db_vec_b.len());
 
         assert!(
-            db.lock().unwrap().write(write_batch, true).is_ok(),
+            db.lock()
+                .unwrap()
+                .write(&WriteOptions::new(), &write_batch)
+                .is_ok(),
             "DB write must succeed"
         );
         assert_eq!(3, delegated_db_vec_a.persisted_length());
@@ -563,7 +606,7 @@ mod tests {
 
     #[test]
     fn rusty_level_db_set_many() {
-        let db = get_test_db();
+        let db = get_test_db(true);
         let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
@@ -595,7 +638,10 @@ mod tests {
         let mut write_batch = WriteBatch::new();
         delegated_db_vec_a.pull_queue(&mut write_batch);
         assert!(
-            db.lock().unwrap().write(write_batch, true).is_ok(),
+            db.lock()
+                .unwrap()
+                .write(&WriteOptions::new(), &write_batch)
+                .is_ok(),
             "DB write must succeed"
         );
         assert_eq!(4, delegated_db_vec_a.persisted_length());
@@ -613,7 +659,7 @@ mod tests {
 
     #[test]
     fn rusty_level_db_set_all() {
-        let db = get_test_db();
+        let db = get_test_db(true);
         let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
@@ -639,7 +685,10 @@ mod tests {
         let mut write_batch = WriteBatch::new();
         delegated_db_vec_a.pull_queue(&mut write_batch);
         assert!(
-            db.lock().unwrap().write(write_batch, true).is_ok(),
+            db.lock()
+                .unwrap()
+                .write(&WriteOptions::new(), &write_batch)
+                .is_ok(),
             "DB write must succeed"
         );
         assert_eq!(3, delegated_db_vec_a.persisted_length());
@@ -652,8 +701,36 @@ mod tests {
     }
 
     #[test]
+    fn db_close_and_reload() {
+        let db = get_test_db(false);
+        let db_path = db.lock().unwrap().path.clone();
+
+        let mut vec: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db, 0, "vec1");
+        vec.push(1000);
+
+        assert_eq!(1, vec.len());
+
+        let mut write_batch = WriteBatch::new();
+        vec.pull_queue(&mut write_batch);
+        assert!(vec
+            .db
+            .lock()
+            .unwrap()
+            .write(&WriteOptions::new(), &write_batch)
+            .is_ok());
+
+        drop(vec); // this will drop (close) the Db
+
+        let db2 = open_test_db(&db_path, true);
+        let mut vec2: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db2, 0, "vec1");
+
+        assert_eq!(1, vec2.len());
+        assert_eq!(1000, vec2.pop().unwrap());
+    }
+
+    #[test]
     fn get_many_ordering_of_outputs() {
-        let db = get_test_db();
+        let db = get_test_db(true);
         let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
@@ -691,7 +768,10 @@ mod tests {
         let mut write_batch = WriteBatch::new();
         delegated_db_vec_a.pull_queue(&mut write_batch);
         assert!(
-            db.lock().unwrap().write(write_batch, true).is_ok(),
+            db.lock()
+                .unwrap()
+                .write(&WriteOptions::new(), &write_batch)
+                .is_ok(),
             "DB write must succeed"
         );
         assert_eq!(3, delegated_db_vec_a.persisted_length());
@@ -782,7 +862,10 @@ mod tests {
                     // persist
                     let mut write_batch = WriteBatch::new();
                     persisted_vector.pull_queue(&mut write_batch);
-                    db.lock().unwrap().write(write_batch, true).unwrap();
+                    db.lock()
+                        .unwrap()
+                        .write(&WriteOptions::new(), &write_batch)
+                        .unwrap();
                 }
                 _ => unreachable!(),
             }
@@ -803,7 +886,10 @@ mod tests {
         // Check equality after persisting updates
         let mut write_batch = WriteBatch::new();
         persisted_vector.pull_queue(&mut write_batch);
-        db.lock().unwrap().write(write_batch, true).unwrap();
+        db.lock()
+            .unwrap()
+            .write(&WriteOptions::new(), &write_batch)
+            .unwrap();
 
         assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
         assert_eq!(
