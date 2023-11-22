@@ -1,4 +1,8 @@
-use rusty_leveldb::{WriteBatch, DB};
+use crate::util_types::level_db::DB;
+use leveldb::{
+    batch::{Batch, WriteBatch},
+    options::{ReadOptions, WriteOptions},
+};
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
@@ -17,8 +21,7 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
             N > index,
             "Cannot get outside of length. Length: {N}, index: {index}"
         );
-        let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
-        let elem_as_bytes_res = self.db.get(&index_bytes);
+        let elem_as_bytes_res = self.db.get(&ReadOptions::new(), &index).unwrap();
         match elem_as_bytes_res {
             Some(bytes) => bincode::deserialize(&bytes).unwrap(),
             None => T::default(),
@@ -31,15 +34,14 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
             indices.iter().all(|index| *index < N),
             "All indices must be lower than length of array. Got: {indices:?}"
         );
-        let mut batch_write = WriteBatch::new();
+        let batch_write = WriteBatch::new();
         for (index, val) in indices_and_vals.iter() {
-            let index_bytes: Vec<u8> = bincode::serialize(index).unwrap();
             let value_bytes: Vec<u8> = bincode::serialize(val).unwrap();
-            batch_write.put(&index_bytes, &value_bytes);
+            batch_write.put(index, &value_bytes);
         }
 
         self.db
-            .write(batch_write, true)
+            .write(&WriteOptions::new(), &batch_write)
             .expect("Failed to batch-write to database");
     }
 
@@ -49,14 +51,10 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
             N > index,
             "Cannot set outside of length. Length: {N}, index: {index}"
         );
-        let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
         let value_bytes: Vec<u8> = bincode::serialize(&value).unwrap();
-        self.db.put(&index_bytes, &value_bytes).unwrap();
-    }
-
-    // Flush database
-    pub fn flush(&mut self) {
-        self.db.flush().expect("Flush must succeed.")
+        self.db
+            .put(&WriteOptions::new(), &index, &value_bytes)
+            .unwrap();
     }
 
     /// Create a new, default-initialized database array. Input database must be empty.
@@ -81,12 +79,11 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
 #[cfg(test)]
 mod database_array_tests {
     use super::*;
-    use rusty_leveldb::DB;
+    use crate::util_types::level_db::DB;
 
     #[test]
     fn init_and_default_values_test() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
         assert_eq!(0u64, u64::default());
         let mut db_array: DatabaseArray<101, u64> = DatabaseArray::new(db);
         assert_eq!(0u64, db_array.get(0));
@@ -114,8 +111,7 @@ mod database_array_tests {
     #[should_panic = "Cannot get outside of length. Length: 101, index: 101"]
     #[test]
     fn panic_on_index_out_of_range_empty_test() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
         let mut db_array: DatabaseArray<101, u64> = DatabaseArray::new(db);
         db_array.get(101);
     }
@@ -123,8 +119,8 @@ mod database_array_tests {
     #[should_panic = "Cannot set outside of length. Length: 50, index: 90"]
     #[test]
     fn panic_on_index_out_of_range_length_one_set_test() {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
+
         let mut db_array: DatabaseArray<50, u64> = DatabaseArray::new(db);
         db_array.set(90, 17);
     }

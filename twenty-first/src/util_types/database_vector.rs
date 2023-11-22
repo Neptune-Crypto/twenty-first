@@ -1,4 +1,8 @@
-use rusty_leveldb::{WriteBatch, DB};
+use crate::util_types::level_db::DB;
+use leveldb::{
+    batch::{Batch, WriteBatch},
+    options::{ReadOptions, WriteOptions},
+};
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
@@ -18,36 +22,37 @@ pub struct DatabaseVector<T: Serialize + DeserializeOwned> {
 
 impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     fn set_length(&mut self, length: IndexType) {
-        let length_as_bytes = bincode::serialize(&length).unwrap();
+        let length = bincode::serialize(&length).unwrap();
         self.db
-            .put(&LENGTH_KEY, &length_as_bytes)
+            .put_u8(&WriteOptions::new(), &LENGTH_KEY, &length)
             .expect("Length write must succeed");
     }
 
     fn delete(&mut self, index: IndexType) {
-        let index_as_bytes = bincode::serialize(&index).unwrap();
         self.db
-            .delete(&index_as_bytes)
+            .delete(&WriteOptions::new(), &index)
             .expect("Deleting element must succeed");
     }
 
     /// Return true if the database vector looks empty. Used for sanity check when creating
     /// a new database vector.
     fn attempt_verify_empty(&mut self) -> bool {
-        let index_bytes: Vec<u8> = bincode::serialize(&INDEX_ZERO).unwrap();
-        self.db.get(&index_bytes).is_none()
+        self.db
+            .get(&ReadOptions::new(), &INDEX_ZERO)
+            .unwrap()
+            .is_none()
     }
 
     pub fn is_empty(&mut self) -> bool {
         self.len() == 0
     }
 
-    pub fn flush(&mut self) {
-        self.db.flush().expect("Flush must succeed.")
-    }
-
     pub fn len(&mut self) -> IndexType {
-        let length_as_bytes = self.db.get(&LENGTH_KEY).expect("Length must exist");
+        let length_as_bytes = self
+            .db
+            .get_u8(&ReadOptions::new(), &LENGTH_KEY)
+            .expect("Length must exist")
+            .unwrap();
         bincode::deserialize(&length_as_bytes).unwrap()
     }
 
@@ -68,22 +73,23 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         let new_length = new_vector.len() as IndexType;
         self.set_length(new_length);
 
-        let mut batch_write = WriteBatch::new();
-        for (index, val) in new_vector.into_iter().enumerate() {
-            // Notice that `index` has to be cast to the type of the index for this data structure.
-            // Otherwise this function will create a corrupted database.
-            let index_bytes: Vec<u8> = bincode::serialize(&(index as IndexType)).unwrap();
-            let value_bytes: Vec<u8> = bincode::serialize(&val).unwrap();
-            batch_write.put(&index_bytes, &value_bytes);
-        }
+        let batch_write = WriteBatch::new();
 
         for index in new_length..old_length {
-            let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
-            batch_write.delete(&index_bytes);
+            // let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
+            batch_write.delete(&index);
+        }
+
+        for (index, val) in (0..).zip(new_vector.into_iter()) {
+            // Notice that `index` has to be cast to the type of the index for this data structure.
+            // Otherwise this function will create a corrupted database.
+            let index = index as IndexType;
+            let value_bytes: Vec<u8> = bincode::serialize(&val).unwrap();
+            batch_write.put(&index, &value_bytes);
         }
 
         self.db
-            .write(batch_write, true)
+            .write(&WriteOptions::new(), &batch_write)
             .expect("Failed to batch-write to database in overwrite_with_vec");
     }
 
@@ -110,8 +116,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             self.len(),
             index
         );
-        let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
-        let elem_as_bytes = self.db.get(&index_bytes).unwrap();
+        let elem_as_bytes = self.db.get(&ReadOptions::new(), &index).unwrap().unwrap();
         bincode::deserialize(&elem_as_bytes).unwrap()
     }
 
@@ -122,9 +127,10 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             self.len(),
             index
         );
-        let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
         let value_bytes: Vec<u8> = bincode::serialize(&value).unwrap();
-        self.db.put(&index_bytes, &value_bytes).unwrap();
+        self.db
+            .put(&WriteOptions::new(), &index, &value_bytes)
+            .unwrap();
     }
 
     pub fn batch_set(&mut self, indices_and_vals: &[(IndexType, T)]) {
@@ -134,15 +140,14 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             indices.iter().all(|index| *index < length),
             "All indices must be lower than length of vector. Got: {indices:?}"
         );
-        let mut batch_write = WriteBatch::new();
+        let batch_write = WriteBatch::new();
         for (index, val) in indices_and_vals.iter() {
-            let index_bytes: Vec<u8> = bincode::serialize(index).unwrap();
             let value_bytes: Vec<u8> = bincode::serialize(val).unwrap();
-            batch_write.put(&index_bytes, &value_bytes);
+            batch_write.put(index, &value_bytes);
         }
 
         self.db
-            .write(batch_write, true)
+            .write(&WriteOptions::new(), &batch_write)
             .expect("Failed to batch-write to database in batch_set");
     }
 
@@ -160,9 +165,10 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
 
     pub fn push(&mut self, value: T) {
         let length = self.len();
-        let index_bytes = bincode::serialize(&length).unwrap();
         let value_bytes = bincode::serialize(&value).unwrap();
-        self.db.put(&index_bytes, &value_bytes).unwrap();
+        self.db
+            .put(&WriteOptions::new(), &length, &value_bytes)
+            .unwrap();
         self.set_length(length + 1);
     }
 
@@ -175,11 +181,10 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
 #[cfg(test)]
 mod database_vector_tests {
     use super::*;
-    use rusty_leveldb::DB;
+    use crate::util_types::level_db::DB;
 
     fn test_constructor() -> DatabaseVector<u64> {
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
+        let db = DB::open_new_test_database(true, None).unwrap();
         DatabaseVector::new(db)
     }
 
