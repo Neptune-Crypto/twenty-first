@@ -42,12 +42,12 @@ pub enum BFieldCodecError {
 impl Display for BFieldCodecError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            BFieldCodecError::EmptySequence => write!(f, "empty sequence"),
-            BFieldCodecError::SequenceTooShort => write!(f, "sequence too short"),
-            BFieldCodecError::SequenceTooLong => write!(f, "sequence too long"),
-            BFieldCodecError::ElementOutOfRange => write!(f, "element out of range"),
-            BFieldCodecError::MissingLengthIndicator => write!(f, "missing length indicator"),
-            BFieldCodecError::InnerDecodingFailure(err) => {
+            Self::EmptySequence => write!(f, "empty sequence"),
+            Self::SequenceTooShort => write!(f, "sequence too short"),
+            Self::SequenceTooLong => write!(f, "sequence too long"),
+            Self::ElementOutOfRange => write!(f, "element out of range"),
+            Self::MissingLengthIndicator => write!(f, "missing length indicator"),
+            Self::InnerDecodingFailure(err) => {
                 write!(f, "inner decoding failure: {err}")
             }
         }
@@ -71,10 +71,10 @@ impl BFieldCodec for BFieldElement {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if sequence.is_empty() {
-            return Err(BFieldCodecError::EmptySequence);
+            return Err(Self::Error::EmptySequence);
         }
         if sequence.len() > 1 {
-            return Err(BFieldCodecError::SequenceTooLong);
+            return Err(Self::Error::SequenceTooLong);
         }
         Ok(Box::new(sequence[0]))
     }
@@ -93,16 +93,16 @@ impl BFieldCodec for u128 {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if sequence.is_empty() {
-            return Err(BFieldCodecError::EmptySequence);
+            return Err(Self::Error::EmptySequence);
         }
         if sequence.len() < 4 {
-            return Err(BFieldCodecError::SequenceTooShort);
+            return Err(Self::Error::SequenceTooShort);
         }
         if sequence.len() > 4 {
-            return Err(BFieldCodecError::SequenceTooLong);
+            return Err(Self::Error::SequenceTooLong);
         }
         if sequence.iter().any(|s| s.value() > u32::MAX as u64) {
-            return Err(BFieldCodecError::ElementOutOfRange);
+            return Err(Self::Error::ElementOutOfRange);
         }
 
         let element = sequence
@@ -130,16 +130,16 @@ impl BFieldCodec for u64 {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if sequence.is_empty() {
-            return Err(BFieldCodecError::EmptySequence);
+            return Err(Self::Error::EmptySequence);
         }
         if sequence.len() < 2 {
-            return Err(BFieldCodecError::SequenceTooShort);
+            return Err(Self::Error::SequenceTooShort);
         }
         if sequence.len() > 2 {
-            return Err(BFieldCodecError::SequenceTooLong);
+            return Err(Self::Error::SequenceTooLong);
         }
         if sequence.iter().any(|s| s.value() > u32::MAX as u64) {
-            return Err(BFieldCodecError::ElementOutOfRange);
+            return Err(Self::Error::ElementOutOfRange);
         }
 
         let element = sequence
@@ -167,13 +167,13 @@ impl BFieldCodec for bool {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if sequence.is_empty() {
-            return Err(BFieldCodecError::EmptySequence);
+            return Err(Self::Error::EmptySequence);
         }
         if sequence.len() > 1 {
-            return Err(BFieldCodecError::SequenceTooLong);
+            return Err(Self::Error::SequenceTooLong);
         }
         if sequence[0].value() > 1 {
-            return Err(BFieldCodecError::ElementOutOfRange);
+            return Err(Self::Error::ElementOutOfRange);
         }
 
         let element = match sequence[0].value() {
@@ -198,13 +198,13 @@ impl BFieldCodec for u32 {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if sequence.is_empty() {
-            return Err(BFieldCodecError::EmptySequence);
+            return Err(Self::Error::EmptySequence);
         }
         if sequence.len() > 1 {
-            return Err(BFieldCodecError::SequenceTooLong);
+            return Err(Self::Error::SequenceTooLong);
         }
         if sequence[0].value() > u32::MAX as u64 {
-            return Err(BFieldCodecError::ElementOutOfRange);
+            return Err(Self::Error::ElementOutOfRange);
         }
 
         let element = sequence[0].value() as u32;
@@ -226,34 +226,34 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         // decode T
         if T::static_length().is_none() && sequence.get(0).is_none() {
-            return Err(BFieldCodecError::MissingLengthIndicator);
+            return Err(Self::Error::MissingLengthIndicator);
         }
         let length_of_t = match T::static_length() {
             Some(length) => length,
             None => sequence[0].value() as usize + 1,
         };
         if sequence.len() < length_of_t {
-            return Err(BFieldCodecError::SequenceTooShort);
+            return Err(Self::Error::SequenceTooShort);
         }
         let (sequence_for_t, sequence) = sequence.split_at(length_of_t);
         let t = *T::decode(sequence_for_t).map_err(|err| err.into())?;
 
         // decode S
         if S::static_length().is_none() && sequence.get(0).is_none() {
-            return Err(BFieldCodecError::MissingLengthIndicator);
+            return Err(Self::Error::MissingLengthIndicator);
         }
         let length_of_s = match S::static_length() {
             Some(length) => length,
             None => sequence[0].value() as usize + 1,
         };
         if sequence.len() < length_of_s {
-            return Err(BFieldCodecError::SequenceTooShort);
+            return Err(Self::Error::SequenceTooShort);
         }
         let (sequence_for_s, sequence) = sequence.split_at(length_of_s);
         let s = *S::decode(sequence_for_s).map_err(|err| err.into())?;
 
         if !sequence.is_empty() {
-            return Err(BFieldCodecError::SequenceTooLong);
+            return Err(Self::Error::SequenceTooLong);
         }
         Ok(Box::new((t, s)))
     }
@@ -286,7 +286,7 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if sequence.is_empty() {
-            return Err(BFieldCodecError::EmptySequence);
+            return Err(Self::Error::EmptySequence);
         }
         let is_some = *bool::decode(&sequence[0..1])?;
         let sequence = &sequence[1..];
@@ -297,7 +297,7 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
         };
 
         if !is_some && !sequence.is_empty() {
-            return Err(BFieldCodecError::SequenceTooLong);
+            return Err(Self::Error::SequenceTooLong);
         }
         Ok(Box::new(element))
     }
@@ -326,14 +326,12 @@ impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N] {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if N > 0 && sequence.is_empty() {
-            return Err(BFieldCodecError::EmptySequence);
+            return Err(Self::Error::EmptySequence);
         }
 
         let vec_t = bfield_codec_decode_list(N, sequence)?;
         let array = vec_t.try_into().map_err(|_| {
-            BFieldCodecError::InnerDecodingFailure(
-                format!("cannot convert Vec<T> into [T; {N}]").into(),
-            )
+            Self::Error::InnerDecodingFailure(format!("cannot convert Vec<T> into [T; {N}]").into())
         })?;
         Ok(Box::new(array))
     }
@@ -352,7 +350,7 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if sequence.is_empty() {
-            return Err(BFieldCodecError::EmptySequence);
+            return Err(Self::Error::EmptySequence);
         }
 
         let vec_length = sequence[0].value() as usize;
@@ -478,7 +476,7 @@ impl<T> BFieldCodec for PhantomData<T> {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if !sequence.is_empty() {
-            return Err(BFieldCodecError::SequenceTooLong);
+            return Err(Self::Error::SequenceTooLong);
         }
         Ok(Box::new(PhantomData))
     }
