@@ -15,13 +15,11 @@ keywords = ["polynomial", "merkle-tree", "post-quantum", "algebra", "tip5"]
 categories = ["cryptography", "mathematics"]
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+pretty_assertions = "1.4"
 proptest = "1.3"
 proptest-arbitrary-interop = "0.1"
 test-strategy = "0.3"
-
-[dev-dependencies.criterion]
-version = "0.5"
-features = ["html_reports"]
 
 [dev-dependencies.cargo-husky]
 version = "1"
