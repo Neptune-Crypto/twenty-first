@@ -450,11 +450,11 @@ impl BFieldCodecDeriveBuilder {
         self.decode_function_body = quote! {
             #(#decode_statements)*
             if !sequence.is_empty() {
-                return Err(#sequence_too_long_error(sequence.len()));
+                return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
             }
-            Ok(Box::new(Self {
+            ::core::result::Result::Ok(Box::new(Self {
                 #(#included_field_names,)*
-                #(#ignored_field_names: Default::default(),)*
+                #(#ignored_field_names: ::core::default::Default::default(),)*
             }))
         };
     }
@@ -476,9 +476,9 @@ impl BFieldCodecDeriveBuilder {
         self.decode_function_body = quote! {
             #(#decode_statements)*
             if !sequence.is_empty() {
-                return Err(#sequence_too_long_error(sequence.len()));
+                return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
             }
-            Ok(Box::new(Self ( #(#field_names,)* )))
+            ::core::result::Result::Ok(Box::new(Self ( #(#field_names,)* )))
         };
     }
 
@@ -500,11 +500,11 @@ impl BFieldCodecDeriveBuilder {
                     #sequence_empty_for_field_error(#field_name_as_string_literal.to_string());
                 }
                 let (len, sequence) = match maybe_fields_static_length {
-                    Some(len) => (len, sequence),
-                    None => (sequence[0].value() as usize, &sequence[1..]),
+                    ::core::option::Option::Some(len) => (len, sequence),
+                    ::core::option::Option::None => (sequence[0].value() as usize, &sequence[1..]),
                 };
                 if sequence.len() < len {
-                    return Err(#sequence_too_short_for_field_error(
+                    return ::core::result::Result::Err(#sequence_too_short_for_field_error(
                         #field_name_as_string_literal.to_string(),
                     ));
                 }
@@ -533,12 +533,12 @@ impl BFieldCodecDeriveBuilder {
 
         self.decode_function_body = quote! {
             if sequence.is_empty() {
-                return Err(#sequence_empty_error);
+                return ::core::result::Result::Err(#sequence_empty_error);
             }
             let (variant_index, sequence) = (sequence[0].value() as usize, &sequence[1..]);
             match variant_index {
                 #(#match_clauses ,)*
-                other_index => Err(#invalid_variant_error(other_index)),
+                other_index => ::core::result::Result::Err(#invalid_variant_error(other_index)),
             }
         };
     }
@@ -556,9 +556,9 @@ impl BFieldCodecDeriveBuilder {
         if associated_data.is_empty() {
             return quote! {
                 if !sequence.is_empty() {
-                    return Err(#sequence_too_long_error(sequence.len()));
+                    return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
                 }
-                Ok(Box::new(Self::#variant_name))
+                ::core::result::Result::Ok(Box::new(Self::#variant_name))
             };
         }
 
@@ -577,14 +577,20 @@ impl BFieldCodecDeriveBuilder {
                                 ::static_length();
                         let field_has_dynamic_length = maybe_fields_static_length.is_none();
                         if sequence.is_empty() && field_has_dynamic_length {
-                            return Err(#sequence_empty_error(#variant_index, #field_index));
+                            return ::core::result::Result::Err(
+                                #sequence_empty_error(#variant_index, #field_index)
+                            );
                         }
                         let (len, sequence) = match maybe_fields_static_length {
-                            Some(len) => (len, sequence),
-                            None => (sequence[0].value() as usize, &sequence[1..]),
+                            ::core::option::Option::Some(len) => (len, sequence),
+                            ::core::option::Option::None => {
+                                (sequence[0].value() as usize, &sequence[1..])
+                            },
                         };
                         if sequence.len() < len {
-                            return Err(#sequence_too_short_error(#variant_index, #field_index));
+                            return ::core::result::Result::Err(
+                                #sequence_too_short_error(#variant_index, #field_index)
+                            );
                         }
                         let decoded =
                             *<#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
@@ -604,9 +610,11 @@ impl BFieldCodecDeriveBuilder {
         quote! {
             #field_decoders
             if !sequence.is_empty() {
-                return Err(#sequence_too_long_error(sequence.len()));
+                return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
             }
-            Ok(Box::new(Self::#variant_name ( #( #field_names , )* )))
+            core::result::Result::Ok(
+                Box::new(Self::#variant_name ( #( #field_names , )* ))
+            )
         }
     }
 
@@ -621,17 +629,17 @@ impl BFieldCodecDeriveBuilder {
             .collect::<Vec<_>>();
         let num_fields = field_types.len();
         self.static_length_body = quote! {
-            let field_lengths : [Option<usize>; #num_fields] = [
+            let field_lengths : [::core::option::Option<usize>; #num_fields] = [
                 #(
                     <#field_types as
                     ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length(),
                 )*
             ];
             if field_lengths.iter().all(|fl| fl.is_some() ) {
-                Some(field_lengths.iter().map(|fl| fl.unwrap()).sum())
+                ::core::option::Option::Some(field_lengths.iter().map(|fl| fl.unwrap()).sum())
             }
             else {
-                None
+                ::core::option::Option::None
             }
         };
     }
@@ -640,13 +648,13 @@ impl BFieldCodecDeriveBuilder {
         let variants = self.variants.as_ref().unwrap();
         let no_variants_have_associated_data = variants.iter().all(|v| v.fields.is_empty());
         if no_variants_have_associated_data {
-            self.static_length_body = quote! {Some(1)};
+            self.static_length_body = quote! {::core::option::Option::Some(1)};
             return;
         }
 
         let num_variants = variants.len();
         if num_variants == 0 {
-            self.static_length_body = quote! {Some(0)};
+            self.static_length_body = quote! {::core::option::Option::Some(0)};
             return;
         }
 
@@ -656,25 +664,28 @@ impl BFieldCodecDeriveBuilder {
             .iter()
             .map(|variant| {
                 let fields = variant.fields.clone();
-                let field_lengths = fields .iter().map(|f| quote!{
-                        <#f as ::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length()
+                let field_lengths = fields.iter().map(|f| {
+                    quote! {
+                        <#f as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                            ::static_length()
                     }
-                );
+                });
                 let num_fields = fields.len();
-                quote!{{
-                    let field_lengths: [Option<usize>; #num_fields] = [ #( #field_lengths , )* ];
+                quote! {{
+                    let field_lengths: [::core::option::Option<usize>; #num_fields] =
+                        [ #( #field_lengths , )* ];
                     if field_lengths.iter().all(|fl| fl.is_some()) {
                         Some(field_lengths.iter().map(|fl|fl.unwrap()).sum())
                     } else {
                         None
                     }
                 }}
-            }
-        )
-        .collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         self.static_length_body = quote! {
-                let variant_lengths : [Option<usize>; #num_variants] = [ #( #variant_lengths , )* ];
+                let variant_lengths : [::core::option::Option<usize>; #num_variants] =
+                    [ #( #variant_lengths , )* ];
                 if variant_lengths.iter().all(|fl| fl.is_some() ) &&
                     variant_lengths.iter().tuple_windows().all(|(l, r)| l.unwrap() == r.unwrap()) {
                     variant_lengths[0]
@@ -703,17 +714,19 @@ impl BFieldCodecDeriveBuilder {
 
                 fn decode(
                     sequence: &[::twenty_first::shared_math::b_field_element::BFieldElement],
-                ) -> Result<Box<Self>, Self::Error> {
+                ) -> ::core::result::Result<Box<Self>, Self::Error> {
                     #decode_function_body
                 }
 
-                fn encode(&self) -> Vec<::twenty_first::shared_math::b_field_element::BFieldElement> {
+                fn encode(&self) -> Vec<
+                    ::twenty_first::shared_math::b_field_element::BFieldElement
+                > {
                     let mut elements = Vec::new();
                     #(#encode_statements)*
                     elements
                 }
 
-                fn static_length() -> Option<usize> {
+                fn static_length() -> ::core::option::Option<usize> {
                     #static_length_body
                 }
             }
@@ -742,6 +755,7 @@ impl BFieldCodecErrorEnumBuilder {
         self.register_error_sequence_empty_for_field();
         self.register_error_sequence_too_short_for_field();
         self.register_error_sequence_too_long();
+        self.register_error_inner_decoding_failure();
     }
 
     fn set_up_enum_errors(&mut self) {
@@ -750,6 +764,7 @@ impl BFieldCodecErrorEnumBuilder {
         self.register_error_sequence_too_short_for_variant();
         self.register_error_sequence_too_long();
         self.register_error_invalid_variant_index();
+        self.register_error_inner_decoding_failure();
     }
 
     fn register_error(
@@ -784,7 +799,7 @@ impl BFieldCodecErrorEnumBuilder {
         let variant_name = quote::format_ident!("SequenceTooLong");
         let variant_type = quote! { #variant_name(usize) };
         let display_match_arm = quote! {
-            Self::#variant_name(num_remaining_elements) => write!(
+            Self::#variant_name(num_remaining_elements) => ::core::write!(
                 f,
                 "cannot decode {}: sequence too long ({num_remaining_elements} elements remaining)",
                 #name
@@ -805,7 +820,7 @@ impl BFieldCodecErrorEnumBuilder {
         let variant_name = quote::format_ident!("SequenceEmpty");
         let variant_type = quote! { #variant_name };
         let display_match_arm = quote! {
-            Self::#variant_name => write!( f, "cannot decode {}: sequence is empty", #name )
+            Self::#variant_name => ::core::write!( f, "cannot decode {}: sequence is empty", #name )
         };
 
         self.register_error("seq_empty", variant_name, variant_type, display_match_arm);
@@ -817,7 +832,7 @@ impl BFieldCodecErrorEnumBuilder {
         let variant_name = quote::format_ident!("SequenceEmptyForField");
         let variant_type = quote! { #variant_name(String) };
         let display_match_arm = quote! {
-            Self::#variant_name(field_name) => write!(
+            Self::#variant_name(field_name) => ::core::write!(
                 f,
                 "cannot decode {}, field {field_name}: sequence is empty",
                 #name,
@@ -838,7 +853,7 @@ impl BFieldCodecErrorEnumBuilder {
         let variant_name = quote::format_ident!("SequenceTooShortForField");
         let variant_type = quote! { #variant_name(String) };
         let display_match_arm = quote! {
-            Self::#variant_name(field_name) => write!(
+            Self::#variant_name(field_name) => ::core::write!(
                 f,
                 "cannot decode {}, field {field_name}: sequence too short",
                 #name,
@@ -859,7 +874,7 @@ impl BFieldCodecErrorEnumBuilder {
         let variant_name = quote::format_ident!("SequenceEmptyForVariant");
         let variant_type = quote! { #variant_name(usize, usize) };
         let display_match_arm = quote! {
-            Self::#variant_name(variant_id, field_id) => write!(
+            Self::#variant_name(variant_id, field_id) => ::core::write!(
                 f,
                 "cannot decode {}, variant {variant_id}, field {field_id}: sequence is empty",
                 #name,
@@ -880,7 +895,7 @@ impl BFieldCodecErrorEnumBuilder {
         let variant_name = quote::format_ident!("SequenceTooShortForVariant");
         let variant_type = quote! { #variant_name(usize, usize) };
         let display_match_arm = quote! {
-            Self::#variant_name(variant_id, field_id) => write!(
+            Self::#variant_name(variant_id, field_id) => ::core::write!(
                 f,
                 "cannot decode {}, variant {variant_id}, field {field_id}: sequence too short",
                 #name,
@@ -901,7 +916,7 @@ impl BFieldCodecErrorEnumBuilder {
         let variant_name = quote::format_ident!("InvalidVariantIndex");
         let variant_type = quote! { #variant_name(usize) };
         let display_match_arm = quote! {
-            Self::#variant_name(variant_index) => write!(
+            Self::#variant_name(variant_index) => ::core::write!(
                 f,
                 "cannot decode {}: invalid variant index {variant_index}",
                 #name
@@ -910,6 +925,33 @@ impl BFieldCodecErrorEnumBuilder {
 
         self.register_error(
             "invalid_variant_index",
+            variant_name,
+            variant_type,
+            display_match_arm,
+        );
+    }
+
+    fn register_error_inner_decoding_failure(&mut self) {
+        let name = self.name.to_string();
+
+        let variant_name = quote::format_ident!("InnerDecodingFailure");
+        let variant_type = quote! {
+            #variant_name(Box<
+                    dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync
+                >
+            )
+        };
+        let display_match_arm = quote! {
+            Self::#variant_name(inner_error) => ::core::write!(
+                f,
+                "cannot decode {}: inner decoding failure: {}",
+                #name,
+                inner_error
+            )
+        };
+
+        self.register_error(
+            "inner_decoding_failure",
             variant_name,
             variant_type,
             display_match_arm,
@@ -953,6 +995,13 @@ impl BFieldCodecErrorEnumBuilder {
 
     fn into_tokens(self) -> TokenStream {
         let error_enum_name = self.error_enum_name();
+        let inner_decoding_failure_name = self
+            .errors
+            .get("inner_decoding_failure")
+            .unwrap()
+            .variant_name
+            .clone();
+
         let errors = self.errors.values();
         let variant_types = errors
             .clone()
@@ -963,16 +1012,28 @@ impl BFieldCodecErrorEnumBuilder {
             .collect::<Vec<_>>();
 
         quote! {
-            #[derive(Debug, Clone, PartialEq, Eq)]
+            #[derive(::core::fmt::Debug)]
             pub enum #error_enum_name {
                 #( #variant_types , )*
             }
-            impl std::error::Error for #error_enum_name {}
-            impl std::fmt::Display for #error_enum_name {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            impl ::std::error::Error for #error_enum_name {}
+            impl ::std::fmt::Display for #error_enum_name {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                     match self {
                         #( #display_match_arms , )*
                     }
+                }
+            }
+            impl ::core::convert::From<Box<
+                dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync
+            >>
+            for #error_enum_name
+            {
+                fn from(err: Box<
+                    dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync
+                >)
+                -> Self {
+                    Self::#inner_decoding_failure_name(err)
                 }
             }
         }

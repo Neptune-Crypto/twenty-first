@@ -58,7 +58,7 @@ impl Error for BFieldCodecError {}
 
 impl From<Box<dyn Error + Send + Sync>> for BFieldCodecError {
     fn from(err: Box<dyn Error + Send + Sync>) -> Self {
-        BFieldCodecError::InnerDecodingFailure(err)
+        Self::InnerDecodingFailure(err)
     }
 }
 
