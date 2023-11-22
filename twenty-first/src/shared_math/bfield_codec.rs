@@ -292,7 +292,7 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
         let sequence = &sequence[1..];
 
         let element = match is_some {
-            true => Some(*T::decode(sequence).map_err(|e| e.into())?),
+            true => Some(*T::decode(sequence).map_err(|err| err.into())?),
             false => None,
         };
 

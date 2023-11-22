@@ -510,7 +510,15 @@ impl BFieldCodecDeriveBuilder {
                 }
                 let decoded =
                     *<#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
-                        ::decode(&sequence[..len])?;
+                        ::decode(&sequence[..len]).map_err(|err|
+                            -> Box<
+                                    dyn ::std::error::Error
+                                    + ::core::marker::Send
+                                    + ::core::marker::Sync
+                            > {
+                                err.into()
+                            }
+                        )?;
                 (decoded, &sequence[len..])
             };
         }
@@ -596,6 +604,14 @@ impl BFieldCodecDeriveBuilder {
                             *<#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
                                 ::decode(
                                     &sequence[..len]
+                                ).map_err(|err|
+                                    -> Box<
+                                            dyn ::std::error::Error
+                                            + ::core::marker::Send
+                                            + ::core::marker::Sync
+                                    > {
+                                        err.into()
+                                    }
                                 )?;
                         (decoded, &sequence[len..])
                     };
