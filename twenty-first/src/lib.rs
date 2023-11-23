@@ -15,3 +15,6 @@ pub mod utils;
 // See also:
 // https://github.com/bkchr/proc-macro-crate/issues/2#issuecomment-572914520
 extern crate self as twenty_first;
+
+// re-export crates used in our public API
+pub use leveldb;
