@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::shared_math::digest::Digest;
 use crate::util_types::level_db::DB;
@@ -12,7 +12,7 @@ use crate::util_types::{algebraic_hasher::AlgebraicHasher, mmr::archival_mmr::Ar
 pub fn get_empty_rustyleveldb_ammr<H: AlgebraicHasher>() -> ArchivalMmr<H, RustyLevelDbVec<Digest>>
 {
     let db = DB::open_new_test_database(true, None).unwrap();
-    let pv = RustyLevelDbVec::new(Arc::new(Mutex::new(db)), 0, "AMMR for unit tests");
+    let pv = RustyLevelDbVec::new(Arc::new(db), 0, "AMMR for unit tests");
     ArchivalMmr::new(pv)
 }
 

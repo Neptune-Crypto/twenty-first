@@ -318,7 +318,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H, RustyLevelDbVec<Digest>> {
 
 #[cfg(test)]
 mod mmr_test {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     use super::*;
     use crate::shared_math::other::random_elements;
@@ -1030,7 +1030,7 @@ mod mmr_test {
         type H = blake3::Hasher;
 
         let db = DB::open_new_test_database(true, None).unwrap();
-        let db = Arc::new(Mutex::new(db));
+        let db = Arc::new(db);
         let persistent_vec_0 = RustyLevelDbVec::new(db.clone(), 0, "archival MMR for unit tests");
         let mut ammr0: ArchivalMmr<H, RustyLevelDbVec<Digest>> = ArchivalMmr::new(persistent_vec_0);
         let persistent_vec_1 = RustyLevelDbVec::new(db.clone(), 1, "archival MMR for unit tests");
@@ -1042,33 +1042,27 @@ mod mmr_test {
         let digest1: Digest = random();
         ammr1.append(digest1);
         // Verify that DB is still empty
-        let db_lock = db.lock().unwrap();
-        let mut db_iter = db_lock.db.iter(&ReadOptions::new());
+        let mut db_iter = db.db.iter(&ReadOptions::new());
         assert!(db_iter.next().is_none());
-        drop(db_lock);
 
         let mut write_batch = WriteBatch::new();
         ammr0.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let db_lock2 = db.lock().unwrap();
-        let mut db_iter2 = db_lock2.db.iter(&ReadOptions::new());
+        let mut db_iter2 = db.db.iter(&ReadOptions::new());
         assert!(db_iter2.next().is_none());
-        drop(db_lock2);
 
         ammr1.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let db_lock3 = db.lock().unwrap();
-        let mut db_iter3 = db_lock3.db.iter(&ReadOptions::new());
+        let mut db_iter3 = db.db.iter(&ReadOptions::new());
         assert!(db_iter3.next().is_none());
 
-        db_lock3.write(&WriteOptions::new(), &write_batch).unwrap();
+        db.write(&WriteOptions::new(), &write_batch).unwrap();
 
         // Verify that DB is not empty
-        let mut db_iter4 = db_lock3.db.iter(&ReadOptions::new());
+        let mut db_iter4 = db.db.iter(&ReadOptions::new());
         assert!(db_iter4.next().is_some());
-        drop(db_lock3);
 
         assert_eq!(digest0, ammr0.get_leaf(0));
         assert_eq!(digest1, ammr1.get_leaf(0));
