@@ -317,8 +317,9 @@ impl BFieldCodecDeriveBuilder {
             .map(|(field_name, field_type)| {
                 quote! {
                     let #field_name:
-                        Vec<::twenty_first::shared_math::b_field_element::BFieldElement> =
-                            self.#field_name.encode();
+                        ::std::vec::Vec<
+                            ::twenty_first::shared_math::b_field_element::BFieldElement
+                        > = self.#field_name.encode();
                     if <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
                         ::static_length().is_none() {
                         elements.push(
@@ -350,8 +351,9 @@ impl BFieldCodecDeriveBuilder {
             .map(|((idx, field_type), field_name)| {
                 quote! {
                     let #field_name:
-                        Vec<::twenty_first::shared_math::b_field_element::BFieldElement> =
-                            self.#idx.encode();
+                        ::std::vec::Vec<
+                            ::twenty_first::shared_math::b_field_element::BFieldElement
+                        > = self.#idx.encode();
                     if <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
                         ::static_length().is_none() {
                         elements.push(
@@ -406,7 +408,7 @@ impl BFieldCodecDeriveBuilder {
                 quote::format_ident!("variant_{}_field_{}_encoding", variant_index, field_index);
             quote! {
                 let #field_encoding:
-                    Vec<::twenty_first::shared_math::b_field_element::BFieldElement> =
+                    ::std::vec::Vec<::twenty_first::shared_math::b_field_element::BFieldElement> =
                         #field_name.encode();
                 if <#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
                     ::static_length().is_none() {
@@ -444,7 +446,7 @@ impl BFieldCodecDeriveBuilder {
             if !sequence.is_empty() {
                 return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
             }
-            ::core::result::Result::Ok(Box::new(Self))
+            ::core::result::Result::Ok(::std::boxed::Box::new(Self))
         };
     }
 
@@ -474,7 +476,7 @@ impl BFieldCodecDeriveBuilder {
             if !sequence.is_empty() {
                 return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
             }
-            ::core::result::Result::Ok(Box::new(Self {
+            ::core::result::Result::Ok(::std::boxed::Box::new(Self {
                 #(#included_field_names,)*
                 #(#ignored_field_names: ::core::default::Default::default(),)*
             }))
@@ -484,9 +486,9 @@ impl BFieldCodecDeriveBuilder {
     fn build_decode_function_body_for_struct_with_unnamed_fields(&mut self) {
         let sequence_too_long_error = self.error_builder.sequence_too_long();
 
-        let field_names: Vec<_> = (0..self.unnamed_fields.len())
+        let field_names = (0..self.unnamed_fields.len())
             .map(|i| quote::format_ident!("field_value_{}", i))
-            .collect();
+            .collect::<Vec<_>>();
         let decode_statements = field_names
             .iter()
             .zip(self.unnamed_fields.iter())
@@ -501,7 +503,7 @@ impl BFieldCodecDeriveBuilder {
             if !sequence.is_empty() {
                 return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
             }
-            ::core::result::Result::Ok(Box::new(Self ( #(#field_names,)* )))
+            ::core::result::Result::Ok(::std::boxed::Box::new(Self ( #(#field_names,)* )))
         };
     }
 
@@ -536,7 +538,7 @@ impl BFieldCodecDeriveBuilder {
                 let decoded =
                     *<#field_type as ::twenty_first::shared_math::bfield_codec::BFieldCodec>
                         ::decode(&sequence[..len]).map_err(|err|
-                            -> Box<
+                            -> ::std::boxed::Box<
                                     dyn ::std::error::Error
                                     + ::core::marker::Send
                                     + ::core::marker::Sync
@@ -591,7 +593,7 @@ impl BFieldCodecDeriveBuilder {
                 if !sequence.is_empty() {
                     return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
                 }
-                ::core::result::Result::Ok(Box::new(Self::#variant_name))
+                ::core::result::Result::Ok(::std::boxed::Box::new(Self::#variant_name))
             };
         }
 
@@ -631,7 +633,7 @@ impl BFieldCodecDeriveBuilder {
                                 ::decode(
                                     &sequence[..len]
                                 ).map_err(|err|
-                                    -> Box<
+                                    -> ::std::boxed::Box<
                                             dyn ::std::error::Error
                                             + ::core::marker::Send
                                             + ::core::marker::Sync
@@ -654,8 +656,8 @@ impl BFieldCodecDeriveBuilder {
             if !sequence.is_empty() {
                 return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
             }
-            core::result::Result::Ok(
-                Box::new(Self::#variant_name ( #( #field_names , )* ))
+            ::core::result::Result::Ok(
+                ::std::boxed::Box::new(Self::#variant_name ( #( #field_names , )* ))
             )
         }
     }
@@ -757,14 +759,14 @@ impl BFieldCodecDeriveBuilder {
 
                 fn decode(
                     sequence: &[::twenty_first::shared_math::b_field_element::BFieldElement],
-                ) -> ::core::result::Result<Box<Self>, Self::Error> {
+                ) -> ::core::result::Result<::std::boxed::Box<Self>, Self::Error> {
                     #decode_function_body
                 }
 
-                fn encode(&self) -> Vec<
+                fn encode(&self) -> ::std::vec::Vec<
                     ::twenty_first::shared_math::b_field_element::BFieldElement
                 > {
-                    let mut elements = Vec::new();
+                    let mut elements = ::std::vec::Vec::new();
                     #(#encode_statements)*
                     elements
                 }
@@ -985,7 +987,7 @@ impl BFieldCodecErrorEnumBuilder {
 
         let variant_name = quote::format_ident!("InnerDecodingFailure");
         let variant_type = quote! {
-            #variant_name(Box<
+            #variant_name(::std::boxed::Box<
                     dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync
                 >
             )
@@ -1073,12 +1075,12 @@ impl BFieldCodecErrorEnumBuilder {
                     }
                 }
             }
-            impl ::core::convert::From<Box<
+            impl ::core::convert::From<::std::boxed::Box<
                 dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync
             >>
             for #error_enum_name
             {
-                fn from(err: Box<
+                fn from(err: ::std::boxed::Box<
                     dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync
                 >)
                 -> Self {
