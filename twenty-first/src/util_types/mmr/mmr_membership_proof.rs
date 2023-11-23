@@ -1195,18 +1195,18 @@ mod mmr_membership_proof_test {
         assert!(!mps
             .iter()
             .zip_eq(specified_leafs.iter())
-            .all(|(mp, (_, digest))| mp.verify(&mmra.get_peaks(), digest, mmra.count_leaves()).0));
+            .all(|(mp, (_, digest))| mp.verify(&mmra.get_peaks(), *digest, mmra.count_leaves()).0));
         MmrMembershipProof::batch_update_from_append(
             &mut mps.iter_mut().collect_vec(),
             original_leaf_count,
-            &new_leaf,
+            new_leaf,
             &old_peaks,
         );
 
         assert!(mps
             .iter()
             .zip_eq(specified_leafs.iter())
-            .all(|(mp, (_, digest))| mp.verify(&mmra.get_peaks(), digest, mmra.count_leaves()).0));
+            .all(|(mp, (_, digest))| mp.verify(&mmra.get_peaks(), *digest, mmra.count_leaves()).0));
     }
 
     #[test]

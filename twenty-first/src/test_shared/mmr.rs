@@ -47,7 +47,6 @@ pub fn mmra_with_mps<H: AlgebraicHasher>(
     leaf_count: u64,
     specified_leafs: Vec<(u64, Digest)>,
 ) -> (MmrAccumulator<H>, Vec<MmrMembershipProof<H>>) {
-    // Assert unique specified leafs
     assert!(
         has_unique_elements(specified_leafs.iter().map(|x| x.0)),
         "Specified leaf indices must be unique"
@@ -76,11 +75,9 @@ pub fn mmra_with_mps<H: AlgebraicHasher>(
         derivable_node_values.insert(node_index_in_path, first_acc_hash);
         if first_mp.authentication_path.len() > height {
             if right_lineage_length_from_node_index(node_index_in_path) != 0 {
-                first_acc_hash =
-                    H::hash_pair(&first_mp.authentication_path[height], &first_acc_hash);
+                first_acc_hash = H::hash_pair(first_mp.authentication_path[height], first_acc_hash);
             } else {
-                first_acc_hash =
-                    H::hash_pair(&first_acc_hash, &first_mp.authentication_path[height]);
+                first_acc_hash = H::hash_pair(first_acc_hash, first_mp.authentication_path[height]);
             }
         }
     }
@@ -90,7 +87,7 @@ pub fn mmra_with_mps<H: AlgebraicHasher>(
 
     let mut all_ap_elements: HashMap<u64, Digest> = original_node_indices
         .into_iter()
-        .zip_eq(first_mp.authentication_path.clone().into_iter())
+        .zip_eq(first_mp.authentication_path.clone())
         .collect();
     let mut all_mps = vec![first_mp];
     let mut all_leaves = vec![first_specified_digest];
@@ -116,11 +113,11 @@ pub fn mmra_with_mps<H: AlgebraicHasher>(
         }
 
         let new_peaks = shared_basic::calculate_new_peaks_from_leaf_mutation::<H>(
-            &peaks, &new_leaf, leaf_count, &new_mp,
+            &peaks, new_leaf, leaf_count, &new_mp,
         );
-        assert!(new_mp.verify(&new_peaks, &new_leaf, leaf_count).0);
+        assert!(new_mp.verify(&new_peaks, new_leaf, leaf_count).0);
         for (j, mp) in all_mps.iter().enumerate() {
-            assert!(mp.verify(&peaks, &all_leaves[j], leaf_count).0);
+            assert!(mp.verify(&peaks, all_leaves[j], leaf_count).0);
         }
         let mutated = MmrMembershipProof::batch_update_from_batch_leaf_mutation(
             &mut all_mps.iter_mut().collect_vec(),
@@ -136,7 +133,7 @@ pub fn mmra_with_mps<H: AlgebraicHasher>(
         }
 
         for (j, mp) in all_mps.iter().enumerate() {
-            assert!(mp.verify(&new_peaks, &all_leaves[j], leaf_count).0);
+            assert!(mp.verify(&new_peaks, all_leaves[j], leaf_count).0);
         }
 
         // Update derivable node values
@@ -148,9 +145,9 @@ pub fn mmra_with_mps<H: AlgebraicHasher>(
             }
             derivable_node_values.insert(node_index_in_path, acc_hash);
             if right_lineage_length_from_node_index(node_index_in_path) != 0 {
-                acc_hash = H::hash_pair(&new_mp.authentication_path[height], &acc_hash);
+                acc_hash = H::hash_pair(new_mp.authentication_path[height], acc_hash);
             } else {
-                acc_hash = H::hash_pair(&acc_hash, &new_mp.authentication_path[height]);
+                acc_hash = H::hash_pair(acc_hash, new_mp.authentication_path[height]);
             }
         }
 
@@ -198,7 +195,7 @@ mod shared_tests_tests {
         for leaf_count in 1..10 {
             for index in 0..leaf_count {
                 let (mmra, mps) = mmra_with_mps::<H>(leaf_count, vec![(index, some)]);
-                assert!(mps[0].verify(&mmra.get_peaks(), &some, leaf_count).0);
+                assert!(mps[0].verify(&mmra.get_peaks(), some, leaf_count).0);
             }
         }
 
@@ -213,8 +210,8 @@ mod shared_tests_tests {
                         leaf_count,
                         vec![(first_index, some), (second_index, other)],
                     );
-                    assert!(mps[0].verify(&mmra.get_peaks(), &some, leaf_count).0);
-                    assert!(mps[1].verify(&mmra.get_peaks(), &other, leaf_count).0);
+                    assert!(mps[0].verify(&mmra.get_peaks(), some, leaf_count).0);
+                    assert!(mps[1].verify(&mmra.get_peaks(), other, leaf_count).0);
                 }
             }
         }
@@ -224,7 +221,7 @@ mod shared_tests_tests {
             let specifications = (0..leaf_count).map(|i| (i, random())).collect_vec();
             let (mmra, mps) = mmra_with_mps::<H>(leaf_count, specifications.clone());
             for (mp, leaf) in mps.iter().zip(specifications.iter().map(|x| x.1)) {
-                assert!(mp.verify(&mmra.get_peaks(), &leaf, leaf_count).0);
+                assert!(mp.verify(&mmra.get_peaks(), leaf, leaf_count).0);
             }
         }
     }
@@ -239,12 +236,12 @@ mod shared_tests_tests {
         let (mmra, mps) = mmra_with_mps::<H>(32, vec![(12, some_digest), (14, other_digest)]);
         assert!(
             mps[0]
-                .verify(&mmra.get_peaks(), &some_digest, mmra.count_leaves())
+                .verify(&mmra.get_peaks(), some_digest, mmra.count_leaves())
                 .0
         );
         assert!(
             mps[1]
-                .verify(&mmra.get_peaks(), &other_digest, mmra.count_leaves())
+                .verify(&mmra.get_peaks(), other_digest, mmra.count_leaves())
                 .0
         );
     }
@@ -269,7 +266,7 @@ mod shared_tests_tests {
                 let (mmra, mps) = mmra_with_mps::<H>(leaf_count, specified_leafs.clone());
 
                 for (mp, leaf) in mps.iter().zip_eq(specified_leafs.iter().map(|x| x.1)) {
-                    assert!(mp.verify(&mmra.get_peaks(), &leaf, leaf_count).0);
+                    assert!(mp.verify(&mmra.get_peaks(), leaf, leaf_count).0);
                 }
             }
         }
@@ -294,7 +291,7 @@ mod shared_tests_tests {
         let (mmra, mps) = mmra_with_mps::<H>(leaf_count, specified_leafs.clone());
 
         for (mp, leaf) in mps.iter().zip_eq(specified_leafs.iter().map(|x| x.1)) {
-            assert!(mp.verify(&mmra.get_peaks(), &leaf, leaf_count).0);
+            assert!(mp.verify(&mmra.get_peaks(), leaf, leaf_count).0);
         }
     }
 }
