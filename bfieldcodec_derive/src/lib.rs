@@ -497,7 +497,9 @@ impl BFieldCodecDeriveBuilder {
                         ::static_length();
                 let field_has_dynamic_length = maybe_fields_static_length.is_none();
                 if sequence.is_empty() && field_has_dynamic_length {
-                    #sequence_empty_for_field_error(#field_name_as_string_literal.to_string());
+                    return ::core::result::Result::Err(
+                        #sequence_empty_for_field_error(#field_name_as_string_literal.to_string())
+                    );
                 }
                 let (len, sequence) = match maybe_fields_static_length {
                     ::core::option::Option::Some(len) => (len, sequence),
