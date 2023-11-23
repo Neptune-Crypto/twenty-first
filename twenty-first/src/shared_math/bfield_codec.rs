@@ -228,9 +228,9 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
         if T::static_length().is_none() && sequence.get(0).is_none() {
             return Err(Self::Error::MissingLengthIndicator);
         }
-        let length_of_t = match T::static_length() {
-            Some(length) => length,
-            None => sequence[0].value() as usize + 1,
+        let (length_of_t, sequence) = match T::static_length() {
+            Some(length) => (length, sequence),
+            None => (sequence[0].value() as usize, &sequence[1..]),
         };
         if sequence.len() < length_of_t {
             return Err(Self::Error::SequenceTooShort);
@@ -242,9 +242,9 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
         if S::static_length().is_none() && sequence.get(0).is_none() {
             return Err(Self::Error::MissingLengthIndicator);
         }
-        let length_of_s = match S::static_length() {
-            Some(length) => length,
-            None => sequence[0].value() as usize + 1,
+        let (length_of_s, sequence) = match S::static_length() {
+            Some(length) => (length, sequence),
+            None => (sequence[0].value() as usize, &sequence[1..]),
         };
         if sequence.len() < length_of_s {
             return Err(Self::Error::SequenceTooShort);
