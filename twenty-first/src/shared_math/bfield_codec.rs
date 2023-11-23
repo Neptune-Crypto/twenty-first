@@ -815,6 +815,54 @@ mod tests {
         use super::*;
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct UnitStruct;
+
+        #[test]
+        fn bfield_codec_derive_unit_struct_static_length() {
+            assert_eq!(Some(0), UnitStruct::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_unit_struct(test_data: BFieldCodecPropertyTestData<UnitStruct>) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct StructWithUnitStruct {
+            a: UnitStruct,
+        }
+
+        #[test]
+        fn bfield_codec_derive_struct_with_unit_struct_static_length() {
+            assert_eq!(Some(0), StructWithUnitStruct::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_struct_with_unit_struct(
+            test_data: BFieldCodecPropertyTestData<StructWithUnitStruct>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithUnitStruct {
+            A(UnitStruct),
+            B,
+        }
+
+        #[test]
+        fn bfield_codec_derive_enum_with_unit_struct_static_length() {
+            assert_eq!(Some(1), EnumWithUnitStruct::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_unit_struct(
+            test_data: BFieldCodecPropertyTestData<EnumWithUnitStruct>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructA {
             field_a: u64,
             field_b: u64,

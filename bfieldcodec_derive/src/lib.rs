@@ -2,9 +2,10 @@
 
 extern crate proc_macro;
 
+use std::collections::HashMap;
+
 use proc_macro2::TokenStream;
 use quote::quote;
-use std::collections::HashMap;
 use syn::parse_macro_input;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
@@ -47,6 +48,7 @@ pub fn bfieldcodec_derive(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 
 #[derive(Debug, Clone, Copy)]
 enum BFieldCodecDeriveType {
+    UnitStruct,
     StructWithNamedFields,
     StructWithUnnamedFields,
     Enum,
@@ -119,6 +121,10 @@ impl BFieldCodecDeriveBuilder {
     fn extract_derive_type(ast: &DeriveInput) -> BFieldCodecDeriveType {
         match &ast.data {
             syn::Data::Struct(syn::DataStruct {
+                fields: Fields::Unit,
+                ..
+            }) => BFieldCodecDeriveType::UnitStruct,
+            syn::Data::Struct(syn::DataStruct {
                 fields: Fields::Named(_),
                 ..
             }) => BFieldCodecDeriveType::StructWithNamedFields,
@@ -127,7 +133,7 @@ impl BFieldCodecDeriveBuilder {
                 ..
             }) => BFieldCodecDeriveType::StructWithUnnamedFields,
             syn::Data::Enum(_) => BFieldCodecDeriveType::Enum,
-            _ => panic!("expected a struct with named fields, with unnamed fields, or an enum"),
+            _ => panic!("expected a struct or an enum"),
         }
     }
 
@@ -263,6 +269,7 @@ impl BFieldCodecDeriveBuilder {
 
     fn build_methods(&mut self) {
         match self.derive_type {
+            BFieldCodecDeriveType::UnitStruct => self.build_methods_for_unit_struct(),
             BFieldCodecDeriveType::StructWithNamedFields => {
                 self.build_methods_for_struct_with_named_fields()
             }
@@ -271,6 +278,11 @@ impl BFieldCodecDeriveBuilder {
             }
             BFieldCodecDeriveType::Enum => self.build_methods_for_enum(),
         }
+    }
+
+    fn build_methods_for_unit_struct(&mut self) {
+        self.build_decode_function_body_for_unit_struct();
+        self.static_length_body = quote! {::core::option::Option::Some(0)};
     }
 
     fn build_methods_for_struct_with_named_fields(&mut self) {
@@ -426,6 +438,17 @@ impl BFieldCodecDeriveBuilder {
                 #( #field_encoders )*
             }
         }
+    }
+
+    fn build_decode_function_body_for_unit_struct(&mut self) {
+        let sequence_too_long_error = self.error_builder.sequence_too_long();
+
+        self.decode_function_body = quote! {
+            if !sequence.is_empty() {
+                return ::core::result::Result::Err(#sequence_too_long_error(sequence.len()));
+            }
+            ::core::result::Result::Ok(Box::new(Self))
+        };
     }
 
     fn build_decode_function_body_for_struct_with_named_fields(&mut self) {
@@ -767,10 +790,16 @@ impl BFieldCodecErrorEnumBuilder {
 
     fn build(&mut self, derive_type: BFieldCodecDeriveType) {
         match derive_type {
+            BFieldCodecDeriveType::UnitStruct => self.set_up_unit_struct_errors(),
             BFieldCodecDeriveType::StructWithNamedFields
             | BFieldCodecDeriveType::StructWithUnnamedFields => self.set_up_struct_errors(),
             BFieldCodecDeriveType::Enum => self.set_up_enum_errors(),
         }
+    }
+
+    fn set_up_unit_struct_errors(&mut self) {
+        self.register_error_sequence_too_long();
+        self.register_error_inner_decoding_failure();
     }
 
     fn set_up_struct_errors(&mut self) {
@@ -1060,5 +1089,21 @@ impl BFieldCodecErrorEnumBuilder {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use syn::parse_quote;
+
+    use super::*;
+
+    #[test]
+    fn macro_compiles_when_expanding_unit_struct() {
+        let ast = parse_quote! {
+            #[derive(BFieldCodec)]
+            struct UnitStruct;
+        };
+        let _rust_code = BFieldCodecDeriveBuilder::new(ast).build();
     }
 }
