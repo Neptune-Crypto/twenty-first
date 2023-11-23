@@ -1,5 +1,4 @@
 use arbitrary::Arbitrary;
-use itertools::Itertools;
 use proptest::prelude::*;
 use proptest_arbitrary_interop::arb;
 use test_strategy::proptest;

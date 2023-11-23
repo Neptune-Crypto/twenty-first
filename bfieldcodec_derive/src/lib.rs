@@ -704,9 +704,10 @@ impl BFieldCodecDeriveBuilder {
         self.static_length_body = quote! {
                 let variant_lengths : [::core::option::Option<usize>; #num_variants] =
                     [ #( #variant_lengths , )* ];
-                if variant_lengths.iter().all(|fl| fl.is_some() ) &&
-                    variant_lengths.iter().tuple_windows().all(|(l, r)| l.unwrap() == r.unwrap()) {
-                    variant_lengths[0]
+                if variant_lengths.iter().all(|field_len| field_len.is_some()) &&
+                    variant_lengths.iter().all(|x| x.unwrap() == variant_lengths[0].unwrap()) {
+                    // account for discriminant
+                    Some(variant_lengths[0].unwrap() + 1)
                 }
                 else {
                     None
