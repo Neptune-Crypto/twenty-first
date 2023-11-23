@@ -324,41 +324,40 @@ where
         }
     }
 
-    // domain: polynomial roots
-    pub fn fast_zerofier(domain: &[FF], primitive_root: BFieldElement, root_order: usize) -> Self {
-        debug_assert_eq!(
-            primitive_root.mod_pow_u32(root_order as u32),
-            BFieldElement::one(),
-            "Supplied element “primitive_root” must have supplied order.\
-            Supplied element was: {primitive_root:?}\
-            Supplied order was: {root_order:?}"
-        );
+    /// Extracted from `cargo bench --bench zerofier` on mjolnir.
+    const CUTOFF_POINT_FOR_FAST_ZEROFIER: usize = 200;
 
+    /// Uses the fastest version of zerofier available, depending on the size of the domain.
+    /// Should be preferred over [`Self::fast_zerofier`] and [`Self::naive_zerofier`].
+    pub fn zerofier(domain: &[FF]) -> Self {
+        if domain.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
+            return Self::naive_zerofier(domain);
+        }
+        Self::fast_zerofier(domain)
+    }
+
+    pub fn fast_zerofier(domain: &[FF]) -> Self {
+        let dedup_domain = domain.iter().copied().unique().collect::<Vec<_>>();
+        let root_order = (dedup_domain.len() + 1).next_power_of_two();
+        let primitive_root = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
+        Self::fast_zerofier_inner(&dedup_domain, primitive_root, root_order)
+    }
+
+    fn fast_zerofier_inner(
+        domain: &[FF],
+        primitive_root: BFieldElement,
+        root_order: usize,
+    ) -> Self {
         if domain.is_empty() {
             return Self::one();
         }
-
         if domain.len() == 1 {
-            return Self {
-                coefficients: vec![-domain[0], FF::one()],
-            };
+            return Self::new(vec![-domain[0], FF::one()]);
         }
 
-        // This assertion must come after above recursion-ending cases have been dealt with.
-        // Otherwise, the supplied primitive_root will (at some point) equal 1 with correct
-        // root_order = 1, incorrectly failing the assertion.
-        debug_assert_ne!(
-            primitive_root.mod_pow_u32((root_order / 2) as u32),
-            BFieldElement::one(),
-            "Supplied element “primitive_root” must be primitive root of supplied order.\
-            Supplied element was: {primitive_root:?}\
-            Supplied order was: {root_order:?}"
-        );
-
-        let half = domain.len() / 2;
-
-        let left = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
-        let right = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+        let mid_point = domain.len() / 2;
+        let left = Self::fast_zerofier_inner(&domain[..mid_point], primitive_root, root_order);
+        let right = Self::fast_zerofier_inner(&domain[mid_point..], primitive_root, root_order);
         Self::fast_multiply(&left, &right, primitive_root, root_order)
     }
 
@@ -378,8 +377,8 @@ where
 
         let half = domain.len() / 2;
 
-        let left_zerofier = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
-        let right_zerofier = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+        let left_zerofier = Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
+        let right_zerofier = Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
 
         let mut left = (self.clone() % left_zerofier).fast_evaluate(
             &domain[..half],
@@ -427,8 +426,8 @@ where
 
         let half = domain.len() / 2;
 
-        let left_zerofier = Self::fast_zerofier(&domain[..half], primitive_root, root_order);
-        let right_zerofier = Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+        let left_zerofier = Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
+        let right_zerofier = Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
 
         let left_offset: Vec<FF> =
             Self::fast_evaluate(&right_zerofier, &domain[..half], primitive_root, root_order);
@@ -526,7 +525,7 @@ where
             Some(z) => z.to_owned(),
             None => {
                 let left_zerofier =
-                    Self::fast_zerofier(&domain[..half], primitive_root, root_order);
+                    Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
                 zerofier_dictionary.insert(left_key, left_zerofier.clone());
                 left_zerofier
             }
@@ -536,7 +535,7 @@ where
             Some(z) => z.to_owned(),
             None => {
                 let right_zerofier =
-                    Self::fast_zerofier(&domain[half..], primitive_root, root_order);
+                    Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
                 zerofier_dictionary.insert(right_key, right_zerofier.clone());
                 right_zerofier
             }
@@ -888,25 +887,13 @@ impl<FF: FiniteField> Polynomial<FF> {
         p2_y_times_dx / dx
     }
 
-    pub fn zerofier(domain: &[FF]) -> Self {
-        if domain.is_empty() {
-            return Self {
-                coefficients: vec![FF::one()],
-            };
-        }
-        let mut zerofier_array = vec![FF::zero(); domain.len() + 1];
-        zerofier_array[0] = FF::one();
-        let mut num_coeffs = 1;
-        for &d in domain.iter() {
-            for k in (1..num_coeffs + 1).rev() {
-                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
-            }
-            zerofier_array[0] = -d * zerofier_array[0];
-            num_coeffs += 1;
-        }
-        Self {
-            coefficients: zerofier_array,
-        }
+    pub fn naive_zerofier(domain: &[FF]) -> Self {
+        domain
+            .iter()
+            .unique()
+            .map(|&r| Self::new(vec![-r, FF::one()]))
+            .reduce(|accumulator, linear_poly| accumulator * linear_poly)
+            .unwrap_or_else(Self::one)
     }
 
     // Slow square implementation that does not use NTT
@@ -1778,27 +1765,30 @@ mod test_polynomials {
     }
 
     #[proptest(cases = 50)]
-    fn zerofier_and_fast_zerofier_are_identical(
-        #[strategy(..4usize)] order_surplus: usize,
+    fn naive_zerofier_and_fast_zerofier_are_identical(
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
     ) {
-        let root_order = (domain.len() + 1).next_power_of_two() * (1 << order_surplus);
-        let omega = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        let zerofier = Polynomial::zerofier(&domain);
-        let fast_zerofier = Polynomial::fast_zerofier(&domain, omega, root_order);
+        let zerofier = Polynomial::naive_zerofier(&domain);
+        let fast_zerofier = Polynomial::fast_zerofier(&domain);
         prop_assert_eq!(zerofier, fast_zerofier);
     }
 
     #[proptest(cases = 50)]
+    fn zerofier_and_naive_zerofier_are_identical(
+        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+    ) {
+        let zerofier = Polynomial::zerofier(&domain);
+        let naive_zerofier = Polynomial::naive_zerofier(&domain);
+        prop_assert_eq!(zerofier, naive_zerofier);
+    }
+
+    #[proptest(cases = 50)]
     fn zerofier_is_zero_only_on_domain(
-        #[strategy(..4usize)] order_surplus: usize,
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
         #[filter(#out_of_domain_points.iter().all(|p| !#domain.contains(p)))]
         out_of_domain_points: Vec<BFieldElement>,
     ) {
-        let root_order = (domain.len() + 1).next_power_of_two() * (1 << order_surplus);
-        let omega = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        let zerofier = Polynomial::fast_zerofier(&domain, omega, root_order);
+        let zerofier = Polynomial::zerofier(&domain);
         for point in domain {
             prop_assert_eq!(BFieldElement::zero(), zerofier.evaluate(&point));
         }
@@ -1809,9 +1799,7 @@ mod test_polynomials {
 
     #[proptest]
     fn zerofier_has_leading_coefficient_one(domain: Vec<BFieldElement>) {
-        let root_order = (domain.len() + 1).next_power_of_two();
-        let omega = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        let zerofier = Polynomial::fast_zerofier(&domain, omega, root_order);
+        let zerofier = Polynomial::zerofier(&domain);
         prop_assert_eq!(
             BFieldElement::one(),
             zerofier.leading_coefficient().unwrap()
