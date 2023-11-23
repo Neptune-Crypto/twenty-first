@@ -1,4 +1,5 @@
 use arbitrary::Arbitrary;
+use itertools::Itertools;
 use proptest::prelude::*;
 use proptest_arbitrary_interop::arb;
 use test_strategy::proptest;
@@ -45,5 +46,19 @@ enum BFieldCodecTestEnumA {
 fn integration_test_enum_a(#[strategy(arb())] test_enum: BFieldCodecTestEnumA) {
     let encoding = test_enum.encode();
     let decoding = *BFieldCodecTestEnumA::decode(&encoding).unwrap();
+    prop_assert_eq!(test_enum, decoding);
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+enum BFieldCodecTestEnumB {
+    A(u32),
+    B(XFieldElement),
+    C(Vec<(u64, Digest)>),
+}
+
+#[proptest]
+fn integration_test_enum_b(#[strategy(arb())] test_enum: BFieldCodecTestEnumB) {
+    let encoding = test_enum.encode();
+    let decoding = *BFieldCodecTestEnumB::decode(&encoding).unwrap();
     prop_assert_eq!(test_enum, decoding);
 }
