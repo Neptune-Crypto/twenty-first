@@ -25,10 +25,10 @@ pub trait DbTable<ParentKey, ParentValue> {
 
 pub trait StorageReader<ParentKey, ParentValue> {
     /// Return multiple values from storage, in the same order as the input keys
-    fn get_many(&mut self, keys: &[ParentKey]) -> Vec<Option<ParentValue>>;
+    fn get_many(&self, keys: &[ParentKey]) -> Vec<Option<ParentValue>>;
 
     /// Return a single value from storage
-    fn get(&mut self, key: ParentKey) -> Option<ParentValue>;
+    fn get(&self, key: ParentKey) -> Option<ParentValue>;
 }
 
 pub enum VecWriteOperation<Index, T> {
@@ -38,7 +38,7 @@ pub enum VecWriteOperation<Index, T> {
 }
 
 pub struct DbtVec<ParentKey, ParentValue, Index, T> {
-    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>>,
+    reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
     current_length: Option<Index>,
     key_prefix: u8,
     write_queue: VecDeque<VecWriteOperation<Index, T>>,
@@ -63,8 +63,6 @@ where
     /// Return the length at the last write to disk
     fn persisted_length(&self) -> Option<Index> {
         self.reader
-            .lock()
-            .expect("Could not get lock on DbtVec object (persisted_length).")
             .get(Self::get_length_key(self.key_prefix))
             .map(|v| v.into())
     }
@@ -77,7 +75,7 @@ where
     }
 
     pub fn new(
-        reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>>,
+        reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
         key_prefix: u8,
         name: &str,
     ) -> Self {
@@ -187,17 +185,12 @@ where
 
         // then try persistent storage
         let key: ParentKey = lock.get_index_key(index);
-        let val = lock
-            .reader
-            .lock()
-            .expect("Could not get lock on DbtVec object")
-            .get(key)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Element with index {index} does not exist in {}. This should not happen",
-                    lock.name
-                )
-            });
+        let val = lock.reader.get(key).unwrap_or_else(|| {
+            panic!(
+                "Element with index {index} does not exist in {}. This should not happen",
+                lock.name
+            )
+        });
         val.into()
     }
 
@@ -242,16 +235,12 @@ where
             return sort_to_match_requested_index_order(fetched_elements);
         }
 
-        let mut db_reader = self_lock
-            .reader
-            .lock()
-            .expect("Could not get lock on StorageReader object (get_many 3).");
-
         let keys_for_indices_not_in_cache = indices_of_elements_not_in_cache
             .iter()
             .map(|&(_, index)| self_lock.get_index_key(index))
             .collect_vec();
-        let elements_fetched_from_db = db_reader
+        let elements_fetched_from_db = self_lock
+            .reader
             .get_many(&keys_for_indices_not_in_cache)
             .into_iter()
             .map(|x| x.unwrap().into());
@@ -295,11 +284,8 @@ where
             .iter()
             .map(|x| self_lock.get_index_key(*x))
             .collect_vec();
-        let mut db_reader = self_lock
+        let elements_fetched_from_db = self_lock
             .reader
-            .lock()
-            .expect("Could not get lock on StorageReader object");
-        let elements_fetched_from_db = db_reader
             .get_many(&keys)
             .into_iter()
             .map(|x| x.unwrap().into());
@@ -383,12 +369,7 @@ where
         } else {
             // then try persistent storage
             let key = self_lock.get_index_key(current_length);
-            self_lock
-                .reader
-                .lock()
-                .expect("Could not get lock on DbtVec object.")
-                .get(key)
-                .map(|value| value.into())
+            self_lock.reader.get(key).map(|value| value.into())
         }
     }
 
@@ -467,12 +448,7 @@ where
     }
 
     fn restore_or_new(&mut self) {
-        if let Some(length) = self
-            .reader
-            .lock()
-            .expect("Could not get lock on DbtVec object (restore_or_new).")
-            .get(Self::get_length_key(self.key_prefix))
-        {
+        if let Some(length) = self.reader.get(Self::get_length_key(self.key_prefix)) {
             self.current_length = Some(length.into());
         } else {
             self.current_length = Some(0);
@@ -499,7 +475,7 @@ pub struct DbtSingleton<ParentKey, ParentValue, T> {
     current_value: T,
     old_value: T,
     key: ParentKey,
-    reader: Arc<Mutex<dyn StorageReader<ParentKey, ParentValue> + Sync + Send>>,
+    reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Sync + Send>,
 }
 
 impl<ParentKey, ParentValue, T> StorageSingleton<T>
@@ -541,12 +517,7 @@ where
     }
 
     fn restore_or_new(&mut self) {
-        self.current_value = match self
-            .reader
-            .lock()
-            .expect("Could not get lock on DbTable object (restore_or_new).")
-            .get(self.key.clone())
-        {
+        self.current_value = match self.reader.get(self.key.clone()) {
             Some(value) => value.into(),
             None => T::default(),
         }
@@ -555,7 +526,7 @@ where
 
 pub struct DbtSchema<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue>> {
     pub tables: Vec<Arc<Mutex<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>>,
-    pub reader: Arc<Mutex<Reader>>,
+    pub reader: Arc<Reader>,
 }
 
 impl<
@@ -691,14 +662,14 @@ pub struct RustyReader {
 }
 
 impl StorageReader<RustyKey, RustyValue> for RustyReader {
-    fn get(&mut self, key: RustyKey) -> Option<RustyValue> {
+    fn get(&self, key: RustyKey) -> Option<RustyValue> {
         self.db
             .get(&ReadOptions::new(), &key.0)
             .unwrap()
             .map(RustyValue)
     }
 
-    fn get_many(&mut self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
+    fn get_many(&self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
         let mut res = vec![];
         for key in keys {
             res.push(
@@ -762,7 +733,7 @@ impl SimpleRustyStorage {
         };
         let schema = DbtSchema::<RustyKey, RustyValue, SimpleRustyReader> {
             tables: Vec::new(),
-            reader: Arc::new(Mutex::new(reader)),
+            reader: Arc::new(reader),
         };
         Self {
             db: db_pointer,
@@ -776,14 +747,14 @@ struct SimpleRustyReader {
 }
 
 impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
-    fn get(&mut self, key: RustyKey) -> Option<RustyValue> {
+    fn get(&self, key: RustyKey) -> Option<RustyValue> {
         self.db
             .get(&ReadOptions::new(), &key.0)
             .unwrap()
             .map(RustyValue)
     }
 
-    fn get_many(&mut self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
+    fn get_many(&self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
         keys.iter()
             .map(|key| {
                 self.db
