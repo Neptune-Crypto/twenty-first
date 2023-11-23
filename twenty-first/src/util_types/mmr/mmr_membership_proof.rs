@@ -107,7 +107,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
     }
 
     /// Return the node indices for the hash values that can be derived from this proof
-    fn get_direct_path_indices(&self) -> Vec<u64> {
+    pub(crate) fn get_direct_path_indices(&self) -> Vec<u64> {
         let mut node_index = shared_advanced::leaf_index_to_node_index(self.leaf_index);
         let mut node_indices = vec![node_index];
         for _ in 0..self.authentication_path.len() {
@@ -583,6 +583,7 @@ mod mmr_membership_proof_test {
     use crate::shared_math::digest::Digest;
     use crate::shared_math::other::random_elements;
     use crate::shared_math::tip5::Tip5;
+    use crate::test_shared;
     use crate::test_shared::mmr::get_rustyleveldb_ammr_from_digests;
     use crate::util_types::mmr::archival_mmr::ArchivalMmr;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
@@ -1163,6 +1164,49 @@ mod mmr_membership_proof_test {
                 }
             }
         }
+    }
+
+    #[test]
+    fn update_membership_proof_from_append_simple_with_bit_mmra() {
+        type H = blake3::Hasher;
+        let original_leaf_count = (1 << 35) + (1 << 7) - 1;
+
+        let specified_count = 40;
+        let mut rng = rand::thread_rng();
+        let mut specified_indices: HashSet<u64> = HashSet::default();
+        for _ in 0..specified_count {
+            specified_indices.insert(rng.gen_range(0..original_leaf_count));
+        }
+
+        // Ensure that at least *one* MP will be mutated upon insertion of a new leaf
+        specified_indices.insert(original_leaf_count - 1);
+
+        let collected_values = specified_indices.len();
+        let specified_leafs: Vec<(u64, Digest)> = specified_indices
+            .into_iter()
+            .zip_eq(random_elements(collected_values))
+            .collect_vec();
+        let (mut mmra, mut mps) =
+            test_shared::mmr::mmra_with_mps::<H>(original_leaf_count, specified_leafs.clone());
+
+        let new_leaf: Digest = random();
+        let old_peaks = mmra.get_peaks();
+        mmra.append(new_leaf);
+        assert!(!mps
+            .iter()
+            .zip_eq(specified_leafs.iter())
+            .all(|(mp, (_, digest))| mp.verify(&mmra.get_peaks(), *digest, mmra.count_leaves()).0));
+        MmrMembershipProof::batch_update_from_append(
+            &mut mps.iter_mut().collect_vec(),
+            original_leaf_count,
+            new_leaf,
+            &old_peaks,
+        );
+
+        assert!(mps
+            .iter()
+            .zip_eq(specified_leafs.iter())
+            .all(|(mp, (_, digest))| mp.verify(&mmra.get_peaks(), *digest, mmra.count_leaves()).0));
     }
 
     #[test]
