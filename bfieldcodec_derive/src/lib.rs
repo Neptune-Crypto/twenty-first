@@ -136,7 +136,7 @@ impl BFieldCodecDeriveBuilder {
             syn::Data::Struct(syn::DataStruct {
                 fields: Fields::Named(fields),
                 ..
-            }) => fields.named.iter().cloned().collect::<Vec<_>>(),
+            }) => fields.named.iter().rev().cloned().collect::<Vec<_>>(),
             _ => vec![],
         }
     }
@@ -337,6 +337,7 @@ impl BFieldCodecDeriveBuilder {
             .iter()
             .zip(field_types.clone())
             .zip(field_names.clone())
+            .rev()
             .map(|((idx, field_type), field_name)| {
                 quote! {
                     let #field_name:
@@ -388,7 +389,8 @@ impl BFieldCodecDeriveBuilder {
             };
         }
 
-        let field_encoders = associated_data.iter().enumerate().map(|(field_index, ad)| {
+        let reversed_enumerated_associated_data = associated_data.iter().enumerate().rev();
+        let field_encoders = reversed_enumerated_associated_data.map(|(field_index, ad)| {
             let field_name = self.enum_variant_field_name(variant_index, field_index);
             let field_type = ad.ty.clone();
             let field_encoding =
@@ -468,6 +470,7 @@ impl BFieldCodecDeriveBuilder {
         let decode_statements = field_names
             .iter()
             .zip(self.unnamed_fields.iter())
+            .rev()
             .map(|(field_name, field)| {
                 self.generate_decode_statement_for_field(field_name, &field.ty)
             })
@@ -575,6 +578,7 @@ impl BFieldCodecDeriveBuilder {
         let field_decoders = associated_data
             .iter()
             .enumerate()
+            .rev()
             .map(|(field_index, field)| {
                 let field_type = field.ty.clone();
                 let field_name = self.enum_variant_field_name(variant_index, field_index);

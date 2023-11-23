@@ -224,20 +224,6 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
     type Error = BFieldCodecError;
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
-        // decode T
-        if T::static_length().is_none() && sequence.get(0).is_none() {
-            return Err(Self::Error::MissingLengthIndicator);
-        }
-        let (length_of_t, sequence) = match T::static_length() {
-            Some(length) => (length, sequence),
-            None => (sequence[0].value() as usize, &sequence[1..]),
-        };
-        if sequence.len() < length_of_t {
-            return Err(Self::Error::SequenceTooShort);
-        }
-        let (sequence_for_t, sequence) = sequence.split_at(length_of_t);
-        let t = *T::decode(sequence_for_t).map_err(|err| err.into())?;
-
         // decode S
         if S::static_length().is_none() && sequence.get(0).is_none() {
             return Err(Self::Error::MissingLengthIndicator);
@@ -252,6 +238,20 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
         let (sequence_for_s, sequence) = sequence.split_at(length_of_s);
         let s = *S::decode(sequence_for_s).map_err(|err| err.into())?;
 
+        // decode T
+        if T::static_length().is_none() && sequence.get(0).is_none() {
+            return Err(Self::Error::MissingLengthIndicator);
+        }
+        let (length_of_t, sequence) = match T::static_length() {
+            Some(length) => (length, sequence),
+            None => (sequence[0].value() as usize, &sequence[1..]),
+        };
+        if sequence.len() < length_of_t {
+            return Err(Self::Error::SequenceTooShort);
+        }
+        let (sequence_for_t, sequence) = sequence.split_at(length_of_t);
+        let t = *T::decode(sequence_for_t).map_err(|err| err.into())?;
+
         if !sequence.is_empty() {
             return Err(Self::Error::SequenceTooLong);
         }
@@ -259,18 +259,21 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
-        let mut str = vec![];
-        let encoding_of_t = self.0.encode();
+        let mut sequence = vec![];
+
         let encoding_of_s = self.1.encode();
-        if T::static_length().is_none() {
-            str.push(BFieldElement::new(encoding_of_t.len() as u64));
-        }
-        str.extend(encoding_of_t);
         if S::static_length().is_none() {
-            str.push(BFieldElement::new(encoding_of_s.len() as u64));
+            sequence.push((encoding_of_s.len() as u64).into());
         }
-        str.extend(encoding_of_s);
-        str
+        sequence.extend(encoding_of_s);
+
+        let encoding_of_t = self.0.encode();
+        if T::static_length().is_none() {
+            sequence.push((encoding_of_t.len() as u64).into());
+        }
+        sequence.extend(encoding_of_t);
+
+        sequence
     }
 
     fn static_length() -> Option<usize> {
