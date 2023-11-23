@@ -678,7 +678,21 @@ mod tests {
     }
 
     #[proptest]
-    fn test_encode_decode_tuples_static_dynamic_size(
+    fn test_encode_decode_tuples_static_dynamic_size_0(
+        test_data: BFieldCodecPropertyTestData<(u32, Vec<u32>)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_dynamic_size_1(
+        test_data: BFieldCodecPropertyTestData<(u32, Vec<u64>)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_dynamic_size_2(
         test_data: BFieldCodecPropertyTestData<(Digest, Vec<BFieldElement>)>,
     ) {
         test_data.assert_bfield_codec_properties()?;
