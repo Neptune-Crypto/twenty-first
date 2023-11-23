@@ -687,26 +687,23 @@ impl From<crate::shared_math::tip5::Digest> for RustyValue {
 }
 
 pub struct RustyReader {
-    pub db: Arc<Mutex<DB>>,
+    pub db: Arc<DB>,
 }
 
 impl StorageReader<RustyKey, RustyValue> for RustyReader {
     fn get(&mut self, key: RustyKey) -> Option<RustyValue> {
         self.db
-            .lock()
-            .expect("StorageReader for RustyWallet: could not get database lock for reading (get)")
             .get(&ReadOptions::new(), &key.0)
             .unwrap()
             .map(RustyValue)
     }
 
     fn get_many(&mut self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
-        let lock = self.db.lock().expect("Could not get lock");
-
         let mut res = vec![];
         for key in keys {
             res.push(
-                lock.get(&ReadOptions::new(), &key.0)
+                self.db
+                    .get(&ReadOptions::new(), &key.0)
                     .unwrap()
                     .map(RustyValue),
             );
@@ -722,7 +719,7 @@ impl StorageReader<RustyKey, RustyValue> for RustyReader {
 /// possible to use this struct and add to the scheme after calling
 /// new() (that's what the tests do).
 pub struct SimpleRustyStorage {
-    db: Arc<Mutex<DB>>,
+    db: Arc<DB>,
     schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
 }
 
@@ -743,8 +740,6 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
         }
 
         self.db
-            .lock()
-            .expect("Persist: could not get lock on database.")
             .write(&WriteOptions::new(), &write_batch)
             .expect("Could not persist to database.");
     }
@@ -761,7 +756,7 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
 
 impl SimpleRustyStorage {
     pub fn new(db: DB) -> Self {
-        let db_pointer = Arc::new(Mutex::new(db));
+        let db_pointer = Arc::new(db);
         let reader = SimpleRustyReader {
             db: db_pointer.clone(),
         };
@@ -777,27 +772,21 @@ impl SimpleRustyStorage {
 }
 
 struct SimpleRustyReader {
-    db: Arc<Mutex<DB>>,
+    db: Arc<DB>,
 }
 
 impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
     fn get(&mut self, key: RustyKey) -> Option<RustyValue> {
         self.db
-            .lock()
-            .expect("get: could not get lock on database (for reading)")
             .get(&ReadOptions::new(), &key.0)
             .unwrap()
             .map(RustyValue)
     }
 
     fn get_many(&mut self, keys: &[RustyKey]) -> Vec<Option<RustyValue>> {
-        let db_lock = self
-            .db
-            .lock()
-            .expect("get_many: could not get lock on database (for reading)");
         keys.iter()
             .map(|key| {
-                db_lock
+                self.db
                     .get(&ReadOptions::new(), &key.0)
                     .unwrap()
                     .map(RustyValue)

@@ -314,7 +314,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
         let cache = HashMap::new();
         Self {
             key_prefix,
-            db: db,
+            db,
             write_queue: VecDeque::default(),
             length,
             cache,
