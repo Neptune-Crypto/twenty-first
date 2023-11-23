@@ -165,6 +165,7 @@ impl BFieldCodecDeriveBuilder {
     }
 
     fn field_is_ignored(field: &Field) -> bool {
+        let field_name = field.ident.as_ref().unwrap();
         let mut relevant_attributes = field
             .attrs
             .iter()
@@ -172,18 +173,14 @@ impl BFieldCodecDeriveBuilder {
         let attribute = match relevant_attributes.clone().count() {
             0 => return false,
             1 => relevant_attributes.next().unwrap(),
-            _ => panic!("field must have at most 1 `bfield_codec` attribute"),
+            _ => panic!("field `{field_name}` must have at most 1 `bfield_codec` attribute"),
         };
-        attribute
-            .parse_nested_meta(|meta| match meta.path.get_ident() {
-                Some(ident) if ident == "ignore" => Ok(()),
-                Some(ident) => Err(meta.error(format!("Unknown identifier \"{ident}\"."))),
-                _ => Err(meta.error("Expected an identifier.")),
-            })
-            .unwrap();
-
-        // unwrap only succeeds if the attribute is `ignore`
-        true
+        let parse_ignore = attribute.parse_nested_meta(|meta| match meta.path.get_ident() {
+            Some(ident) if ident == "ignore" => Ok(()),
+            Some(ident) => panic!("unknown identifier `{ident}` for field `{field_name}`"),
+            _ => unreachable!(),
+        });
+        parse_ignore.is_ok()
     }
 
     fn build(mut self) -> TokenStream {

@@ -61,3 +61,11 @@ fn integration_test_enum_b(#[strategy(arb())] test_enum: BFieldCodecTestEnumB) {
     let decoding = *BFieldCodecTestEnumB::decode(&encoding).unwrap();
     prop_assert_eq!(test_enum, decoding);
 }
+
+#[test]
+fn try_build_various_failure_cases() {
+    let trybuild = trybuild::TestCases::new();
+    trybuild.compile_fail("trybuild/multiple_field_attributes.rs");
+    trybuild.compile_fail("trybuild/incorrect_field_attribute.rs");
+    trybuild.pass("trybuild/missing_field_attribute.rs");
+}
