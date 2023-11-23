@@ -1389,5 +1389,58 @@ mod tests {
         fn bfield_codec_derive_complex_enum(test_data: BFieldCodecPropertyTestData<ComplexEnum>) {
             test_data.assert_bfield_codec_properties()?;
         }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithUniformDataSize {
+            A(Digest),
+            B(Digest),
+            C(Digest),
+        }
+
+        #[test]
+        fn bfield_codec_derive_enum_with_uniform_data_size_derive_static_length() {
+            assert_eq!(
+                6,
+                EnumWithUniformDataSize::static_length().unwrap(),
+                "expected 1 for discriminant, 5 for digest"
+            );
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_uniform_data_size_static_len_eq_encoding_len(
+            #[strategy(arb())] test_data: EnumWithUniformDataSize,
+        ) {
+            prop_assert_eq!(
+                EnumWithUniformDataSize::static_length().unwrap(),
+                test_data.encode().len()
+            );
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_uniform_data_size(
+            test_data: BFieldCodecPropertyTestData<EnumWithUniformDataSize>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithIrregularDataSize {
+            A(u32),
+            B,
+            C(Digest),
+            D(Vec<XFieldElement>),
+        }
+
+        #[test]
+        fn bfield_codec_derive_enum_with_irregular_data_size_derive_static_length() {
+            assert!(EnumWithIrregularDataSize::static_length().is_none());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_irregular_data_size(
+            test_data: BFieldCodecPropertyTestData<EnumWithIrregularDataSize>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
     }
 }
