@@ -50,10 +50,6 @@ emojihash-rs = "0.2"
 get-size = { version = "^0.1.4", features = ["derive"] }
 keccak = "0.1.4"
 
-[[test]]
-name = "tests"
-path = "tests/tests.rs"
-
 [[bench]]
 name = "tip5"
 harness = false
