@@ -620,6 +620,16 @@ impl From<u64> for RustyKey {
 #[derive(Debug)]
 pub struct RustyValue(pub Vec<u8>);
 
+impl From<Vec<u8>> for RustyValue {
+    fn from(value: Vec<u8>) -> Self {
+        RustyValue(value)
+    }
+}
+impl From<RustyValue> for Vec<u8> {
+    fn from(value: RustyValue) -> Self {
+        value.0
+    }
+}
 impl From<RustyValue> for u64 {
     fn from(value: RustyValue) -> Self {
         u64::from_be_bytes(value.0.try_into().unwrap())
@@ -690,8 +700,8 @@ impl StorageReader<RustyKey, RustyValue> for RustyReader {
 /// possible to use this struct and add to the scheme after calling
 /// new() (that's what the tests do).
 pub struct SimpleRustyStorage {
-    db: Arc<DB>,
-    schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
+    pub db: Arc<DB>,
+    pub schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
 }
 
 impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
@@ -742,7 +752,7 @@ impl SimpleRustyStorage {
     }
 }
 
-struct SimpleRustyReader {
+pub struct SimpleRustyReader {
     db: Arc<DB>,
 }
 
