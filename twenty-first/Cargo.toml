@@ -87,5 +87,10 @@ name = "zerofier"
 harness = false
 
 [[bench]]
-name = "database"
+name = "db_leveldb"
 harness = false
+
+[[bench]]
+name = "db_dbtvec"
+harness = false
+
