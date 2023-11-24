@@ -1,7 +1,7 @@
 use divan::Bencher;
 use leveldb_sys::Compression;
 use twenty_first::leveldb::batch::{Batch, WriteBatch};
-use twenty_first::leveldb::database::cache::Cache;
+// use twenty_first::leveldb::database::cache::Cache;
 use twenty_first::leveldb::options::{Options, ReadOptions, WriteOptions};
 use twenty_first::util_types::level_db::DB;
 // use twenty_first::util_types::storage_schema::DbtVec;
@@ -64,12 +64,13 @@ fn db_options() -> Option<Options> {
 
         // default: None   --> 8MB
         // cache: None,
-        cache: Some(Cache::new(1024)),
+        cache: None,
         // note: tests put 128 bytes in each entry.
         // 100 entries = 12,800 bytes.
-        // So Cache of 1024 bytes is 8% of total data set.
-        // that seems reasonably realistic to get some
-        // hits/misses.
+        //
+        // Warning: WriteBatch.put() tends to crash
+        // when this value is Some(Cache::new(..))
+        // instead of None.
     })
 }
 
@@ -118,7 +119,6 @@ mod write_100_entries {
             write_options.sync = sync;
 
             let wb = WriteBatch::new();
-
             for i in 0..NUM_WRITE_ITEMS {
                 let _ = wb.put(&i, &value());
             }

@@ -1,7 +1,7 @@
 use divan::Bencher;
 use leveldb_sys::Compression;
 use std::sync::{Arc, Mutex};
-use twenty_first::leveldb::database::cache::Cache;
+//use twenty_first::leveldb::database::cache::Cache;
 use twenty_first::leveldb::options::Options;
 use twenty_first::util_types::level_db::DB;
 use twenty_first::util_types::storage_schema::{
@@ -64,8 +64,8 @@ fn db_options() -> Option<Options> {
         compression: Compression::No,
 
         // default: None   --> 8MB
-        // cache: None,
-        cache: Some(Cache::new(1024)),
+        cache: None,
+        // cache: Some(Cache::new(1024)),
         // note: tests put 128 bytes in each entry.
         // 100 entries = 12,800 bytes.
         // So Cache of 1024 bytes is 8% of total data set.
