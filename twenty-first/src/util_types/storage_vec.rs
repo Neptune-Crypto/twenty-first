@@ -2,6 +2,7 @@ use crate::util_types::level_db::DB;
 use itertools::Itertools;
 use leveldb::{batch::WriteBatch, options::ReadOptions};
 use serde::{de::DeserializeOwned, Serialize};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
@@ -69,7 +70,11 @@ pub enum WriteElement<T: Serialize + DeserializeOwned> {
     Pop,
 }
 
-pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
+/// This is the private impl of RustyLevelDbVec.
+///
+/// RustyLevelDbVec is a public wrapper that adds RwLock around
+/// all accesses to RustyLevelDbVecPrivate
+pub(crate) struct RustyLevelDbVecPrivate<T: Serialize + DeserializeOwned> {
     key_prefix: u8,
     db: Arc<DB>,
     write_queue: VecDeque<WriteElement<T>>,
@@ -78,7 +83,7 @@ pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
     name: String,
 }
 
-impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {
+impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecPrivate<T> {
     fn is_empty(&self) -> bool {
         self.length == 0
     }
@@ -281,7 +286,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     }
 }
 
-impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
+impl<T: Serialize + DeserializeOwned> RustyLevelDbVecPrivate<T> {
     // Return the key used to store the length of the persisted vector
     fn get_length_key(key_prefix: u8) -> [u8; 2] {
         const LENGTH_KEY: u8 = 0u8;
@@ -358,6 +363,97 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
         }
 
         self.cache.clear();
+    }
+}
+
+/// RustyLevelDbVec is a concurrency safe database-backed
+/// Vec with in memory read/write caching for all operations.
+pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
+    inner: Arc<RwLock<RustyLevelDbVecPrivate<T>>>,
+}
+
+impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {
+    fn is_empty(&self) -> bool {
+        self.deref().is_empty()
+    }
+
+    fn len(&self) -> Index {
+        self.deref().len()
+    }
+
+    fn get(&self, index: Index) -> T {
+        self.deref().get(index)
+    }
+
+    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        self.deref().get_many(indices)
+    }
+
+    /// Return all stored elements in a vector, whose index matches the StorageVec's.
+    /// It's the caller's responsibility that there is enough memory to store all elements.
+    fn get_all(&self) -> Vec<T> {
+        self.deref().get_all()
+    }
+
+    fn set(&mut self, index: Index, value: T) {
+        self.deref_mut().set(index, value)
+    }
+
+    /// set multiple elements.
+    ///
+    /// panics if key_vals contains an index not in the collection
+    ///
+    /// It is the caller's responsibility to ensure that index values are
+    /// unique.  If not, the last value with the same index will win.
+    /// For unordered collections such as HashMap, the behavior is undefined.
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+        self.deref_mut().set_many(key_vals)
+    }
+
+    fn pop(&mut self) -> Option<T> {
+        self.deref_mut().pop()
+    }
+
+    fn push(&mut self, value: T) {
+        self.deref_mut().push(value)
+    }
+}
+
+impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
+    // Return the key used to store the length of the persisted vector
+    pub fn get_length_key(key_prefix: u8) -> [u8; 2] {
+        RustyLevelDbVecPrivate::<T>::get_length_key(key_prefix)
+    }
+
+    /// Return the length at the last write to disk
+    pub fn persisted_length(&self) -> Index {
+        self.deref().persisted_length()
+    }
+
+    /// Return the level-DB key used to store the element at an index
+    pub fn get_index_key(&self, index: Index) -> [u8; 9] {
+        self.deref().get_index_key(index)
+    }
+
+    pub fn new(db: Arc<DB>, key_prefix: u8, name: &str) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(RustyLevelDbVecPrivate::<T>::new(
+                db, key_prefix, name,
+            ))),
+        }
+    }
+
+    /// Collect all added elements that have not yet bit persisted
+    pub fn pull_queue(&mut self, write_batch: &mut WriteBatch) {
+        self.deref_mut().pull_queue(write_batch)
+    }
+
+    pub(crate) fn deref(&self) -> RwLockReadGuard<'_, RustyLevelDbVecPrivate<T>> {
+        self.inner.read().unwrap()
+    }
+
+    pub(crate) fn deref_mut(&mut self) -> RwLockWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
+        self.inner.write().unwrap()
     }
 }
 
@@ -458,7 +554,7 @@ mod tests {
         assert!(db.write(&WriteOptions::new(), &write_batch).is_ok());
 
         // Sanity checks
-        assert!(persisted_vec.cache.is_empty());
+        assert!(persisted_vec.deref().cache.is_empty());
         assert_eq!(persisted_vec.len(), regular_vec.len() as u64);
 
         (persisted_vec, regular_vec, db)
@@ -546,8 +642,8 @@ mod tests {
 
         assert_eq!(3, delegated_db_vec_a.len());
         assert_eq!(0, delegated_db_vec_b.len());
-        assert_eq!(3, delegated_db_vec_a.cache.len());
-        assert!(delegated_db_vec_b.cache.is_empty());
+        assert_eq!(3, delegated_db_vec_a.deref().cache.len());
+        assert!(delegated_db_vec_b.deref().cache.is_empty());
 
         // Get all entries to write to database. Write all entries.
         assert_eq!(0, delegated_db_vec_a.persisted_length());
@@ -570,8 +666,8 @@ mod tests {
         assert_eq!(0, delegated_db_vec_b.persisted_length());
         assert_eq!(3, delegated_db_vec_a.len());
         assert_eq!(0, delegated_db_vec_b.len());
-        assert!(delegated_db_vec_a.cache.is_empty());
-        assert!(delegated_db_vec_b.cache.is_empty());
+        assert!(delegated_db_vec_a.deref().cache.is_empty());
+        assert!(delegated_db_vec_b.deref().is_empty());
     }
 
     #[test]
@@ -676,7 +772,11 @@ mod tests {
 
         let mut write_batch = WriteBatch::new();
         vec.pull_queue(&mut write_batch);
-        assert!(vec.db.write(&WriteOptions::new(), &write_batch).is_ok());
+        assert!(vec
+            .deref()
+            .db
+            .write(&WriteOptions::new(), &write_batch)
+            .is_ok());
 
         drop(vec); // this will drop (close) the Db
 
