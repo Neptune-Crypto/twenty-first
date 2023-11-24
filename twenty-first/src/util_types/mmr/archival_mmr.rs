@@ -1042,26 +1042,26 @@ mod mmr_test {
         let digest1: Digest = random();
         ammr1.append(digest1);
         // Verify that DB is still empty
-        let mut db_iter = db.db.iter(&ReadOptions::new());
+        let mut db_iter = db.iter(&ReadOptions::new());
         assert!(db_iter.next().is_none());
 
         let mut write_batch = WriteBatch::new();
         ammr0.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let mut db_iter2 = db.db.iter(&ReadOptions::new());
+        let mut db_iter2 = db.iter(&ReadOptions::new());
         assert!(db_iter2.next().is_none());
 
         ammr1.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let mut db_iter3 = db.db.iter(&ReadOptions::new());
+        let mut db_iter3 = db.iter(&ReadOptions::new());
         assert!(db_iter3.next().is_none());
 
         db.write(&WriteOptions::new(), &write_batch).unwrap();
 
         // Verify that DB is not empty
-        let mut db_iter4 = db.db.iter(&ReadOptions::new());
+        let mut db_iter4 = db.iter(&ReadOptions::new());
         assert!(db_iter4.next().is_some());
 
         assert_eq!(digest0, ammr0.get_leaf(0));

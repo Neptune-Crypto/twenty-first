@@ -667,7 +667,7 @@ mod tests {
     #[test]
     fn db_close_and_reload() {
         let db = get_test_db(false);
-        let db_path = db.path.clone();
+        let db_path = db.path().clone();
 
         let mut vec: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db, 0, "vec1");
         vec.push(1000);

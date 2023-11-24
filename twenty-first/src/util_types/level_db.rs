@@ -1,10 +1,13 @@
 use leveldb::{
     batch::{Batch, WriteBatch},
+    compaction::Compaction,
     database::comparator::Comparator,
     database::Database,
     error::Error as DbError,
+    iterator::{Iterable, Iterator, KeyIterator, ValueIterator},
     key::IntoLevelDBKey,
     options::{Options, ReadOptions, WriteOptions},
+    snapshots::{Snapshot, Snapshots},
 };
 use std::path::Path;
 
@@ -17,10 +20,14 @@ use std::path::Path;
 //  This also provides an abstraction layer in case we
 //  decide to simplify/alter the DB api a bit, or even
 //  switch crates/impls.
+//
+//  Do not add any public (mutable) fields to this struct.
+#[derive(Debug)]
 pub struct DB {
-    pub db: Database,
-    pub path: std::path::PathBuf,
-    pub destroy_db_on_drop: bool,
+    // note: these must be private and unchanged after creation.
+    db: Database, // Send + Sync
+    path: std::path::PathBuf,
+    destroy_db_on_drop: bool,
 }
 
 impl DB {
@@ -147,6 +154,16 @@ impl DB {
         self.db.delete_u8(options, key)
     }
 
+    #[inline]
+    pub fn path(&self) -> &std::path::PathBuf {
+        &self.path
+    }
+
+    #[inline]
+    pub fn destroy_db_on_drop(&self) -> bool {
+        self.destroy_db_on_drop
+    }
+
     /// Wipe the database files, if existing.
     fn destroy_db(&mut self) -> Result<(), std::io::Error> {
         match self.path.exists() {
@@ -168,8 +185,39 @@ impl Drop for DB {
 }
 
 impl Batch for DB {
+    #[inline]
     fn write(&self, options: &WriteOptions, batch: &WriteBatch) -> Result<(), DbError> {
         self.db.write(options, batch)
+    }
+}
+
+impl<'a> Compaction<'a> for DB {
+    #[inline]
+    fn compact(&self, start: &'a [u8], limit: &'a [u8]) {
+        self.db.compact(start, limit)
+    }
+}
+
+impl<'a> Iterable<'a> for DB {
+    #[inline]
+    fn iter(&'a self, options: &ReadOptions) -> Iterator<'a> {
+        self.db.iter(options)
+    }
+
+    #[inline]
+    fn keys_iter(&'a self, options: &ReadOptions) -> KeyIterator<'a> {
+        self.db.keys_iter(options)
+    }
+
+    #[inline]
+    fn value_iter(&'a self, options: &ReadOptions) -> ValueIterator<'a> {
+        self.db.value_iter(options)
+    }
+}
+
+impl Snapshots for DB {
+    fn snapshot(&self) -> Snapshot {
+        self.db.snapshot()
     }
 }
 

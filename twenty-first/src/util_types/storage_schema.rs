@@ -826,7 +826,7 @@ mod tests {
 
         // open new DB that will not be dropped on close.
         let db = DB::open_new_test_database(false, None).unwrap();
-        let db_path = db.path.clone();
+        let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         assert_eq!(2, Arc::strong_count(&rusty_storage.db));
@@ -883,7 +883,7 @@ mod tests {
     fn test_simple_vector() {
         // open new DB that will not be dropped on close.
         let db = DB::open_new_test_database(false, None).unwrap();
-        let db_path = db.path.clone();
+        let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
@@ -1393,7 +1393,7 @@ mod tests {
 
         // Open new database that will not be destroyed on close.
         let db = DB::open_new_test_database(false, None).unwrap();
-        let db_path = db.path.clone();
+        let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector1 = rusty_storage.schema.new_vec::<u64, S>("test-vector1");
@@ -1660,5 +1660,14 @@ mod tests {
 
         // attempt to set 1 values, when two are in vector.
         vector.set_all(&[5]);
+    }
+
+    #[test]
+    fn test_db_sync_and_send() {
+        fn sync_and_send<T: Sync + Send>(_t: T) {}
+
+        // open new DB that will not be dropped on close.
+        let db = DB::open_new_test_database(false, None).unwrap();
+        sync_and_send(db);
     }
 }
