@@ -2,7 +2,7 @@ use divan::Bencher;
 use leveldb_sys::Compression;
 // use twenty_first::leveldb::database::cache::Cache;
 use twenty_first::leveldb::options::Options;
-use twenty_first::util_types::level_db::DB;
+use twenty_first::storage::level_db::DB;
 use twenty_first::util_types::storage_schema::{
     DbtVecReference, RustyKey, RustyValue, SimpleRustyStorage, StorageWriter,
 };
