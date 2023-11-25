@@ -5,9 +5,9 @@ use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::{shared_advanced, shared_basic};
 use crate::shared_math::digest::Digest;
+use crate::storage::storage_vec::{RustyLevelDbVec, StorageVec};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::shared::bag_peaks;
-use crate::util_types::storage_vec::{RustyLevelDbVec, StorageVec};
 use crate::utils::has_unique_elements;
 use leveldb::batch::WriteBatch;
 
@@ -329,7 +329,7 @@ mod mmr_test {
     use crate::util_types::merkle_tree::merkle_tree_test;
     use crate::{
         shared_math::b_field_element::BFieldElement,
-        util_types::level_db::DB,
+        storage::level_db::DB,
         util_types::mmr::{
             archival_mmr::ArchivalMmr, mmr_accumulator::MmrAccumulator,
             shared_advanced::get_peak_heights_and_peak_node_indices,

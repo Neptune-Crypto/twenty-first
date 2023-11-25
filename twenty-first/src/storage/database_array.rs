@@ -1,4 +1,4 @@
-use crate::util_types::level_db::DB;
+use super::level_db::DB;
 use leveldb::{
     batch::{Batch, WriteBatch},
     options::{ReadOptions, WriteOptions},
@@ -78,8 +78,8 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
 
 #[cfg(test)]
 mod database_array_tests {
+    use super::super::level_db::DB;
     use super::*;
-    use crate::util_types::level_db::DB;
 
     #[test]
     fn init_and_default_values_test() {

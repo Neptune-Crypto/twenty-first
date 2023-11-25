@@ -3,7 +3,7 @@ use leveldb_sys::Compression;
 use twenty_first::leveldb::batch::{Batch, WriteBatch};
 // use twenty_first::leveldb::database::cache::Cache;
 use twenty_first::leveldb::options::{Options, ReadOptions, WriteOptions};
-use twenty_first::util_types::level_db::DB;
+use twenty_first::storage::level_db::DB;
 // use twenty_first::util_types::storage_schema::DbtVec;
 
 // These database bench tests are made with divan.

@@ -1,4 +1,4 @@
-use crate::util_types::level_db::DB;
+use super::level_db::DB;
 use leveldb::{
     batch::{Batch, WriteBatch},
     options::{ReadOptions, WriteOptions},
@@ -180,8 +180,8 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
 
 #[cfg(test)]
 mod database_vector_tests {
+    use super::super::level_db::DB;
     use super::*;
-    use crate::util_types::level_db::DB;
 
     fn test_constructor() -> DatabaseVector<u64> {
         let db = DB::open_new_test_database(true, None).unwrap();

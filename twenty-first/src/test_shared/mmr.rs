@@ -5,12 +5,12 @@ use itertools::Itertools;
 
 use crate::shared_math::digest::Digest;
 use crate::shared_math::other::{log_2_ceil, random_elements};
-use crate::util_types::level_db::DB;
+use crate::storage::level_db::DB;
+use crate::storage::storage_vec::RustyLevelDbVec;
 use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
 use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
 use crate::util_types::mmr::shared_advanced::right_lineage_length_from_node_index;
 use crate::util_types::mmr::shared_basic::{self, leaf_index_to_mt_index_and_peak_index};
-use crate::util_types::storage_vec::RustyLevelDbVec;
 use crate::util_types::{algebraic_hasher::AlgebraicHasher, mmr::archival_mmr::ArchivalMmr};
 use crate::utils::has_unique_elements;
 
