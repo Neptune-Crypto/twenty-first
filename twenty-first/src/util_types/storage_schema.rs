@@ -6,12 +6,16 @@ use leveldb::{
     options::{ReadOptions, WriteOptions},
 };
 use std::{
+    cell::RefCell,
     collections::{HashMap, VecDeque},
     fmt::Debug,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 use crate::shared_math::b_field_element::BFieldElement;
+
+pub type DbtSingletonReference<PK, PV, T> = Arc<RefCell<DbtSingleton<PK, PV, T>>>;
+pub type DbtVecReference<PK, PV, T> = Arc<RefCell<DbtVec<PK, PV, Index, T>>>;
 
 pub enum WriteOperation<ParentKey, ParentValue> {
     Write(ParentKey, ParentValue),
@@ -37,7 +41,7 @@ pub enum VecWriteOperation<Index, T> {
     Pop,
 }
 
-pub struct DbtVec<ParentKey, ParentValue, Index, T> {
+pub struct DbtVecPrivate<ParentKey, ParentValue, Index, T> {
     reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
     current_length: Option<Index>,
     key_prefix: u8,
@@ -46,12 +50,188 @@ pub struct DbtVec<ParentKey, ParentValue, Index, T> {
     name: String,
 }
 
-impl<ParentKey, ParentValue, Index, T> DbtVec<ParentKey, ParentValue, Index, T>
+pub struct DbtVec<ParentKey, ParentValue, Index, T> {
+    // note: Arc is not needed, because we never hand out inner to anyone.
+    inner: RwLock<DbtVecPrivate<ParentKey, ParentValue, Index, T>>,
+}
+
+impl<ParentKey, ParentValue, T> DbtVec<ParentKey, ParentValue, Index, T>
 where
     ParentKey: From<(ParentKey, ParentKey)>,
     ParentKey: From<u8>,
     ParentKey: From<Index>,
     Index: From<ParentValue> + From<u64> + Clone,
+    T: Clone,
+{
+    // DbtVec cannot be instantiated directly outside of this crate.
+    pub(crate) fn new(
+        reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
+        key_prefix: u8,
+        name: &str,
+    ) -> Self {
+        let vec = DbtVecPrivate::<ParentKey, ParentValue, Index, T>::new(reader, key_prefix, name);
+
+        Self {
+            inner: RwLock::new(vec),
+        }
+    }
+
+    pub(crate) fn read_lock(
+        &self,
+    ) -> RwLockReadGuard<'_, DbtVecPrivate<ParentKey, ParentValue, Index, T>> {
+        self.inner.read().unwrap()
+    }
+
+    pub(crate) fn write_lock(
+        &mut self,
+    ) -> RwLockWriteGuard<'_, DbtVecPrivate<ParentKey, ParentValue, Index, T>> {
+        self.inner.write().unwrap()
+    }
+}
+
+impl<ParentKey, ParentValue, T> StorageVec<T> for DbtVec<ParentKey, ParentValue, Index, T>
+where
+    ParentKey: From<Index>,
+    ParentValue: From<T>,
+    T: Clone + From<ParentValue> + Debug,
+    ParentKey: From<(ParentKey, ParentKey)>,
+    ParentKey: From<u8>,
+    Index: From<ParentValue> + From<u64>,
+{
+    fn is_empty(&self) -> bool {
+        self.read_lock().is_empty()
+    }
+
+    fn len(&self) -> Index {
+        self.read_lock().len()
+    }
+
+    fn get(&self, index: Index) -> T {
+        self.read_lock().get(index)
+    }
+
+    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        self.read_lock().get_many(indices)
+    }
+
+    fn get_all(&self) -> Vec<T> {
+        self.read_lock().get_all()
+    }
+
+    fn set(&mut self, index: Index, value: T) {
+        self.write_lock().set(index, value)
+    }
+
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+        self.write_lock().set_many(key_vals)
+    }
+
+    fn pop(&mut self) -> Option<T> {
+        self.write_lock().pop()
+    }
+
+    fn push(&mut self, value: T) {
+        self.write_lock().push(value)
+    }
+}
+
+impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
+    for DbtVec<ParentKey, ParentValue, Index, T>
+where
+    ParentKey: From<Index>,
+    ParentValue: From<T>,
+    T: Clone,
+    T: From<ParentValue>,
+    ParentKey: From<(ParentKey, ParentKey)>,
+    ParentKey: From<u8>,
+    Index: From<ParentValue>,
+    ParentValue: From<Index>,
+{
+    /// Collect all added elements that have not yet been persisted
+    fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
+        self.write_lock().pull_queue()
+    }
+
+    fn restore_or_new(&mut self) {
+        self.write_lock().restore_or_new()
+    }
+}
+
+impl<ParentKey, ParentValue, T> StorageVec<T> for DbtVecReference<ParentKey, ParentValue, T>
+where
+    ParentKey: From<Index>,
+    ParentValue: From<T>,
+    T: Clone + From<ParentValue> + Debug,
+    ParentKey: From<(ParentKey, ParentKey)>,
+    ParentKey: From<u8>,
+    Index: From<ParentValue> + From<u64>,
+{
+    fn is_empty(&self) -> bool {
+        self.borrow().is_empty()
+    }
+
+    fn len(&self) -> Index {
+        self.borrow().len()
+    }
+
+    fn get(&self, index: Index) -> T {
+        self.borrow().get(index)
+    }
+
+    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        self.borrow().get_many(indices)
+    }
+
+    fn get_all(&self) -> Vec<T> {
+        self.borrow().get_all()
+    }
+
+    fn set(&mut self, index: Index, value: T) {
+        self.borrow_mut().set(index, value)
+    }
+
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+        self.borrow_mut().set_many(key_vals)
+    }
+
+    fn pop(&mut self) -> Option<T> {
+        self.borrow_mut().pop()
+    }
+
+    fn push(&mut self, value: T) {
+        self.borrow_mut().push(value)
+    }
+}
+
+impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
+    for DbtVecReference<ParentKey, ParentValue, T>
+where
+    ParentKey: From<Index>,
+    ParentValue: From<T>,
+    T: Clone,
+    T: From<ParentValue>,
+    ParentKey: From<(ParentKey, ParentKey)>,
+    ParentKey: From<u8>,
+    Index: From<ParentValue>,
+    ParentValue: From<Index>,
+{
+    /// Collect all added elements that have not yet been persisted
+    fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
+        self.borrow_mut().pull_queue()
+    }
+
+    fn restore_or_new(&mut self) {
+        self.borrow_mut().restore_or_new()
+    }
+}
+
+impl<ParentKey, ParentValue, T> DbtVecPrivate<ParentKey, ParentValue, Index, T>
+where
+    ParentKey: From<(ParentKey, ParentKey)>,
+    ParentKey: From<u8>,
+    ParentKey: From<Index>,
+    Index: From<ParentValue> + From<u64> + Clone,
+    T: Clone,
 {
     // Return the key of ParentKey type used to store the length of the vector
     fn get_length_key(key_prefix: u8) -> ParentKey {
@@ -74,7 +254,7 @@ where
         (key_prefix_key, index_key).into()
     }
 
-    pub fn new(
+    pub(crate) fn new(
         reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
         key_prefix: u8,
         name: &str,
@@ -90,59 +270,26 @@ where
             name: name.to_string(),
         }
     }
-}
 
-/// A trait that does things with already acquired locks
-trait WithLock<ParentKey, ParentValue, T> {
-    fn len_with_lock(&self, lock: &MutexGuard<DbtVec<ParentKey, ParentValue, Index, T>>) -> Index;
-    fn write_op_overwrite_with_lock(
-        &self,
-        lock: &mut MutexGuard<DbtVec<ParentKey, ParentValue, Index, T>>,
-        index: Index,
-        value: T,
-    );
-}
-
-impl<ParentKey, ParentValue, T> WithLock<ParentKey, ParentValue, T>
-    for Arc<Mutex<DbtVec<ParentKey, ParentValue, Index, T>>>
-where
-    ParentKey: From<Index>,
-    ParentValue: From<T>,
-    T: Clone + From<ParentValue> + Debug,
-    ParentKey: From<(ParentKey, ParentKey)>,
-    ParentKey: From<u8>,
-    Index: From<ParentValue> + From<u64>,
-{
-    fn len_with_lock(&self, lock: &MutexGuard<DbtVec<ParentKey, ParentValue, u64, T>>) -> Index {
-        lock.current_length
-            .unwrap_or_else(|| lock.persisted_length().unwrap_or(0))
-    }
-
-    fn write_op_overwrite_with_lock(
-        &self,
-        lock: &mut MutexGuard<DbtVec<ParentKey, ParentValue, Index, T>>,
-        index: Index,
-        value: T,
-    ) {
-        if let Some(_old_val) = lock.cache.insert(index, value.clone()) {
+    fn write_op_overwrite(&mut self, index: Index, value: T) {
+        if let Some(_old_val) = self.cache.insert(index, value.clone()) {
             // If cache entry exists, we remove any corresponding
             // OverWrite ops in the `write_queue` to reduce disk IO.
 
             // logic: retain all ops that are not overwrite, and
             // overwrite ops that do not have an index matching cache_index.
-            lock.write_queue.retain(|op| match op {
+            self.write_queue.retain(|op| match op {
                 VecWriteOperation::OverWrite((i, _)) => *i != index,
                 _ => true,
             })
         }
 
-        lock.write_queue
+        self.write_queue
             .push_back(VecWriteOperation::OverWrite((index, value)));
     }
 }
 
-impl<ParentKey, ParentValue, T> StorageVec<T>
-    for Arc<Mutex<DbtVec<ParentKey, ParentValue, Index, T>>>
+impl<ParentKey, ParentValue, T> StorageVec<T> for DbtVecPrivate<ParentKey, ParentValue, Index, T>
 where
     ParentKey: From<Index>,
     ParentValue: From<T>,
@@ -158,37 +305,31 @@ where
 
     /// note: acquires lock
     fn len(&self) -> Index {
-        self.len_with_lock(
-            &self
-                .lock()
-                .expect("Could not get lock on DbtVec as StorageVec"),
-        )
+        self.current_length
+            .unwrap_or_else(|| self.persisted_length().unwrap_or(0))
     }
 
     fn get(&self, index: Index) -> T {
         // Disallow getting values out-of-bounds
-        let lock = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec");
 
         assert!(
-            index < self.len_with_lock(&lock),
+            index < self.len(),
             "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-            self.len_with_lock(&lock),
-            lock.name
+            self.len(),
+            self.name
         );
 
         // try cache first
-        if lock.cache.contains_key(&index) {
-            return lock.cache.get(&index).unwrap().clone();
+        if self.cache.contains_key(&index) {
+            return self.cache.get(&index).unwrap().clone();
         }
 
         // then try persistent storage
-        let key: ParentKey = lock.get_index_key(index);
-        let val = lock.reader.get(key).unwrap_or_else(|| {
+        let key: ParentKey = self.get_index_key(index);
+        let val = self.reader.get(key).unwrap_or_else(|| {
             panic!(
                 "Element with index {index} does not exist in {}. This should not happen",
-                lock.name
+                self.name
             )
         });
         val.into()
@@ -203,18 +344,12 @@ where
             elements.into_iter().map(|(_, element)| element).collect()
         }
 
-        let self_lock = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec");
-
-        let self_length = self.len_with_lock(&self_lock);
-
         // Do *not* refer to `self` after this point, instead use `self_lock`
         assert!(
-            indices.iter().all(|x| *x < self_length),
+            indices.iter().all(|x| *x < self.len()),
             "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
-            self_length,
-            self_lock.name
+            self.len(),
+            self.name
         );
 
         let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
@@ -222,11 +357,11 @@ where
                 .iter()
                 .copied()
                 .enumerate()
-                .partition(|&(_, index)| self_lock.cache.contains_key(&index));
+                .partition(|&(_, index)| self.cache.contains_key(&index));
 
         let mut fetched_elements = HashMap::with_capacity(indices.len());
         for (index_position, index) in indices_of_elements_in_cache {
-            let value = self_lock.cache.get(&index).unwrap().clone();
+            let value = self.cache.get(&index).unwrap().clone();
             fetched_elements.insert(index_position, value);
         }
 
@@ -237,9 +372,9 @@ where
 
         let keys_for_indices_not_in_cache = indices_of_elements_not_in_cache
             .iter()
-            .map(|&(_, index)| self_lock.get_index_key(index))
+            .map(|&(_, index)| self.get_index_key(index))
             .collect_vec();
-        let elements_fetched_from_db = self_lock
+        let elements_fetched_from_db = self
             .reader
             .get_many(&keys_for_indices_not_in_cache)
             .into_iter()
@@ -257,18 +392,12 @@ where
     /// Return all stored elements in a vector, whose index matches the StorageVec's.
     /// It's the caller's responsibility that there is enough memory to store all elements.
     fn get_all(&self) -> Vec<T> {
-        let self_lock = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec");
-
-        let length = self.len_with_lock(&self_lock);
-
         let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
-            (0..length).partition(|index| self_lock.cache.contains_key(index));
+            (0..self.len()).partition(|index| self.cache.contains_key(index));
 
-        let mut fetched_elements: Vec<Option<T>> = vec![None; length as usize];
+        let mut fetched_elements: Vec<Option<T>> = vec![None; self.len() as usize];
         for index in indices_of_elements_in_cache {
-            let element = self_lock.cache[&index].clone();
+            let element = self.cache[&index].clone();
             fetched_elements[index as usize] = Some(element);
         }
 
@@ -282,9 +411,9 @@ where
 
         let keys = indices_of_elements_not_in_cache
             .iter()
-            .map(|x| self_lock.get_index_key(*x))
+            .map(|x| self.get_index_key(*x))
             .collect_vec();
-        let elements_fetched_from_db = self_lock
+        let elements_fetched_from_db = self
             .reader
             .get_many(&keys)
             .into_iter()
@@ -304,20 +433,15 @@ where
 
     fn set(&mut self, index: Index, value: T) {
         // Disallow setting values out-of-bounds
-        let mut self_lock = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec");
-
-        let self_len = self.len_with_lock(&self_lock);
 
         assert!(
-            index < self_len,
+            index < self.len(),
             "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-            self_len,
-            self_lock.name
+            self.len(),
+            self.name
         );
 
-        self.write_op_overwrite_with_lock(&mut self_lock, index, value);
+        self.write_op_overwrite(index, value);
     }
 
     /// set multiple elements.
@@ -328,76 +452,63 @@ where
     /// unique.  If not, the last value with the same index will win.
     /// For unordered collections such as HashMap, the behavior is undefined.
     fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
-        let mut self_lock = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec");
-
-        let self_len = self.len_with_lock(&self_lock);
+        let self_len = self.len();
 
         for (index, value) in key_vals.into_iter() {
             assert!(
                 index < self_len,
                 "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
                 self_len,
-                self_lock.name
+                self.name
             );
 
-            self.write_op_overwrite_with_lock(&mut self_lock, index, value);
+            self.write_op_overwrite(index, value);
         }
     }
 
     fn pop(&mut self) -> Option<T> {
-        let mut self_lock = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec");
-
         // If vector is empty, return None
-        if self.len_with_lock(&self_lock) == 0 {
+        if self.is_empty() {
             return None;
         }
 
         // add to write queue
-        self_lock.write_queue.push_back(VecWriteOperation::Pop);
+        self.write_queue.push_back(VecWriteOperation::Pop);
 
         // Update length
-        *self_lock.current_length.as_mut().unwrap() -= 1;
+        *self.current_length.as_mut().unwrap() -= 1;
 
         // try cache first
-        let current_length = self.len_with_lock(&self_lock);
-        if self_lock.cache.contains_key(&current_length) {
-            self_lock.cache.remove(&current_length)
+        let current_length = self.len();
+        if self.cache.contains_key(&current_length) {
+            self.cache.remove(&current_length)
         } else {
             // then try persistent storage
-            let key = self_lock.get_index_key(current_length);
-            self_lock.reader.get(key).map(|value| value.into())
+            let key = self.get_index_key(current_length);
+            self.reader.get(key).map(|value| value.into())
         }
     }
 
     fn push(&mut self, value: T) {
-        let mut self_lock = self
-            .lock()
-            .expect("Could not get lock on DbtVec as StorageVec)");
-
         // add to write queue
-        self_lock
-            .write_queue
+        self.write_queue
             .push_back(VecWriteOperation::Push(value.clone()));
 
         // record in cache
-        let current_length = self.len_with_lock(&self_lock);
-        let _old_val = self_lock.cache.insert(current_length, value);
+        let current_length = self.len();
+        let _old_val = self.cache.insert(current_length, value);
 
         // note: we cannot naively remove any previous `Push` ops with
         // this value from the write_queue (to reduce disk i/o) because
         // there might be corresponding `Pop` op(s).
 
         // update length
-        self_lock.current_length = Some(current_length + 1);
+        self.current_length = Some(current_length + 1);
     }
 }
 
 impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
-    for DbtVec<ParentKey, ParentValue, Index, T>
+    for DbtVecPrivate<ParentKey, ParentValue, Index, T>
 where
     ParentKey: From<Index>,
     ParentValue: From<T>,
@@ -460,7 +571,7 @@ where
 
 // possible future extension
 // pub struct DbtHashMap<Key, Value, K, V> {
-//     parent: Arc<Mutex<DbtSchema<Key, Value>>>,
+//     parent: Arc<RefCell<DbtSchema<Key, Value>>>,
 // }
 
 pub trait StorageSingleton<T>
@@ -471,34 +582,126 @@ where
     fn set(&mut self, t: T);
 }
 
-pub struct DbtSingleton<ParentKey, ParentValue, T> {
+pub(crate) struct DbtSingletonPrivate<ParentKey, ParentValue, T> {
     current_value: T,
     old_value: T,
     key: ParentKey,
     reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Sync + Send>,
 }
 
-impl<ParentKey, ParentValue, T> StorageSingleton<T>
-    for Arc<Mutex<DbtSingleton<ParentKey, ParentValue, T>>>
+pub struct DbtSingleton<ParentKey, ParentValue, T> {
+    // note: Arc is not needed, because we never hand out inner to anyone.
+    inner: RwLock<DbtSingletonPrivate<ParentKey, ParentValue, T>>,
+}
+
+impl<ParentKey, ParentValue, T> DbtSingleton<ParentKey, ParentValue, T>
 where
-    T: Clone + From<ParentValue>,
+    T: Default,
 {
-    fn get(&self) -> T {
-        self.lock()
-            .expect("Could not get lock on DbtSingleton object (get).")
-            .current_value
-            .clone()
+    // DbtSingleton can not be instantiated directly outside of this crate.
+    pub(crate) fn new(
+        key: ParentKey,
+        reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Sync + Send>,
+    ) -> Self {
+        let singleton = DbtSingletonPrivate::<ParentKey, ParentValue, T> {
+            current_value: Default::default(),
+            old_value: Default::default(),
+            key,
+            reader,
+        };
+        Self {
+            inner: RwLock::new(singleton),
+        }
     }
 
-    fn set(&mut self, t: T) {
-        self.lock()
-            .expect("Could not get lock on DbtSingleton object (set).")
-            .current_value = t;
+    pub(crate) fn read_lock(
+        &self,
+    ) -> RwLockReadGuard<'_, DbtSingletonPrivate<ParentKey, ParentValue, T>> {
+        self.inner.read().unwrap()
+    }
+
+    pub(crate) fn write_lock(
+        &self,
+    ) -> RwLockWriteGuard<'_, DbtSingletonPrivate<ParentKey, ParentValue, T>> {
+        self.inner.write().unwrap()
     }
 }
 
 impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
     for DbtSingleton<ParentKey, ParentValue, T>
+where
+    T: Eq + Clone + Default + From<ParentValue>,
+    ParentValue: From<T> + Debug,
+    ParentKey: Clone,
+{
+    fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
+        self.write_lock().pull_queue()
+    }
+
+    fn restore_or_new(&mut self) {
+        self.write_lock().restore_or_new()
+    }
+}
+
+impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
+    for DbtSingletonReference<ParentKey, ParentValue, T>
+where
+    T: Eq + Clone + Default + From<ParentValue>,
+    ParentValue: From<T> + Debug,
+    ParentKey: Clone,
+{
+    fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
+        self.borrow_mut().pull_queue()
+    }
+
+    fn restore_or_new(&mut self) {
+        self.borrow_mut().restore_or_new()
+    }
+}
+
+impl<ParentKey, ParentValue, T> StorageSingleton<T> for DbtSingleton<ParentKey, ParentValue, T>
+where
+    T: Clone + From<ParentValue> + Default,
+{
+    fn get(&self) -> T {
+        self.read_lock().current_value.clone()
+    }
+
+    fn set(&mut self, t: T) {
+        self.write_lock().current_value = t;
+    }
+}
+
+impl<ParentKey, ParentValue, T> StorageSingleton<T>
+    for DbtSingletonReference<ParentKey, ParentValue, T>
+where
+    T: Clone + From<ParentValue> + Default,
+{
+    fn get(&self) -> T {
+        self.borrow().get()
+    }
+
+    fn set(&mut self, t: T) {
+        self.borrow_mut().set(t)
+    }
+}
+
+impl<ParentKey, ParentValue, T> StorageSingleton<T>
+    for DbtSingletonPrivate<ParentKey, ParentValue, T>
+where
+    T: Clone + From<ParentValue>,
+{
+    fn get(&self) -> T {
+        self.current_value.clone()
+    }
+
+    fn set(&mut self, t: T) {
+        self.current_value = t;
+    }
+}
+
+impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
+    for DbtSingletonPrivate<ParentKey, ParentValue, T>
 where
     T: Eq + Clone + Default + From<ParentValue>,
     ParentValue: From<T> + Debug,
@@ -525,7 +728,7 @@ where
 }
 
 pub struct DbtSchema<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue>> {
-    pub tables: Vec<Arc<Mutex<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>>,
+    pub tables: Vec<Arc<RefCell<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>>,
     pub reader: Arc<Reader>,
 }
 
@@ -535,10 +738,7 @@ impl<
         Reader: StorageReader<ParentKey, ParentValue> + 'static + Sync + Send,
     > DbtSchema<ParentKey, ParentValue, Reader>
 {
-    pub fn new_vec<Index, T>(
-        &mut self,
-        name: &str,
-    ) -> Arc<Mutex<DbtVec<ParentKey, ParentValue, Index, T>>>
+    pub fn new_vec<I, T>(&mut self, name: &str) -> DbtVecReference<ParentKey, ParentValue, T>
     where
         ParentKey: From<Index> + 'static,
         ParentValue: From<T> + 'static,
@@ -552,26 +752,21 @@ impl<
     {
         assert!(self.tables.len() < 255);
         let reader = self.reader.clone();
-        let vector = DbtVec::<ParentKey, ParentValue, Index, T> {
-            reader,
-            current_length: None,
-            key_prefix: self.tables.len() as u8,
-            write_queue: VecDeque::new(),
-            cache: HashMap::new(),
-            name: name.to_string(),
-        };
-        let arc_mutex_vector = Arc::new(Mutex::new(vector));
-        self.tables.push(arc_mutex_vector.clone());
-        arc_mutex_vector
+        let key_prefix = self.tables.len() as u8;
+        let vector = DbtVec::<ParentKey, ParentValue, Index, T>::new(reader, key_prefix, name);
+
+        let arc_refcell_vector = Arc::new(RefCell::new(vector));
+        self.tables.push(arc_refcell_vector.clone());
+        arc_refcell_vector
     }
 
     // possible future extension
-    // fn new_hashmap<K, V>(&self) -> Arc<Mutex<DbtHashMap<K, V>>> { }
+    // fn new_hashmap<K, V>(&self) -> Arc<RefCell<DbtHashMap<K, V>>> { }
 
     pub fn new_singleton<S>(
         &mut self,
         key: ParentKey,
-    ) -> Arc<Mutex<DbtSingleton<ParentKey, ParentValue, S>>>
+    ) -> DbtSingletonReference<ParentKey, ParentValue, S>
     where
         S: Default + Eq + Clone + 'static,
         ParentKey: 'static,
@@ -579,16 +774,10 @@ impl<
         ParentKey: From<(ParentKey, ParentKey)> + From<u8>,
         DbtSingleton<ParentKey, ParentValue, S>: DbTable<ParentKey, ParentValue> + Send + Sync,
     {
-        let reader = self.reader.clone();
-        let singleton = DbtSingleton::<ParentKey, ParentValue, S> {
-            current_value: S::default(),
-            old_value: S::default(),
-            key,
-            reader,
-        };
-        let arc_mutex_singleton = Arc::new(Mutex::new(singleton));
-        self.tables.push(arc_mutex_singleton.clone());
-        arc_mutex_singleton
+        let singleton = DbtSingleton::<ParentKey, ParentValue, S>::new(key, self.reader.clone());
+        let arc_refcell_singleton = Arc::new(RefCell::new(singleton));
+        self.tables.push(arc_refcell_singleton.clone());
+        arc_refcell_singleton
     }
 }
 
@@ -668,7 +857,7 @@ impl From<crate::shared_math::tip5::Digest> for RustyValue {
 }
 
 pub struct RustyReader {
-    pub db: Arc<DB>,
+    db: DB,
 }
 
 impl StorageReader<RustyKey, RustyValue> for RustyReader {
@@ -700,7 +889,7 @@ impl StorageReader<RustyKey, RustyValue> for RustyReader {
 /// possible to use this struct and add to the scheme after calling
 /// new() (that's what the tests do).
 pub struct SimpleRustyStorage {
-    pub db: Arc<DB>,
+    // pub db: Arc<DB>,
     pub schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
 }
 
@@ -708,10 +897,7 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
     fn persist(&mut self) {
         let write_batch = WriteBatch::new();
         for table in &self.schema.tables {
-            let operations = table
-                .lock()
-                .expect("Could not get lock on table object in SimpleRustyStorage::persist.")
-                .pull_queue();
+            let operations = table.borrow_mut().pull_queue();
             for op in operations {
                 match op {
                     WriteOperation::Write(key, value) => write_batch.put(&key.0, &value.0),
@@ -720,40 +906,35 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
             }
         }
 
-        self.db
+        self.db()
             .write(&WriteOptions::new(), &write_batch)
             .expect("Could not persist to database.");
     }
 
     fn restore_or_new(&mut self) {
         for table in &self.schema.tables {
-            table
-                .lock()
-                .expect("Could not get lock on table obect in SimpleRustyStorage::restore_or_new.")
-                .restore_or_new();
+            table.borrow_mut().restore_or_new();
         }
     }
 }
 
 impl SimpleRustyStorage {
     pub fn new(db: DB) -> Self {
-        let db_pointer = Arc::new(db);
-        let reader = SimpleRustyReader {
-            db: db_pointer.clone(),
-        };
         let schema = DbtSchema::<RustyKey, RustyValue, SimpleRustyReader> {
             tables: Vec::new(),
-            reader: Arc::new(reader),
+            reader: Arc::new(SimpleRustyReader { db }),
         };
-        Self {
-            db: db_pointer,
-            schema,
-        }
+        Self { schema }
+    }
+
+    #[inline]
+    pub(crate) fn db(&self) -> &DB {
+        &self.schema.reader.db
     }
 }
 
 pub struct SimpleRustyReader {
-    db: Arc<DB>,
+    db: DB,
 }
 
 impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
@@ -829,10 +1010,11 @@ mod tests {
         let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        assert_eq!(2, Arc::strong_count(&rusty_storage.db));
+        assert_eq!(1, Arc::strong_count(&rusty_storage.schema.reader));
         let mut singleton = rusty_storage
             .schema
             .new_singleton::<S>(RustyKey([1u8; 1].to_vec()));
+        assert_eq!(2, Arc::strong_count(&rusty_storage.schema.reader));
 
         // initialize
         rusty_storage.restore_or_new();
@@ -848,24 +1030,25 @@ mod tests {
 
         // persist
         rusty_storage.persist();
-        assert_eq!(2, Arc::strong_count(&rusty_storage.db));
 
         // test
         assert_eq!(singleton.get(), singleton_value);
 
-        let db_ref = rusty_storage.db.clone();
-        assert_eq!(3, Arc::strong_count(&db_ref));
+        assert_eq!(2, Arc::strong_count(&rusty_storage.schema.reader));
+
+        // This is just so we can count reader references
+        // after rusty_storage is dropped.
+        let reader_ref = rusty_storage.schema.reader.clone();
+        assert_eq!(3, Arc::strong_count(&reader_ref));
 
         // drop
-        drop(rusty_storage); // <--- DB ref dropped
+        drop(rusty_storage); // <--- 1 reader ref dropped.
+        assert_eq!(2, Arc::strong_count(&reader_ref));
 
-        assert_eq!(2, Arc::strong_count(&db_ref));
+        drop(singleton); //     <--- 1 reader ref dropped
+        assert_eq!(1, Arc::strong_count(&reader_ref));
 
-        drop(singleton); //     <--- DB ref dropped
-
-        assert_eq!(1, Arc::strong_count(&db_ref));
-
-        drop(db_ref); //        <--- Final DB ref dropped.  Db closes.
+        drop(reader_ref); // <--- Final reader ref dropped. Db closes.
 
         // restore.  re-open existing DB.
         let new_db = DB::open_test_database(&db_path, true, None).unwrap();

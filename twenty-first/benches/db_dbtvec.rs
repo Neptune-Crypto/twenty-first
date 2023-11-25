@@ -1,14 +1,12 @@
 use divan::Bencher;
 use leveldb_sys::Compression;
-use std::sync::{Arc, Mutex};
-//use twenty_first::leveldb::database::cache::Cache;
+// use twenty_first::leveldb::database::cache::Cache;
 use twenty_first::leveldb::options::Options;
 use twenty_first::util_types::level_db::DB;
 use twenty_first::util_types::storage_schema::{
-    DbtVec, RustyKey, RustyValue, SimpleRustyStorage, StorageWriter,
+    DbtVecReference, RustyKey, RustyValue, SimpleRustyStorage, StorageWriter,
 };
 use twenty_first::util_types::storage_vec::StorageVec;
-// use twenty_first::util_types::storage_schema::DbtVec;
 
 // These database bench tests are made with divan.
 //
@@ -80,7 +78,7 @@ fn value() -> Vec<u8> {
 
 fn create_test_dbtvec() -> (
     SimpleRustyStorage,
-    Arc<Mutex<DbtVec<RustyKey, RustyValue, u64, Vec<u8>>>>,
+    DbtVecReference<RustyKey, RustyValue, Vec<u8>>,
 ) {
     let db = DB::open_new_test_database(true, db_options()).unwrap();
     let mut storage = SimpleRustyStorage::new(db);

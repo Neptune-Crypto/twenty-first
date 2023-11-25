@@ -374,29 +374,29 @@ pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
 
 impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {
     fn is_empty(&self) -> bool {
-        self.deref().is_empty()
+        self.read_lock().is_empty()
     }
 
     fn len(&self) -> Index {
-        self.deref().len()
+        self.read_lock().len()
     }
 
     fn get(&self, index: Index) -> T {
-        self.deref().get(index)
+        self.read_lock().get(index)
     }
 
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        self.deref().get_many(indices)
+        self.read_lock().get_many(indices)
     }
 
     /// Return all stored elements in a vector, whose index matches the StorageVec's.
     /// It's the caller's responsibility that there is enough memory to store all elements.
     fn get_all(&self) -> Vec<T> {
-        self.deref().get_all()
+        self.read_lock().get_all()
     }
 
     fn set(&mut self, index: Index, value: T) {
-        self.deref_mut().set(index, value)
+        self.write_lock().set(index, value)
     }
 
     /// set multiple elements.
@@ -407,15 +407,15 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     /// unique.  If not, the last value with the same index will win.
     /// For unordered collections such as HashMap, the behavior is undefined.
     fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
-        self.deref_mut().set_many(key_vals)
+        self.write_lock().set_many(key_vals)
     }
 
     fn pop(&mut self) -> Option<T> {
-        self.deref_mut().pop()
+        self.write_lock().pop()
     }
 
     fn push(&mut self, value: T) {
-        self.deref_mut().push(value)
+        self.write_lock().push(value)
     }
 }
 
@@ -427,12 +427,12 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
 
     /// Return the length at the last write to disk
     pub fn persisted_length(&self) -> Index {
-        self.deref().persisted_length()
+        self.read_lock().persisted_length()
     }
 
     /// Return the level-DB key used to store the element at an index
     pub fn get_index_key(&self, index: Index) -> [u8; 9] {
-        self.deref().get_index_key(index)
+        self.read_lock().get_index_key(index)
     }
 
     pub fn new(db: Arc<DB>, key_prefix: u8, name: &str) -> Self {
@@ -445,14 +445,14 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
 
     /// Collect all added elements that have not yet bit persisted
     pub fn pull_queue(&mut self, write_batch: &mut WriteBatch) {
-        self.deref_mut().pull_queue(write_batch)
+        self.write_lock().pull_queue(write_batch)
     }
 
-    pub(crate) fn deref(&self) -> RwLockReadGuard<'_, RustyLevelDbVecPrivate<T>> {
+    pub(crate) fn read_lock(&self) -> RwLockReadGuard<'_, RustyLevelDbVecPrivate<T>> {
         self.inner.read().unwrap()
     }
 
-    pub(crate) fn deref_mut(&mut self) -> RwLockWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
+    pub(crate) fn write_lock(&mut self) -> RwLockWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
         self.inner.write().unwrap()
     }
 }
@@ -554,7 +554,7 @@ mod tests {
         assert!(db.write(&WriteOptions::new(), &write_batch).is_ok());
 
         // Sanity checks
-        assert!(persisted_vec.deref().cache.is_empty());
+        assert!(persisted_vec.read_lock().cache.is_empty());
         assert_eq!(persisted_vec.len(), regular_vec.len() as u64);
 
         (persisted_vec, regular_vec, db)
@@ -642,8 +642,8 @@ mod tests {
 
         assert_eq!(3, delegated_db_vec_a.len());
         assert_eq!(0, delegated_db_vec_b.len());
-        assert_eq!(3, delegated_db_vec_a.deref().cache.len());
-        assert!(delegated_db_vec_b.deref().cache.is_empty());
+        assert_eq!(3, delegated_db_vec_a.read_lock().cache.len());
+        assert!(delegated_db_vec_b.read_lock().cache.is_empty());
 
         // Get all entries to write to database. Write all entries.
         assert_eq!(0, delegated_db_vec_a.persisted_length());
@@ -666,8 +666,8 @@ mod tests {
         assert_eq!(0, delegated_db_vec_b.persisted_length());
         assert_eq!(3, delegated_db_vec_a.len());
         assert_eq!(0, delegated_db_vec_b.len());
-        assert!(delegated_db_vec_a.deref().cache.is_empty());
-        assert!(delegated_db_vec_b.deref().is_empty());
+        assert!(delegated_db_vec_a.read_lock().cache.is_empty());
+        assert!(delegated_db_vec_b.read_lock().is_empty());
     }
 
     #[test]
@@ -773,7 +773,7 @@ mod tests {
         let mut write_batch = WriteBatch::new();
         vec.pull_queue(&mut write_batch);
         assert!(vec
-            .deref()
+            .read_lock()
             .db
             .write(&WriteOptions::new(), &write_batch)
             .is_ok());
