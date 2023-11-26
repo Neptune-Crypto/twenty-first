@@ -8,11 +8,10 @@ use std::sync::Arc;
 /// Database schema and tables logic for RustyLevelDB. You probably
 /// want to implement your own storage class after this example so
 /// that you can hardcode the schema in new(). But it is nevertheless
-/// possible to use this struct and add to the scheme after calling
-/// new() (that's what the tests do).
+/// possible to use this struct and add to the schema.
 pub struct SimpleRustyStorage {
-    // pub db: Arc<DB>,
-    pub(crate) schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
+    /// dynamic DB Schema.  (new tables may be added)
+    pub schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
 }
 
 impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {

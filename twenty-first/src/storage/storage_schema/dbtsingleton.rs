@@ -13,6 +13,10 @@ use super::{
 /// This type is concurrency-safe.  A single RwLock is employed
 /// for all read and write ops.  Callers do not need to perform
 /// any additional locking.
+///
+/// Also because the locking is fully encapsulated within DbtSingleton
+/// there is no possibility of a caller holding a lock too long
+/// by accident or encountering ordering deadlock issues.
 pub struct DbtSingleton<ParentKey, ParentValue, T> {
     // note: Arc is not needed, because we never hand out inner to anyone.
     inner: RwLock<DbtSingletonPrivate<ParentKey, ParentValue, T>>,
