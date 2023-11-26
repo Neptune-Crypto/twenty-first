@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-pub struct DbtVecPrivate<ParentKey, ParentValue, Index, T> {
+pub(crate) struct DbtVecPrivate<ParentKey, ParentValue, Index, T> {
     reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
     current_length: Option<Index>,
     key_prefix: u8,
@@ -94,13 +94,11 @@ where
     ParentKey: From<u8>,
     Index: From<ParentValue> + From<u64>,
 {
-    /// note: acquires lock
     #[inline]
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// note: acquires lock
     #[inline]
     fn len(&self) -> Index {
         self.current_length
@@ -143,7 +141,6 @@ where
             elements.into_iter().map(|(_, element)| element).collect()
         }
 
-        // Do *not* refer to `self` after this point, instead use `self_lock`
         assert!(
             indices.iter().all(|x| *x < self.len()),
             "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",

@@ -1,3 +1,6 @@
+//! Provides a DB backed Array API that is thread-safe, uncached, and
+//! non-atomic
+
 use super::level_db::DB;
 use leveldb::{
     batch::{Batch, WriteBatch},
@@ -28,6 +31,7 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
         }
     }
 
+    /// set all key/val pairs in `indices_and_vals`
     pub fn batch_set(&mut self, indices_and_vals: &[(IndexType, T)]) {
         let indices: Vec<IndexType> = indices_and_vals.iter().map(|(index, _)| *index).collect();
         assert!(

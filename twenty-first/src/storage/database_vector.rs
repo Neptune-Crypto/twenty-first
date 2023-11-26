@@ -1,3 +1,6 @@
+//! Provides a DB backed Vector API that is thread-safe, uncached, and
+//! non-atomic
+
 use super::level_db::DB;
 use leveldb::{
     batch::{Batch, WriteBatch},
@@ -15,12 +18,18 @@ const LENGTH_KEY: [u8; 1] = [0];
 type IndexType = u64;
 const INDEX_ZERO: IndexType = 0;
 
+/// a DB backed Vector API that is thread-safe, uncached, and non-atomic
 pub struct DatabaseVector<T: Serialize + DeserializeOwned> {
     db: DB,
     _type: PhantomData<T>,
 }
 
 impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
+    /// Set length of Vector
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the database write fails
     fn set_length(&mut self, length: IndexType) {
         let length = bincode::serialize(&length).unwrap();
         self.db
@@ -28,6 +37,11 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             .expect("Length write must succeed");
     }
 
+    /// delete entry identified by Index
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the index is not found
     fn delete(&mut self, index: IndexType) {
         self.db
             .delete(&WriteOptions::new(), &index)
@@ -36,6 +50,10 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
 
     /// Return true if the database vector looks empty. Used for sanity check when creating
     /// a new database vector.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the index is not found
     fn attempt_verify_empty(&mut self) -> bool {
         self.db
             .get(&ReadOptions::new(), &INDEX_ZERO)
@@ -43,10 +61,16 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             .is_none()
     }
 
+    /// returns true if empty
     pub fn is_empty(&mut self) -> bool {
         self.len() == 0
     }
 
+    /// gets length of the vector
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the length has not been written to database
     pub fn len(&mut self) -> IndexType {
         let length_as_bytes = self
             .db
@@ -68,6 +92,11 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         ret
     }
 
+    /// Replaces content of Vec with another Vec
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the DB batch write fails
     pub fn overwrite_with_vec(&mut self, new_vector: Vec<T>) {
         let old_length = self.len();
         let new_length = new_vector.len() as IndexType;
@@ -94,6 +123,10 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     }
 
     /// Create a new, empty database vector
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the new Vec is not empty.
     pub fn new(db: DB) -> Self {
         let mut ret = DatabaseVector {
             db,
@@ -109,6 +142,12 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         ret
     }
 
+    /// retrieve entry identified by `index`
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if index is out of range
+    /// or if the database fetch fails.
     pub fn get(&mut self, index: IndexType) -> T {
         debug_assert!(
             self.len() > index,
@@ -120,6 +159,12 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         bincode::deserialize(&elem_as_bytes).unwrap()
     }
 
+    /// set entry identified by `index` to `value`
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if index is out of range
+    /// or if the database write fails.
     pub fn set(&mut self, index: IndexType, value: T) {
         debug_assert!(
             self.len() > index,
@@ -133,6 +178,12 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             .unwrap();
     }
 
+    /// set key/val pairs in `indices_and_vals`
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if any index is out of range
+    /// or if any database write fails.
     pub fn batch_set(&mut self, indices_and_vals: &[(IndexType, T)]) {
         let indices: Vec<IndexType> = indices_and_vals.iter().map(|(index, _)| *index).collect();
         let length = self.len();
@@ -151,6 +202,12 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             .expect("Failed to batch-write to database in batch_set");
     }
 
+    /// retrieve the last entry and remove it from the Vec
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if get, delete, or
+    /// set_length operations panic.
     pub fn pop(&mut self) -> Option<T> {
         match self.len() {
             0 => None,
@@ -163,6 +220,11 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         }
     }
 
+    /// add `value`` to end of the Vec
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the DB write fails
     pub fn push(&mut self, value: T) {
         let length = self.len();
         let value_bytes = bincode::serialize(&value).unwrap();

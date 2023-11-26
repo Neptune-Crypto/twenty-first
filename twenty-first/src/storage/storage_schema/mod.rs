@@ -1,3 +1,11 @@
+//! Provides a virtual DB Schema with atomic writes across "tables".
+//!
+//! This module provides [`DbSchema`] that can generate any number of
+//! [`DbtVec`] and [`DbtSingleton`] collection types.
+//!
+//! Mutating operations to these "tables" are cached and written to the
+//! database in a single atomic batch operation.
+
 mod dbtsingleton;
 mod dbtsingleton_private;
 mod dbtsingleton_ref;
@@ -17,7 +25,7 @@ pub use dbtsingleton::*;
 // pub use dbtsingleton_private::*;
 pub use dbtsingleton_ref::*;
 pub use dbtvec::*;
-pub use dbtvec_private::*;
+// pub use dbtvec_private::*;
 pub use dbtvec_ref::*;
 pub use enums::*;
 pub use rusty_key::*;

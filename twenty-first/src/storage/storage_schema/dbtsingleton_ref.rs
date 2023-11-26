@@ -1,10 +1,12 @@
-// use super::super::level_db::DB;
-// use super::super::storage_vec::StorageVec;
 use super::traits::StorageSingleton;
 use super::{DbTable, DbtSingleton, WriteOperation};
 use std::sync::Arc;
 use std::{cell::RefCell, fmt::Debug};
 
+/// Singleton reference type created by [`DbSchema`]
+///
+/// This type is concurrency-safe. Callers do not need to perform
+/// any additional locking.
 pub type DbtSingletonReference<PK, PV, T> = Arc<RefCell<DbtSingleton<PK, PV, T>>>;
 
 impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>

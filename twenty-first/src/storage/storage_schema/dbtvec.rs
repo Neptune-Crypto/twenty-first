@@ -1,11 +1,17 @@
 // use super::super::level_db::DB;
 use super::super::storage_vec::{Index, StorageVec};
-use super::{DbTable, DbtVecPrivate, StorageReader, WriteOperation};
+use super::dbtvec_private::DbtVecPrivate;
+use super::{DbTable, StorageReader, WriteOperation};
 use std::{
     fmt::Debug,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
+/// A DB-backed Vec for use with DBSchema
+///
+/// This type is concurrency-safe.  A single RwLock is employed
+/// for all read and write ops.  Callers do not need to perform
+/// any additional locking.
 pub struct DbtVec<ParentKey, ParentValue, Index, T> {
     // note: Arc is not needed, because we never hand out inner to anyone.
     inner: RwLock<DbtVecPrivate<ParentKey, ParentValue, Index, T>>,

@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use crate::shared_math::b_field_element::BFieldElement;
 
+/// Represents a database value as bytes and provides some conversions.
 #[derive(Debug)]
 pub struct RustyValue(pub Vec<u8>);
 
