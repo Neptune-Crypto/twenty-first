@@ -8,6 +8,11 @@ use super::{
     WriteOperation,
 };
 
+/// Singleton type created by [`DbSchema`]
+///
+/// This type is concurrency-safe.  A single RwLock is employed
+/// for all read and write ops.  Callers do not need to perform
+/// any additional locking.
 pub struct DbtSingleton<ParentKey, ParentValue, T> {
     // note: Arc is not needed, because we never hand out inner to anyone.
     inner: RwLock<DbtSingletonPrivate<ParentKey, ParentValue, T>>,

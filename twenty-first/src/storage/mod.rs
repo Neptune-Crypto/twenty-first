@@ -1,13 +1,18 @@
+#![warn(missing_docs)]
+#![warn(rustdoc::unescaped_backticks)]
+#![warn(rustdoc::broken_intra_doc_links)]
+
 //! Thread-safe collection types backed by levelDB.
 //!
 //! In particular:
-//!  - `RustyLeveldbVec` provides a database-backed Vec with
+//!  - [`storage_vec::RustyLevelDbVec`] provides a database-backed Vec with
 //!    read/write cache and atomic writes.
-//!  - `SimpleRustyStorage provides atomic DB writes across
+//!  - [`storage_schema::SimpleRustyStorage`] provides atomic DB writes across
 //!    any number of `DbtVec` or `DbtSingleton` "tables"
-//!  - `DatabaseArray` and `DatabaseVec` provide uncached
+//!  - [`database_array::DatabaseArray`] and [`database_vector::DatabaseVector`] provide uncached
 //!    and non-atomic writes.
-//!  - `DB` provides direct access to the LevelDB API.
+//!  - [`level_db::DB`] provides direct access to the LevelDB API.
+
 pub mod database_array;
 pub mod database_vector;
 pub mod level_db;

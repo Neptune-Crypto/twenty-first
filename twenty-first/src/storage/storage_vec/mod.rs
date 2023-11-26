@@ -4,6 +4,7 @@
 // To accomplish that, we keep the sub modules private, and
 // add `pub use sub_module::*`.
 
+#![allow(missing_docs)]
 mod ordinary_vec;
 mod rusty_leveldb_vec;
 mod rusty_leveldb_vec_private;

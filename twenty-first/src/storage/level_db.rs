@@ -1,3 +1,10 @@
+//! [`DB`] wraps [`crate::leveldb::database::Database`] and provides
+//! functionality for reading the database on-disk path
+//! as well as destroying the on-disk database manually
+//! or automatically upon drop.
+//!
+//! auto-destroy-on-drop is needed for unit tests that use the DB.
+
 use leveldb::{
     batch::{Batch, WriteBatch},
     compaction::Compaction,
@@ -11,11 +18,7 @@ use leveldb::{
 };
 use std::path::Path;
 
-/// `DB` wraps `leveldb::database::Database` and provides
-/// functionality for reading the database on-disk path
-/// as well as destroying the on-disk database manually
-/// or automatically upon drop.  auto-destroy-on-drop is
-/// needed for unit tests that use the DB.
+/// DB provides thread-safe access to LevelDB API.
 //
 //  This also provides an abstraction layer in case we
 //  decide to simplify/alter the DB api a bit, or even
@@ -154,11 +157,13 @@ impl DB {
         self.db.delete_u8(options, key)
     }
 
+    /// returns the directory path of the database files on disk.
     #[inline]
     pub fn path(&self) -> &std::path::PathBuf {
         &self.path
     }
 
+    /// returns `destroy_db_on_drop` setting
     #[inline]
     pub fn destroy_db_on_drop(&self) -> bool {
         self.destroy_db_on_drop

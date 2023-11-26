@@ -2,9 +2,20 @@ use super::super::storage_vec::Index;
 use super::{DbTable, DbtSingleton, DbtSingletonReference, DbtVec, DbtVecReference, StorageReader};
 use std::{cell::RefCell, sync::Arc};
 
+/// Provides a virtual database schema.
+///
+/// `DbtSchema` can create any number of instances of types that
+/// implement [`DbTable`].
+///
+/// The application can perform writes to any subset of the
+/// instances and then persist (write) the data atomically
+/// to the database.
+///
+/// Thus we get something like relational DB transactions using
+/// LevelDB key/val store.
 pub struct DbtSchema<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue>> {
-    pub tables: Vec<Arc<RefCell<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>>,
-    pub reader: Arc<Reader>,
+    pub(crate) tables: Vec<Arc<RefCell<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>>,
+    pub(crate) reader: Arc<Reader>,
 }
 
 impl<
@@ -13,6 +24,7 @@ impl<
         Reader: StorageReader<ParentKey, ParentValue> + 'static + Sync + Send,
     > DbtSchema<ParentKey, ParentValue, Reader>
 {
+    /// Create a new DbtVecReference
     #[inline]
     pub fn new_vec<I, T>(&mut self, name: &str) -> DbtVecReference<ParentKey, ParentValue, T>
     where
@@ -39,6 +51,7 @@ impl<
     // possible future extension
     // fn new_hashmap<K, V>(&self) -> Arc<RefCell<DbtHashMap<K, V>>> { }
 
+    /// Create a new DbtSingletonReference
     #[inline]
     pub fn new_singleton<S>(
         &mut self,

@@ -5,6 +5,7 @@ use leveldb::options::ReadOptions;
 // Note: RustyReader and SimpleRustyReader appear to be exactly
 // the same.  Can we remove one of them?
 
+/// A read-only database interface
 pub struct SimpleRustyReader {
     pub(super) db: DB,
 }

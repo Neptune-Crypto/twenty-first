@@ -12,7 +12,7 @@ use std::sync::Arc;
 /// new() (that's what the tests do).
 pub struct SimpleRustyStorage {
     // pub db: Arc<DB>,
-    pub schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
+    pub(crate) schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
 }
 
 impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
@@ -43,6 +43,7 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
 }
 
 impl SimpleRustyStorage {
+    /// Create a new SimpleRustyStorage
     #[inline]
     pub fn new(db: DB) -> Self {
         let schema = DbtSchema::<RustyKey, RustyValue, SimpleRustyReader> {
