@@ -13,7 +13,11 @@ use std::{cell::RefCell, sync::Arc};
 ///
 /// Thus we get something like relational DB transactions using
 /// LevelDB key/val store.
-pub struct DbtSchema<ParentKey, ParentValue, Reader: StorageReader<ParentKey, ParentValue>> {
+pub struct DbtSchema<
+    ParentKey,
+    ParentValue,
+    Reader: StorageReader<ParentKey, ParentValue> + Send + Sync,
+> {
     pub(crate) tables: Vec<Arc<RefCell<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>>,
     pub(crate) reader: Arc<Reader>,
 }
