@@ -17,56 +17,63 @@ use super::{
 /// Also because the locking is fully encapsulated within DbtSingleton
 /// there is no possibility of a caller holding a lock too long
 /// by accident or encountering ordering deadlock issues.
-pub struct DbtSingleton<ParentKey, ParentValue, T> {
+///
+/// `DbtSingleton` is a NewType around Arc<RwLock<..>>.  Thus it
+/// can be cheaply cloned to create a reference as if it were an
+/// Arc.
+pub struct DbtSingleton<K, V, T> {
     // note: Arc is not needed, because we never hand out inner to anyone.
-    inner: RwLock<DbtSingletonPrivate<ParentKey, ParentValue, T>>,
+    inner: Arc<RwLock<DbtSingletonPrivate<K, V, T>>>,
 }
 
-impl<ParentKey, ParentValue, T> DbtSingleton<ParentKey, ParentValue, T>
+// We manually impl Clone so that callers can make reference clones.
+impl<K, V, T> Clone for DbtSingleton<K, V, T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<K, V, T> DbtSingleton<K, V, T>
 where
     T: Default,
 {
     // DbtSingleton can not be instantiated directly outside of this crate.
     #[inline]
-    pub(crate) fn new(
-        key: ParentKey,
-        reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Sync + Send>,
-    ) -> Self {
-        let singleton = DbtSingletonPrivate::<ParentKey, ParentValue, T> {
+    pub(crate) fn new(key: K, reader: Arc<dyn StorageReader<K, V> + Sync + Send>) -> Self {
+        let singleton = DbtSingletonPrivate::<K, V, T> {
             current_value: Default::default(),
             old_value: Default::default(),
             key,
             reader,
         };
         Self {
-            inner: RwLock::new(singleton),
+            inner: Arc::new(RwLock::new(singleton)),
         }
     }
 
+    // This is a private method, but we allow unit tests in super to use it.
     #[inline]
-    pub(crate) fn read_lock(
-        &self,
-    ) -> RwLockReadGuard<'_, DbtSingletonPrivate<ParentKey, ParentValue, T>> {
+    pub(super) fn read_lock(&self) -> RwLockReadGuard<'_, DbtSingletonPrivate<K, V, T>> {
         self.inner.read().unwrap()
     }
 
+    // This is a private method, but we allow unit tests in super to use it.
     #[inline]
-    pub(crate) fn write_lock(
-        &self,
-    ) -> RwLockWriteGuard<'_, DbtSingletonPrivate<ParentKey, ParentValue, T>> {
+    pub(super) fn write_lock(&self) -> RwLockWriteGuard<'_, DbtSingletonPrivate<K, V, T>> {
         self.inner.write().unwrap()
     }
 }
 
-impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
-    for DbtSingleton<ParentKey, ParentValue, T>
+impl<K, V, T> DbTable<K, V> for DbtSingleton<K, V, T>
 where
-    T: Eq + Clone + Default + From<ParentValue>,
-    ParentValue: From<T> + Debug,
-    ParentKey: Clone,
+    T: Eq + Clone + Default + From<V>,
+    V: From<T> + Debug,
+    K: Clone,
 {
     #[inline]
-    fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
+    fn pull_queue(&mut self) -> Vec<WriteOperation<K, V>> {
         self.write_lock().pull_queue()
     }
 
@@ -76,9 +83,9 @@ where
     }
 }
 
-impl<ParentKey, ParentValue, T> StorageSingleton<T> for DbtSingleton<ParentKey, ParentValue, T>
+impl<K, V, T> StorageSingleton<T> for DbtSingleton<K, V, T>
 where
-    T: Clone + From<ParentValue> + Default,
+    T: Clone + From<V> + Default,
 {
     #[inline]
     fn get(&self) -> T {

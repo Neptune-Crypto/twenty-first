@@ -18,8 +18,8 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
     #[inline]
     fn persist(&mut self) {
         let write_batch = WriteBatch::new();
-        for table in &self.schema.tables {
-            let operations = table.borrow_mut().pull_queue();
+        for table in self.schema.tables.iter_mut() {
+            let operations = table.pull_queue();
             for op in operations {
                 match op {
                     WriteOperation::Write(key, value) => write_batch.put(&key.0, &value.0),
@@ -35,8 +35,8 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
 
     #[inline]
     fn restore_or_new(&mut self) {
-        for table in &self.schema.tables {
-            table.borrow_mut().restore_or_new();
+        for table in self.schema.tables.iter_mut() {
+            table.restore_or_new();
         }
     }
 }

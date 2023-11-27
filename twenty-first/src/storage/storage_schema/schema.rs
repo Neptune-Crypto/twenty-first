@@ -1,6 +1,6 @@
 use super::super::storage_vec::Index;
-use super::{DbTable, DbtSingleton, DbtSingletonReference, DbtVec, DbtVecReference, StorageReader};
-use std::{cell::RefCell, sync::Arc};
+use super::{DbTable, DbtSingleton, DbtVec, StorageReader};
+use std::sync::Arc;
 
 /// Provides a virtual database schema.
 ///
@@ -18,8 +18,15 @@ pub struct DbtSchema<
     ParentValue,
     Reader: StorageReader<ParentKey, ParentValue> + Send + Sync,
 > {
-    pub(crate) tables: Vec<Arc<RefCell<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>>,
-    pub(crate) reader: Arc<Reader>,
+    /// These are the tables known by this `DbtSchema` instance.
+    ///
+    /// Implementor(s) of [`StorageWriter`] will iterate over these
+    /// tables, collect the pending operations, and write them
+    /// atomically to the DB.
+    pub tables: Vec<Box<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>,
+
+    /// Database Reader
+    pub reader: Arc<Reader>,
 }
 
 impl<
@@ -28,9 +35,13 @@ impl<
         Reader: StorageReader<ParentKey, ParentValue> + 'static + Sync + Send,
     > DbtSchema<ParentKey, ParentValue, Reader>
 {
-    /// Create a new DbtVecReference
+    /// Create a new DbtVec
+    ///
+    /// The `DbtSchema` will keep a reference to the `DbtVec`. In this way,
+    /// the Schema becomes aware of any write operations and later
+    /// a [`StorageWriter`] impl can write them all out.
     #[inline]
-    pub fn new_vec<I, T>(&mut self, name: &str) -> DbtVecReference<ParentKey, ParentValue, T>
+    pub fn new_vec<I, T>(&mut self, name: &str) -> DbtVec<ParentKey, ParentValue, Index, T>
     where
         ParentKey: From<Index> + 'static,
         ParentValue: From<T> + 'static,
@@ -47,20 +58,20 @@ impl<
         let key_prefix = self.tables.len() as u8;
         let vector = DbtVec::<ParentKey, ParentValue, Index, T>::new(reader, key_prefix, name);
 
-        let arc_refcell_vector = Arc::new(RefCell::new(vector));
-        self.tables.push(arc_refcell_vector.clone());
-        arc_refcell_vector
+        self.tables.push(Box::new(vector.clone()));
+        vector
     }
 
     // possible future extension
     // fn new_hashmap<K, V>(&self) -> Arc<RefCell<DbtHashMap<K, V>>> { }
 
-    /// Create a new DbtSingletonReference
+    /// Create a new DbtSingleton
+    ///
+    /// The `DbtSchema` will keep a reference to the `DbtSingleton`.
+    /// In this way, the Schema becomes aware of any write operations
+    /// and later a [`StorageWriter`] impl can write them all out.
     #[inline]
-    pub fn new_singleton<S>(
-        &mut self,
-        key: ParentKey,
-    ) -> DbtSingletonReference<ParentKey, ParentValue, S>
+    pub fn new_singleton<S>(&mut self, key: ParentKey) -> DbtSingleton<ParentKey, ParentValue, S>
     where
         S: Default + Eq + Clone + 'static,
         ParentKey: 'static,
@@ -69,8 +80,7 @@ impl<
         DbtSingleton<ParentKey, ParentValue, S>: DbTable<ParentKey, ParentValue> + Send + Sync,
     {
         let singleton = DbtSingleton::<ParentKey, ParentValue, S>::new(key, self.reader.clone());
-        let arc_refcell_singleton = Arc::new(RefCell::new(singleton));
-        self.tables.push(arc_refcell_singleton.clone());
-        arc_refcell_singleton
+        self.tables.push(Box::new(singleton.clone()));
+        singleton
     }
 }

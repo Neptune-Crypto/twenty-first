@@ -1,6 +1,8 @@
 use super::{DbTable, StorageReader, StorageSingleton, WriteOperation};
 use std::{fmt::Debug, sync::Arc};
 
+// note: no locking is required in `DbtSingletonPrivate` because locking
+// is performed in the `DbtSingleton` public wrapper.
 pub(crate) struct DbtSingletonPrivate<ParentKey, ParentValue, T> {
     pub(super) current_value: T,
     pub(super) old_value: T,

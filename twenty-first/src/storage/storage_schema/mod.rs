@@ -8,10 +8,8 @@
 
 mod dbtsingleton;
 mod dbtsingleton_private;
-mod dbtsingleton_ref;
 mod dbtvec;
 mod dbtvec_private;
-mod dbtvec_ref;
 mod enums;
 mod rusty_key;
 mod rusty_reader;
@@ -22,11 +20,7 @@ mod simple_rusty_storage;
 mod traits;
 
 pub use dbtsingleton::*;
-// pub use dbtsingleton_private::*;
-pub use dbtsingleton_ref::*;
 pub use dbtvec::*;
-// pub use dbtvec_private::*;
-pub use dbtvec_ref::*;
 pub use enums::*;
 pub use rusty_key::*;
 pub use rusty_reader::*;
