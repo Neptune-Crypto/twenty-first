@@ -120,7 +120,11 @@ where
 
         // try cache first
         if self.cache.contains_key(&index) {
-            return self.cache.get(&index).unwrap().clone();
+            return self
+                .cache
+                .get(&index)
+                .expect("there should be some value")
+                .clone();
         }
 
         // then try persistent storage
@@ -159,7 +163,11 @@ where
 
         let mut fetched_elements = HashMap::with_capacity(indices.len());
         for (index_position, index) in indices_of_elements_in_cache {
-            let value = self.cache.get(&index).unwrap().clone();
+            let value = self
+                .cache
+                .get(&index)
+                .expect("there should be some value")
+                .clone();
             fetched_elements.insert(index_position, value);
         }
 
@@ -176,7 +184,7 @@ where
             .reader
             .get_many(&keys_for_indices_not_in_cache)
             .into_iter()
-            .map(|x| x.unwrap().into());
+            .map(|x| x.expect("there should be some value").into());
 
         let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
             .iter()
@@ -203,7 +211,7 @@ where
         if no_need_to_lock_database {
             return fetched_elements
                 .into_iter()
-                .map(|x| x.unwrap())
+                .map(|x| x.expect("there should be some value"))
                 .collect_vec();
         }
 
@@ -215,7 +223,7 @@ where
             .reader
             .get_many(&keys)
             .into_iter()
-            .map(|x| x.unwrap().into());
+            .map(|x| x.expect("there should be some value").into());
         let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
             .into_iter()
             .zip_eq(elements_fetched_from_db);
@@ -225,7 +233,7 @@ where
 
         fetched_elements
             .into_iter()
-            .map(|x| x.unwrap())
+            .map(|x| x.expect("there should be some value"))
             .collect_vec()
     }
 
@@ -276,7 +284,10 @@ where
         self.write_queue.push_back(VecWriteOperation::Pop);
 
         // Update length
-        *self.current_length.as_mut().unwrap() -= 1;
+        *self
+            .current_length
+            .as_mut()
+            .expect("there should be some value") -= 1;
 
         // try cache first
         let current_length = self.len();
