@@ -29,9 +29,9 @@ pub enum Domain {
     FixedLength,
 }
 
-pub trait SpongeHasher: Clone + Send + Sync {
+pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
     const RATE: usize;
-    type SpongeState: Clone + Debug + for<'a> Arbitrary<'a>;
+    type SpongeState: Clone + Debug + Default + for<'a> Arbitrary<'a>;
 
     /// Initialize a sponge state
     fn init() -> Self::SpongeState;
