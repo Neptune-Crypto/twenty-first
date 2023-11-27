@@ -107,7 +107,7 @@ mod write_100_entries {
             bencher.bench_local(|| {
                 let wb = WriteBatch::new();
                 for i in 0..NUM_WRITE_ITEMS {
-                    let _ = wb.put(&i, &value());
+                    wb.put(&i, &value());
                 }
                 let _ = db.write(&write_options, &wb);
             });
@@ -120,7 +120,7 @@ mod write_100_entries {
 
             let wb = WriteBatch::new();
             for i in 0..NUM_WRITE_ITEMS {
-                let _ = wb.put(&i, &value());
+                wb.put(&i, &value());
             }
 
             bencher.bench_local(|| {
@@ -194,7 +194,7 @@ mod write_100_entries {
             // batch write items, unsync
             let wb = WriteBatch::new();
             for i in 0..NUM_WRITE_ITEMS {
-                let _ = wb.put(&i, &value());
+                wb.put(&i, &value());
             }
             let _ = db.write(&write_options, &wb);
 
@@ -204,7 +204,7 @@ mod write_100_entries {
 
             bencher.bench_local(|| {
                 for i in 0..NUM_WRITE_ITEMS {
-                    let _ = wb.delete(&i);
+                    wb.delete(&i);
                 }
                 let _ = db.write(&write_options, &wb_del);
             });
@@ -218,7 +218,7 @@ mod write_100_entries {
             // batch write items, unsync
             let wb = WriteBatch::new();
             for i in 0..NUM_WRITE_ITEMS {
-                let _ = wb.put(&i, &value());
+                wb.put(&i, &value());
             }
             let _ = db.write(&write_options, &wb);
 
@@ -226,7 +226,7 @@ mod write_100_entries {
             write_options.sync = true;
             let wb_del = WriteBatch::new();
             for i in 0..NUM_WRITE_ITEMS {
-                let _ = wb.delete(&i);
+                wb.delete(&i);
             }
 
             bencher.bench_local(|| {

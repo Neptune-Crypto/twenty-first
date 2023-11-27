@@ -7,6 +7,8 @@ use std::{
     sync::Arc,
 };
 
+// note: no locking is required in `DbtVecPrivate` because locking
+// is performed in the `DbtVec` public wrapper.
 pub(crate) struct DbtVecPrivate<ParentKey, ParentValue, Index, T> {
     reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
     current_length: Option<Index>,

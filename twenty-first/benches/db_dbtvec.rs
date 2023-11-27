@@ -4,9 +4,9 @@ use leveldb_sys::Compression;
 use twenty_first::leveldb::options::Options;
 use twenty_first::storage::level_db::DB;
 use twenty_first::util_types::storage_schema::{
-    DbtVecReference, RustyKey, RustyValue, SimpleRustyStorage, StorageWriter,
+    DbtVec, RustyKey, RustyValue, SimpleRustyStorage, StorageWriter,
 };
-use twenty_first::util_types::storage_vec::StorageVec;
+use twenty_first::util_types::storage_vec::{Index, StorageVec};
 
 // These database bench tests are made with divan.
 //
@@ -78,7 +78,7 @@ fn value() -> Vec<u8> {
 
 fn create_test_dbtvec() -> (
     SimpleRustyStorage,
-    DbtVecReference<RustyKey, RustyValue, Vec<u8>>,
+    DbtVec<RustyKey, RustyValue, Index, Vec<u8>>,
 ) {
     let db = DB::open_new_test_database(true, db_options()).unwrap();
     let mut storage = SimpleRustyStorage::new(db);
@@ -162,7 +162,7 @@ mod write_100_entries {
             }
 
             bencher.bench_local(|| {
-                let values: Vec<_> = (0..NUM_WRITE_ITEMS).map(|i| (i as u64, value())).collect();
+                let values: Vec<_> = (0..NUM_WRITE_ITEMS).map(|i| (i, value())).collect();
                 vector.set_many(values);
                 if persist {
                     storage.persist();
