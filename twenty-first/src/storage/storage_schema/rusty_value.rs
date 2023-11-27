@@ -21,7 +21,12 @@ impl From<RustyValue> for Vec<u8> {
 impl From<RustyValue> for u64 {
     #[inline]
     fn from(value: RustyValue) -> Self {
-        u64::from_be_bytes(value.0.try_into().unwrap())
+        u64::from_be_bytes(
+            value
+                .0
+                .try_into()
+                .expect("should have deserialized bytes into u64"),
+        )
     }
 }
 impl From<u64> for RustyValue {
@@ -31,6 +36,7 @@ impl From<u64> for RustyValue {
     }
 }
 impl From<RustyValue> for crate::shared_math::tip5::Digest {
+    #[inline]
     fn from(value: RustyValue) -> Self {
         crate::shared_math::tip5::Digest::new(
             value

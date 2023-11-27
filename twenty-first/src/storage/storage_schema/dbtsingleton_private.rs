@@ -31,6 +31,7 @@ where
     ParentValue: From<T> + Debug,
     ParentKey: Clone,
 {
+    #[inline]
     fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
         if self.current_value == self.old_value {
             vec![]
@@ -43,6 +44,7 @@ where
         }
     }
 
+    #[inline]
     fn restore_or_new(&mut self) {
         self.current_value = match self.reader.get(self.key.clone()) {
             Some(value) => value.into(),

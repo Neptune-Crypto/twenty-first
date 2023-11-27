@@ -2,6 +2,7 @@
 //! non-atomic
 
 use super::level_db::DB;
+use super::utils;
 use leveldb::{
     batch::{Batch, WriteBatch},
     options::{ReadOptions, WriteOptions},
@@ -19,6 +20,7 @@ pub struct DatabaseArray<const N: IndexType, T: Serialize + DeserializeOwned + D
 
 impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArray<N, T> {
     /// Return the element at position index. Returns `T::defeault()` if value is unset
+    #[inline]
     pub fn get(&mut self, index: IndexType) -> T {
         assert!(
             N > index,
@@ -26,7 +28,7 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
         );
         let elem_as_bytes_res = self.db.get(&ReadOptions::new(), &index).unwrap();
         match elem_as_bytes_res {
-            Some(bytes) => bincode::deserialize(&bytes).unwrap(),
+            Some(bytes) => utils::deserialize(&bytes),
             None => T::default(),
         }
     }
@@ -40,7 +42,7 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
         );
         let batch_write = WriteBatch::new();
         for (index, val) in indices_and_vals.iter() {
-            let value_bytes: Vec<u8> = bincode::serialize(val).unwrap();
+            let value_bytes: Vec<u8> = utils::serialize(val);
             batch_write.put(index, &value_bytes);
         }
 
@@ -50,18 +52,20 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
     }
 
     /// Set the value at index
+    #[inline]
     pub fn set(&mut self, index: IndexType, value: T) {
         assert!(
             N > index,
             "Cannot set outside of length. Length: {N}, index: {index}"
         );
-        let value_bytes: Vec<u8> = bincode::serialize(&value).unwrap();
+        let value_bytes: Vec<u8> = utils::serialize(&value);
         self.db
             .put(&WriteOptions::new(), &index, &value_bytes)
             .unwrap();
     }
 
     /// Create a new, default-initialized database array. Input database must be empty.
+    #[inline]
     pub fn new(db: DB) -> Self {
         Self {
             db,
@@ -70,11 +74,13 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
     }
 
     /// Restore a database array object from a database.
+    #[inline]
     pub fn restore(db: DB) -> Self {
         Self::new(db)
     }
 
     /// Drop the database array and return the database in which its values are stored
+    #[inline]
     pub fn extract_db(self) -> DB {
         self.db
     }

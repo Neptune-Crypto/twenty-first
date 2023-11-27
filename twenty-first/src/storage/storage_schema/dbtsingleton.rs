@@ -56,13 +56,17 @@ where
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
     pub(super) fn read_lock(&self) -> RwLockReadGuard<'_, DbtSingletonPrivate<K, V, T>> {
-        self.inner.read().unwrap()
+        self.inner
+            .read()
+            .expect("should have acquired read lock for DbtSingletonPrivate")
     }
 
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
     pub(super) fn write_lock(&self) -> RwLockWriteGuard<'_, DbtSingletonPrivate<K, V, T>> {
-        self.inner.write().unwrap()
+        self.inner
+            .write()
+            .expect("should have acquired write lock for DbtSingletonPrivate")
     }
 }
 

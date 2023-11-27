@@ -2,6 +2,7 @@
 //! non-atomic
 
 use super::level_db::DB;
+use super::utils;
 use leveldb::{
     batch::{Batch, WriteBatch},
     options::{ReadOptions, WriteOptions},
@@ -30,8 +31,9 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// # Panics
     ///
     /// This function will panic if the database write fails
+    #[inline]
     fn set_length(&mut self, length: IndexType) {
-        let length = bincode::serialize(&length).unwrap();
+        let length = utils::serialize(&length);
         self.db
             .put_u8(&WriteOptions::new(), &LENGTH_KEY, &length)
             .expect("Length write must succeed");
@@ -42,6 +44,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// # Panics
     ///
     /// This function will panic if the index is not found
+    #[inline]
     fn delete(&mut self, index: IndexType) {
         self.db
             .delete(&WriteOptions::new(), &index)
@@ -54,6 +57,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// # Panics
     ///
     /// This function will panic if the index is not found
+    #[inline]
     fn attempt_verify_empty(&mut self) -> bool {
         self.db
             .get(&ReadOptions::new(), &INDEX_ZERO)
@@ -62,6 +66,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     }
 
     /// returns true if empty
+    #[inline]
     pub fn is_empty(&mut self) -> bool {
         self.len() == 0
     }
@@ -71,16 +76,18 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// # Panics
     ///
     /// This function will panic if the length has not been written to database
+    #[inline]
     pub fn len(&mut self) -> IndexType {
         let length_as_bytes = self
             .db
             .get_u8(&ReadOptions::new(), &LENGTH_KEY)
             .expect("Length must exist")
             .unwrap();
-        bincode::deserialize(&length_as_bytes).unwrap()
+        utils::deserialize(&length_as_bytes)
     }
 
     /// given a database containing a database vector, restore it into a database vector struct
+    #[inline]
     pub fn restore(db: DB) -> Self {
         let mut ret = Self {
             _type: PhantomData,
@@ -105,7 +112,6 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         let batch_write = WriteBatch::new();
 
         for index in new_length..old_length {
-            // let index_bytes: Vec<u8> = bincode::serialize(&index).unwrap();
             batch_write.delete(&index);
         }
 
@@ -113,7 +119,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             // Notice that `index` has to be cast to the type of the index for this data structure.
             // Otherwise this function will create a corrupted database.
             let index = index as IndexType;
-            let value_bytes: Vec<u8> = bincode::serialize(&val).unwrap();
+            let value_bytes: Vec<u8> = utils::serialize(&val);
             batch_write.put(&index, &value_bytes);
         }
 
@@ -127,6 +133,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// # Panics
     ///
     /// This function will panic if the new Vec is not empty.
+    #[inline]
     pub fn new(db: DB) -> Self {
         let mut ret = DatabaseVector {
             db,
@@ -148,6 +155,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     ///
     /// This function will panic if index is out of range
     /// or if the database fetch fails.
+    #[inline]
     pub fn get(&mut self, index: IndexType) -> T {
         debug_assert!(
             self.len() > index,
@@ -156,7 +164,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             index
         );
         let elem_as_bytes = self.db.get(&ReadOptions::new(), &index).unwrap().unwrap();
-        bincode::deserialize(&elem_as_bytes).unwrap()
+        utils::deserialize(&elem_as_bytes)
     }
 
     /// set entry identified by `index` to `value`
@@ -165,6 +173,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     ///
     /// This function will panic if index is out of range
     /// or if the database write fails.
+    #[inline]
     pub fn set(&mut self, index: IndexType, value: T) {
         debug_assert!(
             self.len() > index,
@@ -172,7 +181,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             self.len(),
             index
         );
-        let value_bytes: Vec<u8> = bincode::serialize(&value).unwrap();
+        let value_bytes: Vec<u8> = utils::serialize(&value);
         self.db
             .put(&WriteOptions::new(), &index, &value_bytes)
             .unwrap();
@@ -193,7 +202,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         );
         let batch_write = WriteBatch::new();
         for (index, val) in indices_and_vals.iter() {
-            let value_bytes: Vec<u8> = bincode::serialize(val).unwrap();
+            let value_bytes: Vec<u8> = utils::serialize(val);
             batch_write.put(index, &value_bytes);
         }
 
@@ -208,6 +217,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     ///
     /// This function will panic if get, delete, or
     /// set_length operations panic.
+    #[inline]
     pub fn pop(&mut self) -> Option<T> {
         match self.len() {
             0 => None,
@@ -225,9 +235,10 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// # Panics
     ///
     /// This function will panic if the DB write fails
+    #[inline]
     pub fn push(&mut self, value: T) {
         let length = self.len();
-        let value_bytes = bincode::serialize(&value).unwrap();
+        let value_bytes = utils::serialize(&value);
         self.db
             .put(&WriteOptions::new(), &length, &value_bytes)
             .unwrap();
@@ -235,6 +246,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     }
 
     /// Dispose of the vector and return the database. You should probably only use this for testing.
+    #[inline]
     pub fn extract_db(self) -> DB {
         self.db
     }

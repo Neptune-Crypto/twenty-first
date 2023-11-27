@@ -56,13 +56,15 @@ where
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
     pub(super) fn read_lock(&self) -> RwLockReadGuard<'_, DbtVecPrivate<K, V, Index, T>> {
-        self.inner.read().unwrap()
+        self.inner.read().expect("should acquire DbtVec read lock")
     }
 
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
     pub(super) fn write_lock(&mut self) -> RwLockWriteGuard<'_, DbtVecPrivate<K, V, Index, T>> {
-        self.inner.write().unwrap()
+        self.inner
+            .write()
+            .expect("should acquire DbtVec write lock")
     }
 }
 

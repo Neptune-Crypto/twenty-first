@@ -15,7 +15,7 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
     fn get(&self, key: RustyKey) -> Option<RustyValue> {
         self.db
             .get(&ReadOptions::new(), &key.0)
-            .unwrap()
+            .expect("there should be some value")
             .map(RustyValue)
     }
 
@@ -25,7 +25,7 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
             .map(|key| {
                 self.db
                     .get(&ReadOptions::new(), &key.0)
-                    .unwrap()
+                    .expect("there should be some value")
                     .map(RustyValue)
             })
             .collect()

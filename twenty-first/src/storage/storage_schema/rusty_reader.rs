@@ -7,7 +7,8 @@ use leveldb::options::ReadOptions;
 
 /// A read-only database interface
 pub struct RustyReader {
-    db: DB,
+    /// levelDB Database
+    pub db: DB,
 }
 
 impl StorageReader<RustyKey, RustyValue> for RustyReader {
@@ -15,7 +16,7 @@ impl StorageReader<RustyKey, RustyValue> for RustyReader {
     fn get(&self, key: RustyKey) -> Option<RustyValue> {
         self.db
             .get(&ReadOptions::new(), &key.0)
-            .unwrap()
+            .expect("there should be some value")
             .map(RustyValue)
     }
 
@@ -25,7 +26,7 @@ impl StorageReader<RustyKey, RustyValue> for RustyReader {
             .map(|key| {
                 self.db
                     .get(&ReadOptions::new(), &key.0)
-                    .unwrap()
+                    .expect("there should be some value")
                     .map(RustyValue)
             })
             .collect()

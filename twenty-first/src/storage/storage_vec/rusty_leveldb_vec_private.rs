@@ -1,7 +1,8 @@
 use super::super::level_db::DB;
+use super::super::utils;
 use super::storage_vec_trait::{Index, StorageVec, WriteElement};
 use itertools::Itertools;
-use leveldb::{batch::WriteBatch, options::ReadOptions};
+use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -20,14 +21,17 @@ pub(crate) struct RustyLevelDbVecPrivate<T: Serialize + DeserializeOwned> {
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecPrivate<T> {
+    #[inline]
     fn is_empty(&self) -> bool {
         self.length == 0
     }
 
+    #[inline]
     fn len(&self) -> Index {
         self.length
     }
 
+    #[inline]
     fn get(&self, index: Index) -> T {
         // Disallow getting values out-of-bounds
         assert!(
@@ -44,17 +48,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
 
         // then try persistent storage
         let db_key = self.get_index_key(index);
-        let db_val = self
-            .db
-            .get_u8(&ReadOptions::new(), &db_key)
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Element with index {index} does not exist in {}. This should not happen",
-                    self.name
-                )
-            })
-            .unwrap();
-        bincode::deserialize(&db_val).unwrap()
+        self.get_u8(&db_key)
     }
 
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
@@ -94,8 +88,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
         let elements_fetched_from_db = indices_of_elements_not_in_cache
             .iter()
             .map(|&(_, index)| self.get_index_key(index))
-            .map(|key| self.db.get_u8(&ReadOptions::new(), &key).unwrap().unwrap())
-            .map(|db_element| bincode::deserialize(&db_element).unwrap());
+            .map(|key| self.get_u8(&key));
 
         let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
             .iter()
@@ -124,24 +117,24 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
         if no_need_to_lock_database {
             return fetched_elements
                 .into_iter()
-                .map(|x| x.unwrap())
+                .map(|x| x.expect("should get some element"))
                 .collect_vec();
         }
 
         // let db_reader = self.db;
         for index in indices_of_elements_not_in_cache {
             let key = self.get_index_key(index);
-            let element = self.db.get_u8(&ReadOptions::new(), &key).unwrap().unwrap();
-            let element = bincode::deserialize(&element).unwrap();
+            let element = self.get_u8(&key);
             fetched_elements[index as usize] = Some(element);
         }
 
         fetched_elements
             .into_iter()
-            .map(|x| x.unwrap())
+            .map(|x| x.expect("should get some element"))
             .collect_vec()
     }
 
+    #[inline]
     fn set(&mut self, index: Index, value: T) {
         // Disallow setting values out-of-bounds
         assert!(
@@ -174,12 +167,14 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
     /// It is the caller's responsibility to ensure that index values are
     /// unique.  If not, the last value with the same index will win.
     /// For unordered collections such as HashMap, the behavior is undefined.
+    #[inline]
     fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
         for (index, value) in key_vals.into_iter() {
             self.set(index, value);
         }
     }
 
+    #[inline]
     fn pop(&mut self) -> Option<T> {
         // add to write queue
         self.write_queue.push_back(WriteElement::Pop);
@@ -198,13 +193,11 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
         } else {
             // then try persistent storage
             let db_key = self.get_index_key(self.length);
-            self.db
-                .get_u8(&ReadOptions::new(), &db_key)
-                .unwrap()
-                .map(|bytes| bincode::deserialize(&bytes).unwrap())
+            Some(self.get_u8(&db_key))
         }
     }
 
+    #[inline]
     fn push(&mut self, value: T) {
         // add to write queue
         self.write_queue
@@ -224,32 +217,36 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
 
 impl<T: Serialize + DeserializeOwned> RustyLevelDbVecPrivate<T> {
     // Return the key used to store the length of the persisted vector
+    #[inline]
     pub(crate) fn get_length_key(key_prefix: u8) -> [u8; 2] {
         const LENGTH_KEY: u8 = 0u8;
         [key_prefix, LENGTH_KEY]
     }
 
     /// Return the length at the last write to disk
+    #[inline]
     pub(crate) fn persisted_length(&self) -> Index {
         let key = Self::get_length_key(self.key_prefix);
-        match self.db.get_u8(&ReadOptions::new(), &key).unwrap() {
-            Some(value) => bincode::deserialize(&value).unwrap(),
+        match self.get_u8_option(&key) {
+            Some(value) => utils::deserialize(&value),
             None => 0,
         }
     }
 
     /// Return the level-DB key used to store the element at an index
+    #[inline]
     pub(crate) fn get_index_key(&self, index: Index) -> [u8; 9] {
-        [vec![self.key_prefix], bincode::serialize(&index).unwrap()]
+        [vec![self.key_prefix], utils::serialize(&index)]
             .concat()
             .try_into()
-            .unwrap()
+            .expect("should convert index key into [u8; 9]")
     }
 
+    #[inline]
     pub(crate) fn new(db: Arc<DB>, key_prefix: u8, name: &str) -> Self {
         let length_key = Self::get_length_key(key_prefix);
-        let length = match db.get_u8(&ReadOptions::new(), &length_key).unwrap() {
-            Some(length_bytes) => bincode::deserialize(&length_bytes).unwrap(),
+        let length = match utils::get_u8_option(&db, &length_key, name) {
+            Some(length_bytes) => utils::deserialize(&length_bytes),
             None => 0,
         };
         let cache = HashMap::new();
@@ -271,22 +268,17 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVecPrivate<T> {
             match write_element {
                 WriteElement::OverWrite((i, t)) => {
                     let key = self.get_index_key(i);
-                    let value = bincode::serialize(&t).unwrap();
+                    let value = utils::serialize(&t);
                     write_batch.put_u8(&key, &value);
                 }
                 WriteElement::Push(t) => {
-                    let key =
-                        [vec![self.key_prefix], bincode::serialize(&length).unwrap()].concat();
+                    let key = [vec![self.key_prefix], utils::serialize(&length)].concat();
                     length += 1;
-                    let value = bincode::serialize(&t).unwrap();
+                    let value = utils::serialize(&t);
                     write_batch.put(&key, &value);
                 }
                 WriteElement::Pop => {
-                    let key = [
-                        vec![self.key_prefix],
-                        bincode::serialize(&(length - 1)).unwrap(),
-                    ]
-                    .concat();
+                    let key = [vec![self.key_prefix], utils::serialize(&(length - 1))].concat();
                     length -= 1;
                     write_batch.delete(&key);
                 }
@@ -295,9 +287,19 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVecPrivate<T> {
 
         if original_length != length {
             let key = Self::get_length_key(self.key_prefix);
-            write_batch.put_u8(&key, &bincode::serialize(&self.length).unwrap());
+            write_batch.put_u8(&key, &utils::serialize(&self.length));
         }
 
         self.cache.clear();
+    }
+
+    #[inline]
+    fn get_u8_option(&self, index: &[u8]) -> Option<Vec<u8>> {
+        utils::get_u8_option(&self.db, index, &self.name)
+    }
+
+    #[inline]
+    fn get_u8(&self, index: &[u8]) -> T {
+        utils::get_u8(&self.db, index, &self.name)
     }
 }
