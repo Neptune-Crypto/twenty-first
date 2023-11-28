@@ -1,6 +1,5 @@
 use super::super::level_db::DB;
 use super::{RustyKey, RustyValue, StorageReader};
-use leveldb::options::ReadOptions;
 
 // Note: RustyReader and SimpleRustyReader appear to be exactly
 // the same.  Can we remove one of them?
@@ -15,7 +14,7 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
     #[inline]
     fn get(&self, key: RustyKey) -> Option<RustyValue> {
         self.db
-            .get(&ReadOptions::new(), &key.0)
+            .get(&key.0)
             .expect("there should be some value")
             .map(RustyValue)
     }
@@ -25,7 +24,7 @@ impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
         keys.iter()
             .map(|key| {
                 self.db
-                    .get(&ReadOptions::new(), &key.0)
+                    .get(&key.0)
                     .expect("there should be some value")
                     .map(RustyValue)
             })

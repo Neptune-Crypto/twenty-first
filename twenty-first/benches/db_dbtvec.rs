@@ -1,4 +1,5 @@
 use divan::Bencher;
+use leveldb::options::{ReadOptions, WriteOptions};
 use leveldb_sys::Compression;
 // use twenty_first::leveldb::database::cache::Cache;
 use twenty_first::leveldb::options::Options;
@@ -80,7 +81,16 @@ fn create_test_dbtvec() -> (
     SimpleRustyStorage,
     DbtVec<RustyKey, RustyValue, Index, Vec<u8>>,
 ) {
-    let db = DB::open_new_test_database(true, db_options()).unwrap();
+    let db = DB::open_new_test_database(
+        true,
+        db_options(),
+        Some(ReadOptions {
+            verify_checksums: false,
+            fill_cache: false,
+        }),
+        Some(WriteOptions { sync: true }),
+    )
+    .unwrap();
     let mut storage = SimpleRustyStorage::new(db);
     let vec = storage.schema.new_vec::<u64, Vec<u8>>("test-vector");
     (storage, vec)

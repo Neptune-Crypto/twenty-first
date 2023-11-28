@@ -1,6 +1,5 @@
 use super::level_db::DB;
 use super::storage_vec::Index;
-use leveldb::options::ReadOptions;
 use serde::de::DeserializeOwned;
 
 #[inline]
@@ -21,7 +20,7 @@ where
 
 #[inline]
 pub(super) fn get_u8_option(db: &DB, index: &[u8], name: &str) -> Option<Vec<u8>> {
-    db.get_u8(&ReadOptions::new(), index).unwrap_or_else(|e| {
+    db.get_u8(index).unwrap_or_else(|e| {
         panic!(
             "DB Error retrieving index {} of {}. error: {}",
             deserialize::<Index>(index),

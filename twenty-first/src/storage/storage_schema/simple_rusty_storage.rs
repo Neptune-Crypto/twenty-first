@@ -1,8 +1,7 @@
 use super::super::level_db::DB;
 use super::enums::WriteOperation;
 use super::{DbtSchema, RustyKey, RustyValue, SimpleRustyReader, StorageWriter};
-use leveldb::batch::{Batch, WriteBatch};
-use leveldb::options::WriteOptions;
+use leveldb::batch::WriteBatch;
 use std::sync::Arc;
 
 /// Database schema and tables logic for RustyLevelDB. You probably
@@ -29,7 +28,7 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
         }
 
         self.db()
-            .write(&WriteOptions::new(), &write_batch)
+            .write(&write_batch, true)
             .expect("Could not persist to database.");
     }
 

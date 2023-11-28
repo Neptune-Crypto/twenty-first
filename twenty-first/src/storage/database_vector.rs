@@ -3,10 +3,7 @@
 
 use super::level_db::DB;
 use super::utils;
-use leveldb::{
-    batch::{Batch, WriteBatch},
-    options::{ReadOptions, WriteOptions},
-};
+use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
@@ -36,7 +33,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     fn set_length(&mut self, length: IndexType) {
         let length = utils::serialize(&length);
         self.db
-            .put_u8(&WriteOptions::new(), &LENGTH_KEY, &length)
+            .put_u8(&LENGTH_KEY, &length)
             .expect("Length write must succeed");
     }
 
@@ -48,7 +45,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     #[inline]
     fn delete(&mut self, index: IndexType) {
         self.db
-            .delete(&WriteOptions::new(), &index)
+            .delete(&index)
             .expect("Deleting element must succeed");
     }
 
@@ -60,10 +57,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// This function will panic if the index is not found
     #[inline]
     fn attempt_verify_empty(&mut self) -> bool {
-        self.db
-            .get(&ReadOptions::new(), &INDEX_ZERO)
-            .unwrap()
-            .is_none()
+        self.db.get(&INDEX_ZERO).unwrap().is_none()
     }
 
     /// returns true if empty
@@ -81,7 +75,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     pub fn len(&mut self) -> IndexType {
         let length_as_bytes = self
             .db
-            .get_u8(&ReadOptions::new(), &LENGTH_KEY)
+            .get_u8(&LENGTH_KEY)
             .expect("Length must exist")
             .unwrap();
         utils::deserialize(&length_as_bytes)
@@ -125,7 +119,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         }
 
         self.db
-            .write(&WriteOptions::new(), &batch_write)
+            .write(&batch_write, true)
             .expect("Failed to batch-write to database in overwrite_with_vec");
     }
 
@@ -164,7 +158,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             self.len(),
             index
         );
-        let elem_as_bytes = self.db.get(&ReadOptions::new(), &index).unwrap().unwrap();
+        let elem_as_bytes = self.db.get(&index).unwrap().unwrap();
         utils::deserialize(&elem_as_bytes)
     }
 
@@ -183,9 +177,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
             index
         );
         let value_bytes: Vec<u8> = utils::serialize(&value);
-        self.db
-            .put(&WriteOptions::new(), &index, &value_bytes)
-            .unwrap();
+        self.db.put(&index, &value_bytes).unwrap();
     }
 
     /// set key/val pairs in `indices_and_vals`
@@ -208,7 +200,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         }
 
         self.db
-            .write(&WriteOptions::new(), &batch_write)
+            .write(&batch_write, true)
             .expect("Failed to batch-write to database in batch_set");
     }
 
@@ -240,9 +232,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     pub fn push(&mut self, value: T) {
         let length = self.len();
         let value_bytes = utils::serialize(&value);
-        self.db
-            .put(&WriteOptions::new(), &length, &value_bytes)
-            .unwrap();
+        self.db.put(&length, &value_bytes).unwrap();
         self.set_length(length + 1);
     }
 
@@ -259,7 +249,7 @@ mod database_vector_tests {
     use super::*;
 
     fn test_constructor() -> DatabaseVector<u64> {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
         DatabaseVector::new(db)
     }
 

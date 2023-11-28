@@ -1,6 +1,6 @@
 use divan::Bencher;
 use leveldb_sys::Compression;
-use twenty_first::leveldb::batch::{Batch, WriteBatch};
+use twenty_first::leveldb::batch::WriteBatch;
 // use twenty_first::leveldb::database::cache::Cache;
 use twenty_first::leveldb::options::{Options, ReadOptions, WriteOptions};
 use twenty_first::storage::level_db::DB;
@@ -74,6 +74,20 @@ fn db_options() -> Option<Options> {
     })
 }
 
+fn read_options(verify_checksums: bool, fill_cache: bool) -> Option<ReadOptions> {
+    Some(ReadOptions {
+        verify_checksums,
+        fill_cache,
+    })
+}
+fn read_options_default() -> Option<ReadOptions> {
+    Some(ReadOptions::new())
+}
+
+fn write_options(sync: bool) -> Option<WriteOptions> {
+    Some(WriteOptions { sync })
+}
+
 fn value() -> Vec<u8> {
     (0..127).collect()
 }
@@ -88,35 +102,47 @@ mod write_100_entries {
         use super::*;
 
         fn put(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(true, db_options()).unwrap();
-            let mut write_options = WriteOptions::new();
-            write_options.sync = sync;
+            let db = DB::open_new_test_database(
+                true,
+                db_options(),
+                read_options_default(),
+                write_options(sync),
+            )
+            .unwrap();
 
             bencher.bench_local(|| {
                 for i in 0..NUM_WRITE_ITEMS {
-                    let _ = db.put(&write_options, &i, &value());
+                    let _ = db.put(&i, &value());
                 }
             });
         }
 
         fn batch_put(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(true, db_options()).unwrap();
-            let mut write_options = WriteOptions::new();
-            write_options.sync = sync;
+            let db = DB::open_new_test_database(
+                true,
+                db_options(),
+                read_options_default(),
+                write_options(sync),
+            )
+            .unwrap();
 
             bencher.bench_local(|| {
                 let wb = WriteBatch::new();
                 for i in 0..NUM_WRITE_ITEMS {
                     wb.put(&i, &value());
                 }
-                let _ = db.write(&write_options, &wb);
+                let _ = db.write(&wb, sync);
             });
         }
 
         fn batch_put_write(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(true, db_options()).unwrap();
-            let mut write_options = WriteOptions::new();
-            write_options.sync = sync;
+            let db = DB::open_new_test_database(
+                true,
+                db_options(),
+                read_options_default(),
+                write_options(sync),
+            )
+            .unwrap();
 
             let wb = WriteBatch::new();
             for i in 0..NUM_WRITE_ITEMS {
@@ -124,7 +150,7 @@ mod write_100_entries {
             }
 
             bencher.bench_local(|| {
-                let _ = db.write(&write_options, &wb);
+                let _ = db.write(&wb, sync);
             });
         }
 
@@ -171,66 +197,76 @@ mod write_100_entries {
         use super::*;
 
         fn delete(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(true, db_options()).unwrap();
-            let mut write_options = WriteOptions::new();
-            write_options.sync = sync;
+            let db = DB::open_new_test_database(
+                true,
+                db_options(),
+                read_options_default(),
+                write_options(sync),
+            )
+            .unwrap();
 
             for i in 0..NUM_WRITE_ITEMS {
-                let _ = db.put(&write_options, &i, &value());
+                let _ = db.put(&i, &value());
             }
 
             bencher.bench_local(|| {
                 for i in 0..NUM_WRITE_ITEMS {
-                    let _ = db.delete(&write_options, &i);
+                    let _ = db.delete(&i);
                 }
             });
         }
 
         fn batch_delete(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(true, db_options()).unwrap();
-            let mut write_options = WriteOptions::new();
-            write_options.sync = sync;
+            let db = DB::open_new_test_database(
+                true,
+                db_options(),
+                read_options_default(),
+                write_options(sync),
+            )
+            .unwrap();
 
             // batch write items, unsync
             let wb = WriteBatch::new();
             for i in 0..NUM_WRITE_ITEMS {
                 wb.put(&i, &value());
             }
-            let _ = db.write(&write_options, &wb);
+            let _ = db.write(&wb, false);
 
             // batch delete items, sync
-            write_options.sync = true;
             let wb_del = WriteBatch::new();
 
             bencher.bench_local(|| {
                 for i in 0..NUM_WRITE_ITEMS {
                     wb.delete(&i);
                 }
-                let _ = db.write(&write_options, &wb_del);
+                let _ = db.write(&wb_del, sync);
             });
         }
 
         fn batch_delete_write(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(true, db_options()).unwrap();
-            let mut write_options = WriteOptions::new();
-            write_options.sync = sync;
+            let db = DB::open_new_test_database(
+                true,
+                db_options(),
+                read_options_default(),
+                write_options(sync),
+            )
+            .unwrap();
 
             // batch write items, unsync
             let wb = WriteBatch::new();
             for i in 0..NUM_WRITE_ITEMS {
                 wb.put(&i, &value());
             }
-            let _ = db.write(&write_options, &wb);
+            let _ = db.write(&wb, false);
 
             // batch delete items, sync
-            write_options.sync = true;
             let wb_del = WriteBatch::new();
             for i in 0..NUM_WRITE_ITEMS {
                 wb.delete(&i);
             }
 
             bencher.bench_local(|| {
-                let _ = db.write(&write_options, &wb_del);
+                let _ = db.write(&wb_del, sync);
             });
         }
 
@@ -283,22 +319,22 @@ mod read_100_entries {
         use super::*;
 
         fn get(bencher: Bencher, num_reads: usize, cache: bool, verify_checksum: bool) {
-            let db = DB::open_new_test_database(true, db_options()).unwrap();
-            let mut write_options = WriteOptions::new();
-            write_options.sync = true;
+            let db = DB::open_new_test_database(
+                true,
+                db_options(),
+                read_options(verify_checksum, cache),
+                write_options(false),
+            )
+            .unwrap();
 
             for i in 0..NUM_READ_ITEMS {
-                let _ = db.put(&write_options, &i, &value());
+                let _ = db.put(&i, &value());
             }
-
-            let mut read_options = ReadOptions::new();
-            read_options.fill_cache = cache;
-            read_options.verify_checksums = verify_checksum;
 
             bencher.bench_local(|| {
                 for i in 0..NUM_READ_ITEMS {
                     for _j in 0..num_reads {
-                        let _ = db.get(&read_options, &i);
+                        let _ = db.get(&i);
                     }
                 }
             });

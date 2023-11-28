@@ -20,7 +20,7 @@ use crate::utils::has_unique_elements;
 /// underlying data structure.
 pub fn get_empty_rustyleveldb_ammr<H: AlgebraicHasher>() -> ArchivalMmr<H, RustyLevelDbVec<Digest>>
 {
-    let db = DB::open_new_test_database(true, None).unwrap();
+    let db = DB::open_new_test_database(true, None, None, None).unwrap();
     let pv = RustyLevelDbVec::new(Arc::new(db), 0, "AMMR for unit tests");
     ArchivalMmr::new(pv)
 }

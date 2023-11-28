@@ -336,10 +336,8 @@ mod mmr_test {
         },
     };
     use itertools::izip;
-    use leveldb::batch::Batch;
     use leveldb::iterator::Iterable;
     use leveldb::options::ReadOptions;
-    use leveldb::options::WriteOptions;
     use rand::random;
 
     impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
@@ -1029,7 +1027,7 @@ mod mmr_test {
     fn rust_leveldb_persist_test() {
         type H = blake3::Hasher;
 
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
         let db = Arc::new(db);
         let persistent_vec_0 = RustyLevelDbVec::new(db.clone(), 0, "archival MMR for unit tests");
         let mut ammr0: ArchivalMmr<H, RustyLevelDbVec<Digest>> = ArchivalMmr::new(persistent_vec_0);
@@ -1058,7 +1056,7 @@ mod mmr_test {
         let mut db_iter3 = db.iter(&ReadOptions::new());
         assert!(db_iter3.next().is_none());
 
-        db.write(&WriteOptions::new(), &write_batch).unwrap();
+        db.write_auto(&write_batch).unwrap();
 
         // Verify that DB is not empty
         let mut db_iter4 = db.iter(&ReadOptions::new());
