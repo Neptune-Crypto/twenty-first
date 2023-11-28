@@ -158,17 +158,21 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
             self.name
         );
 
-        if let Some(_old_val) = self.cache.insert(index, value.clone()) {
-            // If cache entry exists, we remove any corresponding
-            // OverWrite ops in the `write_queue` to reduce disk IO.
+        // note: benchmarks have revealed this code to slow down
+        //       set operations by about 7x, eg 10us to 70us.
+        //       Disabling for now.
+        //
+        // if let Some(_old_val) = self.cache.insert(index, value.clone()) {
+        //     // If cache entry exists, we remove any corresponding
+        //     // OverWrite ops in the `write_queue` to reduce disk IO.
 
-            // logic: retain all ops that are not overwrite, and
-            // overwrite ops that do not have an index matching cache_index.
-            self.write_queue.retain(|op| match op {
-                WriteElement::OverWrite((i, _)) => *i != index,
-                _ => true,
-            })
-        }
+        //     // logic: retain all ops that are not overwrite, and
+        //     // overwrite ops that do not have an index matching cache_index.
+        //     self.write_queue.retain(|op| match op {
+        //         WriteElement::OverWrite((i, _)) => *i != index,
+        //         _ => true,
+        //     })
+        // }
 
         self.write_queue
             .push_back(WriteElement::OverWrite((index, value)));
