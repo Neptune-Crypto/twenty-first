@@ -1,6 +1,5 @@
-#[derive(Clone, PartialEq, Eq)]
-
 /// Represents a database key as bytes
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RustyKey(pub Vec<u8>);
 impl From<u8> for RustyKey {
     #[inline]

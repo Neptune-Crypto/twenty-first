@@ -17,6 +17,7 @@ use leveldb::{
     snapshots::{Snapshot, Snapshots},
 };
 use std::path::Path;
+use std::sync::Arc;
 
 /// DB provides thread-safe access to LevelDB API.
 //
@@ -25,10 +26,10 @@ use std::path::Path;
 //  switch crates/impls.
 //
 //  Do not add any public (mutable) fields to this struct.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DB {
     // note: these must be private and unchanged after creation.
-    db: Database, // Send + Sync
+    db: Arc<Database>, // Send + Sync.  Arc is so we can derive Clone.
     path: std::path::PathBuf,
     destroy_db_on_drop: bool,
 }
@@ -42,7 +43,7 @@ impl DB {
     pub fn open(name: &Path, options: &Options) -> Result<Self, DbError> {
         let db = Database::open(name, options)?;
         Ok(Self {
-            db,
+            db: Arc::new(db),
             path: name.into(),
             destroy_db_on_drop: false,
         })
@@ -64,7 +65,7 @@ impl DB {
     ) -> Result<Self, DbError> {
         let db = Database::open_with_comparator(name, options, comparator)?;
         Ok(Self {
-            db,
+            db: Arc::new(db),
             path: name.into(),
             destroy_db_on_drop: false,
         })

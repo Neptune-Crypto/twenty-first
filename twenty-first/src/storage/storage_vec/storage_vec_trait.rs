@@ -1,5 +1,4 @@
 use super::iterators::{ManyIterMut, StorageSetter};
-use serde::{de::DeserializeOwned, Serialize};
 
 pub type Index = u64;
 
@@ -120,10 +119,4 @@ pub trait StorageVec<T> {
 
     /// push an element to end of collection
     fn push(&mut self, value: T);
-}
-
-pub enum WriteElement<T: Serialize + DeserializeOwned> {
-    OverWrite((Index, T)),
-    Push(T),
-    Pop,
 }

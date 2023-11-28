@@ -1,6 +1,6 @@
 use super::super::level_db::DB;
 use super::super::utils;
-use super::storage_vec_trait::{Index, StorageVec, WriteElement};
+use super::storage_vec_trait::{Index, StorageVec};
 use itertools::Itertools;
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
@@ -11,6 +11,7 @@ use std::sync::Arc;
 ///
 /// RustyLevelDbVec is a public wrapper that adds RwLock around
 /// all accesses to RustyLevelDbVecPrivate
+#[derive(Debug, Clone)]
 pub(crate) struct RustyLevelDbVecPrivate<T: Serialize + DeserializeOwned> {
     key_prefix: u8,
     pub(super) db: Arc<DB>,
@@ -157,6 +158,8 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
             self.length,
             self.name
         );
+
+        self.cache.insert(index, value.clone());
 
         // note: benchmarks have revealed this code to slow down
         //       set operations by about 7x, eg 10us to 70us.
@@ -320,4 +323,11 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVecPrivate<T> {
     pub(super) fn get_u8(&self, index: &[u8]) -> T {
         utils::get_u8(&self.db, index, &self.name)
     }
+}
+
+#[derive(Debug, Clone)]
+enum WriteElement<T: Serialize + DeserializeOwned> {
+    OverWrite((Index, T)),
+    Push(T),
+    Pop,
 }

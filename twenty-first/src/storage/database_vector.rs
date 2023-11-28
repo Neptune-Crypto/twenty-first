@@ -20,6 +20,7 @@ type IndexType = u64;
 const INDEX_ZERO: IndexType = 0;
 
 /// a DB backed Vector API that is thread-safe, uncached, and non-atomic
+#[derive(Debug, Clone)]
 pub struct DatabaseVector<T: Serialize + DeserializeOwned> {
     db: DB,
     _type: PhantomData<T>,

@@ -13,6 +13,7 @@ use std::marker::PhantomData;
 type IndexType = u128;
 
 /// Permanent storage of a fixed-length array with elements of type `T`.
+#[derive(Debug, Clone)]
 pub struct DatabaseArray<const N: IndexType, T: Serialize + DeserializeOwned + Default> {
     db: DB,
     _type: PhantomData<T>,
