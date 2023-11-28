@@ -5,12 +5,13 @@
 // add `pub use sub_module::*`.
 
 #![allow(missing_docs)]
+mod iterators;
 mod ordinary_vec;
 mod rusty_leveldb_vec;
 mod rusty_leveldb_vec_private;
 mod storage_vec_trait;
 
-pub use {ordinary_vec::*, rusty_leveldb_vec::*, storage_vec_trait::*};
+pub use {iterators::*, ordinary_vec::*, rusty_leveldb_vec::*, storage_vec_trait::*};
 
 #[cfg(test)]
 mod tests {
@@ -236,13 +237,13 @@ mod tests {
         delegated_db_vec_a.push(30);
 
         let updates = [100, 200, 300];
-        delegated_db_vec_a.set_all(&updates);
+        delegated_db_vec_a.set_all(updates);
 
         assert_eq!(vec![100, 200, 300], delegated_db_vec_a.get_many(&[0, 1, 2]));
 
         #[allow(clippy::shadow_unrelated)]
         let updates = vec![1000, 2000, 3000];
-        delegated_db_vec_a.set_all(&updates);
+        delegated_db_vec_a.set_all(updates);
 
         assert_eq!(
             vec![1000, 2000, 3000],
@@ -475,7 +476,7 @@ mod tests {
     }
 
     #[should_panic(
-        expected = "Out-of-bounds. Got indices [3] but length was 1. persisted vector name: unit test vec 0"
+        expected = "Out-of-bounds. Got index 3 but length was 1. persisted vector name: unit test vec 0"
     )]
     #[test]
     fn panic_on_out_of_bounds_get_many() {
@@ -509,7 +510,7 @@ mod tests {
         let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
 
         // attempt to set 2 values, when only one is in vector.
-        delegated_db_vec.set_all(&[1, 2]);
+        delegated_db_vec.set_all([1, 2]);
     }
 
     #[should_panic(

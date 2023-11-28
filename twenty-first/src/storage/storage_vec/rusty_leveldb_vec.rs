@@ -28,6 +28,32 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         self.read_lock().get(index)
     }
 
+    fn many_iter(
+        &self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        // note: this lock is moved into the iterator closure and is not
+        //       released until caller drops the returned iterator
+        let inner = self.read_lock();
+
+        Box::new(indices.into_iter().map(move |i| {
+            assert!(
+                i < inner.len(),
+                "Out-of-bounds. Got index {} but length was {}. persisted vector name: {}",
+                i,
+                inner.len(),
+                inner.name
+            );
+
+            if inner.cache.contains_key(&i) {
+                (i, inner.cache[&i].clone())
+            } else {
+                let key = inner.get_index_key(i);
+                (i, inner.get_u8(&key))
+            }
+        }))
+    }
+
     #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
         self.read_lock().get_many(indices)

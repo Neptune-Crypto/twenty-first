@@ -53,6 +53,7 @@ emojihash-rs = "0.2"
 get-size = { version = "^0.1.4", features = ["derive"] }
 keccak = "0.1.4"
 leveldb-sys = "2.0.9"
+lending-iterator = "0.1.7"
 
 [[bench]]
 name = "tip5"
