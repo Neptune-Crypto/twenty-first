@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use crate::shared_math::b_field_element::BFieldElement;
 
 /// Represents a database value as bytes and provides some conversions.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RustyValue(pub Vec<u8>);
 
 impl From<Vec<u8>> for RustyValue {

@@ -6,6 +6,7 @@ use leveldb::options::ReadOptions;
 // the same.  Can we remove one of them?
 
 /// A read-only database interface
+#[derive(Debug, Clone)]
 pub struct RustyReader {
     /// levelDB Database
     pub db: DB,

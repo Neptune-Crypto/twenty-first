@@ -1,5 +1,6 @@
 use super::storage_vec_trait::{Index, StorageVec};
 
+#[derive(Debug, Clone)]
 pub struct OrdinaryVec<T>(Vec<T>);
 
 impl<T> From<Vec<T>> for OrdinaryVec<T> {

@@ -8,6 +8,7 @@ use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// RustyLevelDbVec is a concurrency safe database-backed
 /// Vec with in memory read/write caching for all operations.
+#[derive(Debug, Clone)]
 pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
     inner: Arc<RwLock<RustyLevelDbVecPrivate<T>>>,
 }
