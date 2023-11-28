@@ -24,19 +24,16 @@ mod tests {
     use rand::{Rng, RngCore};
     use std::collections::HashMap;
 
-    use leveldb::{
-        batch::{Batch, WriteBatch},
-        options::WriteOptions,
-    };
+    use leveldb::batch::WriteBatch;
 
     // todo: delete fn
     fn get_test_db(destroy_db_on_drop: bool) -> Arc<DB> {
-        Arc::new(DB::open_new_test_database(destroy_db_on_drop, None).unwrap())
+        Arc::new(DB::open_new_test_database(destroy_db_on_drop, None, None, None).unwrap())
     }
 
     // todo: delete fn
     fn open_test_db(path: &std::path::Path, destroy_db_on_drop: bool) -> Arc<DB> {
-        Arc::new(DB::open_test_database(path, destroy_db_on_drop, None).unwrap())
+        Arc::new(DB::open_test_database(path, destroy_db_on_drop, None, None, None).unwrap())
     }
 
     /// Return a persisted vector and a regular in-memory vector with the same elements
@@ -57,7 +54,7 @@ mod tests {
 
         let mut write_batch = WriteBatch::new();
         persisted_vec.pull_queue(&mut write_batch);
-        assert!(db.write(&WriteOptions::new(), &write_batch).is_ok());
+        assert!(db.write_auto(&write_batch).is_ok());
 
         // Sanity checks
         assert!(persisted_vec.read_lock().cache.is_empty());
@@ -164,10 +161,7 @@ mod tests {
         assert_eq!(3, delegated_db_vec_a.len());
         assert_eq!(0, delegated_db_vec_b.len());
 
-        assert!(
-            db.write(&WriteOptions::new(), &write_batch).is_ok(),
-            "DB write must succeed"
-        );
+        assert!(db.write_auto(&write_batch).is_ok(), "DB write must succeed");
         assert_eq!(3, delegated_db_vec_a.persisted_length());
         assert_eq!(0, delegated_db_vec_b.persisted_length());
         assert_eq!(3, delegated_db_vec_a.len());
@@ -209,10 +203,7 @@ mod tests {
         // Persist
         let mut write_batch = WriteBatch::new();
         delegated_db_vec_a.pull_queue(&mut write_batch);
-        assert!(
-            db.write(&WriteOptions::new(), &write_batch).is_ok(),
-            "DB write must succeed"
-        );
+        assert!(db.write_auto(&write_batch).is_ok(), "DB write must succeed");
         assert_eq!(4, delegated_db_vec_a.persisted_length());
 
         // Check values after persisting
@@ -253,10 +244,7 @@ mod tests {
         // Persist
         let mut write_batch = WriteBatch::new();
         delegated_db_vec_a.pull_queue(&mut write_batch);
-        assert!(
-            db.write(&WriteOptions::new(), &write_batch).is_ok(),
-            "DB write must succeed"
-        );
+        assert!(db.write_auto(&write_batch).is_ok(), "DB write must succeed");
         assert_eq!(3, delegated_db_vec_a.persisted_length());
 
         // Check values after persisting
@@ -278,11 +266,7 @@ mod tests {
 
         let mut write_batch = WriteBatch::new();
         vec.pull_queue(&mut write_batch);
-        assert!(vec
-            .read_lock()
-            .db
-            .write(&WriteOptions::new(), &write_batch)
-            .is_ok());
+        assert!(vec.read_lock().db.write_auto(&write_batch).is_ok());
 
         drop(vec); // this will drop (close) the Db
 
@@ -332,10 +316,7 @@ mod tests {
         // Persist
         let mut write_batch = WriteBatch::new();
         delegated_db_vec_a.pull_queue(&mut write_batch);
-        assert!(
-            db.write(&WriteOptions::new(), &write_batch).is_ok(),
-            "DB write must succeed"
-        );
+        assert!(db.write_auto(&write_batch).is_ok(), "DB write must succeed");
         assert_eq!(3, delegated_db_vec_a.persisted_length());
 
         // Check ordering after persisting
@@ -424,7 +405,7 @@ mod tests {
                     // persist
                     let mut write_batch = WriteBatch::new();
                     persisted_vector.pull_queue(&mut write_batch);
-                    db.write(&WriteOptions::new(), &write_batch).unwrap();
+                    db.write_auto(&write_batch).unwrap();
                 }
                 _ => unreachable!(),
             }
@@ -445,7 +426,7 @@ mod tests {
         // Check equality after persisting updates
         let mut write_batch = WriteBatch::new();
         persisted_vector.pull_queue(&mut write_batch);
-        db.write(&WriteOptions::new(), &write_batch).unwrap();
+        db.write_auto(&write_batch).unwrap();
 
         assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
         assert_eq!(

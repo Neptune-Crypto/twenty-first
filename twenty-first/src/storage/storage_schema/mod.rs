@@ -89,7 +89,7 @@ mod tests {
         let singleton_value = S([1u8, 3u8, 3u8, 7u8].to_vec());
 
         // open new DB that will not be dropped on close.
-        let db = DB::open_new_test_database(false, None).unwrap();
+        let db = DB::open_new_test_database(false, None, None, None).unwrap();
         let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
@@ -134,7 +134,7 @@ mod tests {
         drop(reader_ref); // <--- Final reader ref dropped. Db closes.
 
         // restore.  re-open existing DB.
-        let new_db = DB::open_test_database(&db_path, true, None).unwrap();
+        let new_db = DB::open_test_database(&db_path, true, None, None, None).unwrap();
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
         let new_singleton = new_rusty_storage
             .schema
@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn test_simple_vector() {
         // open new DB that will not be dropped on close.
-        let db = DB::open_new_test_database(false, None).unwrap();
+        let db = DB::open_new_test_database(false, None, None, None).unwrap();
         let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
@@ -274,7 +274,7 @@ mod tests {
         drop(vector); //        <--- Final DB ref dropped. DB closes
 
         // Open existing database.
-        let new_db = DB::open_test_database(&db_path, true, None).unwrap();
+        let new_db = DB::open_test_database(&db_path, true, None, None, None).unwrap();
 
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
         let mut new_vector = new_rusty_storage.schema.new_vec::<u64, S>("test-vector");
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_dbtcvecs_get_many() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_dbtcvecs_set_many_get_many() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
@@ -485,7 +485,7 @@ mod tests {
 
     #[test]
     fn test_dbtcvecs_set_all_get_many() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
@@ -553,7 +553,7 @@ mod tests {
 
     #[test]
     fn storage_schema_vector_pbt() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut persisted_vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -658,7 +658,7 @@ mod tests {
         let singleton_value = S([3u8, 3u8, 3u8, 1u8].to_vec());
 
         // Open new database that will not be destroyed on close.
-        let db = DB::open_new_test_database(false, None).unwrap();
+        let db = DB::open_new_test_database(false, None, None, None).unwrap();
         let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
@@ -765,7 +765,7 @@ mod tests {
         drop(singleton); //     <-- final DB ref dropped (DB closes)
 
         // re-open DB / restore from disk
-        let new_db = DB::open_test_database(&db_path, true, None).unwrap();
+        let new_db = DB::open_test_database(&db_path, true, None, None, None).unwrap();
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
         let new_vector1 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector1");
         let mut new_vector2 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector2");
@@ -843,7 +843,7 @@ mod tests {
     )]
     #[test]
     fn out_of_bounds_using_get() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -861,7 +861,7 @@ mod tests {
     )]
     #[test]
     fn out_of_bounds_using_get_many() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -879,7 +879,7 @@ mod tests {
     )]
     #[test]
     fn out_of_bounds_using_set_many() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -896,7 +896,7 @@ mod tests {
     #[should_panic(expected = "size-mismatch.  input has 2 elements and target has 1 elements")]
     #[test]
     fn size_mismatch_too_many_using_set_all() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -913,7 +913,7 @@ mod tests {
     #[should_panic(expected = "size-mismatch.  input has 1 elements and target has 2 elements")]
     #[test]
     fn size_mismatch_too_few_using_set_all() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         let mut vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
@@ -930,7 +930,7 @@ mod tests {
 
     #[test]
     fn test_dbtcvecs_iter_mut() {
-        let db = DB::open_new_test_database(true, None).unwrap();
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
@@ -980,7 +980,7 @@ mod tests {
         fn sync_and_send<T: Sync + Send>(_t: T) {}
 
         // open new DB that will not be dropped on close.
-        let db = DB::open_new_test_database(false, None).unwrap();
+        let db = DB::open_new_test_database(false, None, None, None).unwrap();
         sync_and_send(db);
     }
 }
