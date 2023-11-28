@@ -17,7 +17,7 @@ pub(crate) struct RustyLevelDbVecPrivate<T: Serialize + DeserializeOwned> {
     write_queue: VecDeque<WriteElement<T>>,
     length: Index,
     pub(super) cache: HashMap<Index, T>,
-    name: String,
+    pub(super) name: String,
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecPrivate<T> {
@@ -51,6 +51,15 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
         self.get_u8(&db_key)
     }
 
+    // this fn is here to satisfy the trait, but is implemented
+    // by RustyLevelDbVec
+    fn many_iter(
+        &self,
+        _indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        unreachable!()
+    }
+
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
         fn sort_to_match_requested_index_order<T>(indexed_elements: HashMap<usize, T>) -> Vec<T> {
             let mut elements = indexed_elements.into_iter().collect_vec();
@@ -58,9 +67,14 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
             elements.into_iter().map(|(_, element)| element).collect()
         }
 
+        let max_index = match indices.iter().max() {
+            Some(i) => i,
+            None => return vec![],
+        };
+
         assert!(
-            indices.iter().all(|x| *x < self.len()),
-            "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
+            *max_index < self.len(),
+            "Out-of-bounds. Got index {max_index} but length was {}. persisted vector name: {}",
             self.len(),
             self.name
         );
@@ -299,7 +313,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVecPrivate<T> {
     }
 
     #[inline]
-    fn get_u8(&self, index: &[u8]) -> T {
+    pub(super) fn get_u8(&self, index: &[u8]) -> T {
         utils::get_u8(&self.db, index, &self.name)
     }
 }

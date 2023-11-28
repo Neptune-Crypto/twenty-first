@@ -93,6 +93,32 @@ where
     }
 
     #[inline]
+    fn many_iter<'a>(
+        &'a self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        let inner = self.read_lock();
+
+        Box::new(indices.into_iter().map(move |i| {
+            assert!(
+                i < inner.len(),
+                "Out-of-bounds. Got index {} but length was {}. persisted vector name: {}",
+                i,
+                inner.len(),
+                inner.name
+            );
+
+            if inner.cache.contains_key(&i) {
+                (i, inner.cache[&i].clone())
+            } else {
+                let key = inner.get_index_key(i);
+                let db_element = inner.reader.get(key).unwrap();
+                (i, T::from(db_element))
+            }
+        }))
+    }
+
+    #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
         self.read_lock().get_many(indices)
     }

@@ -24,6 +24,17 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
         self.0[index as usize].clone()
     }
 
+    fn many_iter(
+        &self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        Box::new(
+            indices
+                .into_iter()
+                .map(|index| (index, self.0[index as usize].clone())),
+        )
+    }
+
     #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
         indices

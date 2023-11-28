@@ -10,12 +10,12 @@ use std::{
 // note: no locking is required in `DbtVecPrivate` because locking
 // is performed in the `DbtVec` public wrapper.
 pub(crate) struct DbtVecPrivate<ParentKey, ParentValue, Index, T> {
-    reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
+    pub(super) reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
     current_length: Option<Index>,
     key_prefix: u8,
     write_queue: VecDeque<VecWriteOperation<Index, T>>,
-    cache: HashMap<Index, T>,
-    name: String,
+    pub(super) cache: HashMap<Index, T>,
+    pub(super) name: String,
 }
 
 impl<ParentKey, ParentValue, T> DbtVecPrivate<ParentKey, ParentValue, Index, T>
@@ -44,7 +44,7 @@ where
 
     /// Return the key of ParentKey type used to store the element at a given index of Index type
     #[inline]
-    fn get_index_key(&self, index: Index) -> ParentKey {
+    pub(super) fn get_index_key(&self, index: Index) -> ParentKey {
         let key_prefix_key: ParentKey = self.key_prefix.into();
         let index_key: ParentKey = index.into();
         (key_prefix_key, index_key).into()
@@ -138,6 +138,15 @@ where
         val.into()
     }
 
+    // this fn is here to satisfy the trait but is actually
+    // implemented by DbtVec
+    fn many_iter<'a>(
+        &'a self,
+        _indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        unreachable!()
+    }
+
     /// Fetch multiple elements from a `DbtVec` and return the elements matching the order
     /// of the input indices.
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
@@ -147,9 +156,14 @@ where
             elements.into_iter().map(|(_, element)| element).collect()
         }
 
+        let max_index = match indices.iter().max() {
+            Some(i) => i,
+            None => return vec![],
+        };
+
         assert!(
-            indices.iter().all(|x| *x < self.len()),
-            "Out-of-bounds. Got indices {indices:?} but length was {}. persisted vector name: {}",
+            *max_index < self.len(),
+            "Out-of-bounds. Got index {max_index} but length was {}. persisted vector name: {}",
             self.len(),
             self.name
         );
