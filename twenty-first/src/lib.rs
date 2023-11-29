@@ -18,4 +18,5 @@ pub mod utils;
 extern crate self as twenty_first;
 
 // re-export crates used in our public API
+pub use lending_iterator;
 pub use leveldb;
