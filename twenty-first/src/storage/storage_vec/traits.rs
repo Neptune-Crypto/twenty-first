@@ -23,7 +23,7 @@ pub trait StorageVecReads<T> {
     /// get multiple elements matching indices
     ///
     /// This is a convenience method. For large collections
-    /// it will be more efficient to use `many_iter` directly
+    /// it may be more efficient to use an iterator or for-loop
     /// and avoid allocating a Vec
     #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
@@ -33,7 +33,7 @@ pub trait StorageVecReads<T> {
     /// get all elements
     ///
     /// This is a convenience method. For large collections
-    /// it may be more efficient to use `iter` directly
+    /// it may be more efficient to use an iterator or for-loop
     /// and avoid allocating a Vec
     #[inline]
     fn get_all(&self) -> Vec<T> {
@@ -41,24 +41,158 @@ pub trait StorageVecReads<T> {
     }
 
     /// get an iterator over all elements
+    ///
+    /// The returned iterator holds a read-lock over the collection contents.
+    /// This enables consistent (snapshot) reads because any writer must
+    /// wait until the lock is released.
+    ///
+    /// The lock is not released until the iterator is dropped, so it is
+    /// important to drop the iterator immediately after use.  Typical
+    /// for-loop usage does this automatically.
+    ///
+    /// If a write is attempted before the read lock is dropped, a deadlock
+    /// will occur.
+    ///
+    /// Correct Example:
+    /// ```
+    /// for (key, value) in vec.iter() {
+    ///     println!("{key}: {value}")
+    /// } // <--- iterator is dropped here.
+    ///
+    /// // write can proceed
+    /// let val = vec.put(5, 2);
+    /// ```
+    ///
+    /// Deadlock Example:
+    /// ```
+    /// let iter = vec.iter();
+    /// while let Some(key, val) = iter.next() {
+    ///     println!("{key}: {value}")
+    /// }
+    ///
+    /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
+    /// let val = vec.put(5, 2);
+    /// ```
+    ///
+    /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
     #[inline]
     fn iter(&self) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
         self.many_iter(0..self.len())
     }
 
-    /// get an iterator over all elements
+    /// The returned iterator holds a read-lock over the collection contents.
+    /// This enables consistent (snapshot) reads because any writer must
+    /// wait until the lock is released.
+    ///
+    /// The lock is not released until the iterator is dropped, so it is
+    /// important to drop the iterator immediately after use.  Typical
+    /// for-loop usage does this automatically.
+    ///
+    /// If a write is attempted before the read lock is dropped, a deadlock
+    /// will occur.
+    ///
+    /// Correct Example:
+    /// ```
+    /// for (key, value) in vec.iter_values() {
+    ///     println!("{value}")
+    /// } // <--- iterator is dropped here.
+    ///
+    /// // write can proceed
+    /// let val = vec.push(2);
+    /// ```
+    ///
+    /// Deadlock Example:
+    /// ```
+    /// let iter = vec.iter();
+    /// while let Some(val) = iter.next() {
+    ///     println!("{value}")
+    /// }
+    ///
+    /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
+    /// let val = vec.push(2);
+    /// ```
+    ///
+    /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
     #[inline]
     fn iter_values(&self) -> Box<dyn Iterator<Item = T> + '_> {
         self.many_iter_values(0..self.len())
     }
 
     /// get an iterator over elements matching indices
+    ///
+    /// The returned iterator holds a read-lock over the collection contents.
+    /// This enables consistent (snapshot) reads because any writer must
+    /// wait until the lock is released.
+    ///
+    /// The lock is not released until the iterator is dropped, so it is
+    /// important to drop the iterator immediately after use.  Typical
+    /// for-loop usage does this automatically.
+    ///
+    /// If a write is attempted before the read lock is dropped, a deadlock
+    /// will occur.
+    ///
+    /// Correct Example:
+    /// ```
+    /// for (key, value) in vec.many_iter([3, 5, 7]) {
+    ///     println!("{key}: {value}")
+    /// } // <--- iterator is dropped here.
+    ///
+    /// // write can proceed
+    /// let val = vec.put(5, 2);
+    /// ```
+    ///
+    /// Deadlock Example:
+    /// ```
+    /// let iter = vec.many_iter([3, 5, 7]);
+    /// while let Some(key, val) = iter.next() {
+    ///     println!("{key}: {value}")
+    /// }
+    ///
+    /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
+    /// let val = vec.put(5, 2);
+    /// ```
+    ///
+    /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
     fn many_iter(
         &self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_>;
 
     /// get an iterator over elements matching indices
+    ///
+    /// The returned iterator holds a read-lock over the collection contents.
+    /// This enables consistent (snapshot) reads because any writer must
+    /// wait until the lock is released.
+    ///
+    /// The lock is not released until the iterator is dropped, so it is
+    /// important to drop the iterator immediately after use.  Typical
+    /// for-loop usage does this automatically.
+    ///
+    /// If a write is attempted before the read lock is dropped, a deadlock
+    /// will occur.
+    ///
+    /// Correct Example:
+    /// ```
+    /// for (key, value) in vec.many_iter_values([2, 5, 8]) {
+    ///     println!("{value}")
+    /// } // <--- iterator is dropped here.
+    ///
+    /// // write can proceed
+    /// let val = vec.put(5, 2);
+    /// ```
+    ///
+    /// Deadlock Example:
+    /// ```
+    /// let iter = vec.many_iter_values([2, 5, 8]);
+    /// while let Some(val) = iter.next() {
+    ///     println!("{value}")
+    /// }
+    ///
+    /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
+    /// let val = vec.put(5, 2);
+    /// ```
+    ///
+    /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
     fn many_iter_values(
         &self,
         indices: impl IntoIterator<Item = Index> + 'static,
@@ -138,19 +272,35 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     /// note: the returned (lending) iterator cannot be used in a for loop.  Use a
     ///       while loop instead.  See example below.
     ///
-    /// Important: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`
-    /// which will not be released until the iterator is dropped.  This write lock enables
-    /// the iterator to perform all mutations atomically.
+    /// Important: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`.
+    /// This write lock must be dropped before performing any read operation or the
+    /// code will deadlock.  See Deadlock Example.
     ///
-    /// Example:
+    /// Correct Example:
     /// ```
     /// {
     ///     let mut iter = vec.iter_mut();
-    ///     while let Some(mut setter) = iter.next() {
+    ///         while let Some(mut setter) = iter.next() {
     ///         setter.set(50);
     ///     }
-    /// }   // <--- iter is dropped, and write lock is released.
+    /// } // <----- iter is dropped here.  write lock is released.
+    ///
+    /// // read can proceed
+    /// let val = vec.get(2);
     /// ```
+    ///
+    /// Deadlock Example:
+    /// ```
+    /// let mut iter = vec.iter_mut();
+    /// while let Some(mut setter) = iter.next() {
+    ///     setter.set(50);
+    /// }
+    ///
+    /// // deadlock! This will wait for the read lock forever because iter is still holding write lock.
+    /// let val = vec.get(2);
+    /// ```
+    ///
+    /// note: any read op would deadlock, including `iter()`, `many_iter()`, `get_many()`, etc.
     #[allow(private_bounds)]
     #[inline]
     fn iter_mut(&self) -> ManyIterMut<Self, T>
@@ -169,19 +319,35 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     /// note: the returned (lending) iterator cannot be used in a for loop.  Use a
     ///       while loop instead.  See example below.
     ///
-    /// Important: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`
-    /// which will not be released until the iterator is dropped.  This write lock enables
-    /// the iterator to perform all mutations atomically.
+    /// Important: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`.
+    /// This write lock must be dropped before performing any read operation or the
+    /// code will deadlock.  See Deadlock Example.
     ///
-    /// Example:
+    /// Correct Example:
     /// ```
     /// {
-    ///     let mut iter = vec.many_iter_mut(0..vec.len());
-    ///     while let Some(mut setter) = iter.next() {
+    ///     let mut iter = vec.many_iter_mut([2, 4, 6]);
+    ///         while let Some(mut setter) = iter.next() {
     ///         setter.set(50);
     ///     }
-    /// }   // <--- iter is dropped, and write lock is released.
+    /// } // <----- iter is dropped here.  write lock is released.
+    ///
+    /// // read can proceed
+    /// let val = vec.get(2);
     /// ```
+    ///
+    /// Deadlock Example:
+    /// ```
+    /// let mut iter = vec.many_iter_mut([2, 4, 6]);
+    /// while let Some(mut setter) = iter.next() {
+    ///     setter.set(50);
+    /// }
+    ///
+    /// // deadlock! This will wait for the read lock forever because iter is still holding write lock.
+    /// let val = vec.get(2);
+    /// ```
+    ///
+    /// note: any read op would deadlock, including `iter()`, `many_iter()`, `get_many()`, etc.
     #[allow(private_bounds)]
     #[inline]
     fn many_iter_mut(
