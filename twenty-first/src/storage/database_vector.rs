@@ -223,7 +223,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
         }
     }
 
-    /// add `value`` to end of the Vec
+    /// add `value` to end of the Vec
     ///
     /// # Panics
     ///

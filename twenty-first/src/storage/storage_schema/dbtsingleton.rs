@@ -5,7 +5,7 @@ use std::{
 
 use super::{dbtsingleton_private::DbtSingletonPrivate, traits::*, WriteOperation};
 
-/// Singleton type created by [`DbSchema`]
+/// Singleton type created by [`super::DbtSchema`]
 ///
 /// This type is concurrency-safe.  A single RwLock is employed
 /// for all read and write ops.  Callers do not need to perform
