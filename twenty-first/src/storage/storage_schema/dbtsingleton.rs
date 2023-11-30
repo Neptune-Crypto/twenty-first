@@ -3,10 +3,7 @@ use std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
-use super::{
-    dbtsingleton_private::DbtSingletonPrivate, DbTable, StorageReader, StorageSingleton,
-    WriteOperation,
-};
+use super::{dbtsingleton_private::DbtSingletonPrivate, traits::*, WriteOperation};
 
 /// Singleton type created by [`DbSchema`]
 ///
@@ -70,24 +67,7 @@ where
     }
 }
 
-impl<K, V, T> DbTable<K, V> for DbtSingleton<K, V, T>
-where
-    T: Eq + Clone + Default + From<V>,
-    V: From<T> + Debug,
-    K: Clone,
-{
-    #[inline]
-    fn pull_queue(&mut self) -> Vec<WriteOperation<K, V>> {
-        self.write_lock().pull_queue()
-    }
-
-    #[inline]
-    fn restore_or_new(&mut self) {
-        self.write_lock().restore_or_new()
-    }
-}
-
-impl<K, V, T> StorageSingleton<T> for DbtSingleton<K, V, T>
+impl<K, V, T> StorageSingletonReads<T> for DbtSingleton<K, V, T>
 where
     T: Clone + From<V> + Default,
 {
@@ -95,9 +75,48 @@ where
     fn get(&self) -> T {
         self.read_lock().current_value.clone()
     }
+}
+
+impl<K, V, T> StorageSingletonImmutableWrites<T> for DbtSingleton<K, V, T>
+where
+    T: Clone + From<V> + Default,
+{
+    #[inline]
+    fn set(&self, t: T) {
+        self.write_lock().current_value = t;
+    }
+}
+
+impl<K, V, T> StorageSingleton<T> for DbtSingleton<K, V, T> where T: Clone + From<V> + Default {}
+
+impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
+    for DbtSingleton<ParentKey, ParentValue, T>
+where
+    T: Eq + Clone + Default + From<ParentValue>,
+    ParentValue: From<T> + Debug,
+    ParentKey: Clone,
+{
+    #[inline]
+    fn pull_queue(&self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
+        let mut lock = self.write_lock();
+
+        if lock.current_value == lock.old_value {
+            vec![]
+        } else {
+            lock.old_value = lock.current_value.clone();
+            vec![WriteOperation::Write(
+                lock.key.clone(),
+                lock.current_value.clone().into(),
+            )]
+        }
+    }
 
     #[inline]
-    fn set(&mut self, t: T) {
-        self.write_lock().current_value = t;
+    fn restore_or_new(&self) {
+        let mut lock = self.write_lock();
+        lock.current_value = match lock.reader.get(lock.key.clone()) {
+            Some(value) => value.into(),
+            None => T::default(),
+        }
     }
 }

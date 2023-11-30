@@ -5,9 +5,9 @@ use leveldb_sys::Compression;
 use twenty_first::leveldb::options::Options;
 use twenty_first::storage::level_db::DB;
 use twenty_first::util_types::storage_schema::{
-    DbtVec, RustyKey, RustyValue, SimpleRustyStorage, StorageWriter,
+    traits::*, DbtVec, RustyKey, RustyValue, SimpleRustyStorage,
 };
-use twenty_first::util_types::storage_vec::{Index, StorageVec};
+use twenty_first::util_types::storage_vec::{traits::*, Index};
 
 // These database bench tests are made with divan.
 //
@@ -106,7 +106,7 @@ mod write_100_entries {
         use super::*;
 
         fn push_impl(bencher: Bencher, persist: bool) {
-            let (mut storage, mut vector) = create_test_dbtvec();
+            let (storage, vector) = create_test_dbtvec();
 
             bencher.bench_local(|| {
                 for _i in 0..NUM_WRITE_ITEMS {
@@ -133,7 +133,7 @@ mod write_100_entries {
         use super::*;
 
         fn set_impl(bencher: Bencher, persist: bool) {
-            let (mut storage, mut vector) = create_test_dbtvec();
+            let (storage, vector) = create_test_dbtvec();
 
             for _i in 0..NUM_WRITE_ITEMS {
                 vector.push(value());
@@ -165,7 +165,7 @@ mod write_100_entries {
         use super::*;
 
         fn set_many_impl(bencher: Bencher, persist: bool) {
-            let (mut storage, mut vector) = create_test_dbtvec();
+            let (storage, vector) = create_test_dbtvec();
 
             for _ in 0..NUM_WRITE_ITEMS {
                 vector.push(vec![42]);
@@ -195,7 +195,7 @@ mod write_100_entries {
         use super::*;
 
         fn pop_impl(bencher: Bencher, persist: bool) {
-            let (mut storage, mut vector) = create_test_dbtvec();
+            let (storage, vector) = create_test_dbtvec();
 
             for _i in 0..NUM_WRITE_ITEMS {
                 vector.push(value());
@@ -230,7 +230,7 @@ mod read_100_entries {
     const NUM_READ_ITEMS: u64 = 100;
 
     fn get_impl(bencher: Bencher, num_each: usize, persisted: bool) {
-        let (mut storage, mut vector) = create_test_dbtvec();
+        let (storage, vector) = create_test_dbtvec();
 
         for _i in 0..NUM_READ_ITEMS {
             vector.push(value());
@@ -249,7 +249,7 @@ mod read_100_entries {
     }
 
     fn get_many_impl(bencher: Bencher, num_each: usize, persisted: bool) {
-        let (mut storage, mut vector) = create_test_dbtvec();
+        let (storage, vector) = create_test_dbtvec();
 
         for _i in 0..NUM_READ_ITEMS {
             vector.push(value());

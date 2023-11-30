@@ -1,6 +1,6 @@
-use super::super::storage_vec::{Index, StorageVec};
+use super::super::storage_vec::{traits::*, Index};
 use super::dbtvec_private::DbtVecPrivate;
-use super::{DbTable, StorageReader, WriteOperation};
+use super::{traits::*, VecWriteOperation, WriteOperation};
 use std::{
     fmt::Debug,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -61,14 +61,14 @@ where
 
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
-    pub(super) fn write_lock(&mut self) -> RwLockWriteGuard<'_, DbtVecPrivate<K, V, Index, T>> {
+    pub(super) fn write_lock(&self) -> RwLockWriteGuard<'_, DbtVecPrivate<K, V, Index, T>> {
         self.inner
             .write()
             .expect("should acquire DbtVec write lock")
     }
 }
 
-impl<K, V, T> StorageVec<T> for DbtVec<K, V, Index, T>
+impl<K, V, T> StorageVecReads<T> for DbtVec<K, V, Index, T>
 where
     K: From<Index>,
     V: From<T>,
@@ -91,6 +91,13 @@ where
     fn get(&self, index: Index) -> T {
         self.read_lock().get(index)
     }
+
+    // this fn is here to satisfy the trait but is actually
+    // implemented by DbtVec
+    // todo
+    // fn iter_keys<'a>(&'a self) -> Box<dyn Iterator<Item = Index> + '_> {
+    //     unreachable!()
+    // }
 
     #[inline]
     fn many_iter<'a>(
@@ -119,6 +126,32 @@ where
     }
 
     #[inline]
+    fn many_iter_values<'a>(
+        &'a self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = T> + '_> {
+        let inner = self.read_lock();
+
+        Box::new(indices.into_iter().map(move |i| {
+            assert!(
+                i < inner.len(),
+                "Out-of-bounds. Got index {} but length was {}. persisted vector name: {}",
+                i,
+                inner.len(),
+                inner.name
+            );
+
+            if inner.cache.contains_key(&i) {
+                inner.cache[&i].clone()
+            } else {
+                let key = inner.get_index_key(i);
+                let db_element = inner.reader.get(key).unwrap();
+                T::from(db_element)
+            }
+        }))
+    }
+
+    #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
         self.read_lock().get_many(indices)
     }
@@ -127,47 +160,116 @@ where
     fn get_all(&self) -> Vec<T> {
         self.read_lock().get_all()
     }
+}
 
+impl<K, V, T> StorageVecImmutableWrites<T> for DbtVec<K, V, Index, T>
+where
+    K: From<Index>,
+    V: From<T>,
+    T: Clone + From<V> + Debug,
+    K: From<(K, K)>,
+    K: From<u8>,
+    Index: From<V> + From<u64>,
+{
     #[inline]
-    fn set(&mut self, index: Index, value: T) {
+    fn set(&self, index: Index, value: T) {
         self.write_lock().set(index, value)
     }
 
     #[inline]
-    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
         self.write_lock().set_many(key_vals)
     }
 
     #[inline]
-    fn pop(&mut self) -> Option<T> {
+    fn pop(&self) -> Option<T> {
         self.write_lock().pop()
     }
 
     #[inline]
-    fn push(&mut self, value: T) {
+    fn push(&self, value: T) {
         self.write_lock().push(value)
     }
 }
 
-impl<K, V, T> DbTable<K, V> for DbtVec<K, V, Index, T>
+impl<K, V, T> StorageVec<T> for DbtVec<K, V, Index, T>
 where
     K: From<Index>,
     V: From<T>,
-    T: Clone,
-    T: From<V>,
+    T: Clone + From<V> + Debug,
     K: From<(K, K)>,
     K: From<u8>,
-    Index: From<V>,
-    V: From<Index>,
+    Index: From<V> + From<u64>,
+{
+}
+
+impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
+    for DbtVec<ParentKey, ParentValue, Index, T>
+where
+    ParentKey: From<Index>,
+    ParentValue: From<T>,
+    T: Clone,
+    T: From<ParentValue>,
+    ParentKey: From<(ParentKey, ParentKey)>,
+    ParentKey: From<u8>,
+    Index: From<ParentValue>,
+    ParentValue: From<Index>,
 {
     /// Collect all added elements that have not yet been persisted
-    #[inline]
-    fn pull_queue(&mut self) -> Vec<WriteOperation<K, V>> {
-        self.write_lock().pull_queue()
+    fn pull_queue(&self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
+        let mut lock = self.write_lock();
+
+        let maybe_original_length = lock.persisted_length();
+        // necessary because we need maybe_original_length.is_none() later
+        let original_length = maybe_original_length.unwrap_or(0);
+        let mut length = original_length;
+        let mut queue = vec![];
+        while let Some(write_element) = lock.write_queue.pop_front() {
+            match write_element {
+                VecWriteOperation::OverWrite((i, t)) => {
+                    let key = lock.get_index_key(i);
+                    queue.push(WriteOperation::Write(key, Into::<ParentValue>::into(t)));
+                }
+                VecWriteOperation::Push(t) => {
+                    let key = lock.get_index_key(length);
+                    length += 1;
+                    queue.push(WriteOperation::Write(key, Into::<ParentValue>::into(t)));
+                }
+                VecWriteOperation::Pop => {
+                    let key = lock.get_index_key(length - 1);
+                    length -= 1;
+                    queue.push(WriteOperation::Delete(key));
+                }
+            };
+        }
+
+        if original_length != length || maybe_original_length.is_none() {
+            let key =
+                DbtVecPrivate::<ParentKey, ParentValue, Index, T>::get_length_key(lock.key_prefix);
+            queue.push(WriteOperation::Write(
+                key,
+                Into::<ParentValue>::into(length),
+            ));
+        }
+
+        lock.cache.clear();
+
+        queue
     }
 
     #[inline]
-    fn restore_or_new(&mut self) {
-        self.write_lock().restore_or_new()
+    fn restore_or_new(&self) {
+        let mut lock = self.write_lock();
+
+        if let Some(length) = lock
+            .reader
+            .get(DbtVecPrivate::<ParentKey, ParentValue, Index, T>::get_length_key(lock.key_prefix))
+        {
+            lock.current_length = Some(length.into());
+        } else {
+            lock.current_length = Some(0);
+        }
+        lock.cache.clear();
+        lock.write_queue.clear();
     }
 }

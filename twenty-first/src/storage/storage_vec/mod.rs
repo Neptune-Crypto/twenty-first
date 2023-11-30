@@ -9,9 +9,11 @@ mod iterators;
 mod ordinary_vec;
 mod rusty_leveldb_vec;
 mod rusty_leveldb_vec_private;
-mod storage_vec_trait;
+pub mod traits;
 
-pub use {iterators::*, ordinary_vec::*, rusty_leveldb_vec::*, storage_vec_trait::*};
+pub type Index = u64;
+
+pub use {iterators::*, ordinary_vec::*, rusty_leveldb_vec::*};
 
 #[cfg(test)]
 mod tests {
@@ -19,7 +21,9 @@ mod tests {
 
     use crate::storage::level_db::DB;
 
+    use super::traits::*;
     use super::*;
+
     use itertools::Itertools;
     use rand::{Rng, RngCore};
     use std::collections::HashMap;
@@ -42,7 +46,7 @@ mod tests {
         name: &str,
     ) -> (RustyLevelDbVec<u64>, Vec<u64>, Arc<DB>) {
         let db = get_test_db(true);
-        let mut persisted_vec = RustyLevelDbVec::new(db.clone(), 0, name);
+        let persisted_vec = RustyLevelDbVec::new(db.clone(), 0, name);
         let mut regular_vec = vec![];
 
         let mut rng = rand::thread_rng();
@@ -63,7 +67,7 @@ mod tests {
         (persisted_vec, regular_vec, db)
     }
 
-    fn simple_prop<Storage: StorageVec<[u8; 13]>>(mut delegated_db_vec: Storage) {
+    fn simple_prop<Storage: StorageVec<[u8; 13]>>(delegated_db_vec: Storage) {
         assert_eq!(
             0,
             delegated_db_vec.len(),
@@ -133,9 +137,9 @@ mod tests {
     #[test]
     fn multiple_vectors_in_one_db() {
         let db = get_test_db(true);
-        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
+        let delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
-        let mut delegated_db_vec_b: RustyLevelDbVec<u128> =
+        let delegated_db_vec_b: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 1, "unit test vec b");
 
         // push values to vec_a, verify vec_b is not affected
@@ -173,7 +177,7 @@ mod tests {
     #[test]
     fn rusty_level_db_set_many() {
         let db = get_test_db(true);
-        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
+        let delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
         delegated_db_vec_a.push(10);
@@ -220,7 +224,7 @@ mod tests {
     #[test]
     fn rusty_level_db_set_all() {
         let db = get_test_db(true);
-        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
+        let delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
         delegated_db_vec_a.push(10);
@@ -259,7 +263,7 @@ mod tests {
         let db = get_test_db(false);
         let db_path = db.path().clone();
 
-        let mut vec: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db, 0, "vec1");
+        let vec: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db, 0, "vec1");
         vec.push(1000);
 
         assert_eq!(1, vec.len());
@@ -271,7 +275,7 @@ mod tests {
         drop(vec); // this will drop (close) the Db
 
         let db2 = open_test_db(&db_path, true);
-        let mut vec2: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db2, 0, "vec1");
+        let vec2: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db2, 0, "vec1");
 
         assert_eq!(1, vec2.len());
         assert_eq!(1000, vec2.pop().unwrap());
@@ -280,7 +284,7 @@ mod tests {
     #[test]
     fn get_many_ordering_of_outputs() {
         let db = get_test_db(true);
-        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
+        let delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
         delegated_db_vec_a.push(1000);
@@ -348,7 +352,7 @@ mod tests {
 
     #[test]
     fn delegated_vec_pbt() {
-        let (mut persisted_vector, mut normal_vector, db) =
+        let (persisted_vector, mut normal_vector, db) =
             get_persisted_vec_with_length(10000, "vec 1");
 
         let mut rng = rand::thread_rng();
@@ -470,7 +474,7 @@ mod tests {
     )]
     #[test]
     fn panic_on_out_of_bounds_set() {
-        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
         delegated_db_vec.set(1, 3000);
     }
 
@@ -479,7 +483,7 @@ mod tests {
     )]
     #[test]
     fn panic_on_out_of_bounds_set_many() {
-        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
 
         // attempt to set 2 values, when only one is in vector.
         delegated_db_vec.set_many([(0, 0), (1, 1)]);
@@ -488,7 +492,7 @@ mod tests {
     #[should_panic(expected = "size-mismatch.  input has 2 elements and target has 1 elements.")]
     #[test]
     fn panic_on_size_mismatch_set_all() {
-        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
 
         // attempt to set 2 values, when only one is in vector.
         delegated_db_vec.set_all([1, 2]);
@@ -499,7 +503,7 @@ mod tests {
     )]
     #[test]
     fn panic_on_out_of_bounds_get_even_though_value_exists_in_persistent_memory() {
-        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
+        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
         delegated_db_vec.pop();
         delegated_db_vec.get(11);
     }
@@ -509,8 +513,127 @@ mod tests {
     )]
     #[test]
     fn panic_on_out_of_bounds_set_even_though_value_exists_in_persistent_memory() {
-        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
+        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
         delegated_db_vec.pop();
         delegated_db_vec.set(11, 5000);
+    }
+
+    fn gen_concurrency_test_vec() -> RustyLevelDbVec<usize> {
+        let db = get_test_db(true);
+        let v = RustyLevelDbVec::new(db, 0, "test-vec");
+        for i in 0..400 {
+            v.push(i);
+        }
+        v
+    }
+
+    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+    #[test]
+    fn non_atomic_set_and_get() {
+        use std::thread;
+
+        let vec = gen_concurrency_test_vec();
+        let orig = vec.get_all();
+        let modified: Vec<usize> = orig.iter().map(|_| 50).collect();
+
+        // note: this test is expected to fail/assert within 1000 iterations
+        //       though that can depend on machine load, etc.
+        thread::scope(|s| {
+            for _i in 0..1000 {
+                let gets = s.spawn(|| {
+                    // read values one by one.
+                    let mut copy = vec![];
+                    for z in 0..vec.len() {
+                        copy.push(vec.get(z));
+                    }
+
+                    assert!(
+                        copy == orig || copy == modified,
+                        "encountered inconsistent read: {:?}",
+                        copy
+                    );
+                });
+
+                let sets = s.spawn(|| {
+                    // set values one by one.
+                    for j in 0..vec.len() {
+                        vec.set(j, 50);
+                    }
+                });
+                let _ = gets.join().unwrap();
+                let _ = sets.join().unwrap();
+
+                vec.set_all(orig.clone());
+            }
+        });
+    }
+
+    #[test]
+    fn atomic_setall_and_getall() {
+        use std::thread;
+
+        let vec = gen_concurrency_test_vec();
+        let orig = vec.get_all();
+        let modified: Vec<usize> = orig.iter().map(|_| 50).collect();
+
+        // this test should never fail.  we only loop 100 times to keep
+        // the test fast.  Bump it up to 10000+ temporarily to be extra certain.
+        thread::scope(|s| {
+            for _i in 0..100 {
+                let gets = s.spawn(|| {
+                    let copy = vec.get_all();
+
+                    assert!(
+                        copy == orig || copy == modified,
+                        "encountered inconsistent read: {:?}",
+                        copy
+                    );
+                });
+
+                let sets = s.spawn(|| {
+                    vec.set_all(orig.iter().map(|_| 50));
+                });
+                let _ = gets.join().unwrap();
+                let _ = sets.join().unwrap();
+
+                vec.set_all(orig.clone());
+            }
+        });
+    }
+
+    // Todo: This test does not pass yet.  iter_mut() iters are not atomic.
+    #[test]
+    fn atomic_iter_mut_and_iter() {
+        use std::thread;
+
+        let vec = gen_concurrency_test_vec();
+        let orig = vec.get_all();
+        let modified: Vec<usize> = orig.iter().map(|_| 50).collect();
+
+        // this test should never fail.  we only loop 100 times to keep
+        // the test fast.  Bump it up to 10000+ temporarily to be extra certain.
+        thread::scope(|s| {
+            for _i in 0..100 {
+                let gets = s.spawn(|| {
+                    let copy = vec.iter_values().collect_vec();
+                    assert!(
+                        copy == orig || copy == modified,
+                        "encountered inconsistent read: {:?}",
+                        copy
+                    );
+                });
+
+                let sets = s.spawn(|| {
+                    let mut iter = vec.iter_mut();
+                    while let Some(mut setter) = iter.next() {
+                        setter.set(50);
+                    }
+                });
+                let _ = gets.join().unwrap();
+                let _ = sets.join().unwrap();
+
+                vec.set_all(orig.clone());
+            }
+        });
     }
 }

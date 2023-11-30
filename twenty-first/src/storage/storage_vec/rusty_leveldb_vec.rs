@@ -1,6 +1,9 @@
 use super::super::level_db::DB;
 use super::rusty_leveldb_vec_private::RustyLevelDbVecPrivate;
-use super::storage_vec_trait::{Index, StorageVec};
+use super::{
+    traits::{StorageVec, StorageVecImmutableWrites, StorageVecMutableWrites, StorageVecReads},
+    Index,
+};
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
@@ -13,7 +16,7 @@ pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
     inner: Arc<RwLock<RustyLevelDbVecPrivate<T>>>,
 }
 
-impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {
+impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelDbVec<T> {
     #[inline]
     fn is_empty(&self) -> bool {
         self.read_lock().is_empty()
@@ -55,6 +58,32 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         }))
     }
 
+    fn many_iter_values(
+        &self,
+        indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = T> + '_> {
+        // note: this lock is moved into the iterator closure and is not
+        //       released until caller drops the returned iterator
+        let inner = self.read_lock();
+
+        Box::new(indices.into_iter().map(move |i| {
+            assert!(
+                i < inner.len(),
+                "Out-of-bounds. Got index {} but length was {}. persisted vector name: {}",
+                i,
+                inner.len(),
+                inner.name
+            );
+
+            if inner.cache.contains_key(&i) {
+                inner.cache[&i].clone()
+            } else {
+                let key = inner.get_index_key(i);
+                inner.get_u8(&key)
+            }
+        }))
+    }
+
     #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
         self.read_lock().get_many(indices)
@@ -66,9 +95,11 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     fn get_all(&self) -> Vec<T> {
         self.read_lock().get_all()
     }
+}
 
+impl<T: Serialize + DeserializeOwned + Clone> StorageVecImmutableWrites<T> for RustyLevelDbVec<T> {
     #[inline]
-    fn set(&mut self, index: Index, value: T) {
+    fn set(&self, index: Index, value: T) {
         self.write_lock().set(index, value)
     }
 
@@ -80,22 +111,24 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     /// unique.  If not, the last value with the same index will win.
     /// For unordered collections such as HashMap, the behavior is undefined.
     #[inline]
-    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
         self.write_lock().set_many(key_vals)
     }
 
     #[inline]
-    fn pop(&mut self) -> Option<T> {
+    fn pop(&self) -> Option<T> {
         self.write_lock().pop()
     }
 
     #[inline]
-    fn push(&mut self, value: T) {
+    fn push(&self, value: T) {
         self.write_lock().push(value)
     }
 }
 
-impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
+impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {}
+
+impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
     // Return the key used to store the length of the persisted vector
     #[inline]
     pub fn get_length_key(key_prefix: u8) -> [u8; 2] {
@@ -125,7 +158,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
 
     /// Collect all added elements that have not yet bit persisted
     #[inline]
-    pub fn pull_queue(&mut self, write_batch: &mut WriteBatch) {
+    pub fn pull_queue(&self, write_batch: &WriteBatch) {
         self.write_lock().pull_queue(write_batch)
     }
 
@@ -137,7 +170,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     }
 
     #[inline]
-    pub(super) fn write_lock(&mut self) -> RwLockWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
+    pub(super) fn write_lock(&self) -> RwLockWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
         self.inner
             .write()
             .expect("should have acquired RustyLevelDbVec write lock")

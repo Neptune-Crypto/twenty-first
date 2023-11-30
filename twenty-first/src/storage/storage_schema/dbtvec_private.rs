@@ -1,5 +1,5 @@
-use super::super::storage_vec::{Index, StorageVec};
-use super::{DbTable, StorageReader, VecWriteOperation, WriteOperation};
+use super::super::storage_vec::{traits::*, Index};
+use super::{traits::StorageReader, VecWriteOperation};
 use itertools::Itertools;
 use std::{
     collections::{HashMap, VecDeque},
@@ -11,9 +11,9 @@ use std::{
 // is performed in the `DbtVec` public wrapper.
 pub(crate) struct DbtVecPrivate<ParentKey, ParentValue, Index, T> {
     pub(super) reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
-    current_length: Option<Index>,
-    key_prefix: u8,
-    write_queue: VecDeque<VecWriteOperation<Index, T>>,
+    pub(super) current_length: Option<Index>,
+    pub(super) key_prefix: u8,
+    pub(super) write_queue: VecDeque<VecWriteOperation<Index, T>>,
     pub(super) cache: HashMap<Index, T>,
     pub(super) name: String,
 }
@@ -28,7 +28,7 @@ where
 {
     // Return the key of ParentKey type used to store the length of the vector
     #[inline]
-    fn get_length_key(key_prefix: u8) -> ParentKey {
+    pub(super) fn get_length_key(key_prefix: u8) -> ParentKey {
         let const_length_key: ParentKey = 0u8.into();
         let key_prefix_key: ParentKey = key_prefix.into();
         (key_prefix_key, const_length_key).into()
@@ -36,7 +36,7 @@ where
 
     /// Return the length at the last write to disk
     #[inline]
-    fn persisted_length(&self) -> Option<Index> {
+    pub(super) fn persisted_length(&self) -> Option<Index> {
         self.reader
             .get(Self::get_length_key(self.key_prefix))
             .map(|v| v.into())
@@ -93,7 +93,8 @@ where
     }
 }
 
-impl<ParentKey, ParentValue, T> StorageVec<T> for DbtVecPrivate<ParentKey, ParentValue, Index, T>
+impl<ParentKey, ParentValue, T> StorageVecReads<T>
+    for DbtVecPrivate<ParentKey, ParentValue, Index, T>
 where
     ParentKey: From<Index>,
     ParentValue: From<T>,
@@ -146,10 +147,26 @@ where
 
     // this fn is here to satisfy the trait but is actually
     // implemented by DbtVec
+    // todo
+    // fn iter_keys<'a>(&'a self) -> Box<dyn Iterator<Item = Index> + '_> {
+    //     unreachable!()
+    // }
+
+    // this fn is here to satisfy the trait but is actually
+    // implemented by DbtVec
     fn many_iter<'a>(
         &'a self,
         _indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        unreachable!()
+    }
+
+    // this fn is here to satisfy the trait but is actually
+    // implemented by DbtVec
+    fn many_iter_values<'a>(
+        &'a self,
+        _indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = T> + '_> {
         unreachable!()
     }
 
@@ -256,7 +273,18 @@ where
             .map(|x| x.expect("there should be some value"))
             .collect_vec()
     }
+}
 
+impl<ParentKey, ParentValue, T> StorageVecMutableWrites<T>
+    for DbtVecPrivate<ParentKey, ParentValue, Index, T>
+where
+    ParentKey: From<Index>,
+    ParentValue: From<T>,
+    T: Clone + From<ParentValue> + Debug,
+    ParentKey: From<(ParentKey, ParentKey)>,
+    ParentKey: From<u8>,
+    Index: From<ParentValue> + From<u64>,
+{
     #[inline]
     fn set(&mut self, index: Index, value: T) {
         // Disallow setting values out-of-bounds
@@ -336,68 +364,5 @@ where
 
         // update length
         self.current_length = Some(current_length + 1);
-    }
-}
-
-impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
-    for DbtVecPrivate<ParentKey, ParentValue, Index, T>
-where
-    ParentKey: From<Index>,
-    ParentValue: From<T>,
-    T: Clone,
-    T: From<ParentValue>,
-    ParentKey: From<(ParentKey, ParentKey)>,
-    ParentKey: From<u8>,
-    Index: From<ParentValue>,
-    ParentValue: From<Index>,
-{
-    /// Collect all added elements that have not yet been persisted
-    fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
-        let maybe_original_length = self.persisted_length();
-        // necessary because we need maybe_original_length.is_none() later
-        let original_length = maybe_original_length.unwrap_or(0);
-        let mut length = original_length;
-        let mut queue = vec![];
-        while let Some(write_element) = self.write_queue.pop_front() {
-            match write_element {
-                VecWriteOperation::OverWrite((i, t)) => {
-                    let key = self.get_index_key(i);
-                    queue.push(WriteOperation::Write(key, Into::<ParentValue>::into(t)));
-                }
-                VecWriteOperation::Push(t) => {
-                    let key = self.get_index_key(length);
-                    length += 1;
-                    queue.push(WriteOperation::Write(key, Into::<ParentValue>::into(t)));
-                }
-                VecWriteOperation::Pop => {
-                    let key = self.get_index_key(length - 1);
-                    length -= 1;
-                    queue.push(WriteOperation::Delete(key));
-                }
-            };
-        }
-
-        if original_length != length || maybe_original_length.is_none() {
-            let key = Self::get_length_key(self.key_prefix);
-            queue.push(WriteOperation::Write(
-                key,
-                Into::<ParentValue>::into(length),
-            ));
-        }
-
-        self.cache.clear();
-
-        queue
-    }
-
-    #[inline]
-    fn restore_or_new(&mut self) {
-        if let Some(length) = self.reader.get(Self::get_length_key(self.key_prefix)) {
-            self.current_length = Some(length.into());
-        } else {
-            self.current_length = Some(0);
-        }
-        self.cache.clear();
-        self.write_queue.clear();
     }
 }

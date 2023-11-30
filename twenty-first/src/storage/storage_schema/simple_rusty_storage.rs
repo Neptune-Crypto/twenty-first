@@ -1,6 +1,6 @@
 use super::super::level_db::DB;
 use super::enums::WriteOperation;
-use super::{DbtSchema, RustyKey, RustyValue, SimpleRustyReader, StorageWriter};
+use super::{traits::StorageWriter, DbtSchema, RustyKey, RustyValue, SimpleRustyReader};
 use leveldb::batch::WriteBatch;
 use std::sync::Arc;
 
@@ -15,9 +15,9 @@ pub struct SimpleRustyStorage {
 
 impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
     #[inline]
-    fn persist(&mut self) {
+    fn persist(&self) {
         let write_batch = WriteBatch::new();
-        for table in self.schema.tables.iter_mut() {
+        for table in self.schema.tables.iter() {
             let operations = table.pull_queue();
             for op in operations {
                 match op {
@@ -33,8 +33,8 @@ impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
     }
 
     #[inline]
-    fn restore_or_new(&mut self) {
-        for table in self.schema.tables.iter_mut() {
+    fn restore_or_new(&self) {
+        for table in self.schema.tables.iter() {
             table.restore_or_new();
         }
     }
