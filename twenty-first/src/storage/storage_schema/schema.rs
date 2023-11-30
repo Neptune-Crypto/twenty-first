@@ -1,5 +1,8 @@
 use super::super::storage_vec::Index;
-use super::{DbTable, DbtSingleton, DbtVec, StorageReader};
+use super::{
+    traits::{DbTable, StorageReader},
+    DbtSingleton, DbtVec,
+};
 use std::sync::Arc;
 
 /// Provides a virtual database schema.

@@ -1,22 +1,51 @@
+//! Traits that define the StorageSchema interface
+//!
+//! It is recommended to wildcard import these with
+//! `use twenty_first::storage::storage_vec::traits::*`
+
 use super::WriteOperation;
 
 /// Defines table interface for types used by [`DbtSchema`]
 pub trait DbTable<ParentKey, ParentValue> {
     /// Retrieve all unwritten operations and empty write-queue
-    fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>>;
+    fn pull_queue(&self) -> Vec<WriteOperation<ParentKey, ParentValue>>;
     /// Restore existing table if present, else create a new one
-    fn restore_or_new(&mut self);
+    fn restore_or_new(&self);
 }
 
 /// Defines storage singleton for types created by [`DbtSchema`]
-pub trait StorageSingleton<T>
+pub trait StorageSingletonReads<T>
 where
     T: Clone,
 {
     /// Retrieve value
     fn get(&self) -> T;
+}
+
+/// Defines storage singleton mutable write ops for types created by [`DbtSchema`]
+pub(super) trait StorageSingletonMutableWrites<T>
+where
+    T: Clone,
+{
     /// Set value
     fn set(&mut self, t: T);
+}
+
+/// Defines storage singleton immutable write ops for types created by [`DbtSchema`]
+pub trait StorageSingletonImmutableWrites<T>
+where
+    T: Clone,
+{
+    /// Set value
+    fn set(&self, t: T);
+}
+
+/// Defines storage singleton read ops for types created by [`DbtSchema`]
+pub trait StorageSingleton<T>:
+    StorageSingletonReads<T> + StorageSingletonImmutableWrites<T>
+where
+    T: Clone,
+{
 }
 
 /// Defines storage reader interface
@@ -31,7 +60,7 @@ pub trait StorageReader<ParentKey, ParentValue> {
 /// Defines storage writer interface
 pub trait StorageWriter<ParentKey, ParentValue> {
     /// Write data to storage
-    fn persist(&mut self);
+    fn persist(&self);
     /// restore, or new
-    fn restore_or_new(&mut self);
+    fn restore_or_new(&self);
 }

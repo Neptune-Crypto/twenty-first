@@ -1,6 +1,9 @@
 use super::super::level_db::DB;
 use super::super::utils;
-use super::storage_vec_trait::{Index, StorageVec};
+use super::{
+    traits::{StorageVecMutableWrites, StorageVecReads},
+    Index,
+};
 use itertools::Itertools;
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
@@ -21,7 +24,7 @@ pub(crate) struct RustyLevelDbVecPrivate<T: Serialize + DeserializeOwned> {
     pub(super) name: String,
 }
 
-impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecPrivate<T> {
+impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelDbVecPrivate<T> {
     #[inline]
     fn is_empty(&self) -> bool {
         self.length == 0
@@ -58,6 +61,15 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
         &self,
         _indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+        unreachable!()
+    }
+
+    // this fn is here to satisfy the trait, but is implemented
+    // by RustyLevelDbVec
+    fn many_iter_values(
+        &self,
+        _indices: impl IntoIterator<Item = Index> + 'static,
+    ) -> Box<dyn Iterator<Item = T> + '_> {
         unreachable!()
     }
 
@@ -148,7 +160,11 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
             .map(|x| x.expect("should get some element"))
             .collect_vec()
     }
+}
 
+impl<T: Serialize + DeserializeOwned + Clone> StorageVecMutableWrites<T>
+    for RustyLevelDbVecPrivate<T>
+{
     #[inline]
     fn set(&mut self, index: Index, value: T) {
         // Disallow setting values out-of-bounds
@@ -236,6 +252,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecP
     }
 }
 
+// ************ non-trait methods (StorageVec) **************/
 impl<T: Serialize + DeserializeOwned> RustyLevelDbVecPrivate<T> {
     // Return the key used to store the length of the persisted vector
     #[inline]
@@ -282,7 +299,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVecPrivate<T> {
     }
 
     /// Collect all added elements that have not yet bit persisted
-    pub(crate) fn pull_queue(&mut self, write_batch: &mut WriteBatch) {
+    pub(crate) fn pull_queue(&mut self, write_batch: &WriteBatch) {
         let original_length = self.persisted_length();
         let mut length = original_length;
         while let Some(write_element) = self.write_queue.pop_front() {

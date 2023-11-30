@@ -5,7 +5,7 @@ use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::{shared_advanced, shared_basic};
 use crate::shared_math::digest::Digest;
-use crate::storage::storage_vec::{RustyLevelDbVec, StorageVec};
+use crate::storage::storage_vec::{traits::*, RustyLevelDbVec};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::shared::bag_peaks;
 use crate::utils::has_unique_elements;

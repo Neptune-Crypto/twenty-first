@@ -1,5 +1,5 @@
-use super::{DbTable, StorageReader, StorageSingleton, WriteOperation};
-use std::{fmt::Debug, sync::Arc};
+use super::traits::*;
+use std::sync::Arc;
 
 // note: no locking is required in `DbtSingletonPrivate` because locking
 // is performed in the `DbtSingleton` public wrapper.
@@ -10,7 +10,7 @@ pub(crate) struct DbtSingletonPrivate<ParentKey, ParentValue, T> {
     pub(super) reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Sync + Send>,
 }
 
-impl<ParentKey, ParentValue, T> StorageSingleton<T>
+impl<ParentKey, ParentValue, T> StorageSingletonReads<T>
     for DbtSingletonPrivate<ParentKey, ParentValue, T>
 where
     T: Clone + From<ParentValue>,
@@ -18,37 +18,14 @@ where
     fn get(&self) -> T {
         self.current_value.clone()
     }
-
-    fn set(&mut self, t: T) {
-        self.current_value = t;
-    }
 }
 
-impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
+impl<ParentKey, ParentValue, T> StorageSingletonMutableWrites<T>
     for DbtSingletonPrivate<ParentKey, ParentValue, T>
 where
-    T: Eq + Clone + Default + From<ParentValue>,
-    ParentValue: From<T> + Debug,
-    ParentKey: Clone,
+    T: Clone + From<ParentValue>,
 {
-    #[inline]
-    fn pull_queue(&mut self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
-        if self.current_value == self.old_value {
-            vec![]
-        } else {
-            self.old_value = self.current_value.clone();
-            vec![WriteOperation::Write(
-                self.key.clone(),
-                self.current_value.clone().into(),
-            )]
-        }
-    }
-
-    #[inline]
-    fn restore_or_new(&mut self) {
-        self.current_value = match self.reader.get(self.key.clone()) {
-            Some(value) => value.into(),
-            None => T::default(),
-        }
+    fn set(&mut self, t: T) {
+        self.current_value = t;
     }
 }

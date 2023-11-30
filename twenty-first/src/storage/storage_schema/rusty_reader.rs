@@ -1,5 +1,5 @@
 use super::super::level_db::DB;
-use super::{RustyKey, RustyValue, StorageReader};
+use super::{traits::StorageReader, RustyKey, RustyValue};
 
 // Note: RustyReader and SimpleRustyReader appear to be exactly
 // the same.  Can we remove one of them?
