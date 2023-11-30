@@ -53,25 +53,31 @@ pub trait StorageVecReads<T> {
     /// If a write is attempted before the read lock is dropped, a deadlock
     /// will occur.
     ///
-    /// Correct Example:
+    /// # Correct Example:
     /// ```
-    /// for (key, value) in vec.iter() {
-    ///     println!("{key}: {value}")
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
+    /// for (key, val) in vec.iter() {
+    ///     println!("{key}: {val}")
     /// } // <--- iterator is dropped here.
     ///
     /// // write can proceed
-    /// let val = vec.put(5, 2);
+    /// vec.set(5, 2);
     /// ```
     ///
-    /// Deadlock Example:
-    /// ```
-    /// let iter = vec.iter();
-    /// while let Some(key, val) = iter.next() {
-    ///     println!("{key}: {value}")
+    /// # Deadlock Example:
+    /// ```no_run
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
+    /// let mut iter = vec.iter();
+    /// while let Some((key, val)) = iter.next() {
+    ///     println!("{key}: {val}");
     /// }
     ///
     /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
-    /// let val = vec.put(5, 2);
+    /// vec.set(5, 2);
     /// ```
     ///
     /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
@@ -91,21 +97,27 @@ pub trait StorageVecReads<T> {
     /// If a write is attempted before the read lock is dropped, a deadlock
     /// will occur.
     ///
-    /// Correct Example:
+    /// # Correct Example:
     /// ```
-    /// for (key, value) in vec.iter_values() {
-    ///     println!("{value}")
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
+    /// for (val) in vec.iter_values() {
+    ///     println!("{val}")
     /// } // <--- iterator is dropped here.
     ///
     /// // write can proceed
     /// let val = vec.push(2);
     /// ```
     ///
-    /// Deadlock Example:
-    /// ```
-    /// let iter = vec.iter();
+    /// # Deadlock Example:
+    /// ```no_run
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
+    /// let mut iter = vec.iter_values();
     /// while let Some(val) = iter.next() {
-    ///     println!("{value}")
+    ///     println!("{val}")
     /// }
     ///
     /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
@@ -131,25 +143,31 @@ pub trait StorageVecReads<T> {
     /// If a write is attempted before the read lock is dropped, a deadlock
     /// will occur.
     ///
-    /// Correct Example:
+    /// # Correct Example:
     /// ```
-    /// for (key, value) in vec.many_iter([3, 5, 7]) {
-    ///     println!("{key}: {value}")
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
+    /// for (key, val) in vec.many_iter([3, 5, 7]) {
+    ///     println!("{key}: {val}")
     /// } // <--- iterator is dropped here.
     ///
     /// // write can proceed
-    /// let val = vec.put(5, 2);
+    /// vec.set(5, 2);
     /// ```
     ///
-    /// Deadlock Example:
-    /// ```
-    /// let iter = vec.many_iter([3, 5, 7]);
-    /// while let Some(key, val) = iter.next() {
-    ///     println!("{key}: {value}")
+    /// # Deadlock Example:
+    /// ```no_run
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
+    /// let mut iter = vec.many_iter([3, 5, 7]);
+    /// while let Some((key, val)) = iter.next() {
+    ///     println!("{key}: {val}")
     /// }
     ///
     /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
-    /// let val = vec.put(5, 2);
+    /// vec.set(5, 2);
     /// ```
     ///
     /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
@@ -171,25 +189,31 @@ pub trait StorageVecReads<T> {
     /// If a write is attempted before the read lock is dropped, a deadlock
     /// will occur.
     ///
-    /// Correct Example:
+    /// # Correct Example:
     /// ```
-    /// for (key, value) in vec.many_iter_values([2, 5, 8]) {
-    ///     println!("{value}")
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
+    /// for (val) in vec.many_iter_values([2, 5, 8]) {
+    ///     println!("{val}")
     /// } // <--- iterator is dropped here.
     ///
     /// // write can proceed
-    /// let val = vec.put(5, 2);
+    /// vec.set(5, 2);
     /// ```
     ///
-    /// Deadlock Example:
-    /// ```
-    /// let iter = vec.many_iter_values([2, 5, 8]);
+    /// # Deadlock Example:
+    /// ```no_run
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
+    /// let mut iter = vec.many_iter_values([2, 5, 8]);
     /// while let Some(val) = iter.next() {
-    ///     println!("{value}")
+    ///     println!("{val}")
     /// }
     ///
     /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
-    /// let val = vec.put(5, 2);
+    /// vec.set(5, 2);
     /// ```
     ///
     /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
@@ -276,8 +300,11 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     /// This write lock must be dropped before performing any read operation or the
     /// code will deadlock.  See Deadlock Example.
     ///
-    /// Correct Example:
+    /// # Correct Example:
     /// ```
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
     /// {
     ///     let mut iter = vec.iter_mut();
     ///         while let Some(mut setter) = iter.next() {
@@ -289,8 +316,11 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     /// let val = vec.get(2);
     /// ```
     ///
-    /// Deadlock Example:
-    /// ```
+    /// # Deadlock Example:
+    /// ```no_run
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    ///
     /// let mut iter = vec.iter_mut();
     /// while let Some(mut setter) = iter.next() {
     ///     setter.set(50);
@@ -323,12 +353,15 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     /// This write lock must be dropped before performing any read operation or the
     /// code will deadlock.  See Deadlock Example.
     ///
-    /// Correct Example:
-    /// ```
+    /// # Correct Example:
+    /// ```no_run
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<&str>::from(vec!["1","2","3","4","5","6","7","8","9"]);
+    ///
     /// {
     ///     let mut iter = vec.many_iter_mut([2, 4, 6]);
     ///         while let Some(mut setter) = iter.next() {
-    ///         setter.set(50);
+    ///         setter.set("50");
     ///     }
     /// } // <----- iter is dropped here.  write lock is released.
     ///
@@ -336,11 +369,14 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     /// let val = vec.get(2);
     /// ```
     ///
-    /// Deadlock Example:
-    /// ```
+    /// # Deadlock Example:
+    /// ```no_run
+    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
+    /// # let vec = OrdinaryVec::<&str>::from(vec!["1","2","3","4","5","6","7","8","9"]);
+    ///
     /// let mut iter = vec.many_iter_mut([2, 4, 6]);
     /// while let Some(mut setter) = iter.next() {
-    ///     setter.set(50);
+    ///     setter.set("50");
     /// }
     ///
     /// // deadlock! This will wait for the read lock forever because iter is still holding write lock.
