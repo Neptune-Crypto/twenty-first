@@ -69,9 +69,15 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     // type LockedData;
 
     /// set a single element.
+    ///
+    /// note: The update is performed as a single atomic operation.
     fn set(&self, index: Index, value: T);
 
     /// set multiple elements.
+    ///
+    /// note: all updates are performed as a single atomic operation.
+    ///       readers will see either the before or after state,
+    ///       never an intermediate state.
     fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
         for (key, val) in key_vals.into_iter() {
             self.set(key, val)
@@ -79,6 +85,10 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     }
 
     /// set elements from start to vals.count()
+    ///
+    /// note: all updates are performed as a single atomic operation.
+    ///       readers will see either the before or after state,
+    ///       never an intermediate state.
     #[inline]
     fn set_first_n(&self, vals: impl IntoIterator<Item = T>) {
         self.set_many((0..).zip(vals));
@@ -87,9 +97,11 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     /// set all elements with a simple list of values in an array or Vec
     /// and validates that input length matches target length.
     ///
-    /// calls ::set_many() internally.
-    ///
     /// panics if input length does not match target length.
+    ///
+    /// note: all updates are performed as a single atomic operation.
+    ///       readers will see either the before or after state,
+    ///       never an intermediate state.
     ///
     /// note: casts the input value's length from usize to Index
     ///       so will panic if vals contains more than 2^32 items
@@ -108,12 +120,37 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     }
 
     /// pop an element from end of collection
+    ///
+    /// note: The update is performed as a single atomic operation.
     fn pop(&self) -> Option<T>;
 
     /// push an element to end of collection
+    ///
+    /// note: The update is performed as a single atomic operation.
     fn push(&self, value: T);
 
     /// get a mutable iterator over all elements
+    ///
+    /// note: all updates are performed as a single atomic operation.
+    ///       readers will see either the before or after state,
+    ///       never an intermediate state.
+    ///
+    /// note: the returned (lending) iterator cannot be used in a for loop.  Use a
+    ///       while loop instead.  See example below.
+    ///
+    /// Important: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`
+    /// which will not be released until the iterator is dropped.  This write lock enables
+    /// the iterator to perform all mutations atomically.
+    ///
+    /// Example:
+    /// ```
+    /// {
+    ///     let mut iter = vec.iter_mut();
+    ///     while let Some(mut setter) = iter.next() {
+    ///         setter.set(50);
+    ///     }
+    /// }   // <--- iter is dropped, and write lock is released.
+    /// ```
     #[allow(private_bounds)]
     #[inline]
     fn iter_mut(&self) -> ManyIterMut<Self, T>
@@ -124,6 +161,27 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     }
 
     /// get a mutable iterator over elements matching indices
+    ///
+    /// note: all updates are performed as a single atomic operation.
+    ///       readers will see either the before or after state,
+    ///       never an intermediate state.
+    ///
+    /// note: the returned (lending) iterator cannot be used in a for loop.  Use a
+    ///       while loop instead.  See example below.
+    ///
+    /// Important: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`
+    /// which will not be released until the iterator is dropped.  This write lock enables
+    /// the iterator to perform all mutations atomically.
+    ///
+    /// Example:
+    /// ```
+    /// {
+    ///     let mut iter = vec.many_iter_mut(0..vec.len());
+    ///     while let Some(mut setter) = iter.next() {
+    ///         setter.set(50);
+    ///     }
+    /// }   // <--- iter is dropped, and write lock is released.
+    /// ```
     #[allow(private_bounds)]
     #[inline]
     fn many_iter_mut(
