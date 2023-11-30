@@ -963,6 +963,7 @@ mod tests {
             let val = setter.value();
             setter.set(*val / 2);
         }
+        drop(iter); // <--- without this, code will deadlock at next read.
 
         // Verify mutated values, and non-mutated also.
         for (index, value) in vector.iter() {
