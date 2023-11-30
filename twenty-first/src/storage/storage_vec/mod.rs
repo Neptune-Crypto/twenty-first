@@ -56,8 +56,8 @@ mod tests {
             regular_vec.push(value);
         }
 
-        let mut write_batch = WriteBatch::new();
-        persisted_vec.pull_queue(&mut write_batch);
+        let write_batch = WriteBatch::new();
+        persisted_vec.pull_queue(&write_batch);
         assert!(db.write_auto(&write_batch).is_ok());
 
         // Sanity checks
@@ -157,9 +157,9 @@ mod tests {
         assert_eq!(0, delegated_db_vec_b.persisted_length());
         assert_eq!(3, delegated_db_vec_a.len());
         assert_eq!(0, delegated_db_vec_b.len());
-        let mut write_batch = WriteBatch::new();
-        delegated_db_vec_a.pull_queue(&mut write_batch);
-        delegated_db_vec_b.pull_queue(&mut write_batch);
+        let write_batch = WriteBatch::new();
+        delegated_db_vec_a.pull_queue(&write_batch);
+        delegated_db_vec_b.pull_queue(&write_batch);
         assert_eq!(0, delegated_db_vec_a.persisted_length());
         assert_eq!(0, delegated_db_vec_b.persisted_length());
         assert_eq!(3, delegated_db_vec_a.len());
@@ -205,8 +205,8 @@ mod tests {
         );
 
         // Persist
-        let mut write_batch = WriteBatch::new();
-        delegated_db_vec_a.pull_queue(&mut write_batch);
+        let write_batch = WriteBatch::new();
+        delegated_db_vec_a.pull_queue(&write_batch);
         assert!(db.write_auto(&write_batch).is_ok(), "DB write must succeed");
         assert_eq!(4, delegated_db_vec_a.persisted_length());
 
@@ -246,8 +246,8 @@ mod tests {
         );
 
         // Persist
-        let mut write_batch = WriteBatch::new();
-        delegated_db_vec_a.pull_queue(&mut write_batch);
+        let write_batch = WriteBatch::new();
+        delegated_db_vec_a.pull_queue(&write_batch);
         assert!(db.write_auto(&write_batch).is_ok(), "DB write must succeed");
         assert_eq!(3, delegated_db_vec_a.persisted_length());
 
@@ -268,8 +268,8 @@ mod tests {
 
         assert_eq!(1, vec.len());
 
-        let mut write_batch = WriteBatch::new();
-        vec.pull_queue(&mut write_batch);
+        let write_batch = WriteBatch::new();
+        vec.pull_queue(&write_batch);
         assert!(vec.read_lock().db.write_auto(&write_batch).is_ok());
 
         drop(vec); // this will drop (close) the Db
@@ -318,8 +318,8 @@ mod tests {
         );
 
         // Persist
-        let mut write_batch = WriteBatch::new();
-        delegated_db_vec_a.pull_queue(&mut write_batch);
+        let write_batch = WriteBatch::new();
+        delegated_db_vec_a.pull_queue(&write_batch);
         assert!(db.write_auto(&write_batch).is_ok(), "DB write must succeed");
         assert_eq!(3, delegated_db_vec_a.persisted_length());
 
@@ -407,8 +407,8 @@ mod tests {
                 }
                 5 => {
                     // persist
-                    let mut write_batch = WriteBatch::new();
-                    persisted_vector.pull_queue(&mut write_batch);
+                    let write_batch = WriteBatch::new();
+                    persisted_vector.pull_queue(&write_batch);
                     db.write_auto(&write_batch).unwrap();
                 }
                 _ => unreachable!(),
@@ -428,8 +428,8 @@ mod tests {
         );
 
         // Check equality after persisting updates
-        let mut write_batch = WriteBatch::new();
-        persisted_vector.pull_queue(&mut write_batch);
+        let write_batch = WriteBatch::new();
+        persisted_vector.pull_queue(&write_batch);
         db.write_auto(&write_batch).unwrap();
 
         assert_eq!(normal_vector.len(), persisted_vector.len() as usize);
@@ -560,8 +560,8 @@ mod tests {
                         vec.set(j, 50);
                     }
                 });
-                let _ = gets.join().unwrap();
-                let _ = sets.join().unwrap();
+                gets.join().unwrap();
+                sets.join().unwrap();
 
                 vec.set_all(orig.clone());
             }
@@ -593,8 +593,8 @@ mod tests {
                 let sets = s.spawn(|| {
                     vec.set_all(orig.iter().map(|_| 50));
                 });
-                let _ = gets.join().unwrap();
-                let _ = sets.join().unwrap();
+                gets.join().unwrap();
+                sets.join().unwrap();
 
                 vec.set_all(orig.clone());
             }
@@ -629,8 +629,8 @@ mod tests {
                         setter.set(50);
                     }
                 });
-                let _ = gets.join().unwrap();
-                let _ = sets.join().unwrap();
+                gets.join().unwrap();
+                sets.join().unwrap();
 
                 vec.set_all(orig.clone());
             }

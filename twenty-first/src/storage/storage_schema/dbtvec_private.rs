@@ -9,7 +9,7 @@ use std::{
 
 // note: no locking is required in `DbtVecPrivate` because locking
 // is performed in the `DbtVec` public wrapper.
-pub(crate) struct DbtVecPrivate<ParentKey, ParentValue, Index, T> {
+pub struct DbtVecPrivate<ParentKey, ParentValue, Index, T> {
     pub(super) reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
     pub(super) current_length: Option<Index>,
     pub(super) key_prefix: u8,

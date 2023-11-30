@@ -52,19 +52,22 @@ where
             inner: Arc::new(RwLock::new(vec)),
         }
     }
+}
 
-    // This is a private method, but we allow unit tests in super to use it.
+impl<K, V, T> StorageVecRwLock<T> for DbtVec<K, V, Index, T> {
+    type LockedData = DbtVecPrivate<K, V, Index, T>;
+
     #[inline]
-    pub(super) fn read_lock(&self) -> RwLockReadGuard<'_, DbtVecPrivate<K, V, Index, T>> {
-        self.inner.read().expect("should acquire DbtVec read lock")
+    fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
+        self.inner
+            .write()
+            .expect("should have acquired DbtVec write lock")
     }
 
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
-    pub(super) fn write_lock(&self) -> RwLockWriteGuard<'_, DbtVecPrivate<K, V, Index, T>> {
-        self.inner
-            .write()
-            .expect("should acquire DbtVec write lock")
+    fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
+        self.inner.read().expect("should acquire DbtVec read lock")
     }
 }
 
@@ -171,6 +174,8 @@ where
     K: From<u8>,
     Index: From<V> + From<u64>,
 {
+    // type LockedData = DbtVecPrivate<K, V, Index, T>;
+
     #[inline]
     fn set(&self, index: Index, value: T) {
         self.write_lock().set(index, value)

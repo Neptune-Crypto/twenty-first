@@ -4,7 +4,8 @@
 //! `use twenty_first::storage::storage_vec::traits::*`
 
 // use super::iterators::{ManyIterMut, StorageSetter};
-use super::{Index, ManyIterMut, StorageSetter};
+use super::{Index, ManyIterMut};
+use std::sync::{RwLockReadGuard, RwLockWriteGuard};
 
 // re-export to make life easier for users of our API.
 pub use lending_iterator::LendingIterator;
@@ -45,13 +46,6 @@ pub trait StorageVecReads<T> {
         self.many_iter(0..self.len())
     }
 
-    /// get an iterator over elements matching indices
-    // todo:
-    // fn iter_keys(&self) -> Box<dyn Iterator<Item = Index> + '_> {
-    //     // todo: this is inefficient because many_iter impls clone v.
-    //     Box::new(self.many_iter(0..self.len()).map(move |(k, _v)| k))
-    // }
-
     /// get an iterator over all elements
     #[inline]
     fn iter_values(&self) -> Box<dyn Iterator<Item = T> + '_> {
@@ -72,6 +66,8 @@ pub trait StorageVecReads<T> {
 }
 
 pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
+    // type LockedData;
+
     /// set a single element.
     fn set(&self, index: Index, value: T);
 
@@ -117,21 +113,11 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     /// push an element to end of collection
     fn push(&self, value: T);
 
-    #[inline]
-    fn get_mut(&self, index: Index) -> Option<StorageSetter<Self, T>> {
-        let value = self.get(index);
-        Some(StorageSetter {
-            vec: self,
-            index,
-            value,
-        })
-    }
-
     /// get a mutable iterator over all elements
     #[inline]
     fn iter_mut(&self) -> ManyIterMut<Self, T>
     where
-        Self: Sized,
+        Self: Sized + StorageVecRwLock<T>,
     {
         ManyIterMut::new(0..self.len(), self)
     }
@@ -143,13 +129,25 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> ManyIterMut<Self, T>
     where
-        Self: Sized,
+        Self: Sized + StorageVecRwLock<T>,
     {
         ManyIterMut::new(indices, self)
     }
 }
 
-pub(in super::super) trait StorageVecMutableWrites<T>: StorageVecReads<T> {
+pub trait StorageVecRwLock<T> {
+    type LockedData;
+
+    /// obtain write lock over mutable data.
+    fn write_lock(&self) -> RwLockWriteGuard<Self::LockedData>;
+
+    /// obtain read lock over mutable data.
+    fn read_lock(&self) -> RwLockReadGuard<Self::LockedData>;
+}
+
+pub(in super::super) trait StorageVecIterMut<T>: StorageVec<T> {}
+
+pub trait StorageVecMutableWrites<T>: StorageVecReads<T> {
     /// set a single element.
     fn set(&mut self, index: Index, value: T);
 
