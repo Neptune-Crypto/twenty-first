@@ -5,7 +5,7 @@
 
 use super::WriteOperation;
 
-/// Defines table interface for types used by [`DbtSchema`]
+/// Defines table interface for types used by [`super::DbtSchema`]
 pub trait DbTable<ParentKey, ParentValue> {
     /// Retrieve all unwritten operations and empty write-queue
     fn pull_queue(&self) -> Vec<WriteOperation<ParentKey, ParentValue>>;
@@ -13,7 +13,7 @@ pub trait DbTable<ParentKey, ParentValue> {
     fn restore_or_new(&self);
 }
 
-/// Defines storage singleton for types created by [`DbtSchema`]
+/// Defines storage singleton for types created by [`super::DbtSchema`]
 pub trait StorageSingletonReads<T>
 where
     T: Clone,
@@ -22,7 +22,7 @@ where
     fn get(&self) -> T;
 }
 
-/// Defines storage singleton mutable write ops for types created by [`DbtSchema`]
+/// Defines storage singleton mutable write ops for types created by [`super::DbtSchema`]
 pub(super) trait StorageSingletonMutableWrites<T>
 where
     T: Clone,
@@ -31,7 +31,7 @@ where
     fn set(&mut self, t: T);
 }
 
-/// Defines storage singleton immutable write ops for types created by [`DbtSchema`]
+/// Defines storage singleton immutable write ops for types created by [`super::DbtSchema`]
 pub trait StorageSingletonImmutableWrites<T>
 where
     T: Clone,
@@ -40,7 +40,7 @@ where
     fn set(&self, t: T);
 }
 
-/// Defines storage singleton read ops for types created by [`DbtSchema`]
+/// Defines storage singleton read ops for types created by [`super::DbtSchema`]
 pub trait StorageSingleton<T>:
     StorageSingletonReads<T> + StorageSingletonImmutableWrites<T>
 where

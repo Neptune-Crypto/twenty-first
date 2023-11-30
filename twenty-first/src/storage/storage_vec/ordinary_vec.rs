@@ -2,7 +2,7 @@ use super::{traits::*, Index};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// OrdinaryVec is a public wrapper that adds RwLock around
-/// all accesses to an ordinary Vec<T>
+/// all accesses to an ordinary `Vec<T>`
 #[derive(Debug, Clone)]
 pub struct OrdinaryVec<T>(Arc<RwLock<Vec<T>>>);
 

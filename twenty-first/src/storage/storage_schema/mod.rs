@@ -1,6 +1,6 @@
 //! Provides a virtual DB Schema with atomic writes across "tables".
 //!
-//! This module provides [`DbSchema`] that can generate any number of
+//! This module provides [`DbtSchema`] that can generate any number of
 //! [`DbtVec`] and [`DbtSingleton`] collection types.
 //!
 //! Mutating operations to these "tables" are cached and written to the

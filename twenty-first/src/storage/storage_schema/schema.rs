@@ -23,7 +23,7 @@ pub struct DbtSchema<
 > {
     /// These are the tables known by this `DbtSchema` instance.
     ///
-    /// Implementor(s) of [`StorageWriter`] will iterate over these
+    /// Implementor(s) of [`super::traits::StorageWriter`] will iterate over these
     /// tables, collect the pending operations, and write them
     /// atomically to the DB.
     pub tables: Vec<Box<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>,
@@ -42,7 +42,7 @@ impl<
     ///
     /// The `DbtSchema` will keep a reference to the `DbtVec`. In this way,
     /// the Schema becomes aware of any write operations and later
-    /// a [`StorageWriter`] impl can write them all out.
+    /// a [`super::traits::StorageWriter`] impl can write them all out.
     #[inline]
     pub fn new_vec<I, T>(&mut self, name: &str) -> DbtVec<ParentKey, ParentValue, Index, T>
     where
@@ -72,7 +72,7 @@ impl<
     ///
     /// The `DbtSchema` will keep a reference to the `DbtSingleton`.
     /// In this way, the Schema becomes aware of any write operations
-    /// and later a [`StorageWriter`] impl can write them all out.
+    /// and later a [`super::traits::StorageWriter`] impl can write them all out.
     #[inline]
     pub fn new_singleton<S>(&mut self, key: ParentKey) -> DbtSingleton<ParentKey, ParentValue, S>
     where
