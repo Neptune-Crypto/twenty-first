@@ -1,9 +1,8 @@
-use super::{
-    traits::{StorageVec, StorageVecImmutableWrites, StorageVecReads},
-    Index,
-};
-use std::sync::{Arc, RwLock};
+use super::{traits::*, Index};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+/// OrdinaryVec is a public wrapper that adds RwLock around
+/// all accesses to an ordinary Vec<T>
 #[derive(Debug, Clone)]
 pub struct OrdinaryVec<T>(Arc<RwLock<Vec<T>>>);
 
@@ -95,6 +94,24 @@ impl<T: Clone> StorageVecImmutableWrites<T> for OrdinaryVec<T> {
     #[inline]
     fn push(&self, value: T) {
         self.0.write().unwrap().push(value);
+    }
+}
+
+impl<T> StorageVecRwLock<T> for OrdinaryVec<T> {
+    type LockedData = Vec<T>;
+
+    #[inline]
+    fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
+        self.0
+            .write()
+            .expect("should have acquired OrdinaryVec write lock")
+    }
+
+    #[inline]
+    fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
+        self.0
+            .read()
+            .expect("should have acquired OrdinaryVec read lock")
     }
 }
 

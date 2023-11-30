@@ -1,9 +1,6 @@
 use super::super::level_db::DB;
 use super::rusty_leveldb_vec_private::RustyLevelDbVecPrivate;
-use super::{
-    traits::{StorageVec, StorageVecImmutableWrites, StorageVecMutableWrites, StorageVecReads},
-    Index,
-};
+use super::{traits::*, Index};
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
@@ -98,6 +95,8 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelD
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> StorageVecImmutableWrites<T> for RustyLevelDbVec<T> {
+    // type LockedData = RustyLevelDbVecPrivate<T>;
+
     #[inline]
     fn set(&self, index: Index, value: T) {
         self.write_lock().set(index, value)
@@ -123,6 +122,24 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecImmutableWrites<T> for R
     #[inline]
     fn push(&self, value: T) {
         self.write_lock().push(value)
+    }
+}
+
+impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVec<T> {
+    type LockedData = RustyLevelDbVecPrivate<T>;
+
+    #[inline]
+    fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
+        self.inner
+            .write()
+            .expect("should have acquired RustyLevelDbVec write lock")
+    }
+
+    #[inline]
+    fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
+        self.inner
+            .read()
+            .expect("should have acquired RustyLevelDbVec read lock")
     }
 }
 
@@ -160,19 +177,5 @@ impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
     #[inline]
     pub fn pull_queue(&self, write_batch: &WriteBatch) {
         self.write_lock().pull_queue(write_batch)
-    }
-
-    #[inline]
-    pub(super) fn read_lock(&self) -> RwLockReadGuard<'_, RustyLevelDbVecPrivate<T>> {
-        self.inner
-            .read()
-            .expect("should have acquired RustyLevelDbVec read lock")
-    }
-
-    #[inline]
-    pub(super) fn write_lock(&self) -> RwLockWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
-        self.inner
-            .write()
-            .expect("should have acquired RustyLevelDbVec write lock")
     }
 }

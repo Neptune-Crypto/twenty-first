@@ -14,8 +14,14 @@ use std::sync::Arc;
 ///
 /// RustyLevelDbVec is a public wrapper that adds RwLock around
 /// all accesses to RustyLevelDbVecPrivate
+//
+// note: no locking is required in `DbtVecPrivate` because locking
+// is performed in the `DbtVec` public wrapper.
+//
+// note: this is `pub` because it is exposed in public API by `ManyIterMut`
+// but we keep all the fields private.
 #[derive(Debug, Clone)]
-pub(crate) struct RustyLevelDbVecPrivate<T: Serialize + DeserializeOwned> {
+pub struct RustyLevelDbVecPrivate<T: Serialize + DeserializeOwned> {
     key_prefix: u8,
     pub(super) db: Arc<DB>,
     write_queue: VecDeque<WriteElement<T>>,
