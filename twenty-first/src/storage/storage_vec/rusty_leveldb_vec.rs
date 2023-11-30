@@ -81,11 +81,6 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelD
         }))
     }
 
-    #[inline]
-    fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        self.read_lock().get_many(indices)
-    }
-
     /// Return all stored elements in a vector, whose index matches the StorageVec's.
     /// It's the caller's responsibility that there is enough memory to store all elements.
     #[inline]

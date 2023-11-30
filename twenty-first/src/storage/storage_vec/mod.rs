@@ -7,6 +7,7 @@
 #![allow(missing_docs)]
 mod iterators;
 mod ordinary_vec;
+mod ordinary_vec_private;
 mod rusty_leveldb_vec;
 mod rusty_leveldb_vec_private;
 pub mod traits;

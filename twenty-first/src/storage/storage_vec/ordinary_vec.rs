@@ -1,14 +1,24 @@
+use super::ordinary_vec_private::OrdinaryVecPrivate;
 use super::{traits::*, Index};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-/// OrdinaryVec is a public wrapper that adds RwLock around
-/// all accesses to an ordinary `Vec<T>`
+/// OrdinaryVec is a wrapper that adds RwLock and atomic snapshot
+/// guarantees around all accesses to an ordinary `Vec<T>`
 #[derive(Debug, Clone)]
-pub struct OrdinaryVec<T>(Arc<RwLock<Vec<T>>>);
+pub struct OrdinaryVec<T>(Arc<RwLock<OrdinaryVecPrivate<T>>>);
 
 impl<T> From<Vec<T>> for OrdinaryVec<T> {
     fn from(v: Vec<T>) -> Self {
-        Self(Arc::new(RwLock::new(v)))
+        Self(Arc::new(RwLock::new(OrdinaryVecPrivate(v))))
+    }
+}
+
+impl<T> From<&[T]> for OrdinaryVec<T>
+where
+    T: Copy,
+{
+    fn from(v: &[T]) -> Self {
+        Self(Arc::new(RwLock::new(OrdinaryVecPrivate(v.to_vec()))))
     }
 }
 
@@ -20,47 +30,50 @@ impl<T: Clone> StorageVecReads<T> for OrdinaryVec<T> {
 
     #[inline]
     fn len(&self) -> Index {
-        self.0.read().unwrap().len() as Index
+        self.0.read().unwrap().len()
     }
 
     #[inline]
     fn get(&self, index: Index) -> T {
-        self.0.write().unwrap()[index as usize].clone()
+        self.0.read().unwrap().get(index)
     }
 
     fn many_iter(
         &self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
-        Box::new(
-            indices
-                .into_iter()
-                .map(|index| (index, self.0.read().unwrap()[index as usize].clone())),
-        )
+        // note: this lock is moved into the iterator closure and is not
+        //       released until caller drops the returned iterator
+        let inner = self.0.read().unwrap();
+
+        Box::new(indices.into_iter().map(move |i| {
+            assert!(
+                i < inner.len(),
+                "Out-of-bounds. Got index {} but length was {}.",
+                i,
+                inner.len(),
+            );
+            (i, inner.get(i))
+        }))
     }
 
     fn many_iter_values(
         &self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = T> + '_> {
-        Box::new(
-            indices
-                .into_iter()
-                .map(|index| self.0.read().unwrap()[index as usize].clone()),
-        )
-    }
+        // note: this lock is moved into the iterator closure and is not
+        //       released until caller drops the returned iterator
+        let inner = self.0.read().unwrap();
 
-    #[inline]
-    fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        indices
-            .iter()
-            .map(|index| self.0.read().unwrap()[*index as usize].clone())
-            .collect()
-    }
-
-    #[inline]
-    fn get_all(&self) -> Vec<T> {
-        self.0.read().unwrap().clone()
+        Box::new(indices.into_iter().map(move |i| {
+            assert!(
+                i < inner.len(),
+                "Out-of-bounds. Got index {} but length was {}.",
+                i,
+                inner.len(),
+            );
+            inner.get(i)
+        }))
     }
 }
 
@@ -68,22 +81,7 @@ impl<T: Clone> StorageVecImmutableWrites<T> for OrdinaryVec<T> {
     #[inline]
     fn set(&self, index: Index, value: T) {
         // note: on 32 bit systems, this could panic.
-        self.0.write().unwrap()[index as usize] = value;
-    }
-
-    /// set multiple elements.
-    ///
-    /// panics if key_vals contains an index not in the collection
-    ///
-    /// It is the caller's responsibility to ensure that index values are
-    /// unique.  If not, the last value with the same index will win.
-    /// For unordered collections such as HashMap, the behavior is undefined.
-    #[inline]
-    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
-        for (index, value) in key_vals.into_iter() {
-            // note: on 32 bit systems, this could panic.
-            self.0.write().unwrap()[index as usize] = value;
-        }
+        self.0.write().unwrap().set(index, value);
     }
 
     #[inline]
@@ -98,7 +96,7 @@ impl<T: Clone> StorageVecImmutableWrites<T> for OrdinaryVec<T> {
 }
 
 impl<T> StorageVecRwLock<T> for OrdinaryVec<T> {
-    type LockedData = Vec<T>;
+    type LockedData = OrdinaryVecPrivate<T>;
 
     #[inline]
     fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
