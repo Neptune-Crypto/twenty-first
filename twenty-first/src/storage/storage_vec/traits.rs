@@ -114,6 +114,7 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     fn push(&self, value: T);
 
     /// get a mutable iterator over all elements
+    #[allow(private_bounds)]
     #[inline]
     fn iter_mut(&self) -> ManyIterMut<Self, T>
     where
@@ -123,6 +124,7 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     }
 
     /// get a mutable iterator over elements matching indices
+    #[allow(private_bounds)]
     #[inline]
     fn many_iter_mut(
         &self,
@@ -135,7 +137,8 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     }
 }
 
-pub trait StorageVecRwLock<T> {
+// We keep this trait private so that the locks remain encapsulated inside our API.
+pub(in super::super) trait StorageVecRwLock<T> {
     type LockedData;
 
     /// obtain write lock over mutable data.
