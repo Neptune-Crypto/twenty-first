@@ -11,6 +11,7 @@ use std::marker::PhantomData;
 use std::sync::RwLockWriteGuard;
 
 /// a mutating iterator for StorageVec trait
+#[allow(private_bounds)]
 pub struct ManyIterMut<'a, V, T>
 where
     V: StorageVecImmutableWrites<T> + StorageVecRwLock<T> + ?Sized,
@@ -21,6 +22,7 @@ where
     phantom_d: PhantomData<V>,
 }
 
+#[allow(private_bounds)]
 impl<'a, V, T> ManyIterMut<'a, V, T>
 where
     V: StorageVecImmutableWrites<T> + StorageVecRwLock<T> + ?Sized,
@@ -40,6 +42,7 @@ where
 
 // LendingIterator trait gives us all the nice iterator type functions.
 // We only have to impl next()
+#[allow(private_bounds)]
 #[gat]
 impl<'a, V, T: 'a> LendingIterator for ManyIterMut<'a, V, T>
 where
@@ -66,6 +69,7 @@ where
 }
 
 /// used for accessing and setting values returned from StorageVec::get_mut() and mutable iterators
+#[allow(private_bounds)]
 pub struct StorageSetter<'c, 'd, V, T>
 where
     V: StorageVecImmutableWrites<T> + StorageVecRwLock<T> + ?Sized,
@@ -76,6 +80,7 @@ where
     value: T,
 }
 
+#[allow(private_bounds)]
 impl<'a, 'b, V, T> StorageSetter<'a, 'b, V, T>
 where
     V: StorageVecImmutableWrites<T> + StorageVecRwLock<T> + ?Sized,
