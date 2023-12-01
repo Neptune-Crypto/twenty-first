@@ -233,14 +233,14 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
 
     /// set multiple elements.
     ///
+    /// It is the caller's responsibility to ensure that index values are
+    /// unique.  If not, the last value with the same index will win.
+    /// For unordered collections such as HashMap, the behavior is undefined.
+    ///
     /// note: all updates are performed as a single atomic operation.
     ///       readers will see either the before or after state,
     ///       never an intermediate state.
-    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
-        for (key, val) in key_vals.into_iter() {
-            self.set(key, val)
-        }
-    }
+    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>);
 
     /// set elements from start to vals.count()
     ///
@@ -286,6 +286,11 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     ///
     /// note: The update is performed as a single atomic operation.
     fn push(&self, value: T);
+
+    /// Removes all elements from the collection
+    ///
+    /// note: The update is performed as a single atomic operation.
+    fn clear(&self);
 
     /// get a mutable iterator over all elements
     ///
@@ -455,6 +460,162 @@ pub trait StorageVecMutableWrites<T>: StorageVecReads<T> {
 
     /// push an element to end of collection
     fn push(&mut self, value: T);
+
+    fn clear(&mut self);
 }
 
 pub trait StorageVec<T>: StorageVecReads<T> + StorageVecImmutableWrites<T> {}
+
+#[cfg(test)]
+pub(in crate::storage) mod tests {
+    use super::*;
+    use itertools::Itertools;
+
+    pub mod concurrency {
+        use super::*;
+        use std::thread;
+
+        pub fn prepare_concurrency_test_vec(vec: &impl StorageVec<u64>) {
+            vec.clear();
+            for i in 0..400 {
+                vec.push(i);
+            }
+        }
+
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        pub fn non_atomic_set_and_get(vec: &(impl StorageVec<u64> + Send + Sync)) {
+            prepare_concurrency_test_vec(vec);
+            let orig = vec.get_all();
+            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+
+            // note: this test is expected to fail/assert within 1000 iterations
+            //       though that can depend on machine load, etc.
+            thread::scope(|s| {
+                for _i in 0..1000 {
+                    let gets = s.spawn(|| {
+                        // read values one by one.
+                        let mut copy = vec![];
+                        for z in 0..vec.len() {
+                            copy.push(vec.get(z));
+                        }
+
+                        assert!(
+                            copy == orig || copy == modified,
+                            "encountered inconsistent read: {:?}",
+                            copy
+                        );
+                    });
+
+                    let sets = s.spawn(|| {
+                        // set values one by one.
+                        for j in 0..vec.len() {
+                            vec.set(j, 50);
+                        }
+                    });
+                    gets.join().unwrap();
+                    sets.join().unwrap();
+
+                    vec.set_all(orig.clone());
+                }
+            });
+        }
+
+        pub fn atomic_setmany_and_getmany(vec: &(impl StorageVec<u64> + Send + Sync)) {
+            prepare_concurrency_test_vec(vec);
+            let orig = vec.get_all();
+            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+
+            let indices: Vec<_> = (0..orig.len() as u64).collect();
+
+            // this test should never fail.  we only loop 100 times to keep
+            // the test fast.  Bump it up to 10000+ temporarily to be extra certain.
+            thread::scope(|s| {
+                for _i in 0..100 {
+                    let gets = s.spawn(|| {
+                        let copy = vec.get_many(&indices);
+
+                        assert!(
+                            copy == orig || copy == modified,
+                            "encountered inconsistent read: {:?}",
+                            copy
+                        );
+                    });
+
+                    let sets = s.spawn(|| {
+                        vec.set_many(orig.iter().enumerate().map(|(k, _v)| (k as u64, 50u64)));
+                    });
+                    gets.join().unwrap();
+                    sets.join().unwrap();
+
+                    vec.set_all(orig.clone());
+                }
+            });
+        }
+
+        pub fn atomic_setall_and_getall(vec: &(impl StorageVec<u64> + Send + Sync)) {
+            prepare_concurrency_test_vec(vec);
+            let orig = vec.get_all();
+            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+
+            // this test should never fail.  we only loop 100 times to keep
+            // the test fast.  Bump it up to 10000+ temporarily to be extra certain.
+            thread::scope(|s| {
+                for _i in 0..100 {
+                    let gets = s.spawn(|| {
+                        let copy = vec.get_all();
+
+                        assert!(
+                            copy == orig || copy == modified,
+                            "encountered inconsistent read: {:?}",
+                            copy
+                        );
+                    });
+
+                    let sets = s.spawn(|| {
+                        vec.set_all(orig.iter().map(|_| 50));
+                    });
+                    gets.join().unwrap();
+                    sets.join().unwrap();
+
+                    vec.set_all(orig.clone());
+                }
+            });
+        }
+
+        pub fn atomic_iter_mut_and_iter<T>(vec: &T)
+        where
+            T: StorageVec<u64> + StorageVecRwLock<u64> + Send + Sync,
+            T::LockedData: StorageVecReads<u64> + StorageVecMutableWrites<u64>,
+        {
+            prepare_concurrency_test_vec(vec);
+            let orig = vec.get_all();
+            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+
+            // this test should never fail.  we only loop 100 times to keep
+            // the test fast.  Bump it up to 10000+ temporarily to be extra certain.
+            thread::scope(|s| {
+                for _i in 0..100 {
+                    let gets = s.spawn(|| {
+                        let copy = vec.iter_values().collect_vec();
+                        assert!(
+                            copy == orig || copy == modified,
+                            "encountered inconsistent read: {:?}",
+                            copy
+                        );
+                    });
+
+                    let sets = s.spawn(|| {
+                        let mut iter = vec.iter_mut();
+                        while let Some(mut setter) = iter.next() {
+                            setter.set(50);
+                        }
+                    });
+                    gets.join().unwrap();
+                    sets.join().unwrap();
+
+                    vec.set_all(orig.clone());
+                }
+            });
+        }
+    }
+}

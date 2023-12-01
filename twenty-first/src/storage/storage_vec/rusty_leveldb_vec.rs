@@ -81,6 +81,11 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelD
         }))
     }
 
+    #[inline]
+    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+        self.read_lock().get_many(indices)
+    }
+
     /// Return all stored elements in a vector, whose index matches the StorageVec's.
     /// It's the caller's responsibility that there is enough memory to store all elements.
     #[inline]
@@ -117,6 +122,11 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecImmutableWrites<T> for R
     #[inline]
     fn push(&self, value: T) {
         self.write_lock().push(value)
+    }
+
+    #[inline]
+    fn clear(&self) {
+        self.write_lock().clear();
     }
 }
 
@@ -172,5 +182,38 @@ impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
     #[inline]
     pub fn pull_queue(&self, write_batch: &WriteBatch) {
         self.write_lock().pull_queue(write_batch)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::tests::get_test_db;
+    use super::super::traits::tests as traits_tests;
+    use super::*;
+
+    fn gen_concurrency_test_vec() -> RustyLevelDbVec<u64> {
+        let db = get_test_db(true);
+        RustyLevelDbVec::new(db, 0, "test-vec")
+    }
+
+    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+    #[test]
+    fn non_atomic_set_and_get() {
+        traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
+    }
+
+    #[test]
+    fn atomic_setmany_and_getmany() {
+        traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
+    }
+
+    #[test]
+    fn atomic_setall_and_getall() {
+        traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
+    }
+
+    #[test]
+    fn atomic_iter_mut_and_iter() {
+        traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
     }
 }

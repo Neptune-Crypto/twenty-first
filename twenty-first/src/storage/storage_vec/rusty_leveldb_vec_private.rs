@@ -256,6 +256,13 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecMutableWrites<T>
         // update length
         self.length += 1;
     }
+
+    #[inline]
+    fn clear(&mut self) {
+        while !self.is_empty() {
+            self.pop();
+        }
+    }
 }
 
 // ************ non-trait methods (StorageVec) **************/

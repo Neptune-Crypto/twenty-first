@@ -365,4 +365,11 @@ where
         // update length
         self.current_length = Some(current_length + 1);
     }
+
+    #[inline]
+    fn clear(&mut self) {
+        while !self.is_empty() {
+            self.pop();
+        }
+    }
 }

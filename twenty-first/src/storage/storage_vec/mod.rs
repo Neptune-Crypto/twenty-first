@@ -32,7 +32,7 @@ mod tests {
     use leveldb::batch::WriteBatch;
 
     // todo: delete fn
-    fn get_test_db(destroy_db_on_drop: bool) -> Arc<DB> {
+    pub(super) fn get_test_db(destroy_db_on_drop: bool) -> Arc<DB> {
         Arc::new(DB::open_new_test_database(destroy_db_on_drop, None, None, None).unwrap())
     }
 
@@ -517,124 +517,5 @@ mod tests {
         let (delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
         delegated_db_vec.pop();
         delegated_db_vec.set(11, 5000);
-    }
-
-    fn gen_concurrency_test_vec() -> RustyLevelDbVec<usize> {
-        let db = get_test_db(true);
-        let v = RustyLevelDbVec::new(db, 0, "test-vec");
-        for i in 0..400 {
-            v.push(i);
-        }
-        v
-    }
-
-    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
-    #[test]
-    fn non_atomic_set_and_get() {
-        use std::thread;
-
-        let vec = gen_concurrency_test_vec();
-        let orig = vec.get_all();
-        let modified: Vec<usize> = orig.iter().map(|_| 50).collect();
-
-        // note: this test is expected to fail/assert within 1000 iterations
-        //       though that can depend on machine load, etc.
-        thread::scope(|s| {
-            for _i in 0..1000 {
-                let gets = s.spawn(|| {
-                    // read values one by one.
-                    let mut copy = vec![];
-                    for z in 0..vec.len() {
-                        copy.push(vec.get(z));
-                    }
-
-                    assert!(
-                        copy == orig || copy == modified,
-                        "encountered inconsistent read: {:?}",
-                        copy
-                    );
-                });
-
-                let sets = s.spawn(|| {
-                    // set values one by one.
-                    for j in 0..vec.len() {
-                        vec.set(j, 50);
-                    }
-                });
-                gets.join().unwrap();
-                sets.join().unwrap();
-
-                vec.set_all(orig.clone());
-            }
-        });
-    }
-
-    #[test]
-    fn atomic_setall_and_getall() {
-        use std::thread;
-
-        let vec = gen_concurrency_test_vec();
-        let orig = vec.get_all();
-        let modified: Vec<usize> = orig.iter().map(|_| 50).collect();
-
-        // this test should never fail.  we only loop 100 times to keep
-        // the test fast.  Bump it up to 10000+ temporarily to be extra certain.
-        thread::scope(|s| {
-            for _i in 0..100 {
-                let gets = s.spawn(|| {
-                    let copy = vec.get_all();
-
-                    assert!(
-                        copy == orig || copy == modified,
-                        "encountered inconsistent read: {:?}",
-                        copy
-                    );
-                });
-
-                let sets = s.spawn(|| {
-                    vec.set_all(orig.iter().map(|_| 50));
-                });
-                gets.join().unwrap();
-                sets.join().unwrap();
-
-                vec.set_all(orig.clone());
-            }
-        });
-    }
-
-    // Todo: This test does not pass yet.  iter_mut() iters are not atomic.
-    #[test]
-    fn atomic_iter_mut_and_iter() {
-        use std::thread;
-
-        let vec = gen_concurrency_test_vec();
-        let orig = vec.get_all();
-        let modified: Vec<usize> = orig.iter().map(|_| 50).collect();
-
-        // this test should never fail.  we only loop 100 times to keep
-        // the test fast.  Bump it up to 10000+ temporarily to be extra certain.
-        thread::scope(|s| {
-            for _i in 0..100 {
-                let gets = s.spawn(|| {
-                    let copy = vec.iter_values().collect_vec();
-                    assert!(
-                        copy == orig || copy == modified,
-                        "encountered inconsistent read: {:?}",
-                        copy
-                    );
-                });
-
-                let sets = s.spawn(|| {
-                    let mut iter = vec.iter_mut();
-                    while let Some(mut setter) = iter.next() {
-                        setter.set(50);
-                    }
-                });
-                gets.join().unwrap();
-                sets.join().unwrap();
-
-                vec.set_all(orig.clone());
-            }
-        });
     }
 }

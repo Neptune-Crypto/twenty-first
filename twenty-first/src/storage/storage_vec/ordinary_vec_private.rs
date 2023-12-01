@@ -1,6 +1,6 @@
 use super::{traits::*, Index};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct OrdinaryVecPrivate<T>(pub(super) Vec<T>);
 
 impl<T: Clone> StorageVecReads<T> for OrdinaryVecPrivate<T> {
@@ -41,6 +41,13 @@ impl<T: Clone> StorageVecMutableWrites<T> for OrdinaryVecPrivate<T> {
     }
 
     #[inline]
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+        for (key, val) in key_vals.into_iter() {
+            self.set(key, val);
+        }
+    }
+
+    #[inline]
     fn pop(&mut self) -> Option<T> {
         self.0.pop()
     }
@@ -48,5 +55,10 @@ impl<T: Clone> StorageVecMutableWrites<T> for OrdinaryVecPrivate<T> {
     #[inline]
     fn push(&mut self, value: T) {
         self.0.push(value);
+    }
+
+    #[inline]
+    fn clear(&mut self) {
+        self.0.clear();
     }
 }
