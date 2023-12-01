@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// OrdinaryVec is a wrapper that adds RwLock and atomic snapshot
 /// guarantees around all accesses to an ordinary `Vec<T>`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct OrdinaryVec<T>(Arc<RwLock<OrdinaryVecPrivate<T>>>);
 
 impl<T> From<Vec<T>> for OrdinaryVec<T> {
@@ -13,29 +13,20 @@ impl<T> From<Vec<T>> for OrdinaryVec<T> {
     }
 }
 
-impl<T> From<&[T]> for OrdinaryVec<T>
-where
-    T: Copy,
-{
-    fn from(v: &[T]) -> Self {
-        Self(Arc::new(RwLock::new(OrdinaryVecPrivate(v.to_vec()))))
-    }
-}
-
 impl<T: Clone> StorageVecReads<T> for OrdinaryVec<T> {
     #[inline]
     fn is_empty(&self) -> bool {
-        self.0.read().unwrap().is_empty()
+        self.read_lock().is_empty()
     }
 
     #[inline]
     fn len(&self) -> Index {
-        self.0.read().unwrap().len()
+        self.read_lock().len()
     }
 
     #[inline]
     fn get(&self, index: Index) -> T {
-        self.0.read().unwrap().get(index)
+        self.read_lock().get(index)
     }
 
     fn many_iter(
@@ -44,7 +35,7 @@ impl<T: Clone> StorageVecReads<T> for OrdinaryVec<T> {
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
         // note: this lock is moved into the iterator closure and is not
         //       released until caller drops the returned iterator
-        let inner = self.0.read().unwrap();
+        let inner = self.read_lock();
 
         Box::new(indices.into_iter().map(move |i| {
             assert!(
@@ -63,7 +54,7 @@ impl<T: Clone> StorageVecReads<T> for OrdinaryVec<T> {
     ) -> Box<dyn Iterator<Item = T> + '_> {
         // note: this lock is moved into the iterator closure and is not
         //       released until caller drops the returned iterator
-        let inner = self.0.read().unwrap();
+        let inner = self.read_lock();
 
         Box::new(indices.into_iter().map(move |i| {
             assert!(
@@ -81,17 +72,27 @@ impl<T: Clone> StorageVecImmutableWrites<T> for OrdinaryVec<T> {
     #[inline]
     fn set(&self, index: Index, value: T) {
         // note: on 32 bit systems, this could panic.
-        self.0.write().unwrap().set(index, value);
+        self.write_lock().set(index, value);
+    }
+
+    #[inline]
+    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+        self.write_lock().set_many(key_vals);
     }
 
     #[inline]
     fn pop(&self) -> Option<T> {
-        self.0.write().unwrap().pop()
+        self.write_lock().pop()
     }
 
     #[inline]
     fn push(&self, value: T) {
-        self.0.write().unwrap().push(value);
+        self.write_lock().push(value);
+    }
+
+    #[inline]
+    fn clear(&self) {
+        self.write_lock().clear();
     }
 }
 
@@ -114,3 +115,34 @@ impl<T> StorageVecRwLock<T> for OrdinaryVec<T> {
 }
 
 impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {}
+
+#[cfg(test)]
+mod tests {
+    use super::super::traits::tests as traits_tests;
+    use super::*;
+
+    fn gen_concurrency_test_vec() -> OrdinaryVec<u64> {
+        Default::default()
+    }
+
+    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+    #[test]
+    fn non_atomic_set_and_get() {
+        traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
+    }
+
+    #[test]
+    fn atomic_setmany_and_getmany() {
+        traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
+    }
+
+    #[test]
+    fn atomic_setall_and_getall() {
+        traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
+    }
+
+    #[test]
+    fn atomic_iter_mut_and_iter() {
+        traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
+    }
+}

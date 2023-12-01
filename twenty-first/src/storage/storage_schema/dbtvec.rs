@@ -195,6 +195,11 @@ where
     fn push(&self, value: T) {
         self.write_lock().push(value)
     }
+
+    #[inline]
+    fn clear(&self) {
+        self.write_lock().clear()
+    }
 }
 
 impl<K, V, T> StorageVec<T> for DbtVec<K, V, Index, T>
@@ -276,5 +281,43 @@ where
         }
         lock.cache.clear();
         lock.write_queue.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::storage_vec::traits::tests as traits_tests;
+    use super::super::{RustyKey, RustyValue, SimpleRustyStorage};
+    use super::*;
+    use crate::storage::level_db::DB;
+
+    fn gen_concurrency_test_vec() -> DbtVec<RustyKey, RustyValue, Index, u64> {
+        // open new DB that will be removed on close.
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
+        let mut rusty_storage = SimpleRustyStorage::new(db);
+        rusty_storage
+            .schema
+            .new_vec::<Index, u64>("atomicity-test-vector")
+    }
+
+    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+    #[test]
+    fn non_atomic_set_and_get() {
+        traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
+    }
+
+    #[test]
+    fn atomic_setmany_and_getmany() {
+        traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
+    }
+
+    #[test]
+    fn atomic_setall_and_getall() {
+        traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
+    }
+
+    #[test]
+    fn atomic_iter_mut_and_iter() {
+        traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
     }
 }
