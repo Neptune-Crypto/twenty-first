@@ -191,29 +191,33 @@ mod tests {
     use super::super::traits::tests as traits_tests;
     use super::*;
 
-    fn gen_concurrency_test_vec() -> RustyLevelDbVec<u64> {
-        let db = get_test_db(true);
-        RustyLevelDbVec::new(db, 0, "test-vec")
-    }
+    mod concurrency {
+        use super::*;
 
-    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
-    #[test]
-    fn non_atomic_set_and_get() {
-        traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
-    }
+        fn gen_concurrency_test_vec() -> RustyLevelDbVec<u64> {
+            let db = get_test_db(true);
+            RustyLevelDbVec::new(db, 0, "test-vec")
+        }
 
-    #[test]
-    fn atomic_setmany_and_getmany() {
-        traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
-    }
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        #[test]
+        fn non_atomic_set_and_get() {
+            traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
+        }
 
-    #[test]
-    fn atomic_setall_and_getall() {
-        traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
-    }
+        #[test]
+        fn atomic_setmany_and_getmany() {
+            traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
+        }
 
-    #[test]
-    fn atomic_iter_mut_and_iter() {
-        traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
+        #[test]
+        fn atomic_setall_and_getall() {
+            traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
+        }
+
+        #[test]
+        fn atomic_iter_mut_and_iter() {
+            traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
+        }
     }
 }
