@@ -983,4 +983,145 @@ mod tests {
         let db = DB::open_new_test_database(false, None, None, None).unwrap();
         sync_and_send(db);
     }
+
+    pub mod concurrency {
+        use super::*;
+        use std::thread;
+
+        type TestVec = DbtVec<RustyKey, RustyValue, Index, u64>;
+
+        // pub fn prepare_concurrency_test_singleton(singleton: &impl StorageSingleton<u64>) {
+        //     singleton.set(42);
+        // }
+
+        fn gen_concurrency_test_vecs(num: u8) -> Vec<TestVec> {
+            // open new DB that will be removed on close.
+            let db = DB::open_new_test_database(true, None, None, None).unwrap();
+            let mut rusty_storage = SimpleRustyStorage::new(db);
+
+            (0..num)
+                .map(|i| {
+                    let vec = rusty_storage
+                        .schema
+                        .new_vec::<Index, u64>(&format!("atomicity-test-vector #{}", i));
+                    for i in 0u64..300 {
+                        vec.push(i);
+                    }
+                    vec
+                })
+                .collect()
+        }
+
+        pub fn iter_all_eq<T: PartialEq>(iter: impl IntoIterator<Item = T>) -> bool {
+            let mut iter = iter.into_iter();
+            let first = match iter.next() {
+                Some(f) => f,
+                None => return true,
+            };
+            iter.all(|elem| elem == first)
+        }
+
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        // todo, see same test in storage_vec::rusty_leveldb_vec::tests::concurrency
+        #[test]
+        pub fn non_atomic_set_and_get() {
+            unimplemented!();
+        }
+
+        // todo, see same test in storage_vec::rusty_leveldb_vec::tests::concurrency
+        // note: the multi-table test should make this unnecessary.
+        #[test]
+        fn atomic_setmany_and_getmany() {
+            unimplemented!();
+        }
+
+        // todo, see same test in storage_vec::rusty_leveldb_vec::tests::concurrency
+        // note: the multi-table test should make this unnecessary.
+        #[test]
+        pub fn atomic_setall_and_getall() {
+            unimplemented!();
+        }
+
+        // todo, see same test in storage_vec::rusty_leveldb_vec::tests::concurrency
+        // note: the multi-table test should make this unnecessary.
+        #[test]
+        pub fn atomic_iter_mut_and_iter() {
+            unimplemented!();
+        }
+
+        // TODO: Improve DbtSchema API.
+        //   This test fails an assertion because it uses a non-atomic
+        //   construction for sharing the multiple tables between threads.
+        //
+        // The failing test highlights that the present `DbtSchema`
+        //   a) does not prevent creation of non-atomic multi-table construction
+        //   b) does not assist with creating an atomic multi-table construction
+        //   c) does not document about atomic vs non-atomic multi-table
+        //
+        // TODO: adapt the improvements from
+        // https://github.com/dan-da/twenty-first/blob/088f12d6c46c3a15c8d826f8e20839ad7131f915/twenty-first/src/util_types/storage_schema.rs#L1671
+        //
+        // TODO: uncomment the #[should_panic] once the API is improved to provide
+        //       atomic multi-table construction.  For now we want to see the error output.
+        // #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        #[test]
+        pub fn non_atomic_multi_table_setmany_and_getmany() {
+            let vecs = gen_concurrency_test_vecs(2);
+            let orig = vecs[0].get_all();
+            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+
+            // note: all vecs have the same length and same values.
+            let indices: Vec<_> = (0..orig.len() as u64).collect();
+
+            thread::scope(|s| {
+                for _i in 0..100 {
+                    let gets = s.spawn(|| {
+                        let mut copies = vec![];
+                        for vec in vecs.iter() {
+                            let copy = vec.get_many(&indices);
+                            thread::sleep(std::time::Duration::from_millis(1));
+
+                            assert!(
+                                copy == orig || copy == modified,
+                                "encountered inconsistent table read. data: {:?}",
+                                copy
+                            );
+
+                            copies.push(copy);
+                        }
+
+                        let sums: Vec<u64> = copies.iter().map(|f| f.iter().sum()).collect();
+                        assert!(
+                            iter_all_eq(sums.clone()),
+                            "encountered inconsistent read across tables:\n  sums: {:?}\n  data: {:?}",
+                            sums,
+                            copies
+                        );
+                        println!("sums: {:?}", sums);
+                    });
+
+                    let sets = s.spawn(|| {
+                        for vec in vecs.iter() {
+                            vec.set_many(orig.iter().enumerate().map(|(k, _v)| (k as u64, 50u64)));
+                        }
+                    });
+                    gets.join().unwrap();
+                    sets.join().unwrap();
+
+                    println!("--- threads finished. restart. ---");
+
+                    for vec in vecs.iter() {
+                        vec.set_all(orig.clone());
+                    }
+                }
+            });
+        }
+
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        // this will verify that the atomic construction of multiple tables passes atomicity test.
+        #[test]
+        pub fn atomic_multi_table_setmany_and_getmany() {
+            unimplemented!();
+        }
+    }
 }
