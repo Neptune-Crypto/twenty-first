@@ -1,8 +1,10 @@
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::marker::PhantomData;
 use std::slice::Iter;
 
-use anyhow::bail;
-use anyhow::Result;
 use itertools::Itertools;
 use num_traits::One;
 use num_traits::Zero;
@@ -13,19 +15,51 @@ pub use bfieldcodec_derive::BFieldCodec;
 
 use super::b_field_element::BFieldElement;
 
-/// BFieldCodec
-///
-/// This trait provides functions for encoding to and decoding from a
-/// Vec of BFieldElements. This encoding does not record the size of
-/// objects nor their type information; this is
+/// This trait provides functions for encoding to and decoding from a Vec of [BFieldElement]s.
+/// This encoding does not record the size of objects nor their type information; this is
 /// the responsibility of the decoder.
 pub trait BFieldCodec {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>>;
+    type Error: Into<Box<dyn Error + Send + Sync>> + Debug + Display;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error>;
     fn encode(&self) -> Vec<BFieldElement>;
 
-    /// Returns the length in number of BFieldElements if it is known at compile-time.
+    /// Returns the length in number of [BFieldElement]s if it is known at compile-time.
     /// Otherwise, None.
     fn static_length() -> Option<usize>;
+}
+
+#[derive(Debug)]
+pub enum BFieldCodecError {
+    EmptySequence,
+    SequenceTooShort,
+    SequenceTooLong,
+    ElementOutOfRange,
+    MissingLengthIndicator,
+    InvalidLengthIndicator,
+    InnerDecodingFailure(Box<dyn Error + Send + Sync>),
+}
+
+impl Display for BFieldCodecError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptySequence => write!(f, "empty sequence"),
+            Self::SequenceTooShort => write!(f, "sequence too short"),
+            Self::SequenceTooLong => write!(f, "sequence too long"),
+            Self::ElementOutOfRange => write!(f, "element out of range"),
+            Self::MissingLengthIndicator => write!(f, "missing length indicator"),
+            Self::InvalidLengthIndicator => write!(f, "invalid length indicator"),
+            Self::InnerDecodingFailure(err) => write!(f, "inner decoding failure: {err}"),
+        }
+    }
+}
+
+impl Error for BFieldCodecError {}
+
+impl From<Box<dyn Error + Send + Sync>> for BFieldCodecError {
+    fn from(err: Box<dyn Error + Send + Sync>) -> Self {
+        Self::InnerDecodingFailure(err)
+    }
 }
 
 // The underlying type of a BFieldElement is a u64. A single u64 does not fit in one BFieldElement.
@@ -33,12 +67,16 @@ pub trait BFieldCodec {
 // BFieldCodec implementation that encodes a single BFieldElement as two BFieldElements.
 // This is not desired. Hence, BFieldCodec is implemented manually for BFieldElement.
 impl BFieldCodec for BFieldElement {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != 1 {
-            bail!("trying to decode more or less than one BFieldElements as one BFieldElement");
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+        if sequence.is_empty() {
+            return Err(Self::Error::EmptySequence);
         }
-        let element_zero = sequence[0];
-        Ok(Box::new(element_zero))
+        if sequence.len() > 1 {
+            return Err(Self::Error::SequenceTooLong);
+        }
+        Ok(Box::new(sequence[0]))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
@@ -51,26 +89,28 @@ impl BFieldCodec for BFieldElement {
 }
 
 impl BFieldCodec for u128 {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != 4 {
-            bail!(
-                "Cannot decode sequence of length {} =/= 4 as u128.",
-                sequence.len()
-            );
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+        if sequence.is_empty() {
+            return Err(Self::Error::EmptySequence);
         }
-        if !sequence.iter().all(|s| s.value() <= u32::MAX as u64) {
-            bail!(
-                "Could not parse sequence of BFieldElements {:?} as u128.",
-                sequence
-            );
+        if sequence.len() < 4 {
+            return Err(Self::Error::SequenceTooShort);
         }
-        return Ok(Box::new(
-            sequence
-                .iter()
-                .enumerate()
-                .map(|(i, s)| (s.value() as u128) << (i * 32))
-                .sum(),
-        ));
+        if sequence.len() > 4 {
+            return Err(Self::Error::SequenceTooLong);
+        }
+        if sequence.iter().any(|s| s.value() > u32::MAX as u64) {
+            return Err(Self::Error::ElementOutOfRange);
+        }
+
+        let element = sequence
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.value() as u128) << (i * 32))
+            .sum();
+        Ok(Box::new(element))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
@@ -86,26 +126,28 @@ impl BFieldCodec for u128 {
 }
 
 impl BFieldCodec for u64 {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != 2 {
-            bail!(
-                "Cannot decode sequence of length {} =/= 2 as u64.",
-                sequence.len()
-            );
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+        if sequence.is_empty() {
+            return Err(Self::Error::EmptySequence);
         }
-        if !sequence.iter().all(|s| s.value() <= u32::MAX as u64) {
-            bail!(
-                "Could not parse sequence of BFieldElements {:?} as u64.",
-                sequence
-            );
+        if sequence.len() < 2 {
+            return Err(Self::Error::SequenceTooShort);
         }
-        return Ok(Box::new(
-            sequence
-                .iter()
-                .enumerate()
-                .map(|(i, s)| s.value() << (i * 32))
-                .sum(),
-        ));
+        if sequence.len() > 2 {
+            return Err(Self::Error::SequenceTooLong);
+        }
+        if sequence.iter().any(|s| s.value() > u32::MAX as u64) {
+            return Err(Self::Error::ElementOutOfRange);
+        }
+
+        let element = sequence
+            .iter()
+            .enumerate()
+            .map(|(i, s)| s.value() << (i * 32))
+            .sum();
+        Ok(Box::new(element))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
@@ -121,18 +163,25 @@ impl BFieldCodec for u64 {
 }
 
 impl BFieldCodec for bool {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != 1 {
-            bail!(
-                "Cannot decode sequence of {} =/= 1 BFieldElements as bool.",
-                sequence.len()
-            );
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+        if sequence.is_empty() {
+            return Err(Self::Error::EmptySequence);
         }
-        Ok(Box::new(match sequence[0].value() {
+        if sequence.len() > 1 {
+            return Err(Self::Error::SequenceTooLong);
+        }
+        if sequence[0].value() > 1 {
+            return Err(Self::Error::ElementOutOfRange);
+        }
+
+        let element = match sequence[0].value() {
             0 => false,
             1 => true,
-            n => bail!("Failed to parse BFieldElement {n} as bool."),
-        }))
+            _ => unreachable!(),
+        };
+        Ok(Box::new(element))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
@@ -145,18 +194,21 @@ impl BFieldCodec for bool {
 }
 
 impl BFieldCodec for u32 {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
-        if sequence.len() != 1 {
-            bail!(
-                "Cannot decode sequence of length {} =/= 1 BFieldElements as u32.",
-                sequence.len()
-            );
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+        if sequence.is_empty() {
+            return Err(Self::Error::EmptySequence);
         }
-        let value = sequence[0].value();
-        if value > u32::MAX as u64 {
-            bail!("Cannot decode BFieldElement {value} as u32.");
+        if sequence.len() > 1 {
+            return Err(Self::Error::SequenceTooLong);
         }
-        Ok(Box::new(value as u32))
+        if sequence[0].value() > u32::MAX as u64 {
+            return Err(Self::Error::ElementOutOfRange);
+        }
+
+        let element = sequence[0].value() as u32;
+        Ok(Box::new(element))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
@@ -169,70 +221,59 @@ impl BFieldCodec for u32 {
 }
 
 impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
-    fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        let mut index = 0;
-        // decode T
-        let len_t = match T::static_length() {
-            Some(len) => len,
-            None => {
-                let length = match str.get(index) {
-                    Some(bfe) => bfe.value() as usize,
-                    None => bail!(
-                        "Prepended length of type T satisfying unsized BFieldCodec does not exist"
-                    ),
-                };
-                index += 1;
-                length
-            }
-        };
+    type Error = BFieldCodecError;
 
-        if str.len() < index + len_t {
-            bail!("Sequence too short to decode tuple, element 0");
-        }
-        let t = *T::decode(&str[index..index + len_t])?;
-        index += len_t;
-
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         // decode S
-        let len_s = match S::static_length() {
-            Some(len) => len,
-            None => {
-                let length = match str.get(index) {
-                    Some(bfe) => bfe.value() as usize,
-                    None => bail!(
-                        "Prepended length of type S satisfying unsized BFieldCodec does not exist"
-                    ),
-                };
-                index += 1;
-                length
-            }
+        if S::static_length().is_none() && sequence.get(0).is_none() {
+            return Err(Self::Error::MissingLengthIndicator);
+        }
+        let (length_of_s, sequence) = match S::static_length() {
+            Some(length) => (length, sequence),
+            None => (sequence[0].value() as usize, &sequence[1..]),
         };
-
-        if str.len() < index + len_s {
-            bail!("Sequence too short to decode tuple, element 1");
+        if sequence.len() < length_of_s {
+            return Err(Self::Error::SequenceTooShort);
         }
-        let s = *S::decode(&str[index..index + len_s])?;
-        index += len_s;
+        let (sequence_for_s, sequence) = sequence.split_at(length_of_s);
+        let s = *S::decode(sequence_for_s).map_err(|err| err.into())?;
 
-        if index != str.len() {
-            bail!("Error decoding (T,S): length mismatch");
+        // decode T
+        if T::static_length().is_none() && sequence.get(0).is_none() {
+            return Err(Self::Error::MissingLengthIndicator);
         }
+        let (length_of_t, sequence) = match T::static_length() {
+            Some(length) => (length, sequence),
+            None => (sequence[0].value() as usize, &sequence[1..]),
+        };
+        if sequence.len() < length_of_t {
+            return Err(Self::Error::SequenceTooShort);
+        }
+        let (sequence_for_t, sequence) = sequence.split_at(length_of_t);
+        let t = *T::decode(sequence_for_t).map_err(|err| err.into())?;
 
+        if !sequence.is_empty() {
+            return Err(Self::Error::SequenceTooLong);
+        }
         Ok(Box::new((t, s)))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
-        let mut str = vec![];
-        let mut encoding_of_t = self.0.encode();
-        let mut encoding_of_s = self.1.encode();
-        if T::static_length().is_none() {
-            str.push(BFieldElement::new(encoding_of_t.len() as u64));
-        }
-        str.append(&mut encoding_of_t);
+        let mut sequence = vec![];
+
+        let encoding_of_s = self.1.encode();
         if S::static_length().is_none() {
-            str.push(BFieldElement::new(encoding_of_s.len() as u64));
+            sequence.push((encoding_of_s.len() as u64).into());
         }
-        str.append(&mut encoding_of_s);
-        str
+        sequence.extend(encoding_of_s);
+
+        let encoding_of_t = self.0.encode();
+        if T::static_length().is_none() {
+            sequence.push((encoding_of_t.len() as u64).into());
+        }
+        sequence.extend(encoding_of_t);
+
+        sequence
     }
 
     fn static_length() -> Option<usize> {
@@ -244,37 +285,31 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
 }
 
 impl<T: BFieldCodec> BFieldCodec for Option<T> {
-    fn decode(str: &[BFieldElement]) -> Result<Box<Self>> {
-        let is_some = match str.get(0) {
-            Some(e) => {
-                if e.is_one() || e.is_zero() {
-                    e.is_one()
-                } else {
-                    bail!("Invalid option indicator: {e}")
-                }
-            }
-            None => bail!("Cannot decode Option of T: empty sequence"),
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+        if sequence.is_empty() {
+            return Err(Self::Error::EmptySequence);
+        }
+        let is_some = *bool::decode(&sequence[0..1])?;
+        let sequence = &sequence[1..];
+
+        let element = match is_some {
+            true => Some(*T::decode(sequence).map_err(|err| err.into())?),
+            false => None,
         };
 
-        if is_some {
-            Ok(Box::new(Some(*T::decode(&str[1..])?)))
-        } else {
-            Ok(Box::new(None))
+        if !is_some && !sequence.is_empty() {
+            return Err(Self::Error::SequenceTooLong);
         }
+        Ok(Box::new(element))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
-        let mut str = vec![];
         match self {
-            None => {
-                str.push(BFieldElement::zero());
-            }
-            Some(t) => {
-                str.push(BFieldElement::one());
-                str.append(&mut t.encode());
-            }
+            None => vec![BFieldElement::zero()],
+            Some(t) => [vec![BFieldElement::one()], t.encode()].concat(),
         }
-        str
     }
 
     fn static_length() -> Option<usize> {
@@ -283,16 +318,17 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
 }
 
 impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N] {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if N > 0 && sequence.is_empty() {
-            bail!("Cannot decode empty sequence into [T; {N}]");
+            return Err(Self::Error::EmptySequence);
         }
 
         let vec_t = bfield_codec_decode_list(N, sequence)?;
-        let array = match vec_t.try_into() {
-            Ok(array) => array,
-            Err(_) => bail!("Cannot convert Vec<T> into [T; {N}]."),
-        };
+        let array = vec_t.try_into().map_err(|_| {
+            Self::Error::InnerDecodingFailure(format!("cannot convert Vec<T> into [T; {N}]").into())
+        })?;
         Ok(Box::new(array))
     }
 
@@ -306,21 +342,23 @@ impl<T: BFieldCodec, const N: usize> BFieldCodec for [T; N] {
 }
 
 impl<T: BFieldCodec> BFieldCodec for Vec<T> {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if sequence.is_empty() {
-            bail!("Cannot decode empty sequence into Vec<T>");
+            return Err(Self::Error::EmptySequence);
         }
 
-        let indicated_num_elements = sequence[0].value() as usize;
-        let vec_t = bfield_codec_decode_list(indicated_num_elements, &sequence[1..])?;
-        Ok(Box::new(vec_t))
+        let vec_length = sequence[0].value() as usize;
+        let vec = bfield_codec_decode_list(vec_length, &sequence[1..])?;
+        Ok(Box::new(vec))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
         let num_elements = (self.len() as u64).into();
         let mut encoding = vec![num_elements];
-        let mut encoded_items = bfield_codec_encode_list(self.iter());
-        encoding.append(&mut encoded_items);
+        let encoded_items = bfield_codec_encode_list(self.iter());
+        encoding.extend(encoded_items);
         encoding
     }
 
@@ -334,92 +372,91 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
 fn bfield_codec_decode_list<T: BFieldCodec>(
     indicated_num_items: usize,
     sequence: &[BFieldElement],
-) -> Result<Vec<T>> {
-    // Initializing the vector with the indicated capacity potentially allows a DOS.
-    let mut vec_t = vec![];
-
-    let sequence_len = sequence.len();
-    if T::static_length().is_some() {
-        let item_length = T::static_length().unwrap();
-        let maybe_vector_size = indicated_num_items.checked_mul(item_length);
-        let Some(vector_size) = maybe_vector_size else {
-            bail!("Length indication too large: {indicated_num_items} * {item_length}");
-        };
-
-        if sequence_len != vector_size {
-            bail!(
-                "Indicator for number of items must match sequence length. \
-                List claims to contain {indicated_num_items} items. \
-                Item size is {item_length}. Sequence length is {sequence_len}.",
-            );
-        }
-        let raw_item_iter = sequence.chunks_exact(item_length);
-        if !raw_item_iter.remainder().is_empty() {
-            bail!("Could not chunk sequence into equal parts of size {item_length}.");
-        }
-        if raw_item_iter.len() != indicated_num_items {
-            bail!(
-                "List contains wrong number of items. Expected {indicated_num_items}, found {}.",
-                raw_item_iter.len()
-            );
-        }
-        for raw_item in raw_item_iter {
-            let item = *T::decode(raw_item)?;
-            vec_t.push(item);
-        }
+) -> Result<Vec<T>, BFieldCodecError> {
+    let vec = if T::static_length().is_some() {
+        bfield_codec_decode_list_with_statically_sized_items(indicated_num_items, sequence)?
     } else {
-        let mut sequence_index = 0;
-        for item_idx in 1..=indicated_num_items {
-            let item_length = match sequence.get(sequence_index) {
-                Some(len) => len.value() as usize,
-                None => bail!(
-                    "Index count mismatch while decoding List of T. \
-                    Attempted to decode item {item_idx} of {indicated_num_items}.",
-                ),
-            };
-            sequence_index += 1;
-            if sequence_len < sequence_index + item_length {
-                bail!(
-                    "Sequence too short to decode List of T: \
-                    {sequence_len} < {sequence_index} + {item_length}. \
-                    Attempted to decode item {item_idx} of {indicated_num_items}.",
-                );
-            }
-            let item = *T::decode(&sequence[sequence_index..sequence_index + item_length])?;
-            sequence_index += item_length;
-            vec_t.push(item);
-        }
-        if sequence_len != sequence_index {
-            bail!("List contains too many items: {sequence_len} != {sequence_index}.");
-        }
+        bfield_codec_decode_list_with_dynamically_sized_items(indicated_num_items, sequence)?
+    };
+    Ok(vec)
+}
+
+fn bfield_codec_decode_list_with_statically_sized_items<T: BFieldCodec>(
+    num_items: usize,
+    sequence: &[BFieldElement],
+) -> Result<Vec<T>, BFieldCodecError> {
+    // Initializing the vector with the indicated capacity potentially allows a DOS.
+    let mut vec = vec![];
+
+    let item_length = T::static_length().unwrap();
+    let maybe_vector_size = num_items.checked_mul(item_length);
+    let Some(vector_size) = maybe_vector_size else {
+        return Err(BFieldCodecError::InvalidLengthIndicator);
+    };
+    if sequence.len() < vector_size {
+        return Err(BFieldCodecError::SequenceTooShort);
     }
-    Ok(vec_t)
+    if sequence.len() > vector_size {
+        return Err(BFieldCodecError::SequenceTooLong);
+    }
+
+    for raw_item in sequence.chunks_exact(item_length) {
+        let item = *T::decode(raw_item).map_err(|e| e.into())?;
+        vec.push(item);
+    }
+    Ok(vec)
+}
+
+fn bfield_codec_decode_list_with_dynamically_sized_items<T: BFieldCodec>(
+    num_items: usize,
+    sequence: &[BFieldElement],
+) -> Result<Vec<T>, BFieldCodecError> {
+    // Initializing the vector with the indicated capacity potentially allows a DOS.
+    let mut vec = vec![];
+    let mut sequence_index = 0;
+    for _ in 0..num_items {
+        let Some(item_length) = sequence.get(sequence_index) else {
+            return Err(BFieldCodecError::MissingLengthIndicator);
+        };
+        let item_length = item_length.value() as usize;
+        sequence_index += 1;
+        if sequence.len() < sequence_index + item_length {
+            return Err(BFieldCodecError::SequenceTooShort);
+        }
+        let item = *T::decode(&sequence[sequence_index..sequence_index + item_length])
+            .map_err(|e| e.into())?;
+        sequence_index += item_length;
+        vec.push(item);
+    }
+    if sequence.len() != sequence_index {
+        return Err(BFieldCodecError::SequenceTooLong);
+    }
+    Ok(vec)
 }
 
 /// The core of the [`BFieldCodec`] encoding logic for `Vec<T>` and `[T; N]`.
 /// Encoding the length-prepending must be handled by the caller (if necessary).
-fn bfield_codec_encode_list<T: BFieldCodec>(item_iter: Iter<T>) -> Vec<BFieldElement> {
+fn bfield_codec_encode_list<T: BFieldCodec>(elements: Iter<T>) -> Vec<BFieldElement> {
     if T::static_length().is_some() {
-        item_iter.flat_map(|elem| elem.encode()).collect()
-    } else {
-        let mut encoding = vec![];
-        for elem in item_iter {
-            let mut element_encoded = elem.encode();
-            let element_len = (element_encoded.len() as u64).into();
-            encoding.push(element_len);
-            encoding.append(&mut element_encoded);
-        }
-        encoding
+        return elements.flat_map(|elem| elem.encode()).collect();
     }
+
+    let mut encoding = vec![];
+    for element in elements {
+        let element_encoded = element.encode();
+        let element_length = (element_encoded.len() as u64).into();
+        encoding.push(element_length);
+        encoding.extend(element_encoded);
+    }
+    encoding
 }
 
 impl<T> BFieldCodec for PhantomData<T> {
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>> {
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         if !sequence.is_empty() {
-            bail!(
-                "Cannot decode non-empty BFE slice as phantom data; sequence length: {}",
-                sequence.len()
-            )
+            return Err(Self::Error::SequenceTooLong);
         }
         Ok(Box::new(PhantomData))
     }
@@ -435,394 +472,341 @@ impl<T> BFieldCodec for PhantomData<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::shared_math::other::random_elements;
+    use proptest::collection::size_range;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
+    use test_strategy::proptest;
+
+    use crate::shared_math::{digest::Digest, tip5::Tip5, x_field_element::XFieldElement};
 
     use super::*;
-    use rand::{random, thread_rng};
 
-    /// Extensive (and computationally expensive) testing of properties for [`BFieldCodec`].
-    /// Checks uniqueness of encoding & decoding, as well as checking that `decode` does not panic.
-    fn expensive_encoding_pbt<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(
-        original_encoded: &[BFieldElement],
-        original_decoded: T,
-    ) {
-        const PBT_SIZE: usize = 50;
+    #[derive(Debug, PartialEq, Eq, test_strategy::Arbitrary)]
+    struct BFieldCodecPropertyTestData<T>
+    where
+        T: 'static + BFieldCodec + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
+    {
+        #[strategy(arb())]
+        value: T,
 
-        // Go over every single element in the sequence, to see if mutating anyone
-        // of the elements causes undesired behavior
-        let mut mutated_encoding = original_encoded.to_vec();
-        for i in 0..mutated_encoding.len() {
-            let original_value = mutated_encoding[i];
+        #[strategy(Just(#value.encode()))]
+        encoding: Vec<BFieldElement>,
 
-            // Ensure that random values do not cause problems
-            for _ in 0..PBT_SIZE {
-                mutated_encoding[i] = random();
-                let decoded_mutated = T::decode(&mutated_encoding);
-                assert!(
-                    decoded_mutated.is_err()
-                        || *decoded_mutated.unwrap() != original_decoded
-                        || mutated_encoding[i] == original_value,
-                    "Error: Mutated encoding was: {}",
-                    mutated_encoding.iter().join(",")
-                );
-            }
+        #[strategy(vec(arb(), #encoding.len()))]
+        #[filter(#encoding.iter().zip(#random_encoding.iter()).all(|(a, b)| a != b))]
+        random_encoding: Vec<BFieldElement>,
 
-            // Ensure that "nearby" values do not cause problems
-            mutated_encoding[i] = original_value - BFieldElement::new((PBT_SIZE / 2) as u64);
-            for _ in 0..PBT_SIZE {
-                mutated_encoding[i].increment();
-                let decoded_mutated = T::decode(&mutated_encoding);
-                assert!(
-                    decoded_mutated.is_err()
-                        || *decoded_mutated.unwrap() != original_decoded
-                        || mutated_encoding[i] == original_value,
-                    "Error: Mutated encoding was: {}",
-                    mutated_encoding.iter().join(",")
-                );
-            }
+        #[any(size_range(1..128).lift())]
+        encoding_lengthener: Vec<BFieldElement>,
 
-            // Reset word
-            mutated_encoding[i] = original_value;
-        }
-
-        // Ensure no crash while decoding very short sequences
-        let upper_length_bound = std::cmp::min(mutated_encoding.len(), PBT_SIZE / 2);
-        for i in 0..upper_length_bound {
-            let random_bfes = random_elements(i);
-
-            // Ensure `decode` does not crash
-            let dec_res = T::decode(&random_bfes);
-            assert!(
-                dec_res.is_err() || *dec_res.unwrap() != original_decoded,
-                "random BFEs of shorter length than original encoding should not \
-                decode to the original struct"
-            );
-        }
-
-        // Ensure no crash while decoding a sequence *one* shorter than the original sequence
-        assert_eq!(
-            original_encoded, mutated_encoding,
-            "Sanity check of test integrity"
-        );
-        if mutated_encoding.pop().is_some() {
-            let dec_res = T::decode(&mutated_encoding);
-            assert!(
-                dec_res.is_err() || *dec_res.unwrap() != original_decoded,
-                "random BFEs of shorter length than original encoding should not \
-                decode to the original struct"
-            );
-        }
+        #[strategy(0..=#encoding.len())]
+        length_of_too_short_sequence: usize,
     }
 
-    /// Assert properties for [`BFieldCodec`].
-    /// Usually only tests basic properties.
-    /// With environment variable `EXPENSIVE_ENCODING_PBT` set, runs an extensive set of tests.
-    /// See also [`expensive_encoding_pbt`].
-    fn assert_bfield_codec_properties<T: BFieldCodec + PartialEq + Eq + std::fmt::Debug>(
-        value: &T,
-    ) {
-        let mut encoded = value.encode();
-        let decoded = T::decode(&encoded);
-        let decoded = *decoded.unwrap();
-        assert_eq!(*value, decoded);
-
-        if std::env::var("EXPENSIVE_ENCODING_PBT").is_ok() {
-            expensive_encoding_pbt(&encoded, decoded);
+    impl<T> BFieldCodecPropertyTestData<T>
+    where
+        T: 'static + BFieldCodec + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
+    {
+        fn assert_bfield_codec_properties(&self) -> Result<(), TestCaseError> {
+            self.assert_decoded_encoding_is_self()?;
+            self.assert_decoding_too_long_encoding_fails()?;
+            self.assert_decoding_too_short_encoding_fails()?;
+            self.modify_each_element_and_assert_decoding_failure()?;
+            self.assert_decoding_random_too_short_encoding_fails_gracefully()
         }
 
-        encoded.push(BFieldElement::new(5));
-        assert!(
-            T::decode(&encoded).is_err(),
-            "decoding a sequence that is too long does not fail"
-        );
-        encoded.pop().unwrap();
+        fn assert_decoded_encoding_is_self(&self) -> Result<(), TestCaseError> {
+            let Ok(decoding) = T::decode(&self.encoding) else {
+                let err = TestCaseError::Fail("decoding canonical encoding must not fail".into());
+                return Err(err);
+            };
+            prop_assert_eq!(&self.value, &*decoding);
+            Ok(())
+        }
 
-        if !encoded.is_empty() {
+        fn assert_decoding_too_long_encoding_fails(&self) -> Result<(), TestCaseError> {
+            let mut too_long_encoding = self.encoding.to_owned();
+            too_long_encoding.extend(self.encoding_lengthener.to_owned());
+            prop_assert!(T::decode(&too_long_encoding).is_err());
+            Ok(())
+        }
+
+        fn assert_decoding_too_short_encoding_fails(&self) -> Result<(), TestCaseError> {
+            if self.failure_assertions_for_decoding_too_short_sequence_is_not_meaningful() {
+                return Ok(());
+            }
+            let mut encoded = self.encoding.to_owned();
             encoded.pop();
-            assert!(
-                T::decode(&encoded).is_err(),
-                "decoding a sequence that is stoo short does not fail"
-            );
+            prop_assert!(T::decode(&encoded).is_err());
+            Ok(())
+        }
+
+        fn modify_each_element_and_assert_decoding_failure(&self) -> Result<(), TestCaseError> {
+            let mut encoding = self.encoding.to_owned();
+            for i in 0..encoding.len() {
+                let original_value = encoding[i];
+                encoding[i] = self.random_encoding[i];
+                let decoding = T::decode(&encoding);
+                if decoding.is_ok_and(|d| *d == self.value) {
+                    return Err(TestCaseError::Fail(format!("failing index: {i}").into()));
+                }
+                encoding[i] = original_value;
+            }
+            Ok(())
+        }
+
+        fn assert_decoding_random_too_short_encoding_fails_gracefully(
+            &self,
+        ) -> Result<(), TestCaseError> {
+            if self.failure_assertions_for_decoding_too_short_sequence_is_not_meaningful() {
+                return Ok(());
+            }
+
+            let random_encoding =
+                self.random_encoding[..self.length_of_too_short_sequence].to_vec();
+            let decoding_result = T::decode(&random_encoding);
+            if decoding_result.is_ok_and(|d| *d == self.value) {
+                return Err(TestCaseError::Fail("randomness mustn't be `self`".into()));
+            }
+            Ok(())
+        }
+
+        fn failure_assertions_for_decoding_too_short_sequence_is_not_meaningful(&self) -> bool {
+            self.encoding.is_empty()
         }
     }
 
-    mod bfield_codec_tests {
-
-        use rand::{Rng, RngCore};
-
-        use crate::shared_math::{
-            digest::Digest, digest::DIGEST_LENGTH, other::random_elements, tip5::Tip5,
-            x_field_element::XFieldElement, x_field_element::EXTENSION_DEGREE,
-        };
-
-        use super::*;
-
-        #[test]
-        fn test_encode_decode_random_bfieldelement() {
-            for _ in 1..=10 {
-                let bfe: BFieldElement = random();
-                assert_bfield_codec_properties(&bfe);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_random_xfieldelement() {
-            for _ in 1..=10 {
-                let xfe: XFieldElement = random();
-                assert_bfield_codec_properties(&xfe);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_random_digest() {
-            for _ in 1..=10 {
-                let dig: Digest = random();
-                assert_bfield_codec_properties(&dig);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_random_vec_of_bfieldelement() {
-            for _ in 1..=10 {
-                let len = thread_rng().gen_range(0..100);
-                let bfe_vec: Vec<BFieldElement> = (0..len).map(|_| random()).collect_vec();
-                assert_bfield_codec_properties(&bfe_vec);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_random_vec_of_xfieldelement() {
-            for _ in 1..=10 {
-                let len = thread_rng().gen_range(0..100);
-                let xfe_vec: Vec<XFieldElement> = (0..len).map(|_| random()).collect_vec();
-                assert_bfield_codec_properties(&xfe_vec);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_random_vec_of_digest() {
-            for _ in 1..=10 {
-                let len = thread_rng().gen_range(0..100);
-                let digest_vec: Vec<Digest> = (0..len).map(|_| random()).collect_vec();
-                assert_bfield_codec_properties(&digest_vec);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_random_vec_of_vec_of_bfieldelement() {
-            for _ in 1..=10 {
-                let len = thread_rng().gen_range(0..10);
-                let bfe_vec_vec: Vec<Vec<BFieldElement>> = (0..len)
-                    .map(|_| {
-                        let inner_len = thread_rng().gen_range(0..20);
-                        (0..inner_len).map(|_| random()).collect_vec()
-                    })
-                    .collect_vec();
-                assert_bfield_codec_properties(&bfe_vec_vec);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_random_vec_of_vec_of_xfieldelement() {
-            for _ in 1..=10 {
-                let len = thread_rng().gen_range(0..10);
-                let xfe_vec_vec: Vec<Vec<XFieldElement>> = (0..len)
-                    .map(|_| {
-                        let inner_len = thread_rng().gen_range(0..20);
-                        (0..inner_len).map(|_| random()).collect_vec()
-                    })
-                    .collect_vec();
-                assert_bfield_codec_properties(&xfe_vec_vec);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_tuples_static_static_size_0() {
-            let static_static: (Digest, u128) = (random(), random());
-            assert_bfield_codec_properties(&static_static);
-        }
-
-        #[test]
-        fn test_encode_decode_tuples_static_static_size_1() {
-            let static_static: (Digest, u64) = (random(), random());
-            assert_bfield_codec_properties(&static_static);
-        }
-
-        #[test]
-        fn test_encode_decode_tuples_static_static_size_2() {
-            let static_static: (BFieldElement, BFieldElement) = (random(), random());
-            assert_bfield_codec_properties(&static_static);
-        }
-
-        #[test]
-        fn test_encode_decode_tuples_static_static_size_3() {
-            let static_static: (BFieldElement, XFieldElement) = (random(), random());
-            assert_bfield_codec_properties(&static_static);
-        }
-
-        #[test]
-        fn test_encode_decode_tuples_static_static_size_4() {
-            let static_static: (XFieldElement, BFieldElement) = (random(), random());
-            assert_bfield_codec_properties(&static_static);
-        }
-
-        #[test]
-        fn test_encode_decode_tuples_static_static_size_5() {
-            let static_static: (XFieldElement, Digest) = (random(), random());
-            assert_bfield_codec_properties(&static_static);
-        }
-
-        #[test]
-        fn test_encode_decode_tuples_static_dynamic_size() {
-            for vec_length in 0..10 {
-                let static_dynamic: (Digest, Vec<BFieldElement>) =
-                    (random(), random_elements(vec_length));
-                assert_bfield_codec_properties(&static_dynamic);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_tuples_dynamic_static_size() {
-            for vec_length in 0..10 {
-                let dynamic_static: (Vec<XFieldElement>, Digest) =
-                    (random_elements(vec_length), random());
-                assert_bfield_codec_properties(&dynamic_static);
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_tuples_dynamic_dynamic_size() {
-            for vec_length_left in 0..4 {
-                for vec_length_right in 0..4 {
-                    let dynamic_dynamic: (Vec<XFieldElement>, Vec<Digest>) = (
-                        random_elements(vec_length_left),
-                        random_elements(vec_length_right),
-                    );
-                    assert_bfield_codec_properties(&dynamic_dynamic);
-                }
-            }
-        }
-
-        #[test]
-        fn test_decode_random_negative() {
-            for _ in 1..=10000 {
-                let len = thread_rng().gen_range(0..100);
-                let str: Vec<BFieldElement> = random_elements(len);
-
-                // Some of the following cases can be triggered by false
-                // positives. This should occur with probability roughly
-                // 2^-60.
-
-                if let Ok(sth) = Vec::<BFieldElement>::decode(&str) {
-                    panic!("{sth:?}");
-                }
-
-                if str.len() % EXTENSION_DEGREE != 1 {
-                    if let Ok(sth) = Vec::<XFieldElement>::decode(&str) {
-                        panic!("{sth:?}");
-                    }
-                }
-
-                if str.len() % DIGEST_LENGTH != 1 {
-                    if let Ok(sth) = Vec::<Digest>::decode(&str) {
-                        panic!("{sth:?}");
-                    }
-                }
-
-                if let Ok(sth) = Vec::<Vec<BFieldElement>>::decode(&str) {
-                    if !sth.is_empty() {
-                        panic!("{sth:?}");
-                    }
-                }
-
-                if let Ok(sth) = Vec::<Vec<XFieldElement>>::decode(&str) {
-                    if !sth.is_empty() {
-                        panic!("{sth:?}");
-                    }
-                }
-
-                // if let Ok(_sth) = Vec::<PartialAuthenticationPath<Digest>>::decode(&str) {
-                //     (will work quite often)
-                // }
-            }
-        }
-
-        #[test]
-        fn test_encode_decode_random_vec_option_xfieldelement() {
-            let mut rng = thread_rng();
-            let n = 10 + (rng.next_u32() % 50);
-            let mut vector: Vec<Option<XFieldElement>> = vec![];
-            for _ in 0..n {
-                if rng.next_u32() % 2 == 0 {
-                    vector.push(None);
-                } else {
-                    vector.push(Some(rng.gen()));
-                }
-            }
-
-            assert_bfield_codec_properties(&vector);
-        }
-
-        #[test]
-        fn test_phantom_data() {
-            let pd = PhantomData::<Tip5>;
-            let encoded = pd.encode();
-            let decoded = *PhantomData::decode(&encoded).unwrap();
-            assert_eq!(decoded, pd);
-
-            assert!(encoded.is_empty());
-        }
-
-        #[test]
-        fn decode_encode_array_with_static_element_size() {
-            const N: usize = 14;
-            type Array = [u64; N];
-
-            let an_array: Array = [14u64; N];
-            assert_bfield_codec_properties(&an_array);
-
-            assert_eq!(
-                Some(N * 2),
-                <Array>::static_length(),
-                "Static length must be set and correct for array with static element lengths"
-            );
-        }
-
-        #[test]
-        fn decode_encode_array_with_dynamic_element_size() {
-            const N: usize = 19;
-            type Array = [Vec<Digest>; N];
-
-            // Initialize an array with empty vectors in all elements
-            let mut an_array: Array = Default::default();
-            assert_bfield_codec_properties(&an_array);
-
-            // Should also work if the elements are not just the empty vectors
-            let mut rng = thread_rng();
-            for elem in an_array.iter_mut() {
-                *elem = random_elements(rng.gen_range(0..7));
-            }
-
-            assert_bfield_codec_properties(&an_array);
-
-            assert!(
-                <Array>::static_length().is_none(),
-                "Static length must be none for array with dynamic element lengths"
-            );
-        }
+    #[proptest]
+    fn test_encode_decode_random_bfieldelement(
+        test_data: BFieldCodecPropertyTestData<BFieldElement>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
     }
 
+    #[proptest]
+    fn test_encode_decode_random_xfieldelement(
+        test_data: BFieldCodecPropertyTestData<XFieldElement>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_random_digest(test_data: BFieldCodecPropertyTestData<Digest>) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_random_vec_of_bfieldelement(
+        test_data: BFieldCodecPropertyTestData<Vec<BFieldElement>>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_random_vec_of_xfieldelement(
+        test_data: BFieldCodecPropertyTestData<Vec<XFieldElement>>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_random_vec_of_digest(
+        test_data: BFieldCodecPropertyTestData<Vec<Digest>>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_random_vec_of_vec_of_bfieldelement(
+        test_data: BFieldCodecPropertyTestData<Vec<Vec<BFieldElement>>>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_random_vec_of_vec_of_xfieldelement(
+        test_data: BFieldCodecPropertyTestData<Vec<Vec<XFieldElement>>>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_random_vec_of_vec_of_digest(
+        test_data: BFieldCodecPropertyTestData<Vec<Vec<Digest>>>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_static_size_0(
+        test_data: BFieldCodecPropertyTestData<(Digest, u128)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_static_size_1(
+        test_data: BFieldCodecPropertyTestData<(Digest, u64)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_static_size_2(
+        test_data: BFieldCodecPropertyTestData<(BFieldElement, BFieldElement)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_static_size_3(
+        test_data: BFieldCodecPropertyTestData<(BFieldElement, XFieldElement)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_static_size_4(
+        test_data: BFieldCodecPropertyTestData<(XFieldElement, BFieldElement)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_static_size_5(
+        test_data: BFieldCodecPropertyTestData<(XFieldElement, Digest)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_dynamic_size_0(
+        test_data: BFieldCodecPropertyTestData<(u32, Vec<u32>)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_dynamic_size_1(
+        test_data: BFieldCodecPropertyTestData<(u32, Vec<u64>)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_static_dynamic_size_2(
+        test_data: BFieldCodecPropertyTestData<(Digest, Vec<BFieldElement>)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_dynamic_static_size(
+        test_data: BFieldCodecPropertyTestData<(Vec<XFieldElement>, Digest)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_tuples_dynamic_dynamic_size(
+        test_data: BFieldCodecPropertyTestData<(Vec<XFieldElement>, Vec<Digest>)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_phantom_data(test_data: BFieldCodecPropertyTestData<PhantomData<Tip5>>) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_encode_decode_random_vec_option_xfieldelement(
+        test_data: BFieldCodecPropertyTestData<Vec<Option<XFieldElement>>>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn decode_encode_array_with_static_element_size(
+        test_data: BFieldCodecPropertyTestData<[u64; 14]>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn decode_encode_array_with_dynamic_element_size(
+        test_data: BFieldCodecPropertyTestData<[Vec<Digest>; 19]>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[test]
+    fn static_length_of_array_with_static_element_size_is_as_expected() {
+        const N: usize = 14;
+        assert_eq!(Some(N * 2), <[u64; N]>::static_length());
+    }
+
+    #[test]
+    fn static_length_of_array_with_dynamic_element_size_is_as_expected() {
+        const N: usize = 19;
+        assert!(<[Vec<Digest>; N]>::static_length().is_none());
+    }
+
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_bfield_elements_fails(
+        random_encoding: Vec<BFieldElement>,
+    ) {
+        let decoding = Vec::<BFieldElement>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
+    }
+
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_xfield_elements_fails(
+        random_encoding: Vec<BFieldElement>,
+    ) {
+        let decoding = Vec::<XFieldElement>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
+    }
+
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_digests_fails(random_encoding: Vec<BFieldElement>) {
+        let decoding = Vec::<Digest>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
+    }
+
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_vec_of_bfield_elements_fails(
+        random_encoding: Vec<BFieldElement>,
+    ) {
+        let decoding = Vec::<Vec<BFieldElement>>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
+    }
+
+    #[proptest]
+    fn decoding_random_encoding_as_vec_of_vec_of_xfield_elements_fails(
+        random_encoding: Vec<BFieldElement>,
+    ) {
+        let decoding = Vec::<Vec<XFieldElement>>::decode(&random_encoding);
+        prop_assert!(decoding.is_err());
+    }
+
+    /// Depending on the test helper [`BFieldCodecPropertyTestData`] in the bfieldcodec_derive crate
+    /// would introduce an almost-cyclic dependency.[^1] This would make publishing to crates.io
+    /// quite difficult. Hence, integration tests in the bfieldcodec_derive crate are also off the
+    /// table. Consequently, we test the derive macro here.
+    ///
+    /// See also: https://github.com/rust-lang/cargo/issues/8379#issuecomment-1261970561
+    ///
+    /// [^1]: almost-cyclic because the dependency would be a dev-dependency
     #[cfg(test)]
     pub mod derive_tests {
-        // Since we cannot use the derive macro in the same crate where it is defined,
-        // we test the macro here instead.
 
-        use rand::{random, thread_rng, Rng, RngCore};
+        use arbitrary::Arbitrary;
 
+        use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
         use crate::{
-            shared_math::{
-                digest::Digest, other::random_elements, tip5::Tip5, x_field_element::XFieldElement,
-            },
+            shared_math::{digest::Digest, tip5::Tip5, x_field_element::XFieldElement},
             util_types::{
                 algebraic_hasher::AlgebraicHasher, mmr::mmr_membership_proof::MmrMembershipProof,
             },
@@ -830,27 +814,135 @@ mod tests {
 
         use super::*;
 
-        #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct UnitStruct;
+
+        #[test]
+        fn bfield_codec_derive_unit_struct_static_length() {
+            assert_eq!(Some(0), UnitStruct::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_unit_struct(test_data: BFieldCodecPropertyTestData<UnitStruct>) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct StructWithUnitStruct {
+            a: UnitStruct,
+        }
+
+        #[test]
+        fn bfield_codec_derive_struct_with_unit_struct_static_length() {
+            assert_eq!(Some(0), StructWithUnitStruct::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_struct_with_unit_struct(
+            test_data: BFieldCodecPropertyTestData<StructWithUnitStruct>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithUnitStruct {
+            A(UnitStruct),
+            B,
+        }
+
+        #[test]
+        fn bfield_codec_derive_enum_with_unit_struct_static_length() {
+            assert_eq!(Some(1), EnumWithUnitStruct::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_unit_struct(
+            test_data: BFieldCodecPropertyTestData<EnumWithUnitStruct>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructA {
             field_a: u64,
             field_b: u64,
             field_c: u64,
         }
 
-        #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+        #[test]
+        fn bfield_codec_derive_test_struct_a_static_length() {
+            assert_eq!(Some(6), DeriveTestStructA::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_test_struct_a(
+            test_data: BFieldCodecPropertyTestData<DeriveTestStructA>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructB(u128);
 
-        #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+        #[test]
+        fn bfield_codec_derive_test_struct_b_static_length() {
+            assert_eq!(Some(4), DeriveTestStructB::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_test_struct_b(
+            test_data: BFieldCodecPropertyTestData<DeriveTestStructB>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructC(u128, u64, u32);
 
+        #[test]
+        fn bfield_codec_derive_test_struct_c_static_length() {
+            assert_eq!(Some(7), DeriveTestStructC::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_test_struct_c(
+            test_data: BFieldCodecPropertyTestData<DeriveTestStructC>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
         // Struct containing Vec<T> where T is BFieldCodec
-        #[derive(BFieldCodec, PartialEq, Eq, Debug)]
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructD(Vec<u128>);
 
-        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+        #[test]
+        fn bfield_codec_derive_test_struct_d_static_length() {
+            assert!(DeriveTestStructD::static_length().is_none());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_test_struct_d(
+            test_data: BFieldCodecPropertyTestData<DeriveTestStructD>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructE(Vec<u128>, u128, u64, Vec<bool>, u32, Vec<u128>);
 
-        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+        #[test]
+        fn bfield_codec_derive_test_struct_e_static_length() {
+            assert!(DeriveTestStructE::static_length().is_none());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_test_struct_e(
+            test_data: BFieldCodecPropertyTestData<DeriveTestStructE>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructF {
             field_a: Vec<u64>,
             field_b: bool,
@@ -860,7 +952,19 @@ mod tests {
             field_f: Vec<BFieldElement>,
         }
 
-        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+        #[test]
+        fn bfield_codec_derive_test_struct_f_static_length() {
+            assert!(DeriveTestStructF::static_length().is_none());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_test_struct_f(
+            test_data: BFieldCodecPropertyTestData<DeriveTestStructF>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct WithPhantomData<H: AlgebraicHasher> {
             a_field: u128,
             #[bfield_codec(ignore)]
@@ -868,7 +972,14 @@ mod tests {
             another_field: Vec<u64>,
         }
 
-        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+        #[proptest]
+        fn bfield_codec_derive_with_phantom_data(
+            test_data: BFieldCodecPropertyTestData<WithPhantomData<Tip5>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct WithNestedPhantomData<H: AlgebraicHasher> {
             a_field: u128,
             #[bfield_codec(ignore)]
@@ -878,510 +989,312 @@ mod tests {
             a_fourth_field: WithPhantomData<Tip5>,
         }
 
-        #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
+        #[proptest]
+        fn bfield_codec_derive_with_nested_phantom_data(
+            test_data: BFieldCodecPropertyTestData<WithNestedPhantomData<Tip5>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct WithNestedVec {
             a_field: Vec<Vec<u64>>,
         }
 
         #[test]
-        fn empty_structs_and_enums() {
-            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
-            struct EmptyStruct {}
-
-            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
-            struct StructWithEmptyStruct {
-                a: EmptyStruct,
-            }
-
-            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
-            struct StructWithTwoEmptyStructs {
-                a: EmptyStruct,
-                b: EmptyStruct,
-            }
-
-            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
-            struct BigStructWithEmptyStructs {
-                a: EmptyStruct,
-                b: EmptyStruct,
-                c: StructWithTwoEmptyStructs,
-                d: StructWithEmptyStruct,
-                e: EmptyStruct,
-            }
-
-            assert_bfield_codec_properties(&EmptyStruct::default());
-            assert_bfield_codec_properties(&StructWithEmptyStruct::default());
-            assert_bfield_codec_properties(&StructWithTwoEmptyStructs::default());
-            assert_bfield_codec_properties(&BigStructWithEmptyStructs::default());
-
-            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
-            enum EnumWithEmptyStruct {
-                A(EmptyStruct),
-                B,
-                C(EmptyStruct),
-            }
-            assert_bfield_codec_properties(&EnumWithEmptyStruct::A(EmptyStruct::default()));
-            assert_bfield_codec_properties(&EnumWithEmptyStruct::B);
-            assert_bfield_codec_properties(&EnumWithEmptyStruct::C(EmptyStruct::default()));
-        }
-
-        #[test]
-        fn simple_struct_with_named_fields() {
-            assert_bfield_codec_properties(&DeriveTestStructA {
-                field_a: 14,
-                field_b: 555558,
-                field_c: 1337,
-            });
-
-            assert_eq!(Some(6), DeriveTestStructA::static_length());
-        }
-
-        #[test]
-        fn simple_struct_with_one_unnamed_field() {
-            assert_bfield_codec_properties(&DeriveTestStructB(127));
-
-            assert_eq!(Some(4), DeriveTestStructB::static_length());
-        }
-
-        #[test]
-        fn simple_struct_with_unnamed_fields() {
-            assert_bfield_codec_properties(&DeriveTestStructC(127 << 100, 14, 1000));
-
-            assert_eq!(Some(7), DeriveTestStructC::static_length());
-        }
-
-        #[test]
-        fn struct_with_unnamed_vec_field() {
-            assert_bfield_codec_properties(&DeriveTestStructD(vec![
-                1 << 99,
-                99,
-                1 << 120,
-                120,
-                u64::MAX as u128,
-            ]));
-
-            // Test the empty struct
-            assert_bfield_codec_properties(&DeriveTestStructD(vec![]));
-
-            assert!(DeriveTestStructD::static_length().is_none());
-        }
-
-        #[test]
-        fn struct_with_unnamed_vec_fields() {
-            fn random_struct() -> DeriveTestStructE {
-                let mut rng = thread_rng();
-                let length_0: usize = rng.gen_range(0..10);
-                let length_3: usize = rng.gen_range(0..20);
-                let length_5: usize = rng.gen_range(0..20);
-                DeriveTestStructE(
-                    random_elements(length_0),
-                    random(),
-                    random(),
-                    random_elements(length_3),
-                    random(),
-                    random_elements(length_5),
-                )
-            }
-            for _ in 0..20 {
-                assert_bfield_codec_properties(&random_struct());
-            }
-
-            // Also test the Default/empty struct
-            assert_bfield_codec_properties(&DeriveTestStructE::default());
-
-            assert!(DeriveTestStructE::static_length().is_none());
-        }
-
-        #[test]
-        fn struct_with_named_vec_fields() {
-            fn random_struct() -> DeriveTestStructF {
-                let mut rng = thread_rng();
-                let length_a: usize = rng.gen_range(0..10);
-                let length_d: usize = rng.gen_range(0..20);
-                let length_e: usize = rng.gen_range(0..20);
-                let length_f: usize = rng.gen_range(0..20);
-                DeriveTestStructF {
-                    field_a: random_elements(length_a),
-                    field_b: random(),
-                    field_c: random(),
-                    field_d: random_elements(length_d),
-                    field_e: random_elements(length_e),
-                    field_f: random_elements(length_f),
-                }
-            }
-            for _ in 0..20 {
-                assert_bfield_codec_properties(&random_struct());
-            }
-
-            // Also test the Default/empty struct
-            assert_bfield_codec_properties(&DeriveTestStructF::default());
-
-            assert!(DeriveTestStructF::static_length().is_none());
-        }
-
-        fn random_with_phantomdata_struct() -> WithPhantomData<Tip5> {
-            let mut rng = thread_rng();
-            let length_another_field: usize = rng.gen_range(0..10);
-            WithPhantomData {
-                a_field: random(),
-                _phantom_data: PhantomData,
-                another_field: random_elements(length_another_field),
-            }
-        }
-
-        #[test]
-        fn struct_with_phantom_data() {
-            for _ in 0..20 {
-                assert_bfield_codec_properties(&random_with_phantomdata_struct());
-            }
-
-            // Also test the Default/empty struct
-            assert_bfield_codec_properties(&WithPhantomData::<Tip5>::default());
-        }
-
-        #[test]
-        fn struct_with_nested_phantom_data() {
-            fn random_struct() -> WithNestedPhantomData<Tip5> {
-                let mut rng = thread_rng();
-                let length_a_fourth_field: usize = rng.gen_range(0..10);
-                let a_third_field = (0..length_a_fourth_field)
-                    .map(|_| random_with_phantomdata_struct())
-                    .collect_vec();
-                WithNestedPhantomData {
-                    _phantom_data: PhantomData,
-                    a_field: random(),
-                    another_field: random_elements(rng.gen_range(0..15)),
-                    a_fourth_field: random_with_phantomdata_struct(),
-                    a_third_field,
-                }
-            }
-
-            for _ in 0..10 {
-                assert_bfield_codec_properties(&random_struct());
-            }
-
-            // Also test the Default/empty struct
-            assert_bfield_codec_properties(&WithNestedPhantomData::<Tip5>::default());
-        }
-
-        #[test]
-        fn struct_with_nested_vec() {
-            fn random_struct() -> WithNestedVec {
-                let mut rng = thread_rng();
-                let outer_length = rng.gen_range(0..10);
-                let mut ret = WithNestedVec {
-                    a_field: Vec::with_capacity(outer_length),
-                };
-                for _ in 0..outer_length {
-                    let inner_length = rng.gen_range(0..12);
-                    let inner_vec: Vec<u64> = random_elements(inner_length);
-                    ret.a_field.push(inner_vec);
-                }
-
-                ret
-            }
-
-            for _ in 0..10 {
-                assert_bfield_codec_properties(&random_struct());
-            }
-
-            // Also test the Default/empty struct
-            assert_bfield_codec_properties(&WithNestedVec::default());
-
+        fn bfield_codec_derive_with_nested_vec_static_length() {
             assert!(WithNestedVec::static_length().is_none());
         }
 
+        #[proptest]
+        fn bfield_codec_derive_with_nested_vec(
+            test_data: BFieldCodecPropertyTestData<WithNestedVec>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct EmptyStruct {}
+
+        #[proptest]
+        fn bfield_codec_derive_empty_struct(test_data: BFieldCodecPropertyTestData<EmptyStruct>) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct StructWithEmptyStruct {
+            a: EmptyStruct,
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_struct_with_empty_struct(
+            test_data: BFieldCodecPropertyTestData<StructWithEmptyStruct>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct StructWithTwoEmptyStructs {
+            a: EmptyStruct,
+            b: EmptyStruct,
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_struct_with_two_empty_structs(
+            test_data: BFieldCodecPropertyTestData<StructWithTwoEmptyStructs>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct BigStructWithEmptyStructs {
+            a: EmptyStruct,
+            b: EmptyStruct,
+            c: StructWithTwoEmptyStructs,
+            d: StructWithEmptyStruct,
+            e: EmptyStruct,
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_big_struct_with_empty_structs(
+            test_data: BFieldCodecPropertyTestData<BigStructWithEmptyStructs>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithEmptyStruct {
+            A(EmptyStruct),
+            B,
+            C(EmptyStruct),
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_empty_struct(
+            test_data: BFieldCodecPropertyTestData<EnumWithEmptyStruct>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct MuchNesting {
+            a: Vec<Vec<Vec<Vec<BFieldElement>>>>,
+            #[bfield_codec(ignore)]
+            b: PhantomData<Tip5>,
+            #[bfield_codec(ignore)]
+            c: PhantomData<Tip5>,
+        }
+
         #[test]
-        fn deeply_nested_vec() {
-            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
-            struct MuchNesting {
-                a: Vec<Vec<Vec<Vec<BFieldElement>>>>,
-                #[bfield_codec(ignore)]
-                b: PhantomData<Tip5>,
-                #[bfield_codec(ignore)]
-                c: PhantomData<Tip5>,
-            }
-
-            fn random_struct() -> MuchNesting {
-                let mut rng = thread_rng();
-                let outer_length = rng.gen_range(0..10);
-                let mut ret = MuchNesting {
-                    a: Vec::with_capacity(outer_length),
-                    b: PhantomData,
-                    c: PhantomData,
-                };
-                for i in 0..outer_length {
-                    ret.a.push(vec![]);
-                    let second_length = rng.gen_range(0..10);
-                    for j in 0..second_length {
-                        ret.a[i].push(vec![]);
-                        let third_length = rng.gen_range(0..10);
-                        for k in 0..third_length {
-                            ret.a[i][j].push(vec![]);
-                            ret.a[i][j][k] = random_elements(rng.gen_range(0..15));
-                        }
-                    }
-                }
-
-                ret
-            }
-
-            for _ in 0..5 {
-                assert_bfield_codec_properties(&random_struct());
-            }
-
+        fn bfield_codec_derive_much_nesting_static_length() {
             assert!(MuchNesting::static_length().is_none());
         }
 
+        #[proptest]
+        fn bfield_codec_derive_much_nesting(test_data: BFieldCodecPropertyTestData<MuchNesting>) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct SmallArrayStructUnnamedFields([u128; 1]);
+
         #[test]
-        fn struct_with_small_array() {
-            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
-            struct SmallArrayStructUnnamedFields([u128; 1]);
-
-            #[derive(BFieldCodec, PartialEq, Eq, Debug, Default)]
-            struct SmallArrayStructNamedFields {
-                a: [u128; 1],
-            }
-
-            fn random_struct_unnamed_fields() -> SmallArrayStructUnnamedFields {
-                SmallArrayStructUnnamedFields([random(); 1])
-            }
-
-            fn random_struct_named_fields() -> SmallArrayStructNamedFields {
-                SmallArrayStructNamedFields { a: [random(); 1] }
-            }
-
-            for _ in 0..5 {
-                assert_bfield_codec_properties(&random_struct_unnamed_fields());
-                assert_bfield_codec_properties(&random_struct_named_fields());
-            }
-
+        fn bfield_codec_derive_small_array_struct_unnamed_fields_static_length() {
             assert_eq!(Some(4), SmallArrayStructUnnamedFields::static_length());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_small_array_struct_unnamed_fields(
+            test_data: BFieldCodecPropertyTestData<SmallArrayStructUnnamedFields>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct SmallArrayStructNamedFields {
+            a: [u128; 1],
+        }
+
+        #[test]
+        fn bfield_codec_derive_small_array_struct_named_fields_static_length() {
             assert_eq!(Some(4), SmallArrayStructNamedFields::static_length());
         }
 
+        #[proptest]
+        fn bfield_codec_derive_small_array_struct_named_fields(
+            test_data: BFieldCodecPropertyTestData<SmallArrayStructNamedFields>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct BigArrayStructUnnamedFields([u128; 300]);
+
         #[test]
-        fn struct_with_big_array() {
-            const BIG_ARRAY_LENGTH: usize = 300;
-
-            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
-            struct BigArrayStructUnnamedFields([u128; BIG_ARRAY_LENGTH]);
-
-            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
-            struct BigArrayStructNamedFields {
-                a: [XFieldElement; BIG_ARRAY_LENGTH],
-                b: XFieldElement,
-                c: u64,
-            }
-
-            fn random_struct_unnamed_fields() -> BigArrayStructUnnamedFields {
-                BigArrayStructUnnamedFields(
-                    random_elements::<u128>(BIG_ARRAY_LENGTH)
-                        .try_into()
-                        .unwrap(),
-                )
-            }
-
-            fn random_struct_named_fields() -> BigArrayStructNamedFields {
-                BigArrayStructNamedFields {
-                    a: random_elements::<XFieldElement>(BIG_ARRAY_LENGTH)
-                        .try_into()
-                        .unwrap(),
-                    b: random(),
-                    c: random(),
-                }
-            }
-
-            for _ in 0..3 {
-                assert_bfield_codec_properties(&random_struct_unnamed_fields());
-                assert_bfield_codec_properties(&random_struct_named_fields());
-            }
-
+        fn bfield_codec_derive_big_array_struct_unnamed_fields_static_length() {
+            let array_length = 300;
+            let factor = u128::static_length().unwrap();
+            let expected_length = Some(array_length * factor);
             assert_eq!(
-                Some(BIG_ARRAY_LENGTH * 4),
+                expected_length,
                 BigArrayStructUnnamedFields::static_length()
-            );
-            assert_eq!(
-                Some(BIG_ARRAY_LENGTH * 3 + 3 + 2),
-                BigArrayStructNamedFields::static_length()
             );
         }
 
+        #[proptest(cases = 20)]
+        fn bfield_codec_derive_big_array_struct_unnamed_fields(
+            test_data: BFieldCodecPropertyTestData<BigArrayStructUnnamedFields>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct BigArrayStructNamedFields {
+            a: [XFieldElement; 300],
+            b: XFieldElement,
+            c: u64,
+        }
+
         #[test]
-        fn struct_with_array_with_dynamically_sized_elements() {
-            const ARRAY_LENGTH: usize = 7;
+        fn bfield_codec_derive_big_array_struct_named_fields_static_length() {
+            let array_length = 300;
+            let factor = XFieldElement::static_length().unwrap();
+            let expected_length = Some(array_length * factor + 3 + 2);
+            assert_eq!(expected_length, BigArrayStructNamedFields::static_length());
+        }
 
-            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
-            struct ArrayStructDynamicallySizedElementsUnnamedFields([Vec<u128>; ARRAY_LENGTH]);
+        #[proptest(cases = 20)]
+        fn bfield_codec_derive_big_array_struct_named_fields(
+            test_data: BFieldCodecPropertyTestData<BigArrayStructNamedFields>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
 
-            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
-            struct ArrayStructDynamicallySizedElementsNamedFields {
-                a: [Vec<u128>; ARRAY_LENGTH],
-            }
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct ArrayStructDynamicallySizedElementsUnnamedFields([Vec<u128>; 7]);
 
-            fn random_struct_unnamed_fields() -> ArrayStructDynamicallySizedElementsUnnamedFields {
-                let mut rng = thread_rng();
-                ArrayStructDynamicallySizedElementsUnnamedFields(std::array::from_fn(|_| {
-                    random_elements(rng.gen_range(0..10))
-                }))
-            }
-
-            fn random_struct_named_fields() -> ArrayStructDynamicallySizedElementsNamedFields {
-                let mut rng = thread_rng();
-                ArrayStructDynamicallySizedElementsNamedFields {
-                    a: std::array::from_fn(|_| random_elements(rng.gen_range(0..10))),
-                }
-            }
-
-            for _ in 0..5 {
-                assert_bfield_codec_properties(&random_struct_unnamed_fields());
-                assert_bfield_codec_properties(&random_struct_named_fields());
-            }
-
+        #[test]
+        fn bfield_codec_derive_array_struct_dyn_sized_elements_unnamed_fields_static_length() {
             assert!(ArrayStructDynamicallySizedElementsUnnamedFields::static_length().is_none());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_array_struct_dyn_sized_elements_unnamed_fields(
+            test_data: BFieldCodecPropertyTestData<
+                ArrayStructDynamicallySizedElementsUnnamedFields,
+            >,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct ArrayStructDynamicallySizedElementsNamedFields {
+            a: [Vec<u128>; 7],
+        }
+
+        #[test]
+        fn bfield_codec_derive_array_struct_dyn_sized_elements_named_fields_static_length() {
             assert!(ArrayStructDynamicallySizedElementsNamedFields::static_length().is_none());
         }
 
+        #[proptest]
+        fn bfield_codec_derive_array_struct_dyn_sized_elements_named_fields(
+            test_data: BFieldCodecPropertyTestData<ArrayStructDynamicallySizedElementsNamedFields>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct StructWithTupleField {
+            a: (Digest, Vec<Digest>),
+        }
+
         #[test]
-        fn struct_with_tuple_field_dynamic_size() {
-            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
-            struct StructWithTupleField {
-                a: (Digest, Vec<Digest>),
-            }
-
-            fn random_struct() -> StructWithTupleField {
-                let mut rng = thread_rng();
-                StructWithTupleField {
-                    a: (random(), random_elements(rng.gen_range(0..10))),
-                }
-            }
-
-            for _ in 0..5 {
-                assert_bfield_codec_properties(&random_struct());
-            }
-
+        fn bfield_codec_derive_struct_with_tuple_field_static_length() {
             assert!(StructWithTupleField::static_length().is_none());
         }
 
-        #[test]
-        fn struct_with_tuple_field_static_size() {
-            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
-            struct StructWithTupleField {
-                a: ([Digest; 2], XFieldElement),
-            }
+        #[proptest]
+        fn bfield_codec_derive_struct_with_tuple_field(
+            test_data: BFieldCodecPropertyTestData<StructWithTupleField>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
 
-            fn random_struct() -> StructWithTupleField {
-                StructWithTupleField {
-                    a: ([random(), random()], random()),
-                }
-            }
-
-            for _ in 0..5 {
-                assert_bfield_codec_properties(&random_struct());
-            }
-
-            assert_eq!(Some(13), StructWithTupleField::static_length());
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct StructWithTupleFieldTwoElements {
+            a: ([Digest; 2], XFieldElement),
         }
 
         #[test]
-        fn struct_with_nested_tuple_field() {
-            #[derive(BFieldCodec, PartialEq, Eq, Debug)]
-            struct StructWithTupleField {
-                a: (([Digest; 2], Vec<XFieldElement>), (XFieldElement, u64)),
-            }
+        fn bfield_codec_derive_struct_with_tuple_field_two_elements_static_length() {
+            assert_eq!(Some(13), StructWithTupleFieldTwoElements::static_length());
+        }
 
-            fn random_struct() -> StructWithTupleField {
-                let mut rng = thread_rng();
-                StructWithTupleField {
-                    a: (
-                        ([random(), random()], random_elements(rng.gen_range(0..10))),
-                        (random(), random()),
-                    ),
-                }
-            }
+        #[proptest]
+        fn bfield_codec_derive_struct_with_tuple_field_two_elements(
+            test_data: BFieldCodecPropertyTestData<StructWithTupleFieldTwoElements>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
 
-            for _ in 0..5 {
-                assert_bfield_codec_properties(&random_struct());
-            }
-
-            assert!(StructWithTupleField::static_length().is_none());
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct StructWithNestedTupleField {
+            a: (([Digest; 2], Vec<XFieldElement>), (XFieldElement, u64)),
         }
 
         #[test]
-        fn ms_membership_proof_derive_test() {
-            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-            struct MsMembershipProof<H: AlgebraicHasher> {
-                sender_randomness: Digest,
-                receiver_preimage: Digest,
-                auth_path_aocl: MmrMembershipProof<H>,
-            }
+        fn bfield_codec_derive_struct_with_nested_tuple_field_static_length() {
+            assert!(StructWithNestedTupleField::static_length().is_none());
+        }
 
-            fn random_mmr_membership_proof<H: AlgebraicHasher>() -> MmrMembershipProof<H> {
-                let leaf_index: u64 = random();
-                let authentication_path: Vec<Digest> =
-                    random_elements((thread_rng().next_u32() % 15) as usize);
-                MmrMembershipProof {
-                    leaf_index,
-                    authentication_path,
-                    _hasher: PhantomData,
-                }
-            }
+        #[proptest]
+        fn bfield_codec_derive_struct_with_nested_tuple_field(
+            test_data: BFieldCodecPropertyTestData<StructWithNestedTupleField>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
 
-            fn random_struct() -> MsMembershipProof<Tip5> {
-                let sender_randomness: Digest = random();
-                let receiver_preimage: Digest = random();
-                let auth_path_aocl: MmrMembershipProof<Tip5> = random_mmr_membership_proof();
-                MsMembershipProof {
-                    sender_randomness,
-                    receiver_preimage,
-                    auth_path_aocl,
-                }
-            }
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct MsMembershipProof<H: AlgebraicHasher> {
+            sender_randomness: Digest,
+            receiver_preimage: Digest,
+            auth_path_aocl: MmrMembershipProof<H>,
+        }
 
-            for _ in 0..5 {
-                assert_bfield_codec_properties(&random_struct());
-            }
-
+        #[test]
+        fn bfield_codec_derive_ms_membership_proof_derive_static_length() {
             assert!(MsMembershipProof::<Tip5>::static_length().is_none());
         }
 
-        #[test]
-        fn mmr_bfieldcodec_derive_test() {
-            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-            struct MmrAccumulator<H: BFieldCodec> {
-                leaf_count: u64,
-                peaks: Vec<Digest>,
-                #[bfield_codec(ignore)]
-                _hasher: PhantomData<H>,
-            }
-
-            fn random_struct() -> MmrAccumulator<Tip5> {
-                let leaf_count: u64 = random();
-                let mut rng = thread_rng();
-                let peaks = random_elements(rng.gen_range(0..63));
-                MmrAccumulator {
-                    leaf_count,
-                    peaks,
-                    _hasher: PhantomData,
-                }
-            }
-
-            for _ in 0..5 {
-                assert_bfield_codec_properties(&random_struct());
-            }
+        #[proptest]
+        fn bfield_codec_derive_ms_membership_proof_derive(
+            test_data: BFieldCodecPropertyTestData<MsMembershipProof<Tip5>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
         }
 
         #[test]
-        fn unsupported_fields_can_be_ignored_test() {
-            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-            struct UnsupportedFields {
-                a: u64,
-                #[bfield_codec(ignore)]
-                b: usize,
-            }
-            let my_struct = UnsupportedFields {
-                a: random(),
-                b: random(),
-            };
+        fn bfield_codec_derive_mmr_bfieldcodec_derive_static_length() {
+            assert!(MmrAccumulator::<Tip5>::static_length().is_none());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_mmr_bfieldcodec_derive(
+            test_data: BFieldCodecPropertyTestData<MmrAccumulator<Tip5>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct UnsupportedFields {
+            a: u64,
+            #[bfield_codec(ignore)]
+            b: usize,
+        }
+
+        #[proptest]
+        fn unsupported_fields_can_be_ignored_test(#[strategy(arb())] my_struct: UnsupportedFields) {
             let encoded = my_struct.encode();
             let decoded = UnsupportedFields::decode(&encoded).unwrap();
             assert_eq!(
@@ -1395,218 +1308,126 @@ mod tests {
             )
         }
 
-        #[test]
-        fn vec_of_struct_with_one_fix_len_field_test() {
-            // This is a regression test addressing #124.
-            // https://github.com/Neptune-Crypto/twenty-first/issues/124
-
-            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-            struct OneFixedLenField {
-                some_digest: Digest,
-            }
-
-            let rand_struct = || OneFixedLenField {
-                some_digest: random(),
-            };
-
-            for num_elements in 0..5 {
-                dbg!(num_elements);
-                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
-            }
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct OneFixedLenField {
+            some_digest: Digest,
         }
 
-        #[test]
-        fn vec_of_struct_with_two_fix_len_fields_test() {
-            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-            pub struct TwoFixedLenFields {
-                pub some_digest: Digest,
-                pub some_u64: u64,
-            }
-
-            let rand_struct = || TwoFixedLenFields {
-                some_digest: random(),
-                some_u64: random(),
-            };
-
-            for num_elements in 0..5 {
-                dbg!(num_elements);
-                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
-            }
+        /// regression test, see https://github.com/Neptune-Crypto/twenty-first/issues/124
+        #[proptest]
+        fn bfield_codec_derive_vec_of_struct_with_one_fix_len_field_test(
+            test_data: BFieldCodecPropertyTestData<Vec<OneFixedLenField>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
         }
 
-        #[test]
-        fn vec_of_struct_with_two_fix_len_unnamed_fields_test() {
-            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-            pub struct TwoFixedLenUnnamedFields(Digest, u64);
-
-            let rand_struct = || TwoFixedLenUnnamedFields(random(), random());
-
-            for num_elements in 0..5 {
-                dbg!(num_elements);
-                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
-            }
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        pub struct TwoFixedLenFields {
+            pub some_digest: Digest,
+            pub some_u64: u64,
         }
 
-        #[test]
-        fn vec_of_struct_with_fix_and_var_len_fields_test() {
-            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-            pub struct FixAndVarLenFields {
-                pub some_digest: Digest,
-                pub some_vec: Vec<u64>,
-            }
-
-            let rand_struct = || {
-                let num_elements: usize = thread_rng().gen_range(0..7);
-                FixAndVarLenFields {
-                    some_digest: random(),
-                    some_vec: random_elements(num_elements),
-                }
-            };
-
-            for num_elements in 0..5 {
-                dbg!(num_elements);
-                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
-            }
+        #[proptest]
+        fn bfield_codec_derive_vec_of_struct_with_two_fix_len_fields_test(
+            test_data: BFieldCodecPropertyTestData<Vec<TwoFixedLenFields>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
         }
 
-        #[test]
-        fn vec_of_struct_with_fix_and_var_len_unnamed_fields_test() {
-            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-            struct FixAndVarLenUnnamedFields(Digest, Vec<u64>);
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        pub struct TwoFixedLenUnnamedFields(Digest, u64);
 
-            let rand_struct = || {
-                let num_elements: usize = thread_rng().gen_range(0..7);
-                FixAndVarLenUnnamedFields(random(), random_elements(num_elements))
-            };
-
-            for num_elements in 0..5 {
-                dbg!(num_elements);
-                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
-            }
+        #[proptest]
+        fn bfield_codec_derive_vec_of_struct_with_two_fix_len_unnamed_fields_test(
+            test_data: BFieldCodecPropertyTestData<Vec<TwoFixedLenUnnamedFields>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
         }
 
-        #[test]
-        fn vec_of_struct_with_quite_a_few_fix_and_var_len_fields_test() {
-            #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
-            struct QuiteAFewFixAndVarLenFields {
-                some_digest: Digest,
-                some_vec: Vec<u64>,
-                some_u64: u64,
-                other_vec: Vec<u32>,
-                other_digest: Digest,
-                yet_another_vec: Vec<u32>,
-                and_another_vec: Vec<u64>,
-                more_fixed_len: u64,
-                even_more_fixed_len: u64,
-            }
-
-            let rand_struct = || {
-                let num_elements_0: usize = thread_rng().gen_range(0..7);
-                let num_elements_1: usize = thread_rng().gen_range(0..7);
-                let num_elements_2: usize = thread_rng().gen_range(0..7);
-                let num_elements_3: usize = thread_rng().gen_range(0..7);
-                QuiteAFewFixAndVarLenFields {
-                    some_digest: random(),
-                    some_vec: random_elements(num_elements_0),
-                    some_u64: random(),
-                    other_vec: random_elements(num_elements_1),
-                    other_digest: random(),
-                    yet_another_vec: random_elements(num_elements_2),
-                    and_another_vec: random_elements(num_elements_3),
-                    more_fixed_len: random(),
-                    even_more_fixed_len: random(),
-                }
-            };
-
-            for num_elements in 0..5 {
-                dbg!(num_elements);
-                assert_bfield_codec_properties(&vec![rand_struct(); num_elements]);
-            }
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        pub struct FixAndVarLenFields {
+            pub some_digest: Digest,
+            pub some_vec: Vec<u64>,
         }
 
-        #[cfg(test)]
-        mod simple_derivations {
-            use itertools::Itertools;
-            use rand::random;
-
-            use crate::shared_math::{
-                b_field_element::BFieldElement, bfield_codec::BFieldCodec, tip5::Digest,
-                x_field_element::XFieldElement,
-            };
-
-            #[derive(BFieldCodec)]
-            struct SimpleStructA {
-                a: BFieldElement,
-                b: XFieldElement,
-            }
-
-            #[derive(BFieldCodec)]
-            struct SimpleStructB(u32, u64);
-
-            #[derive(PartialEq, Eq, Debug, BFieldCodec)]
-            enum SimpleEnum {
-                A,
-                B(u32),
-                C(BFieldElement, u32, u32),
-            }
-
-            #[test]
-            fn test_simple_struct_a() {
-                let simple_struct = SimpleStructA {
-                    a: BFieldElement::new(42u64),
-                    b: XFieldElement::new([
-                        BFieldElement::new(1u64),
-                        BFieldElement::new(2u64),
-                        BFieldElement::new(3u64),
-                    ]),
-                };
-                let encoded = simple_struct.encode();
-                let decoded = *SimpleStructA::decode(&encoded).unwrap();
-                assert_eq!(simple_struct.a, decoded.a);
-                assert_eq!(simple_struct.b, decoded.b);
-
-                let mut too_long = encoded;
-                too_long.push(BFieldElement::new(5));
-                assert!(SimpleStructA::decode(&too_long).is_err())
-            }
-
-            #[test]
-            fn test_simple_struct_b() {
-                let simple_struct = SimpleStructB(42, 7);
-                let encoded = simple_struct.encode();
-                let decoded = *SimpleStructB::decode(&encoded).unwrap();
-                assert_eq!(simple_struct.0, decoded.0);
-                assert_eq!(simple_struct.1, decoded.1);
-
-                let mut too_long = encoded;
-                too_long.push(BFieldElement::new(5));
-                assert!(SimpleStructB::decode(&too_long).is_err())
-            }
-
-            #[test]
-            fn test_simple_enum() {
-                let simple_enum = SimpleEnum::C(BFieldElement::new(10), 7, 8);
-                assert!(SimpleEnum::static_length().is_none());
-                let encoded = simple_enum.encode();
-                assert_eq!(4, encoded.len());
-                let decoded = *SimpleEnum::decode(&encoded).unwrap();
-                assert_eq!(simple_enum, decoded);
-            }
-
-            #[test]
-            fn test_simple_digest() {
-                let digest: Digest = random();
-                let encoded = digest.encode();
-                let decoded = *Digest::decode(&encoded).unwrap();
-                assert_eq!(digest, decoded);
-
-                let mut too_long = encoded;
-                too_long.push(BFieldElement::new(5));
-                assert!(Digest::decode(&too_long).is_err())
-            }
+        #[proptest]
+        fn bfield_codec_derive_vec_of_struct_with_fix_and_var_len_fields_test(
+            test_data: BFieldCodecPropertyTestData<Vec<FixAndVarLenFields>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
         }
 
-        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec)]
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct FixAndVarLenUnnamedFields(Digest, Vec<u64>);
+
+        #[proptest]
+        fn bfield_codec_derive_vec_of_struct_with_fix_and_var_len_unnamed_fields_test(
+            test_data: BFieldCodecPropertyTestData<Vec<FixAndVarLenUnnamedFields>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct QuiteAFewFixAndVarLenFields {
+            some_digest: Digest,
+            some_vec: Vec<u64>,
+            some_u64: u64,
+            other_vec: Vec<u32>,
+            other_digest: Digest,
+            yet_another_vec: Vec<u32>,
+            and_another_vec: Vec<u64>,
+            more_fixed_len: u64,
+            even_more_fixed_len: u64,
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_vec_of_struct_with_quite_a_few_fix_and_var_len_fields_test(
+            test_data: BFieldCodecPropertyTestData<Vec<QuiteAFewFixAndVarLenFields>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct SimpleStructA {
+            a: BFieldElement,
+            b: XFieldElement,
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_simple_struct_a(
+            test_data: BFieldCodecPropertyTestData<SimpleStructA>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct SimpleStructB(u32, u64);
+
+        #[proptest]
+        fn bfield_codec_derive_simple_struct_b(
+            test_data: BFieldCodecPropertyTestData<SimpleStructB>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum SimpleEnum {
+            A,
+            B(u32),
+            C(BFieldElement, u32, u32),
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_simple_enum(test_data: BFieldCodecPropertyTestData<SimpleEnum>) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_digest(test_data: BFieldCodecPropertyTestData<Digest>) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         enum ComplexEnum {
             A,
             B(u32),
@@ -1615,43 +1436,62 @@ mod tests {
             E(Option<bool>),
         }
 
+        #[proptest]
+        fn bfield_codec_derive_complex_enum(test_data: BFieldCodecPropertyTestData<ComplexEnum>) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithUniformDataSize {
+            A(Digest),
+            B(Digest),
+            C(Digest),
+        }
+
         #[test]
-        fn test_complex_enum_derive() {
-            let mut rng = thread_rng();
-            match ComplexEnum::A {
-                ComplexEnum::A => {
-                    let object = ComplexEnum::A;
+        fn bfield_codec_derive_enum_with_uniform_data_size_derive_static_length() {
+            assert_eq!(
+                6,
+                EnumWithUniformDataSize::static_length().unwrap(),
+                "expected 1 for discriminant, 5 for digest"
+            );
+        }
 
-                    assert_bfield_codec_properties(&object);
-                }
-                ComplexEnum::B(_) => {
-                    let object = ComplexEnum::B(rng.next_u32());
+        #[proptest]
+        fn bfield_codec_derive_enum_with_uniform_data_size_static_len_eq_encoding_len(
+            #[strategy(arb())] test_data: EnumWithUniformDataSize,
+        ) {
+            prop_assert_eq!(
+                EnumWithUniformDataSize::static_length().unwrap(),
+                test_data.encode().len()
+            );
+        }
 
-                    assert_bfield_codec_properties(&object);
-                }
-                ComplexEnum::C(_, _, _) => {
-                    let object = ComplexEnum::C(rng.gen(), rng.gen(), rng.next_u32());
+        #[proptest]
+        fn bfield_codec_derive_enum_with_uniform_data_size(
+            test_data: BFieldCodecPropertyTestData<EnumWithUniformDataSize>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
 
-                    assert_bfield_codec_properties(&object);
-                }
-                ComplexEnum::D(_, _) => {
-                    let d_3 = ComplexEnum::D(rng.gen::<[BFieldElement; 3]>().to_vec(), rng.gen());
-                    assert_bfield_codec_properties(&d_3);
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithIrregularDataSize {
+            A(u32),
+            B,
+            C(Digest),
+            D(Vec<XFieldElement>),
+        }
 
-                    let d_0 = ComplexEnum::D(Vec::<BFieldElement>::new(), rng.gen());
-                    assert_bfield_codec_properties(&d_0);
-                }
-                ComplexEnum::E(_) => {
-                    let e_none = ComplexEnum::E(None);
-                    assert_bfield_codec_properties(&e_none);
+        #[test]
+        fn bfield_codec_derive_enum_with_irregular_data_size_derive_static_length() {
+            assert!(EnumWithIrregularDataSize::static_length().is_none());
+        }
 
-                    let e_some_false = ComplexEnum::E(Some(false));
-                    assert_bfield_codec_properties(&e_some_false);
-
-                    let e_some_true = ComplexEnum::E(Some(true));
-                    assert_bfield_codec_properties(&e_some_true);
-                }
-            }
+        #[proptest]
+        fn bfield_codec_derive_enum_with_irregular_data_size(
+            test_data: BFieldCodecPropertyTestData<EnumWithIrregularDataSize>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
         }
     }
 }

@@ -1,0 +1,7 @@
+error: proc-macro derive panicked
+ --> trybuild/multiple_field_attributes.rs:3:10
+  |
+3 | #[derive(BFieldCodec)]
+  |          ^^^^^^^^^^^
+  |
+  = help: message: field `a` must have at most 1 `bfield_codec` attribute

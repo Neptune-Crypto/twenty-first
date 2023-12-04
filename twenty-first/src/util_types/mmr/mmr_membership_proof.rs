@@ -1,3 +1,4 @@
+use arbitrary::Arbitrary;
 use get_size::GetSize;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::RandomState;
@@ -12,7 +13,7 @@ use crate::shared_math::digest::Digest;
 use crate::shared_math::other::log_2_floor;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
-#[derive(Debug, Clone, Serialize, Deserialize, GetSize, BFieldCodec)]
+#[derive(Debug, Clone, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]
 pub struct MmrMembershipProof<H>
 where
     H: AlgebraicHasher + Sized,

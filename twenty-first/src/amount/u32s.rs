@@ -3,7 +3,6 @@ use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Rem, Sub};
 
-use anyhow::bail;
 use get_size::GetSize;
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
@@ -14,7 +13,7 @@ use serde_big_array::BigArray;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::bfield_codec::BFieldCodec;
+use crate::shared_math::bfield_codec::{BFieldCodec, BFieldCodecError};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, GetSize)]
 pub struct U32s<const N: usize> {
@@ -339,13 +338,17 @@ impl<const N: usize> Display for U32s<N> {
 }
 
 impl<const N: usize> BFieldCodec for U32s<N> {
-    fn encode(&self) -> Vec<BFieldElement> {
-        self.values.into_iter().flat_map(|v| v.encode()).collect()
-    }
+    type Error = BFieldCodecError;
 
-    fn decode(sequence: &[BFieldElement]) -> anyhow::Result<Box<Self>> {
-        if sequence.len() != N {
-            bail!("Failed to decode {sequence:?} into U32s<{N}>. Bad length.");
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+        if N > 0 && sequence.is_empty() {
+            return Err(Self::Error::EmptySequence);
+        }
+        if sequence.len() < N {
+            return Err(Self::Error::SequenceTooShort);
+        }
+        if sequence.len() > N {
+            return Err(Self::Error::SequenceTooLong);
         }
 
         let mut array: [u32; N] = [0u32; N];
@@ -353,6 +356,10 @@ impl<const N: usize> BFieldCodec for U32s<N> {
             array[i] = *u32::decode(&sequence[i..i + 1])?;
         }
         Ok(Box::new(Self::new(array)))
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        self.values.into_iter().flat_map(|v| v.encode()).collect()
     }
 
     fn static_length() -> Option<usize> {

@@ -1,15 +1,14 @@
 [package]
 name = "bfieldcodec_derive"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 license = "GPL-2.0"
 description = "Derive macro for BFieldCodec."
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 syn = { version = "^2", features = ["full", "derive"] }
 quote = "1.0"
+proc-macro2 = "1.0"
 
 [lib]
 proc-macro = true
