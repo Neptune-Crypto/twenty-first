@@ -1533,5 +1533,15 @@ mod tests {
         ) {
             test_data.assert_bfield_codec_properties()?;
         }
+
+        #[test]
+        fn enums_bfield_codec_discriminant_can_be_accessed() {
+            let a = EnumWithGenericsAndWhereClause::<u32>::A;
+            let b = EnumWithGenericsAndWhereClause::<u32>::B(1);
+            let c = EnumWithGenericsAndWhereClause::<u32>::C(1, 2);
+            assert_eq!(0, a.bfield_codec_discriminant());
+            assert_eq!(1, b.bfield_codec_discriminant());
+            assert_eq!(2, c.bfield_codec_discriminant());
+        }
     }
 }
