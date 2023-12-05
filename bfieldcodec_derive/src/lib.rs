@@ -17,11 +17,14 @@ use syn::Ident;
 use syn::Type;
 use syn::Variant;
 
-/// Derives `BFieldCodec` for structs.
+/// Derives `BFieldCodec` for structs and enums.
 ///
 /// Fields that should not be serialized can be ignored by annotating them with
 /// `#[bfield_codec(ignore)]`.
 /// Ignored fields must implement [`Default`].
+///
+/// For enums, the discriminant used for serialization can be accessed through method
+/// `bfield_codec_discriminant`.
 ///
 /// ### Example
 ///
@@ -36,6 +39,17 @@ use syn::Variant;
 /// let encoded = foo.encode();
 /// let decoded = Foo::decode(&encoded).unwrap();
 /// assert_eq!(foo.bar, decoded.bar);
+/// ```
+///
+/// Accessing the discriminant of an enum's variant:
+///
+/// ```ignore
+/// #[derive(BFieldCodec)]
+/// enum Bar {
+///     Baz,
+///     Qux(u64),
+/// }
+/// let _discriminant = Bar::Baz.bfield_codec_discriminant();
 /// ```
 ///
 /// ### Known limitations
