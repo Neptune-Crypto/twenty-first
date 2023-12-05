@@ -777,7 +777,7 @@ impl BFieldCodecDeriveBuilder {
         let (impl_generics, ty_generics, where_clause) = self.generics.split_for_impl();
         quote! {
             impl #impl_generics #name #ty_generics #where_clause {
-                fn bfield_codec_discriminant(&self) -> usize {
+                pub fn bfield_codec_discriminant(&self) -> usize {
                     match self {
                         #( #variant_match_arms , )*
                     }
