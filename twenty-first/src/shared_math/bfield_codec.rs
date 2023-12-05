@@ -1493,5 +1493,55 @@ mod tests {
         ) {
             test_data.assert_bfield_codec_properties()?;
         }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithGenerics<I: Into<u64>> {
+            A(I),
+            B(I, I),
+        }
+
+        #[test]
+        fn bfield_codec_derive_enum_with_generics_derive_static_length() {
+            assert!(EnumWithGenerics::<u32>::static_length().is_none());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_generics(
+            test_data: BFieldCodecPropertyTestData<EnumWithGenerics<u32>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithGenericsAndWhereClause<I: Into<u64>>
+        where
+            I: Debug + Copy + Eq,
+        {
+            A,
+            B(I),
+            C(I, I),
+        }
+
+        #[test]
+        fn bfield_codec_derive_enum_with_generics_and_where_clause_derive_static_length() {
+            assert!(EnumWithGenericsAndWhereClause::<u32>::static_length().is_none());
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_generics_and_where_clause(
+            test_data: BFieldCodecPropertyTestData<EnumWithGenericsAndWhereClause<u32>>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[test]
+        fn enums_bfield_codec_discriminant_can_be_accessed() {
+            let a = EnumWithGenericsAndWhereClause::<u32>::A;
+            let b = EnumWithGenericsAndWhereClause::<u32>::B(1);
+            let c = EnumWithGenericsAndWhereClause::<u32>::C(1, 2);
+            assert_eq!(0, a.bfield_codec_discriminant());
+            assert_eq!(1, b.bfield_codec_discriminant());
+            assert_eq!(2, c.bfield_codec_discriminant());
+        }
     }
 }

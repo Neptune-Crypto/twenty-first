@@ -31,7 +31,7 @@ features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
 anyhow = "1.0"
 arbitrary = { version = "1", features = ["derive"] }
 bincode = "1.3"
-bfieldcodec_derive = "0.5"
+bfieldcodec_derive = { path = "../bfieldcodec_derive" }
 blake3 = "1.5.0"
 colored = "2.0"
 hashbrown = "0.14"

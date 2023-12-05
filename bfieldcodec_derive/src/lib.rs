@@ -17,11 +17,14 @@ use syn::Ident;
 use syn::Type;
 use syn::Variant;
 
-/// Derives `BFieldCodec` for structs.
+/// Derives `BFieldCodec` for structs and enums.
 ///
 /// Fields that should not be serialized can be ignored by annotating them with
 /// `#[bfield_codec(ignore)]`.
 /// Ignored fields must implement [`Default`].
+///
+/// For enums, the discriminant used for serialization can be accessed through method
+/// `bfield_codec_discriminant`.
 ///
 /// ### Example
 ///
@@ -38,15 +41,27 @@ use syn::Variant;
 /// assert_eq!(foo.bar, decoded.bar);
 /// ```
 ///
-/// ### Known limitations
+/// Accessing the discriminant of an enum's variant:
+///
+/// ```ignore
+/// #[derive(BFieldCodec)]
+/// enum Bar {
+///     Baz,
+///     Qux(u64),
+/// }
+/// let _discriminant = Bar::Baz.bfield_codec_discriminant();
 /// ```
+///
+/// ### Known limitations
+///
+/// - Enums with no variants are currently not supported. Consider using a unit struct instead.
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     BFieldCodecDeriveBuilder::new(ast).build().into()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BFieldCodecDeriveType {
     UnitStruct,
     StructWithNamedFields,
@@ -370,12 +385,9 @@ impl BFieldCodecDeriveBuilder {
 
     fn build_encode_statements_for_enum(&mut self) {
         let encode_clauses = self
-            .variants
-            .as_ref()
-            .unwrap()
-            .iter()
-            .enumerate()
-            .map(|(i, v)| self.generate_encode_clause_for_variant(i, &v.ident, &v.fields));
+            .enum_discriminants_and_variants()
+            .into_iter()
+            .map(|(d, v)| self.generate_encode_clause_for_variant(d, v));
         let encode_match_statement = quote! {
             match self {
                 #( #encode_clauses , )*
@@ -386,15 +398,17 @@ impl BFieldCodecDeriveBuilder {
 
     fn generate_encode_clause_for_variant(
         &self,
-        variant_index: usize,
-        variant_name: &Ident,
-        associated_data: &Fields,
+        discriminant: usize,
+        variant: &Variant,
     ) -> TokenStream {
+        let variant_name = &variant.ident;
+        let associated_data = &variant.fields;
+
         if associated_data.is_empty() {
             return quote! {
                 Self::#variant_name => {
                     elements.push(::twenty_first::shared_math::b_field_element::BFieldElement::new(
-                        #variant_index as u64)
+                        #discriminant as u64)
                     );
                 }
             };
@@ -402,10 +416,10 @@ impl BFieldCodecDeriveBuilder {
 
         let reversed_enumerated_associated_data = associated_data.iter().enumerate().rev();
         let field_encoders = reversed_enumerated_associated_data.map(|(field_index, ad)| {
-            let field_name = self.enum_variant_field_name(variant_index, field_index);
+            let field_name = self.enum_variant_field_name(discriminant, field_index);
             let field_type = ad.ty.clone();
             let field_encoding =
-                quote::format_ident!("variant_{}_field_{}_encoding", variant_index, field_index);
+                quote::format_ident!("variant_{}_field_{}_encoding", discriminant, field_index);
             quote! {
                 let #field_encoding:
                     ::std::vec::Vec<::twenty_first::shared_math::b_field_element::BFieldElement> =
@@ -425,13 +439,13 @@ impl BFieldCodecDeriveBuilder {
         let field_names = associated_data
             .iter()
             .enumerate()
-            .map(|(field_index, _field)| self.enum_variant_field_name(variant_index, field_index));
+            .map(|(field_index, _field)| self.enum_variant_field_name(discriminant, field_index));
 
         quote! {
             Self::#variant_name ( #( #field_names , )* ) => {
                 elements.push(
                     ::twenty_first::shared_math::b_field_element::BFieldElement::new(
-                        #variant_index as u64
+                        #discriminant as u64
                     )
                 );
                 #( #field_encoders )*
@@ -553,26 +567,22 @@ impl BFieldCodecDeriveBuilder {
 
     fn build_decode_function_body_for_enum(&mut self) {
         let sequence_empty_error = self.error_builder.sequence_empty();
-        let invalid_variant_error = self.error_builder.invalid_variant_index();
+        let invalid_variant_error = self.error_builder.invalid_discriminant();
 
-        let decode_clauses = self
-            .variants
-            .as_ref()
-            .unwrap()
-            .iter()
-            .enumerate()
-            .map(|(i, v)| self.generate_decode_clause_for_variant(i, &v.ident, &v.fields));
-        let match_clauses = decode_clauses
-            .enumerate()
-            .map(|(index, decode_clause)| quote! { #index => { #decode_clause } });
+        let mut match_arms = vec![];
+        for (discriminant, variant) in self.enum_discriminants_and_variants() {
+            let decode_clause = self.generate_decode_clause_for_variant(discriminant, variant);
+            let match_arm = quote! { #discriminant => { #decode_clause } };
+            match_arms.push(match_arm);
+        }
 
         self.decode_function_body = quote! {
             if sequence.is_empty() {
                 return ::core::result::Result::Err(#sequence_empty_error);
             }
-            let (variant_index, sequence) = (sequence[0].value() as usize, &sequence[1..]);
-            match variant_index {
-                #(#match_clauses ,)*
+            let (discriminant, sequence) = (sequence[0].value() as usize, &sequence[1..]);
+            match discriminant {
+                #(#match_arms ,)*
                 other_index => ::core::result::Result::Err(#invalid_variant_error(other_index)),
             }
         };
@@ -580,14 +590,15 @@ impl BFieldCodecDeriveBuilder {
 
     fn generate_decode_clause_for_variant(
         &self,
-        variant_index: usize,
-        variant_name: &Ident,
-        associated_data: &Fields,
+        discriminant: usize,
+        variant: &Variant,
     ) -> TokenStream {
         let sequence_too_long_error = self.error_builder.sequence_too_long();
         let sequence_empty_error = self.error_builder.sequence_empty_for_variant();
         let sequence_too_short_error = self.error_builder.sequence_too_short_for_variant();
 
+        let variant_name = &variant.ident;
+        let associated_data = &variant.fields;
         if associated_data.is_empty() {
             return quote! {
                 if !sequence.is_empty() {
@@ -603,9 +614,9 @@ impl BFieldCodecDeriveBuilder {
             .rev()
             .map(|(field_index, field)| {
                 let field_type = field.ty.clone();
-                let field_name = self.enum_variant_field_name(variant_index, field_index);
+                let field_name = self.enum_variant_field_name(discriminant, field_index);
                 let field_value =
-                    quote::format_ident!("variant_{}_field_{}_value", variant_index, field_index);
+                    quote::format_ident!("variant_{}_field_{}_value", discriminant, field_index);
                 quote! {
                     let (#field_value, sequence) = {
                         let maybe_fields_static_length =
@@ -614,7 +625,7 @@ impl BFieldCodecDeriveBuilder {
                         let field_has_dynamic_length = maybe_fields_static_length.is_none();
                         if sequence.is_empty() && field_has_dynamic_length {
                             return ::core::result::Result::Err(
-                                #sequence_empty_error(#variant_index, #field_index)
+                                #sequence_empty_error(#discriminant, #field_index)
                             );
                         }
                         let (len, sequence) = match maybe_fields_static_length {
@@ -625,7 +636,7 @@ impl BFieldCodecDeriveBuilder {
                         };
                         if sequence.len() < len {
                             return ::core::result::Result::Err(
-                                #sequence_too_short_error(#variant_index, #field_index)
+                                #sequence_too_short_error(#discriminant, #field_index)
                             );
                         }
                         let decoded =
@@ -650,7 +661,7 @@ impl BFieldCodecDeriveBuilder {
         let field_names = associated_data
             .iter()
             .enumerate()
-            .map(|(field_index, _field)| self.enum_variant_field_name(variant_index, field_index));
+            .map(|(field_index, _field)| self.enum_variant_field_name(discriminant, field_index));
         quote! {
             #field_decoders
             if !sequence.is_empty() {
@@ -662,8 +673,8 @@ impl BFieldCodecDeriveBuilder {
         }
     }
 
-    fn enum_variant_field_name(&self, variant_index: usize, field_index: usize) -> syn::Ident {
-        quote::format_ident!("variant_{}_field_{}", variant_index, field_index)
+    fn enum_variant_field_name(&self, discriminant: usize, field_index: usize) -> syn::Ident {
+        quote::format_ident!("variant_{}_field_{}", discriminant, field_index)
     }
 
     fn build_static_length_body_for_struct(&mut self, fields: &[Field]) {
@@ -742,7 +753,41 @@ impl BFieldCodecDeriveBuilder {
         };
     }
 
+    fn enum_discriminants_and_variants(&self) -> Vec<(usize, &Variant)> {
+        self.variants.as_ref().unwrap().iter().enumerate().collect()
+    }
+
+    fn maybe_impl_enum_discriminants(&self) -> TokenStream {
+        if self.derive_type != BFieldCodecDeriveType::Enum {
+            return quote! {};
+        }
+
+        let mut variant_match_arms = vec![];
+        for (discriminant, variant) in self.enum_discriminants_and_variants() {
+            let ident = &variant.ident;
+            let mut match_statement = quote! { Self::#ident };
+            if !variant.fields.is_empty() {
+                match_statement.extend(quote! { ( .. ) });
+            }
+            let match_arm = quote! { #match_statement => #discriminant };
+            variant_match_arms.push(match_arm);
+        }
+
+        let name = self.name.clone();
+        let (impl_generics, ty_generics, where_clause) = self.generics.split_for_impl();
+        quote! {
+            impl #impl_generics #name #ty_generics #where_clause {
+                fn bfield_codec_discriminant(&self) -> usize {
+                    match self {
+                        #( #variant_match_arms , )*
+                    }
+                }
+            }
+        }
+    }
+
     fn into_tokens(self) -> TokenStream {
+        let maybe_impl_enum_discriminants = self.maybe_impl_enum_discriminants();
         let name = self.name;
         let error_enum_name = self.error_builder.error_enum_name();
         let errors = self.error_builder.into_tokens();
@@ -752,6 +797,7 @@ impl BFieldCodecDeriveBuilder {
         let (impl_generics, ty_generics, where_clause) = self.generics.split_for_impl();
 
         quote! {
+            #maybe_impl_enum_discriminants
             #errors
             impl #impl_generics ::twenty_first::shared_math::bfield_codec::BFieldCodec
             for #name #ty_generics #where_clause {
@@ -814,7 +860,7 @@ impl BFieldCodecErrorEnumBuilder {
         self.register_error_sequence_empty_for_variant();
         self.register_error_sequence_too_short_for_variant();
         self.register_error_sequence_too_long();
-        self.register_error_invalid_variant_index();
+        self.register_error_invalid_discriminant();
         self.register_error_inner_decoding_failure();
     }
 
@@ -961,21 +1007,21 @@ impl BFieldCodecErrorEnumBuilder {
         );
     }
 
-    fn register_error_invalid_variant_index(&mut self) {
+    fn register_error_invalid_discriminant(&mut self) {
         let name = self.name.to_string();
 
         let variant_name = quote::format_ident!("InvalidVariantIndex");
         let variant_type = quote! { #variant_name(usize) };
         let display_match_arm = quote! {
-            Self::#variant_name(variant_index) => ::core::write!(
+            Self::#variant_name(discriminant) => ::core::write!(
                 f,
-                "cannot decode {}: invalid variant index {variant_index}",
+                "cannot decode {}: invalid variant index {discriminant}",
                 #name
             )
         };
 
         self.register_error(
-            "invalid_variant_index",
+            "invalid_discriminant",
             variant_name,
             variant_type,
             display_match_arm,
@@ -1039,8 +1085,8 @@ impl BFieldCodecErrorEnumBuilder {
         self.global_identifier(&error.variant_name)
     }
 
-    fn invalid_variant_index(&self) -> TokenStream {
-        let error = self.errors.get("invalid_variant_index").unwrap();
+    fn invalid_discriminant(&self) -> TokenStream {
+        let error = self.errors.get("invalid_discriminant").unwrap();
         self.global_identifier(&error.variant_name)
     }
 
