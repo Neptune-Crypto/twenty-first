@@ -39,14 +39,15 @@ use syn::Variant;
 /// ```
 ///
 /// ### Known limitations
-/// ```
+///
+/// - Enums with no variants are currently not supported. Consider using a unit struct instead.
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     BFieldCodecDeriveBuilder::new(ast).build().into()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BFieldCodecDeriveType {
     UnitStruct,
     StructWithNamedFields,
@@ -742,7 +743,38 @@ impl BFieldCodecDeriveBuilder {
         };
     }
 
+    fn maybe_impl_enum_discriminants(&self) -> TokenStream {
+        if self.derive_type != BFieldCodecDeriveType::Enum {
+            return quote! {};
+        }
+
+        let mut variant_match_arms = vec![];
+        let variants = self.variants.as_ref().unwrap();
+        for (index, variant) in variants.iter().enumerate() {
+            let ident = &variant.ident;
+            let mut match_statement = quote! { Self::#ident };
+            if !variant.fields.is_empty() {
+                match_statement.extend(quote! { ( .. ) });
+            }
+            let match_arm = quote! { #match_statement => #index };
+            variant_match_arms.push(match_arm);
+        }
+
+        let name = self.name.clone();
+        let (impl_generics, ty_generics, where_clause) = self.generics.split_for_impl();
+        quote! {
+            impl #impl_generics #name #ty_generics #where_clause {
+                fn bfield_codec_discriminant(&self) -> usize {
+                    match self {
+                        #( #variant_match_arms , )*
+                    }
+                }
+            }
+        }
+    }
+
     fn into_tokens(self) -> TokenStream {
+        let maybe_impl_enum_discriminants = self.maybe_impl_enum_discriminants();
         let name = self.name;
         let error_enum_name = self.error_builder.error_enum_name();
         let errors = self.error_builder.into_tokens();
@@ -752,6 +784,7 @@ impl BFieldCodecDeriveBuilder {
         let (impl_generics, ty_generics, where_clause) = self.generics.split_for_impl();
 
         quote! {
+            #maybe_impl_enum_discriminants
             #errors
             impl #impl_generics ::twenty_first::shared_math::bfield_codec::BFieldCodec
             for #name #ty_generics #where_clause {
