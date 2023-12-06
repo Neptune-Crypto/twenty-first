@@ -1004,8 +1004,8 @@ mod tests {
                     let vec = rusty_storage
                         .schema
                         .new_vec::<Index, u64>(&format!("atomicity-test-vector #{}", i));
-                    for i in 0u64..300 {
-                        vec.push(i);
+                    for j in 0u64..300 {
+                        vec.push(j);
                     }
                     vec
                 })

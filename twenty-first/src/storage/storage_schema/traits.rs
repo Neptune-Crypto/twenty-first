@@ -4,6 +4,7 @@
 //! `use twenty_first::storage::storage_vec::traits::*`
 
 use super::WriteOperation;
+pub use crate::leveldb::database::key::IntoLevelDBKey;
 
 /// Defines table interface for types used by [`super::DbtSchema`]
 pub trait DbTable<ParentKey, ParentValue> {

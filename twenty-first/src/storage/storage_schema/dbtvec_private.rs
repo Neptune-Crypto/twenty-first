@@ -31,6 +31,9 @@ where
     pub(super) fn get_length_key(key_prefix: u8) -> ParentKey {
         let const_length_key: ParentKey = 0u8.into();
         let key_prefix_key: ParentKey = key_prefix.into();
+
+        // This concatenates prefix + length (0u8) to form the
+        // real Key as used in LevelDB
         (key_prefix_key, const_length_key).into()
     }
 
@@ -47,6 +50,9 @@ where
     pub(super) fn get_index_key(&self, index: Index) -> ParentKey {
         let key_prefix_key: ParentKey = self.key_prefix.into();
         let index_key: ParentKey = index.into();
+
+        // This concatenates prefix + index to form the
+        // real Key as used in LevelDB
         (key_prefix_key, index_key).into()
     }
 
