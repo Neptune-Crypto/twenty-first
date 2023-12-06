@@ -35,14 +35,14 @@ use std::sync::Arc;
 /// ```
 /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{SimpleRustyStorage, traits::*}};
 /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
-/// # let mut rusty_storage = SimpleRustyStorage::new(db);
-/// # rusty_storage.restore_or_new();
 /// use std::sync::{Arc, RwLock};
+/// let mut storage = SimpleRustyStorage::new(db);
+/// storage.restore_or_new();
 ///
 /// let tables = (
-///     rusty_storage.schema.new_vec::<u64, u16>("ages"),
-///     rusty_storage.schema.new_vec::<u64, String>("names"),
-///     rusty_storage.schema.new_singleton::<bool>(12u64.into())
+///     storage.schema.new_vec::<u64, u16>("ages"),
+///     storage.schema.new_vec::<u64, String>("names"),
+///     storage.schema.new_singleton::<bool>(12u64.into())
 /// );
 ///
 /// let atomic_tables = Arc::new(RwLock::new(tables));
@@ -69,15 +69,16 @@ use std::sync::Arc;
 /// ```rust
 /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{SimpleRustyStorage, traits::*}};
 /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
-/// # let mut rusty_storage = SimpleRustyStorage::new(db);
-/// # rusty_storage.restore_or_new();
-/// let tables = (
-///     rusty_storage.schema.new_vec::<u64, u16>("ages"),
-///     rusty_storage.schema.new_vec::<u64, String>("names"),
-///     rusty_storage.schema.new_singleton::<bool>(12u64.into())
-/// );
+/// let mut storage = SimpleRustyStorage::new(db);
+/// storage.restore_or_new();
 ///
-/// let atomic_tables = rusty_storage.schema.atomic_rw(tables);
+/// let atomic_tables = storage.schema.create_tables_rw(|s| {
+///     (
+///         s.new_vec::<u64, u16>("ages"),
+///         s.new_vec::<u64, String>("names"),
+///         s.new_singleton::<bool>(12u64.into())
+///     )
+/// });
 ///
 /// // these writes happen atomically.
 /// atomic_tables.with_mut(|tables| {
@@ -161,35 +162,100 @@ impl<
         singleton
     }
 
-    // note: it would be nice to have a `create_tables()` method
-    // that takes a list of table definition enums and returns
-    // some kind of dynamic heterogenous list (maybe frunk::Hlist?)
-    // of tables.  However, specifying the tables to be created
-    // as a parameter seems to require variadic generics and/or
-    // higher-kinded-types, which do not exist in rust yet.
-    //
-    // So for now, we make do with the pattern that callers
-    // invoke `new_singleton()` and `new_vec()` to populate a
-    // container such as a `tuple` or `struct` and then they
-    // should pass the container to `atomic_rw()` to make the
-    // tables atomic.
+    /// create tables and wrap in an [`AtomicRw<T>`]
+    ///
+    /// This is the recommended way to create a group of tables
+    /// that are atomic for reads and writes across tables.
+    ///
+    /// Atomicity is guaranteed by an [`RwLock`](std::sync::RwLock).
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{SimpleRustyStorage, traits::*}};
+    /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
+    /// let mut storage = SimpleRustyStorage::new(db);
+    /// storage.restore_or_new();
+    ///
+    /// let atomic_tables = storage.schema.create_tables_rw(|s| {
+    ///     (
+    ///         s.new_vec::<u64, u16>("ages"),
+    ///         s.new_vec::<u64, String>("names"),
+    ///         s.new_singleton::<bool>(12u64.into())
+    ///     )
+    /// });
+    ///
+    /// // these writes happen atomically.
+    /// atomic_tables.with_mut(|tables| {
+    ///     tables.0.push(5);
+    ///     tables.1.push("Sally".into());
+    ///     tables.2.set(true);
+    /// });
+    /// ```
+    pub fn create_tables_rw<D, F>(&mut self, f: F) -> AtomicRw<D>
+    where
+        F: Fn(&mut Self) -> D,
+    {
+        let data = f(self);
+        AtomicRw::<D>::from(data)
+    }
+
+    /// create tables and wrap in an [`AtomicMutex<T>`]
+    ///
+    /// This is a simple way to create a group of tables
+    /// that are atomic for reads and writes across tables.
+    ///
+    /// Atomicity is guaranteed by a [`Mutex`](std::sync::Mutex).
+    ///
+    /// # Example:
+    ///
+    /// ```rust
+    /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{SimpleRustyStorage, traits::*}};
+    /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
+    /// let mut storage = SimpleRustyStorage::new(db);
+    /// storage.restore_or_new();
+    ///
+    /// let atomic_tables = storage.schema.create_tables_mutex(|s| {
+    ///     (
+    ///         s.new_vec::<u64, u16>("ages"),
+    ///         s.new_vec::<u64, String>("names"),
+    ///         s.new_singleton::<bool>(12u64.into())
+    ///     )
+    /// });
+    ///
+    /// // these writes happen atomically.
+    /// atomic_tables.with_mut(|tables| {
+    ///     tables.0.push(5);
+    ///     tables.1.push("Sally".into());
+    ///     tables.2.set(true);
+    /// });
+    /// ```
+    pub fn create_tables_mutex<D, F>(&mut self, f: F) -> AtomicMutex<D>
+    where
+        F: Fn(&mut Self) -> D,
+    {
+        let data = f(self);
+        AtomicMutex::<D>::from(data)
+    }
 
     /// Wraps input of type `T` with a [`AtomicRw`]
+    ///
+    /// note: method [`create_tables_rw()`](Self::create_tables_rw()) is a simpler alternative.
     ///
     /// # Example:
     ///
     /// ```
     /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{DbtSchema, SimpleRustyStorage, traits::*}};
     /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
-    /// # let mut rusty_storage = SimpleRustyStorage::new(db);
-    /// # rusty_storage.restore_or_new();
+    /// let mut storage = SimpleRustyStorage::new(db);
+    /// storage.restore_or_new();
     ///
-    /// let ages = rusty_storage.schema.new_vec::<u64, u16>("ages");
-    /// let names = rusty_storage.schema.new_vec::<u64, String>("names");
-    /// let proceed = rusty_storage.schema.new_singleton::<bool>(12u64.into());
+    /// let ages = storage.schema.new_vec::<u64, u16>("ages");
+    /// let names = storage.schema.new_vec::<u64, String>("names");
+    /// let proceed = storage.schema.new_singleton::<bool>(12u64.into());
     ///
     /// let tables = (ages, names, proceed);
-    /// let atomic_tables = rusty_storage.schema.atomic_rw(tables);
+    /// let atomic_tables = storage.schema.atomic_rw(tables);
     ///
     /// // these writes happen atomically.
     /// atomic_tables.with_mut(|tables| {
@@ -204,20 +270,22 @@ impl<
 
     /// Wraps input of type `T` with a [`AtomicMutex`]
     ///
+    /// note: method [`create_tables_mutex()`](Self::create_tables_mutex()) is a simpler alternative.
+    ///
     /// # Example:
     ///
     /// ```
     /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{DbtSchema, SimpleRustyStorage, traits::*}};
     /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
-    /// # let mut rusty_storage = SimpleRustyStorage::new(db);
-    /// # rusty_storage.restore_or_new();
+    /// let mut storage = SimpleRustyStorage::new(db);
+    /// storage.restore_or_new();
     ///
-    /// let ages = rusty_storage.schema.new_vec::<u64, u16>("ages");
-    /// let names = rusty_storage.schema.new_vec::<u64, String>("names");
-    /// let proceed = rusty_storage.schema.new_singleton::<bool>(12u64.into());
+    /// let ages = storage.schema.new_vec::<u64, u16>("ages");
+    /// let names = storage.schema.new_vec::<u64, String>("names");
+    /// let proceed = storage.schema.new_singleton::<bool>(12u64.into());
     ///
     /// let tables = (ages, names, proceed);
-    /// let atomic_tables = rusty_storage.schema.atomic_mutex(tables);
+    /// let atomic_tables = storage.schema.atomic_mutex(tables);
     ///
     /// // these writes happen atomically.
     /// atomic_tables.with_mut(|tables| {

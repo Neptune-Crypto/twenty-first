@@ -1,7 +1,7 @@
 use super::traits::Atomic;
 use std::sync::{Arc, Mutex};
 
-/// An Arc<Mutex<T>> wrapper to make data thread-safe and easy to work with.
+/// An `Arc<Mutex<T>>` wrapper to make data thread-safe and easy to work with.
 ///
 /// # Example
 /// ```
