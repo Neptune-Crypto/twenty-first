@@ -294,8 +294,8 @@ impl Mul for CyclotomicRingElement {
     type Output = CyclotomicRingElement;
 
     /// Multiply two polynomials in the ring
-    /// Fp[X] / (X^64 + 1)
-    /// using coset-NTT.
+    /// `Fp[X] / (X^64 + 1)`
+    /// using `coset-NTT`.
     fn mul(self, rhs: Self) -> Self::Output {
         let mut lhs_coeffs = self.coefficients;
         let mut rhs_coeffs = rhs.coefficients;
