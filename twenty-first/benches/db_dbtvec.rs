@@ -4,10 +4,8 @@ use leveldb_sys::Compression;
 // use twenty_first::leveldb::database::cache::Cache;
 use twenty_first::leveldb::options::Options;
 use twenty_first::storage::level_db::DB;
-use twenty_first::util_types::storage_schema::{
-    traits::*, DbtVec, RustyKey, RustyValue, SimpleRustyStorage,
-};
-use twenty_first::util_types::storage_vec::{traits::*, Index};
+use twenty_first::util_types::storage_schema::{traits::*, DbtVec, SimpleRustyStorage};
+use twenty_first::util_types::storage_vec::traits::*;
 
 // These database bench tests are made with divan.
 //
@@ -77,10 +75,7 @@ fn value() -> Vec<u8> {
     (0..127).collect()
 }
 
-fn create_test_dbtvec() -> (
-    SimpleRustyStorage,
-    DbtVec<RustyKey, RustyValue, Index, Vec<u8>>,
-) {
+fn create_test_dbtvec() -> (SimpleRustyStorage, DbtVec<Vec<u8>>) {
     let db = DB::open_new_test_database(
         true,
         db_options(),
@@ -92,7 +87,7 @@ fn create_test_dbtvec() -> (
     )
     .unwrap();
     let mut storage = SimpleRustyStorage::new(db);
-    let vec = storage.schema.new_vec::<u64, Vec<u8>>("test-vector");
+    let vec = storage.schema.new_vec::<Vec<u8>>("test-vector");
     (storage, vec)
 }
 

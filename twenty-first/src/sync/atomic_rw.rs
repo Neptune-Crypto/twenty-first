@@ -114,6 +114,7 @@ impl<T> Atomic<T> for AtomicRw<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     // Verify (compile-time) that AtomicRw::with() and ::with_mut() accept mutable values.  (FnMut)

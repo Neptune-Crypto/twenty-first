@@ -151,7 +151,7 @@ mod tests {
         let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<S>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -276,7 +276,7 @@ mod tests {
         let new_db = DB::open_test_database(&db_path, true, None, None, None).unwrap();
 
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
-        let new_vector = new_rusty_storage.schema.new_vec::<u64, S>("test-vector");
+        let new_vector = new_rusty_storage.schema.new_vec::<S>("test-vector");
 
         // initialize
         new_rusty_storage.restore_or_new();
@@ -353,7 +353,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<S>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -406,7 +406,7 @@ mod tests {
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
         rusty_storage.restore_or_new();
-        let vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<S>("test-vector");
 
         // Generate initial index/value pairs.
         const TEST_LIST_LENGTH: u8 = 105;
@@ -489,7 +489,7 @@ mod tests {
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
         rusty_storage.restore_or_new();
-        let vector = rusty_storage.schema.new_vec::<u64, S>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<S>("test-vector");
 
         // Generate initial index/value pairs.
         const TEST_LIST_LENGTH: u8 = 105;
@@ -555,7 +555,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let persisted_vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+        let persisted_vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // Insert 1000 elements
         let mut rng = rand::thread_rng();
@@ -661,8 +661,8 @@ mod tests {
         let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector1 = rusty_storage.schema.new_vec::<u64, S>("test-vector1");
-        let vector2 = rusty_storage.schema.new_vec::<u64, S>("test-vector2");
+        let vector1 = rusty_storage.schema.new_vec::<S>("test-vector1");
+        let vector2 = rusty_storage.schema.new_vec::<S>("test-vector2");
         let singleton = rusty_storage
             .schema
             .new_singleton::<S>(RustyKey([1u8; 1].to_vec()));
@@ -766,8 +766,8 @@ mod tests {
         // re-open DB / restore from disk
         let new_db = DB::open_test_database(&db_path, true, None, None, None).unwrap();
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
-        let new_vector1 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector1");
-        let new_vector2 = new_rusty_storage.schema.new_vec::<u64, S>("test-vector2");
+        let new_vector1 = new_rusty_storage.schema.new_vec::<S>("test-vector1");
+        let new_vector2 = new_rusty_storage.schema.new_vec::<S>("test-vector2");
         new_rusty_storage.restore_or_new();
         let new_singleton = new_rusty_storage
             .schema
@@ -845,7 +845,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -863,7 +863,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -881,7 +881,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -898,7 +898,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -915,7 +915,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -934,7 +934,7 @@ mod tests {
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
         rusty_storage.restore_or_new();
-        let vector = rusty_storage.schema.new_vec::<u64, u64>("test-vector");
+        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // Generate initial index/value pairs.
         const TEST_LIST_LENGTH: u64 = 105;
@@ -989,8 +989,8 @@ mod tests {
         use crate::sync::AtomicRw;
         use std::thread;
 
-        type TestVec = DbtVec<RustyKey, RustyValue, Index, u64>;
-        type TestSingleton = DbtSingleton<RustyKey, RustyValue, u64>;
+        type TestVec = DbtVec<u64>;
+        type TestSingleton = DbtSingleton<u64>;
 
         // pub fn prepare_concurrency_test_singleton(singleton: &impl StorageSingleton<u64>) {
         //     singleton.set(42);
@@ -1013,9 +1013,7 @@ mod tests {
                 // open new DB that will be removed on close.
                 let db = DB::open_new_test_database(true, None, None, None).unwrap();
                 let mut rusty_storage = SimpleRustyStorage::new(db);
-                rusty_storage
-                    .schema
-                    .new_vec::<Index, u64>(&format!("atomicity-test-vector"))
+                rusty_storage.schema.new_vec::<u64>("atomicity-test-vector")
             }
 
             #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
@@ -1264,8 +1262,8 @@ mod tests {
                 storage.schema.create_tables_rw(|schema| {
                     (0..num)
                         .map(|i| {
-                            let vec = schema
-                                .new_vec::<Index, u64>(&format!("atomicity-test-vector #{}", i));
+                            let vec =
+                                schema.new_vec::<u64>(&format!("atomicity-test-vector #{}", i));
                             for j in 0u64..300 {
                                 vec.push(j);
                             }
@@ -1284,7 +1282,7 @@ mod tests {
                     .map(|i| {
                         let vec = rusty_storage
                             .schema
-                            .new_vec::<Index, u64>(&format!("atomicity-test-vector #{}", i));
+                            .new_vec::<u64>(&format!("atomicity-test-vector #{}", i));
                         for j in 0u64..300 {
                             vec.push(j);
                         }

@@ -72,7 +72,6 @@ impl<V> StorageVecReads<V> for DbtVec<V>
 where
     V: Clone + Debug,
     V: From<RustyValue>,
-    Index: From<V> + From<u64>,
 {
     #[inline]
     fn is_empty(&self) -> bool {
@@ -162,7 +161,6 @@ where
 impl<V> StorageVecImmutableWrites<V> for DbtVec<V>
 where
     V: Clone + Debug + From<RustyValue>,
-    Index: From<V> + From<u64>,
 {
     // type LockedData = DbtVecPrivate<V>;
 
@@ -192,18 +190,11 @@ where
     }
 }
 
-impl<V> StorageVec<V> for DbtVec<V>
-where
-    V: Clone + Debug + From<RustyValue>,
-    Index: From<V> + From<u64>,
-{
-}
+impl<V> StorageVec<V> for DbtVec<V> where V: Clone + Debug + From<RustyValue> {}
 
 impl<V> DbTable for DbtVec<V>
 where
     V: Clone,
-    Index: From<V>,
-    V: From<Index>,
     V: From<RustyValue>,
     RustyValue: From<V>,
 {
@@ -265,11 +256,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::super::super::storage_vec::traits::tests as traits_tests;
-    use super::super::{RustyKey, RustyValue, SimpleRustyStorage};
+    use super::super::SimpleRustyStorage;
     use super::*;
     use crate::storage::level_db::DB;
 
-    fn gen_concurrency_test_vec() -> DbtVec<RustyKey, RustyValue, u64> {
+    fn gen_concurrency_test_vec() -> DbtVec<u64> {
         // open new DB that will be removed on close.
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
         let mut rusty_storage = SimpleRustyStorage::new(db);

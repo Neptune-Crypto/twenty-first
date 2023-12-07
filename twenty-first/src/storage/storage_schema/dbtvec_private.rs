@@ -100,7 +100,6 @@ where
 impl<V> StorageVecReads<V> for DbtVecPrivate<V>
 where
     V: Clone + Debug,
-    Index: From<V> + From<u64>,
     V: From<RustyValue>,
 {
     #[inline]
@@ -278,7 +277,6 @@ where
 impl<V> StorageVecMutableWrites<V> for DbtVecPrivate<V>
 where
     V: Clone + Debug,
-    Index: From<V> + From<u64>,
     V: From<RustyValue>,
 {
     #[inline]

@@ -40,8 +40,8 @@ use std::sync::Arc;
 /// storage.restore_or_new();
 ///
 /// let tables = (
-///     storage.schema.new_vec::<u64, u16>("ages"),
-///     storage.schema.new_vec::<u64, String>("names"),
+///     storage.schema.new_vec::<u16>("ages"),
+///     storage.schema.new_vec::<String>("names"),
 ///     storage.schema.new_singleton::<bool>(12u64.into())
 /// );
 ///
@@ -74,8 +74,8 @@ use std::sync::Arc;
 ///
 /// let atomic_tables = storage.schema.create_tables_rw(|s| {
 ///     (
-///         s.new_vec::<u64, u16>("ages"),
-///         s.new_vec::<u64, String>("names"),
+///         s.new_vec::<u16>("ages"),
+///         s.new_vec::<String>("names"),
 ///         s.new_singleton::<bool>(12u64.into())
 ///     )
 /// });
@@ -162,8 +162,8 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     ///
     /// let atomic_tables = storage.schema.create_tables_rw(|s| {
     ///     (
-    ///         s.new_vec::<u64, u16>("ages"),
-    ///         s.new_vec::<u64, String>("names"),
+    ///         s.new_vec::<u16>("ages"),
+    ///         s.new_vec::<String>("names"),
     ///         s.new_singleton::<bool>(12u64.into())
     ///     )
     /// });
@@ -200,8 +200,8 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     ///
     /// let atomic_tables = storage.schema.create_tables_mutex(|s| {
     ///     (
-    ///         s.new_vec::<u64, u16>("ages"),
-    ///         s.new_vec::<u64, String>("names"),
+    ///         s.new_vec::<u16>("ages"),
+    ///         s.new_vec::<String>("names"),
     ///         s.new_singleton::<bool>(12u64.into())
     ///     )
     /// });
@@ -233,8 +233,8 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// let mut storage = SimpleRustyStorage::new(db);
     /// storage.restore_or_new();
     ///
-    /// let ages = storage.schema.new_vec::<u64, u16>("ages");
-    /// let names = storage.schema.new_vec::<u64, String>("names");
+    /// let ages = storage.schema.new_vec::<u16>("ages");
+    /// let names = storage.schema.new_vec::<String>("names");
     /// let proceed = storage.schema.new_singleton::<bool>(12u64.into());
     ///
     /// let tables = (ages, names, proceed);
@@ -263,8 +263,8 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// let mut storage = SimpleRustyStorage::new(db);
     /// storage.restore_or_new();
     ///
-    /// let ages = storage.schema.new_vec::<u64, u16>("ages");
-    /// let names = storage.schema.new_vec::<u64, String>("names");
+    /// let ages = storage.schema.new_vec::<u16>("ages");
+    /// let names = storage.schema.new_vec::<String>("names");
     /// let proceed = storage.schema.new_singleton::<bool>(12u64.into());
     ///
     /// let tables = (ages, names, proceed);
