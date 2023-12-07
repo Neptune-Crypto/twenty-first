@@ -1,19 +1,22 @@
+use super::super::storage_vec::Index;
+use super::{RustyKey, RustyValue};
+
 /// Database write operations
 #[derive(Debug, Clone)]
-pub enum WriteOperation<K, V> {
+pub enum WriteOperation {
     /// write operation
-    Write(K, V),
+    Write(RustyKey, RustyValue),
     /// delete operation
-    Delete(K),
+    Delete(RustyKey),
 }
 
 /// Vector write operations
 #[derive(Debug, Clone)]
-pub enum VecWriteOperation<Index, T> {
+pub enum VecWriteOperation<V> {
     /// overwrite, aka set operation
-    OverWrite((Index, T)),
+    OverWrite((Index, V)),
     /// push to end operation
-    Push(T),
+    Push(V),
     /// pop from end operation
     Pop,
 }

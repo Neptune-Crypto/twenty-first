@@ -1,31 +1,30 @@
 use super::traits::*;
+use super::RustyKey;
 use std::sync::Arc;
 
 // note: no locking is required in `DbtSingletonPrivate` because locking
 // is performed in the `DbtSingleton` public wrapper.
-pub(crate) struct DbtSingletonPrivate<ParentKey, ParentValue, T> {
-    pub(super) current_value: T,
-    pub(super) old_value: T,
-    pub(super) key: ParentKey,
-    pub(super) reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Sync + Send>,
+pub(crate) struct DbtSingletonPrivate<V> {
+    pub(super) current_value: V,
+    pub(super) old_value: V,
+    pub(super) key: RustyKey,
+    pub(super) reader: Arc<dyn StorageReader + Sync + Send>,
 }
 
-impl<ParentKey, ParentValue, T> StorageSingletonReads<T>
-    for DbtSingletonPrivate<ParentKey, ParentValue, T>
+impl<V> StorageSingletonReads<V> for DbtSingletonPrivate<V>
 where
-    T: Clone + From<ParentValue>,
+    V: Clone + From<V>,
 {
-    fn get(&self) -> T {
+    fn get(&self) -> V {
         self.current_value.clone()
     }
 }
 
-impl<ParentKey, ParentValue, T> StorageSingletonMutableWrites<T>
-    for DbtSingletonPrivate<ParentKey, ParentValue, T>
+impl<V> StorageSingletonMutableWrites<V> for DbtSingletonPrivate<V>
 where
-    T: Clone + From<ParentValue>,
+    V: Clone + From<V>,
 {
-    fn set(&mut self, t: T) {
-        self.current_value = t;
+    fn set(&mut self, v: V) {
+        self.current_value = v;
     }
 }

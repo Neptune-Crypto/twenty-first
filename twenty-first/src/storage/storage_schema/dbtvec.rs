@@ -1,6 +1,7 @@
-use super::super::storage_vec::{traits::*, Index};
+use super::super::storage_vec::traits::*;
+use super::super::storage_vec::Index;
 use super::dbtvec_private::DbtVecPrivate;
-use super::{traits::*, VecWriteOperation, WriteOperation};
+use super::{traits::*, RustyValue, VecWriteOperation, WriteOperation};
 use std::{
     fmt::Debug,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -19,11 +20,11 @@ use std::{
 /// `DbtSingleton` is a NewType around Arc<RwLock<..>>.  Thus it
 /// can be cheaply cloned to create a reference as if it were an
 /// Arc.
-pub struct DbtVec<K, V, Index, T> {
-    inner: Arc<RwLock<DbtVecPrivate<K, V, Index, T>>>,
+pub struct DbtVec<V> {
+    inner: Arc<RwLock<DbtVecPrivate<V>>>,
 }
 
-impl<K, V, T> Clone for DbtVec<K, V, Index, T> {
+impl<V> Clone for DbtVec<V> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -31,22 +32,18 @@ impl<K, V, T> Clone for DbtVec<K, V, Index, T> {
     }
 }
 
-impl<K, V, T> DbtVec<K, V, Index, T>
+impl<V> DbtVec<V>
 where
-    K: From<(K, K)>,
-    K: From<u8>,
-    K: From<Index>,
-    Index: From<V> + From<u64> + Clone,
-    T: Clone,
+    V: Clone,
 {
     // DbtVec cannot be instantiated directly outside of this crate.
     #[inline]
     pub(crate) fn new(
-        reader: Arc<dyn StorageReader<K, V> + Send + Sync>,
+        reader: Arc<dyn StorageReader + Send + Sync>,
         key_prefix: u8,
         name: &str,
     ) -> Self {
-        let vec = DbtVecPrivate::<K, V, Index, T>::new(reader, key_prefix, name);
+        let vec = DbtVecPrivate::<V>::new(reader, key_prefix, name);
 
         Self {
             inner: Arc::new(RwLock::new(vec)),
@@ -54,8 +51,8 @@ where
     }
 }
 
-impl<K, V, T> StorageVecRwLock<T> for DbtVec<K, V, Index, T> {
-    type LockedData = DbtVecPrivate<K, V, Index, T>;
+impl<V> StorageVecRwLock<V> for DbtVec<V> {
+    type LockedData = DbtVecPrivate<V>;
 
     #[inline]
     fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
@@ -71,13 +68,10 @@ impl<K, V, T> StorageVecRwLock<T> for DbtVec<K, V, Index, T> {
     }
 }
 
-impl<K, V, T> StorageVecReads<T> for DbtVec<K, V, Index, T>
+impl<V> StorageVecReads<V> for DbtVec<V>
 where
-    K: From<Index>,
-    V: From<T>,
-    T: Clone + From<V> + Debug,
-    K: From<(K, K)>,
-    K: From<u8>,
+    V: Clone + Debug,
+    V: From<RustyValue>,
     Index: From<V> + From<u64>,
 {
     #[inline]
@@ -91,14 +85,14 @@ where
     }
 
     #[inline]
-    fn get(&self, index: Index) -> T {
+    fn get(&self, index: Index) -> V {
         self.read_lock().get(index)
     }
 
     // this fn is here to satisfy the trait but is actually
     // implemented by DbtVec
     // todo
-    // fn iter_keys<'a>(&'a self) -> Box<dyn Iterator<Item = Index> + '_> {
+    // fn iter_keys<'a>(&'a self) -> Box<dyn Iterator<Item = K> + '_> {
     //     unreachable!()
     // }
 
@@ -106,7 +100,7 @@ where
     fn many_iter<'a>(
         &'a self,
         indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+    ) -> Box<dyn Iterator<Item = (Index, V)> + '_> {
         let inner = self.read_lock();
 
         Box::new(indices.into_iter().map(move |i| {
@@ -123,7 +117,7 @@ where
             } else {
                 let key = inner.get_index_key(i);
                 let db_element = inner.reader.get(key).unwrap();
-                (i, T::from(db_element))
+                (i, V::from(db_element))
             }
         }))
     }
@@ -132,7 +126,7 @@ where
     fn many_iter_values<'a>(
         &'a self,
         indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> Box<dyn Iterator<Item = T> + '_> {
+    ) -> Box<dyn Iterator<Item = V> + '_> {
         let inner = self.read_lock();
 
         Box::new(indices.into_iter().map(move |i| {
@@ -149,50 +143,46 @@ where
             } else {
                 let key = inner.get_index_key(i);
                 let db_element = inner.reader.get(key).unwrap();
-                T::from(db_element)
+                V::from(db_element)
             }
         }))
     }
 
     #[inline]
-    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+    fn get_many(&self, indices: &[Index]) -> Vec<V> {
         self.read_lock().get_many(indices)
     }
 
     #[inline]
-    fn get_all(&self) -> Vec<T> {
+    fn get_all(&self) -> Vec<V> {
         self.read_lock().get_all()
     }
 }
 
-impl<K, V, T> StorageVecImmutableWrites<T> for DbtVec<K, V, Index, T>
+impl<V> StorageVecImmutableWrites<V> for DbtVec<V>
 where
-    K: From<Index>,
-    V: From<T>,
-    T: Clone + From<V> + Debug,
-    K: From<(K, K)>,
-    K: From<u8>,
+    V: Clone + Debug + From<RustyValue>,
     Index: From<V> + From<u64>,
 {
-    // type LockedData = DbtVecPrivate<K, V, Index, T>;
+    // type LockedData = DbtVecPrivate<V>;
 
     #[inline]
-    fn set(&self, index: Index, value: T) {
+    fn set(&self, index: Index, value: V) {
         self.write_lock().set(index, value)
     }
 
     #[inline]
-    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, V)>) {
         self.write_lock().set_many(key_vals)
     }
 
     #[inline]
-    fn pop(&self) -> Option<T> {
+    fn pop(&self) -> Option<V> {
         self.write_lock().pop()
     }
 
     #[inline]
-    fn push(&self, value: T) {
+    fn push(&self, value: V) {
         self.write_lock().push(value)
     }
 
@@ -202,31 +192,23 @@ where
     }
 }
 
-impl<K, V, T> StorageVec<T> for DbtVec<K, V, Index, T>
+impl<V> StorageVec<V> for DbtVec<V>
 where
-    K: From<Index>,
-    V: From<T>,
-    T: Clone + From<V> + Debug,
-    K: From<(K, K)>,
-    K: From<u8>,
+    V: Clone + Debug + From<RustyValue>,
     Index: From<V> + From<u64>,
 {
 }
 
-impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
-    for DbtVec<ParentKey, ParentValue, Index, T>
+impl<V> DbTable for DbtVec<V>
 where
-    ParentKey: From<Index>,
-    ParentValue: From<T>,
-    T: Clone,
-    T: From<ParentValue>,
-    ParentKey: From<(ParentKey, ParentKey)>,
-    ParentKey: From<u8>,
-    Index: From<ParentValue>,
-    ParentValue: From<Index>,
+    V: Clone,
+    Index: From<V>,
+    V: From<Index>,
+    V: From<RustyValue>,
+    RustyValue: From<V>,
 {
     /// Collect all added elements that have not yet been persisted
-    fn pull_queue(&self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
+    fn pull_queue(&self) -> Vec<WriteOperation> {
         let mut lock = self.write_lock();
 
         let maybe_original_length = lock.persisted_length();
@@ -238,12 +220,12 @@ where
             match write_element {
                 VecWriteOperation::OverWrite((i, t)) => {
                     let key = lock.get_index_key(i);
-                    queue.push(WriteOperation::Write(key, Into::<ParentValue>::into(t)));
+                    queue.push(WriteOperation::Write(key, t.into()));
                 }
                 VecWriteOperation::Push(t) => {
                     let key = lock.get_index_key(length);
                     length += 1;
-                    queue.push(WriteOperation::Write(key, Into::<ParentValue>::into(t)));
+                    queue.push(WriteOperation::Write(key, t.into()));
                 }
                 VecWriteOperation::Pop => {
                     let key = lock.get_index_key(length - 1);
@@ -254,12 +236,8 @@ where
         }
 
         if original_length != length || maybe_original_length.is_none() {
-            let key =
-                DbtVecPrivate::<ParentKey, ParentValue, Index, T>::get_length_key(lock.key_prefix);
-            queue.push(WriteOperation::Write(
-                key,
-                Into::<ParentValue>::into(length),
-            ));
+            let key = DbtVecPrivate::<V>::get_length_key(lock.key_prefix);
+            queue.push(WriteOperation::Write(key, length.into()));
         }
 
         lock.cache.clear();
@@ -273,7 +251,7 @@ where
 
         if let Some(length) = lock
             .reader
-            .get(DbtVecPrivate::<ParentKey, ParentValue, Index, T>::get_length_key(lock.key_prefix))
+            .get(DbtVecPrivate::<V>::get_length_key(lock.key_prefix))
         {
             lock.current_length = Some(length.into());
         } else {
@@ -291,13 +269,11 @@ mod tests {
     use super::*;
     use crate::storage::level_db::DB;
 
-    fn gen_concurrency_test_vec() -> DbtVec<RustyKey, RustyValue, Index, u64> {
+    fn gen_concurrency_test_vec() -> DbtVec<RustyKey, RustyValue, u64> {
         // open new DB that will be removed on close.
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        rusty_storage
-            .schema
-            .new_vec::<Index, u64>("atomicity-test-vector")
+        rusty_storage.schema.new_vec::<u64>("atomicity-test-vector")
     }
 
     #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]

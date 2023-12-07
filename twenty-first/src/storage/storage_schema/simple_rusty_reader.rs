@@ -10,7 +10,7 @@ pub struct SimpleRustyReader {
     pub(super) db: DB,
 }
 
-impl StorageReader<RustyKey, RustyValue> for SimpleRustyReader {
+impl StorageReader for SimpleRustyReader {
     #[inline]
     fn get(&self, key: RustyKey) -> Option<RustyValue> {
         self.db

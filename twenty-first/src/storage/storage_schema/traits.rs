@@ -3,13 +3,13 @@
 //! It is recommended to wildcard import these with
 //! `use twenty_first::storage::storage_vec::traits::*`
 
-use super::WriteOperation;
+use super::{RustyKey, RustyValue, WriteOperation};
 pub use crate::leveldb::database::key::IntoLevelDBKey;
 
 /// Defines table interface for types used by [`super::DbtSchema`]
-pub trait DbTable<ParentKey, ParentValue> {
+pub trait DbTable {
     /// Retrieve all unwritten operations and empty write-queue
-    fn pull_queue(&self) -> Vec<WriteOperation<ParentKey, ParentValue>>;
+    fn pull_queue(&self) -> Vec<WriteOperation>;
     /// Restore existing table if present, else create a new one
     fn restore_or_new(&self);
 }
@@ -50,16 +50,16 @@ where
 }
 
 /// Defines storage reader interface
-pub trait StorageReader<ParentKey, ParentValue> {
+pub trait StorageReader {
     /// Return multiple values from storage, in the same order as the input keys
-    fn get_many(&self, keys: &[ParentKey]) -> Vec<Option<ParentValue>>;
+    fn get_many(&self, keys: &[RustyKey]) -> Vec<Option<RustyValue>>;
 
     /// Return a single value from storage
-    fn get(&self, key: ParentKey) -> Option<ParentValue>;
+    fn get(&self, key: RustyKey) -> Option<RustyValue>;
 }
 
 /// Defines storage writer interface
-pub trait StorageWriter<ParentKey, ParentValue> {
+pub trait StorageWriter {
     /// Write data to storage
     fn persist(&self);
     /// restore, or new

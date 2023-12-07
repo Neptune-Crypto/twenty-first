@@ -3,7 +3,9 @@ use std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
-use super::{dbtsingleton_private::DbtSingletonPrivate, traits::*, WriteOperation};
+use super::{
+    dbtsingleton_private::DbtSingletonPrivate, traits::*, RustyKey, RustyValue, WriteOperation,
+};
 
 /// Singleton type created by [`super::DbtSchema`]
 ///
@@ -18,13 +20,13 @@ use super::{dbtsingleton_private::DbtSingletonPrivate, traits::*, WriteOperation
 /// `DbtSingleton` is a NewType around Arc<RwLock<..>>.  Thus it
 /// can be cheaply cloned to create a reference as if it were an
 /// Arc.
-pub struct DbtSingleton<K, V, T> {
+pub struct DbtSingleton<V> {
     // note: Arc is not needed, because we never hand out inner to anyone.
-    inner: Arc<RwLock<DbtSingletonPrivate<K, V, T>>>,
+    inner: Arc<RwLock<DbtSingletonPrivate<V>>>,
 }
 
 // We manually impl Clone so that callers can make reference clones.
-impl<K, V, T> Clone for DbtSingleton<K, V, T> {
+impl<V> Clone for DbtSingleton<V> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -32,14 +34,14 @@ impl<K, V, T> Clone for DbtSingleton<K, V, T> {
     }
 }
 
-impl<K, V, T> DbtSingleton<K, V, T>
+impl<V> DbtSingleton<V>
 where
-    T: Default,
+    V: Default,
 {
     // DbtSingleton can not be instantiated directly outside of this crate.
     #[inline]
-    pub(crate) fn new(key: K, reader: Arc<dyn StorageReader<K, V> + Sync + Send>) -> Self {
-        let singleton = DbtSingletonPrivate::<K, V, T> {
+    pub(crate) fn new(key: RustyKey, reader: Arc<dyn StorageReader + Sync + Send>) -> Self {
+        let singleton = DbtSingletonPrivate::<V> {
             current_value: Default::default(),
             old_value: Default::default(),
             key,
@@ -52,7 +54,7 @@ where
 
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
-    pub(super) fn read_lock(&self) -> RwLockReadGuard<'_, DbtSingletonPrivate<K, V, T>> {
+    pub(super) fn read_lock(&self) -> RwLockReadGuard<'_, DbtSingletonPrivate<V>> {
         self.inner
             .read()
             .expect("should have acquired read lock for DbtSingletonPrivate")
@@ -60,44 +62,45 @@ where
 
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
-    pub(super) fn write_lock(&self) -> RwLockWriteGuard<'_, DbtSingletonPrivate<K, V, T>> {
+    pub(super) fn write_lock(&self) -> RwLockWriteGuard<'_, DbtSingletonPrivate<V>> {
         self.inner
             .write()
             .expect("should have acquired write lock for DbtSingletonPrivate")
     }
 }
 
-impl<K, V, T> StorageSingletonReads<T> for DbtSingleton<K, V, T>
+impl<V> StorageSingletonReads<V> for DbtSingleton<V>
 where
-    T: Clone + From<V> + Default,
+    V: Clone + From<V> + Default,
 {
     #[inline]
-    fn get(&self) -> T {
+    fn get(&self) -> V {
         self.read_lock().current_value.clone()
     }
 }
 
-impl<K, V, T> StorageSingletonImmutableWrites<T> for DbtSingleton<K, V, T>
+impl<V> StorageSingletonImmutableWrites<V> for DbtSingleton<V>
 where
-    T: Clone + From<V> + Default,
+    V: Clone + From<V> + Default,
+    V: From<RustyValue>,
 {
     #[inline]
-    fn set(&self, t: T) {
+    fn set(&self, t: V) {
         self.write_lock().current_value = t;
     }
 }
 
-impl<K, V, T> StorageSingleton<T> for DbtSingleton<K, V, T> where T: Clone + From<V> + Default {}
+impl<V> StorageSingleton<V> for DbtSingleton<V> where V: Clone + From<V> + Default + From<RustyValue>
+{}
 
-impl<ParentKey, ParentValue, T> DbTable<ParentKey, ParentValue>
-    for DbtSingleton<ParentKey, ParentValue, T>
+impl<V> DbTable for DbtSingleton<V>
 where
-    T: Eq + Clone + Default + From<ParentValue>,
-    ParentValue: From<T> + Debug,
-    ParentKey: Clone,
+    V: Eq + Clone + Default + Debug,
+    V: From<RustyValue>,
+    RustyValue: From<V>,
 {
     #[inline]
-    fn pull_queue(&self) -> Vec<WriteOperation<ParentKey, ParentValue>> {
+    fn pull_queue(&self) -> Vec<WriteOperation> {
         let mut lock = self.write_lock();
 
         if lock.current_value == lock.old_value {
@@ -116,7 +119,7 @@ where
         let mut lock = self.write_lock();
         lock.current_value = match lock.reader.get(lock.key.clone()) {
             Some(value) => value.into(),
-            None => T::default(),
+            None => V::default(),
         }
     }
 }

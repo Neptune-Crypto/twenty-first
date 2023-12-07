@@ -11,7 +11,7 @@ pub struct RustyReader {
     pub db: DB,
 }
 
-impl StorageReader<RustyKey, RustyValue> for RustyReader {
+impl StorageReader for RustyReader {
     #[inline]
     fn get(&self, key: RustyKey) -> Option<RustyValue> {
         self.db

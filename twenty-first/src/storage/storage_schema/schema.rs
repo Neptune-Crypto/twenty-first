@@ -1,5 +1,5 @@
-use super::super::storage_vec::Index;
-use super::{traits::*, DbtSingleton, DbtVec};
+// use super::super::storage_vec::Index;
+use super::{traits::*, DbtSingleton, DbtVec, RustyKey, RustyValue};
 use crate::sync::{AtomicMutex, AtomicRw};
 use std::sync::Arc;
 
@@ -87,28 +87,19 @@ use std::sync::Arc;
 ///     tables.2.set(true);
 /// });
 /// ```
-pub struct DbtSchema<
-    ParentKey,
-    ParentValue,
-    Reader: StorageReader<ParentKey, ParentValue> + Send + Sync,
-> {
+pub struct DbtSchema<Reader: StorageReader + Send + Sync> {
     /// These are the tables known by this `DbtSchema` instance.
     ///
     /// Implementor(s) of [`StorageWriter`] will iterate over these
     /// tables, collect the pending operations, and write them
     /// atomically to the DB.
-    pub tables: Vec<Box<dyn DbTable<ParentKey, ParentValue> + Send + Sync>>,
+    pub tables: Vec<Box<dyn DbTable + Send + Sync>>,
 
     /// Database Reader
     pub reader: Arc<Reader>,
 }
 
-impl<
-        ParentKey,
-        ParentValue,
-        Reader: StorageReader<ParentKey, ParentValue> + 'static + Sync + Send,
-    > DbtSchema<ParentKey, ParentValue, Reader>
-{
+impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// Create a new DbtVec
     ///
     /// The `DbtSchema` will keep a reference to the `DbtVec`. In this way,
@@ -117,22 +108,16 @@ impl<
     ///
     /// Atomicity: see [`DbtSchema`]
     #[inline]
-    pub fn new_vec<I, T>(&mut self, name: &str) -> DbtVec<ParentKey, ParentValue, Index, T>
+    pub fn new_vec<V>(&mut self, name: &str) -> DbtVec<V>
     where
-        ParentKey: From<Index> + 'static,
-        ParentValue: From<T> + 'static,
-        T: Clone + From<ParentValue> + 'static,
-        ParentKey: From<(ParentKey, ParentKey)>,
-        ParentKey: From<u8>,
-        Index: From<ParentValue>,
-        ParentValue: From<Index>,
-        Index: From<u64> + 'static,
-        DbtVec<ParentKey, ParentValue, Index, T>: DbTable<ParentKey, ParentValue> + Send + Sync,
+        V: Clone + From<RustyValue> + 'static,
+        RustyValue: From<V>,
+        DbtVec<V>: DbTable + Send + Sync,
     {
         assert!(self.tables.len() < 255);
         let reader = self.reader.clone();
         let key_prefix = self.tables.len() as u8;
-        let vector = DbtVec::<ParentKey, ParentValue, Index, T>::new(reader, key_prefix, name);
+        let vector = DbtVec::<V>::new(reader, key_prefix, name);
 
         self.tables.push(Box::new(vector.clone()));
         vector
@@ -149,15 +134,13 @@ impl<
     ///
     /// Atomicity: see [`DbtSchema`]
     #[inline]
-    pub fn new_singleton<S>(&mut self, key: ParentKey) -> DbtSingleton<ParentKey, ParentValue, S>
+    pub fn new_singleton<V>(&mut self, key: RustyKey) -> DbtSingleton<V>
     where
-        S: Default + Eq + Clone + 'static,
-        ParentKey: 'static,
-        ParentValue: From<S> + 'static,
-        ParentKey: From<(ParentKey, ParentKey)> + From<u8>,
-        DbtSingleton<ParentKey, ParentValue, S>: DbTable<ParentKey, ParentValue> + Send + Sync,
+        V: Default + Clone + From<RustyValue> + 'static,
+        RustyValue: From<V>,
+        DbtSingleton<V>: DbTable + Send + Sync,
     {
-        let singleton = DbtSingleton::<ParentKey, ParentValue, S>::new(key, self.reader.clone());
+        let singleton = DbtSingleton::<V>::new(key, self.reader.clone());
         self.tables.push(Box::new(singleton.clone()));
         singleton
     }

@@ -1,5 +1,7 @@
-use super::super::storage_vec::{traits::*, Index};
+use super::super::storage_vec::traits::*;
+use super::super::storage_vec::Index;
 use super::{traits::StorageReader, VecWriteOperation};
+use super::{RustyKey, RustyValue};
 use itertools::Itertools;
 use std::{
     collections::{HashMap, VecDeque},
@@ -9,28 +11,24 @@ use std::{
 
 // note: no locking is required in `DbtVecPrivate` because locking
 // is performed in the `DbtVec` public wrapper.
-pub struct DbtVecPrivate<ParentKey, ParentValue, Index, T> {
-    pub(super) reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
+pub struct DbtVecPrivate<V> {
+    pub(super) reader: Arc<dyn StorageReader + Send + Sync>,
     pub(super) current_length: Option<Index>,
     pub(super) key_prefix: u8,
-    pub(super) write_queue: VecDeque<VecWriteOperation<Index, T>>,
-    pub(super) cache: HashMap<Index, T>,
+    pub(super) write_queue: VecDeque<VecWriteOperation<V>>,
+    pub(super) cache: HashMap<Index, V>,
     pub(super) name: String,
 }
 
-impl<ParentKey, ParentValue, T> DbtVecPrivate<ParentKey, ParentValue, Index, T>
+impl<V> DbtVecPrivate<V>
 where
-    ParentKey: From<(ParentKey, ParentKey)>,
-    ParentKey: From<u8>,
-    ParentKey: From<Index>,
-    Index: From<ParentValue> + From<u64> + Clone,
-    T: Clone,
+    V: Clone,
 {
-    // Return the key of ParentKey type used to store the length of the vector
+    // Return the key of K type used to store the length of the vector
     #[inline]
-    pub(super) fn get_length_key(key_prefix: u8) -> ParentKey {
-        let const_length_key: ParentKey = 0u8.into();
-        let key_prefix_key: ParentKey = key_prefix.into();
+    pub(super) fn get_length_key(key_prefix: u8) -> RustyKey {
+        let const_length_key: RustyKey = 0u8.into();
+        let key_prefix_key: RustyKey = key_prefix.into();
 
         // This concatenates prefix + length (0u8) to form the
         // real Key as used in LevelDB
@@ -45,11 +43,11 @@ where
             .map(|v| v.into())
     }
 
-    /// Return the key of ParentKey type used to store the element at a given index of Index type
+    /// Return the key of K type used to store the element at a given index of Index type
     #[inline]
-    pub(super) fn get_index_key(&self, index: Index) -> ParentKey {
-        let key_prefix_key: ParentKey = self.key_prefix.into();
-        let index_key: ParentKey = index.into();
+    pub(super) fn get_index_key(&self, index: Index) -> RustyKey {
+        let key_prefix_key: RustyKey = self.key_prefix.into();
+        let index_key: RustyKey = index.into();
 
         // This concatenates prefix + index to form the
         // real Key as used in LevelDB
@@ -58,7 +56,7 @@ where
 
     #[inline]
     pub(crate) fn new(
-        reader: Arc<dyn StorageReader<ParentKey, ParentValue> + Send + Sync>,
+        reader: Arc<dyn StorageReader + Send + Sync>,
         key_prefix: u8,
         name: &str,
     ) -> Self {
@@ -75,7 +73,7 @@ where
     }
 
     #[inline]
-    fn write_op_overwrite(&mut self, index: Index, value: T) {
+    fn write_op_overwrite(&mut self, index: Index, value: V) {
         self.cache.insert(index, value.clone());
 
         // note: benchmarks have revealed this code to slow down
@@ -99,15 +97,11 @@ where
     }
 }
 
-impl<ParentKey, ParentValue, T> StorageVecReads<T>
-    for DbtVecPrivate<ParentKey, ParentValue, Index, T>
+impl<V> StorageVecReads<V> for DbtVecPrivate<V>
 where
-    ParentKey: From<Index>,
-    ParentValue: From<T>,
-    T: Clone + From<ParentValue> + Debug,
-    ParentKey: From<(ParentKey, ParentKey)>,
-    ParentKey: From<u8>,
-    Index: From<ParentValue> + From<u64>,
+    V: Clone + Debug,
+    Index: From<V> + From<u64>,
+    V: From<RustyValue>,
 {
     #[inline]
     fn is_empty(&self) -> bool {
@@ -121,7 +115,7 @@ where
     }
 
     #[inline]
-    fn get(&self, index: Index) -> T {
+    fn get(&self, index: Index) -> V {
         // Disallow getting values out-of-bounds
 
         assert!(
@@ -141,7 +135,7 @@ where
         }
 
         // then try persistent storage
-        let key: ParentKey = self.get_index_key(index);
+        let key: RustyKey = self.get_index_key(index);
         let val = self.reader.get(key).unwrap_or_else(|| {
             panic!(
                 "Element with index {index} does not exist in {}. This should not happen",
@@ -154,7 +148,7 @@ where
     // this fn is here to satisfy the trait but is actually
     // implemented by DbtVec
     // todo
-    // fn iter_keys<'a>(&'a self) -> Box<dyn Iterator<Item = Index> + '_> {
+    // fn iter_keys<'a>(&'a self) -> Box<dyn Iterator<Item = K> + '_> {
     //     unreachable!()
     // }
 
@@ -163,7 +157,7 @@ where
     fn many_iter<'a>(
         &'a self,
         _indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
+    ) -> Box<dyn Iterator<Item = (Index, V)> + '_> {
         unreachable!()
     }
 
@@ -172,14 +166,14 @@ where
     fn many_iter_values<'a>(
         &'a self,
         _indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> Box<dyn Iterator<Item = T> + '_> {
+    ) -> Box<dyn Iterator<Item = V> + '_> {
         unreachable!()
     }
 
     /// Fetch multiple elements from a `DbtVec` and return the elements matching the order
     /// of the input indices.
-    fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        fn sort_to_match_requested_index_order<T>(indexed_elements: HashMap<usize, T>) -> Vec<T> {
+    fn get_many(&self, indices: &[Index]) -> Vec<V> {
+        fn sort_to_match_requested_index_order<V>(indexed_elements: HashMap<usize, V>) -> Vec<V> {
             let mut elements = indexed_elements.into_iter().collect_vec();
             elements.sort_unstable_by_key(|&(index_position, _)| index_position);
             elements.into_iter().map(|(_, element)| element).collect()
@@ -240,11 +234,11 @@ where
 
     /// Return all stored elements in a vector, whose index matches the StorageVec's.
     /// It's the caller's responsibility that there is enough memory to store all elements.
-    fn get_all(&self) -> Vec<T> {
+    fn get_all(&self) -> Vec<V> {
         let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
             (0..self.len()).partition(|index| self.cache.contains_key(index));
 
-        let mut fetched_elements: Vec<Option<T>> = vec![None; self.len() as usize];
+        let mut fetched_elements: Vec<Option<V>> = vec![None; self.len() as usize];
         for index in indices_of_elements_in_cache {
             let element = self.cache[&index].clone();
             fetched_elements[index as usize] = Some(element);
@@ -281,18 +275,14 @@ where
     }
 }
 
-impl<ParentKey, ParentValue, T> StorageVecMutableWrites<T>
-    for DbtVecPrivate<ParentKey, ParentValue, Index, T>
+impl<V> StorageVecMutableWrites<V> for DbtVecPrivate<V>
 where
-    ParentKey: From<Index>,
-    ParentValue: From<T>,
-    T: Clone + From<ParentValue> + Debug,
-    ParentKey: From<(ParentKey, ParentKey)>,
-    ParentKey: From<u8>,
-    Index: From<ParentValue> + From<u64>,
+    V: Clone + Debug,
+    Index: From<V> + From<u64>,
+    V: From<RustyValue>,
 {
     #[inline]
-    fn set(&mut self, index: Index, value: T) {
+    fn set(&mut self, index: Index, value: V) {
         // Disallow setting values out-of-bounds
 
         assert!(
@@ -312,7 +302,7 @@ where
     /// It is the caller's responsibility to ensure that index values are
     /// unique.  If not, the last value with the same index will win.
     /// For unordered collections such as HashMap, the behavior is undefined.
-    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, V)>) {
         let self_len = self.len();
 
         for (index, value) in key_vals.into_iter() {
@@ -328,7 +318,7 @@ where
     }
 
     #[inline]
-    fn pop(&mut self) -> Option<T> {
+    fn pop(&mut self) -> Option<V> {
         // If vector is empty, return None
         if self.is_empty() {
             return None;
@@ -355,7 +345,7 @@ where
     }
 
     #[inline]
-    fn push(&mut self, value: T) {
+    fn push(&mut self, value: V) {
         // add to write queue
         self.write_queue
             .push_back(VecWriteOperation::Push(value.clone()));

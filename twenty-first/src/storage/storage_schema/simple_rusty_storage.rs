@@ -1,6 +1,6 @@
 use super::super::level_db::DB;
 use super::enums::WriteOperation;
-use super::{traits::StorageWriter, DbtSchema, RustyKey, RustyValue, SimpleRustyReader};
+use super::{traits::StorageWriter, DbtSchema, SimpleRustyReader};
 use leveldb::batch::WriteBatch;
 use std::sync::Arc;
 
@@ -10,10 +10,10 @@ use std::sync::Arc;
 /// possible to use this struct and add to the schema.
 pub struct SimpleRustyStorage {
     /// dynamic DB Schema.  (new tables may be added)
-    pub schema: DbtSchema<RustyKey, RustyValue, SimpleRustyReader>,
+    pub schema: DbtSchema<SimpleRustyReader>,
 }
 
-impl StorageWriter<RustyKey, RustyValue> for SimpleRustyStorage {
+impl StorageWriter for SimpleRustyStorage {
     #[inline]
     fn persist(&self) {
         let write_batch = WriteBatch::new();
@@ -44,7 +44,7 @@ impl SimpleRustyStorage {
     /// Create a new SimpleRustyStorage
     #[inline]
     pub fn new(db: DB) -> Self {
-        let schema = DbtSchema::<RustyKey, RustyValue, SimpleRustyReader> {
+        let schema = DbtSchema::<SimpleRustyReader> {
             tables: Vec::new(),
             reader: Arc::new(SimpleRustyReader { db }),
         };
